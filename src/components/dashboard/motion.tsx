@@ -28,8 +28,7 @@ export function Reveal({ children, className, delay = 0 }: RevealProps) {
       className={className}
       variants={riseVariants}
       initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: "-80px" }}
+      animate="show"
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay }}
     >
       {children}
@@ -44,8 +43,7 @@ export function RevealGroup({ children, className }: RevealProps) {
       className={className}
       variants={staggerVariants}
       initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: "-60px" }}
+      animate="show"
     >
       {children}
     </motion.div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { buyerMatches, matchingNote } from "@/data/mock";
-import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { SectionShell } from "../SectionShell";
 import { motion } from "../motion";
@@ -41,8 +40,7 @@ export function MatchingSection() {
           <motion.article
             key={m.id}
             initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07, duration: 0.45 }}
             whileHover={{ y: -4 }}
             className="bg-card border-line flex flex-col gap-4 rounded-[24px] border p-5 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]"

@@ -26,8 +26,7 @@ export function JourneysSection() {
               <motion.div
                 key={s.key}
                 initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
                 className="relative z-10 flex flex-1 flex-col items-center gap-2 text-center"
               >
@@ -66,8 +65,7 @@ export function JourneysSection() {
               <motion.div
                 key={p.id}
                 initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.06 }}
                 whileHover={{ y: -4 }}
                 className={cn(

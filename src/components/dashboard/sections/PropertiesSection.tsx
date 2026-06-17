@@ -23,8 +23,7 @@ export function PropertiesSection() {
           <motion.article
             key={p.id}
             initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07, duration: 0.45 }}
             whileHover={{ y: -4 }}
             className="bg-card border-line group flex flex-col overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]"

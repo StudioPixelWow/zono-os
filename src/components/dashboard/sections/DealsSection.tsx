@@ -27,8 +27,7 @@ export function DealsSection() {
             <motion.div
               key={d.id}
               initial={{ opacity: 0, x: 14 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
+              animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.08 }}
               className="bg-card border-line flex items-center gap-3 rounded-[20px] border p-4 shadow-[var(--shadow-soft)]"
             >
