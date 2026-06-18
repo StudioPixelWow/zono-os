@@ -1,7 +1,7 @@
 "use client";
 
 import { recommendedProperties } from "@/data/mock";
-import type { Tone } from "@/types";
+import type { RecommendedProperty, Tone } from "@/types";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { SectionShell } from "../SectionShell";
@@ -15,11 +15,27 @@ const tagTone: Record<Tone, string> = {
   red: "bg-danger text-white",
 };
 
-export function PropertiesSection() {
+interface PropertiesSectionProps {
+  /** Cards to render. Defaults to mock data so existing callers keep working. */
+  properties?: RecommendedProperty[];
+  /** When set, shows a subtle inline notice above the grid (error fallback). */
+  errorMessage?: string;
+}
+
+export function PropertiesSection({
+  properties = recommendedProperties,
+  errorMessage,
+}: PropertiesSectionProps = {}) {
   return (
     <SectionShell title="הזדמנויות נדל״ן חדשות עבורך" eyebrow="מותאם עבורך">
+      {errorMessage && (
+        <div className="bg-danger-soft text-danger mb-4 flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-semibold">
+          <Icon name="AlertTriangle" size={14} strokeWidth={2.2} />
+          {errorMessage}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {recommendedProperties.map((p, i) => (
+        {properties.map((p, i) => (
           <motion.article
             key={p.id}
             initial={{ opacity: 0, y: 16 }}

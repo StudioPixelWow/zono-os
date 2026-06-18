@@ -34,3 +34,34 @@ export const supabaseServiceRoleKey = () =>
     "SUPABASE_SERVICE_ROLE_KEY",
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
+
+/** Placeholder values shipped in .env.example — treated as "not configured". */
+const PLACEHOLDERS = new Set([
+  "https://your-project-ref.supabase.co",
+  "your-anon-key",
+  "your-service-role-key",
+]);
+
+function isReal(value: string | undefined): boolean {
+  return !!value && !PLACEHOLDERS.has(value);
+}
+
+/**
+ * Non-throwing check for whether public Supabase env vars are present and real
+ * (not the .env.example placeholders). Lets callers fall back to mock data
+ * instead of crashing when Supabase isn't configured yet.
+ */
+export function isSupabaseConfigured(): boolean {
+  return (
+    isReal(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    isReal(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  );
+}
+
+/**
+ * Server-only: whether the service-role key is also present and real. Required
+ * for the pre-auth server read path used by repositories.
+ */
+export function isServiceRoleConfigured(): boolean {
+  return isSupabaseConfigured() && isReal(process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
