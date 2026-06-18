@@ -46,15 +46,30 @@ const TAG_OPTIONS = [
   { value: "premium", label: "פרימיום" },
 ];
 
-const BOOL_FEATURES: { key: keyof PropertyInput; label: string }[] = [
-  { key: "hasParking", label: "חניה" },
-  { key: "hasElevator", label: "מעלית" },
-  { key: "hasBalcony", label: "מרפסת" },
-  { key: "hasSafeRoom", label: 'ממ"ד' },
-  { key: "hasStorage", label: "מחסן" },
-  { key: "isAccessible", label: "נגישות" },
+const BOOL_FEATURES: { key: keyof PropertyInput; label: string; icon: string }[] = [
+  { key: "hasParking", label: "חניה", icon: "Car" },
+  { key: "hasElevator", label: "מעלית", icon: "ArrowUpDown" },
+  { key: "hasBalcony", label: "מרפסת", icon: "Trees" },
+  { key: "hasSafeRoom", label: 'ממ"ד', icon: "Shield" },
+  { key: "hasStorage", label: "מחסן", icon: "Warehouse" },
+  { key: "isAccessible", label: "נגישות", icon: "Accessibility" },
 ];
 
+const FEATURE_META: Record<
+  (typeof PROPERTY_FEATURE_KEYS)[number],
+  { label: string; icon: string }
+> = {
+  renovated: { label: "משופצת", icon: "Hammer" },
+  air_conditioning: { label: "מיזוג", icon: "Snowflake" },
+  bars: { label: "סורגים", icon: "Fence" },
+  pandor_doors: { label: "דלתות פנדור", icon: "DoorClosed" },
+  upgraded_kitchen: { label: "מטבח משודרג", icon: "ChefHat" },
+  master_unit: { label: "יחידת הורים", icon: "Bed" },
+  open_view: { label: "נוף פתוח", icon: "Mountain" },
+  front_facing: { label: "חזית", icon: "Eye" },
+  rear_facing: { label: "עורפית", icon: "Building" },
+  solar_heater: { label: "דוד שמש", icon: "Sun" },
+};
 const FEATURE_LABELS: Record<(typeof PROPERTY_FEATURE_KEYS)[number], string> = {
   renovated: "משופצת",
   air_conditioning: "מיזוג",
@@ -67,6 +82,34 @@ const FEATURE_LABELS: Record<(typeof PROPERTY_FEATURE_KEYS)[number], string> = {
   rear_facing: "עורפית",
   solar_heater: "דוד שמש",
 };
+
+function FeatureToggle({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2 rounded-2xl border px-3.5 py-2.5 text-sm font-semibold transition",
+        active
+          ? "bg-brand border-brand text-white shadow-[0_6px_16px_rgba(124,58,237,0.25)]"
+          : "bg-card border-line text-ink hover:border-brand-light",
+      )}
+    >
+      <Icon name={icon} size={16} strokeWidth={2} />
+      {label}
+    </button>
+  );
+}
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -379,14 +422,22 @@ export function PropertyWizard({
                 <p className={`${lbl} mb-2`}>מאפיינים</p>
                 <div className="flex flex-wrap gap-2">
                   {BOOL_FEATURES.map((f) => (
-                    <Chip key={f.key} active={Boolean(form[f.key])} onClick={() => set(f.key, !form[f.key] as never)}>
-                      {f.label}
-                    </Chip>
+                    <FeatureToggle
+                      key={f.key}
+                      active={Boolean(form[f.key])}
+                      icon={f.icon}
+                      label={f.label}
+                      onClick={() => set(f.key, !form[f.key] as never)}
+                    />
                   ))}
                   {PROPERTY_FEATURE_KEYS.map((k) => (
-                    <Chip key={k} active={form.features.includes(k)} onClick={() => toggleFeature(k)}>
-                      {FEATURE_LABELS[k]}
-                    </Chip>
+                    <FeatureToggle
+                      key={k}
+                      active={form.features.includes(k)}
+                      icon={FEATURE_META[k].icon}
+                      label={FEATURE_META[k].label}
+                      onClick={() => toggleFeature(k)}
+                    />
                   ))}
                 </div>
               </div>
