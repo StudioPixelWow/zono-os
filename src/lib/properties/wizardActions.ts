@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
   createDraftProperty,
+  discardDraft,
   markPublished,
   saveDraft,
 } from "./repository";
@@ -31,6 +32,17 @@ export async function saveDraftAction(
     return { error: "השמירה האוטומטית נכשלה." };
   }
   return {};
+}
+
+/** Cancel: discard the draft and return to the list. */
+export async function discardDraftAction(id: string): Promise<void> {
+  try {
+    await discardDraft(id);
+  } catch (e) {
+    console.error("[properties] discard failed:", e);
+  }
+  revalidatePath("/properties");
+  redirect("/properties");
 }
 
 /** Final publish: save everything, mark published, go to the property page. */

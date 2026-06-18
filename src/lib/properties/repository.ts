@@ -7,7 +7,7 @@
  *
  * Server-only. Never import from a Client Component.
  */
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database, PropertyStatus } from "@/lib/supabase/types";
 import type { PropertyFilters, PropertyInput } from "./types";
@@ -153,10 +153,40 @@ export async function archiveProperty(id: string): Promise<void> {
   await setPropertyStatus(id, "archived");
 }
 
+/** Remove the caller's untouched empty drafts (service-role, owner-scoped). */
+async function cleanupAbandonedDrafts(userId: string): Promise<void> {
+  try {
+    const supabase = createServiceRoleClient();
+    await supabase
+      .from("properties")
+      .delete()
+      .eq("owner_id", userId)
+      .eq("status", "draft")
+      .eq("price", 0)
+      .eq("title", "טיוטה ללא שם");
+  } catch {
+    /* best-effort cleanup */
+  }
+}
+
+/** Discard a draft explicitly (cancel). Never deletes a published listing. */
+export async function discardDraft(id: string): Promise<void> {
+  const { user } = await getSessionContext();
+  if (!user) return;
+  const supabase = createServiceRoleClient();
+  await supabase
+    .from("properties")
+    .delete()
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .neq("status", "published");
+}
+
 /** Create an empty draft so media + autosave have a property id to attach to. */
 export async function createDraftProperty(): Promise<PropertyRow> {
   const { user, profile } = await getSessionContext();
   if (!user || !profile) throw new Error("not authenticated");
+  await cleanupAbandonedDrafts(user.id);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("properties")

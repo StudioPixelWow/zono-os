@@ -14,7 +14,11 @@ import {
   PROPERTY_TYPE_OPTIONS,
 } from "@/lib/properties/labels";
 import { PROPERTY_FEATURE_KEYS, type PropertyInput } from "@/lib/properties/types";
-import { saveDraftAction, publishPropertyAction } from "@/lib/properties/wizardActions";
+import {
+  saveDraftAction,
+  publishPropertyAction,
+  discardDraftAction,
+} from "@/lib/properties/wizardActions";
 import { generatePropertyText } from "@/lib/properties/ai";
 import type { AiPropertyContext } from "@/lib/properties/types";
 import type { MediaRow } from "@/lib/properties/media";
@@ -465,6 +469,9 @@ export function PropertyWizard({
           {saveState === "saved" ? "נשמר אוטומטית ✓" : saveState === "saving" ? "שומר…" : ""}
         </span>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => void discardDraftAction(draftId)}>
+            ביטול
+          </Button>
           {step > 1 && (
             <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>הקודם</Button>
           )}
