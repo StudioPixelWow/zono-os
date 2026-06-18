@@ -1,7 +1,4 @@
 import { Suspense } from "react";
-import { getDashboardContext } from "@/lib/dashboard/context";
-import { DashboardDataProvider } from "@/components/dashboard/DashboardDataProvider";
-import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { HeroSection } from "@/components/dashboard/sections/HeroSection";
 import { OpportunitiesSection } from "@/components/dashboard/sections/OpportunitiesSection";
 import { PropertiesSectionContainer } from "@/components/dashboard/sections/PropertiesSectionContainer";
@@ -13,28 +10,23 @@ import { DealsSection } from "@/components/dashboard/sections/DealsSection";
 import { MarketSection } from "@/components/dashboard/sections/MarketSection";
 import { CommandSection } from "@/components/dashboard/sections/CommandSection";
 
-// The Properties strip reads live data on the server, so render per-request
-// (avoids build-time prerendering the Supabase query).
+// Reads live data on the server (Properties strip), so render per-request.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const dashboardData = await getDashboardContext();
-
+export default function Home() {
   return (
-    <DashboardDataProvider value={dashboardData}>
-      <DashboardShell>
-        <HeroSection />
-        <OpportunitiesSection />
-        <Suspense fallback={<PropertiesSkeleton />}>
-          <PropertiesSectionContainer />
-        </Suspense>
-        <HeatmapSection />
-        <JourneysSection />
-        <MatchingSection />
-        <DealsSection />
-        <MarketSection />
-        <CommandSection />
-      </DashboardShell>
-    </DashboardDataProvider>
+    <>
+      <HeroSection />
+      <OpportunitiesSection />
+      <Suspense fallback={<PropertiesSkeleton />}>
+        <PropertiesSectionContainer />
+      </Suspense>
+      <HeatmapSection />
+      <JourneysSection />
+      <MatchingSection />
+      <DealsSection />
+      <MarketSection />
+      <CommandSection />
+    </>
   );
 }
