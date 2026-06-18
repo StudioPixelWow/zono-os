@@ -388,7 +388,14 @@ export function PropertyWizard({
                   הצג אזור/שכונה בלבד
                 </label>
               </div>
-              <LocationMap latitude={form.latitude ?? null} longitude={form.longitude ?? null} onChange={(lat, lng) => setForm((f) => ({ ...f, latitude: lat, longitude: lng }))} />
+              <LocationMap
+                latitude={form.latitude ?? null}
+                longitude={form.longitude ?? null}
+                addressQuery={[form.address, form.buildingNumber, form.neighborhood, form.city]
+                  .filter(Boolean)
+                  .join(" ")}
+                onChange={(lat, lng) => setForm((f) => ({ ...f, latitude: lat, longitude: lng }))}
+              />
             </div>
           )}
 

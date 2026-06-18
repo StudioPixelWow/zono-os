@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const field =
   "bg-surface border-line text-ink focus:border-brand-light h-11 w-full rounded-xl border px-3 text-sm outline-none transition";
@@ -9,7 +9,7 @@ const label = "text-muted text-xs font-semibold";
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 const ISRAEL_CENTER = { lat: 32.0853, lng: 34.7818 };
 
-// ── Minimal typed surface for the bits of the Google Maps JS API we use ──────
+// ── Minimal typed surface for the Google Maps JS API we use ──────────────────
 interface GLatLng {
   lat(): number;
   lng(): number;
@@ -24,10 +24,22 @@ interface GMarker {
 }
 interface GMap {
   addListener(event: string, cb: (e: GMapMouseEvent) => void): void;
+  setCenter(p: { lat: number; lng: number }): void;
+  setZoom(z: number): void;
+}
+interface GGeocoderResult {
+  geometry: { location: GLatLng };
+}
+interface GGeocoder {
+  geocode(
+    req: { address: string; region?: string },
+    cb: (results: GGeocoderResult[] | null, status: string) => void,
+  ): void;
 }
 interface GoogleMaps {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => GMap;
   Marker: new (opts: Record<string, unknown>) => GMarker;
+  Geocoder: new () => GGeocoder;
 }
 interface GoogleNS {
   maps: GoogleMaps;
@@ -55,14 +67,42 @@ function GoogleMapPicker({
   apiKey,
   latitude,
   longitude,
+  addressQuery,
   onChange,
 }: {
   apiKey: string;
   latitude: number | null;
   longitude: number | null;
+  addressQuery: string;
   onChange: (lat: number, lng: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<GMap | null>(null);
+  const markerRef = useRef<GMarker | null>(null);
+  const geocoderRef = useRef<GGeocoder | null>(null);
+  const [status, setStatus] = useState<"" | "locating" | "ok" | "notfound">("");
+
+  const place = (lat: number, lng: number) => {
+    markerRef.current?.setPosition({ lat, lng });
+    mapRef.current?.setCenter({ lat, lng });
+    mapRef.current?.setZoom(16);
+    onChange(lat, lng);
+  };
+
+  const geocode = (query: string) => {
+    const q = query.trim();
+    if (!q || !geocoderRef.current) return;
+    setStatus("locating");
+    geocoderRef.current.geocode({ address: q, region: "il" }, (results, st) => {
+      if (st === "OK" && results && results[0]) {
+        const loc = results[0].geometry.location;
+        place(loc.lat(), loc.lng());
+        setStatus("ok");
+      } else {
+        setStatus("notfound");
+      }
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -72,15 +112,13 @@ function GoogleMapPicker({
         const w = window as unknown as { google?: GoogleNS };
         const maps = w.google?.maps;
         if (!maps) return;
-        const center =
-          latitude != null && longitude != null
-            ? { lat: latitude, lng: longitude }
-            : ISRAEL_CENTER;
-        const map = new maps.Map(ref.current, {
-          center,
-          zoom: latitude != null ? 15 : 8,
-        });
+        const hasCoords = latitude != null && longitude != null;
+        const center = hasCoords ? { lat: latitude, lng: longitude } : ISRAEL_CENTER;
+        const map = new maps.Map(ref.current, { center, zoom: hasCoords ? 15 : 8 });
         const marker = new maps.Marker({ position: center, map, draggable: true });
+        mapRef.current = map;
+        markerRef.current = marker;
+        geocoderRef.current = new maps.Geocoder();
         marker.addListener("dragend", () => {
           const p = marker.getPosition();
           if (p) onChange(p.lat(), p.lng());
@@ -93,32 +131,58 @@ function GoogleMapPicker({
             onChange(lat, lng);
           }
         });
+        // Auto-locate from the address if no coordinates yet (deferred so it
+        // doesn't setState synchronously inside the effect).
+        if (!hasCoords && addressQuery.trim()) {
+          const q = addressQuery;
+          setTimeout(() => {
+            if (!cancelled) geocode(q);
+          }, 0);
+        }
       })
       .catch(() => {
-        /* fall back silently to inputs */
+        /* silent fallback */
       });
     return () => {
       cancelled = true;
     };
-    // Init once; coordinate edits flow through inputs without re-creating the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={ref} className="border-line h-56 w-full rounded-2xl border" />;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => geocode(addressQuery)}
+          className="bg-brand-soft text-brand-strong hover:bg-brand hover:text-white inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition"
+        >
+          אתר את הכתובת על המפה
+        </button>
+        {status === "locating" && <span className="text-muted text-xs">מאתר…</span>}
+        {status === "notfound" && <span className="text-danger text-xs">הכתובת לא נמצאה — נסה/י לדייק</span>}
+        {status === "ok" && <span className="text-success text-xs">המיקום עודכן ✓</span>}
+      </div>
+      <div ref={ref} className="border-line h-56 w-full rounded-2xl border" />
+      <p className="text-muted text-[11px]">לחיצה או גרירת הסמן על המפה תעדכן את המיקום ידנית.</p>
+    </div>
+  );
 }
 
 /**
- * Location coordinates + map. With NEXT_PUBLIC_GOOGLE_MAPS_API_KEY → an
- * interactive Google map with a draggable pin (click/drag updates lat/lng).
- * Without a key → numeric inputs + a keyless embedded preview.
+ * Location coordinates + map. With NEXT_PUBLIC_GOOGLE_MAPS_API_KEY → interactive
+ * Google map: geocodes the typed address ("אתר על המפה" + auto on load) and a
+ * draggable pin. Without a key → numeric inputs + keyless embed preview.
  */
 export function LocationMap({
   latitude,
   longitude,
+  addressQuery,
   onChange,
 }: {
   latitude: number | null;
   longitude: number | null;
+  addressQuery: string;
   onChange: (lat: number | null, lng: number | null) => void;
 }) {
   const hasCoords = latitude != null && longitude != null;
@@ -155,15 +219,13 @@ export function LocationMap({
       </div>
 
       {MAPS_KEY ? (
-        <>
-          <GoogleMapPicker
-            apiKey={MAPS_KEY}
-            latitude={latitude}
-            longitude={longitude}
-            onChange={(lat, lng) => onChange(lat, lng)}
-          />
-          <p className="text-muted text-[11px]">לחיצה או גרירת הסמן על המפה תעדכן את המיקום.</p>
-        </>
+        <GoogleMapPicker
+          apiKey={MAPS_KEY}
+          latitude={latitude}
+          longitude={longitude}
+          addressQuery={addressQuery}
+          onChange={(lat, lng) => onChange(lat, lng)}
+        />
       ) : hasCoords ? (
         <div className="border-line overflow-hidden rounded-2xl border">
           <iframe
@@ -175,7 +237,7 @@ export function LocationMap({
         </div>
       ) : (
         <p className="text-muted bg-surface rounded-2xl px-4 py-6 text-center text-xs">
-          הזן/י קואורדינטות לתצוגת מפה. לפין נגרר אינטראקטיבי — הגדר/י
+          הזן/י קואורדינטות לתצוגת מפה. לאיתור אוטומטי לפי כתובת — הגדר/י
           NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.
         </p>
       )}
