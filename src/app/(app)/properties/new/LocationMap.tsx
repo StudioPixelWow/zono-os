@@ -80,7 +80,9 @@ function GoogleMapPicker({
   const mapRef = useRef<GMap | null>(null);
   const markerRef = useRef<GMarker | null>(null);
   const geocoderRef = useRef<GGeocoder | null>(null);
-  const [status, setStatus] = useState<"" | "locating" | "ok" | "notfound">("");
+  const [status, setStatus] = useState<
+    "" | "locating" | "ok" | "notfound" | "error"
+  >("");
 
   const place = (lat: number, lng: number) => {
     markerRef.current?.setPosition({ lat, lng });
@@ -98,8 +100,11 @@ function GoogleMapPicker({
         const loc = results[0].geometry.location;
         place(loc.lat(), loc.lng());
         setStatus("ok");
-      } else {
+      } else if (st === "ZERO_RESULTS") {
         setStatus("notfound");
+      } else {
+        // REQUEST_DENIED / OVER_QUERY_LIMIT / billing not enabled, etc.
+        setStatus("error");
       }
     });
   };
@@ -161,6 +166,9 @@ function GoogleMapPicker({
         </button>
         {status === "locating" && <span className="text-muted text-xs">מאתר…</span>}
         {status === "notfound" && <span className="text-danger text-xs">הכתובת לא נמצאה — נסה/י לדייק</span>}
+        {status === "error" && (
+          <span className="text-danger text-xs">שירות המפות לא זמין — יש להפעיל Billing ו-Geocoding API</span>
+        )}
         {status === "ok" && <span className="text-success text-xs">המיקום עודכן ✓</span>}
       </div>
       <div ref={ref} className="border-line h-56 w-full rounded-2xl border" />
