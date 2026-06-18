@@ -210,3 +210,40 @@ export function isStalled(lastActivityAt: string | null, stage: JourneyStage): b
   if (stage === TERMINAL_STAGE) return false;
   return daysSince(lastActivityAt) >= STALLED_DAYS;
 }
+
+// ── Health score & next action ───────────────────────────────────────────────
+
+export type HealthTone = "good" | "medium" | "risk";
+
+/**
+ * Health score (0..100): 70% completion of the current stage + 30% freshness
+ * (penalised the longer the property sits without activity). Closed = 100.
+ */
+export function healthScore(
+  stage: JourneyStage,
+  c: JourneyContext,
+  lastActivityAt: string | null,
+): number {
+  if (stage === TERMINAL_STAGE) return 100;
+  const completion = completionPercent(stage, c);
+  const freshnessPenalty = Math.min(40, daysSince(lastActivityAt) * 2);
+  const score = Math.round(completion * 0.7 + (100 - freshnessPenalty) * 0.3);
+  return Math.max(0, Math.min(100, score));
+}
+
+export function healthTone(score: number): HealthTone {
+  if (score >= 75) return "good";
+  if (score >= 45) return "medium";
+  return "risk";
+}
+
+/** The single most useful next step for the agent. */
+export function nextRecommendedAction(
+  stage: JourneyStage,
+  c: JourneyContext,
+): string {
+  const missing = missingActions(stage, c);
+  if (missing.length) return missing[0].label;
+  const n = nextStage(stage);
+  return n ? `קדם לשלב: ${STAGE_DEFS[n].label}` : "המסע הושלם — אין פעולה נדרשת";
+}

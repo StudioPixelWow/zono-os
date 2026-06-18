@@ -23,11 +23,13 @@ import {
 import type { Database, JourneyStage, PropertyStatus } from "@/lib/supabase/types";
 import type { JourneyContext } from "@/lib/journey/stages";
 import { JourneyPanel } from "./JourneyPanel";
+import { TasksPanel } from "./TasksPanel";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
 type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
 type MediaRow = Database["public"]["Tables"]["property_media"]["Row"];
+type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
 
 interface JourneyData {
   stage: JourneyStage;
@@ -39,6 +41,7 @@ interface JourneyData {
 type Tab =
   | "overview"
   | "journey"
+  | "tasks"
   | "details"
   | "images"
   | "documents"
@@ -47,6 +50,7 @@ type Tab =
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "סקירה" },
   { id: "journey", label: "מסע הנכס" },
+  { id: "tasks", label: "משימות" },
   { id: "details", label: "פרטים" },
   { id: "images", label: "תמונות" },
   { id: "documents", label: "מסמכים" },
@@ -83,6 +87,7 @@ export function PropertyDetailView({
   notes,
   documents,
   media,
+  tasks,
   journey,
 }: {
   property: PropertyRow;
@@ -90,6 +95,7 @@ export function PropertyDetailView({
   notes: NoteRow[];
   documents: DocumentRow[];
   media: MediaRow[];
+  tasks: TaskRow[];
   journey: JourneyData;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -236,6 +242,8 @@ export function PropertyDetailView({
             activities={activities}
           />
         )}
+
+        {tab === "tasks" && <TasksPanel propertyId={p.id} tasks={tasks} />}
 
         {tab === "details" && (
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">

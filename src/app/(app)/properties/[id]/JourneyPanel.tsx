@@ -10,10 +10,14 @@ import {
   STAGE_DEFS,
   completionPercent,
   daysSince,
+  healthScore,
+  healthTone,
   isStalled,
   missingActions,
+  nextRecommendedAction,
   nextStage,
   prevStage,
+  requiredActions,
   stageIndex,
   type JourneyContext,
 } from "@/lib/journey/stages";
@@ -43,11 +47,19 @@ export function JourneyPanel({
   const [pending, start] = useTransition();
 
   const percent = completionPercent(stage, context);
+  const allActions = requiredActions(stage, context);
   const missing = missingActions(stage, context);
+  const completed = allActions.filter((a) => a.done);
   const stalled = isStalled(lastActivityAt, stage);
   const next = nextStage(stage);
   const prev = prevStage(stage);
   const curIdx = stageIndex(stage);
+  const health = healthScore(stage, context, lastActivityAt);
+  const hTone = healthTone(health);
+  const recommended = nextRecommendedAction(stage, context);
+
+  const healthColor =
+    hTone === "good" ? "text-success" : hTone === "medium" ? "text-brand-strong" : "text-danger";
 
   const go = (target: JourneyStage) => {
     setError(null);
@@ -71,9 +83,15 @@ export function JourneyPanel({
           </div>
           <p className="text-muted mt-1 text-xs">{STAGE_DEFS[stage].description}</p>
         </div>
-        <div className="text-end">
-          <p className="text-brand-strong text-3xl font-black">{percent}%</p>
-          <p className="text-muted text-xs font-semibold">השלמת מסע</p>
+        <div className="flex items-center gap-6">
+          <div className="text-end">
+            <p className="text-brand-strong text-3xl font-black">{percent}%</p>
+            <p className="text-muted text-xs font-semibold">השלמת מסע</p>
+          </div>
+          <div className="text-end">
+            <p className={cn("text-3xl font-black", healthColor)}>{health}</p>
+            <p className="text-muted text-xs font-semibold">ציון בריאות</p>
+          </div>
         </div>
       </div>
 
@@ -82,6 +100,13 @@ export function JourneyPanel({
           className="bg-brand h-full rounded-full transition-all"
           style={{ width: `${percent}%` }}
         />
+      </div>
+
+      {/* Next recommended action */}
+      <div className="bg-brand-soft text-brand-strong flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold">
+        <Icon name="ArrowUpRight" size={18} />
+        <span className="text-muted">הפעולה המומלצת הבאה:</span>
+        <span className="text-ink font-bold">{recommended}</span>
       </div>
 
       {/* Stalled / overdue warning */}
@@ -135,13 +160,23 @@ export function JourneyPanel({
         </div>
       </div>
 
-      {/* Missing required actions */}
+      {/* Stage checklist — completed + pending */}
       <div className="bg-surface rounded-2xl p-4">
         <p className="text-ink mb-3 text-sm font-extrabold">
-          {missing.length ? "פעולות נדרשות בשלב זה" : "כל הפעולות בשלב זה הושלמו ✓"}
+          {missing.length
+            ? `פעולות בשלב זה — ${completed.length}/${allActions.length} הושלמו`
+            : "כל הפעולות בשלב זה הושלמו ✓"}
         </p>
-        {missing.length > 0 && (
+        {allActions.length > 0 && (
           <ul className="flex flex-col gap-2">
+            {completed.map((a) => (
+              <li key={a.key} className="flex items-center gap-2 text-sm">
+                <span className="bg-success grid h-5 w-5 place-items-center rounded-full text-white">
+                  <Icon name="UserCheck" size={12} />
+                </span>
+                <span className="text-muted line-through">{a.label}</span>
+              </li>
+            ))}
             {missing.map((a) => (
               <li key={a.key} className="flex items-center gap-2 text-sm">
                 <span className="border-line text-muted grid h-5 w-5 place-items-center rounded-full border">

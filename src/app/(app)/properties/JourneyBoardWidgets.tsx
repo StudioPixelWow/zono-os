@@ -91,7 +91,7 @@ function Widget({
 export function JourneyBoardWidgets({ board }: { board: JourneyBoard }) {
   if (board.total === 0) return null;
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Widget
         tone="brand"
         icon="AlertTriangle"
@@ -105,6 +105,13 @@ export function JourneyBoardWidgets({ board }: { board: JourneyBoard }) {
         title="נכסים תקועים"
         empty="אין נכסים תקועים"
         items={board.stalled}
+      />
+      <Widget
+        tone="brand"
+        icon="Megaphone"
+        title="חסרים חומרי שיווק"
+        empty="לכל הנכסים יש חומרים ✓"
+        items={board.missingAssets}
       />
       <Widget
         tone="success"

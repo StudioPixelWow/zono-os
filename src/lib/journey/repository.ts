@@ -38,6 +38,7 @@ export interface JourneyBoard {
   needingAction: JourneyItem[];
   stalled: JourneyItem[];
   recentlyUpdated: JourneyItem[];
+  missingAssets: JourneyItem[];
   total: number;
 }
 
@@ -211,10 +212,21 @@ export async function listJourneyBoard(): Promise<JourneyBoard> {
     )
     .slice(0, 6);
 
+  // Missing marketing assets: not closed, and lacking a primary image or any
+  // marketing/description text (can't be published well without these).
+  const missingAssets = items
+    .filter((it) => {
+      if (it.journey.current_stage === "closed") return false;
+      const p = it.property;
+      return !p.primary_image_url || (!p.marketing_description && !p.description);
+    })
+    .sort((a, b) => idx(a.journey.current_stage) - idx(b.journey.current_stage));
+
   return {
     needingAction: needingAction.slice(0, 6),
     stalled: stalled.slice(0, 6),
     recentlyUpdated,
+    missingAssets: missingAssets.slice(0, 6),
     total: items.length,
   };
 }
