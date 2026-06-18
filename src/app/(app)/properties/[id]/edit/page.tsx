@@ -19,6 +19,8 @@ export default async function EditPropertyPage({
   if (!p) notFound();
 
   const loc = propertyLocation(p);
+  // Map ALL fields (including wizard-only ones) so the simple edit form
+  // round-trips them unchanged instead of wiping them on save.
   const initial: Partial<PropertyInput> = {
     title: p.title,
     description: p.description,
@@ -35,13 +37,31 @@ export default async function EditPropertyPage({
     city: p.city,
     region: p.region,
     address: loc.address ?? "",
-    neighborhood: loc.neighborhood ?? "",
+    neighborhood: p.neighborhood ?? loc.neighborhood ?? "",
+    buildingNumber: p.building_number,
+    latitude: p.latitude,
+    longitude: p.longitude,
+    showExactAddress: p.show_exact_address,
+    showNeighborhoodOnly: p.show_neighborhood_only,
     hasParking: p.has_parking,
     hasElevator: p.has_elevator,
     hasBalcony: p.has_balcony,
     hasSafeRoom: p.has_safe_room,
     hasStorage: p.has_storage,
     isAccessible: p.is_accessible,
+    parkingCount: p.parking_count,
+    storageCount: p.storage_count,
+    balconyCount: p.balcony_count,
+    features: Array.isArray(p.features) ? (p.features as string[]) : [],
+    listingTag: p.listing_tag,
+    availabilityDate: p.availability_date,
+    priceBeforeDiscount: p.price_before_discount,
+    pricePerSqm: p.price_per_sqm,
+    marketingDescription: p.marketing_description,
+    aiDescription: p.ai_description,
+    internalNotes: p.internal_notes,
+    targetAudience: p.target_audience,
+    primaryImageUrl: p.primary_image_url,
     hasExclusivity: p.has_exclusivity,
     exclusivityEndsAt: p.exclusivity_ends_at ? p.exclusivity_ends_at.slice(0, 10) : null,
   };

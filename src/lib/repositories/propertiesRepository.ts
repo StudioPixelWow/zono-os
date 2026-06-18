@@ -9,8 +9,8 @@
  *
  * Never import this file from a Client Component.
  */
-import { createServiceRoleClient } from "@/lib/supabase/server";
-import { isServiceRoleConfigured } from "@/lib/supabase/env";
+import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { Database, PropertyType } from "@/lib/supabase/types";
 import type { ListingTag, RecommendedProperty, Tone } from "@/types/dashboard";
 import { recommendedProperties as mockProperties } from "@/data/mock";
@@ -109,11 +109,12 @@ function mapRowToCard(row: PropertyRow, index: number): RecommendedProperty {
  * - Query failure → throws (caller renders an error state).
  */
 export async function listDashboardProperties(): Promise<DashboardPropertiesResult> {
-  if (!isServiceRoleConfigured()) {
+  if (!isSupabaseConfigured()) {
     return { properties: mockProperties, source: "mock" };
   }
 
-  const supabase = createServiceRoleClient();
+  // RLS-scoped: only the signed-in user's organization (no cross-org leak).
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("properties")
     .select(SELECT_COLUMNS)
