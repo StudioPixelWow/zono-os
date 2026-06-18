@@ -57,8 +57,9 @@ export async function publishPropertyAction(
     await saveDraft(id, { ...input, status: "published" });
     await markPublished(id, input.primaryImageUrl ?? null);
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
     console.error("[properties] publish failed:", e);
-    return { error: "פרסום הנכס נכשל. נסה/י שוב." };
+    return { error: `פרסום הנכס נכשל: ${msg}` };
   }
   revalidatePath("/properties");
   redirect(`/properties/${id}`);
