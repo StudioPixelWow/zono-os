@@ -61,6 +61,18 @@ export async function publishPropertyAction(
     console.error("[properties] publish failed:", e);
     return { error: `פרסום הנכס נכשל: ${msg}` };
   }
+
+  // Best-effort: initialize the property's intelligence on publish. Never
+  // blocks publishing — the Command Center also has a manual activate button.
+  try {
+    const { initializePropertyIntelligence } = await import(
+      "@/lib/intelligence/service"
+    );
+    await initializePropertyIntelligence(id);
+  } catch (e) {
+    console.error("[intelligence] auto-init on publish failed:", e);
+  }
+
   revalidatePath("/properties");
   redirect(`/properties/${id}`);
 }

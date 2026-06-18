@@ -351,6 +351,172 @@ type PropertyJourneysRow = {
   updated_at: string;
 };
 
+type PropertyIntelligenceProfilesRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  blueprint_id: string | null;
+  mission_type: string | null;
+  mission_title: string | null;
+  mission_description: string | null;
+  target_sale_days: number | null;
+  target_price: number | null;
+  target_leads: number | null;
+  target_visits: number | null;
+  target_offers: number | null;
+  health_score: number;
+  success_score: number;
+  risk_score: number;
+  marketing_score: number;
+  exposure_score: number;
+  seller_trust_score: number;
+  market_position_score: number;
+  momentum_score: number;
+  current_stage: string | null;
+  next_best_action: string | null;
+  intelligence_summary: string | null;
+  autonomous_mode_enabled: boolean;
+  allowed_auto_actions: Json;
+  approval_required_actions: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyBlueprintsRow = {
+  id: string;
+  org_id: string | null;
+  name: string;
+  property_type: string | null;
+  deal_type: string | null;
+  exclusivity_type: string | null;
+  target_days: number | null;
+  description: string | null;
+  stages: Json;
+  required_actions: Json;
+  recommended_actions: Json;
+  risk_rules: Json;
+  scoring_rules: Json;
+  calendar_rules: Json;
+  is_system_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyMissionsRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  target_metric: string | null;
+  target_value: number | null;
+  current_value: number;
+  due_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyLeversRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  lever_type: string | null;
+  title: string;
+  description: string | null;
+  expected_impact: string | null;
+  impact_score: number;
+  effort_score: number;
+  urgency_score: number;
+  confidence_score: number;
+  status: string;
+  related_task_id: string | null;
+  related_meeting_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyRisksRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  risk_type: string | null;
+  severity: string;
+  title: string;
+  description: string | null;
+  detected_at: string;
+  resolved_at: string | null;
+  status: string;
+  recommended_action: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyExposureChannelsRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  channel: string;
+  status: string;
+  published_url: string | null;
+  published_at: string | null;
+  last_checked_at: string | null;
+  views_count: number;
+  leads_count: number;
+  clicks_count: number;
+  engagement_score: number;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertySellerTouchpointsRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  seller_id: string | null;
+  touchpoint_type: string | null;
+  title: string | null;
+  description: string | null;
+  direction: string;
+  sentiment: string | null;
+  seller_response: string | null;
+  trust_impact_score: number;
+  created_by_user_id: string | null;
+  created_at: string;
+};
+
+type PropertyCalendarPlansRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  title: string;
+  description: string | null;
+  plan_type: string | null;
+  suggested_date: string | null;
+  scheduled_event_id: string | null;
+  status: string;
+  priority: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyScoreEventsRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  score_type: string;
+  old_score: number | null;
+  new_score: number | null;
+  reason: string | null;
+  created_at: string;
+};
+
 type DealsRow = {
   id: string;
   org_id: string;
@@ -644,6 +810,39 @@ export interface Database {
       property_journeys: TableShape<
         PropertyJourneysRow,
         "org_id" | "property_id"
+      >;
+      property_intelligence_profiles: TableShape<
+        PropertyIntelligenceProfilesRow,
+        "org_id" | "property_id"
+      >;
+      property_blueprints: TableShape<PropertyBlueprintsRow, "name">;
+      property_missions: TableShape<
+        PropertyMissionsRow,
+        "org_id" | "property_id" | "title"
+      >;
+      property_levers: TableShape<
+        PropertyLeversRow,
+        "org_id" | "property_id" | "title"
+      >;
+      property_risks: TableShape<
+        PropertyRisksRow,
+        "org_id" | "property_id" | "title"
+      >;
+      property_exposure_channels: TableShape<
+        PropertyExposureChannelsRow,
+        "org_id" | "property_id" | "channel"
+      >;
+      property_seller_touchpoints: TableShape<
+        PropertySellerTouchpointsRow,
+        "org_id" | "property_id"
+      >;
+      property_calendar_plans: TableShape<
+        PropertyCalendarPlansRow,
+        "org_id" | "property_id" | "title"
+      >;
+      property_score_events: TableShape<
+        PropertyScoreEventsRow,
+        "org_id" | "property_id" | "score_type"
       >;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;

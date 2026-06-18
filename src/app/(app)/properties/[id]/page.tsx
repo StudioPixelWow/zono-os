@@ -8,6 +8,7 @@ import {
 } from "@/lib/properties/repository";
 import { buildJourneyContext, getJourney } from "@/lib/journey/repository";
 import { listPropertyTasks } from "@/lib/tasks/repository";
+import { getPropertyCommandCenter } from "@/lib/intelligence/service";
 import { journeyStageForStatusFallback } from "@/lib/journey/fallback";
 import { PropertyDetailView } from "./PropertyDetailView";
 
@@ -22,7 +23,7 @@ export default async function PropertyDetailsPage({
   const property = await getPropertyById(id);
   if (!property) notFound();
 
-  const [activities, notes, documents, media, tasks, journeyRow, context] =
+  const [activities, notes, documents, media, tasks, journeyRow, context, commandCenter] =
     await Promise.all([
       getPropertyActivities(id),
       getPropertyNotes(id),
@@ -31,6 +32,7 @@ export default async function PropertyDetailsPage({
       listPropertyTasks(id),
       getJourney(id),
       buildJourneyContext(property),
+      getPropertyCommandCenter(id),
     ]);
 
   const journey = {
@@ -49,6 +51,7 @@ export default async function PropertyDetailsPage({
       media={media}
       tasks={tasks}
       journey={journey}
+      commandCenter={commandCenter}
     />
   );
 }

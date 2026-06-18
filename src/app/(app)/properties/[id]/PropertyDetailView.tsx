@@ -24,6 +24,8 @@ import type { Database, JourneyStage, PropertyStatus } from "@/lib/supabase/type
 import type { JourneyContext } from "@/lib/journey/stages";
 import { JourneyPanel } from "./JourneyPanel";
 import { TasksPanel } from "./TasksPanel";
+import { CommandCenter } from "./CommandCenter";
+import type { CommandCenter as CommandCenterData } from "@/lib/intelligence/service";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
@@ -39,6 +41,7 @@ interface JourneyData {
 }
 
 type Tab =
+  | "command"
   | "overview"
   | "journey"
   | "tasks"
@@ -48,6 +51,7 @@ type Tab =
   | "activities"
   | "notes";
 const TABS: { id: Tab; label: string }[] = [
+  { id: "command", label: "מרכז ניהול נכס" },
   { id: "overview", label: "סקירה" },
   { id: "journey", label: "מסע הנכס" },
   { id: "tasks", label: "משימות" },
@@ -89,6 +93,7 @@ export function PropertyDetailView({
   media,
   tasks,
   journey,
+  commandCenter,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
@@ -97,8 +102,9 @@ export function PropertyDetailView({
   media: MediaRow[];
   tasks: TaskRow[];
   journey: JourneyData;
+  commandCenter: CommandCenterData | null;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("command");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const yes = "כן";
@@ -201,7 +207,17 @@ export function PropertyDetailView({
       </div>
 
       {/* Panels */}
-      <div className="bg-card border-line rounded-[20px] border p-5">
+      <div className={cn(tab !== "command" && "bg-card border-line rounded-[20px] border p-5")}>
+        {tab === "command" && (
+          <CommandCenter
+            propertyId={p.id}
+            propertyTitle={p.title}
+            addressLine={propertyAddressLine(p)}
+            data={commandCenter}
+            tasks={tasks}
+          />
+        )}
+
         {tab === "overview" && (
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             <div>
