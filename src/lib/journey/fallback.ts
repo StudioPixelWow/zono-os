@@ -5,7 +5,7 @@
  */
 import type { JourneyStage, PropertyStatus } from "@/lib/supabase/types";
 
-export function journey_stage_for_status_fallback(
+export function journeyStageForStatusFallback(
   status: PropertyStatus,
 ): JourneyStage {
   switch (status) {

@@ -1,6 +1,8 @@
 import { listProperties, type PropertyRow } from "@/lib/properties/repository";
+import { listJourneyBoard, type JourneyBoard } from "@/lib/journey/repository";
 import type { PropertyStatus, PropertyType } from "@/lib/supabase/types";
 import { PropertiesListView } from "./PropertiesListView";
+import { JourneyBoardWidgets } from "./JourneyBoardWidgets";
 
 export const dynamic = "force-dynamic";
 
@@ -42,5 +44,17 @@ export default async function PropertiesPage({
     error = true;
   }
 
-  return <PropertiesListView properties={rows} filters={filters} error={error} />;
+  let board: JourneyBoard | null = null;
+  try {
+    board = await listJourneyBoard();
+  } catch (e) {
+    console.error("[journey] board failed:", e);
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {board && <JourneyBoardWidgets board={board} />}
+      <PropertiesListView properties={rows} filters={filters} error={error} />
+    </div>
+  );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
@@ -26,6 +27,7 @@ import { JourneyPanel } from "./JourneyPanel";
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
 type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
+type MediaRow = Database["public"]["Tables"]["property_media"]["Row"];
 
 interface JourneyData {
   stage: JourneyStage;
@@ -80,12 +82,14 @@ export function PropertyDetailView({
   activities,
   notes,
   documents,
+  media,
   journey,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
   notes: NoteRow[];
   documents: DocumentRow[];
+  media: MediaRow[];
   journey: JourneyData;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -250,9 +254,32 @@ export function PropertyDetailView({
           </div>
         )}
 
-        {tab === "images" && (
-          <EmptyState icon="Building2" text="אין תמונות עדיין. העלאת תמונות תתווסף בהמשך." />
-        )}
+        {tab === "images" &&
+          (media.length === 0 ? (
+            <EmptyState icon="Building2" text="אין תמונות עדיין. ניתן להוסיף תמונות דרך עריכת הנכס." />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {media.map((m) => (
+                <div
+                  key={m.id}
+                  className="border-line bg-surface relative aspect-[4/3] overflow-hidden rounded-2xl border"
+                >
+                  <Image
+                    src={m.url}
+                    alt={m.alt_text ?? p.title}
+                    fill
+                    sizes="(max-width: 640px) 50vw, 33vw"
+                    className="object-cover"
+                  />
+                  {m.is_primary && (
+                    <span className="bg-brand absolute end-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
+                      ראשית
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
 
         {tab === "documents" &&
           (documents.length === 0 ? (
