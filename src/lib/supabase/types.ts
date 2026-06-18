@@ -64,6 +64,15 @@ export type ActivityType =
   | "call" | "whatsapp" | "email" | "sms" | "note" | "meeting" | "viewing"
   | "system" | "status_change" | "document" | "task";
 export type ActivityDirection = "inbound" | "outbound" | "internal";
+export type JourneyStage =
+  | "new"
+  | "information_collection"
+  | "marketing_preparation"
+  | "published"
+  | "active_marketing"
+  | "negotiation"
+  | "deal_signed"
+  | "closed";
 export type TaskStatus = "todo" | "in_progress" | "blocked" | "done" | "cancelled";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type MeetingType =
@@ -325,6 +334,19 @@ type PropertyMediaRow = {
   is_primary: boolean;
   alt_text: string | null;
   external_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyJourneysRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  current_stage: JourneyStage;
+  stage_entered_at: string;
+  last_activity_at: string;
+  progress: number;
+  stage_history: Json;
   created_at: string;
   updated_at: string;
 };
@@ -619,6 +641,10 @@ export interface Database {
       units: TableShape<UnitsRow, "org_id" | "project_id" | "unit_number">;
       properties: TableShape<PropertiesRow, "org_id" | "title" | "type" | "price">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
+      property_journeys: TableShape<
+        PropertyJourneysRow,
+        "org_id" | "property_id"
+      >;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
       matching_results: TableShape<MatchingResultsRow, "org_id" | "buyer_id" | "score">;
@@ -644,6 +670,8 @@ export interface Database {
       current_org_id: { Args: Record<string, never>; Returns: string };
       current_role_key: { Args: Record<string, never>; Returns: string };
       has_min_role: { Args: { p_min: string }; Returns: boolean };
+      journey_stage_for_status: { Args: { p_status: string }; Returns: JourneyStage };
+      journey_progress_for_stage: { Args: { p_stage: JourneyStage }; Returns: number };
       is_org_member: { Args: { p_org: string }; Returns: boolean };
       role_rank: { Args: { p_key: string }; Returns: number };
       seed_org_default_roles: { Args: { p_org: string }; Returns: undefined };
@@ -676,6 +704,7 @@ export interface Database {
       matching_source: MatchingSource;
       activity_type: ActivityType;
       activity_direction: ActivityDirection;
+      journey_stage: JourneyStage;
       task_status: TaskStatus;
       task_priority: TaskPriority;
       meeting_type: MeetingType;

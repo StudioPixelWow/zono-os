@@ -19,15 +19,32 @@ import {
   archivePropertyAction,
   setPropertyStatusAction,
 } from "@/lib/properties/actions";
-import type { Database, PropertyStatus } from "@/lib/supabase/types";
+import type { Database, JourneyStage, PropertyStatus } from "@/lib/supabase/types";
+import type { JourneyContext } from "@/lib/journey/stages";
+import { JourneyPanel } from "./JourneyPanel";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
 type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
 
-type Tab = "overview" | "details" | "images" | "documents" | "activities" | "notes";
+interface JourneyData {
+  stage: JourneyStage;
+  lastActivityAt: string | null;
+  stageEnteredAt: string | null;
+  context: JourneyContext;
+}
+
+type Tab =
+  | "overview"
+  | "journey"
+  | "details"
+  | "images"
+  | "documents"
+  | "activities"
+  | "notes";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "סקירה" },
+  { id: "journey", label: "מסע הנכס" },
   { id: "details", label: "פרטים" },
   { id: "images", label: "תמונות" },
   { id: "documents", label: "מסמכים" },
@@ -63,11 +80,13 @@ export function PropertyDetailView({
   activities,
   notes,
   documents,
+  journey,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
   notes: NoteRow[];
   documents: DocumentRow[];
+  journey: JourneyData;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +220,17 @@ export function PropertyDetailView({
               </p>
             )}
           </div>
+        )}
+
+        {tab === "journey" && (
+          <JourneyPanel
+            propertyId={p.id}
+            stage={journey.stage}
+            lastActivityAt={journey.lastActivityAt}
+            stageEnteredAt={journey.stageEnteredAt}
+            context={journey.context}
+            activities={activities}
+          />
         )}
 
         {tab === "details" && (
