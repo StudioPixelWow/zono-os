@@ -1,18 +1,51 @@
 "use client";
 
+import { heroAssistantMessage, mapPins } from "@/data/mock";
+import { formatShekels } from "@/lib/utils";
 import {
-  currentAgent,
-  heroAssistantMessage,
-  mapPins,
-  newOpportunitiesToday,
-} from "@/data/mock";
+  DEAL_TYPE_OPTIONS,
+  PROPERTY_TYPE_OPTIONS,
+} from "@/lib/onboarding/options";
 import { Icon } from "../Icon";
 import { CityMap } from "../CityMap";
 import { FloatingAssistant } from "../FloatingAssistant";
 import { motion } from "../motion";
+import { useCurrentUser, useDashboardData } from "../DashboardDataProvider";
 
-/** Hero "city command center" — the dominant first impression. */
+function labelsFor(
+  values: string[],
+  options: { value: string; label: string }[],
+): string {
+  if (!values || values.length === 0) return "";
+  const map = new Map(options.map((o) => [o.value, o.label]));
+  return values.map((v) => map.get(v) ?? v).join(" · ");
+}
+
+function priceRange(min: number | null, max: number | null): string {
+  if (min != null && max != null) return `${formatShekels(min)}–${formatShekels(max)}`;
+  if (max != null) return `עד ${formatShekels(max)}`;
+  if (min != null) return `מ-${formatShekels(min)}`;
+  return "לא הוגדר";
+}
+
+/** Hero "city command center" — now reflects the signed-in user's real context. */
 export function HeroSection() {
+  const user = useCurrentUser();
+  const { localities, primaryLocality, localitiesCount, error } = useDashboardData();
+
+  const firstName = user?.firstName?.trim();
+  const greeting = firstName ? `בוקר טוב, ${firstName}` : "בוקר טוב";
+
+  const propertyFocus = labelsFor(user?.propertyTypes ?? [], PROPERTY_TYPE_OPTIONS);
+  const dealFocus = labelsFor(user?.dealTypes ?? [], DEAL_TYPE_OPTIONS);
+  const hasLocalities = localitiesCount > 0;
+
+  const stats = [
+    { k: "עיר ראשית", v: primaryLocality ?? "—" },
+    { k: "ערי פעילות", v: String(localitiesCount) },
+    { k: "טווח מחיר", v: priceRange(user?.minPrice ?? null, user?.maxPrice ?? null) },
+  ];
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 16 }}
@@ -22,15 +55,40 @@ export function HeroSection() {
     >
       {/* Text block */}
       <div className="flex flex-col justify-center">
-        <p className="text-muted text-sm font-semibold">{currentAgent.greeting}</p>
-        <h1 className="text-ink mt-2 text-3xl font-black leading-[1.15] sm:text-4xl">
-          זונו מצא{" "}
-          <span className="text-brand">{newOpportunitiesToday}</span> הזדמנויות
-          חדשות בזון שלך
-        </h1>
-        <p className="text-muted mt-3 max-w-md text-base leading-relaxed">
-          מפה חיה של נכסים, קונים, מוכרים והזדמנויות בזמן אמת.
+        <p className="text-muted flex items-center gap-2 text-sm font-semibold">
+          {greeting}
+          {user?.onboardingCompleted && (
+            <span className="bg-success-soft text-success inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold">
+              <Icon name="UserCheck" size={11} strokeWidth={2.4} />
+              הפרופיל הוקם
+            </span>
+          )}
         </p>
+
+        <h1 className="text-ink mt-2 text-3xl font-black leading-[1.15] sm:text-4xl">
+          אזורי הפעילות שלך
+        </h1>
+
+        {error ? (
+          <p className="text-danger mt-3 max-w-md text-base leading-relaxed">
+            לא ניתן לטעון את הנתונים כעת. נסה/י לרענן את הדף.
+          </p>
+        ) : hasLocalities ? (
+          <p className="text-muted mt-3 max-w-md text-base leading-relaxed">
+            {primaryLocality && (
+              <>
+                עיר ראשית <span className="text-brand font-bold">{primaryLocality}</span>
+                {localitiesCount > 1 && <> ועוד {localitiesCount - 1} ערים</>}.{" "}
+              </>
+            )}
+            {propertyFocus && <>מיקוד: {propertyFocus}. </>}
+            {dealFocus && <>סוג עסקה: {dealFocus}.</>}
+          </p>
+        ) : (
+          <p className="text-muted mt-3 max-w-md text-base leading-relaxed">
+            עדיין לא הוגדרו אזורי פעילות. אפשר להוסיף אותם דרך ההגדרות.
+          </p>
+        )}
 
         <div className="mt-6 flex flex-wrap gap-3">
           <button className="bg-brand hover:bg-brand-strong inline-flex h-12 items-center gap-2 rounded-2xl px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(124,58,237,0.32)] transition">
@@ -43,22 +101,38 @@ export function HeroSection() {
           </button>
         </div>
 
-        {/* tiny live stat row */}
+        {/* live stat row — real operating-area data */}
         <div className="mt-7 flex flex-wrap gap-x-7 gap-y-2">
-          {[
-            { k: "נכסים פעילים", v: "18" },
-            { k: "קונים חמים", v: "24" },
-            { k: "עסקאות החודש", v: "12" },
-          ].map((s) => (
+          {stats.map((s) => (
             <div key={s.k}>
               <p className="text-ink text-xl font-black">{s.v}</p>
               <p className="text-muted text-xs font-medium">{s.k}</p>
             </div>
           ))}
         </div>
+
+        {/* selected localities chips (empty-state aware) */}
+        {hasLocalities && (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {localities.map((l) => (
+              <span
+                key={l.name}
+                className={
+                  "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold " +
+                  (l.isPrimary
+                    ? "bg-brand text-white"
+                    : "bg-brand-soft text-brand-strong")
+                }
+              >
+                {l.isPrimary && "★ "}
+                {l.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Map — dominant element */}
+      {/* Map — decorative (still mock) */}
       <div className="relative h-[340px] overflow-hidden rounded-[26px] border border-line bg-card shadow-[0_20px_50px_rgba(124,58,237,0.12)] sm:h-[420px]">
         <CityMap pins={mapPins} />
         <FloatingAssistant

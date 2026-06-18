@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { getDashboardContext } from "@/lib/dashboard/context";
+import { DashboardDataProvider } from "@/components/dashboard/DashboardDataProvider";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { HeroSection } from "@/components/dashboard/sections/HeroSection";
 import { OpportunitiesSection } from "@/components/dashboard/sections/OpportunitiesSection";
@@ -15,20 +17,24 @@ import { CommandSection } from "@/components/dashboard/sections/CommandSection";
 // (avoids build-time prerendering the Supabase query).
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default async function Home() {
+  const dashboardData = await getDashboardContext();
+
   return (
-    <DashboardShell>
-      <HeroSection />
-      <OpportunitiesSection />
-      <Suspense fallback={<PropertiesSkeleton />}>
-        <PropertiesSectionContainer />
-      </Suspense>
-      <HeatmapSection />
-      <JourneysSection />
-      <MatchingSection />
-      <DealsSection />
-      <MarketSection />
-      <CommandSection />
-    </DashboardShell>
+    <DashboardDataProvider value={dashboardData}>
+      <DashboardShell>
+        <HeroSection />
+        <OpportunitiesSection />
+        <Suspense fallback={<PropertiesSkeleton />}>
+          <PropertiesSectionContainer />
+        </Suspense>
+        <HeatmapSection />
+        <JourneysSection />
+        <MatchingSection />
+        <DealsSection />
+        <MarketSection />
+        <CommandSection />
+      </DashboardShell>
+    </DashboardDataProvider>
   );
 }

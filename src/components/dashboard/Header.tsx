@@ -1,10 +1,17 @@
 "use client";
 
 import { Icon } from "./Icon";
-import { currentAgent } from "@/data/mock";
+import { useCurrentOrganization, useCurrentUser } from "./DashboardDataProvider";
 
 /** Top bar: logo + tagline, search, notifications, profile, primary CTA. */
 export function Header() {
+  const user = useCurrentUser();
+  const organization = useCurrentOrganization();
+
+  const displayName = user?.fullName?.trim() || "משתמש";
+  const roleLabel = user?.roleLabel || "סוכן";
+  const tagline = organization?.name || "הסוכן החזק בזון שלך";
+
   return (
     <header className="bg-surface/80 sticky top-0 z-30 backdrop-blur-xl">
       <div className="border-line flex items-center gap-3 border-b px-4 py-3 sm:gap-4 sm:px-6 lg:px-8">
@@ -18,7 +25,7 @@ export function Header() {
               ZONO
             </span>
             <p className="text-muted hidden text-[11px] font-medium sm:block">
-              הסוכן החזק בזון שלך
+              {tagline}
             </p>
           </div>
         </div>
@@ -48,11 +55,11 @@ export function Header() {
 
           <div className="bg-card border-line hidden items-center gap-2.5 rounded-2xl border py-1.5 pe-1.5 ps-3 sm:flex">
             <div className="leading-tight">
-              <p className="text-ink text-sm font-bold">{currentAgent.name}</p>
-              <p className="text-muted text-[11px]">{currentAgent.role}</p>
+              <p className="text-ink text-sm font-bold">{displayName}</p>
+              <p className="text-muted text-[11px]">{roleLabel}</p>
             </div>
             <div className="from-brand to-brand-light grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br text-sm font-black text-white">
-              {currentAgent.name.charAt(0)}
+              {displayName.charAt(0)}
             </div>
           </div>
 
