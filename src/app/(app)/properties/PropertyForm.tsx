@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { LocalityPicker } from "./LocalityPicker";
 import {
   ISRAELI_REGION_LABELS,
   LISTING_KIND_OPTIONS,
@@ -248,11 +249,12 @@ export function PropertyForm({ initial, submitLabel, cancelHref, onSubmit }: Pro
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block">
             <span className={label}>עיר</span>
-            <input
-              className={`${field} mt-1`}
-              value={form.city ?? ""}
-              onChange={(e) => set("city", e.target.value)}
-            />
+            <div className="mt-1">
+              <LocalityPicker
+                value={form.city ?? null}
+                onChange={(v) => set("city", v)}
+              />
+            </div>
           </label>
           <label className="block">
             <span className={label}>אזור</span>
