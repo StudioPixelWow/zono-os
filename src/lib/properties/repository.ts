@@ -13,6 +13,7 @@ import type { Database, PropertyStatus } from "@/lib/supabase/types";
 import type { PropertyFilters, PropertyInput } from "./types";
 
 export type PropertyRow = Database["public"]["Tables"]["properties"]["Row"];
+export type PropertyMediaRow = Database["public"]["Tables"]["property_media"]["Row"];
 export type { PropertyFilters, PropertyInput } from "./types";
 
 function toRecord(input: PropertyInput) {
@@ -23,7 +24,7 @@ function toRecord(input: PropertyInput) {
     region: input.region ?? undefined,
   };
   return {
-    title: input.title.trim(),
+    title: input.title.trim() || "טיוטה ללא שם",
     description: input.description || null,
     type: input.type,
     listing_kind: input.listingKind,
@@ -37,6 +38,12 @@ function toRecord(input: PropertyInput) {
     total_floors: input.totalFloors ?? null,
     city: input.city || null,
     region: (input.region as PropertyRow["region"]) || null,
+    neighborhood: input.neighborhood || null,
+    building_number: input.buildingNumber || null,
+    latitude: input.latitude ?? null,
+    longitude: input.longitude ?? null,
+    show_exact_address: input.showExactAddress,
+    show_neighborhood_only: input.showNeighborhoodOnly,
     location,
     has_parking: input.hasParking,
     has_elevator: input.hasElevator,
@@ -44,6 +51,19 @@ function toRecord(input: PropertyInput) {
     has_safe_room: input.hasSafeRoom,
     has_storage: input.hasStorage,
     is_accessible: input.isAccessible,
+    parking_count: input.parkingCount ?? null,
+    storage_count: input.storageCount ?? null,
+    balcony_count: input.balconyCount ?? null,
+    features: input.features ?? [],
+    listing_tag: (input.listingTag as PropertyRow["listing_tag"]) || null,
+    availability_date: input.availabilityDate || null,
+    price_before_discount: input.priceBeforeDiscount ?? null,
+    price_per_sqm: input.pricePerSqm ?? null,
+    marketing_description: input.marketingDescription || null,
+    ai_description: input.aiDescription || null,
+    internal_notes: input.internalNotes || null,
+    target_audience: input.targetAudience || null,
+    primary_image_url: input.primaryImageUrl || null,
     has_exclusivity: input.hasExclusivity,
     exclusivity_ends_at: input.exclusivityEndsAt || null,
   };
@@ -131,6 +151,67 @@ export async function setPropertyStatus(
 
 export async function archiveProperty(id: string): Promise<void> {
   await setPropertyStatus(id, "archived");
+}
+
+/** Create an empty draft so media + autosave have a property id to attach to. */
+export async function createDraftProperty(): Promise<PropertyRow> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile) throw new Error("not authenticated");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("properties")
+    .insert({
+      org_id: profile.org_id,
+      owner_id: user.id,
+      title: "טיוטה ללא שם",
+      type: "apartment",
+      listing_kind: "sale",
+      status: "draft",
+      price: 0,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** Autosave the full form into an existing draft/property. */
+export async function saveDraft(id: string, input: PropertyInput): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("properties")
+    .update(toRecord(input))
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/** Mark a property as published (sets published_at + primary image). */
+export async function markPublished(
+  id: string,
+  primaryImageUrl: string | null,
+): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("properties")
+    .update({
+      status: "published",
+      published_at: new Date().toISOString(),
+      primary_image_url: primaryImageUrl,
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function listPropertyMedia(
+  propertyId: string,
+): Promise<PropertyMediaRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("property_media")
+    .select("*")
+    .eq("property_id", propertyId)
+    .order("sort_order", { ascending: true });
+  return data ?? [];
 }
 
 // ── Related records for the details page (read-only this phase) ──────────────

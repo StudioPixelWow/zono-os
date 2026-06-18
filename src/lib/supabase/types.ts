@@ -39,7 +39,10 @@ export type PropertyType =
   | "cottage" | "studio" | "commercial" | "office" | "land" | "other";
 export type ListingKind = "sale" | "rent";
 export type PropertyStatus =
-  | "draft" | "active" | "under_offer" | "in_contract" | "sold" | "rented" | "withdrawn" | "archived";
+  | "draft" | "active" | "under_offer" | "in_contract" | "sold" | "rented" | "withdrawn" | "archived"
+  | "ready" | "published";
+export type ListingTag = "new" | "exclusive" | "opportunity" | "premium" | "sold";
+export type MediaType = "image" | "video" | "floor_plan" | "tour_360" | "document";
 export type ProjectType =
   | "residential" | "mixed_use" | "commercial" | "urban_renewal" | "luxury" | "other";
 export type ProjectStatus =
@@ -280,9 +283,51 @@ type PropertiesRow = {
   has_exclusivity: boolean;
   exclusivity_ends_at: string | null;
   listed_at: string | null;
+  neighborhood: string | null;
+  building_number: string | null;
+  formatted_address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  show_exact_address: boolean;
+  show_neighborhood_only: boolean;
+  parking_count: number | null;
+  storage_count: number | null;
+  balcony_count: number | null;
+  features: Json;
+  listing_tag: ListingTag | null;
+  availability_date: string | null;
+  price_before_discount: number | null;
+  price_per_sqm: number | null;
+  marketing_description: string | null;
+  ai_description: string | null;
+  internal_notes: string | null;
+  target_audience: string | null;
+  quality_score: number | null;
+  last_ai_generated_at: string | null;
+  primary_image_url: string | null;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+type PropertyMediaRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  type: MediaType;
+  url: string;
+  storage_path: string | null;
+  mime_type: string | null;
+  file_size: number | null;
+  width: number | null;
+  height: number | null;
+  sort_order: number;
+  is_primary: boolean;
+  alt_text: string | null;
+  external_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 type DealsRow = {
   id: string;
@@ -573,6 +618,7 @@ export interface Database {
       projects: TableShape<ProjectsRow, "org_id" | "name">;
       units: TableShape<UnitsRow, "org_id" | "project_id" | "unit_number">;
       properties: TableShape<PropertiesRow, "org_id" | "title" | "type" | "price">;
+      property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
       matching_results: TableShape<MatchingResultsRow, "org_id" | "buyer_id" | "score">;
@@ -615,6 +661,8 @@ export interface Database {
       property_type: PropertyType;
       listing_kind: ListingKind;
       property_status: PropertyStatus;
+      listing_tag: ListingTag;
+      media_type: MediaType;
       project_type: ProjectType;
       project_status: ProjectStatus;
       unit_status: UnitStatus;

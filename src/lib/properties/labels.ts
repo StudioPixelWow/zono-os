@@ -65,6 +65,8 @@ export const PROPERTY_STATUS_LABELS: Record<PropertyStatus, string> = {
   rented: "הושכר",
   withdrawn: "הוסר",
   archived: "בארכיון",
+  ready: "מוכן לפרסום",
+  published: "פורסם",
 };
 
 export const PROPERTY_STATUS_TONES: Record<PropertyStatus, BadgeTone> = {
@@ -76,6 +78,8 @@ export const PROPERTY_STATUS_TONES: Record<PropertyStatus, BadgeTone> = {
   rented: "brand",
   withdrawn: "neutral",
   archived: "neutral",
+  ready: "accent",
+  published: "success",
 };
 
 /** Statuses an agent can set from the UI (archived handled via "archive"). */
