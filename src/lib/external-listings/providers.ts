@@ -189,40 +189,54 @@ class ApifyProvider implements PropertyProvider {
   normalizeListing(raw: RawListing): NormalizedExternalListing {
     const images = (() => {
       const v = pick(raw, ["images", "imageUrls", "image_urls", "photos"]);
-      if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? x : (x as { url?: string })?.url ?? "")).filter(Boolean);
-      return [] as string[];
+      const list = Array.isArray(v) ? v.map((x) => (typeof x === "string" ? x : (x as { url?: string })?.url ?? "")).filter(Boolean) : [];
+      // Fall back to the cover image if no gallery was returned.
+      const cover = str(pick(raw, ["coverImage", "mainImage", "thumbnail"]));
+      if (!list.length && cover) return [cover];
+      return list as string[];
     })();
+    const address = str(pick(raw, ["address", "fullAddress", "addressText"]));
+    const description = str(pick(raw, ["listingDescription", "description", "text", "body"]));
+    // Yad2/Madlan listings often have no standalone title — derive one.
+    const title = str(pick(raw, ["title", "name", "headline", "listingTitle"]))
+      ?? address
+      ?? (description ? description.replace(/\s+/g, " ").trim().slice(0, 80) : null);
+    const boolOf = (keys: string[]): boolean | null => {
+      const v = pick(raw, keys);
+      return typeof v === "boolean" ? v : null;
+    };
     return {
       source: this.source,
-      sourceId: String(pick(raw, ["id", "listingId", "adNumber", "token"]) ?? cryptoId()),
-      externalId: str(pick(raw, ["id", "listingId", "adNumber", "token"])),
-      title: str(pick(raw, ["title", "name", "headline"])),
-      city: str(pick(raw, ["city", "cityName", "locality", "area"])),
-      neighborhood: str(pick(raw, ["neighborhood", "neighbourhood", "hood"])),
-      street: str(pick(raw, ["street", "streetName"])),
-      streetNumber: str(pick(raw, ["streetNumber", "houseNumber", "number"])),
-      address: str(pick(raw, ["address", "fullAddress"])),
-      propertyType: str(pick(raw, ["type", "propertyType", "category"])),
+      sourceId: String(pick(raw, ["id", "listingId", "adNumber", "token", "orderId"]) ?? cryptoId()),
+      externalId: str(pick(raw, ["id", "listingId", "adNumber", "token", "orderId"])),
+      title,
+      city: str(pick(raw, ["city", "cityName", "locality", "area", "settlement"])),
+      neighborhood: str(pick(raw, ["neighborhood", "neighbourhood", "neighborhoodName", "hood", "areaName", "quarter"])),
+      street: str(pick(raw, ["street", "streetName", "addressStreet"])),
+      streetNumber: str(pick(raw, ["streetNumber", "houseNumber", "number", "addressNumber"])),
+      address,
+      propertyType: str(pick(raw, ["type", "propertyType", "category", "assetType"])),
       dealType: "sale",
-      price: num(pick(raw, ["price", "askingPrice", "priceValue"])),
-      rooms: num(pick(raw, ["rooms", "roomsCount", "numberOfRooms"])),
-      bathrooms: num(pick(raw, ["bathrooms"])),
-      balconies: num(pick(raw, ["balconies"])),
+      price: num(pick(raw, ["price", "askingPrice", "priceValue", "priceNis"])),
+      rooms: num(pick(raw, ["rooms", "roomsCount", "numberOfRooms", "roomsNumber"])),
+      bathrooms: num(pick(raw, ["bathrooms", "bathroomsCount"])),
+      balconies: num(pick(raw, ["balconies", "balconiesCount"])),
       floor: num(pick(raw, ["floor", "floorNumber"])),
-      totalFloors: num(pick(raw, ["totalFloors", "floors"])),
-      sqm: num(pick(raw, ["sqm", "size", "squareMeters", "area_sqm"])),
-      areaSqm: num(pick(raw, ["areaSqm", "builtArea"])),
-      parking: typeof pick(raw, ["parking", "hasParking"]) === "boolean" ? Boolean(pick(raw, ["parking", "hasParking"])) : null,
-      elevator: typeof pick(raw, ["elevator", "hasElevator"]) === "boolean" ? Boolean(pick(raw, ["elevator", "hasElevator"])) : null,
-      condition: str(pick(raw, ["condition", "state"])),
-      description: str(pick(raw, ["description", "text", "body"])),
+      totalFloors: num(pick(raw, ["totalFloors", "floors", "buildingFloors"])),
+      sqm: num(pick(raw, ["sqm", "size", "squareMeters", "squareMeter", "square_meters", "area_sqm", "builtSqm", "squareMeterage", "meterage", "houseSize"])),
+      areaSqm: num(pick(raw, ["areaSqm", "builtArea", "gardenSize", "lotSize"])),
+      parking: boolOf(["parking", "hasParking"]),
+      elevator: boolOf(["elevator", "hasElevator"]),
+      secureRoom: boolOf(["secureRoom", "hasSecureRoom", "hasMamad"]),
+      condition: str(pick(raw, ["condition", "state", "assetCondition"])),
+      description,
       images,
       contactName: str(pick(raw, ["contactName", "advertiserName", "agentName"])),
       contactPhone: str(pick(raw, ["phone", "contactPhone", "advertiserPhone"])),
       contactType: str(pick(raw, ["contactType", "advertiserType"])),
-      hasAgent: typeof pick(raw, ["hasAgent", "isAgent"]) === "boolean" ? Boolean(pick(raw, ["hasAgent", "isAgent"])) : null,
-      listingUrl: str(pick(raw, ["url", "link", "listingUrl"])),
-      publishedAt: str(pick(raw, ["publishedAt", "date", "createdAt"])),
+      hasAgent: boolOf(["hasAgent", "isAgent", "isAgency"]),
+      listingUrl: str(pick(raw, ["url", "link", "listingUrl", "adUrl"])),
+      publishedAt: str(pick(raw, ["publishedAt", "date", "createdAt", "updatedAt", "scrapedAt", "fetchedAt", "listedAt", "uploadDate"])),
       rawData: raw,
     };
   }
