@@ -67,14 +67,20 @@ function areaMatch(listing: ListingForDeal, b: BuyerForMatch): boolean | null {
 }
 
 export function matchBuyerToListing(listing: ListingForDeal, b: BuyerForMatch): BuyerMatch | null {
-  // Budget fit
-  let budgetFit: number;
   const p = listing.price;
+  // HARD budget gate — a buyer never matches a listing materially over their
+  // max budget (allow a 10% stretch), nor one far below their min (wrong segment).
+  if (p != null) {
+    if (b.budgetMax != null && p > b.budgetMax * 1.1) return null;
+    if (b.budgetMin != null && p < b.budgetMin * 0.6) return null;
+  }
+
+  // Budget fit (within gate)
+  let budgetFit: number;
   if (p == null) budgetFit = 50;
-  else if ((b.budgetMin == null || p >= b.budgetMin) && (b.budgetMax == null || p <= b.budgetMax)) budgetFit = 100;
-  else if (b.budgetMax != null && p <= b.budgetMax * 1.1) budgetFit = 60; // up to 10% over
-  else if (b.budgetMin != null && p >= b.budgetMin * 0.9) budgetFit = 55;
-  else budgetFit = 15;
+  else if ((b.budgetMin == null || p >= b.budgetMin) && (b.budgetMax == null || p <= b.budgetMax)) budgetFit = 100; // in range
+  else if (b.budgetMax != null && p > b.budgetMax) budgetFit = 55; // 0–10% stretch over max
+  else budgetFit = 75; // below min but affordable
 
   // Rooms fit
   let roomsFit: number;
