@@ -476,6 +476,65 @@ type ExternalListingsRow = {
   updated_at: string;
 };
 
+type CompetitorProfilesRow = {
+  id: string;
+  organization_id: string;
+  broker_profile_id: string | null;
+  display_name: string;
+  competitor_type: string;
+  market_share_score: number;
+  inventory_strength_score: number;
+  growth_score: number;
+  exclusivity_score: number;
+  pricing_power_score: number;
+  activity_score: number;
+  acquisition_risk_score: number;
+  opportunity_score: number;
+  total_listings: number;
+  active_localities: number;
+  dominant_localities: Json;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  ai_summary: string | null;
+  ai_risk_summary: string | null;
+  ai_opportunity_summary: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type CompetitorMarketPositionsRow = {
+  id: string;
+  organization_id: string;
+  competitor_profile_id: string;
+  locality: string;
+  listings_count: number;
+  market_share_percent: number;
+  avg_price: number | null;
+  avg_price_per_sqm: number | null;
+  exclusives_count: number;
+  private_seller_loss_count: number;
+  inventory_change_30d: number;
+  growth_rate: number;
+  rank: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type CompetitorSignalsRow = {
+  id: string;
+  organization_id: string;
+  competitor_profile_id: string | null;
+  signal_type: string;
+  locality: string | null;
+  title: string;
+  description: string | null;
+  severity: string;
+  confidence_score: number;
+  metadata: Json;
+  created_at: string;
+};
+
 type InventoryAcquisitionProfilesRow = {
   id: string;
   organization_id: string;
@@ -1904,6 +1963,18 @@ export interface Database {
       inventory_acquisition_reviews: TableShape<
         InventoryAcquisitionReviewsRow,
         "organization_id" | "review_type" | "title"
+      >;
+      competitor_profiles: TableShape<
+        CompetitorProfilesRow,
+        "organization_id" | "display_name"
+      >;
+      competitor_market_positions: TableShape<
+        CompetitorMarketPositionsRow,
+        "organization_id" | "competitor_profile_id" | "locality"
+      >;
+      competitor_signals: TableShape<
+        CompetitorSignalsRow,
+        "organization_id" | "signal_type" | "title"
       >;
       seller_intelligence_profiles: TableShape<
         SellerIntelligenceProfilesRow,

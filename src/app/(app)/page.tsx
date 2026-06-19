@@ -4,6 +4,7 @@ import { PropertiesSectionContainer } from "@/components/dashboard/sections/Prop
 import { PropertiesSkeleton } from "@/components/dashboard/sections/PropertiesSkeleton";
 import { CommandSection } from "@/components/dashboard/sections/CommandSection";
 import { CommunicationDashboardSection } from "@/components/dashboard/sections/CommunicationDashboardSection";
+import { CompetitorDashboardSection } from "@/components/dashboard/sections/CompetitorDashboardSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
   MatchingSectionContainer, OpportunitiesSectionContainer,
@@ -27,6 +28,9 @@ export default function Home() {
       <Suspense fallback={null}><MarketSectionContainer /></Suspense>
       <Suspense fallback={null}>
         <CommunicationDashboardSection />
+      </Suspense>
+      <Suspense fallback={null}>
+        <CompetitorDashboardSection />
       </Suspense>
       <CommandSection />
     </>
