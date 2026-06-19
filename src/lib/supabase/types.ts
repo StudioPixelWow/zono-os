@@ -696,6 +696,107 @@ type SellerCommitmentsRow = {
   updated_at: string;
 };
 
+type DecisionIntelligenceProfilesRow = {
+  id: string;
+  org_id: string;
+  organization_health_score: number;
+  organization_risk_score: number;
+  organization_growth_score: number;
+  organization_execution_score: number;
+  organization_attention_score: number;
+  organization_revenue_score: number;
+  active_properties: number;
+  active_sellers: number;
+  high_risk_properties: number;
+  high_risk_sellers: number;
+  stalled_properties: number;
+  stalled_sellers: number;
+  overdue_tasks: number;
+  overdue_commitments: number;
+  top_priority_entity_id: string | null;
+  top_priority_entity_type: string | null;
+  top_priority_reason: string | null;
+  executive_summary: string | null;
+  risk_summary: string | null;
+  growth_summary: string | null;
+  next_best_business_action: string | null;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type AttentionItemsRow = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  attention_score: number;
+  urgency_score: number;
+  impact_score: number;
+  confidence_score: number;
+  revenue_impact_score: number;
+  relationship_impact_score: number;
+  churn_impact_score: number;
+  title: string;
+  reason: string | null;
+  recommended_action: string | null;
+  expected_outcome: string | null;
+  status: string;
+  detected_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type OpportunitySignalsRow = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  opportunity_score: number;
+  impact_score: number;
+  confidence_score: number;
+  title: string;
+  description: string | null;
+  recommended_action: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type DecisionQueueRow = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  priority_score: number;
+  rank_position: number;
+  title: string;
+  reason: string | null;
+  action_type: string | null;
+  action_payload: Json;
+  expected_impact: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type DecisionRecommendationsRow = {
+  id: string;
+  org_id: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  recommendation_type: string | null;
+  title: string;
+  description: string | null;
+  urgency_score: number;
+  impact_score: number;
+  confidence_score: number;
+  expected_result: string | null;
+  generated_at: string;
+  created_at: string;
+};
+
 type DealsRow = {
   id: string;
   org_id: string;
@@ -1074,6 +1175,26 @@ export interface Database {
       seller_commitments: TableShape<
         SellerCommitmentsRow,
         "org_id" | "seller_id" | "title"
+      >;
+      decision_intelligence_profiles: TableShape<
+        DecisionIntelligenceProfilesRow,
+        "org_id"
+      >;
+      attention_items: TableShape<
+        AttentionItemsRow,
+        "org_id" | "entity_type" | "entity_id" | "title"
+      >;
+      opportunity_signals: TableShape<
+        OpportunitySignalsRow,
+        "org_id" | "entity_type" | "entity_id" | "title"
+      >;
+      decision_queue: TableShape<
+        DecisionQueueRow,
+        "org_id" | "entity_type" | "entity_id" | "title"
+      >;
+      decision_recommendations: TableShape<
+        DecisionRecommendationsRow,
+        "org_id" | "title"
       >;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;

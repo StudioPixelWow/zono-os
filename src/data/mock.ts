@@ -28,6 +28,7 @@ export const newOpportunitiesToday = 17;
 /* ── Navigation ─────────────────────────────────────────── */
 export const navItems: NavItem[] = [
   { id: "home", label: "בית", icon: "Home", active: true },
+  { id: "command", label: "מרכז פיקוד", icon: "Flame" },
   { id: "map", label: "מפה חכמה", icon: "Map" },
   { id: "properties", label: "נכסים", icon: "Building2" },
   { id: "buyers", label: "קונים", icon: "Users" },
