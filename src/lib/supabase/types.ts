@@ -476,6 +476,63 @@ type ExternalListingsRow = {
   updated_at: string;
 };
 
+type InventoryAcquisitionProfilesRow = {
+  id: string;
+  organization_id: string;
+  external_listing_id: string;
+  acquisition_score: number;
+  private_seller_score: number;
+  buyer_demand_score: number;
+  price_opportunity_score: number;
+  market_gap_score: number;
+  contactability_score: number;
+  broker_competition_score: number;
+  double_side_potential_score: number;
+  acquisition_status: string;
+  next_best_action: string | null;
+  reason_summary: string | null;
+  ai_summary: string | null;
+  ai_outreach_strategy: string | null;
+  ai_risk_summary: string | null;
+  metadata: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type InventoryAcquisitionActionsRow = {
+  id: string;
+  organization_id: string;
+  acquisition_profile_id: string;
+  external_listing_id: string | null;
+  action_type: string;
+  title: string;
+  description: string | null;
+  urgency_score: number;
+  impact_score: number;
+  confidence_score: number;
+  expected_outcome: string | null;
+  status: string;
+  related_task_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type InventoryAcquisitionReviewsRow = {
+  id: string;
+  organization_id: string;
+  external_listing_id: string | null;
+  acquisition_profile_id: string | null;
+  review_type: string;
+  title: string;
+  reason: string | null;
+  confidence_score: number;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
 type BrokerProfilesRow = {
   id: string;
   org_id: string;
@@ -1835,6 +1892,18 @@ export interface Database {
       property_broker_matches: TableShape<
         PropertyBrokerMatchesRow,
         "org_id" | "broker_id"
+      >;
+      inventory_acquisition_profiles: TableShape<
+        InventoryAcquisitionProfilesRow,
+        "organization_id" | "external_listing_id"
+      >;
+      inventory_acquisition_actions: TableShape<
+        InventoryAcquisitionActionsRow,
+        "organization_id" | "acquisition_profile_id" | "action_type" | "title"
+      >;
+      inventory_acquisition_reviews: TableShape<
+        InventoryAcquisitionReviewsRow,
+        "organization_id" | "review_type" | "title"
       >;
       seller_intelligence_profiles: TableShape<
         SellerIntelligenceProfilesRow,

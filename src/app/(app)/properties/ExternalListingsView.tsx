@@ -16,6 +16,7 @@ import {
 } from "@/lib/external-listings/actions";
 import { recalcDecisionBrainAction } from "@/lib/decision-intelligence/actions";
 import { createBrokerFromListingAction, decideListingMatchAction, runBrokerDetectionAction } from "@/lib/broker/actions";
+import { openAcquisitionAction } from "@/lib/acquisition/actions";
 import type { ImportDiagnostics } from "@/lib/external-listings/service";
 import type { Database } from "@/lib/supabase/types";
 
@@ -165,6 +166,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
           <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
           <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
           <Link href="/broker-intelligence"><Button size="sm" variant="ghost">מודיעין מתווכים</Button></Link>
+          <Link href="/acquisition"><Button size="sm" variant="ghost">מודיעין גיוס</Button></Link>
           <Button size="sm" variant="ghost" onClick={recalcBrain} disabled={pending}>חשב מרכז פיקוד מחדש</Button>
           <Button size="sm" variant="ghost" onClick={loadDiag} disabled={pending}>דיבאג ייבוא</Button>
         </div>
@@ -307,7 +309,14 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
                     <td className="text-muted px-4 py-3">{l.sqm ?? "—"}</td>
                     <td className="text-muted px-4 py-3">{sqmPrice ? sqmPrice.toLocaleString("he-IL") : "—"}</td>
                     <td className={cn("px-4 py-3 font-bold", tone(l.opportunity_score))}>{l.opportunity_score}</td>
-                    <td className="px-4 py-3">{l.promoted_property_id ? <span className="text-success text-xs font-bold">קודם ✓</span> : <Button size="sm" variant="ghost" onClick={() => run(() => promoteExternalListingAction(l.id))} disabled={pending}>קדם ל-CRM</Button>}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col items-start gap-1">
+                        {l.promoted_property_id ? <span className="text-success text-xs font-bold">קודם ✓</span> : <Button size="sm" variant="ghost" onClick={() => run(() => promoteExternalListingAction(l.id))} disabled={pending}>קדם ל-CRM</Button>}
+                        {!l.promoted_property_id && (
+                          <button className="text-brand-strong text-[10px] font-bold" disabled={pending} onClick={() => { setError(null); start(async () => { const r = await openAcquisitionAction(l.id); if (r?.error) setError(r.error); else router.push("/acquisition"); }); }}>פתח הזדמנות גיוס</button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}

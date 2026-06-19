@@ -60,6 +60,7 @@ interface OrgData {
   marketCells: { localityId: string | null; localityName: string; demand: number; supply: number; opportunity: number; belowAverage: number; priceDrops: number; externalListings: number; activeBuyers: number; matchedBuyers: number }[];
   brokerReviews: { listingId: string; brokerName: string }[];
   brokerDominance: { brokerId: string; brokerName: string; city: string; count: number }[];
+  acquisitionOps: { profileId: string; title: string; city: string | null; score: number; privateSeller: number; buyerDemand: number; doubleSide: number; nextAction: string | null; reason: string | null }[];
   externalPriceDrops: Set<string>;
   externalDuplicates: Set<string>;
   externalCityAvgSqm: Map<string, number>;
@@ -71,7 +72,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -90,6 +91,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("market_area_snapshots").select("locality_id,locality_name,date,demand_score,supply_score,opportunity_score,below_average_count,price_drops_count,active_external_listings,active_buyers_count,matched_buyers_count").order("date", { ascending: false }).limit(300),
     supabase.from("broker_match_reviews").select("listing_id,broker_id").eq("status", "pending").limit(40),
     supabase.from("external_listings").select("detected_broker_id,detected_broker_name,city").not("detected_broker_id", "is", null).eq("status", "active").in("broker_detection_status", ["auto", "approved"]).limit(1000),
+    supabase.from("inventory_acquisition_profiles").select("id,acquisition_score,private_seller_score,buyer_demand_score,double_side_potential_score,next_best_action,reason_summary,acquisition_status,external_listings(title,city)").gte("acquisition_score", 55).not("acquisition_status", "in", "(not_relevant,promoted_to_crm,lost)").order("acquisition_score", { ascending: false }).limit(40),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -144,6 +146,10 @@ async function gatherOrgData(): Promise<OrgData> {
       }
       return [...counts.values()].filter((c) => c.count >= 3);
     })(),
+    acquisitionOps: (acqP.data ?? []).map((a) => {
+      const l = (a as unknown as { external_listings?: { title: string | null; city: string | null } | null }).external_listings;
+      return { profileId: a.id, title: l?.title ?? "מודעה חיצונית", city: l?.city ?? null, score: a.acquisition_score, privateSeller: a.private_seller_score, buyerDemand: a.buyer_demand_score, doubleSide: a.double_side_potential_score, nextAction: a.next_best_action, reason: a.reason_summary };
+    }),
     externalListings,
     externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
     externalDuplicates: new Set((extD.data ?? []).map((dd) => dd.listing_id)),
@@ -359,6 +365,19 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       rows.push({ org_id: orgId, entity_type: "match", entity_id: mm.id, opportunity_score: clamp(mm.opportunity_score), impact_score: mm.revenue_score, confidence_score: mm.closing_probability, title: `${d.buyerMap.get(mm.buyer_id) ?? "קונה"} ← ${d.propMap.get(mm.property_id)?.title ?? "נכס"} · עסקה קרובה לסגירה`, description: `הסתברות סגירה ${mm.closing_probability}%.`, recommended_action: "לקדם לסגירה — ביקור/הצעה", status: "open" });
     }
   }
+  // Inventory acquisition — broker acquisition opportunities (private sellers,
+  // buyer demand, double-side). Links to the acquisition board.
+  for (const a of d.acquisitionOps) {
+    rows.push({
+      org_id: orgId, entity_type: "acquisition", entity_id: a.profileId,
+      opportunity_score: clamp(a.score), impact_score: clamp(Math.max(a.privateSeller, a.buyerDemand)), confidence_score: 72,
+      title: `גיוס: ${a.title}${a.city ? ` · ${a.city}` : ""}${a.doubleSide >= 70 ? " · דו״צ" : ""}`,
+      description: a.reason ?? "הזדמנות גיוס נכס.",
+      recommended_action: a.nextAction ?? "צור קשר עם בעלים פרטי",
+      status: "open",
+    });
+  }
+
   // Market heatmap clusters — locality-level opportunity signals.
   for (const c of d.marketCells) {
     if (!c.localityId) continue;
