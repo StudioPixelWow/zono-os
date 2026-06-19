@@ -47,6 +47,8 @@ interface OrgData {
   sellerProfiles: { seller_id: string; seller_trust_score: number; seller_churn_risk_score: number; seller_health_score: number; days_since_last_contact: number | null }[];
   sellerMap: Map<string, string>;
   activePropCountBySeller: Map<string, number>;
+  buyerProfiles: { buyer_id: string; buyer_health_score: number; buyer_conversion_probability: number; buyer_readiness_score: number; buyer_engagement_score: number; buyer_financing_score: number; days_since_activity: number | null; current_stage: string }[];
+  buyerMap: Map<string, string>;
   overdueTasks: number;
   overdueCommitments: { seller_id: string; title: string }[];
 }
@@ -54,13 +56,15 @@ interface OrgData {
 async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
-  const [pp, props, sp, sellers, tasks, commits] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
     supabase.from("sellers").select("id,full_name"),
     supabase.from("tasks").select("id", { count: "exact", head: true }).neq("status", "done").not("due_at", "is", null).lt("due_at", nowIso),
     supabase.from("seller_commitments").select("seller_id,title,due_date").eq("status", "open").not("due_date", "is", null).lt("due_date", nowIso),
+    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_health_score,buyer_conversion_probability,buyer_readiness_score,buyer_engagement_score,buyer_financing_score,days_since_activity,current_stage"),
+    supabase.from("buyers").select("id,full_name"),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -74,6 +78,8 @@ async function gatherOrgData(): Promise<OrgData> {
     sellerProfiles: sp.data ?? [],
     sellerMap: new Map((sellers.data ?? []).map((s) => [s.id, s.full_name])),
     activePropCountBySeller,
+    buyerProfiles: bp.data ?? [],
+    buyerMap: new Map((buyers.data ?? []).map((b) => [b.id, b.full_name])),
     overdueTasks: tasks.count ?? 0,
     overdueCommitments: (commits.data ?? []).map((c) => ({ seller_id: c.seller_id, title: c.title })),
   };
@@ -139,6 +145,31 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
     });
   }
 
+  for (const bu of d.buyerProfiles) {
+    const conv = bu.buyer_conversion_probability;
+    const days = bu.days_since_activity;
+    const closeToPurchase = conv >= 65;
+    const atRisk = bu.buyer_health_score < 45 || (days ?? 0) >= 14;
+    if (!closeToPurchase && !atRisk) continue;
+    const severity = closeToPurchase ? "high" : (days ?? 0) >= 21 ? "high" : "medium";
+    const revenueImpact = clamp(conv);
+    const relationshipImpact = clamp(100 - bu.buyer_health_score);
+    const u = closeToPurchase
+      ? clamp(60 + conv * 0.3)
+      : calculateUrgencyScore({ daysSinceActivity: days, severity });
+    const impact = calculateImpactScore({ revenueImpact, relationshipImpact, churnImpact: 0 });
+    rows.push({
+      org_id: orgId, entity_type: "buyer", entity_id: bu.buyer_id,
+      attention_score: calculateAttentionScore({ urgency: u, impact, confidence: 78 }),
+      urgency_score: u, impact_score: impact, confidence_score: 78,
+      revenue_impact_score: revenueImpact, relationship_impact_score: relationshipImpact, churn_impact_score: 0,
+      title: d.buyerMap.get(bu.buyer_id) ?? "קונה",
+      reason: closeToPurchase ? `קרוב לסגירה (${conv}%)` : bu.buyer_health_score < 45 ? `בריאות נמוכה ${bu.buyer_health_score}` : `אין פעילות ${days} ימים`,
+      recommended_action: closeToPurchase ? "לקדם לסגירה / לתאם ביקור" : "שיחת מעקב עם הקונה",
+      expected_outcome: closeToPurchase ? "מימוש עסקה" : "החזרת הקונה למסלול", status: "open",
+    });
+  }
+
   return rows.sort((a, b) => (b.attention_score ?? 0) - (a.attention_score ?? 0));
 }
 
@@ -157,7 +188,16 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
     if (s.seller_trust_score >= 70 && (d.activePropCountBySeller.get(s.seller_id) ?? 0) > 0)
       rows.push({ org_id: orgId, entity_type: "seller", entity_id: s.seller_id, opportunity_score: 60, impact_score: 60, confidence_score: 70, title: `${d.sellerMap.get(s.seller_id) ?? "מוכר"} · חיזוק שותפות`, description: "מוכר באמון גבוה — הזדמנות להרחבת שיתוף פעולה.", recommended_action: "קבע פגישת אסטרטגיה לשימור", status: "open" });
   }
-  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 20);
+  for (const bu of d.buyerProfiles) {
+    const name = d.buyerMap.get(bu.buyer_id) ?? "קונה";
+    if (bu.buyer_readiness_score >= 70)
+      rows.push({ org_id: orgId, entity_type: "buyer", entity_id: bu.buyer_id, opportunity_score: clamp(bu.buyer_readiness_score), impact_score: clamp(bu.buyer_conversion_probability), confidence_score: 80, title: `${name} · קונה מוכן`, description: "קונה במוכנות גבוהה לרכישה.", recommended_action: "להציג נכסים מתאימים ולתאם ביקור", status: "open" });
+    else if (bu.buyer_financing_score >= 70)
+      rows.push({ org_id: orgId, entity_type: "buyer", entity_id: bu.buyer_id, opportunity_score: 65, impact_score: clamp(bu.buyer_conversion_probability), confidence_score: 75, title: `${name} · מימון מוכן`, description: "מימון מאושר — הזדמנות לקדם עסקה.", recommended_action: "לקדם הצגת נכסים וביקורים", status: "open" });
+    else if (bu.buyer_engagement_score >= 70)
+      rows.push({ org_id: orgId, entity_type: "buyer", entity_id: bu.buyer_id, opportunity_score: 58, impact_score: 55, confidence_score: 70, title: `${name} · מעורבות גבוהה`, description: "קונה מעורב מאוד — לנצל את התנופה.", recommended_action: "לתאם ביקור / שיחת המשך", status: "open" });
+  }
+  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 25);
 }
 
 // ── Orchestration ────────────────────────────────────────────────────────────

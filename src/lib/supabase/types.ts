@@ -797,6 +797,129 @@ type DecisionRecommendationsRow = {
   created_at: string;
 };
 
+type BuyerIntelligenceProfilesRow = {
+  id: string;
+  org_id: string;
+  buyer_id: string;
+  buyer_health_score: number;
+  buyer_readiness_score: number;
+  buyer_engagement_score: number;
+  buyer_qualification_score: number;
+  buyer_trust_score: number;
+  buyer_financing_score: number;
+  buyer_momentum_score: number;
+  buyer_conversion_probability: number;
+  current_stage: string;
+  current_status: string;
+  next_best_action: string | null;
+  viewed_properties_count: number;
+  visits_count: number;
+  liked_properties_count: number;
+  rejected_properties_count: number;
+  offers_count: number;
+  meetings_count: number;
+  calls_count: number;
+  last_activity_at: string | null;
+  last_visit_at: string | null;
+  days_since_activity: number | null;
+  primary_objection: string | null;
+  purchase_motivation: string | null;
+  urgency_level: string | null;
+  preferred_area_summary: string | null;
+  intelligence_summary: string | null;
+  ai_summary: string | null;
+  ai_risk_summary: string | null;
+  ai_recommendation_summary: string | null;
+  autonomous_mode_enabled: boolean;
+  allowed_auto_actions: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BuyerMissionsRow = {
+  id: string;
+  org_id: string;
+  buyer_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  target_metric: string | null;
+  target_value: number | null;
+  current_value: number;
+  due_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BuyerRisksRow = {
+  id: string;
+  org_id: string;
+  buyer_id: string;
+  risk_type: string | null;
+  severity: string;
+  title: string;
+  description: string | null;
+  recommended_action: string | null;
+  status: string;
+  detected_at: string;
+  resolved_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type BuyerTouchpointsRow = {
+  id: string;
+  org_id: string;
+  buyer_id: string;
+  property_id: string | null;
+  touchpoint_type: string | null;
+  direction: string;
+  title: string | null;
+  description: string | null;
+  sentiment: string | null;
+  impact_score: number;
+  trust_impact: number;
+  engagement_impact: number;
+  created_by_user_id: string | null;
+  occurred_at: string;
+  created_at: string;
+};
+
+type BuyerObjectionsRow = {
+  id: string;
+  org_id: string;
+  buyer_id: string;
+  objection_type: string | null;
+  severity: string;
+  title: string | null;
+  description: string | null;
+  resolved: boolean;
+  resolved_at: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BuyerCommitmentsRow = {
+  id: string;
+  org_id: string;
+  buyer_id: string;
+  property_id: string | null;
+  title: string;
+  description: string | null;
+  promised_at: string;
+  due_date: string | null;
+  fulfilled_at: string | null;
+  status: string;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type DealsRow = {
   id: string;
   org_id: string;
@@ -1196,6 +1319,15 @@ export interface Database {
         DecisionRecommendationsRow,
         "org_id" | "title"
       >;
+      buyer_intelligence_profiles: TableShape<
+        BuyerIntelligenceProfilesRow,
+        "org_id" | "buyer_id"
+      >;
+      buyer_missions: TableShape<BuyerMissionsRow, "org_id" | "buyer_id" | "title">;
+      buyer_risks: TableShape<BuyerRisksRow, "org_id" | "buyer_id" | "title">;
+      buyer_touchpoints: TableShape<BuyerTouchpointsRow, "org_id" | "buyer_id">;
+      buyer_objections: TableShape<BuyerObjectionsRow, "org_id" | "buyer_id">;
+      buyer_commitments: TableShape<BuyerCommitmentsRow, "org_id" | "buyer_id" | "title">;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
       matching_results: TableShape<MatchingResultsRow, "org_id" | "buyer_id" | "score">;

@@ -2,8 +2,10 @@ import { listBuyers, listBuyerBoard, type BuyerRow } from "@/lib/buyers/reposito
 import type { BuyerBoard } from "@/lib/buyers/repository";
 import type { BuyerFilters } from "@/lib/buyers/types";
 import type { BuyerTemperature, LeadSource, PropertyType } from "@/lib/supabase/types";
+import { listBuyerIntelBoard, type BuyerIntelBoard } from "@/lib/buyer-intelligence/service";
 import { BuyersListView } from "./BuyersListView";
 import { BuyerBoardWidgets } from "./BuyerBoardWidgets";
+import { BuyerIntelWidgets } from "./BuyerIntelWidgets";
 
 export const dynamic = "force-dynamic";
 
@@ -52,9 +54,17 @@ export default async function BuyersPage({
     console.error("[buyers] board failed:", e);
   }
 
+  let intel: BuyerIntelBoard | null = null;
+  try {
+    intel = await listBuyerIntelBoard();
+  } catch (e) {
+    console.error("[buyers] intel board failed:", e);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {board && <BuyerBoardWidgets board={board} />}
+      {intel && <BuyerIntelWidgets board={intel} />}
       <BuyersListView buyers={rows} filters={filters} error={error} />
     </div>
   );

@@ -15,7 +15,7 @@ import type { ExecutiveCommandCenter as ExecCC, FocusItem } from "@/lib/decision
 
 const TONE_TEXT: Record<Tone, string> = { good: "text-success", medium: "text-brand-strong", risk: "text-danger" };
 const fmt = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
-const entityHref = (t: string, id: string) => (t === "property" ? `/properties/${id}` : t === "seller" ? `/sellers/${id}` : "#");
+const entityHref = (t: string, id: string) => (t === "property" ? `/properties/${id}` : t === "seller" ? `/sellers/${id}` : t === "buyer" ? `/buyers/${id}` : "#");
 
 function SectionCard({ title, icon, action, children }: { title: string; icon: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (

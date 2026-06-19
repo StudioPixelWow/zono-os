@@ -37,6 +37,15 @@ export async function createBuyerAction(
     console.error("[buyers] create failed:", e);
     return { error: `יצירת הקונה נכשלה: ${msg}` };
   }
+  // Spin up the buyer digital twin immediately (best-effort).
+  try {
+    const { logActivityEvent } = await import("@/lib/activity/service");
+    await logActivityEvent({ eventType: "buyer.created", entityType: "buyer", entityId: id, title: "נוצר קונה חדש" });
+    const { initializeBuyerIntelligence } = await import("@/lib/buyer-intelligence/service");
+    await initializeBuyerIntelligence(id);
+  } catch (e) {
+    console.error("[buyers] intelligence auto-init failed:", e);
+  }
   revalidatePath("/buyers");
   redirect(`/buyers/${id}`);
 }

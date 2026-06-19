@@ -19,6 +19,8 @@ import {
 } from "@/lib/buyers/labels";
 import { BuyerTasksPanel } from "./BuyerTasksPanel";
 import type { Database } from "@/lib/supabase/types";
+import { BuyerCommandCenter } from "./BuyerCommandCenter";
+import type { BuyerCommandCenter as BuyerCCData } from "@/lib/buyer-intelligence/service";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
@@ -26,6 +28,7 @@ type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
 type MeetingRow = Database["public"]["Tables"]["meetings"]["Row"];
 
 type Tab =
+  | "command"
   | "overview"
   | "preferences"
   | "activities"
@@ -34,6 +37,7 @@ type Tab =
   | "meetings"
   | "matches";
 const TABS: { id: Tab; label: string }[] = [
+  { id: "command", label: "מרכז ניהול קונה" },
   { id: "overview", label: "סקירה" },
   { id: "preferences", label: "העדפות" },
   { id: "activities", label: "פעילות" },
@@ -72,14 +76,16 @@ export function BuyerDetailView({
   tasks,
   notes,
   meetings,
+  commandCenter,
 }: {
   buyer: BuyerRow;
   activities: ActivityRow[];
   tasks: TaskRow[];
   notes: NoteRow[];
   meetings: MeetingRow[];
+  commandCenter: BuyerCCData | null;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("command");
   const prefs = buyerPreferences(b);
   const yes = "כן";
   const no = "—";
@@ -159,7 +165,11 @@ export function BuyerDetailView({
       </div>
 
       {/* Panels */}
-      <div className="bg-card border-line rounded-[20px] border p-5">
+      <div className={cn(tab !== "command" && "bg-card border-line rounded-[20px] border p-5")}>
+        {tab === "command" && (
+          <BuyerCommandCenter buyerId={b.id} buyerName={b.full_name} data={commandCenter} />
+        )}
+
         {tab === "overview" && (
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             <div>

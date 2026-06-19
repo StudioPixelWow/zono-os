@@ -6,6 +6,7 @@ import {
   getBuyerNotes,
   getBuyerTasks,
 } from "@/lib/buyers/repository";
+import { getBuyerCommandCenter } from "@/lib/buyer-intelligence/service";
 import { BuyerDetailView } from "./BuyerDetailView";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +20,12 @@ export default async function BuyerDetailsPage({
   const buyer = await getBuyerById(id);
   if (!buyer) notFound();
 
-  const [activities, tasks, notes, meetings] = await Promise.all([
+  const [activities, tasks, notes, meetings, commandCenter] = await Promise.all([
     getBuyerActivities(id),
     getBuyerTasks(id),
     getBuyerNotes(id),
     getBuyerMeetings(id),
+    getBuyerCommandCenter(id),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function BuyerDetailsPage({
       tasks={tasks}
       notes={notes}
       meetings={meetings}
+      commandCenter={commandCenter}
     />
   );
 }
