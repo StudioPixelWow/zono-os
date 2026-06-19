@@ -21,11 +21,21 @@ async function doSync(opts: { sources?: string[]; localityId?: string | null }):
   }
 }
 
-export const importYad2Action = () => doSync({ sources: ["yad2"] });
-export const importMadlanAction = () => doSync({ sources: ["madlan"] });
-export const importAllAction = () => doSync({});
-export const syncNowAction = (localityId?: string | null, source?: string | null) =>
-  doSync({ localityId: localityId || null, sources: source ? [source] : undefined });
+export async function importYad2Action(): Promise<ExternalActionState> {
+  return doSync({ sources: ["yad2"] });
+}
+export async function importMadlanAction(): Promise<ExternalActionState> {
+  return doSync({ sources: ["madlan"] });
+}
+export async function importAllAction(): Promise<ExternalActionState> {
+  return doSync({});
+}
+export async function syncNowAction(
+  localityId?: string | null,
+  source?: string | null,
+): Promise<ExternalActionState> {
+  return doSync({ localityId: localityId || null, sources: source ? [source] : undefined });
+}
 
 export async function promoteExternalListingAction(listingId: string): Promise<ExternalActionState> {
   let propertyId: string;
