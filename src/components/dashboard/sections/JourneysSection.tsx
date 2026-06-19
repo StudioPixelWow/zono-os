@@ -1,6 +1,7 @@
 "use client";
 
 import { journeyProperties, journeyStages } from "@/data/mock";
+import type { JourneyProperty, JourneyRailStage } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { SectionShell } from "../SectionShell";
@@ -13,7 +14,7 @@ const nodeColor = {
   upcoming: "bg-card border-line text-muted",
 } as const;
 
-export function JourneysSection() {
+export function JourneysSection({ stages = journeyStages, properties = journeyProperties }: { stages?: JourneyRailStage[]; properties?: JourneyProperty[] } = {}) {
   return (
     <SectionShell title="מסע הנכסים הפעילים שלך" eyebrow="פייפליין חי">
       <div className="bg-card border-line rounded-[24px] border p-5 shadow-[var(--shadow-card)] sm:p-6">
@@ -22,7 +23,7 @@ export function JourneysSection() {
           <div className="relative flex min-w-[680px] items-start justify-between px-1">
             {/* connector line */}
             <span className="bg-line absolute end-6 start-6 top-5 h-0.5" />
-            {journeyStages.map((s, i) => (
+            {stages.map((s, i) => (
               <motion.div
                 key={s.key}
                 initial={{ opacity: 0, y: 10 }}
@@ -59,7 +60,7 @@ export function JourneysSection() {
 
         {/* Property mini cards */}
         <div className="no-scrollbar mt-6 -mx-1 flex gap-4 overflow-x-auto px-1 pb-1">
-          {journeyProperties.map((p, i) => {
+          {properties.map((p, i) => {
             const main = i === 0;
             return (
               <motion.div

@@ -1,7 +1,7 @@
 "use client";
 
 import { hotOpportunities } from "@/data/mock";
-import type { Tone } from "@/types";
+import type { HotOpportunity, Tone } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { SectionShell } from "../SectionShell";
@@ -23,11 +23,11 @@ const toneAccent: Record<Tone, string> = {
   red: "bg-danger",
 };
 
-export function OpportunitiesSection() {
+export function OpportunitiesSection({ items = hotOpportunities }: { items?: HotOpportunity[] } = {}) {
   return (
     <SectionShell title="הזדמנויות חמות עבורך" eyebrow="AI · בזמן אמת">
       <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-        {hotOpportunities.map((o, i) => (
+        {items.map((o, i) => (
           <motion.article
             key={o.id}
             initial={{ opacity: 0, y: 14 }}

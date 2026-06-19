@@ -1,29 +1,28 @@
 "use client";
 
 import { recentDeals } from "@/data/mock";
-import type { MapPin } from "@/types";
+import type { MapPin, RecentDeal } from "@/types/dashboard";
 import { formatShekels } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { CityMap } from "../CityMap";
 import { SectionShell } from "../SectionShell";
 import { motion } from "../motion";
 
-const dealPins: MapPin[] = recentDeals.map((d) => ({
-  id: d.id,
-  label: `${d.type}, ${d.city}`,
-  count: 0,
-  tone: "purple",
-  xPct: d.xPct,
-  yPct: d.yPct,
-}));
-
-export function DealsSection() {
+export function DealsSection({ deals = recentDeals }: { deals?: RecentDeal[] } = {}) {
+  const dealPins: MapPin[] = deals.map((d) => ({
+    id: d.id,
+    label: `${d.type}, ${d.city}`,
+    count: 0,
+    tone: "purple",
+    xPct: d.xPct,
+    yPct: d.yPct,
+  }));
   return (
     <SectionShell title="עסקאות שבוצעו לאחרונה" eyebrow="פעילות אחרונה">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         {/* Deals list */}
         <div className="flex flex-col gap-3">
-          {recentDeals.map((d, i) => (
+          {deals.map((d, i) => (
             <motion.div
               key={d.id}
               initial={{ opacity: 0, x: 14 }}

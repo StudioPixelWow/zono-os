@@ -243,16 +243,19 @@ export async function getCommunicationHealth(entityType: string, entityId: strin
   };
 }
 
-export async function completeFollowup(id: string): Promise<void> {
+export async function completeFollowup(id: string, entityType?: string, entityId?: string): Promise<void> {
   const { profile } = await getSessionContext();
   if (!profile) throw new Error("not authenticated");
   await commFollowupRepository.complete(id);
+  // Recompute so health/risk + decision-brain reflect the change immediately.
+  if (entityType && entityId) await recomputeCommunicationProfile(entityType, entityId);
 }
 
-export async function setCommitmentStatus(id: string, status: "fulfilled" | "broken"): Promise<void> {
+export async function setCommitmentStatus(id: string, status: "fulfilled" | "broken", entityType?: string, entityId?: string): Promise<void> {
   const { profile } = await getSessionContext();
   if (!profile) throw new Error("not authenticated");
   await commCommitmentRepository.setStatus(id, status);
+  if (entityType && entityId) await recomputeCommunicationProfile(entityType, entityId);
 }
 
 // ── Org-wide reads (dashboard + decision brain) ──────────────────────────────

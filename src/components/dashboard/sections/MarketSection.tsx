@@ -1,17 +1,18 @@
 "use client";
 
 import { marketStats } from "@/data/mock";
+import type { MarketStat } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { MiniChart } from "../MiniChart";
 import { SectionShell } from "../SectionShell";
 import { motion } from "../motion";
 
-export function MarketSection() {
+export function MarketSection({ stats = marketStats }: { stats?: MarketStat[] } = {}) {
   return (
     <SectionShell title="מודיעין שוק" eyebrow="נתוני שוק חיים">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        {marketStats.map((s, i) => {
+        {stats.map((s, i) => {
           const isGood = s.changePct > 0 === s.positiveIsGood;
           return (
             <motion.div

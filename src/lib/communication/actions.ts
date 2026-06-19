@@ -33,7 +33,7 @@ export async function logCommunicationAction(input: LogCommunicationInput): Prom
 
 export async function completeFollowupAction(id: string, entityType: string, entityId: string): Promise<CommActionState> {
   try {
-    await completeFollowup(id);
+    await completeFollowup(id, entityType, entityId);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "שגיאה" };
   }
@@ -43,7 +43,7 @@ export async function completeFollowupAction(id: string, entityType: string, ent
 
 export async function setCommitmentStatusAction(id: string, status: "fulfilled" | "broken", entityType: string, entityId: string): Promise<CommActionState> {
   try {
-    await setCommitmentStatus(id, status);
+    await setCommitmentStatus(id, status, entityType, entityId);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "שגיאה" };
   }

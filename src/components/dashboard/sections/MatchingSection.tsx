@@ -1,6 +1,7 @@
 "use client";
 
 import { buyerMatches, matchingNote } from "@/data/mock";
+import type { BuyerMatch } from "@/types/dashboard";
 import { Icon } from "../Icon";
 import { SectionShell } from "../SectionShell";
 import { motion } from "../motion";
@@ -32,11 +33,11 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-export function MatchingSection() {
+export function MatchingSection({ matches = buyerMatches, note = matchingNote }: { matches?: BuyerMatch[]; note?: string } = {}) {
   return (
     <SectionShell title="התאמות חכמות" eyebrow="AI Matching">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {buyerMatches.map((m, i) => (
+        {matches.map((m, i) => (
           <motion.article
             key={m.id}
             initial={{ opacity: 0, y: 16 }}
@@ -85,7 +86,7 @@ export function MatchingSection() {
 
       <div className="text-muted mt-4 flex items-center gap-2 text-xs font-medium">
         <Icon name="Sparkles" size={14} className="text-brand" />
-        {matchingNote}
+        {note}
       </div>
     </SectionShell>
   );
