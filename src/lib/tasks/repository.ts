@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database, TaskPriority, TaskStatus } from "@/lib/supabase/types";
 import { touchJourney } from "@/lib/journey/repository";
+import { logTaskCompleted, logTaskCreated } from "@/lib/activity/service";
 
 export type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
 
@@ -68,6 +69,7 @@ export async function createPropertyTask(
     occurred_at: new Date().toISOString(),
   });
   await touchJourney(propertyId);
+  await logTaskCreated(data);
   return data;
 }
 
@@ -81,8 +83,9 @@ export async function setTaskStatus(
     .from("tasks")
     .update({ status, completed_at: done ? new Date().toISOString() : null })
     .eq("id", taskId)
-    .select("property_id")
+    .select("id,title,property_id,buyer_id,seller_id")
     .single();
   if (error) throw new Error(error.message);
   if (data?.property_id) await touchJourney(data.property_id);
+  if (done && data) await logTaskCompleted(data);
 }

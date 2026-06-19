@@ -9,6 +9,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
+import { activityEventRepository } from "@/lib/activity/repository";
+import { createRelationship, logActivityEvent, logScoreChanged } from "@/lib/activity/service";
+import { EVENT_TYPES, RELATIONSHIP_TYPES } from "@/lib/activity/types";
 import { computeAllScores, type ScoreContext, type ScoreSet } from "./scoring";
 import {
   defaultCalendar,
@@ -54,7 +57,7 @@ async function gatherContext(
   const id = property.id;
   const recent = new Date(Date.now() - 14 * DAY).toISOString();
 
-  const [media, docs, acts, tasks, leads, meetings, exposure, touch, journey] =
+  const [media, docs, acts, tasks, leads, meetings, exposure, touch, journey, events] =
     await Promise.all([
       supabase.from("property_media").select("type,is_primary").eq("property_id", id),
       supabase.from("documents").select("id", { count: "exact", head: true }).eq("property_id", id),
@@ -65,9 +68,14 @@ async function gatherContext(
       supabase.from("property_exposure_channels").select("status,views_count,clicks_count,leads_count").eq("property_id", id),
       supabase.from("property_seller_touchpoints").select("created_at,touchpoint_type,sentiment").eq("property_id", id),
       supabase.from("property_journeys").select("current_stage,last_activity_at").eq("property_id", id).maybeSingle(),
+      activityEventRepository.listForEntity("property", id, 200),
     ]);
 
   const mediaRows = media.data ?? [];
+  // Unified activity layer feeds momentum/freshness alongside the legacy feed.
+  const eventRows = events ?? [];
+  const eventsRecentCount = eventRows.filter((e) => e.occurred_at >= recent).length;
+  const lastEventAt = eventRows[0]?.occurred_at ?? null;
   const exposureRows = exposure.data ?? [];
   const touchRows = touch.data ?? [];
   const taskRows = tasks.data ?? [];
@@ -75,7 +83,11 @@ async function gatherContext(
   const actRows = acts.data ?? [];
   const leadRows = leads.data ?? [];
 
-  const lastActivity = actRows[0]?.occurred_at ?? property.updated_at;
+  const lastActivity =
+    [actRows[0]?.occurred_at, lastEventAt, property.updated_at]
+      .filter((v): v is string => !!v)
+      .sort()
+      .pop() ?? property.updated_at;
   const stage = journey.data?.current_stage ?? null;
   const loc = (property.location ?? {}) as { address?: string };
 
@@ -108,7 +120,7 @@ async function gatherContext(
     meetingsCompleted: meetingRows.filter((m) => m.status === "completed").length,
     positiveSellerResponses: touchRows.filter((t) => t.sentiment === "positive").length,
     daysSinceSellerUpdate: daysBetween(touchRows[0]?.created_at ?? null),
-    recentActivities: actRows.filter((a) => a.occurred_at >= recent).length,
+    recentActivities: actRows.filter((a) => a.occurred_at >= recent).length + eventsRecentCount,
     recentLeads: leadRows.filter((l) => l.created_at >= recent).length,
     recentVisits: meetingRows.filter((m) => m.type === "viewing" && m.start_at >= recent).length,
     recentTasksCompleted: taskRows.filter((t) => t.completed_at && t.completed_at >= recent).length,
@@ -161,6 +173,12 @@ export async function generatePropertyMissions(property: PropertyRow): Promise<v
     status: "active",
   }));
   await propertyMissionRepository.insertMany(rows);
+  await logActivityEvent({
+    eventType: EVENT_TYPES.propertyMissionCreated,
+    entityType: "property",
+    entityId: property.id,
+    title: `נוצרו ${rows.length} יעדים לנכס`,
+  });
 }
 
 export async function generatePropertyLevers(property: PropertyRow): Promise<void> {
@@ -177,6 +195,12 @@ export async function generatePropertyLevers(property: PropertyRow): Promise<voi
     status: "suggested",
   }));
   await propertyLeverRepository.insertMany(rows);
+  await logActivityEvent({
+    eventType: EVENT_TYPES.propertyLeverCreated,
+    entityType: "property",
+    entityId: property.id,
+    title: `נוצרו ${rows.length} מנופי צמיחה`,
+  });
 }
 
 export async function generatePropertyTasks(property: PropertyRow): Promise<void> {
@@ -191,11 +215,20 @@ export async function generatePropertyTasks(property: PropertyRow): Promise<void
     priority: t.priority as Database["public"]["Tables"]["tasks"]["Row"]["priority"],
     due_at: inDays(t.dueInDays),
     status: "todo" as Database["public"]["Tables"]["tasks"]["Row"]["status"],
+    entity_type: "property",
+    entity_id: property.id,
+    intelligence_source: "blueprint",
   }));
   if (!rows.length) return;
   const supabase = await createClient();
   const { error } = await supabase.from("tasks").insert(rows);
   if (error) throw new Error(error.message);
+  await logActivityEvent({
+    eventType: EVENT_TYPES.taskCreated,
+    entityType: "property",
+    entityId: property.id,
+    title: `נוצרו ${rows.length} משימות חכמות`,
+  });
 }
 
 export async function generatePropertyCalendarPlan(property: PropertyRow): Promise<void> {
@@ -211,6 +244,12 @@ export async function generatePropertyCalendarPlan(property: PropertyRow): Promi
     status: "suggested",
   }));
   await propertyCalendarPlanRepository.insertMany(rows);
+  await logActivityEvent({
+    eventType: EVENT_TYPES.calendarSuggestionCreated,
+    entityType: "property",
+    entityId: property.id,
+    title: `נוצרו ${rows.length} הצעות יומן`,
+  });
 }
 
 async function ensureExposureChannels(property: PropertyRow): Promise<void> {
@@ -241,6 +280,15 @@ export async function generatePropertyRisks(
     status: "open",
   }));
   await propertyRiskRepository.insertMany(rows);
+  if (rows.length) {
+    await logActivityEvent({
+      eventType: EVENT_TYPES.propertyRiskCreated,
+      entityType: "property",
+      entityId: property.id,
+      title: `זוהו ${rows.length} סיכונים פעילים`,
+      priority: "high",
+    });
+  }
   return propertyRiskRepository.listOpen(property.id);
 }
 
@@ -294,6 +342,7 @@ export async function updatePropertyScores(propertyId: string): Promise<ScoreSet
         events.push({ org_id: orgId, property_id: propertyId, score_type: type, old_score: oldS, new_score: newS, reason: "recalculation" });
     }
     if (events.length) await propertyScoreRepository.insertMany(events);
+    if (events.length) await logScoreChanged("property", propertyId, summary);
   }
   return scores;
 }
@@ -338,6 +387,33 @@ export async function initializePropertyIntelligence(
   ]);
   await generatePropertyTasks(property);
   await updatePropertyScores(propertyId);
+
+  // Unified activity layer: record initialization + base relationships.
+  await logActivityEvent({
+    eventType: EVENT_TYPES.propertyIntelligenceInitialized,
+    entityType: "property",
+    entityId: property.id,
+    title: "ZONO Intelligence הופעל לנכס",
+    priority: "medium",
+  });
+  if (property.owner_id) {
+    await createRelationship({
+      sourceType: "user",
+      sourceId: property.owner_id,
+      targetType: "property",
+      targetId: property.id,
+      relationshipType: RELATIONSHIP_TYPES.agentAssignedToProperty,
+    });
+  }
+  if (property.seller_id) {
+    await createRelationship({
+      sourceType: "seller",
+      sourceId: property.seller_id,
+      targetType: "property",
+      targetId: property.id,
+      relationshipType: RELATIONSHIP_TYPES.sellerOwnsProperty,
+    });
+  }
 
   return (await propertyIntelligenceRepository.getByProperty(propertyId))!;
 }

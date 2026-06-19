@@ -128,6 +128,17 @@ export async function setJourneyStage(
     property_id: propertyId,
     occurred_at: now,
   });
+
+  // Unified activity layer
+  const { logActivityEvent } = await import("@/lib/activity/service");
+  const { EVENT_TYPES } = await import("@/lib/activity/types");
+  await logActivityEvent({
+    eventType: EVENT_TYPES.propertyStageChanged,
+    entityType: "property",
+    entityId: propertyId,
+    title: `שלב המסע עודכן: ${fromLabel} ← ${toLabel}`,
+    status: stage,
+  });
 }
 
 /** Touch the journey's last-activity timestamp (clears a stalled flag). */

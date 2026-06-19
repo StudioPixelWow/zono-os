@@ -26,6 +26,14 @@ import { JourneyPanel } from "./JourneyPanel";
 import { TasksPanel } from "./TasksPanel";
 import { CommandCenter } from "./CommandCenter";
 import type { CommandCenter as CommandCenterData } from "@/lib/intelligence/service";
+import { EntityTimeline } from "@/components/activity/EntityTimeline";
+import { ActivitySummaryCard } from "@/components/activity/ActivitySummaryCard";
+import { RelationshipGraphMini } from "@/components/activity/RelationshipGraphMini";
+import type {
+  ActivityEventRow,
+  ActivitySummary,
+  RelationshipRow,
+} from "@/lib/activity/types";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
@@ -42,6 +50,7 @@ interface JourneyData {
 
 type Tab =
   | "command"
+  | "timeline"
   | "overview"
   | "journey"
   | "tasks"
@@ -52,6 +61,7 @@ type Tab =
   | "notes";
 const TABS: { id: Tab; label: string }[] = [
   { id: "command", label: "מרכז ניהול נכס" },
+  { id: "timeline", label: "ציר זמן" },
   { id: "overview", label: "סקירה" },
   { id: "journey", label: "מסע הנכס" },
   { id: "tasks", label: "משימות" },
@@ -94,6 +104,9 @@ export function PropertyDetailView({
   tasks,
   journey,
   commandCenter,
+  timeline,
+  relationships,
+  activitySummary,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
@@ -103,6 +116,9 @@ export function PropertyDetailView({
   tasks: TaskRow[];
   journey: JourneyData;
   commandCenter: CommandCenterData | null;
+  timeline: ActivityEventRow[];
+  relationships: RelationshipRow[];
+  activitySummary: ActivitySummary;
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const [error, setError] = useState<string | null>(null);
@@ -207,7 +223,7 @@ export function PropertyDetailView({
       </div>
 
       {/* Panels */}
-      <div className={cn(tab !== "command" && "bg-card border-line rounded-[20px] border p-5")}>
+      <div className={cn(tab !== "command" && tab !== "timeline" && "bg-card border-line rounded-[20px] border p-5")}>
         {tab === "command" && (
           <CommandCenter
             propertyId={p.id}
@@ -216,6 +232,31 @@ export function PropertyDetailView({
             data={commandCenter}
             tasks={tasks}
           />
+        )}
+
+        {tab === "timeline" && (
+          <div className="flex flex-col gap-6">
+            <ActivitySummaryCard
+              summary={activitySummary}
+              extra={{
+                openTasks: tasks.filter((t) => t.status !== "done" && t.status !== "cancelled").length,
+                openRisks: commandCenter?.risks.filter((r) => r.status === "open").length,
+              }}
+            />
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.6fr_1fr]">
+              <div className="bg-card border-line rounded-[20px] border p-5">
+                <EntityTimeline
+                  items={timeline}
+                  title="ציר זמן הנכס"
+                  emptyStateText="אין פעילות מתועדת עדיין — פעולות יירשמו כאן אוטומטית."
+                />
+              </div>
+              <div className="bg-card border-line rounded-[20px] border p-5">
+                <p className="text-ink mb-3 text-sm font-extrabold">קשרים</p>
+                <RelationshipGraphMini relationships={relationships} selfType="property" />
+              </div>
+            </div>
+          </div>
         )}
 
         {tab === "overview" && (

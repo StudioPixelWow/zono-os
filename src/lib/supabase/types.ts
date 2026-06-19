@@ -517,6 +517,80 @@ type PropertyScoreEventsRow = {
   created_at: string;
 };
 
+type ActivityEventsRow = {
+  id: string;
+  org_id: string;
+  actor_user_id: string | null;
+  actor_type: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  title: string;
+  description: string | null;
+  channel: string | null;
+  direction: string | null;
+  priority: string | null;
+  status: string | null;
+  sentiment: string | null;
+  metadata: Json;
+  occurred_at: string;
+  created_at: string;
+};
+
+type EntityRelationshipsRow = {
+  id: string;
+  org_id: string;
+  source_entity_type: string;
+  source_entity_id: string;
+  target_entity_type: string;
+  target_entity_id: string;
+  relationship_type: string;
+  strength_score: number;
+  status: string;
+  metadata: Json;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type CommunicationThreadsRow = {
+  id: string;
+  org_id: string;
+  contact_id: string | null;
+  buyer_id: string | null;
+  seller_id: string | null;
+  property_id: string | null;
+  deal_id: string | null;
+  channel: string;
+  title: string | null;
+  status: string;
+  last_message_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type CommunicationMessagesRow = {
+  id: string;
+  org_id: string;
+  thread_id: string;
+  sender_user_id: string | null;
+  direction: string;
+  channel: string;
+  subject: string | null;
+  body: string | null;
+  transcript: string | null;
+  ai_summary: string | null;
+  sentiment: string | null;
+  external_message_id: string | null;
+  metadata: Json;
+  sent_at: string | null;
+  received_at: string | null;
+  created_at: string;
+};
+
 type DealsRow = {
   id: string;
   org_id: string;
@@ -620,6 +694,12 @@ type TasksRow = {
   unit_id: string | null;
   project_id: string | null;
   deal_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  impact_score: number | null;
+  intelligence_source: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -661,6 +741,11 @@ type MeetingsRow = {
   unit_id: string | null;
   project_id: string | null;
   deal_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  intelligence_source: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -843,6 +928,27 @@ export interface Database {
       property_score_events: TableShape<
         PropertyScoreEventsRow,
         "org_id" | "property_id" | "score_type"
+      >;
+      activity_events: TableShape<
+        ActivityEventsRow,
+        "org_id" | "event_type" | "entity_type" | "entity_id" | "title"
+      >;
+      entity_relationships: TableShape<
+        EntityRelationshipsRow,
+        | "org_id"
+        | "source_entity_type"
+        | "source_entity_id"
+        | "target_entity_type"
+        | "target_entity_id"
+        | "relationship_type"
+      >;
+      communication_threads: TableShape<
+        CommunicationThreadsRow,
+        "org_id" | "channel"
+      >;
+      communication_messages: TableShape<
+        CommunicationMessagesRow,
+        "org_id" | "thread_id" | "direction" | "channel"
       >;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
