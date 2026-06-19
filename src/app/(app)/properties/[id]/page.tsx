@@ -19,6 +19,7 @@ import {
 } from "@/lib/activity/service";
 import { journeyStageForStatusFallback } from "@/lib/journey/fallback";
 import { PropertyDetailView } from "./PropertyDetailView";
+import { CommunicationSection } from "@/components/communication/CommunicationSection";
 
 export const dynamic = "force-dynamic";
 
@@ -71,21 +72,24 @@ export default async function PropertyDetailsPage({
   };
 
   return (
-    <PropertyDetailView
-      property={property}
-      activities={activities}
-      notes={notes}
-      documents={documents}
-      media={media}
-      tasks={tasks}
-      journey={journey}
-      commandCenter={commandCenter}
-      timeline={timeline}
-      relationships={relationships}
-      activitySummary={activitySummary}
-      recommendedBuyers={recommendedBuyers}
-      propertySellers={propertySellers}
-      sellerReadiness={sellerReadiness}
-    />
+    <div className="flex flex-col gap-6">
+      <PropertyDetailView
+        property={property}
+        activities={activities}
+        notes={notes}
+        documents={documents}
+        media={media}
+        tasks={tasks}
+        journey={journey}
+        commandCenter={commandCenter}
+        timeline={timeline}
+        relationships={relationships}
+        activitySummary={activitySummary}
+        recommendedBuyers={recommendedBuyers}
+        propertySellers={propertySellers}
+        sellerReadiness={sellerReadiness}
+      />
+      <CommunicationSection entityType="property" entityId={id} />
+    </div>
   );
 }

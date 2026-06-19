@@ -54,6 +54,9 @@ interface OrgData {
   overdueTasks: number;
   overdueCommitments: { seller_id: string; title: string }[];
   externalListings: { id: string; title: string | null; city: string | null; price: number | null; sqm: number | null; rooms: number | null; has_agent: boolean | null; opportunity_score: number; published_at: string | null }[];
+  commFollowups: { id: string; title: string; entity_type: string; entity_id: string; due_at: string | null; priority: string }[];
+  commCommitments: { id: string; text: string; entity_type: string; entity_id: string; status: string; due_date: string | null }[];
+  commProfiles: { entity_type: string; entity_id: string; unanswered: number; daysSince: number | null; sentiment: number; nextAction: string | null }[];
   externalPriceDrops: Set<string>;
   externalDuplicates: Set<string>;
   externalCityAvgSqm: Map<string, number>;
@@ -65,7 +68,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -78,6 +81,9 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("external_listings").select("id,title,city,price,sqm,rooms,has_agent,opportunity_score,published_at").eq("status", "active").is("promoted_property_id", null).order("opportunity_score", { ascending: false }).limit(60),
     supabase.from("external_listing_history").select("listing_id").eq("change_type", "price_changed").gte("created_at", priceDropSince).limit(500),
     supabase.from("external_listing_duplicates").select("listing_id").eq("status", "suspected").limit(500),
+    supabase.from("communication_followups").select("id,title,entity_type,entity_id,due_at,priority").eq("status", "open").not("due_at", "is", null).lt("due_at", nowIso).order("due_at", { ascending: true }).limit(60),
+    supabase.from("communication_commitments").select("id,commitment_text,entity_type,entity_id,status,due_date").in("status", ["open", "broken"]).order("due_date", { ascending: true, nullsFirst: false }).limit(60),
+    supabase.from("communication_intelligence_profiles").select("entity_type,entity_id,unanswered_messages_count,days_since_contact,sentiment_score,next_best_action").limit(500),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -108,6 +114,9 @@ async function gatherOrgData(): Promise<OrgData> {
     matchProfiles: mp.data ?? [],
     overdueTasks: tasks.count ?? 0,
     overdueCommitments: (commits.data ?? []).map((c) => ({ seller_id: c.seller_id, title: c.title })),
+    commFollowups: (cFollow.data ?? []).map((f) => ({ id: f.id, title: f.title, entity_type: f.entity_type, entity_id: f.entity_id, due_at: f.due_at, priority: f.priority })),
+    commCommitments: (cCommit.data ?? []).map((c) => ({ id: c.id, text: c.commitment_text, entity_type: c.entity_type, entity_id: c.entity_id, status: c.status, due_date: c.due_date })),
+    commProfiles: (cProf.data ?? []).map((p) => ({ entity_type: p.entity_type, entity_id: p.entity_id, unanswered: p.unanswered_messages_count, daysSince: p.days_since_contact, sentiment: p.sentiment_score, nextAction: p.next_best_action })),
     externalListings,
     externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
     externalDuplicates: new Set((extD.data ?? []).map((dd) => dd.listing_id)),
@@ -220,6 +229,55 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
       recommended_action: atRisk ? "לטפל בסיכוני העסקה" : "לקדם את העסקה לסגירה",
       expected_outcome: "מימוש עסקה והגדלת הכנסה", status: "open",
     });
+  }
+
+  // ── Communication signals → attention (overdue followups, broken/overdue
+  //    commitments, no-response, negative sentiment, stale important contacts) ─
+  const nameOf = (t: string, id: string) =>
+    t === "seller" ? d.sellerMap.get(id) ?? "מוכר" : t === "buyer" ? d.buyerMap.get(id) ?? "קונה" : t === "property" ? d.propMap.get(id)?.title ?? "נכס" : t === "match" ? "התאמה" : "ישות";
+  const seen = new Set<string>();
+  const now = Date.now();
+  for (const c of d.commCommitments) {
+    if (c.status !== "broken" && !(c.due_date && new Date(c.due_date).getTime() < now)) continue;
+    const broken = c.status === "broken";
+    rows.push({
+      org_id: orgId, entity_type: c.entity_type, entity_id: c.entity_id,
+      attention_score: broken ? 90 : 80, urgency_score: broken ? 92 : 82, impact_score: 75, confidence_score: 85,
+      revenue_impact_score: 40, relationship_impact_score: 80, churn_impact_score: broken ? 70 : 50,
+      title: `${nameOf(c.entity_type, c.entity_id)} · ${broken ? "התחייבות שנשברה" : "התחייבות באיחור"}`,
+      reason: c.text, recommended_action: "השלם את ההתחייבות והחזר אמון", expected_outcome: "שימור אמון ומניעת נטישה", status: "open",
+    });
+    seen.add(`${c.entity_type}:${c.entity_id}`);
+  }
+  for (const f of d.commFollowups) {
+    const key = `${f.entity_type}:${f.entity_id}`;
+    if (seen.has(key)) continue;
+    rows.push({
+      org_id: orgId, entity_type: f.entity_type, entity_id: f.entity_id,
+      attention_score: f.priority === "high" ? 82 : 72, urgency_score: f.priority === "high" ? 85 : 72, impact_score: 60, confidence_score: 80,
+      revenue_impact_score: 45, relationship_impact_score: 65, churn_impact_score: 40,
+      title: `${nameOf(f.entity_type, f.entity_id)} · פולואפ באיחור`,
+      reason: f.title, recommended_action: "בצע את הפולואפ עכשיו", expected_outcome: "החזרת הקשר למסלול", status: "open",
+    });
+    seen.add(key);
+  }
+  for (const p of d.commProfiles) {
+    const key = `${p.entity_type}:${p.entity_id}`;
+    if (seen.has(key)) continue;
+    const noResponse = p.unanswered > 0;
+    const negative = p.sentiment < 40;
+    const threshold = p.entity_type === "seller" ? 14 : p.entity_type === "buyer" ? 7 : 10;
+    const stale = p.daysSince != null && p.daysSince > threshold;
+    if (!noResponse && !negative && !stale) continue;
+    const reason = negative ? "סנטימנט שלילי ללא טיפול" : noResponse ? `${p.unanswered} הודעות ללא מענה` : `אין קשר ${p.daysSince} ימים`;
+    rows.push({
+      org_id: orgId, entity_type: p.entity_type, entity_id: p.entity_id,
+      attention_score: negative ? 78 : noResponse ? 70 : 66, urgency_score: negative ? 80 : 68, impact_score: 58, confidence_score: 75,
+      revenue_impact_score: 40, relationship_impact_score: 70, churn_impact_score: negative ? 60 : 45,
+      title: `${nameOf(p.entity_type, p.entity_id)} · ${negative ? "סנטימנט שלילי" : noResponse ? "ממתין לתגובה" : "ללא קשר"}`,
+      reason, recommended_action: p.nextAction ?? "צור קשר וקדם את הטיפול", expected_outcome: "שיפור בריאות הקשר", status: "open",
+    });
+    seen.add(key);
   }
 
   return rows.sort((a, b) => (b.attention_score ?? 0) - (a.attention_score ?? 0));

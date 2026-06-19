@@ -785,6 +785,88 @@ type CommunicationMessagesRow = {
   created_at: string;
 };
 
+type CommunicationIntelligenceProfilesRow = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  relationship_type: string | null;
+  communication_health_score: number;
+  responsiveness_score: number;
+  sentiment_score: number;
+  followup_risk_score: number;
+  trust_impact_score: number;
+  engagement_impact_score: number;
+  momentum_impact_score: number;
+  last_contact_at: string | null;
+  last_inbound_at: string | null;
+  last_outbound_at: string | null;
+  days_since_contact: number | null;
+  unanswered_messages_count: number;
+  missed_followups_count: number;
+  open_commitments_count: number;
+  next_best_action: string | null;
+  ai_summary: string | null;
+  ai_risk_summary: string | null;
+  ai_recommendation_summary: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type CommunicationCommitmentsRow = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  commitment_text: string;
+  promised_by_user_id: string | null;
+  promised_to_type: string | null;
+  promised_to_id: string | null;
+  due_date: string | null;
+  status: string;
+  fulfilled_at: string | null;
+  broken_at: string | null;
+  impact_score: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type CommunicationFollowupsRow = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  followup_type: string | null;
+  title: string;
+  reason: string | null;
+  priority: string;
+  due_at: string | null;
+  status: string;
+  completed_at: string | null;
+  related_task_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type CommunicationInsightsRow = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  insight_type: string;
+  title: string;
+  description: string | null;
+  severity: string;
+  confidence_score: number;
+  recommended_action: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
 type SellerIntelligenceProfilesRow = {
   id: string;
   org_id: string;
@@ -1563,6 +1645,22 @@ export interface Database {
       communication_messages: TableShape<
         CommunicationMessagesRow,
         "org_id" | "thread_id" | "direction" | "channel"
+      >;
+      communication_intelligence_profiles: TableShape<
+        CommunicationIntelligenceProfilesRow,
+        "org_id" | "entity_type" | "entity_id"
+      >;
+      communication_commitments: TableShape<
+        CommunicationCommitmentsRow,
+        "org_id" | "entity_type" | "entity_id" | "commitment_text"
+      >;
+      communication_followups: TableShape<
+        CommunicationFollowupsRow,
+        "org_id" | "entity_type" | "entity_id" | "title"
+      >;
+      communication_insights: TableShape<
+        CommunicationInsightsRow,
+        "org_id" | "entity_type" | "entity_id" | "insight_type" | "title"
       >;
       seller_intelligence_profiles: TableShape<
         SellerIntelligenceProfilesRow,

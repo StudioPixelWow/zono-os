@@ -9,6 +9,7 @@ import {
 import { getBuyerCommandCenter } from "@/lib/buyer-intelligence/service";
 import { recommendedPropertiesForBuyer } from "@/lib/matching-intelligence/service";
 import { BuyerDetailView } from "./BuyerDetailView";
+import { CommunicationSection } from "@/components/communication/CommunicationSection";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +32,17 @@ export default async function BuyerDetailsPage({
   ]);
 
   return (
-    <BuyerDetailView
-      buyer={buyer}
-      activities={activities}
-      tasks={tasks}
-      notes={notes}
-      meetings={meetings}
-      commandCenter={commandCenter}
-      recommendations={recommendations}
-    />
+    <div className="flex flex-col gap-6">
+      <BuyerDetailView
+        buyer={buyer}
+        activities={activities}
+        tasks={tasks}
+        notes={notes}
+        meetings={meetings}
+        commandCenter={commandCenter}
+        recommendations={recommendations}
+      />
+      <CommunicationSection entityType="buyer" entityId={id} />
+    </div>
   );
 }

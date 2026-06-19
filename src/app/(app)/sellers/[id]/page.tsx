@@ -7,6 +7,7 @@ import { interestedBuyersForSeller } from "@/lib/matching-intelligence/service";
 import { getSeller360 } from "@/lib/sellers/service360";
 import { SellerCommandCenter } from "./SellerCommandCenter";
 import { Seller360Sections } from "./Seller360Sections";
+import { CommunicationSection } from "@/components/communication/CommunicationSection";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,8 @@ export default async function SellerDetailPage({
       </div>
 
       {seller360 && <Seller360Sections seller={seller360.seller} properties={seller360.properties} />}
+
+      <CommunicationSection entityType="seller" entityId={id} />
 
       <SellerCommandCenter sellerId={id} sellerName={seller.full_name} data={commandCenter} interestedBuyers={interestedBuyers} />
     </div>

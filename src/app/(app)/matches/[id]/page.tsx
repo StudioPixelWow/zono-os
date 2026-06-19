@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { getMatchCommandCenter } from "@/lib/matching-intelligence/service";
 import { MatchCommandCenter } from "./MatchCommandCenter";
+import { CommunicationSection } from "@/components/communication/CommunicationSection";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function MatchDetailPage({
         חזרה להתאמות
       </Link>
       <MatchCommandCenter data={data} />
+      <CommunicationSection entityType="match" entityId={id} />
     </div>
   );
 }

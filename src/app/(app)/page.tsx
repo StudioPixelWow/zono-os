@@ -9,6 +9,7 @@ import { MatchingSection } from "@/components/dashboard/sections/MatchingSection
 import { DealsSection } from "@/components/dashboard/sections/DealsSection";
 import { MarketSection } from "@/components/dashboard/sections/MarketSection";
 import { CommandSection } from "@/components/dashboard/sections/CommandSection";
+import { CommunicationDashboardSection } from "@/components/dashboard/sections/CommunicationDashboardSection";
 
 // Reads live data on the server (Properties strip), so render per-request.
 export const dynamic = "force-dynamic";
@@ -26,6 +27,9 @@ export default function Home() {
       <MatchingSection />
       <DealsSection />
       <MarketSection />
+      <Suspense fallback={null}>
+        <CommunicationDashboardSection />
+      </Suspense>
       <CommandSection />
     </>
   );
