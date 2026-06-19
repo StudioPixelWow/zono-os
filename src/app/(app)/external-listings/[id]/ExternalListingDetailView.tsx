@@ -98,9 +98,7 @@ export function ExternalListingDetailView({ detail }: { detail: ExternalListingD
       {/* Smart actions */}
       <div className="flex flex-wrap gap-2">
         {l.listing_url && (
-          <a href={l.listing_url} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="secondary" leadingIcon={<Icon name="ArrowUpRight" size={15} />}>פתח במקור</Button>
-          </a>
+          <Button size="sm" variant="secondary" onClick={() => setShowSource(true)} leadingIcon={<Icon name="Maximize2" size={15} />}>פתח במקור</Button>
         )}
         {l.promoted_property_id ? (
           <Link href={`/properties/${l.promoted_property_id}`}><Button size="sm" variant="secondary">קודם ל-CRM ✓ — פתח נכס</Button></Link>
@@ -252,6 +250,28 @@ export function ExternalListingDetailView({ detail }: { detail: ExternalListingD
           </div>
         </Section>
       </div>
+
+      {/* Source preview modal — stays inside ZONO */}
+      {showSource && l.listing_url && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/60 p-3 sm:p-6" onClick={() => setShowSource(false)}>
+          <div className="bg-card mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-[20px] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-line flex items-center justify-between gap-3 border-b px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-ink text-sm font-extrabold">{sourceLabel} · תצוגת מקור</p>
+                <p className="text-muted truncate text-[11px]">{l.listing_url}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <a href={l.listing_url} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="ghost" leadingIcon={<Icon name="ArrowUpRight" size={14} />}>בטאב חדש</Button></a>
+                <button type="button" onClick={() => setShowSource(false)} className="text-muted hover:text-ink grid h-8 w-8 place-items-center rounded-lg" aria-label="סגור"><Icon name="Minus" size={18} /></button>
+              </div>
+            </div>
+            <div className="relative flex-1">
+              <iframe src={l.listing_url} title="תצוגת מקור" className="h-full w-full" referrerPolicy="no-referrer" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
+              <p className="text-muted pointer-events-none absolute inset-x-0 bottom-0 bg-card/90 px-4 py-2 text-center text-[11px]">אם המודעה לא נטענת, ייתכן שהאתר חוסם הצגה במסגרת — פתח ״בטאב חדש״.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
