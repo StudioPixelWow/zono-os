@@ -66,6 +66,10 @@ function toRecord(input: PropertyInput) {
     primary_image_url: input.primaryImageUrl || null,
     has_exclusivity: input.hasExclusivity,
     exclusivity_ends_at: input.exclusivityEndsAt || null,
+    // Keep the source-taxonomy exclusivity flags in sync with has_exclusivity.
+    is_exclusive: input.hasExclusivity,
+    is_agent_exclusive: input.hasExclusivity,
+    exclusivity_scope: input.hasExclusivity ? "agent_exclusive" : "none",
   };
 }
 
@@ -114,6 +118,8 @@ export async function createProperty(input: PropertyInput): Promise<PropertyRow>
       ...toRecord(input),
       org_id: profile.org_id,
       owner_id: user.id,
+      uploaded_by_user_id: user.id,
+      assigned_agent_id: user.id,
       listed_at: input.status === "active" ? new Date().toISOString() : null,
     })
     .select("*")
@@ -193,6 +199,8 @@ export async function createDraftProperty(): Promise<PropertyRow> {
     .insert({
       org_id: profile.org_id,
       owner_id: user.id,
+      uploaded_by_user_id: user.id,
+      assigned_agent_id: user.id,
       title: "טיוטה ללא שם",
       type: "apartment",
       listing_kind: "sale",
