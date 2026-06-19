@@ -20,6 +20,13 @@ export interface SellerScoreContext {
   activePropertiesCount: number;
   hasPricingConflict: boolean;
   openRisks: { severity: string }[];
+  // Seller 360 signals (optional — default to neutral when absent)
+  cooperationScore?: number;
+  allowsMarketing?: boolean;
+  availableForShowings?: boolean;
+  hasSignedAgreement?: boolean;
+  urgencyCritical?: boolean;
+  decisionHesitant?: boolean;
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -61,6 +68,7 @@ export function calculateSellerConfidenceScore(c: SellerScoreContext): number {
   s += Math.min(25, c.meetingsCount * 6);
   s += Math.min(25, c.fulfilledCommitments * 6);
   s += c.hasPricingConflict ? -10 : 10;
+  if (c.decisionHesitant) s -= 12;
   return clamp(s);
 }
 
@@ -84,6 +92,8 @@ export function calculateSellerChurnRiskScore(c: SellerScoreContext): number {
   if (c.recentTouchpoints === 0) s += 15;
   if (c.reportsSent > 0 && c.reportsOpened === 0) s += 10;
   if (c.hasPricingConflict) s += 15;
+  if ((c.cooperationScore ?? 50) < 40) s += 12;
+  if (c.hasSignedAgreement === false) s += 8;
   s += Math.min(20, c.negativeResponses * 6);
   for (const r of c.openRisks) {
     s += r.severity === "critical" ? 12 : r.severity === "high" ? 8 : r.severity === "medium" ? 4 : 2;

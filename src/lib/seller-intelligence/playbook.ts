@@ -54,6 +54,19 @@ export function detectSellerRisks(c: SellerScoreContext): SellerRiskSeed[] {
     r.push({ riskType: "exclusivity_risk", severity: "critical", title: "סיכון לבלעדיות", description: "ניתוק ממושך מסכן את הבלעדיות.", recommendedAction: "ליצור קשר דחוף ולחדש ערך" });
   if (c.activePropertiesCount === 0 && c.propertiesCount > 0)
     r.push({ riskType: "inactive_seller", severity: "medium", title: "מוכר לא פעיל", description: "אין נכסים פעילים למוכר זה.", recommendedAction: "לבחון חידוש שיתוף פעולה" });
+  // Seller 360 operational/legal/decision risks
+  if (c.hasSignedAgreement === false)
+    r.push({ riskType: "no_agreement", severity: "high", title: "אין הסכם חתום", description: "לא נחתם הסכם ייצוג/בלעדיות.", recommendedAction: "להחתים על הסכם ייצוג" });
+  if (c.availableForShowings === false)
+    r.push({ riskType: "no_showings", severity: "medium", title: "לא זמין להצגות", description: "המוכר אינו מאפשר ביקורים — פגיעה בקצב.", recommendedAction: "לתאם חלון זמינות להצגות" });
+  if (c.allowsMarketing === false)
+    r.push({ riskType: "no_marketing", severity: "high", title: "לא מאשר שיווק", description: "המוכר לא אישר פעולות שיווק.", recommendedAction: "לשכנע באסטרטגיית שיווק ממוקדת" });
+  if ((c.cooperationScore ?? 50) < 40)
+    r.push({ riskType: "low_cooperation", severity: "medium", title: "שיתוף פעולה נמוך", description: "רמת שיתוף הפעולה של המוכר נמוכה.", recommendedAction: "פגישת יישור ציפיות" });
+  if (c.urgencyCritical)
+    r.push({ riskType: "critical_urgency", severity: "high", title: "דחיפות קריטית", description: "המוכר בלחץ זמן גבוה — נדרש קצב מהיר.", recommendedAction: "להאיץ מוכנות שיווק והצגות" });
+  if (c.decisionHesitant)
+    r.push({ riskType: "hesitant_decision", severity: "medium", title: "מקבל החלטות מהסס", description: "סגנון החלטה מהסס מאריך את התהליך.", recommendedAction: "לספק נתונים והוכחות חברתיות" });
   return r;
 }
 

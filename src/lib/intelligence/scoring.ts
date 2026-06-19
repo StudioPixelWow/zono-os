@@ -50,6 +50,11 @@ export interface ScoreContext {
   // seller intelligence (consumed from the Seller OS when available)
   sellerProfileTrust?: number | null;
   sellerChurnRisk?: number | null;
+  // seller readiness (from property_sellers)
+  hasLinkedSeller?: boolean;
+  hasDecisionMaker?: boolean;
+  hasSigner?: boolean;
+  sellerAllowsMarketing?: boolean;
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));

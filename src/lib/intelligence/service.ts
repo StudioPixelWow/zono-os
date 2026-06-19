@@ -57,7 +57,7 @@ async function gatherContext(
   const id = property.id;
   const recent = new Date(Date.now() - 14 * DAY).toISOString();
 
-  const [media, docs, acts, tasks, leads, meetings, exposure, touch, journey, events, sellerProfileRes] =
+  const [media, docs, acts, tasks, leads, meetings, exposure, touch, journey, events, sellerProfileRes, propertySellersRes] =
     await Promise.all([
       supabase.from("property_media").select("type,is_primary").eq("property_id", id),
       supabase.from("documents").select("id", { count: "exact", head: true }).eq("property_id", id),
@@ -72,8 +72,24 @@ async function gatherContext(
       property.seller_id
         ? supabase.from("seller_intelligence_profiles").select("seller_trust_score,seller_churn_risk_score").eq("seller_id", property.seller_id).maybeSingle()
         : Promise.resolve({ data: null }),
+      supabase.from("property_sellers").select("seller_id,is_primary,is_decision_maker,can_sign").eq("property_id", id).eq("status", "active"),
     ]);
-  const sellerProfile = (sellerProfileRes as { data: { seller_trust_score: number; seller_churn_risk_score: number } | null }).data;
+  let sellerProfile = (sellerProfileRes as { data: { seller_trust_score: number; seller_churn_risk_score: number } | null }).data;
+  // Seller readiness from property_sellers (preferred over legacy seller_id).
+  const sellerLinks = (propertySellersRes as { data: { seller_id: string; is_primary: boolean; is_decision_maker: boolean; can_sign: boolean }[] | null }).data ?? [];
+  const hasLinkedSeller = sellerLinks.length > 0;
+  const hasDecisionMaker = sellerLinks.some((l) => l.is_decision_maker);
+  const hasSigner = sellerLinks.some((l) => l.can_sign);
+  let sellerAllowsMarketing = true;
+  const primaryLink = sellerLinks.find((l) => l.is_primary) ?? sellerLinks[0];
+  if (primaryLink) {
+    const [intelRes, sellerRowRes] = await Promise.all([
+      supabase.from("seller_intelligence_profiles").select("seller_trust_score,seller_churn_risk_score").eq("seller_id", primaryLink.seller_id).maybeSingle(),
+      supabase.from("sellers").select("allows_marketing").eq("id", primaryLink.seller_id).maybeSingle(),
+    ]);
+    if (intelRes.data) sellerProfile = intelRes.data;
+    sellerAllowsMarketing = sellerRowRes.data?.allows_marketing ?? true;
+  }
 
   const mediaRows = media.data ?? [];
   // Unified activity layer feeds momentum/freshness alongside the legacy feed.
@@ -134,6 +150,10 @@ async function gatherContext(
     stalled: (daysBetween(lastActivity) ?? 0) >= 14 && stage !== "closed",
     sellerProfileTrust: sellerProfile?.seller_trust_score ?? null,
     sellerChurnRisk: sellerProfile?.seller_churn_risk_score ?? null,
+    hasLinkedSeller,
+    hasDecisionMaker,
+    hasSigner,
+    sellerAllowsMarketing,
   };
   return { ctx, orgId: property.org_id };
 }
@@ -275,6 +295,14 @@ export async function generatePropertyRisks(
 ): Promise<RiskRow[]> {
   await propertyRiskRepository.clearOpen(property.id);
   const candidates = detectRiskCandidates(ctx);
+  // Seller readiness risks (from property_sellers).
+  if (!ctx.hasLinkedSeller) {
+    candidates.push({ riskType: "no_seller", severity: "high", title: "חסר מוכר מקושר", description: "לנכס לא מקושר מוכר פעיל.", recommendedAction: "לקשר מוכר לנכס" });
+  } else {
+    if (!ctx.hasDecisionMaker) candidates.push({ riskType: "no_decision_maker", severity: "medium", title: "לא מוגדר מקבל החלטות", description: "אף מוכר לא סומן כמקבל החלטות.", recommendedAction: "לסמן מקבל החלטות" });
+    if (!ctx.hasSigner) candidates.push({ riskType: "no_signer", severity: "medium", title: "לא מוגדר גורם חתימה", description: "אף מוכר לא סומן כמורשה חתימה.", recommendedAction: "לסמן מורשה חתימה" });
+    if (ctx.sellerAllowsMarketing === false) candidates.push({ riskType: "seller_no_marketing", severity: "high", title: "המוכר לא אישר שיווק", description: "המוכר הראשי לא אישר פעולות שיווק.", recommendedAction: "לקבל אישור שיווק מהמוכר" });
+  }
   // Consume Seller Intelligence: high seller churn is a property-level risk.
   if (ctx.sellerChurnRisk != null && ctx.sellerChurnRisk >= 60) {
     candidates.push({

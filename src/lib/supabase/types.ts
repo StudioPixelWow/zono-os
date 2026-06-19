@@ -195,6 +195,65 @@ type SellersRow = {
   notes: string | null;
   motivation: SellerMotivation | null;
   expected_price: number | null;
+  secondary_phone: string | null;
+  address: string | null;
+  city: string | null;
+  locality_id: string | null;
+  birthday: string | null;
+  occupation: string | null;
+  family_status: string | null;
+  seller_type: string | null;
+  motivation_type: string | null;
+  motivation_notes: string | null;
+  urgency_level: string | null;
+  target_sale_date: string | null;
+  must_sell_by: string | null;
+  desired_price: number | null;
+  minimum_price: number | null;
+  dream_price: number | null;
+  mortgage_exists: boolean;
+  mortgage_balance: number | null;
+  financial_notes: string | null;
+  decision_style: string | null;
+  main_objection: string | null;
+  negotiation_sensitivity: string | null;
+  preferred_contact_method: string | null;
+  preferred_contact_time: string | null;
+  communication_notes: string | null;
+  price_sensitivity_score: number;
+  time_sensitivity_score: number;
+  trust_sensitivity_score: number;
+  marketing_openness_score: number;
+  negotiation_flexibility_score: number;
+  cooperation_score: number;
+  available_for_showings: boolean;
+  allows_marketing: boolean;
+  allows_signage: boolean;
+  allows_exclusive: boolean;
+  has_signed_agreement: boolean;
+  seller_profile_summary: string | null;
+  ai_psychology_summary: string | null;
+  ai_negotiation_summary: string | null;
+  ai_risk_summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+type PropertySellersRow = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  seller_id: string;
+  relationship_type: string;
+  ownership_percentage: number | null;
+  is_primary: boolean;
+  is_decision_maker: boolean;
+  can_sign: boolean;
+  receives_reports: boolean;
+  participates_in_negotiation: boolean;
+  status: string;
+  notes: string | null;
+  metadata: Json;
   created_at: string;
   updated_at: string;
 }
@@ -1427,6 +1486,10 @@ export interface Database {
       match_objections: TableShape<MatchObjectionsRow, "org_id" | "match_id">;
       match_opportunities: TableShape<MatchOpportunitiesRow, "org_id" | "match_id">;
       revenue_signals: TableShape<RevenueSignalsRow, "org_id">;
+      property_sellers: TableShape<
+        PropertySellersRow,
+        "org_id" | "property_id" | "seller_id"
+      >;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
       matching_results: TableShape<MatchingResultsRow, "org_id" | "buyer_id" | "score">;

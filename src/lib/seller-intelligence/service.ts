@@ -56,14 +56,16 @@ interface GatheredContext {
 async function gatherSellerContext(sellerId: string): Promise<GatheredContext> {
   const supabase = await createClient();
   const recentIso = new Date(Date.now() - 30 * DAY).toISOString();
-  const [tp, commits, meetings, props, risks] = await Promise.all([
+  const [tp, commits, meetings, props, risks, sellerRow] = await Promise.all([
     supabase.from("seller_touchpoints").select("touchpoint_type,sentiment,occurred_at").eq("seller_id", sellerId),
     supabase.from("seller_commitments").select("status").eq("seller_id", sellerId),
     supabase.from("meetings").select("id").eq("seller_id", sellerId),
     supabase.from("properties").select("status").eq("seller_id", sellerId),
     supabase.from("seller_risks").select("severity,risk_type").eq("seller_id", sellerId).eq("status", "open"),
+    supabase.from("sellers").select("cooperation_score,allows_marketing,available_for_showings,has_signed_agreement,urgency_level,decision_style,minimum_price,desired_price").eq("id", sellerId).maybeSingle(),
   ]);
 
+  const s360 = sellerRow.data;
   const tps = tp.data ?? [];
   const commitRows = commits.data ?? [];
   const propRows = props.data ?? [];
@@ -88,7 +90,14 @@ async function gatherSellerContext(sellerId: string): Promise<GatheredContext> {
     activePropertiesCount: propRows.filter((p) => ACTIVE_STATUSES.includes(p.status as string)).length,
     hasPricingConflict:
       riskRows.some((r) => r.risk_type === "pricing_conflict") ||
-      tps.some((t) => t.touchpoint_type === "pricing_discussion" && t.sentiment === "negative"),
+      tps.some((t) => t.touchpoint_type === "pricing_discussion" && t.sentiment === "negative") ||
+      (s360?.minimum_price != null && s360?.desired_price != null && s360.minimum_price > s360.desired_price),
+    cooperationScore: s360?.cooperation_score ?? 50,
+    allowsMarketing: s360?.allows_marketing ?? true,
+    availableForShowings: s360?.available_for_showings ?? true,
+    hasSignedAgreement: s360?.has_signed_agreement ?? false,
+    urgencyCritical: s360?.urgency_level === "critical",
+    decisionHesitant: s360?.decision_style === "hesitant",
     openRisks: [],
   };
 

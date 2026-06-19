@@ -4,7 +4,9 @@ import { Icon } from "@/components/dashboard/Icon";
 import { getSellerById } from "@/lib/sellers/repository";
 import { getSellerCommandCenter } from "@/lib/seller-intelligence/service";
 import { interestedBuyersForSeller } from "@/lib/matching-intelligence/service";
+import { getSeller360 } from "@/lib/sellers/service360";
 import { SellerCommandCenter } from "./SellerCommandCenter";
+import { Seller360Sections } from "./Seller360Sections";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +19,10 @@ export default async function SellerDetailPage({
   const seller = await getSellerById(id);
   if (!seller) notFound();
 
-  const [commandCenter, interestedBuyers] = await Promise.all([
+  const [commandCenter, interestedBuyers, seller360] = await Promise.all([
     getSellerCommandCenter(id),
     interestedBuyersForSeller(id),
+    getSeller360(id),
   ]);
 
   return (
@@ -35,6 +38,8 @@ export default async function SellerDetailPage({
           {seller.email ? ` · ${seller.email}` : ""}
         </p>
       </div>
+
+      {seller360 && <Seller360Sections seller={seller360.seller} properties={seller360.properties} />}
 
       <SellerCommandCenter sellerId={id} sellerName={seller.full_name} data={commandCenter} interestedBuyers={interestedBuyers} />
     </div>

@@ -10,6 +10,8 @@ import { buildJourneyContext, getJourney } from "@/lib/journey/repository";
 import { listPropertyTasks } from "@/lib/tasks/repository";
 import { getPropertyCommandCenter } from "@/lib/intelligence/service";
 import { recommendedBuyersForProperty } from "@/lib/matching-intelligence/service";
+import { getPropertySellers } from "@/lib/sellers/service360";
+import { validatePropertySellerReadiness } from "@/lib/sellers/propertySellers";
 import {
   getActivitySummaryForEntity,
   getEntityRelationships,
@@ -42,6 +44,8 @@ export default async function PropertyDetailsPage({
     relationships,
     activitySummary,
     recommendedBuyers,
+    propertySellers,
+    sellerReadiness,
   ] = await Promise.all([
     getPropertyActivities(id),
     getPropertyNotes(id),
@@ -55,6 +59,8 @@ export default async function PropertyDetailsPage({
     getEntityRelationships("property", id),
     getActivitySummaryForEntity("property", id),
     recommendedBuyersForProperty(id),
+    getPropertySellers(id),
+    validatePropertySellerReadiness(id),
   ]);
 
   const journey = {
@@ -78,6 +84,8 @@ export default async function PropertyDetailsPage({
       relationships={relationships}
       activitySummary={activitySummary}
       recommendedBuyers={recommendedBuyers}
+      propertySellers={propertySellers}
+      sellerReadiness={sellerReadiness}
     />
   );
 }

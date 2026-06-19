@@ -34,6 +34,9 @@ import type {
   ActivitySummary,
   RelationshipRow,
 } from "@/lib/activity/types";
+import { PropertySellersPanel } from "./PropertySellersPanel";
+import type { PropertySellerView } from "@/lib/sellers/service360";
+import type { SellerReadiness } from "@/lib/sellers/propertySellers";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
@@ -52,6 +55,7 @@ type Tab =
   | "command"
   | "timeline"
   | "overview"
+  | "sellers"
   | "journey"
   | "tasks"
   | "details"
@@ -63,6 +67,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "command", label: "מרכז ניהול נכס" },
   { id: "timeline", label: "ציר זמן" },
   { id: "overview", label: "סקירה" },
+  { id: "sellers", label: "בעלים / מוכרים" },
   { id: "journey", label: "מסע הנכס" },
   { id: "tasks", label: "משימות" },
   { id: "details", label: "פרטים" },
@@ -108,6 +113,8 @@ export function PropertyDetailView({
   relationships,
   activitySummary,
   recommendedBuyers,
+  propertySellers,
+  sellerReadiness,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
@@ -121,6 +128,8 @@ export function PropertyDetailView({
   relationships: RelationshipRow[];
   activitySummary: ActivitySummary;
   recommendedBuyers: import("@/components/activity/RecommendedMatches").RecoItemView[];
+  propertySellers: PropertySellerView[];
+  sellerReadiness: SellerReadiness;
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const [error, setError] = useState<string | null>(null);
@@ -301,6 +310,10 @@ export function PropertyDetailView({
             context={journey.context}
             activities={activities}
           />
+        )}
+
+        {tab === "sellers" && (
+          <PropertySellersPanel propertyId={p.id} sellers={propertySellers} readiness={sellerReadiness} />
         )}
 
         {tab === "tasks" && <TasksPanel propertyId={p.id} tasks={tasks} />}

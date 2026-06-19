@@ -53,6 +53,18 @@ export async function publishPropertyAction(
   if (!input.title?.trim()) return { error: "נא להזין כותרת לפני פרסום." };
   if (!input.price || input.price <= 0) return { error: "נא להזין מחיר לפני פרסום." };
 
+  // Seller readiness gate: a property cannot be published without a linked
+  // seller + a decision-maker/signer + a contact method.
+  try {
+    const { validatePropertySellerReadiness } = await import("@/lib/sellers/propertySellers");
+    const readiness = await validatePropertySellerReadiness(id);
+    if (!readiness.ready) {
+      return { error: "כדי לפרסם נכס, יש לקשר לפחות מוכר אחד ולקבוע מי מקבל החלטות." };
+    }
+  } catch (e) {
+    console.error("[properties] seller readiness check failed:", e);
+  }
+
   try {
     await saveDraft(id, { ...input, status: "published" });
     await markPublished(id, input.primaryImageUrl ?? null);
