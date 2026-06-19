@@ -139,7 +139,9 @@ class ApifyProvider implements PropertyProvider {
       city,
       locality: city,
       location: city,
-      dealType: "sale",
+      // The swerve Yad2/Madlan actors require dealType ∈ {"buy","rent","commercial"}.
+      // "for sale" maps to "buy".
+      dealType: "buy",
       maxListingsPerCity: limit,
       maxItems: limit,
       maxResults: limit,
@@ -234,19 +236,13 @@ export class Yad2Provider extends ApifyProvider {
   constructor() {
     super("yad2", "APIFY_YAD2_ACTOR_ID", "swerve/yad2-scraper");
   }
-  // Yad2 input adapter — adjust keys here to the real Yad2 actor's schema.
-  buildInput(city: string, limit: number): Record<string, unknown> {
-    return { ...super.buildInput(city, limit), dealType: "forsale" };
-  }
+  // Yad2 input adapter — override buildInput here if the actor needs other keys.
 }
 export class MadlanProvider extends ApifyProvider {
   constructor() {
     super("madlan", "APIFY_MADLAN_ACTOR_ID", "swerve/madlan-scraper");
   }
-  // Madlan input adapter — adjust keys here to the real Madlan actor's schema.
-  buildInput(city: string, limit: number): Record<string, unknown> {
-    return { ...super.buildInput(city, limit), dealType: "sale" };
-  }
+  // Madlan input adapter — override buildInput here if the actor needs other keys.
 }
 
 export function getProvider(source: string): PropertyProvider {
