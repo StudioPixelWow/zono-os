@@ -16,6 +16,8 @@ import {
   type PropertyRow,
 } from "@/lib/properties/labels";
 
+import { inventoryBadges, type Badge as InvBadge } from "@/lib/properties/inventory";
+
 interface Filters {
   city?: string;
   type?: string;
@@ -26,6 +28,25 @@ interface Filters {
   maxRooms?: number;
 }
 
+const BADGE_TONE: Record<InvBadge["tone"], string> = {
+  brand: "bg-brand-soft text-brand-strong",
+  success: "bg-success-soft text-success",
+  warning: "bg-warning-soft text-warning",
+  accent: "bg-sky-100 text-sky-700",
+  neutral: "bg-surface text-muted",
+};
+
+function InventoryBadges({ badges }: { badges: InvBadge[] }) {
+  if (badges.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {badges.map((b, i) => (
+        <span key={i} className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", BADGE_TONE[b.tone])}>{b.label}</span>
+      ))}
+    </div>
+  );
+}
+
 const field =
   "bg-surface border-line text-ink focus:border-brand-light h-10 w-full rounded-xl border px-3 text-sm outline-none transition";
 
@@ -33,10 +54,12 @@ export function PropertiesListView({
   properties,
   filters,
   error,
+  currentUserId = null,
 }: {
   properties: PropertyRow[];
   filters: Filters;
   error?: boolean;
+  currentUserId?: string | null;
 }) {
   const [view, setView] = useState<"cards" | "table">("cards");
 
@@ -189,6 +212,7 @@ export function PropertiesListView({
               <p className="text-muted text-sm">
                 {PROPERTY_TYPE_LABELS[p.type]} · {propertyAddressLine(p)}
               </p>
+              <InventoryBadges badges={inventoryBadges(p, currentUserId)} />
               <p className="text-brand-strong text-lg font-black">
                 {formatShekels(p.price)}
               </p>
@@ -222,6 +246,7 @@ export function PropertiesListView({
                       {p.title}
                     </Link>
                     <p className="text-muted text-xs">{propertyAddressLine(p)}</p>
+                    <div className="mt-1"><InventoryBadges badges={inventoryBadges(p, currentUserId)} /></div>
                   </td>
                   <td className="text-muted px-4 py-3">{PROPERTY_TYPE_LABELS[p.type]}</td>
                   <td className="px-4 py-3">

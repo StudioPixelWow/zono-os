@@ -374,9 +374,144 @@ type PropertiesRow = {
   last_ai_generated_at: string | null;
   primary_image_url: string | null;
   published_at: string | null;
+  property_origin: string;
+  source_type: string;
+  external_source: string | null;
+  ownership_scope: string;
+  exclusivity_scope: string;
+  listing_rights: string;
+  uploaded_by_user_id: string | null;
+  assigned_agent_id: string | null;
+  office_owner_id: string | null;
+  source_listing_id: string | null;
+  source_listing_url: string | null;
+  source_last_synced_at: string | null;
+  source_status: string | null;
+  is_internal_inventory: boolean;
+  is_external_inventory: boolean;
+  is_exclusive: boolean;
+  is_office_exclusive: boolean;
+  is_agent_exclusive: boolean;
+  deal_priority_score: number;
+  internal_double_side_priority: boolean;
+  source_metadata: Json;
   created_at: string;
   updated_at: string;
 }
+
+type ExternalListingSourcesRow = {
+  id: string;
+  org_id: string | null;
+  provider: string;
+  name: string;
+  is_active: boolean;
+  configuration: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type ExternalListingsRow = {
+  id: string;
+  org_id: string;
+  source: string;
+  source_id: string;
+  external_id: string | null;
+  title: string | null;
+  city: string | null;
+  locality_id: string | null;
+  neighborhood: string | null;
+  street: string | null;
+  street_number: string | null;
+  address: string | null;
+  property_type: string | null;
+  deal_type: string | null;
+  price: number | null;
+  rooms: number | null;
+  bathrooms: number | null;
+  balconies: number | null;
+  floor: number | null;
+  total_floors: number | null;
+  sqm: number | null;
+  area_sqm: number | null;
+  lot_size: number | null;
+  parking: boolean | null;
+  storage: boolean | null;
+  elevator: boolean | null;
+  accessibility: boolean | null;
+  secure_room: boolean | null;
+  condition: string | null;
+  description: string | null;
+  images: Json;
+  floorplan_images: Json;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_type: string | null;
+  has_agent: boolean | null;
+  listing_url: string | null;
+  published_at: string | null;
+  first_seen_at: string;
+  imported_at: string;
+  last_synced_at: string | null;
+  removed_at: string | null;
+  status: string;
+  opportunity_score: number;
+  duplicate_group_id: string | null;
+  duplicate_confidence_score: number | null;
+  primary_property_id: string | null;
+  promoted_property_id: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type ExternalListingHistoryRow = {
+  id: string;
+  org_id: string;
+  listing_id: string;
+  change_type: string;
+  old_value: Json | null;
+  new_value: Json | null;
+  created_at: string;
+};
+
+type ExternalListingDuplicatesRow = {
+  id: string;
+  org_id: string;
+  listing_id: string;
+  duplicate_of_listing_id: string | null;
+  internal_property_id: string | null;
+  confidence_score: number;
+  reason: string | null;
+  status: string;
+  created_at: string;
+};
+
+type ImportJobsRow = {
+  id: string;
+  org_id: string;
+  provider: string;
+  status: string;
+  params: Json;
+  total_found: number;
+  total_imported: number;
+  total_updated: number;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ImportJobLogsRow = {
+  id: string;
+  org_id: string;
+  job_id: string;
+  level: string;
+  message: string;
+  metadata: Json;
+  created_at: string;
+};
 
 type PropertyMediaRow = {
   id: string;
@@ -1490,6 +1625,12 @@ export interface Database {
         PropertySellersRow,
         "org_id" | "property_id" | "seller_id"
       >;
+      external_listing_sources: TableShape<ExternalListingSourcesRow, "provider" | "name">;
+      external_listings: TableShape<ExternalListingsRow, "org_id" | "source" | "source_id">;
+      external_listing_history: TableShape<ExternalListingHistoryRow, "org_id" | "listing_id" | "change_type">;
+      external_listing_duplicates: TableShape<ExternalListingDuplicatesRow, "org_id" | "listing_id">;
+      import_jobs: TableShape<ImportJobsRow, "org_id" | "provider">;
+      import_job_logs: TableShape<ImportJobLogsRow, "org_id" | "job_id" | "message">;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
       matching_results: TableShape<MatchingResultsRow, "org_id" | "buyer_id" | "score">;

@@ -2,11 +2,16 @@ import { listProperties, type PropertyRow } from "@/lib/properties/repository";
 import { listJourneyBoard, type JourneyBoard } from "@/lib/journey/repository";
 import { listIntelligenceBoard, type IntelligenceBoard } from "@/lib/intelligence/service";
 import { listActivityBoard, type ActivityBoard } from "@/lib/activity/service";
+import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
+import { matchesInventoryTab, type InventoryTab } from "@/lib/properties/inventory";
+import { getSessionContext } from "@/lib/auth/session";
 import type { PropertyStatus, PropertyType } from "@/lib/supabase/types";
 import { PropertiesListView } from "./PropertiesListView";
 import { JourneyBoardWidgets } from "./JourneyBoardWidgets";
 import { IntelligenceWidgets } from "./IntelligenceWidgets";
 import { ActivityWidgets } from "./ActivityWidgets";
+import { InventoryTabs } from "./InventoryTabs";
+import { ExternalListingsView } from "./ExternalListingsView";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +44,10 @@ export default async function PropertiesPage({
     maxRooms: num(str("maxRooms")),
   };
 
+  const tab = (str("inv") ?? "all") as InventoryTab;
+  const { user } = await getSessionContext();
+  const currentUserId = user?.id ?? null;
+
   let rows: PropertyRow[] = [];
   let error = false;
   try {
@@ -46,6 +55,17 @@ export default async function PropertiesPage({
   } catch (e) {
     console.error("[properties] list failed:", e);
     error = true;
+  }
+  // Filter the internal inventory by the active tab (external handled separately).
+  if (tab !== "external") rows = rows.filter((r) => matchesInventoryTab(r, tab, currentUserId));
+
+  let externalListings: ExternalListingRow[] = [];
+  if (tab === "external") {
+    try {
+      externalListings = await externalListingRepository.listForOrg();
+    } catch (e) {
+      console.error("[external] list failed:", e);
+    }
   }
 
   let board: JourneyBoard | null = null;
@@ -74,7 +94,12 @@ export default async function PropertiesPage({
       {board && <JourneyBoardWidgets board={board} />}
       {intel && <IntelligenceWidgets board={intel} />}
       {activity && <ActivityWidgets board={activity} />}
-      <PropertiesListView properties={rows} filters={filters} error={error} />
+      <InventoryTabs active={tab} />
+      {tab === "external" ? (
+        <ExternalListingsView listings={externalListings} />
+      ) : (
+        <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} />
+      )}
     </div>
   );
 }
