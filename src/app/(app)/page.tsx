@@ -2,11 +2,10 @@ import { Suspense } from "react";
 import { HeroSection } from "@/components/dashboard/sections/HeroSection";
 import { PropertiesSectionContainer } from "@/components/dashboard/sections/PropertiesSectionContainer";
 import { PropertiesSkeleton } from "@/components/dashboard/sections/PropertiesSkeleton";
-import { HeatmapSection } from "@/components/dashboard/sections/HeatmapSection";
 import { CommandSection } from "@/components/dashboard/sections/CommandSection";
 import { CommunicationDashboardSection } from "@/components/dashboard/sections/CommunicationDashboardSection";
 import {
-  DealsSectionContainer, JourneysSectionContainer, MarketSectionContainer,
+  DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
   MatchingSectionContainer, OpportunitiesSectionContainer,
 } from "@/components/dashboard/sections/RealContainers";
 
@@ -21,7 +20,7 @@ export default function Home() {
       <Suspense fallback={<PropertiesSkeleton />}>
         <PropertiesSectionContainer />
       </Suspense>
-      <HeatmapSection />
+      <Suspense fallback={null}><HeatmapSectionContainer /></Suspense>
       <Suspense fallback={null}><JourneysSectionContainer /></Suspense>
       <Suspense fallback={null}><MatchingSectionContainer /></Suspense>
       <Suspense fallback={null}><DealsSectionContainer /></Suspense>

@@ -10,6 +10,7 @@ import { Icon } from "./Icon";
 const HREFS: Record<string, string> = {
   home: "/",
   command: "/command",
+  map: "/market",
   properties: "/properties",
   buyers: "/buyers",
   sellers: "/sellers",

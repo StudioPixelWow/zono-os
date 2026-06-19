@@ -57,6 +57,7 @@ interface OrgData {
   commFollowups: { id: string; title: string; entity_type: string; entity_id: string; due_at: string | null; priority: string }[];
   commCommitments: { id: string; text: string; entity_type: string; entity_id: string; status: string; due_date: string | null }[];
   commProfiles: { entity_type: string; entity_id: string; unanswered: number; daysSince: number | null; sentiment: number; nextAction: string | null }[];
+  marketCells: { localityId: string | null; localityName: string; demand: number; supply: number; opportunity: number; belowAverage: number; priceDrops: number; externalListings: number; activeBuyers: number; matchedBuyers: number }[];
   externalPriceDrops: Set<string>;
   externalDuplicates: Set<string>;
   externalCityAvgSqm: Map<string, number>;
@@ -68,7 +69,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -84,6 +85,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("communication_followups").select("id,title,entity_type,entity_id,due_at,priority").eq("status", "open").not("due_at", "is", null).lt("due_at", nowIso).order("due_at", { ascending: true }).limit(60),
     supabase.from("communication_commitments").select("id,commitment_text,entity_type,entity_id,status,due_date").in("status", ["open", "broken"]).order("due_date", { ascending: true, nullsFirst: false }).limit(60),
     supabase.from("communication_intelligence_profiles").select("entity_type,entity_id,unanswered_messages_count,days_since_contact,sentiment_score,next_best_action").limit(500),
+    supabase.from("market_area_snapshots").select("locality_id,locality_name,date,demand_score,supply_score,opportunity_score,below_average_count,price_drops_count,active_external_listings,active_buyers_count,matched_buyers_count").order("date", { ascending: false }).limit(300),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -117,6 +119,16 @@ async function gatherOrgData(): Promise<OrgData> {
     commFollowups: (cFollow.data ?? []).map((f) => ({ id: f.id, title: f.title, entity_type: f.entity_type, entity_id: f.entity_id, due_at: f.due_at, priority: f.priority })),
     commCommitments: (cCommit.data ?? []).map((c) => ({ id: c.id, text: c.commitment_text, entity_type: c.entity_type, entity_id: c.entity_id, status: c.status, due_date: c.due_date })),
     commProfiles: (cProf.data ?? []).map((p) => ({ entity_type: p.entity_type, entity_id: p.entity_id, unanswered: p.unanswered_messages_count, daysSince: p.days_since_contact, sentiment: p.sentiment_score, nextAction: p.next_best_action })),
+    marketCells: (() => {
+      const seen = new Set<string>();
+      const out: OrgData["marketCells"] = [];
+      for (const m of mkt.data ?? []) {
+        if (seen.has(m.locality_name)) continue;
+        seen.add(m.locality_name);
+        out.push({ localityId: m.locality_id, localityName: m.locality_name, demand: m.demand_score, supply: m.supply_score, opportunity: m.opportunity_score, belowAverage: m.below_average_count, priceDrops: m.price_drops_count, externalListings: m.active_external_listings, activeBuyers: m.active_buyers_count, matchedBuyers: m.matched_buyers_count });
+      }
+      return out;
+    })(),
     externalListings,
     externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
     externalDuplicates: new Set((extD.data ?? []).map((dd) => dd.listing_id)),
@@ -312,6 +324,27 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       rows.push({ org_id: orgId, entity_type: "match", entity_id: mm.id, opportunity_score: clamp(mm.opportunity_score), impact_score: mm.revenue_score, confidence_score: mm.closing_probability, title: `${d.buyerMap.get(mm.buyer_id) ?? "קונה"} ← ${d.propMap.get(mm.property_id)?.title ?? "נכס"} · עסקה קרובה לסגירה`, description: `הסתברות סגירה ${mm.closing_probability}%.`, recommended_action: "לקדם לסגירה — ביקור/הצעה", status: "open" });
     }
   }
+  // Market heatmap clusters — locality-level opportunity signals.
+  for (const c of d.marketCells) {
+    if (!c.localityId) continue;
+    const reasons: string[] = [];
+    if (c.demand >= 70) reasons.push("ביקוש גבוה באזור");
+    if (c.priceDrops >= 3) reasons.push(`${c.priceDrops} ירידות מחיר`);
+    if (c.belowAverage >= 3) reasons.push(`${c.belowAverage} מודעות מתחת לממוצע`);
+    if (c.demand >= 60 && c.externalListings <= 2) reasons.push("ביקוש ללא מספיק היצע");
+    if (c.opportunity >= 70) reasons.push("ריכוז הזדמנויות חיצוניות");
+    if (!reasons.length) continue;
+    rows.push({
+      org_id: orgId, entity_type: "locality", entity_id: c.localityId,
+      opportunity_score: clamp(Math.max(c.opportunity, c.demand >= 70 ? 72 : 0)),
+      impact_score: clamp(c.demand), confidence_score: 70,
+      title: `${c.localityName} · מוקד שוק`,
+      description: `מפת ביקוש: ${reasons.join(" · ")} (ביקוש ${c.demand}, היצע ${c.supply}).`,
+      recommended_action: c.demand >= 60 && c.externalListings <= 2 ? "גייס מלאי באזור — יש ביקוש" : "מקד פעילות שיווק וגיוס באזור",
+      status: "open",
+    });
+  }
+
   // External listings — opportunity signals only (NEVER auto-promoted to CRM).
   // A signal is generated when ANY interesting condition holds — not a single
   // score gate — so relevant external listings always surface in the brain.

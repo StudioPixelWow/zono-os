@@ -1,7 +1,7 @@
 "use client";
 
 import { heatNeighborhoods, heatmapInsight } from "@/data/mock";
-import type { Tone } from "@/types";
+import type { HeatNeighborhood, Tone } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { SectionShell } from "../SectionShell";
@@ -36,7 +36,8 @@ const legend = [
   { tone: "purple" as Tone, label: "הזדמנות" },
 ];
 
-export function HeatmapSection() {
+export function HeatmapSection({ neighborhoods = heatNeighborhoods, insight = heatmapInsight }: { neighborhoods?: HeatNeighborhood[]; insight?: string } = {}) {
+  const hasData = neighborhoods.length > 0;
   return (
     <SectionShell title="מפת הביקוש בעיר" eyebrow="מודיעין שכונות">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
@@ -75,8 +76,16 @@ export function HeatmapSection() {
 
         {/* Heatmap */}
         <div className="bg-card border-line relative overflow-hidden rounded-[24px] border p-4 shadow-[var(--shadow-card)]">
+          {!hasData ? (
+            <div className="grid min-h-[300px] place-items-center text-center">
+              <div>
+                <p className="text-ink text-sm font-extrabold">אין עדיין נתוני מפת ביקוש</p>
+                <p className="text-muted mt-1 max-w-xs text-xs">לחץ ״חשב מפת ביקוש מחדש״ במסך מפת השוק כדי לבנות את המפה מנתוני המודעות, הקונים והנכסים שלך.</p>
+              </div>
+            </div>
+          ) : (
           <svg viewBox="0 0 560 340" className="h-full min-h-[300px] w-full">
-            {heatNeighborhoods.map((n) => (
+            {neighborhoods.map((n) => (
               <g key={n.id}>
                 <polygon
                   points={n.points}
@@ -107,14 +116,17 @@ export function HeatmapSection() {
               </g>
             ))}
           </svg>
+          )}
 
           {/* AI insight */}
-          <div className="bg-brand-soft/80 absolute inset-x-4 bottom-4 flex items-center gap-2.5 rounded-2xl p-3 backdrop-blur">
-            <ZonoOrb size={32} />
-            <p className="text-brand-strong text-xs font-bold leading-snug">
-              {heatmapInsight}
-            </p>
-          </div>
+          {hasData && (
+            <div className="bg-brand-soft/80 absolute inset-x-4 bottom-4 flex items-center gap-2.5 rounded-2xl p-3 backdrop-blur">
+              <ZonoOrb size={32} />
+              <p className="text-brand-strong text-xs font-bold leading-snug">
+                {insight}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </SectionShell>

@@ -867,6 +867,35 @@ type CommunicationInsightsRow = {
   created_at: string;
 };
 
+type MarketAreaSnapshotsRow = {
+  id: string;
+  organization_id: string;
+  locality_id: string | null;
+  locality_name: string;
+  date: string;
+  active_external_listings: number;
+  active_internal_properties: number;
+  avg_price: number | null;
+  avg_price_per_sqm: number | null;
+  median_price: number | null;
+  min_price: number | null;
+  max_price: number | null;
+  avg_rooms: number | null;
+  price_drops_count: number;
+  below_average_count: number;
+  private_owner_count: number;
+  duplicate_candidates_count: number;
+  active_buyers_count: number;
+  matched_buyers_count: number;
+  demand_score: number;
+  supply_score: number;
+  opportunity_score: number;
+  heat_level: string;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 type SellerIntelligenceProfilesRow = {
   id: string;
   org_id: string;
@@ -1661,6 +1690,10 @@ export interface Database {
       communication_insights: TableShape<
         CommunicationInsightsRow,
         "org_id" | "entity_type" | "entity_id" | "insight_type" | "title"
+      >;
+      market_area_snapshots: TableShape<
+        MarketAreaSnapshotsRow,
+        "organization_id" | "locality_name"
       >;
       seller_intelligence_profiles: TableShape<
         SellerIntelligenceProfilesRow,
