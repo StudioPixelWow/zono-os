@@ -1,16 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { runImport } from "@/lib/external-listings/service";
 
-// Mock-safe: validates the session and runs a mock Yad2 import (no Apify yet).
-export async function POST() {
+// Real Apify (Yad2). Uses the authenticated org; never trusts a client org id.
+export async function POST(req: NextRequest) {
   const { profile } = await getSessionContext();
   if (!profile) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  let localityId: string | null = null;
   try {
-    const result = await runImport("yad2");
-    return NextResponse.json({ ok: true, mock: true, ...result });
+    const body = await req.json();
+    if (typeof body?.localityId === "string") localityId = body.localityId;
+  } catch { /* no body */ }
+  try {
+    const summary = await runImport({ sources: ["yad2"], localityId });
+    return NextResponse.json({ ok: summary.success, summary });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "import failed";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "import failed" }, { status: 500 });
   }
 }

@@ -2,33 +2,30 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { promoteExternalListing, runImport } from "./service";
+import { buildMarketAnalysis, promoteExternalListing, runImport, type SyncSummary } from "./service";
 
 export interface ExternalActionState {
   error?: string;
-  imported?: number;
+  summary?: SyncSummary;
 }
 
-async function doImport(provider: string): Promise<ExternalActionState> {
+async function doSync(opts: { sources?: string[]; localityId?: string | null }): Promise<ExternalActionState> {
   try {
-    const r = await runImport(provider);
+    const summary = await runImport(opts);
     revalidatePath("/properties");
-    return { imported: r.imported };
+    return { summary };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
-    console.error("[external] import failed:", e);
+    console.error("[external] sync failed:", e);
     return { error: `ייבוא נכשל: ${msg}` };
   }
 }
 
-export const importYad2Action = () => doImport("yad2");
-export const importMadlanAction = () => doImport("madlan");
-export async function importAllAction(): Promise<ExternalActionState> {
-  const a = await doImport("yad2");
-  const b = await doImport("madlan");
-  if (a.error || b.error) return { error: a.error ?? b.error };
-  return { imported: (a.imported ?? 0) + (b.imported ?? 0) };
-}
+export const importYad2Action = () => doSync({ sources: ["yad2"] });
+export const importMadlanAction = () => doSync({ sources: ["madlan"] });
+export const importAllAction = () => doSync({});
+export const syncNowAction = (localityId?: string | null, source?: string | null) =>
+  doSync({ localityId: localityId || null, sources: source ? [source] : undefined });
 
 export async function promoteExternalListingAction(listingId: string): Promise<ExternalActionState> {
   let propertyId: string;
@@ -40,4 +37,18 @@ export async function promoteExternalListingAction(listingId: string): Promise<E
   }
   revalidatePath("/properties");
   redirect(`/properties/${propertyId}`);
+}
+
+export interface AnalysisState {
+  text?: string;
+  error?: string;
+}
+export async function buildMarketAnalysisAction(): Promise<AnalysisState> {
+  try {
+    const a = await buildMarketAnalysis();
+    return { text: a.summaryText };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
+    return { error: `בניית ניתוח נכשלה: ${msg}` };
+  }
 }

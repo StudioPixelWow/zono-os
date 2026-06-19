@@ -1,14 +1,19 @@
 /**
- * External listing providers — provider-agnostic interface + Yad2/Madlan
- * adapters. Core logic consumes NormalizedExternalListing only.
+ * External listing providers — real Apify-powered Yad2 / Madlan scrapers.
+ * SERVER-ONLY: APIFY_TOKEN is read from the environment and never exposed.
  *
- * MOCK-SAFE: providers return deterministic mock data. Real Apify actor calls
- * are NOT made here yet (see env vars below for the planned wiring).
+ * Env:
+ *   APIFY_TOKEN
+ *   APIFY_YAD2_ACTOR_ID   (default swerve/yad2-scraper)
+ *   APIFY_MADLAN_ACTOR_ID (default swerve/madlan-scraper)
  *
- * Planned env:
- *   APIFY_API_TOKEN, APIFY_YAD2_ACTOR_ID (swerve/yad2-scraper),
- *   APIFY_MADLAN_ACTOR_ID (swerve/madlan-scraper)
+ * If APIFY_TOKEN is missing: in development we fall back to mock data; in
+ * production we throw a clear error (no silent empty imports).
  */
+import "server-only";
+import { ApifyClient } from "apify-client";
+
+export const MAX_LISTINGS_PER_CITY = 50;
 
 export interface NormalizedExternalListing {
   source: string;
@@ -30,113 +35,156 @@ export interface NormalizedExternalListing {
   totalFloors?: number | null;
   sqm?: number | null;
   areaSqm?: number | null;
-  lotSize?: number | null;
   parking?: boolean | null;
-  storage?: boolean | null;
   elevator?: boolean | null;
-  accessibility?: boolean | null;
   secureRoom?: boolean | null;
   condition?: string | null;
   description?: string | null;
   images?: string[];
-  floorplanImages?: string[];
   contactName?: string | null;
   contactPhone?: string | null;
   contactType?: string | null;
   hasAgent?: boolean | null;
   listingUrl?: string | null;
   publishedAt?: string | null;
-}
-
-export interface ListingSearchParams {
-  city?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  rooms?: number;
-  limit?: number;
+  rawData?: Record<string, unknown>;
 }
 
 type RawListing = Record<string, unknown>;
 
 export interface PropertyProvider {
   readonly source: string;
-  searchListings(params: ListingSearchParams): Promise<RawListing[]>;
+  searchListings(locality: string): Promise<RawListing[]>;
   normalizeListing(raw: RawListing): NormalizedExternalListing;
-  getListingDetails(sourceId: string): Promise<RawListing | null>;
-  detectRemovedListings(currentSourceIds: string[]): Promise<string[]>;
 }
 
-// ── Deterministic mock generator ─────────────────────────────────────────────
-const CITIES = ["תל אביב", "חיפה", "ירושלים", "רמת גן", "באר שבע"];
-const TYPES = ["apartment", "garden_apartment", "penthouse", "private_house"];
+const isDev = process.env.NODE_ENV !== "production";
+const num = (v: unknown): number | null => {
+  if (v == null) return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
+const str = (v: unknown): string | null => (v == null ? null : String(v));
+const pick = (raw: RawListing, keys: string[]): unknown => {
+  for (const k of keys) if (raw[k] != null) return raw[k];
+  return null;
+};
 
-function mockRaws(source: string, params: ListingSearchParams): RawListing[] {
-  const n = Math.min(params.limit ?? 8, 12);
-  return Array.from({ length: n }, (_, i) => ({
-    id: `${source.toUpperCase()}-${1000 + i}`,
-    title: `${source === "yad2" ? "דירה למכירה" : "נכס"} ${params.city ?? CITIES[i % CITIES.length]}`,
-    city: params.city ?? CITIES[i % CITIES.length],
-    type: TYPES[i % TYPES.length],
+function client(): ApifyClient {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) throw new Error("APIFY_TOKEN missing");
+  return new ApifyClient({ token });
+}
+
+/** Run an Apify actor and return its default dataset items. */
+async function runActor(actorId: string, input: Record<string, unknown>): Promise<RawListing[]> {
+  const run = await client().actor(actorId).call(input);
+  const datasetId = run.defaultDatasetId;
+  if (!datasetId) return [];
+  const { items } = await client().dataset(datasetId).listItems();
+  return items as RawListing[];
+}
+
+// ── Mock fallback (development only) ─────────────────────────────────────────
+function mockRaws(source: string, locality: string): RawListing[] {
+  return Array.from({ length: 6 }, (_, i) => ({
+    id: `${source.toUpperCase()}-${locality}-${1000 + i}`,
+    title: `${source === "yad2" ? "דירה למכירה" : "נכס"} ${locality}`,
+    city: locality,
+    type: "apartment",
     price: 1_500_000 + i * 250_000,
     rooms: 3 + (i % 3),
     sqm: 70 + i * 8,
-    floor: 1 + (i % 6),
-    elevator: i % 2 === 0,
-    parking: i % 3 === 0,
+    floor: 1 + (i % 5),
     url: `https://www.${source}.co.il/item/${1000 + i}`,
     phone: `05${i}-000000${i}`,
     hasAgent: i % 2 === 0,
+    _mock: true,
   }));
 }
 
-class MockProvider implements PropertyProvider {
-  constructor(public readonly source: string) {}
-  async searchListings(params: ListingSearchParams): Promise<RawListing[]> {
-    return mockRaws(this.source, params);
+class ApifyProvider implements PropertyProvider {
+  constructor(public readonly source: string, private readonly actorEnv: string, private readonly defaultActor: string) {}
+
+  async searchListings(locality: string): Promise<RawListing[]> {
+    if (!process.env.APIFY_TOKEN) {
+      if (isDev) return mockRaws(this.source, locality);
+      throw new Error("APIFY_TOKEN missing — external import unavailable in production");
+    }
+    const actorId = process.env[this.actorEnv] || this.defaultActor;
+    return runActor(actorId, { city: locality, locality, dealType: "sale", maxListingsPerCity: MAX_LISTINGS_PER_CITY, maxItems: MAX_LISTINGS_PER_CITY });
   }
+
   normalizeListing(raw: RawListing): NormalizedExternalListing {
+    const images = (() => {
+      const v = pick(raw, ["images", "imageUrls", "image_urls", "photos"]);
+      if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? x : (x as { url?: string })?.url ?? "")).filter(Boolean);
+      return [] as string[];
+    })();
     return {
       source: this.source,
-      sourceId: String(raw.id),
-      externalId: String(raw.id),
-      title: (raw.title as string) ?? null,
-      city: (raw.city as string) ?? null,
-      propertyType: (raw.type as string) ?? null,
+      sourceId: String(pick(raw, ["id", "listingId", "adNumber", "token"]) ?? cryptoId()),
+      externalId: str(pick(raw, ["id", "listingId", "adNumber", "token"])),
+      title: str(pick(raw, ["title", "name", "headline"])),
+      city: str(pick(raw, ["city", "cityName", "locality", "area"])),
+      neighborhood: str(pick(raw, ["neighborhood", "neighbourhood", "hood"])),
+      street: str(pick(raw, ["street", "streetName"])),
+      streetNumber: str(pick(raw, ["streetNumber", "houseNumber", "number"])),
+      address: str(pick(raw, ["address", "fullAddress"])),
+      propertyType: str(pick(raw, ["type", "propertyType", "category"])),
       dealType: "sale",
-      price: (raw.price as number) ?? null,
-      rooms: (raw.rooms as number) ?? null,
-      sqm: (raw.sqm as number) ?? null,
-      floor: (raw.floor as number) ?? null,
-      elevator: (raw.elevator as boolean) ?? null,
-      parking: (raw.parking as boolean) ?? null,
-      contactPhone: (raw.phone as string) ?? null,
-      hasAgent: (raw.hasAgent as boolean) ?? null,
-      listingUrl: (raw.url as string) ?? null,
-      publishedAt: new Date().toISOString(),
-      images: [],
+      price: num(pick(raw, ["price", "askingPrice", "priceValue"])),
+      rooms: num(pick(raw, ["rooms", "roomsCount", "numberOfRooms"])),
+      bathrooms: num(pick(raw, ["bathrooms"])),
+      balconies: num(pick(raw, ["balconies"])),
+      floor: num(pick(raw, ["floor", "floorNumber"])),
+      totalFloors: num(pick(raw, ["totalFloors", "floors"])),
+      sqm: num(pick(raw, ["sqm", "size", "squareMeters", "area_sqm"])),
+      areaSqm: num(pick(raw, ["areaSqm", "builtArea"])),
+      parking: typeof pick(raw, ["parking", "hasParking"]) === "boolean" ? Boolean(pick(raw, ["parking", "hasParking"])) : null,
+      elevator: typeof pick(raw, ["elevator", "hasElevator"]) === "boolean" ? Boolean(pick(raw, ["elevator", "hasElevator"])) : null,
+      condition: str(pick(raw, ["condition", "state"])),
+      description: str(pick(raw, ["description", "text", "body"])),
+      images,
+      contactName: str(pick(raw, ["contactName", "advertiserName", "agentName"])),
+      contactPhone: str(pick(raw, ["phone", "contactPhone", "advertiserPhone"])),
+      contactType: str(pick(raw, ["contactType", "advertiserType"])),
+      hasAgent: typeof pick(raw, ["hasAgent", "isAgent"]) === "boolean" ? Boolean(pick(raw, ["hasAgent", "isAgent"])) : null,
+      listingUrl: str(pick(raw, ["url", "link", "listingUrl"])),
+      publishedAt: str(pick(raw, ["publishedAt", "date", "createdAt"])),
+      rawData: raw,
     };
-  }
-  async getListingDetails(sourceId: string): Promise<RawListing | null> {
-    return { id: sourceId, title: "פרטי נכס (mock)", city: CITIES[0], type: "apartment", price: 2_000_000 };
-  }
-  async detectRemovedListings(): Promise<string[]> {
-    // Real implementation will diff current vs previously-seen source ids.
-    return [];
   }
 }
 
-export class Yad2Provider extends MockProvider {
+function cryptoId(): string {
+  return `gen-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export class Yad2Provider extends ApifyProvider {
   constructor() {
-    super("yad2");
+    super("yad2", "APIFY_YAD2_ACTOR_ID", "swerve/yad2-scraper");
   }
 }
-export class MadlanProvider extends MockProvider {
+export class MadlanProvider extends ApifyProvider {
   constructor() {
-    super("madlan");
+    super("madlan", "APIFY_MADLAN_ACTOR_ID", "swerve/madlan-scraper");
   }
 }
 
 export function getProvider(source: string): PropertyProvider {
-  if (source === "madlan") return new MadlanProvider();
-  return new Yad2Provider();
+  return source === "madlan" ? new MadlanProvider() : new Yad2Provider();
+}
+
+export async function runYad2Scraper(locality: string): Promise<NormalizedExternalListing[]> {
+  const p = new Yad2Provider();
+  return (await p.searchListings(locality)).map((r) => p.normalizeListing(r));
+}
+export async function runMadlanScraper(locality: string): Promise<NormalizedExternalListing[]> {
+  const p = new MadlanProvider();
+  return (await p.searchListings(locality)).map((r) => p.normalizeListing(r));
+}
+
+export function isApifyConfigured(): boolean {
+  return !!process.env.APIFY_TOKEN;
 }
