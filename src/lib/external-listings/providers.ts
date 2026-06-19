@@ -76,12 +76,16 @@ function client(): ApifyClient {
   return new ApifyClient({ token });
 }
 
-/** Run an Apify actor and return its default dataset items. */
+/** Run an Apify actor and return its default dataset items (bounded). */
 async function runActor(actorId: string, input: Record<string, unknown>): Promise<RawListing[]> {
-  const run = await client().actor(actorId).call(input);
+  // Guardrails: cap the actor run + wait so a request can't hang indefinitely.
+  const run = await client().actor(actorId).call(input, { timeout: 120, waitSecs: 110, memory: 512 });
+  if (run.status !== "SUCCEEDED") {
+    throw new Error(`actor ${actorId} status=${run.status}`);
+  }
   const datasetId = run.defaultDatasetId;
   if (!datasetId) return [];
-  const { items } = await client().dataset(datasetId).listItems();
+  const { items } = await client().dataset(datasetId).listItems({ limit: MAX_LISTINGS_PER_CITY });
   return items as RawListing[];
 }
 

@@ -7,11 +7,13 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import {
   buildMarketAnalysisAction,
+  getImportDiagnosticsAction,
   importMadlanAction,
   importYad2Action,
   promoteExternalListingAction,
   syncNowAction,
 } from "@/lib/external-listings/actions";
+import type { ImportDiagnostics } from "@/lib/external-listings/service";
 import type { Database } from "@/lib/supabase/types";
 
 type Row = Database["public"]["Tables"]["external_listings"]["Row"];
@@ -24,6 +26,7 @@ export function ExternalListingsView({ listings }: { listings: Row[] }) {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
+  const [diag, setDiag] = useState<ImportDiagnostics | null>(null);
   const [pending, start] = useTransition();
   const [source, setSource] = useState("");
   const [minRooms, setMinRooms] = useState("");
@@ -35,11 +38,15 @@ export function ExternalListingsView({ listings }: { listings: Row[] }) {
     start(async () => {
       const r = await fn();
       if (r?.error) setError(r.error);
-      else if (r?.summary) { setMsg(`סונכרן: ${r.summary.inserted} חדשים, ${r.summary.updated} עודכנו${r.summary.errors.length ? ` · ${r.summary.errors.length} שגיאות` : ""}`); router.refresh(); }
-      else router.refresh();
+      else if (r?.summary) {
+        setMsg(`סונכרן: ${r.summary.inserted} חדשים, ${r.summary.updated} עודכנו${r.summary.errors.length ? ` · ${r.summary.errors.length} שגיאות` : ""}`);
+        if (r.summary.errors.length) setError(`שגיאות ייבוא: ${r.summary.errors.slice(0, 3).join(" | ")}`);
+        router.refresh();
+      } else router.refresh();
     });
   };
   const analyze = () => { setError(null); start(async () => { const r = await buildMarketAnalysisAction(); if (r.error) setError(r.error); else setAnalysis(r.text ?? ""); }); };
+  const loadDiag = () => { setError(null); start(async () => { setDiag(await getImportDiagnosticsAction()); }); };
 
   const filtered = useMemo(() => listings.filter((l) => {
     if (source && l.source !== source) return false;
@@ -73,8 +80,32 @@ export function ExternalListingsView({ listings }: { listings: Row[] }) {
           <Button size="sm" variant="secondary" onClick={() => run(importMadlanAction)} disabled={pending}>מדלן</Button>
           <Button size="sm" onClick={() => run(() => syncNowAction(null, null))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>סנכרן עכשיו</Button>
           <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
+          <Button size="sm" variant="ghost" onClick={loadDiag} disabled={pending}>דיבאג ייבוא</Button>
         </div>
       </div>
+
+      {diag && (
+        <div className="bg-card border-line rounded-[20px] border p-4">
+          <p className="text-ink mb-2 text-sm font-extrabold">דיבאג ייבוא אחרון</p>
+          {!diag.apifyConfigured && <p className="text-danger text-xs font-bold">⚠ APIFY_TOKEN לא מוגדר בסביבה.</p>}
+          {diag.job ? (
+            <div className="text-xs leading-relaxed">
+              <p className="text-muted">סטטוס: <b className="text-ink">{diag.job.status}</b> · מקור: {diag.job.provider} · נמצאו {diag.job.total_found} · נשמרו {diag.job.total_imported}</p>
+              {diag.job.error && <p className="text-danger mt-1 font-bold">שגיאת job: {diag.job.error}</p>}
+              <div className="mt-2 flex max-h-72 flex-col gap-1 overflow-auto">
+                {diag.logs.map((l, i) => (
+                  <div key={i} className={cn("rounded-lg px-2 py-1", l.level === "error" ? "bg-danger-soft text-danger" : l.level === "debug" ? "bg-surface text-muted" : "text-muted")}>
+                    <span className="font-semibold">[{l.level}]</span> {l.message}
+                    {l.level === "debug" && l.metadata != null && (
+                      <details className="mt-1"><summary className="cursor-pointer text-[11px]">Raw / Mapped / Missing</summary><pre className="whitespace-pre-wrap text-[10px] leading-tight">{JSON.stringify(l.metadata, null, 2).slice(0, 4000)}</pre></details>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : <p className="text-muted text-xs">אין ייבוא אחרון.</p>}
+        </div>
+      )}
 
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}

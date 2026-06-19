@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, promoteExternalListing, runImport, type SyncSummary } from "./service";
+import { buildMarketAnalysis, getImportDiagnostics, promoteExternalListing, runImport, type ImportDiagnostics, type SyncSummary } from "./service";
 
 export interface ExternalActionState {
   error?: string;
@@ -47,6 +47,10 @@ export async function promoteExternalListingAction(listingId: string): Promise<E
   }
   revalidatePath("/properties");
   redirect(`/properties/${propertyId}`);
+}
+
+export async function getImportDiagnosticsAction(): Promise<ImportDiagnostics> {
+  return getImportDiagnostics();
 }
 
 export interface AnalysisState {

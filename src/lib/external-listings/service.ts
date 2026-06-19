@@ -10,25 +10,16 @@ import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 import type { Database } from "@/lib/supabase/types";
 import {
+  getProvider,
   isApifyConfigured,
-  runMadlanScraper,
-  runYad2Scraper,
   type NormalizedExternalListing,
 } from "./providers";
+import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
 
 type DB = SupabaseClient<Database>;
+const DAY = 86_400_000;
+const daysSince = (iso: string | null | undefined) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / DAY) : null);
 const clampScore = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
-
-function opportunityScore(n: NormalizedExternalListing): number {
-  let s = 30;
-  if (n.price && n.price > 0) s += 15;
-  if (n.rooms) s += 10;
-  if (n.sqm) s += 10;
-  if ((n.images?.length ?? 0) > 0) s += 10;
-  if (n.contactPhone) s += 10;
-  if (n.hasAgent === false) s += 15;
-  return clampScore(s);
-}
 
 export interface SyncSummary {
   success: boolean;
@@ -67,7 +58,23 @@ async function upsertListings(
     .eq("org_id", orgId).eq("source", source).in("source_id", sourceIds);
   const existingMap = new Map((existing ?? []).map((e) => [e.source_id, e]));
 
-  const rows: Database["public"]["Tables"]["external_listings"]["Insert"][] = listings.map((n) => ({
+  // Area baseline (₪/m²) from this batch — drives price-vs-average opportunity.
+  const sqmPrices = listings.filter((l) => l.price && l.sqm).map((l) => l.price! / l.sqm!);
+  const avgSqm = sqmPrices.length ? sqmPrices.reduce((a, b) => a + b, 0) / sqmPrices.length : 0;
+
+  const rows: Database["public"]["Tables"]["external_listings"]["Insert"][] = listings.map((n) => {
+    const q = qualityScores(n);
+    const sqmP = n.price && n.sqm ? n.price / n.sqm : null;
+    const opp = calculateExternalOpportunityScore({
+      priceVsAreaAvg: avgSqm > 0 && sqmP != null ? sqmP / avgSqm : null,
+      completeness: q.data_completeness_score,
+      privateOwner: n.hasAgent === false,
+      duplicateConfidence: 0,
+      buyerFit: false,
+      localityActive: true,
+      daysSincePublished: daysSince(n.publishedAt),
+    });
+    return ({
     org_id: orgId, source, source_id: n.sourceId, external_id: n.externalId ?? null,
     title: n.title ?? null, city: n.city ?? null, neighborhood: n.neighborhood ?? null,
     street: n.street ?? null, street_number: n.streetNumber ?? null, address: n.address ?? null,
@@ -79,9 +86,9 @@ async function upsertListings(
     images: (n.images ?? []) as never, contact_name: n.contactName ?? null, contact_phone: n.contactPhone ?? null,
     contact_type: n.contactType ?? null, has_agent: n.hasAgent ?? null, listing_url: n.listingUrl ?? null,
     published_at: n.publishedAt ?? null, last_synced_at: new Date().toISOString(), status: "active",
-    opportunity_score: opportunityScore(n),
-    metadata: { raw_data: n.rawData ?? {} } as never,
-  }));
+    opportunity_score: opp,
+    metadata: { raw_data: n.rawData ?? {}, quality: q } as never,
+  }); });
 
   const { error } = await db.from("external_listings").upsert(rows as never, { onConflict: "org_id,source,source_id" });
   if (error) throw new Error(error.message);
@@ -158,18 +165,32 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   }
 
   let totalFound = 0;
+  const logDebug = (message: string, metadata: Record<string, unknown>) =>
+    db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level: "debug", metadata: metadata as never });
+
   for (const loc of localities) {
     for (const source of sources) {
+      const t0 = Date.now();
       try {
-        const listings = source === "madlan" ? await runMadlanScraper(loc.name) : await runYad2Scraper(loc.name);
+        const provider = getProvider(source);
+        const raws = await provider.searchListings(loc.name);
+        const ms = Date.now() - t0;
+        const listings = raws.map((r) => provider.normalizeListing(r));
+        // Debug: first 5 raw + mapped items + missing fields, for admin inspection.
+        await logDebug(`raw_sample · ${source} · ${loc.name}`, {
+          source, city: loc.name, count: raws.length, durationMs: ms,
+          sample: raws.slice(0, 5),
+          mapped: listings.slice(0, 5),
+          missing: listings[0] ? missingFields(listings[0]) : [],
+        });
         totalFound += listings.length;
         const r = await upsertListings(db, orgId, source, listings, jobId);
         summary.inserted += r.inserted; summary.updated += r.updated;
-        await log(`${source} · ${loc.name}: ${listings.length} נמצאו (${r.inserted} חדשים, ${r.updated} עודכנו)`);
+        await log(`${source} · ${loc.name}: ${listings.length} פריטים ב-${ms}ms (${r.inserted} חדשים, ${r.updated} עודכנו)`);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "שגיאה";
         summary.errors.push(`${source}/${loc.name}: ${msg}`);
-        await log(`כשל ב-${source} · ${loc.name}: ${msg}`, "error");
+        await log(`כשל ב-${source} · ${loc.name} (${Date.now() - t0}ms): ${msg}`, "error");
         // continue with the other source / city
       }
     }
@@ -187,6 +208,24 @@ export async function runImport(opts: SyncOptions = {}): Promise<SyncSummary> {
   if (!profile) throw new Error("not authenticated");
   const db = (await createClient()) as unknown as DB;
   return syncOrg(db, profile.org_id, opts, user?.id ?? null);
+}
+
+export interface ImportDiagnostics {
+  job: { id: string; provider: string; status: string; total_found: number; total_imported: number; error: string | null; started_at: string | null; finished_at: string | null } | null;
+  logs: { level: string; message: string; metadata: unknown; created_at: string }[];
+  apifyConfigured: boolean;
+}
+
+/** Latest import job + logs (errors + raw debug samples) for the admin panel. */
+export async function getImportDiagnostics(): Promise<ImportDiagnostics> {
+  const { profile } = await getSessionContext();
+  if (!profile) return { job: null, logs: [], apifyConfigured: isApifyConfigured() };
+  const supabase = await createClient();
+  const { data: jobs } = await supabase.from("import_jobs").select("id,provider,status,total_found,total_imported,error,started_at,finished_at").order("created_at", { ascending: false }).limit(1);
+  const job = jobs?.[0] ?? null;
+  if (!job) return { job: null, logs: [], apifyConfigured: isApifyConfigured() };
+  const { data: logs } = await supabase.from("import_job_logs").select("level,message,metadata,created_at").eq("job_id", job.id).order("created_at", { ascending: true }).limit(60);
+  return { job, logs: logs ?? [], apifyConfigured: isApifyConfigured() };
 }
 
 /** Cron-triggered sync for a specific org (service-role, trusted server). */
