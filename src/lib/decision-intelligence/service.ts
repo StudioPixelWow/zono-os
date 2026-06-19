@@ -89,7 +89,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("communication_intelligence_profiles").select("entity_type,entity_id,unanswered_messages_count,days_since_contact,sentiment_score,next_best_action").limit(500),
     supabase.from("market_area_snapshots").select("locality_id,locality_name,date,demand_score,supply_score,opportunity_score,below_average_count,price_drops_count,active_external_listings,active_buyers_count,matched_buyers_count").order("date", { ascending: false }).limit(300),
     supabase.from("broker_match_reviews").select("listing_id,broker_id").eq("status", "pending").limit(40),
-    supabase.from("external_listings").select("detected_broker_id,detected_broker_name,city").not("detected_broker_id", "is", null).eq("status", "active").limit(1000),
+    supabase.from("external_listings").select("detected_broker_id,detected_broker_name,city").not("detected_broker_id", "is", null).eq("status", "active").in("broker_detection_status", ["auto", "approved"]).limit(1000),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));

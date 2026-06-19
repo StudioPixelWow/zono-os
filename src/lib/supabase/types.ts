@@ -468,6 +468,10 @@ type ExternalListingsRow = {
   broker_match_status: string;
   broker_evidence: Json;
   broker_detected_at: string | null;
+  broker_detection_status: string;
+  broker_detection_source: string | null;
+  broker_detection_last_run_at: string | null;
+  broker_detection_locked: boolean;
   created_at: string;
   updated_at: string;
 };

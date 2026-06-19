@@ -4,16 +4,18 @@
  * never invents brokers; never marks verified without evidence.
  */
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 import type { Database } from "@/lib/supabase/types";
 import {
-  bestBrokerMatch, normalizeAgencyName, normalizeHebrewName, normalizePhoneNumber,
+  bestBrokerMatch, classifyListingSourceType, normalizeAgencyName, normalizeHebrewName, normalizePhoneNumber,
   type AliasLike, type BrokerCandidate, type ListingForMatch,
 } from "./engine";
 
 type DB = Database["public"]["Tables"];
+type Client = SupabaseClient<Database>;
 export type BrokerProfileRow = DB["broker_profiles"]["Row"];
 export type BrokerMatchReviewRow = DB["broker_match_reviews"]["Row"];
 
@@ -93,9 +95,9 @@ export async function importBrokersFromCsv(rows: BrokerInput[]): Promise<CsvImpo
 }
 
 // ── Detection: match external listings → broker profiles ─────────────────────
-export interface DetectionSummary { scanned: number; matched: number; needsReview: number }
+export interface DetectionSummary { scanned: number; matched: number; needsReview: number; unknown: number }
 
-async function loadCandidates(supabase: Awaited<ReturnType<typeof createClient>>): Promise<BrokerCandidate[]> {
+async function loadCandidates(supabase: Client): Promise<BrokerCandidate[]> {
   const [{ data: profiles }, { data: aliases }] = await Promise.all([
     supabase.from("broker_profiles").select("id,normalized_name,normalized_agency,normalized_phone,primary_city").limit(2000),
     supabase.from("broker_aliases").select("broker_id,alias_type,normalized_value").limit(8000),
@@ -112,60 +114,83 @@ async function loadCandidates(supabase: Awaited<ReturnType<typeof createClient>>
   }));
 }
 
-export async function runBrokerDetectionForOrg(): Promise<DetectionSummary> {
-  const { profile } = await requireProfile();
-  const supabase = await createClient();
-  const orgId = profile.org_id;
-
-  const candidates = await loadCandidates(supabase);
-  const { data: listings } = await supabase
+/**
+ * Core detection — works with any client (RLS user OR service-role cron).
+ * Skips listings LOCKED by a human decision (approved/rejected). Applies
+ * heuristic classification for listings with no broker-profile match.
+ */
+export async function detectForOrg(db: Client, orgId: string): Promise<DetectionSummary> {
+  const summary: DetectionSummary = { scanned: 0, matched: 0, needsReview: 0, unknown: 0 };
+  const candidates = await loadCandidates(db);
+  const { data: listings } = await db
     .from("external_listings")
-    .select("id,contact_name,contact_phone,city,has_agent,detected_broker_id")
-    .eq("status", "active").is("promoted_property_id", null).limit(1000);
+    .select("id,contact_name,contact_phone,contact_type,city,has_agent")
+    .eq("status", "active").is("promoted_property_id", null)
+    .eq("broker_detection_locked", false).limit(1000);
+  if (!listings?.length) return summary;
 
-  const summary: DetectionSummary = { scanned: 0, matched: 0, needsReview: 0 };
-  if (!candidates.length || !listings?.length) return summary;
   const nameById = new Map<string, string>();
-  { const { data } = await supabase.from("broker_profiles").select("id,display_name,broker_type"); for (const b of data ?? []) nameById.set(b.id, b.display_name); }
   const typeById = new Map<string, string>();
-  { const { data } = await supabase.from("broker_profiles").select("id,broker_type"); for (const b of data ?? []) typeById.set(b.id, b.broker_type); }
+  if (candidates.length) {
+    const { data } = await db.from("broker_profiles").select("id,display_name,broker_type");
+    for (const b of data ?? []) { nameById.set(b.id, b.display_name); typeById.set(b.id, b.broker_type); }
+  }
+  const now = new Date().toISOString();
 
   for (const l of listings) {
     summary.scanned++;
     const lm: ListingForMatch = { contactName: l.contact_name, contactPhone: l.contact_phone, city: l.city, agencyName: null };
-    const m = bestBrokerMatch(lm, candidates);
-    if (!m) continue;
-    const brokerName = nameById.get(m.brokerId) ?? null;
-    const isAgency = typeById.get(m.brokerId) === "agency" || typeById.get(m.brokerId) === "office";
-    const auto = m.status === "auto_matched";
+    const m = candidates.length ? bestBrokerMatch(lm, candidates) : null;
 
-    await supabase.from("external_listings").update({
-      detected_broker_id: m.brokerId, detected_broker_name: brokerName,
-      broker_confidence_score: m.confidence, broker_match_status: m.status,
-      broker_evidence: { matchType: m.matchType, ...m.evidence } as never,
-      broker_detected_at: new Date().toISOString(),
-      listing_source_type: isAgency ? "agency" : "broker",
-      broker_detection_badge: isAgency ? "משרד תיווך" : "פרסום מתווך",
-    }).eq("id", l.id);
+    if (m) {
+      const brokerName = nameById.get(m.brokerId) ?? null;
+      const isAgency = typeById.get(m.brokerId) === "agency" || typeById.get(m.brokerId) === "office";
+      const auto = m.status === "auto_matched";
+      await db.from("external_listings").update({
+        detected_broker_id: m.brokerId, detected_broker_name: brokerName,
+        broker_confidence_score: m.confidence, broker_match_status: m.status,
+        broker_evidence: { matchType: m.matchType, ...m.evidence } as never, broker_detected_at: now,
+        listing_source_type: isAgency ? "agency" : "broker",
+        broker_detection_badge: isAgency ? "משרד תיווך" : "פרסום מתווך",
+        broker_detection_status: auto ? "auto" : "needs_review",
+        broker_detection_source: "profile_match", broker_detection_last_run_at: now,
+      } as never).eq("id", l.id);
 
-    // Refresh links/reviews for this listing.
-    await supabase.from("property_broker_matches").delete().eq("external_listing_id", l.id).eq("status", "pending");
-    await supabase.from("property_broker_matches").insert({
-      org_id: orgId, external_listing_id: l.id, broker_id: m.brokerId, match_type: m.matchType as never,
-      confidence_score: m.confidence, status: auto ? "approved" : "pending", evidence: m.evidence as never,
-    } as never);
-
-    if (auto) { summary.matched++; }
-    else {
-      summary.needsReview++;
-      await supabase.from("broker_match_reviews").delete().eq("listing_id", l.id).eq("status", "pending");
-      await supabase.from("broker_match_reviews").insert({
-        org_id: orgId, listing_id: l.id, broker_id: m.brokerId, match_type: m.matchType as never,
-        confidence_score: m.confidence, evidence: m.evidence as never, status: "pending",
+      await db.from("property_broker_matches").delete().eq("external_listing_id", l.id).eq("status", "pending");
+      await db.from("property_broker_matches").insert({
+        org_id: orgId, external_listing_id: l.id, broker_id: m.brokerId, match_type: m.matchType as never,
+        confidence_score: m.confidence, status: auto ? "approved" : "pending", evidence: m.evidence as never,
       } as never);
+
+      if (auto) summary.matched++;
+      else {
+        summary.needsReview++;
+        await db.from("broker_match_reviews").delete().eq("listing_id", l.id).eq("status", "pending");
+        await db.from("broker_match_reviews").insert({
+          org_id: orgId, listing_id: l.id, broker_id: m.brokerId, match_type: m.matchType as never,
+          confidence_score: m.confidence, evidence: m.evidence as never, status: "pending",
+        } as never);
+      }
+    } else {
+      // No profile match — heuristic classification only (no confirmed broker).
+      const cls = classifyListingSourceType({ hasAgent: l.has_agent, contactType: l.contact_type, contactName: l.contact_name });
+      await db.from("external_listings").update({
+        detected_broker_id: null, detected_broker_name: null, broker_confidence_score: 0,
+        broker_match_status: "unmatched", listing_source_type: cls.sourceType as never,
+        broker_detection_badge: cls.badge, broker_detection_status: "unknown",
+        broker_detection_source: "heuristic", broker_detection_last_run_at: now,
+      } as never).eq("id", l.id);
+      summary.unknown++;
     }
   }
   return summary;
+}
+
+/** Session wrapper (RLS, org from session). */
+export async function runBrokerDetectionForOrg(): Promise<DetectionSummary> {
+  const { profile } = await requireProfile();
+  const supabase = await createClient();
+  return detectForOrg(supabase as unknown as Client, profile.org_id);
 }
 
 // ── Review workflow (admin-gated) ────────────────────────────────────────────
@@ -179,10 +204,18 @@ export async function decideMatchReview(reviewId: string, decision: "approved" |
 
   if (review.listing_id) {
     if (decision === "approved") {
-      await supabase.from("external_listings").update({ broker_match_status: "approved" }).eq("id", review.listing_id);
+      // LOCK the listing so future re-syncs never overwrite the human decision.
+      await supabase.from("external_listings").update({
+        broker_match_status: "approved", broker_detection_status: "approved",
+        broker_detection_source: "manual", broker_detection_locked: true,
+      } as never).eq("id", review.listing_id);
       await supabase.from("property_broker_matches").update({ status: "approved" }).eq("external_listing_id", review.listing_id).eq("broker_id", review.broker_id as string);
     } else {
-      await supabase.from("external_listings").update({ broker_match_status: "rejected", detected_broker_id: null, detected_broker_name: null, broker_confidence_score: 0 }).eq("id", review.listing_id);
+      await supabase.from("external_listings").update({
+        broker_match_status: "rejected", broker_detection_status: "rejected",
+        broker_detection_source: "manual", broker_detection_locked: true,
+        detected_broker_id: null, detected_broker_name: null, broker_confidence_score: 0,
+      } as never).eq("id", review.listing_id);
       await supabase.from("property_broker_matches").delete().eq("external_listing_id", review.listing_id).eq("broker_id", review.broker_id as string);
     }
   }

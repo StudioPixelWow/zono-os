@@ -21,6 +21,13 @@ import type { Database } from "@/lib/supabase/types";
 
 type Row = Database["public"]["Tables"]["external_listings"]["Row"];
 const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
+const DETECTION_STATUS: Record<string, { label: string; cls: string }> = {
+  auto: { label: "זוהה אוטומטית", cls: "text-success" },
+  needs_review: { label: "דורש בדיקה", cls: "text-warning" },
+  approved: { label: "אושר ידנית", cls: "text-success" },
+  rejected: { label: "נדחה ידנית", cls: "text-danger" },
+  unknown: { label: "לא ידוע", cls: "text-muted" },
+};
 const SOURCE_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   private_seller: { label: "מוכר פרטי", cls: "bg-success-soft text-success" },
   broker: { label: "פרסום מתווך", cls: "bg-warning-soft text-warning" },
@@ -279,13 +286,14 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
                       return (
                         <div className="flex flex-col items-start gap-1">
                           <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", st.cls)} title={ev}>{l.broker_detection_badge ?? st.label}</span>
+                          {(() => { const ds = DETECTION_STATUS[l.broker_detection_status] ?? DETECTION_STATUS.unknown; return <span className={cn("text-[10px] font-bold", ds.cls)}>{ds.label}{l.broker_detection_locked ? " 🔒" : ""}</span>; })()}
                           {l.detected_broker_name && <span className="text-muted text-[10px]" title={ev}>{l.detected_broker_name}{l.broker_confidence_score ? ` · ${l.broker_confidence_score}%` : ""}</span>}
                           <span className="flex gap-1">
-                            {l.broker_match_status === "needs_review" && (<>
+                            {!l.broker_detection_locked && l.broker_detection_status === "needs_review" && (<>
                               <button className="text-success text-[10px] font-bold" disabled={pending} onClick={() => bk(() => decideListingMatchAction(l.id, "approved"))}>אשר</button>
                               <button className="text-danger text-[10px] font-bold" disabled={pending} onClick={() => bk(() => decideListingMatchAction(l.id, "rejected"))}>דחה</button>
                             </>)}
-                            {!l.detected_broker_id && l.listing_source_type !== "private_seller" && (
+                            {!l.detected_broker_id && !l.broker_detection_locked && l.listing_source_type !== "private_seller" && (
                               <button className="text-brand-strong text-[10px] font-bold" disabled={pending} onClick={() => bk(() => createBrokerFromListingAction(l.id))}>צור מתווך</button>
                             )}
                           </span>
