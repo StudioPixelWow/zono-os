@@ -17,6 +17,8 @@ import {
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
 
 type DB = SupabaseClient<Database>;
+// Guardrail: never scrape the whole country in one run. Cap localities per sync.
+const MAX_CITIES_PER_SYNC = 20;
 const DAY = 86_400_000;
 const daysSince = (iso: string | null | undefined) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / DAY) : null);
 const clampScore = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -149,8 +151,14 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   const jobId = job?.id as string;
   const log = (message: string, level = "info") => db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level });
 
-  const localities = await activeLocalities(db, orgId, opts.localityId);
+  const allLocalities = await activeLocalities(db, orgId, opts.localityId);
+  // Guardrail: cap cities per sync run so we never scrape the whole country.
+  const localities = allLocalities.slice(0, MAX_CITIES_PER_SYNC);
   const summary: SyncSummary = { success: true, organizationId: orgId, cities: localities.map((l) => l.name), sources, inserted: 0, updated: 0, errors: [] };
+
+  if (allLocalities.length > MAX_CITIES_PER_SYNC) {
+    await log(`הוגבל ל-${MAX_CITIES_PER_SYNC} אזורים מתוך ${allLocalities.length} (מגן ייצור)`, "warn");
+  }
 
   if (!localities.length) {
     await log("אין אזורי פעילות פעילים לארגון", "warn");

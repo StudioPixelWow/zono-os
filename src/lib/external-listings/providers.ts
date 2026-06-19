@@ -73,7 +73,8 @@ const pick = (raw: RawListing, keys: string[]): unknown => {
 function client(): ApifyClient {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("APIFY_TOKEN missing");
-  return new ApifyClient({ token });
+  // Bounded retries — never hang indefinitely on transient Apify errors.
+  return new ApifyClient({ token, maxRetries: 3 });
 }
 
 /** Run an Apify actor and return its default dataset items (bounded). */
