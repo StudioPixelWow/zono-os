@@ -223,11 +223,13 @@ class ApifyProvider implements PropertyProvider {
       balconies: num(pick(raw, ["balconies", "balconiesCount"])),
       floor: num(pick(raw, ["floor", "floorNumber"])),
       totalFloors: num(pick(raw, ["totalFloors", "floors", "buildingFloors"])),
-      sqm: num(pick(raw, ["sqm", "size", "squareMeters", "squareMeter", "square_meters", "area_sqm", "builtSqm", "squareMeterage", "meterage", "houseSize"])),
+      // Yad2 exposes the numeric size only as `areaSqm`; fall back to it for sqm.
+      sqm: num(pick(raw, ["sqm", "size", "squareMeters", "squareMeter", "square_meters", "area_sqm", "builtSqm", "squareMeterage", "meterage", "houseSize", "areaSqm"])),
       areaSqm: num(pick(raw, ["areaSqm", "builtArea", "gardenSize", "lotSize"])),
-      parking: boolOf(["parking", "hasParking"]),
-      elevator: boolOf(["elevator", "hasElevator"]),
-      secureRoom: boolOf(["secureRoom", "hasSecureRoom", "hasMamad"]),
+      // Prefer the has* boolean over numeric counts like `parking: 2`.
+      parking: boolOf(["hasParking", "parking"]),
+      elevator: boolOf(["hasElevator", "elevator"]),
+      secureRoom: boolOf(["hasSecureRoom", "secureRoom", "hasMamad"]),
       condition: str(pick(raw, ["condition", "state", "assetCondition"])),
       description,
       images,
