@@ -259,7 +259,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
                 const below = sqmPrice != null && stats.belowThreshold > 0 && sqmPrice < stats.belowThreshold;
                 return (
                   <tr key={l.id} className={cn("border-line hover:bg-surface border-b last:border-0", below && "bg-success-soft")}>
-                    <td className="px-4 py-3">{l.listing_url ? <a href={l.listing_url} target="_blank" rel="noopener noreferrer" className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a> : <span className="text-ink font-bold">{l.title ?? "מודעה"}</span>}{below && <span className="text-success mr-2 text-[10px] font-bold">מתחת לממוצע</span>}</td>
+                    <td className="px-4 py-3"><a href={`/external-listings/${l.id}`} className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a>{below && <span className="text-success mr-2 text-[10px] font-bold">מתחת לממוצע</span>}</td>
                     <td className="text-muted px-4 py-3">{SOURCE_LABELS[l.source] ?? l.source}</td>
                     <td className="text-muted px-4 py-3">{l.city ?? "—"}</td>
                     <td className="text-ink px-4 py-3 font-bold">{l.price ? formatShekels(l.price) : "—"}</td>

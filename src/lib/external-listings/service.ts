@@ -16,6 +16,18 @@ import {
   type NormalizedExternalListing,
 } from "./providers";
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
+import {
+  buildAiFields,
+  calculateExternalDealPotential,
+  marketIntel,
+  matchBuyersToListing,
+  whyItMatters,
+  type AiFields,
+  type BuyerForMatch,
+  type BuyerMatch,
+  type ListingForDeal,
+  type MarketIntel,
+} from "./deal";
 
 type DB = SupabaseClient<Database>;
 // Guardrail: never scrape the whole country in one run. Cap localities per sync.
@@ -305,6 +317,147 @@ export async function organizationsWithActiveLocalities(): Promise<string[]> {
   const db = createServiceRoleClient() as unknown as DB;
   const { data } = await db.from("organization_operating_localities").select("organization_id");
   return [...new Set((data ?? []).map((r) => r.organization_id))];
+}
+
+// ── External Listing Deep View (intelligence only — never auto-promotes) ──────
+type ExtRow = Database["public"]["Tables"]["external_listings"]["Row"];
+
+export interface ExternalListingDetail {
+  listing: ExtRow;
+  market: MarketIntel;
+  buyerMatches: BuyerMatch[];
+  dealPotential: number;
+  whyItMatters: string[];
+  priceHistory: { changeType: string; oldValue: unknown; newValue: unknown; at: string }[];
+  priceDropCount: number;
+  similar: { id: string; title: string | null; price: number | null; sqm: number | null; rooms: number | null; source: string; opportunity_score: number }[];
+  duplicate: boolean;
+  localityActivity: number;
+  ai: AiFields;
+}
+
+export async function getExternalListingDetail(listingId: string): Promise<ExternalListingDetail | null> {
+  const { profile } = await getSessionContext();
+  if (!profile) throw new Error("not authenticated");
+  const supabase = await createClient();
+
+  const { data: listing } = await supabase.from("external_listings").select("*").eq("id", listingId).maybeSingle();
+  if (!listing) return null;
+
+  const [cityRes, hoodRes, histRes, dupRes, buyersRes, buyerIntelRes] = await Promise.all([
+    listing.city
+      ? supabase.from("external_listings").select("id,title,price,sqm,rooms,source,opportunity_score,neighborhood").eq("city", listing.city).eq("status", "active").limit(200)
+      : Promise.resolve({ data: [] as ExtRow[] }),
+    listing.neighborhood
+      ? supabase.from("external_listings").select("id,price,sqm").eq("neighborhood", listing.neighborhood).eq("status", "active").limit(200)
+      : Promise.resolve({ data: [] as { id: string; price: number | null; sqm: number | null }[] }),
+    supabase.from("external_listing_history").select("change_type,old_value,new_value,created_at").eq("listing_id", listingId).order("created_at", { ascending: false }).limit(20),
+    supabase.from("external_listing_duplicates").select("id").eq("listing_id", listingId).eq("status", "suspected").limit(1),
+    supabase.from("buyers").select("id,full_name,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,readiness,has_preapproval"),
+    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_conversion_probability,buyer_readiness_score"),
+  ]);
+
+  const cityListings = (cityRes.data ?? []) as { id: string; price: number | null; sqm: number | null; title: string | null; rooms: number | null; source: string; opportunity_score: number; neighborhood: string | null }[];
+  const hoodListings = listing.neighborhood
+    ? (hoodRes.data ?? []) as { id: string; price: number | null; sqm: number | null }[]
+    : cityListings.map((l) => ({ id: l.id, price: l.price, sqm: l.sqm }));
+
+  const forDeal: ListingForDeal = {
+    id: listing.id, title: listing.title, city: listing.city, neighborhood: listing.neighborhood,
+    price: listing.price, sqm: listing.sqm, rooms: listing.rooms, hasAgent: listing.has_agent, opportunityScore: listing.opportunity_score,
+  };
+
+  const market = marketIntel(forDeal, cityListings, hoodListings);
+
+  const intelMap = new Map((buyerIntelRes.data ?? []).map((b) => [b.buyer_id, b]));
+  const buyers: BuyerForMatch[] = (buyersRes.data ?? []).map((b) => {
+    const intel = intelMap.get(b.id);
+    return {
+      id: b.id, name: b.full_name, budgetMin: b.budget_min, budgetMax: b.budget_max,
+      roomsMin: b.rooms_min, roomsMax: b.rooms_max, areas: b.preferred_areas ?? [],
+      readiness: b.readiness ?? intel?.buyer_readiness_score ?? null,
+      hasPreapproval: b.has_preapproval ?? false,
+      conversionProbability: intel?.buyer_conversion_probability ?? null,
+    };
+  });
+  const buyerMatches = matchBuyersToListing(forDeal, buyers);
+
+  const priceHistory = (histRes.data ?? []).map((h) => ({ changeType: h.change_type, oldValue: h.old_value, newValue: h.new_value, at: h.created_at }));
+  const priceDropCount = priceHistory.filter((h) => h.changeType === "price_changed").length;
+  const duplicate = (dupRes.data ?? []).length > 0;
+
+  const dealPotential = calculateExternalDealPotential({
+    buyerMatches: buyerMatches.length,
+    topBuyerReadiness: buyerMatches[0]?.closingProbability ?? 0,
+    competitiveness: market.competitiveness,
+    privateOwner: listing.has_agent === false,
+    localityActivity: cityListings.length,
+    priceDropped: priceDropCount > 0,
+  });
+
+  const similar = cityListings
+    .filter((l) => l.id !== listing.id)
+    .map((l) => {
+      const refSqm = listing.sqm ?? 0;
+      const refRooms = listing.rooms ?? 0;
+      const score = Math.abs((l.sqm ?? refSqm) - refSqm) + Math.abs(Number(l.rooms ?? refRooms) - Number(refRooms)) * 10;
+      return { l, score };
+    })
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 6)
+    .map(({ l }) => ({ id: l.id, title: l.title, price: l.price, sqm: l.sqm, rooms: l.rooms, source: l.source, opportunity_score: l.opportunity_score }));
+
+  const ai = buildAiFields({ listing: forDeal, market, buyerMatches, dealPotential, privateOwner: listing.has_agent === false, priceDropCount });
+
+  return {
+    listing, market, buyerMatches, dealPotential,
+    whyItMatters: whyItMatters({ market, privateOwner: listing.has_agent === false, priceDropCount, buyerMatches: buyerMatches.length, duplicate }),
+    priceHistory, priceDropCount, similar, duplicate, localityActivity: cityListings.length, ai,
+  };
+}
+
+// ── Seller acquisition mode (turn external opportunity into future inventory) ─
+/** Create a seller-acquisition task with outreach script + checklist. */
+export async function createAcquisitionTask(listingId: string): Promise<string> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile) throw new Error("not authenticated");
+  const supabase = await createClient();
+  const { data: l } = await supabase.from("external_listings").select("*").eq("id", listingId).maybeSingle();
+  if (!l) throw new Error("listing not found");
+
+  const where = [l.neighborhood, l.city].filter(Boolean).join(", ") || "—";
+  const priceTxt = l.price ? `${l.price.toLocaleString("he-IL")} ₪` : "ללא מחיר";
+  const privateOwner = l.has_agent === false;
+  const title = `גיוס נכס: ${l.title ?? "מודעה חיצונית"}${l.city ? ` · ${l.city}` : ""}`;
+
+  const script = privateOwner
+    ? `שלום, מצאתי את המודעה שלך (${where}, ${priceTxt}). אני סוכן/ת באזור עם קונים פעילים שמחפשים בדיוק כזה נכס. אשמח להציג איך חשיפה מקצועית וליווי יכולים למכור מהר ובמחיר טוב יותר — מתי נוח לדבר?`
+    : `בדוק שיתוף פעולה עם המפרסם (${l.contact_name ?? "מתווך"}) או הצגת קונה רלוונטי. אין להציג כנכס בבלעדיות המשרד.`;
+
+  const checklist = [
+    "אימות פרטי הנכס מול המקור",
+    privateOwner ? "יצירת קשר עם הבעלים והצעת ייצוג" : "בדיקת שיתוף פעולה עם המפרסם",
+    "הצגת קונים פוטנציאליים תואמים",
+    "בדיקת בלעדיות / תנאי שיתוף",
+    "תיעוד והעברה ל-CRM אם מתקדם",
+  ];
+  const description = [
+    `מקור: ${l.source} · מידע ציבורי בלבד (לא נכס בבלעדיות המשרד).`,
+    l.listing_url ? `קישור: ${l.listing_url}` : "",
+    `המלצת פנייה: ${privateOwner ? "בעלים פרטי — הזדמנות גיוס בלעדיות" : "מתווך — שיתוף פעולה/קונה"}.`,
+    `תסריט שיחה: ${script}`,
+    `צ׳קליסט גיוס: ${checklist.map((c, i) => `${i + 1}. ${c}`).join(" | ")}`,
+  ].filter(Boolean).join("\n");
+
+  const { data, error } = await supabase.from("tasks").insert({
+    org_id: profile.org_id, created_by: user.id, assignee_id: user.id,
+    title, description, status: "todo", priority: privateOwner ? "high" : "medium",
+    entity_type: "external_listing", entity_id: l.id, intelligence_source: "external_listings",
+  }).select("id").single();
+  if (error) throw new Error(error.message);
+
+  await logActivityEvent({ eventType: "task.created", entityType: "external_listing", entityId: l.id, title });
+  return data.id as string;
 }
 
 // ── Promotion (unchanged behaviour: never automatic) ─────────────────────────

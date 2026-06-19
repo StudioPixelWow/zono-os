@@ -287,15 +287,19 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
     if (fitsBuyer) reasons.push("תואם קונה פעיל");
     if (isDup) reasons.push("חשד לכפילות");
     if (!reasons.length && highScore) reasons.push("ציון הזדמנות גבוה");
-    // Boost the stored score for buyer-fit so strong matches rank well.
-    const score = clamp(Math.max(l.opportunity_score, fitsBuyer ? 70 : 0, belowAvg ? 75 : 0));
+    // Potential double-side (דו״צ): we have a matching buyer AND can plausibly
+    // win the seller side (private owner) or the listing is below market.
+    const doubleSide = fitsBuyer && (privateOwner || belowAvg);
+    if (doubleSide) reasons.unshift("פוטנציאל עסקת דו״צ");
+    // Boost the stored score: double-side > buyer-fit > below-avg.
+    const score = clamp(Math.max(l.opportunity_score, doubleSide ? 82 : 0, fitsBuyer ? 70 : 0, belowAvg ? 75 : 0));
     rows.push({
       org_id: orgId, entity_type: "external_listing", entity_id: l.id,
       opportunity_score: score, impact_score: clamp(l.opportunity_score),
       confidence_score: isDup ? 55 : 70,
-      title: `${l.title ?? "מודעה חיצונית"}${l.city ? ` · ${l.city}` : ""}`,
+      title: `${doubleSide ? "דו״צ פוטנציאלי · " : ""}${l.title ?? "מודעה חיצונית"}${l.city ? ` · ${l.city}` : ""}`,
       description: `מודעה חיצונית: ${reasons.join(" · ")}.`,
-      recommended_action: fitsBuyer ? "התאם לקונה הפעיל ותאם הצגה" : privateOwner ? "צור קשר עם הבעלים לבדיקת בלעדיות" : "בדוק את המודעה ושקול יצירת קשר",
+      recommended_action: doubleSide ? "פעולת דו״צ: גייס את הבעלים והצג לקונה התואם" : fitsBuyer ? "התאם לקונה הפעיל ותאם הצגה" : privateOwner ? "צור קשר עם הבעלים לבדיקת בלעדיות" : "בדוק את המודעה ושקול יצירת קשר",
       status: "open",
     });
   }

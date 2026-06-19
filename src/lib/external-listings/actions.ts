@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, getImportDiagnostics, promoteExternalListing, runImport, type ImportDiagnostics, type SyncSummary } from "./service";
+import { buildMarketAnalysis, createAcquisitionTask, getImportDiagnostics, promoteExternalListing, runImport, type ImportDiagnostics, type SyncSummary } from "./service";
 
 export interface ExternalActionState {
   error?: string;
@@ -51,6 +51,17 @@ export async function promoteExternalListingAction(listingId: string): Promise<E
 
 export async function getImportDiagnosticsAction(): Promise<ImportDiagnostics> {
   return getImportDiagnostics();
+}
+
+export async function createAcquisitionTaskAction(listingId: string): Promise<ExternalActionState> {
+  try {
+    await createAcquisitionTask(listingId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
+    return { error: `יצירת משימת הגיוס נכשלה: ${msg}` };
+  }
+  revalidatePath("/properties");
+  return {};
 }
 
 export interface AnalysisState {
