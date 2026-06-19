@@ -21,7 +21,20 @@ const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-3 text-sm outline-none transition";
 const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
-export function ExternalListingsView({ listings, marketStats }: { listings: Row[]; marketStats?: { priceDrops: number; duplicateCandidates: number } }) {
+interface DebugReport {
+  success: boolean;
+  provider: string;
+  actorId: string;
+  runStatus: string;
+  datasetItems: number;
+  rawSample: Record<string, unknown> | null;
+  normalizedSample: Record<string, unknown> | null;
+  missingFields: string[];
+  error: string | null;
+  env: { apifyToken: boolean; yad2ActorId: boolean; madlanActorId: boolean; cronSecret: boolean };
+}
+
+export function ExternalListingsView({ listings, marketStats, isAdmin = false }: { listings: Row[]; marketStats?: { priceDrops: number; duplicateCandidates: number }; isAdmin?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -29,6 +42,12 @@ export function ExternalListingsView({ listings, marketStats }: { listings: Row[
   const [diag, setDiag] = useState<ImportDiagnostics | null>(null);
   const [pending, start] = useTransition();
   const [dayAgo] = useState(() => Date.now() - 86_400_000);
+  // Admin actor-verification debug tool
+  const [dbgCity, setDbgCity] = useState("");
+  const [dbgSave, setDbgSave] = useState(false);
+  const [dbgBusy, setDbgBusy] = useState(false);
+  const [dbgReport, setDbgReport] = useState<DebugReport | null>(null);
+  const [dbgError, setDbgError] = useState<string | null>(null);
   const [source, setSource] = useState("");
   const [minRooms, setMinRooms] = useState("");
   const [minPrice, setMinPrice] = useState("");
@@ -48,6 +67,23 @@ export function ExternalListingsView({ listings, marketStats }: { listings: Row[
   };
   const analyze = () => { setError(null); start(async () => { const r = await buildMarketAnalysisAction(); if (r.error) setError(r.error); else setAnalysis(r.text ?? ""); }); };
   const loadDiag = () => { setError(null); start(async () => { setDiag(await getImportDiagnosticsAction()); }); };
+  const runDebug = async (provider: string) => {
+    if (!dbgCity.trim()) { setDbgError("הזן עיר לבדיקה"); return; }
+    setDbgError(null); setDbgReport(null); setDbgBusy(true);
+    try {
+      const res = await fetch("/api/external-listings/debug-provider", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, city: dbgCity.trim(), limit: 5, saveSample: dbgSave }),
+      });
+      const json = await res.json();
+      if (!res.ok) setDbgError(json.error ?? "בדיקה נכשלה");
+      else setDbgReport(json as DebugReport);
+    } catch (e) {
+      setDbgError(e instanceof Error ? e.message : "בדיקה נכשלה");
+    } finally {
+      setDbgBusy(false);
+    }
+  };
 
   const filtered = useMemo(() => listings.filter((l) => {
     if (source && l.source !== source) return false;
@@ -131,6 +167,37 @@ export function ExternalListingsView({ listings, marketStats }: { listings: Row[
               </div>
             </div>
           ) : <p className="text-muted text-xs">אין ייבוא אחרון.</p>}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-card border-line rounded-[20px] border p-4">
+          <p className="text-ink mb-1 text-sm font-extrabold">אימות Actor (כלי אדמין)</p>
+          <p className="text-muted mb-3 text-xs">בדיקת actor בודד · עיר אחת · עד 5 מודעות. לא מריץ סנכרון מלא.</p>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input className={field} placeholder="עיר לבדיקה (למשל קרית ביאליק)" value={dbgCity} onChange={(e) => setDbgCity(e.target.value)} />
+            <Button size="sm" variant="secondary" onClick={() => runDebug("yad2")} disabled={dbgBusy}>בדוק יד2</Button>
+            <Button size="sm" variant="secondary" onClick={() => runDebug("madlan")} disabled={dbgBusy}>בדוק מדלן</Button>
+            <label className="text-muted flex items-center gap-1 text-xs"><input type="checkbox" checked={dbgSave} onChange={(e) => setDbgSave(e.target.checked)} /> שמור דגימה</label>
+            {dbgBusy && <span className="text-muted text-xs">בודק…</span>}
+          </div>
+          {(() => {
+            const env = dbgReport?.env;
+            const chip = (ok: boolean, label: string) => <span key={label} className={cn("rounded-lg px-2 py-1 text-[11px] font-bold", ok ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}>{ok ? "✓" : "✗"} {label}</span>;
+            return env ? <div className="mb-3 flex flex-wrap gap-1">{chip(env.apifyToken, "APIFY_TOKEN")}{chip(env.yad2ActorId, "YAD2_ACTOR_ID")}{chip(env.madlanActorId, "MADLAN_ACTOR_ID")}{chip(env.cronSecret, "CRON_SECRET")}</div> : null;
+          })()}
+          {dbgError && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-xs font-semibold">{dbgError}</p>}
+          {dbgReport && (
+            <div className="text-xs leading-relaxed">
+              <p className="text-muted">מקור: <b className="text-ink">{dbgReport.provider}</b> · actor: <span className="text-ink">{dbgReport.actorId}</span> · סטטוס: <b className={dbgReport.success ? "text-success" : "text-danger"}>{dbgReport.runStatus}</b> · פריטים: <b className="text-ink">{dbgReport.datasetItems}</b></p>
+              {dbgReport.error && <p className="text-danger mt-1 font-bold">שגיאת Apify: {dbgReport.error}</p>}
+              {dbgReport.missingFields.length > 0 && <p className="text-warning mt-1">שדות חסרים: {dbgReport.missingFields.join(", ")}</p>}
+              <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                <details open><summary className="text-muted cursor-pointer font-bold">פריט גולמי ראשון</summary><pre className="bg-surface mt-1 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg p-2 text-[10px] leading-tight">{dbgReport.rawSample ? JSON.stringify(dbgReport.rawSample, null, 2).slice(0, 5000) : "—"}</pre></details>
+                <details open><summary className="text-muted cursor-pointer font-bold">פלט ממופה (Normalized)</summary><pre className="bg-surface mt-1 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg p-2 text-[10px] leading-tight">{dbgReport.normalizedSample ? JSON.stringify(dbgReport.normalizedSample, null, 2).slice(0, 5000) : "—"}</pre></details>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

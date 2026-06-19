@@ -10,6 +10,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 import type { Database } from "@/lib/supabase/types";
 import {
+  externalEnvStatus,
   getProvider,
   isApifyConfigured,
   type NormalizedExternalListing,
@@ -234,6 +235,63 @@ export async function getImportDiagnostics(): Promise<ImportDiagnostics> {
   if (!job) return { job: null, logs: [], apifyConfigured: isApifyConfigured() };
   const { data: logs } = await supabase.from("import_job_logs").select("level,message,metadata,created_at").eq("job_id", job.id).order("created_at", { ascending: true }).limit(60);
   return { job, logs: logs ?? [], apifyConfigured: isApifyConfigured() };
+}
+
+// ── Admin actor-verification debug tool (does NOT run a full sync) ────────────
+export interface ProviderDebugReport {
+  success: boolean;
+  provider: string;
+  actorId: string;
+  runStatus: string;
+  datasetItems: number;
+  rawSample: Record<string, unknown> | null;
+  normalizedSample: NormalizedExternalListing | null;
+  missingFields: string[];
+  error: string | null;
+  env: ReturnType<typeof externalEnvStatus>;
+}
+
+/** Presence-only environment validation (never returns secret values). */
+export function validateExternalEnv(): ReturnType<typeof externalEnvStatus> {
+  return externalEnvStatus();
+}
+
+/**
+ * Run ONE city against ONE provider with a tiny limit, for actor verification.
+ * Never triggers the full sync. Persists the raw sample only when saveSample.
+ */
+export async function debugProvider(
+  source: string, city: string, limit = 5, saveSample = false,
+): Promise<ProviderDebugReport> {
+  const { profile } = await getSessionContext();
+  if (!profile) throw new Error("not authenticated");
+  const provider = getProvider(source);
+  const safeLimit = Math.max(1, Math.min(limit, 5)); // debug cap: never more than 5
+  const r = await provider.debugRun(city, safeLimit);
+  const normalizedSample = r.rawSample ? provider.normalizeListing(r.rawSample) : null;
+  const missing = normalizedSample ? missingFields(normalizedSample) : [];
+
+  if (saveSample && r.rawSample) {
+    const db = await createClient();
+    const { data: job } = await db
+      .from("import_jobs")
+      .insert({ org_id: profile.org_id, provider: `debug:${source}`, status: "completed", started_at: new Date().toISOString(), finished_at: new Date().toISOString(), total_found: r.datasetItems, total_imported: 0, created_by: profile.id, params: { city, limit: safeLimit, debug: true } as never })
+      .select("id").single();
+    if (job?.id) {
+      await db.from("import_job_logs").insert({
+        org_id: profile.org_id, job_id: job.id, level: "debug",
+        message: `debug sample · ${source} · ${city} (${r.runStatus}, ${r.datasetItems} items)`,
+        metadata: { actorId: r.actorId, runStatus: r.runStatus, rawSample: r.rawSample, normalizedSample, missingFields: missing } as never,
+      });
+    }
+  }
+
+  return {
+    success: r.error == null,
+    provider: source, actorId: r.actorId, runStatus: r.runStatus, datasetItems: r.datasetItems,
+    rawSample: r.rawSample, normalizedSample, missingFields: missing, error: r.error,
+    env: externalEnvStatus(),
+  };
 }
 
 /** Cron-triggered sync for a specific org (service-role, trusted server). */

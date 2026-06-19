@@ -5,6 +5,7 @@ import { listActivityBoard, type ActivityBoard } from "@/lib/activity/service";
 import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
 import { matchesInventoryTab, type InventoryTab } from "@/lib/properties/inventory";
 import { getSessionContext } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import type { PropertyStatus, PropertyType } from "@/lib/supabase/types";
 import { PropertiesListView } from "./PropertiesListView";
 import { JourneyBoardWidgets } from "./JourneyBoardWidgets";
@@ -61,12 +62,18 @@ export default async function PropertiesPage({
 
   let externalListings: ExternalListingRow[] = [];
   let externalMarketStats = { priceDrops: 0, duplicateCandidates: 0 };
+  let externalIsAdmin = false;
   if (tab === "external") {
     try {
-      [externalListings, externalMarketStats] = await Promise.all([
+      const supabase = await createClient();
+      const [listingsRes, statsRes, adminRes] = await Promise.all([
         externalListingRepository.listForOrg(),
         externalListingRepository.marketStats(),
+        supabase.rpc("has_min_role", { p_min: "manager" }),
       ]);
+      externalListings = listingsRes;
+      externalMarketStats = statsRes;
+      externalIsAdmin = adminRes.data === true;
     } catch (e) {
       console.error("[external] list failed:", e);
     }
@@ -100,7 +107,7 @@ export default async function PropertiesPage({
       {activity && <ActivityWidgets board={activity} />}
       <InventoryTabs active={tab} />
       {tab === "external" ? (
-        <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} />
+        <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} isAdmin={externalIsAdmin} />
       ) : (
         <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} />
       )}

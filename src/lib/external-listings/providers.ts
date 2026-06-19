@@ -54,8 +54,20 @@ type RawListing = Record<string, unknown>;
 
 export interface PropertyProvider {
   readonly source: string;
-  searchListings(locality: string): Promise<RawListing[]>;
+  readonly actorId: string;
+  searchListings(locality: string, limit?: number): Promise<RawListing[]>;
   normalizeListing(raw: RawListing): NormalizedExternalListing;
+  /** Diagnostic run — never throws, never persists; surfaces status + error. */
+  debugRun(city: string, limit: number): Promise<ProviderDebugResult>;
+}
+
+/** Result of a non-destructive actor test run (admin debug tool). */
+export interface ProviderDebugResult {
+  actorId: string;
+  runStatus: string;
+  datasetItems: number;
+  rawSample: RawListing | null;
+  error: string | null;
 }
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -78,7 +90,7 @@ function client(): ApifyClient {
 }
 
 /** Run an Apify actor and return its default dataset items (bounded). */
-async function runActor(actorId: string, input: Record<string, unknown>): Promise<RawListing[]> {
+async function runActor(actorId: string, input: Record<string, unknown>, limit = MAX_LISTINGS_PER_CITY): Promise<RawListing[]> {
   // Guardrails: cap the actor run + wait so a request can't hang indefinitely.
   const run = await client().actor(actorId).call(input, { timeout: 120, waitSecs: 110, memory: 512 });
   if (run.status !== "SUCCEEDED") {
@@ -86,7 +98,7 @@ async function runActor(actorId: string, input: Record<string, unknown>): Promis
   }
   const datasetId = run.defaultDatasetId;
   if (!datasetId) return [];
-  const { items } = await client().dataset(datasetId).listItems({ limit: MAX_LISTINGS_PER_CITY });
+  const { items } = await client().dataset(datasetId).listItems({ limit });
   return items as RawListing[];
 }
 
@@ -111,13 +123,65 @@ function mockRaws(source: string, locality: string): RawListing[] {
 class ApifyProvider implements PropertyProvider {
   constructor(public readonly source: string, private readonly actorEnv: string, private readonly defaultActor: string) {}
 
-  async searchListings(locality: string): Promise<RawListing[]> {
+  /** Resolved actor id (env override → default). */
+  get actorId(): string {
+    return process.env[this.actorEnv] || this.defaultActor;
+  }
+
+  /**
+   * INPUT ADAPTER — the single place to adapt to a real actor's schema.
+   * Defaults send the common Yad2/Madlan-style keys plus location/maxItems
+   * aliases. If an actor rejects city/dealType/maxListingsPerCity, edit here
+   * (or override in the subclass) to match its actual required fields.
+   */
+  buildInput(city: string, limit: number): Record<string, unknown> {
+    return {
+      city,
+      locality: city,
+      location: city,
+      dealType: "sale",
+      maxListingsPerCity: limit,
+      maxItems: limit,
+      maxResults: limit,
+    };
+  }
+
+  async searchListings(locality: string, limit = MAX_LISTINGS_PER_CITY): Promise<RawListing[]> {
     if (!process.env.APIFY_TOKEN) {
       if (isDev) return mockRaws(this.source, locality);
       throw new Error("APIFY_TOKEN missing — external import unavailable in production");
     }
-    const actorId = process.env[this.actorEnv] || this.defaultActor;
-    return runActor(actorId, { city: locality, locality, dealType: "sale", maxListingsPerCity: MAX_LISTINGS_PER_CITY, maxItems: MAX_LISTINGS_PER_CITY });
+    return runActor(this.actorId, this.buildInput(locality, limit), limit);
+  }
+
+  /** Non-destructive test run: returns status + first item + error, never throws. */
+  async debugRun(city: string, limit: number): Promise<ProviderDebugResult> {
+    const actorId = this.actorId;
+    if (!process.env.APIFY_TOKEN) {
+      if (isDev) {
+        const items = mockRaws(this.source, city).slice(0, limit);
+        return { actorId, runStatus: "MOCK", datasetItems: items.length, rawSample: items[0] ?? null, error: null };
+      }
+      return { actorId, runStatus: "NO_TOKEN", datasetItems: 0, rawSample: null, error: "APIFY_TOKEN missing" };
+    }
+    try {
+      const run = await client().actor(actorId).call(this.buildInput(city, limit), { timeout: 90, waitSecs: 80, memory: 512 });
+      const datasetId = run.defaultDatasetId;
+      let items: RawListing[] = [];
+      if (datasetId) {
+        const res = await client().dataset(datasetId).listItems({ limit });
+        items = res.items as RawListing[];
+      }
+      return {
+        actorId,
+        runStatus: run.status,
+        datasetItems: items.length,
+        rawSample: items[0] ?? null,
+        error: run.status === "SUCCEEDED" ? null : `actor finished with status=${run.status}`,
+      };
+    } catch (e) {
+      return { actorId, runStatus: "ERROR", datasetItems: 0, rawSample: null, error: e instanceof Error ? e.message : "unknown Apify error" };
+    }
   }
 
   normalizeListing(raw: RawListing): NormalizedExternalListing {
@@ -170,10 +234,18 @@ export class Yad2Provider extends ApifyProvider {
   constructor() {
     super("yad2", "APIFY_YAD2_ACTOR_ID", "swerve/yad2-scraper");
   }
+  // Yad2 input adapter — adjust keys here to the real Yad2 actor's schema.
+  buildInput(city: string, limit: number): Record<string, unknown> {
+    return { ...super.buildInput(city, limit), dealType: "forsale" };
+  }
 }
 export class MadlanProvider extends ApifyProvider {
   constructor() {
     super("madlan", "APIFY_MADLAN_ACTOR_ID", "swerve/madlan-scraper");
+  }
+  // Madlan input adapter — adjust keys here to the real Madlan actor's schema.
+  buildInput(city: string, limit: number): Record<string, unknown> {
+    return { ...super.buildInput(city, limit), dealType: "sale" };
   }
 }
 
@@ -192,4 +264,14 @@ export async function runMadlanScraper(locality: string): Promise<NormalizedExte
 
 export function isApifyConfigured(): boolean {
   return !!process.env.APIFY_TOKEN;
+}
+
+/** Presence-only env check (never returns the secret values themselves). */
+export function externalEnvStatus(): { apifyToken: boolean; yad2ActorId: boolean; madlanActorId: boolean; cronSecret: boolean } {
+  return {
+    apifyToken: !!process.env.APIFY_TOKEN,
+    yad2ActorId: !!process.env.APIFY_YAD2_ACTOR_ID,
+    madlanActorId: !!process.env.APIFY_MADLAN_ACTOR_ID,
+    cronSecret: !!process.env.CRON_SECRET,
+  };
 }
