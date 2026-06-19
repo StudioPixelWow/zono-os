@@ -13,6 +13,7 @@ import {
   promoteExternalListingAction,
   syncNowAction,
 } from "@/lib/external-listings/actions";
+import { recalcDecisionBrainAction } from "@/lib/decision-intelligence/actions";
 import type { ImportDiagnostics } from "@/lib/external-listings/service";
 import type { Database } from "@/lib/supabase/types";
 
@@ -66,6 +67,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
     });
   };
   const analyze = () => { setError(null); start(async () => { const r = await buildMarketAnalysisAction(); if (r.error) setError(r.error); else setAnalysis(r.text ?? ""); }); };
+  const recalcBrain = () => { setError(null); setMsg(null); start(async () => { const r = await recalcDecisionBrainAction(); if (r?.error) setError(r.error); else setMsg("מרכז הפיקוד חושב מחדש — המודעות החיצוניות עודכנו בו ✓"); }); };
   const loadDiag = () => { setError(null); start(async () => { setDiag(await getImportDiagnosticsAction()); }); };
   const runDebug = async (provider: string) => {
     if (!dbgCity.trim()) { setDbgError("הזן עיר לבדיקה"); return; }
@@ -143,6 +145,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
           <Button size="sm" variant="secondary" onClick={() => run(importMadlanAction)} disabled={pending}>מדלן</Button>
           <Button size="sm" onClick={() => run(() => syncNowAction(null, null))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>סנכרן עכשיו</Button>
           <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
+          <Button size="sm" variant="ghost" onClick={recalcBrain} disabled={pending}>חשב מרכז פיקוד מחדש</Button>
           <Button size="sm" variant="ghost" onClick={loadDiag} disabled={pending}>דיבאג ייבוא</Button>
         </div>
       </div>

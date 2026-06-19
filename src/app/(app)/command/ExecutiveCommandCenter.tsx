@@ -16,6 +16,7 @@ import type { ExecutiveCommandCenter as ExecCC, FocusItem } from "@/lib/decision
 const TONE_TEXT: Record<Tone, string> = { good: "text-success", medium: "text-brand-strong", risk: "text-danger" };
 const fmt = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
 const entityHref = (t: string, id: string) => (t === "property" ? `/properties/${id}` : t === "seller" ? `/sellers/${id}` : t === "buyer" ? `/buyers/${id}` : t === "external_listing" ? `/properties?inv=external` : "#");
+const ExtBadge = ({ t }: { t: string }) => (t === "external_listing" ? <span className="bg-brand-soft text-brand-strong shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold">חיצוני</span> : null);
 
 function SectionCard({ title, icon, action, children }: { title: string; icon: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -105,6 +106,19 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
         </div>
       </div>
 
+      {/* External listings → Decision Brain debug counters */}
+      <div className="bg-card border-line flex flex-wrap items-center gap-x-5 gap-y-1 rounded-[18px] border px-4 py-2.5 text-xs">
+        <span className="text-muted font-bold">מודעות חיצוניות במוח המנהל:</span>
+        <span className="text-muted">נטענו <b className="text-ink">{data.externalDebug.listingsLoaded}</b></span>
+        <span className="text-muted">הזדמנויות <b className="text-ink">{data.externalDebug.opportunities}</b></span>
+        <span className="text-muted">בתור עדיפויות <b className="text-ink">{data.externalDebug.inQueue}</b></span>
+        <span className="text-muted">בהמלצות <b className="text-ink">{data.externalDebug.inRecommendations}</b></span>
+        <span className="text-muted">במוקד היום <b className="text-ink">{focus.filter((f) => f.entityType === "external_listing").length}</b></span>
+        {data.externalDebug.listingsLoaded > 0 && data.externalDebug.opportunities === 0 && (
+          <span className="text-warning">— ייתכן שצריך ״חשב מחדש״</span>
+        )}
+      </div>
+
       {/* Revenue pipeline (from Matching Intelligence) */}
       <div className="bg-card border-line flex flex-wrap items-center justify-between gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-3">
@@ -141,7 +155,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
               <li key={`${f.entityId}-${i}`} className="border-line flex items-center gap-3 rounded-2xl border p-3">
                 <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl text-sm font-black", i === 0 ? "bg-danger text-white" : "bg-brand-soft text-brand-strong")}>{i + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <Link href={entityHref(f.entityType, f.entityId)} className="text-ink hover:text-brand text-sm font-bold">{f.title}</Link>
+                  <span className="flex items-center gap-1.5"><Link href={entityHref(f.entityType, f.entityId)} className="text-ink hover:text-brand text-sm font-bold">{f.title}</Link><ExtBadge t={f.entityType} /></span>
                   <p className="text-muted text-xs">{f.why}{f.action ? ` · ${f.action}` : ""}</p>
                 </div>
                 <span className={cn("shrink-0 text-sm font-black", TONE_TEXT[attentionTone(f.priority)])}>{f.priority}</span>
@@ -196,7 +210,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
               {data.opportunities.slice(0, 8).map((o) => (
                 <li key={o.id} className="border-line flex items-center justify-between gap-2 border-b py-2 last:border-0">
                   <div className="min-w-0">
-                    <Link href={entityHref(o.entity_type, o.entity_id)} className="text-ink hover:text-brand text-sm font-semibold">{o.title}</Link>
+                    <span className="flex items-center gap-1.5"><Link href={entityHref(o.entity_type, o.entity_id)} className="text-ink hover:text-brand text-sm font-semibold">{o.title}</Link><ExtBadge t={o.entity_type} /></span>
                     <p className="text-muted text-[11px]">{o.recommended_action}</p>
                   </div>
                   <span className="text-success shrink-0 text-sm font-black">{o.opportunity_score}</span>
@@ -214,6 +228,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
                 <li key={q.id} className="flex items-center gap-2 text-sm">
                   <span className="bg-surface text-muted grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[11px] font-black">{q.rank_position}</span>
                   <Link href={entityHref(q.entity_type, q.entity_id)} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{q.title}</Link>
+                  <ExtBadge t={q.entity_type} />
                   <span className="text-muted shrink-0 text-[11px]">{q.action_type === "opportunity" ? "הזדמנות" : "סיכון"}</span>
                   <span className="text-brand-strong shrink-0 font-black">{q.priority_score}</span>
                 </li>

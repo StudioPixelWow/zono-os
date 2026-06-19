@@ -49,6 +49,7 @@ interface OrgData {
   activePropCountBySeller: Map<string, number>;
   buyerProfiles: { buyer_id: string; buyer_health_score: number; buyer_conversion_probability: number; buyer_readiness_score: number; buyer_engagement_score: number; buyer_financing_score: number; days_since_activity: number | null; current_stage: string }[];
   buyerMap: Map<string, string>;
+  buyerCriteria: { budgetMin: number | null; budgetMax: number | null; roomsMin: number | null; roomsMax: number | null; areas: string[] }[];
   matchProfiles: { id: string; buyer_id: string; property_id: string; closing_probability: number; risk_score: number; opportunity_score: number; revenue_score: number; urgency_score: number; match_stage: string; match_status: string }[];
   overdueTasks: number;
   overdueCommitments: { seller_id: string; title: string }[];
@@ -72,7 +73,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("tasks").select("id", { count: "exact", head: true }).neq("status", "done").not("due_at", "is", null).lt("due_at", nowIso),
     supabase.from("seller_commitments").select("seller_id,title,due_date").eq("status", "open").not("due_date", "is", null).lt("due_date", nowIso),
     supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_health_score,buyer_conversion_probability,buyer_readiness_score,buyer_engagement_score,buyer_financing_score,days_since_activity,current_stage"),
-    supabase.from("buyers").select("id,full_name"),
+    supabase.from("buyers").select("id,full_name,budget_min,budget_max,rooms_min,rooms_max,preferred_areas"),
     supabase.from("match_intelligence_profiles").select("id,buyer_id,property_id,closing_probability,risk_score,opportunity_score,revenue_score,urgency_score,match_stage,match_status"),
     supabase.from("external_listings").select("id,title,city,price,sqm,rooms,has_agent,opportunity_score,published_at").eq("status", "active").is("promoted_property_id", null).order("opportunity_score", { ascending: false }).limit(60),
     supabase.from("external_listing_history").select("listing_id").eq("change_type", "price_changed").gte("created_at", priceDropSince).limit(500),
@@ -103,6 +104,7 @@ async function gatherOrgData(): Promise<OrgData> {
     activePropCountBySeller,
     buyerProfiles: bp.data ?? [],
     buyerMap: new Map((buyers.data ?? []).map((b) => [b.id, b.full_name])),
+    buyerCriteria: (buyers.data ?? []).map((b) => ({ budgetMin: b.budget_min, budgetMax: b.budget_max, roomsMin: b.rooms_min, roomsMax: b.rooms_max, areas: b.preferred_areas ?? [] })),
     matchProfiles: mp.data ?? [],
     overdueTasks: tasks.count ?? 0,
     overdueCommitments: (commits.data ?? []).map((c) => ({ seller_id: c.seller_id, title: c.title })),
@@ -253,31 +255,51 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
     }
   }
   // External listings — opportunity signals only (NEVER auto-promoted to CRM).
+  // A signal is generated when ANY interesting condition holds — not a single
+  // score gate — so relevant external listings always surface in the brain.
+  const HIGH_OPP = 60;
+  const buyerMatch = (l: OrgData["externalListings"][number]): boolean => {
+    if (!d.buyerCriteria.length) return false;
+    return d.buyerCriteria.some((b) => {
+      const cityOk = !b.areas.length || (l.city != null && b.areas.some((a) => a && l.city != null && (a === l.city || a.includes(l.city!) || l.city!.includes(a))));
+      const priceOk = l.price == null || ((b.budgetMin == null || l.price >= b.budgetMin) && (b.budgetMax == null || l.price <= b.budgetMax));
+      const roomsOk = l.rooms == null || ((b.roomsMin == null || l.rooms >= b.roomsMin) && (b.roomsMax == null || l.rooms <= b.roomsMax));
+      // Require at least a budget or area match to count (avoid matching everyone).
+      const hasCriteria = b.areas.length > 0 || b.budgetMin != null || b.budgetMax != null;
+      return hasCriteria && cityOk && priceOk && roomsOk;
+    });
+  };
   for (const l of d.externalListings) {
-    if (l.opportunity_score < 55) continue;
     const sqmP = l.price && l.sqm ? l.price / l.sqm : null;
     const cityAvg = l.city ? d.externalCityAvgSqm.get(l.city) ?? 0 : 0;
     const belowAvg = sqmP != null && cityAvg > 0 && sqmP <= cityAvg * 0.9;
     const privateOwner = l.has_agent === false;
     const priceDrop = d.externalPriceDrops.has(l.id);
     const isDup = d.externalDuplicates.has(l.id);
+    const highScore = l.opportunity_score >= HIGH_OPP;
+    const fitsBuyer = buyerMatch(l);
+    // Only generate a signal if the listing is actually interesting.
+    if (!(belowAvg || privateOwner || priceDrop || isDup || highScore || fitsBuyer)) continue;
     const reasons: string[] = [];
     if (belowAvg) reasons.push("מתחת לממוצע השוק");
     if (priceDrop) reasons.push("ירידת מחיר לאחרונה");
     if (privateOwner) reasons.push("בעלים פרטי (ללא תיווך)");
+    if (fitsBuyer) reasons.push("תואם קונה פעיל");
     if (isDup) reasons.push("חשד לכפילות");
-    if (!reasons.length) reasons.push("ציון הזדמנות גבוה");
+    if (!reasons.length && highScore) reasons.push("ציון הזדמנות גבוה");
+    // Boost the stored score for buyer-fit so strong matches rank well.
+    const score = clamp(Math.max(l.opportunity_score, fitsBuyer ? 70 : 0, belowAvg ? 75 : 0));
     rows.push({
       org_id: orgId, entity_type: "external_listing", entity_id: l.id,
-      opportunity_score: clamp(l.opportunity_score), impact_score: clamp(l.opportunity_score),
+      opportunity_score: score, impact_score: clamp(l.opportunity_score),
       confidence_score: isDup ? 55 : 70,
       title: `${l.title ?? "מודעה חיצונית"}${l.city ? ` · ${l.city}` : ""}`,
       description: `מודעה חיצונית: ${reasons.join(" · ")}.`,
-      recommended_action: privateOwner ? "צור קשר עם הבעלים לבדיקת בלעדיות" : "בדוק את המודעה ושקול יצירת קשר",
+      recommended_action: fitsBuyer ? "התאם לקונה הפעיל ותאם הצגה" : privateOwner ? "צור קשר עם הבעלים לבדיקת בלעדיות" : "בדוק את המודעה ושקול יצירת קשר",
       status: "open",
     });
   }
-  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 40);
+  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 50);
 }
 
 // ── Orchestration ────────────────────────────────────────────────────────────
@@ -367,12 +389,14 @@ export interface ExecutiveCommandCenter {
   recommendations: RecommendationRow[];
   upcomingCommitments: { id: string; title: string; due: string | null; sellerName: string }[];
   revenuePipeline: number;
+  /** Debug counters for the External Listings → Decision Brain integration. */
+  externalDebug: { listingsLoaded: number; opportunities: number; inQueue: number; inRecommendations: number };
 }
 
 export async function getExecutiveCommandCenter(): Promise<ExecutiveCommandCenter> {
   const orgId = await currentOrgId();
   const supabase = await createClient();
-  const [profile, attention, opportunities, queue, recommendations, commitsRes, sellersRes, revRes] = await Promise.all([
+  const [profile, attention, opportunities, queue, recommendations, commitsRes, sellersRes, revRes, extCountRes] = await Promise.all([
     decisionIntelligenceRepository.get(orgId),
     attentionRepository.listOpen(),
     opportunityRepository.list(),
@@ -381,9 +405,11 @@ export async function getExecutiveCommandCenter(): Promise<ExecutiveCommandCente
     supabase.from("seller_commitments").select("id,seller_id,title,due_date").eq("status", "open").order("due_date", { ascending: true, nullsFirst: false }).limit(8),
     supabase.from("sellers").select("id,full_name"),
     supabase.from("revenue_signals").select("probability_weighted_revenue").limit(1000),
+    supabase.from("external_listings").select("id", { count: "exact", head: true }).eq("status", "active").is("promoted_property_id", null),
   ]);
   const names = new Map((sellersRes.data ?? []).map((s) => [s.id, s.full_name]));
   const revenuePipeline = (revRes.data ?? []).reduce((s, r) => s + (r.probability_weighted_revenue ?? 0), 0);
+  const isExt = (t: string) => t === "external_listing";
   return {
     profile,
     attention,
@@ -392,6 +418,12 @@ export async function getExecutiveCommandCenter(): Promise<ExecutiveCommandCente
     recommendations,
     upcomingCommitments: (commitsRes.data ?? []).map((c) => ({ id: c.id, title: c.title, due: c.due_date, sellerName: names.get(c.seller_id) ?? "מוכר" })),
     revenuePipeline,
+    externalDebug: {
+      listingsLoaded: extCountRes.count ?? 0,
+      opportunities: opportunities.filter((o) => isExt(o.entity_type)).length,
+      inQueue: queue.filter((q) => isExt(q.entity_type)).length,
+      inRecommendations: recommendations.filter((r) => r.entity_type != null && isExt(r.entity_type)).length,
+    },
   };
 }
 
