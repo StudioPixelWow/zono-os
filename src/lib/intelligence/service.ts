@@ -57,7 +57,7 @@ async function gatherContext(
   const id = property.id;
   const recent = new Date(Date.now() - 14 * DAY).toISOString();
 
-  const [media, docs, acts, tasks, leads, meetings, exposure, touch, journey, events] =
+  const [media, docs, acts, tasks, leads, meetings, exposure, touch, journey, events, sellerProfileRes] =
     await Promise.all([
       supabase.from("property_media").select("type,is_primary").eq("property_id", id),
       supabase.from("documents").select("id", { count: "exact", head: true }).eq("property_id", id),
@@ -69,7 +69,11 @@ async function gatherContext(
       supabase.from("property_seller_touchpoints").select("created_at,touchpoint_type,sentiment").eq("property_id", id),
       supabase.from("property_journeys").select("current_stage,last_activity_at").eq("property_id", id).maybeSingle(),
       activityEventRepository.listForEntity("property", id, 200),
+      property.seller_id
+        ? supabase.from("seller_intelligence_profiles").select("seller_trust_score,seller_churn_risk_score").eq("seller_id", property.seller_id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
+  const sellerProfile = (sellerProfileRes as { data: { seller_trust_score: number; seller_churn_risk_score: number } | null }).data;
 
   const mediaRows = media.data ?? [];
   // Unified activity layer feeds momentum/freshness alongside the legacy feed.
@@ -128,6 +132,8 @@ async function gatherContext(
     openRisks: [],
     overdueTasks: taskRows.filter((t) => t.status !== "done" && t.due_at && t.due_at < new Date().toISOString()).length,
     stalled: (daysBetween(lastActivity) ?? 0) >= 14 && stage !== "closed",
+    sellerProfileTrust: sellerProfile?.seller_trust_score ?? null,
+    sellerChurnRisk: sellerProfile?.seller_churn_risk_score ?? null,
   };
   return { ctx, orgId: property.org_id };
 }
@@ -269,6 +275,16 @@ export async function generatePropertyRisks(
 ): Promise<RiskRow[]> {
   await propertyRiskRepository.clearOpen(property.id);
   const candidates = detectRiskCandidates(ctx);
+  // Consume Seller Intelligence: high seller churn is a property-level risk.
+  if (ctx.sellerChurnRisk != null && ctx.sellerChurnRisk >= 60) {
+    candidates.push({
+      riskType: "seller_churn",
+      severity: ctx.sellerChurnRisk >= 75 ? "critical" : "high",
+      title: "סיכון מצד המוכר",
+      description: `סיכון נטישת המוכר גבוה (${ctx.sellerChurnRisk}). עלול לסכן את הבלעדיות.`,
+      recommendedAction: "לחזק את הקשר עם המוכר — שיחת עדכון / דוח",
+    });
+  }
   const rows = candidates.map((r) => ({
     org_id: property.org_id,
     property_id: property.id,

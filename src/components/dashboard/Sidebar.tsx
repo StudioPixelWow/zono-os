@@ -11,6 +11,7 @@ const HREFS: Record<string, string> = {
   home: "/",
   properties: "/properties",
   buyers: "/buyers",
+  sellers: "/sellers",
 };
 
 /**

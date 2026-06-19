@@ -47,6 +47,9 @@ export interface ScoreContext {
   openRisks: { severity: string }[];
   overdueTasks: number;
   stalled: boolean;
+  // seller intelligence (consumed from the Seller OS when available)
+  sellerProfileTrust?: number | null;
+  sellerChurnRisk?: number | null;
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -101,6 +104,8 @@ export function calculateSellerTrustScore(c: ScoreContext): number {
   s += Math.min(20, c.reportsSent * 7);
   s += Math.min(10, c.meetingsCompleted * 5);
   s += Math.min(10, c.positiveSellerResponses * 5);
+  // Blend in the Seller Intelligence OS trust score when present.
+  if (c.sellerProfileTrust != null) s = clamp(s) * 0.5 + c.sellerProfileTrust * 0.5;
   return clamp(s);
 }
 

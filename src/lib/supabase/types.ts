@@ -591,6 +591,111 @@ type CommunicationMessagesRow = {
   created_at: string;
 };
 
+type SellerIntelligenceProfilesRow = {
+  id: string;
+  org_id: string;
+  seller_id: string;
+  seller_health_score: number;
+  seller_trust_score: number;
+  seller_engagement_score: number;
+  seller_confidence_score: number;
+  seller_satisfaction_score: number;
+  seller_churn_risk_score: number;
+  seller_response_score: number;
+  seller_relationship_score: number;
+  current_status: string;
+  current_stage: string | null;
+  last_contact_at: string | null;
+  next_best_action: string | null;
+  intelligence_summary: string | null;
+  trust_trend: string;
+  engagement_trend: string;
+  satisfaction_trend: string;
+  days_since_last_contact: number | null;
+  meetings_count: number;
+  calls_count: number;
+  reports_sent_count: number;
+  reports_opened_count: number;
+  properties_count: number;
+  active_properties_count: number;
+  ai_summary: string | null;
+  ai_risk_summary: string | null;
+  ai_opportunity_summary: string | null;
+  autonomous_mode_enabled: boolean;
+  allowed_auto_actions: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SellerMissionsRow = {
+  id: string;
+  org_id: string;
+  seller_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  target_metric: string | null;
+  target_value: number | null;
+  current_value: number;
+  due_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SellerRisksRow = {
+  id: string;
+  org_id: string;
+  seller_id: string;
+  risk_type: string | null;
+  severity: string;
+  title: string;
+  description: string | null;
+  recommended_action: string | null;
+  status: string;
+  detected_at: string;
+  resolved_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type SellerTouchpointsRow = {
+  id: string;
+  org_id: string;
+  seller_id: string;
+  property_id: string | null;
+  touchpoint_type: string | null;
+  direction: string;
+  title: string | null;
+  description: string | null;
+  sentiment: string | null;
+  impact_score: number;
+  trust_impact: number;
+  engagement_impact: number;
+  created_by_user_id: string | null;
+  occurred_at: string;
+  created_at: string;
+};
+
+type SellerCommitmentsRow = {
+  id: string;
+  org_id: string;
+  seller_id: string;
+  property_id: string | null;
+  title: string;
+  description: string | null;
+  promised_at: string;
+  due_date: string | null;
+  fulfilled_at: string | null;
+  status: string;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type DealsRow = {
   id: string;
   org_id: string;
@@ -949,6 +1054,26 @@ export interface Database {
       communication_messages: TableShape<
         CommunicationMessagesRow,
         "org_id" | "thread_id" | "direction" | "channel"
+      >;
+      seller_intelligence_profiles: TableShape<
+        SellerIntelligenceProfilesRow,
+        "org_id" | "seller_id"
+      >;
+      seller_missions: TableShape<
+        SellerMissionsRow,
+        "org_id" | "seller_id" | "title"
+      >;
+      seller_risks: TableShape<
+        SellerRisksRow,
+        "org_id" | "seller_id" | "title"
+      >;
+      seller_touchpoints: TableShape<
+        SellerTouchpointsRow,
+        "org_id" | "seller_id"
+      >;
+      seller_commitments: TableShape<
+        SellerCommitmentsRow,
+        "org_id" | "seller_id" | "title"
       >;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
