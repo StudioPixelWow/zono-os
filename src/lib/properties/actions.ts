@@ -62,6 +62,19 @@ export async function setPropertyStatusAction(
   id: string,
   status: PropertyStatus,
 ): Promise<PropertyActionState> {
+  // Publishing requires seller readiness — same gate as the wizard publish,
+  // so the detail-page status dropdown can't bypass it.
+  if (status === "published") {
+    try {
+      const { validatePropertySellerReadiness } = await import("@/lib/sellers/propertySellers");
+      const readiness = await validatePropertySellerReadiness(id);
+      if (!readiness.ready) {
+        return { error: "כדי לפרסם נכס, יש לקשר לפחות מוכר אחד ולקבוע מי מקבל החלטות." };
+      }
+    } catch (e) {
+      console.error("[properties] readiness check failed:", e);
+    }
+  }
   try {
     await setPropertyStatus(id, status);
   } catch (e) {
