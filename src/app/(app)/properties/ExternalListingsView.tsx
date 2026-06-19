@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
@@ -14,11 +15,20 @@ import {
   syncNowAction,
 } from "@/lib/external-listings/actions";
 import { recalcDecisionBrainAction } from "@/lib/decision-intelligence/actions";
+import { createBrokerFromListingAction, decideListingMatchAction, runBrokerDetectionAction } from "@/lib/broker/actions";
 import type { ImportDiagnostics } from "@/lib/external-listings/service";
 import type { Database } from "@/lib/supabase/types";
 
 type Row = Database["public"]["Tables"]["external_listings"]["Row"];
 const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
+const SOURCE_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
+  private_seller: { label: "מוכר פרטי", cls: "bg-success-soft text-success" },
+  broker: { label: "פרסום מתווך", cls: "bg-warning-soft text-warning" },
+  agency: { label: "משרד תיווך", cls: "bg-danger-soft text-danger" },
+  office: { label: "נכס בבלעדיות", cls: "bg-brand-soft text-brand-strong" },
+  exclusive: { label: "נכס בבלעדיות", cls: "bg-brand-soft text-brand-strong" },
+  unknown: { label: "לא ידוע", cls: "bg-surface text-muted" },
+};
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-3 text-sm outline-none transition";
 const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
@@ -69,6 +79,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
   const analyze = () => { setError(null); start(async () => { const r = await buildMarketAnalysisAction(); if (r.error) setError(r.error); else setAnalysis(r.text ?? ""); }); };
   const recalcBrain = () => { setError(null); setMsg(null); start(async () => { const r = await recalcDecisionBrainAction(); if (r?.error) setError(r.error); else setMsg("מרכז הפיקוד חושב מחדש — המודעות החיצוניות עודכנו בו ✓"); }); };
   const loadDiag = () => { setError(null); start(async () => { setDiag(await getImportDiagnosticsAction()); }); };
+  const bk = (fn: () => Promise<{ error?: string; message?: string }>) => { setError(null); setMsg(null); start(async () => { const r = await fn(); if (r?.error) setError(r.error); else { if (r?.message) setMsg(r.message); router.refresh(); } }); };
   const runDebug = async (provider: string) => {
     if (!dbgCity.trim()) { setDbgError("הזן עיר לבדיקה"); return; }
     setDbgError(null); setDbgReport(null); setDbgBusy(true);
@@ -145,6 +156,8 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
           <Button size="sm" variant="secondary" onClick={() => run(importMadlanAction)} disabled={pending}>מדלן</Button>
           <Button size="sm" onClick={() => run(() => syncNowAction(null, null))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>סנכרן עכשיו</Button>
           <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
+          <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
+          <Link href="/broker-intelligence"><Button size="sm" variant="ghost">מודיעין מתווכים</Button></Link>
           <Button size="sm" variant="ghost" onClick={recalcBrain} disabled={pending}>חשב מרכז פיקוד מחדש</Button>
           <Button size="sm" variant="ghost" onClick={loadDiag} disabled={pending}>דיבאג ייבוא</Button>
         </div>
@@ -252,7 +265,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
       ) : (
         <div className="bg-card border-line overflow-x-auto rounded-[20px] border">
           <table className="w-full min-w-[760px] text-start text-sm">
-            <thead className="text-muted border-line border-b text-xs"><tr>{["מודעה", "מקור", "עיר", "מחיר", "חד׳", "מ״ר", "₪/מ״ר", "הזדמנות", ""].map((h) => <th key={h} className="px-4 py-3 text-start font-bold">{h}</th>)}</tr></thead>
+            <thead className="text-muted border-line border-b text-xs"><tr>{["מודעה", "סוג פרסום", "מקור", "עיר", "מחיר", "חד׳", "מ״ר", "₪/מ״ר", "הזדמנות", ""].map((h) => <th key={h} className="px-4 py-3 text-start font-bold">{h}</th>)}</tr></thead>
             <tbody>
               {filtered.map((l) => {
                 const sqmPrice = l.price && l.sqm ? Math.round(l.price / l.sqm) : null;
@@ -260,6 +273,25 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
                 return (
                   <tr key={l.id} className={cn("border-line hover:bg-surface border-b last:border-0", below && "bg-success-soft")}>
                     <td className="px-4 py-3"><a href={`/external-listings/${l.id}`} className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a>{below && <span className="text-success mr-2 text-[10px] font-bold">מתחת לממוצע</span>}</td>
+                    <td className="px-4 py-3">{(() => {
+                      const st = SOURCE_TYPE_BADGE[l.listing_source_type] ?? SOURCE_TYPE_BADGE.unknown;
+                      const ev = l.broker_evidence && typeof l.broker_evidence === "object" ? JSON.stringify(l.broker_evidence) : "";
+                      return (
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", st.cls)} title={ev}>{l.broker_detection_badge ?? st.label}</span>
+                          {l.detected_broker_name && <span className="text-muted text-[10px]" title={ev}>{l.detected_broker_name}{l.broker_confidence_score ? ` · ${l.broker_confidence_score}%` : ""}</span>}
+                          <span className="flex gap-1">
+                            {l.broker_match_status === "needs_review" && (<>
+                              <button className="text-success text-[10px] font-bold" disabled={pending} onClick={() => bk(() => decideListingMatchAction(l.id, "approved"))}>אשר</button>
+                              <button className="text-danger text-[10px] font-bold" disabled={pending} onClick={() => bk(() => decideListingMatchAction(l.id, "rejected"))}>דחה</button>
+                            </>)}
+                            {!l.detected_broker_id && l.listing_source_type !== "private_seller" && (
+                              <button className="text-brand-strong text-[10px] font-bold" disabled={pending} onClick={() => bk(() => createBrokerFromListingAction(l.id))}>צור מתווך</button>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}</td>
                     <td className="text-muted px-4 py-3">{SOURCE_LABELS[l.source] ?? l.source}</td>
                     <td className="text-muted px-4 py-3">{l.city ?? "—"}</td>
                     <td className="text-ink px-4 py-3 font-bold">{l.price ? formatShekels(l.price) : "—"}</td>

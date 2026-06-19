@@ -58,6 +58,8 @@ interface OrgData {
   commCommitments: { id: string; text: string; entity_type: string; entity_id: string; status: string; due_date: string | null }[];
   commProfiles: { entity_type: string; entity_id: string; unanswered: number; daysSince: number | null; sentiment: number; nextAction: string | null }[];
   marketCells: { localityId: string | null; localityName: string; demand: number; supply: number; opportunity: number; belowAverage: number; priceDrops: number; externalListings: number; activeBuyers: number; matchedBuyers: number }[];
+  brokerReviews: { listingId: string; brokerName: string }[];
+  brokerDominance: { brokerId: string; brokerName: string; city: string; count: number }[];
   externalPriceDrops: Set<string>;
   externalDuplicates: Set<string>;
   externalCityAvgSqm: Map<string, number>;
@@ -69,7 +71,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -86,6 +88,8 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("communication_commitments").select("id,commitment_text,entity_type,entity_id,status,due_date").in("status", ["open", "broken"]).order("due_date", { ascending: true, nullsFirst: false }).limit(60),
     supabase.from("communication_intelligence_profiles").select("entity_type,entity_id,unanswered_messages_count,days_since_contact,sentiment_score,next_best_action").limit(500),
     supabase.from("market_area_snapshots").select("locality_id,locality_name,date,demand_score,supply_score,opportunity_score,below_average_count,price_drops_count,active_external_listings,active_buyers_count,matched_buyers_count").order("date", { ascending: false }).limit(300),
+    supabase.from("broker_match_reviews").select("listing_id,broker_id").eq("status", "pending").limit(40),
+    supabase.from("external_listings").select("detected_broker_id,detected_broker_name,city").not("detected_broker_id", "is", null).eq("status", "active").limit(1000),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -128,6 +132,17 @@ async function gatherOrgData(): Promise<OrgData> {
         out.push({ localityId: m.locality_id, localityName: m.locality_name, demand: m.demand_score, supply: m.supply_score, opportunity: m.opportunity_score, belowAverage: m.below_average_count, priceDrops: m.price_drops_count, externalListings: m.active_external_listings, activeBuyers: m.active_buyers_count, matchedBuyers: m.matched_buyers_count });
       }
       return out;
+    })(),
+    brokerReviews: (bkRev.data ?? []).filter((r) => r.listing_id).map((r) => ({ listingId: r.listing_id as string, brokerName: "מתווך" })),
+    brokerDominance: (() => {
+      const counts = new Map<string, { brokerId: string; brokerName: string; city: string; count: number }>();
+      for (const d of bkDet.data ?? []) {
+        if (!d.detected_broker_id || !d.city) continue;
+        const key = `${d.detected_broker_id}:${d.city}`;
+        const cur = counts.get(key) ?? { brokerId: d.detected_broker_id, brokerName: d.detected_broker_name ?? "מתווך", city: d.city, count: 0 };
+        cur.count++; counts.set(key, cur);
+      }
+      return [...counts.values()].filter((c) => c.count >= 3);
     })(),
     externalListings,
     externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
@@ -290,6 +305,26 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
       reason, recommended_action: p.nextAction ?? "צור קשר וקדם את הטיפול", expected_outcome: "שיפור בריאות הקשר", status: "open",
     });
     seen.add(key);
+  }
+
+  // Broker intelligence signals — pending reviews + broker locality dominance.
+  for (const r of d.brokerReviews) {
+    rows.push({
+      org_id: orgId, entity_type: "external_listing", entity_id: r.listingId,
+      attention_score: 66, urgency_score: 60, impact_score: 50, confidence_score: 70,
+      revenue_impact_score: 35, relationship_impact_score: 40, churn_impact_score: 0,
+      title: "התאמת מתווך לבדיקה", reason: "זוהה מתווך אפשרי במודעה — דורש אישור אנושי",
+      recommended_action: "אשר/דחה את ההתאמה במודיעין מתווכים", expected_outcome: "סיווג נכון של מקור הפרסום", status: "open",
+    });
+  }
+  for (const b of d.brokerDominance) {
+    rows.push({
+      org_id: orgId, entity_type: "broker", entity_id: b.brokerId,
+      attention_score: 64, urgency_score: 55, impact_score: 58, confidence_score: 72,
+      revenue_impact_score: 45, relationship_impact_score: 60, churn_impact_score: 0,
+      title: `${b.brokerName} · שולט ב${b.city}`, reason: `${b.count} מודעות פעילות מאותו מתווך באזור`,
+      recommended_action: "שקול שיתוף פעולה / מיצוב מול המתווך", expected_outcome: "ניצול דינמיקת השוק המקומית", status: "open",
+    });
   }
 
   return rows.sort((a, b) => (b.attention_score ?? 0) - (a.attention_score ?? 0));

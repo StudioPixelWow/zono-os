@@ -460,6 +460,115 @@ type ExternalListingsRow = {
   primary_property_id: string | null;
   promoted_property_id: string | null;
   metadata: Json;
+  listing_source_type: string;
+  broker_detection_badge: string | null;
+  broker_confidence_score: number;
+  detected_broker_id: string | null;
+  detected_broker_name: string | null;
+  broker_match_status: string;
+  broker_evidence: Json;
+  broker_detected_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BrokerProfilesRow = {
+  id: string;
+  org_id: string;
+  display_name: string;
+  normalized_name: string;
+  broker_type: string;
+  agency_name: string | null;
+  normalized_agency: string | null;
+  phone: string | null;
+  normalized_phone: string | null;
+  email: string | null;
+  website: string | null;
+  license_number: string | null;
+  primary_city: string | null;
+  verification_status: string;
+  confidence_score: number;
+  listings_count: number;
+  ai_summary: string | null;
+  metadata: Json;
+  created_by_user_id: string | null;
+  verified_by_user_id: string | null;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BrokerAliasesRow = {
+  id: string;
+  org_id: string;
+  broker_id: string;
+  alias_type: string;
+  value: string;
+  normalized_value: string;
+  source: string | null;
+  created_at: string;
+};
+
+type BrokerSourcesRow = {
+  id: string;
+  org_id: string;
+  broker_id: string;
+  source_type: string;
+  url: string | null;
+  evidence: Json;
+  captured_at: string | null;
+  created_at: string;
+};
+
+type BrokerServiceAreasRow = {
+  id: string;
+  org_id: string;
+  broker_id: string;
+  locality_id: string | null;
+  city_name: string;
+  created_at: string;
+};
+
+type BrokerDiscoveryRunsRow = {
+  id: string;
+  org_id: string;
+  provider: string;
+  status: string;
+  params: Json;
+  found_count: number;
+  created_count: number;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+type BrokerMatchReviewsRow = {
+  id: string;
+  org_id: string;
+  listing_id: string | null;
+  broker_id: string | null;
+  match_type: string | null;
+  confidence_score: number;
+  evidence: Json;
+  status: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyBrokerMatchesRow = {
+  id: string;
+  org_id: string;
+  external_listing_id: string | null;
+  property_id: string | null;
+  broker_id: string;
+  match_type: string | null;
+  confidence_score: number;
+  status: string;
+  evidence: Json;
   created_at: string;
   updated_at: string;
 };
@@ -1694,6 +1803,34 @@ export interface Database {
       market_area_snapshots: TableShape<
         MarketAreaSnapshotsRow,
         "organization_id" | "locality_name"
+      >;
+      broker_profiles: TableShape<
+        BrokerProfilesRow,
+        "org_id" | "display_name" | "normalized_name"
+      >;
+      broker_aliases: TableShape<
+        BrokerAliasesRow,
+        "org_id" | "broker_id" | "alias_type" | "value" | "normalized_value"
+      >;
+      broker_sources: TableShape<
+        BrokerSourcesRow,
+        "org_id" | "broker_id" | "source_type"
+      >;
+      broker_service_areas: TableShape<
+        BrokerServiceAreasRow,
+        "org_id" | "broker_id" | "city_name"
+      >;
+      broker_discovery_runs: TableShape<
+        BrokerDiscoveryRunsRow,
+        "org_id" | "provider"
+      >;
+      broker_match_reviews: TableShape<
+        BrokerMatchReviewsRow,
+        "org_id"
+      >;
+      property_broker_matches: TableShape<
+        PropertyBrokerMatchesRow,
+        "org_id" | "broker_id"
       >;
       seller_intelligence_profiles: TableShape<
         SellerIntelligenceProfilesRow,

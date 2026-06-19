@@ -16,6 +16,7 @@ import {
   type NormalizedExternalListing,
 } from "./providers";
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
+import { classifyListingSourceType } from "@/lib/broker/engine";
 import {
   buildAiFields,
   calculateExternalDealPotential,
@@ -89,6 +90,7 @@ async function upsertListings(
       localityActive: true,
       daysSincePublished: daysSince(n.publishedAt),
     });
+    const cls = classifyListingSourceType({ hasAgent: n.hasAgent ?? null, contactType: n.contactType ?? null, contactName: n.contactName ?? null });
     return ({
     org_id: orgId, source, source_id: n.sourceId, external_id: n.externalId ?? null,
     title: n.title ?? null, city: n.city ?? null, neighborhood: n.neighborhood ?? null,
@@ -102,6 +104,8 @@ async function upsertListings(
     contact_type: n.contactType ?? null, has_agent: n.hasAgent ?? null, listing_url: n.listingUrl ?? null,
     published_at: n.publishedAt ?? null, last_synced_at: new Date().toISOString(), status: "active",
     opportunity_score: opp,
+    listing_source_type: cls.sourceType as never,
+    broker_detection_badge: cls.badge,
     metadata: { raw_data: n.rawData ?? {}, quality: q } as never,
   }); });
 
