@@ -18,6 +18,16 @@ export const externalListingRepository = {
       .limit(limit);
     return data ?? [];
   },
+  /** Counts that need sibling tables (price drops + duplicate candidates). */
+  async marketStats(): Promise<{ priceDrops: number; duplicateCandidates: number }> {
+    const supabase = await createClient();
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    const [drops, dups] = await Promise.all([
+      supabase.from("external_listing_history").select("listing_id", { count: "exact", head: true }).eq("change_type", "price_changed").gte("created_at", since),
+      supabase.from("external_listing_duplicates").select("listing_id", { count: "exact", head: true }).eq("status", "suspected"),
+    ]);
+    return { priceDrops: drops.count ?? 0, duplicateCandidates: dups.count ?? 0 };
+  },
   async getById(id: string): Promise<ExternalListingRow | null> {
     const supabase = await createClient();
     const { data } = await supabase.from("external_listings").select("*").eq("id", id).maybeSingle();

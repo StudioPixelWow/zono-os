@@ -52,12 +52,19 @@ interface OrgData {
   matchProfiles: { id: string; buyer_id: string; property_id: string; closing_probability: number; risk_score: number; opportunity_score: number; revenue_score: number; urgency_score: number; match_stage: string; match_status: string }[];
   overdueTasks: number;
   overdueCommitments: { seller_id: string; title: string }[];
+  externalListings: { id: string; title: string | null; city: string | null; price: number | null; sqm: number | null; rooms: number | null; has_agent: boolean | null; opportunity_score: number; published_at: string | null }[];
+  externalPriceDrops: Set<string>;
+  externalDuplicates: Set<string>;
+  externalCityAvgSqm: Map<string, number>;
 }
+
+const EXT_DAY = 86_400_000;
 
 async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp] = await Promise.all([
+  const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -67,6 +74,9 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_health_score,buyer_conversion_probability,buyer_readiness_score,buyer_engagement_score,buyer_financing_score,days_since_activity,current_stage"),
     supabase.from("buyers").select("id,full_name"),
     supabase.from("match_intelligence_profiles").select("id,buyer_id,property_id,closing_probability,risk_score,opportunity_score,revenue_score,urgency_score,match_stage,match_status"),
+    supabase.from("external_listings").select("id,title,city,price,sqm,rooms,has_agent,opportunity_score,published_at").eq("status", "active").is("promoted_property_id", null).order("opportunity_score", { ascending: false }).limit(60),
+    supabase.from("external_listing_history").select("listing_id").eq("change_type", "price_changed").gte("created_at", priceDropSince).limit(500),
+    supabase.from("external_listing_duplicates").select("listing_id").eq("status", "suspected").limit(500),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -74,6 +84,17 @@ async function gatherOrgData(): Promise<OrgData> {
   for (const p of props.data ?? []) {
     if (p.seller_id && ACTIVE.includes(p.status as string)) activePropCountBySeller.set(p.seller_id, (activePropCountBySeller.get(p.seller_id) ?? 0) + 1);
   }
+
+  const externalListings = extL.data ?? [];
+  const cityAccum = new Map<string, { sum: number; n: number }>();
+  for (const l of externalListings) {
+    if (l.city && l.price && l.sqm) {
+      const a = cityAccum.get(l.city) ?? { sum: 0, n: 0 };
+      a.sum += l.price / l.sqm; a.n += 1; cityAccum.set(l.city, a);
+    }
+  }
+  const externalCityAvgSqm = new Map([...cityAccum].map(([c, a]) => [c, a.n ? a.sum / a.n : 0]));
+
   return {
     propProfiles: pp.data ?? [],
     propMap,
@@ -85,6 +106,10 @@ async function gatherOrgData(): Promise<OrgData> {
     matchProfiles: mp.data ?? [],
     overdueTasks: tasks.count ?? 0,
     overdueCommitments: (commits.data ?? []).map((c) => ({ seller_id: c.seller_id, title: c.title })),
+    externalListings,
+    externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
+    externalDuplicates: new Set((extD.data ?? []).map((dd) => dd.listing_id)),
+    externalCityAvgSqm,
   };
 }
 
@@ -227,7 +252,32 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       rows.push({ org_id: orgId, entity_type: "match", entity_id: mm.id, opportunity_score: clamp(mm.opportunity_score), impact_score: mm.revenue_score, confidence_score: mm.closing_probability, title: `${d.buyerMap.get(mm.buyer_id) ?? "קונה"} ← ${d.propMap.get(mm.property_id)?.title ?? "נכס"} · עסקה קרובה לסגירה`, description: `הסתברות סגירה ${mm.closing_probability}%.`, recommended_action: "לקדם לסגירה — ביקור/הצעה", status: "open" });
     }
   }
-  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 30);
+  // External listings — opportunity signals only (NEVER auto-promoted to CRM).
+  for (const l of d.externalListings) {
+    if (l.opportunity_score < 55) continue;
+    const sqmP = l.price && l.sqm ? l.price / l.sqm : null;
+    const cityAvg = l.city ? d.externalCityAvgSqm.get(l.city) ?? 0 : 0;
+    const belowAvg = sqmP != null && cityAvg > 0 && sqmP <= cityAvg * 0.9;
+    const privateOwner = l.has_agent === false;
+    const priceDrop = d.externalPriceDrops.has(l.id);
+    const isDup = d.externalDuplicates.has(l.id);
+    const reasons: string[] = [];
+    if (belowAvg) reasons.push("מתחת לממוצע השוק");
+    if (priceDrop) reasons.push("ירידת מחיר לאחרונה");
+    if (privateOwner) reasons.push("בעלים פרטי (ללא תיווך)");
+    if (isDup) reasons.push("חשד לכפילות");
+    if (!reasons.length) reasons.push("ציון הזדמנות גבוה");
+    rows.push({
+      org_id: orgId, entity_type: "external_listing", entity_id: l.id,
+      opportunity_score: clamp(l.opportunity_score), impact_score: clamp(l.opportunity_score),
+      confidence_score: isDup ? 55 : 70,
+      title: `${l.title ?? "מודעה חיצונית"}${l.city ? ` · ${l.city}` : ""}`,
+      description: `מודעה חיצונית: ${reasons.join(" · ")}.`,
+      recommended_action: privateOwner ? "צור קשר עם הבעלים לבדיקת בלעדיות" : "בדוק את המודעה ושקול יצירת קשר",
+      status: "open",
+    });
+  }
+  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 40);
 }
 
 // ── Orchestration ────────────────────────────────────────────────────────────

@@ -21,13 +21,14 @@ const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-3 text-sm outline-none transition";
 const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
-export function ExternalListingsView({ listings }: { listings: Row[] }) {
+export function ExternalListingsView({ listings, marketStats }: { listings: Row[]; marketStats?: { priceDrops: number; duplicateCandidates: number } }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [diag, setDiag] = useState<ImportDiagnostics | null>(null);
   const [pending, start] = useTransition();
+  const [dayAgo] = useState(() => Date.now() - 86_400_000);
   const [source, setSource] = useState("");
   const [minRooms, setMinRooms] = useState("");
   const [minPrice, setMinPrice] = useState("");
@@ -67,6 +68,32 @@ export function ExternalListingsView({ listings }: { listings: Row[] }) {
     const avgSqm = sqmPrices.length ? Math.round(sqmPrices.reduce((a, b) => a + b, 0) / sqmPrices.length) : 0;
     return { bySource, avgPrice: priceN ? Math.round(priceSum / priceN) : 0, avgSqm, belowThreshold: avgSqm * 0.9 };
   }, [filtered]);
+
+  // ── External market intelligence (computed across all listings) ──────────────
+  const market = useMemo(() => {
+    // per-city ₪/m² averages for an accurate below-average flag
+    const cityAcc: Record<string, { sum: number; n: number }> = {};
+    for (const l of listings) if (l.city && l.price && l.sqm) { (cityAcc[l.city] ??= { sum: 0, n: 0 }); cityAcc[l.city].sum += l.price / l.sqm; cityAcc[l.city].n++; }
+    const cityAvg: Record<string, number> = {};
+    for (const [c, a] of Object.entries(cityAcc)) cityAvg[c] = a.n ? a.sum / a.n : 0;
+    let newToday = 0, belowAvg = 0, privateOwner = 0, bestOpp = 0;
+    for (const l of listings) {
+      if (l.first_seen_at && new Date(l.first_seen_at).getTime() >= dayAgo) newToday++;
+      if (l.city && l.price && l.sqm && cityAvg[l.city] > 0 && l.price / l.sqm <= cityAvg[l.city] * 0.9) belowAvg++;
+      if (l.has_agent === false) privateOwner++;
+      if (l.opportunity_score >= 70) bestOpp++;
+    }
+    return { newToday, belowAvg, privateOwner, bestOpp, priceDrops: marketStats?.priceDrops ?? 0, duplicates: marketStats?.duplicateCandidates ?? 0 };
+  }, [listings, marketStats, dayAgo]);
+
+  const marketCards: { label: string; value: number; icon: string; tone: string }[] = [
+    { label: "חדשות היום", value: market.newToday, icon: "Sparkles", tone: "text-brand-strong" },
+    { label: "ירידות מחיר", value: market.priceDrops, icon: "TrendingDown", tone: "text-warning" },
+    { label: "מתחת לממוצע", value: market.belowAvg, icon: "Tag", tone: "text-success" },
+    { label: "בעלים פרטי", value: market.privateOwner, icon: "UserCheck", tone: "text-brand" },
+    { label: "חשד לכפילות", value: market.duplicates, icon: "Eye", tone: "text-muted" },
+    { label: "הזדמנויות מובילות", value: market.bestOpp, icon: "TrendingUp", tone: "text-success" },
+  ];
 
   return (
     <section className="flex flex-col gap-5">
@@ -115,6 +142,20 @@ export function ExternalListingsView({ listings }: { listings: Row[] }) {
           <pre className="text-muted whitespace-pre-wrap text-xs leading-relaxed">{analysis}</pre>
         </div>
       )}
+
+      {/* Market intelligence */}
+      <div>
+        <p className="text-muted mb-2 text-xs font-bold">מודיעין שוק חיצוני</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {marketCards.map((c) => (
+            <div key={c.label} className="bg-card border-line rounded-2xl border p-3">
+              <span className={cn("mb-1 inline-flex", c.tone)}><Icon name={c.icon} size={16} /></span>
+              <p className="text-ink text-2xl font-black">{c.value}</p>
+              <p className="text-muted text-[11px] font-bold">{c.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

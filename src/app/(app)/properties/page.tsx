@@ -60,9 +60,13 @@ export default async function PropertiesPage({
   if (tab !== "external") rows = rows.filter((r) => matchesInventoryTab(r, tab, currentUserId));
 
   let externalListings: ExternalListingRow[] = [];
+  let externalMarketStats = { priceDrops: 0, duplicateCandidates: 0 };
   if (tab === "external") {
     try {
-      externalListings = await externalListingRepository.listForOrg();
+      [externalListings, externalMarketStats] = await Promise.all([
+        externalListingRepository.listForOrg(),
+        externalListingRepository.marketStats(),
+      ]);
     } catch (e) {
       console.error("[external] list failed:", e);
     }
@@ -96,7 +100,7 @@ export default async function PropertiesPage({
       {activity && <ActivityWidgets board={activity} />}
       <InventoryTabs active={tab} />
       {tab === "external" ? (
-        <ExternalListingsView listings={externalListings} />
+        <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} />
       ) : (
         <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} />
       )}
