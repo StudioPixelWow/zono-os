@@ -225,7 +225,7 @@ export function ExternalListingDetailView({ detail }: { detail: ExternalListingD
                 <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
                   <Link href={`/external-listings/${s.id}`} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{s.title ?? "מודעה"} · {SOURCE_LABELS[s.source] ?? s.source}</Link>
                   <span className="text-muted shrink-0 text-[11px]">{s.price ? formatShekels(s.price) : "—"}{s.sqm ? ` · ${s.sqm}מ״ר` : ""}</span>
-                  <span className={cn("shrink-0 text-[11px] font-black", tone(s.opportunity_score))}>{s.opportunity_score}</span>
+                  <span className={cn("shrink-0 text-[11px] font-black", tone(s.similarity))}>דומה {s.similarity}%</span>
                 </li>
               ))}
             </ul>

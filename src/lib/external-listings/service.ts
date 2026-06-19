@@ -330,7 +330,7 @@ export interface ExternalListingDetail {
   whyItMatters: string[];
   priceHistory: { changeType: string; oldValue: unknown; newValue: unknown; at: string }[];
   priceDropCount: number;
-  similar: { id: string; title: string | null; price: number | null; sqm: number | null; rooms: number | null; source: string; opportunity_score: number }[];
+  similar: { id: string; title: string | null; price: number | null; sqm: number | null; rooms: number | null; source: string; opportunity_score: number; similarity: number }[];
   duplicate: boolean;
   localityActivity: number;
   ai: AiFields;
@@ -395,17 +395,24 @@ export async function getExternalListingDetail(listingId: string): Promise<Exter
     priceDropped: priceDropCount > 0,
   });
 
+  // Similarity 0..100 from price + sqm + rooms proximity (+ same-neighborhood bonus).
+  const refSqm = listing.sqm ?? 0;
+  const refRooms = Number(listing.rooms ?? 0);
+  const refPrice = listing.price ?? 0;
+  const near = (a: number, b: number, ref: number) => (ref > 0 ? Math.max(0, 1 - Math.abs(a - b) / ref) : a === b ? 1 : 0);
   const similar = cityListings
     .filter((l) => l.id !== listing.id)
     .map((l) => {
-      const refSqm = listing.sqm ?? 0;
-      const refRooms = listing.rooms ?? 0;
-      const score = Math.abs((l.sqm ?? refSqm) - refSqm) + Math.abs(Number(l.rooms ?? refRooms) - Number(refRooms)) * 10;
-      return { l, score };
+      const sqmSim = l.sqm != null && refSqm > 0 ? near(l.sqm, refSqm, refSqm) : 0.5;
+      const priceSim = l.price != null && refPrice > 0 ? near(l.price, refPrice, refPrice) : 0.5;
+      const roomsSim = l.rooms == null || refRooms === 0 ? 0.5 : Math.abs(Number(l.rooms) - refRooms) < 0.5 ? 1 : Math.abs(Number(l.rooms) - refRooms) <= 1 ? 0.6 : 0.2;
+      const hoodBonus = listing.neighborhood && l.neighborhood && l.neighborhood === listing.neighborhood ? 0.05 : 0;
+      const similarity = Math.max(0, Math.min(100, Math.round((sqmSim * 0.4 + priceSim * 0.4 + roomsSim * 0.2 + hoodBonus) * 100)));
+      return { l, similarity };
     })
-    .sort((a, b) => a.score - b.score)
+    .sort((a, b) => b.similarity - a.similarity)
     .slice(0, 6)
-    .map(({ l }) => ({ id: l.id, title: l.title, price: l.price, sqm: l.sqm, rooms: l.rooms, source: l.source, opportunity_score: l.opportunity_score }));
+    .map(({ l, similarity }) => ({ id: l.id, title: l.title, price: l.price, sqm: l.sqm, rooms: l.rooms, source: l.source, opportunity_score: l.opportunity_score, similarity }));
 
   const ai = buildAiFields({ listing: forDeal, market, buyerMatches, dealPotential, privateOwner: listing.has_agent === false, priceDropCount });
 
