@@ -15,6 +15,7 @@ import {
   scheduleCalendarPlanAction,
 } from "@/lib/intelligence/actions";
 import type { CommandCenter as CommandCenterData } from "@/lib/intelligence/service";
+import { RecommendedMatches, type RecoItemView } from "@/components/activity/RecommendedMatches";
 import type { Database } from "@/lib/supabase/types";
 
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
@@ -88,12 +89,14 @@ export function CommandCenter({
   addressLine,
   data,
   tasks,
+  recommendedBuyers = [],
 }: {
   propertyId: string;
   propertyTitle: string;
   addressLine: string;
   data: CommandCenterData | null;
   tasks: TaskRow[];
+  recommendedBuyers?: RecoItemView[];
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -196,6 +199,10 @@ export function CommandCenter({
           ))}
         </div>
       </SectionCard>
+
+      {/* Recommended buyers (from Matching Intelligence) */}
+      <RecommendedMatches title="קונים מומלצים לנכס" emptyText="אין התאמות עדיין — חשב התאמות במסך 'התאמות'." items={recommendedBuyers} />
+
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* 3) Levers */}

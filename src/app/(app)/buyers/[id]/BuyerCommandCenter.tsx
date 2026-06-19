@@ -7,6 +7,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EntityTimeline } from "@/components/activity/EntityTimeline";
+import { RecommendedMatches, type RecoItemView } from "@/components/activity/RecommendedMatches";
 import { readinessLabel, scoreTone, type Tone } from "@/lib/buyer-intelligence/scoring";
 import {
   BUYER_STAGES,
@@ -67,7 +68,7 @@ function PropList({ items }: { items: { id: string; title: string }[] }) {
   );
 }
 
-export function BuyerCommandCenter({ buyerId, buyerName, data }: { buyerId: string; buyerName: string; data: BuyerCC | null }) {
+export function BuyerCommandCenter({ buyerId, buyerName, data, recommendations = [] }: { buyerId: string; buyerName: string; data: BuyerCC | null; recommendations?: RecoItemView[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [tpType, setTpType] = useState("phone_call");
@@ -157,6 +158,10 @@ export function BuyerCommandCenter({ buyerId, buyerName, data }: { buyerId: stri
       <SectionCard title="ציוני קונה" icon="BarChart3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{tiles.map((t) => <ScoreTile key={t.label} {...t} />)}</div>
       </SectionCard>
+
+      {/* Recommended properties (from Matching Intelligence) */}
+      <RecommendedMatches title="נכסים מומלצים לקונה" emptyText="אין התאמות עדיין — חשב התאמות במסך 'התאמות'." items={recommendations} />
+
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* 7) Recommended actions */}

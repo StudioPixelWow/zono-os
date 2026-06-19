@@ -15,6 +15,7 @@ const EMPTY: ExecCC = {
   queue: [],
   recommendations: [],
   upcomingCommitments: [],
+  revenuePipeline: 0,
 };
 
 export default async function CommandPage() {

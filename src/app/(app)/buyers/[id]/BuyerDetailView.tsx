@@ -21,6 +21,7 @@ import { BuyerTasksPanel } from "./BuyerTasksPanel";
 import type { Database } from "@/lib/supabase/types";
 import { BuyerCommandCenter } from "./BuyerCommandCenter";
 import type { BuyerCommandCenter as BuyerCCData } from "@/lib/buyer-intelligence/service";
+import type { RecoItemView } from "@/components/activity/RecommendedMatches";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
@@ -77,6 +78,7 @@ export function BuyerDetailView({
   notes,
   meetings,
   commandCenter,
+  recommendations,
 }: {
   buyer: BuyerRow;
   activities: ActivityRow[];
@@ -84,6 +86,7 @@ export function BuyerDetailView({
   notes: NoteRow[];
   meetings: MeetingRow[];
   commandCenter: BuyerCCData | null;
+  recommendations: RecoItemView[];
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const prefs = buyerPreferences(b);
@@ -167,7 +170,7 @@ export function BuyerDetailView({
       {/* Panels */}
       <div className={cn(tab !== "command" && "bg-card border-line rounded-[20px] border p-5")}>
         {tab === "command" && (
-          <BuyerCommandCenter buyerId={b.id} buyerName={b.full_name} data={commandCenter} />
+          <BuyerCommandCenter buyerId={b.id} buyerName={b.full_name} data={commandCenter} recommendations={recommendations} />
         )}
 
         {tab === "overview" && (

@@ -49,6 +49,7 @@ interface OrgData {
   activePropCountBySeller: Map<string, number>;
   buyerProfiles: { buyer_id: string; buyer_health_score: number; buyer_conversion_probability: number; buyer_readiness_score: number; buyer_engagement_score: number; buyer_financing_score: number; days_since_activity: number | null; current_stage: string }[];
   buyerMap: Map<string, string>;
+  matchProfiles: { id: string; buyer_id: string; property_id: string; closing_probability: number; risk_score: number; opportunity_score: number; revenue_score: number; urgency_score: number; match_stage: string; match_status: string }[];
   overdueTasks: number;
   overdueCommitments: { seller_id: string; title: string }[];
 }
@@ -56,7 +57,7 @@ interface OrgData {
 async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -65,6 +66,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("seller_commitments").select("seller_id,title,due_date").eq("status", "open").not("due_date", "is", null).lt("due_date", nowIso),
     supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_health_score,buyer_conversion_probability,buyer_readiness_score,buyer_engagement_score,buyer_financing_score,days_since_activity,current_stage"),
     supabase.from("buyers").select("id,full_name"),
+    supabase.from("match_intelligence_profiles").select("id,buyer_id,property_id,closing_probability,risk_score,opportunity_score,revenue_score,urgency_score,match_stage,match_status"),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -80,6 +82,7 @@ async function gatherOrgData(): Promise<OrgData> {
     activePropCountBySeller,
     buyerProfiles: bp.data ?? [],
     buyerMap: new Map((buyers.data ?? []).map((b) => [b.id, b.full_name])),
+    matchProfiles: mp.data ?? [],
     overdueTasks: tasks.count ?? 0,
     overdueCommitments: (commits.data ?? []).map((c) => ({ seller_id: c.seller_id, title: c.title })),
   };
@@ -170,6 +173,28 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
     });
   }
 
+  const matchTitle = (mm: OrgData["matchProfiles"][number]) =>
+    `${d.buyerMap.get(mm.buyer_id) ?? "קונה"} ← ${d.propMap.get(mm.property_id)?.title ?? "נכס"}`;
+  for (const mm of d.matchProfiles) {
+    if (mm.match_status !== "active" || mm.match_stage === "closed" || mm.match_stage === "lost") continue;
+    const atRisk = mm.risk_score >= 55;
+    const urgentNeg = mm.match_stage === "negotiation" || mm.match_stage === "offer_submitted";
+    const highValue = mm.opportunity_score >= 70;
+    if (!atRisk && !urgentNeg && !highValue) continue;
+    const u = clamp(mm.urgency_score * 0.6 + (urgentNeg ? 30 : 0) + (atRisk ? 20 : 0));
+    const impact = calculateImpactScore({ revenueImpact: mm.revenue_score, relationshipImpact: 50, churnImpact: 0 });
+    rows.push({
+      org_id: orgId, entity_type: "match", entity_id: mm.id,
+      attention_score: calculateAttentionScore({ urgency: u, impact, confidence: 80 }),
+      urgency_score: u, impact_score: impact, confidence_score: 80,
+      revenue_impact_score: mm.revenue_score, relationship_impact_score: 50, churn_impact_score: mm.risk_score,
+      title: matchTitle(mm),
+      reason: atRisk ? `עסקה בסיכון ${mm.risk_score}` : urgentNeg ? "עסקה במשא ומתן" : `הזדמנות גבוהה ${mm.opportunity_score}`,
+      recommended_action: atRisk ? "לטפל בסיכוני העסקה" : "לקדם את העסקה לסגירה",
+      expected_outcome: "מימוש עסקה והגדלת הכנסה", status: "open",
+    });
+  }
+
   return rows.sort((a, b) => (b.attention_score ?? 0) - (a.attention_score ?? 0));
 }
 
@@ -197,7 +222,12 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
     else if (bu.buyer_engagement_score >= 70)
       rows.push({ org_id: orgId, entity_type: "buyer", entity_id: bu.buyer_id, opportunity_score: 58, impact_score: 55, confidence_score: 70, title: `${name} · מעורבות גבוהה`, description: "קונה מעורב מאוד — לנצל את התנופה.", recommended_action: "לתאם ביקור / שיחת המשך", status: "open" });
   }
-  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 25);
+  for (const mm of d.matchProfiles) {
+    if (mm.match_status === "active" && mm.match_stage !== "closed" && mm.match_stage !== "lost" && mm.closing_probability >= 65) {
+      rows.push({ org_id: orgId, entity_type: "match", entity_id: mm.id, opportunity_score: clamp(mm.opportunity_score), impact_score: mm.revenue_score, confidence_score: mm.closing_probability, title: `${d.buyerMap.get(mm.buyer_id) ?? "קונה"} ← ${d.propMap.get(mm.property_id)?.title ?? "נכס"} · עסקה קרובה לסגירה`, description: `הסתברות סגירה ${mm.closing_probability}%.`, recommended_action: "לקדם לסגירה — ביקור/הצעה", status: "open" });
+    }
+  }
+  return rows.sort((a, b) => (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)).slice(0, 30);
 }
 
 // ── Orchestration ────────────────────────────────────────────────────────────
@@ -286,12 +316,13 @@ export interface ExecutiveCommandCenter {
   queue: QueueRow[];
   recommendations: RecommendationRow[];
   upcomingCommitments: { id: string; title: string; due: string | null; sellerName: string }[];
+  revenuePipeline: number;
 }
 
 export async function getExecutiveCommandCenter(): Promise<ExecutiveCommandCenter> {
   const orgId = await currentOrgId();
   const supabase = await createClient();
-  const [profile, attention, opportunities, queue, recommendations, commitsRes, sellersRes] = await Promise.all([
+  const [profile, attention, opportunities, queue, recommendations, commitsRes, sellersRes, revRes] = await Promise.all([
     decisionIntelligenceRepository.get(orgId),
     attentionRepository.listOpen(),
     opportunityRepository.list(),
@@ -299,8 +330,10 @@ export async function getExecutiveCommandCenter(): Promise<ExecutiveCommandCente
     recommendationRepository.list(),
     supabase.from("seller_commitments").select("id,seller_id,title,due_date").eq("status", "open").order("due_date", { ascending: true, nullsFirst: false }).limit(8),
     supabase.from("sellers").select("id,full_name"),
+    supabase.from("revenue_signals").select("probability_weighted_revenue").limit(1000),
   ]);
   const names = new Map((sellersRes.data ?? []).map((s) => [s.id, s.full_name]));
+  const revenuePipeline = (revRes.data ?? []).reduce((s, r) => s + (r.probability_weighted_revenue ?? 0), 0);
   return {
     profile,
     attention,
@@ -308,6 +341,7 @@ export async function getExecutiveCommandCenter(): Promise<ExecutiveCommandCente
     queue,
     recommendations,
     upcomingCommitments: (commitsRes.data ?? []).map((c) => ({ id: c.id, title: c.title, due: c.due_date, sellerName: names.get(c.seller_id) ?? "מוכר" })),
+    revenuePipeline,
   };
 }
 

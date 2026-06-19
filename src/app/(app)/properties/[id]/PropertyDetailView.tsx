@@ -107,6 +107,7 @@ export function PropertyDetailView({
   timeline,
   relationships,
   activitySummary,
+  recommendedBuyers,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
@@ -119,6 +120,7 @@ export function PropertyDetailView({
   timeline: ActivityEventRow[];
   relationships: RelationshipRow[];
   activitySummary: ActivitySummary;
+  recommendedBuyers: import("@/components/activity/RecommendedMatches").RecoItemView[];
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const [error, setError] = useState<string | null>(null);
@@ -231,6 +233,7 @@ export function PropertyDetailView({
             addressLine={propertyAddressLine(p)}
             data={commandCenter}
             tasks={tasks}
+            recommendedBuyers={recommendedBuyers}
           />
         )}
 

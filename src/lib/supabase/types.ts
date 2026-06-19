@@ -920,6 +920,97 @@ type BuyerCommitmentsRow = {
   updated_at: string;
 };
 
+type MatchIntelligenceProfilesRow = {
+  id: string;
+  org_id: string;
+  buyer_id: string;
+  property_id: string;
+  seller_id: string | null;
+  compatibility_score: number;
+  readiness_score: number;
+  engagement_score: number;
+  trust_score: number;
+  timing_score: number;
+  momentum_score: number;
+  risk_score: number;
+  closing_probability: number;
+  opportunity_score: number;
+  revenue_score: number;
+  urgency_score: number;
+  match_status: string;
+  match_stage: string;
+  next_best_action: string | null;
+  primary_blocker: string | null;
+  strongest_advantage: string | null;
+  estimated_deal_value: number | null;
+  estimated_commission: number | null;
+  intelligence_summary: string | null;
+  ai_summary: string | null;
+  ai_risk_summary: string | null;
+  ai_recommendation_summary: string | null;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type MatchRisksRow = {
+  id: string;
+  org_id: string;
+  match_id: string;
+  risk_type: string | null;
+  severity: string;
+  title: string;
+  description: string | null;
+  recommended_action: string | null;
+  status: string;
+  detected_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type MatchObjectionsRow = {
+  id: string;
+  org_id: string;
+  match_id: string;
+  objection_type: string | null;
+  severity: string;
+  description: string | null;
+  resolved: boolean;
+  resolution_action: string | null;
+  resolved_at: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type MatchOpportunitiesRow = {
+  id: string;
+  org_id: string;
+  match_id: string;
+  opportunity_score: number;
+  revenue_score: number;
+  urgency_score: number;
+  estimated_deal_value: number | null;
+  estimated_commission: number | null;
+  recommended_action: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type RevenueSignalsRow = {
+  id: string;
+  org_id: string;
+  match_id: string | null;
+  estimated_commission: number;
+  expected_revenue: number;
+  confidence: number;
+  probability_weighted_revenue: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type DealsRow = {
   id: string;
   org_id: string;
@@ -1328,6 +1419,14 @@ export interface Database {
       buyer_touchpoints: TableShape<BuyerTouchpointsRow, "org_id" | "buyer_id">;
       buyer_objections: TableShape<BuyerObjectionsRow, "org_id" | "buyer_id">;
       buyer_commitments: TableShape<BuyerCommitmentsRow, "org_id" | "buyer_id" | "title">;
+      match_intelligence_profiles: TableShape<
+        MatchIntelligenceProfilesRow,
+        "org_id" | "buyer_id" | "property_id"
+      >;
+      match_risks: TableShape<MatchRisksRow, "org_id" | "match_id" | "title">;
+      match_objections: TableShape<MatchObjectionsRow, "org_id" | "match_id">;
+      match_opportunities: TableShape<MatchOpportunitiesRow, "org_id" | "match_id">;
+      revenue_signals: TableShape<RevenueSignalsRow, "org_id">;
       deals: TableShape<DealsRow, "org_id" | "title">;
       opportunities: TableShape<OpportunitiesRow, "org_id" | "type" | "title">;
       matching_results: TableShape<MatchingResultsRow, "org_id" | "buyer_id" | "score">;

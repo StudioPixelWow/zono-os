@@ -9,6 +9,7 @@ import {
 import { buildJourneyContext, getJourney } from "@/lib/journey/repository";
 import { listPropertyTasks } from "@/lib/tasks/repository";
 import { getPropertyCommandCenter } from "@/lib/intelligence/service";
+import { recommendedBuyersForProperty } from "@/lib/matching-intelligence/service";
 import {
   getActivitySummaryForEntity,
   getEntityRelationships,
@@ -40,6 +41,7 @@ export default async function PropertyDetailsPage({
     timeline,
     relationships,
     activitySummary,
+    recommendedBuyers,
   ] = await Promise.all([
     getPropertyActivities(id),
     getPropertyNotes(id),
@@ -52,6 +54,7 @@ export default async function PropertyDetailsPage({
     getEntityTimeline("property", id),
     getEntityRelationships("property", id),
     getActivitySummaryForEntity("property", id),
+    recommendedBuyersForProperty(id),
   ]);
 
   const journey = {
@@ -74,6 +77,7 @@ export default async function PropertyDetailsPage({
       timeline={timeline}
       relationships={relationships}
       activitySummary={activitySummary}
+      recommendedBuyers={recommendedBuyers}
     />
   );
 }

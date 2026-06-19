@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { attentionLevel, attentionTone, scoreTone, type Tone } from "@/lib/decision-intelligence/scoring";
@@ -103,6 +103,15 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
             חשב מחדש
           </Button>
         </div>
+      </div>
+
+      {/* Revenue pipeline (from Matching Intelligence) */}
+      <div className="bg-card border-line flex flex-wrap items-center justify-between gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center gap-3">
+          <span className="bg-success-soft text-success grid h-11 w-11 place-items-center rounded-2xl"><Icon name="TrendingUp" size={22} /></span>
+          <div><p className="text-muted text-xs font-semibold">צנרת הכנסות (משוקללת בהסתברות)</p><p className="text-success text-3xl font-black">{formatShekels(data.revenuePipeline)}</p></div>
+        </div>
+        <Link href="/matches" className="text-brand-strong text-sm font-bold hover:underline">לכל ההתאמות ←</Link>
       </div>
 
       {/* 1) Organization health */}

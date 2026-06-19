@@ -6,6 +6,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EntityTimeline } from "@/components/activity/EntityTimeline";
+import { RecommendedMatches, type RecoItemView } from "@/components/activity/RecommendedMatches";
 import {
   churnLevel,
   churnTone,
@@ -69,7 +70,7 @@ function ScoreTile({ label, value, tone }: { label: string; value: number; tone:
 
 const TP_TYPES = Object.keys(TOUCHPOINT_LABELS);
 
-export function SellerCommandCenter({ sellerId, sellerName, data }: { sellerId: string; sellerName: string; data: SellerCC | null }) {
+export function SellerCommandCenter({ sellerId, sellerName, data, interestedBuyers = [] }: { sellerId: string; sellerName: string; data: SellerCC | null; interestedBuyers?: RecoItemView[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [tpType, setTpType] = useState("phone_call");
@@ -160,6 +161,10 @@ export function SellerCommandCenter({ sellerId, sellerName, data }: { sellerId: 
           {tiles.map((t) => <ScoreTile key={t.label} {...t} />)}
         </div>
       </SectionCard>
+
+      {/* Interested buyers (from Matching Intelligence) */}
+      <RecommendedMatches title="קונים מתעניינים בנכסי המוכר" emptyText="אין התאמות עדיין — חשב התאמות במסך 'התאמות'." items={interestedBuyers} />
+
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* 11) Recommended actions */}
