@@ -51,7 +51,7 @@ export function ListingHoverPreview({
     >
       {children}
       {open && (
-        <span className="border-line bg-card absolute top-full start-0 z-50 mt-1 block w-80 rounded-2xl border p-0 text-start shadow-[var(--shadow-lift)]">
+        <span className="border-line bg-card pointer-events-none absolute top-full start-0 z-50 mt-1 block w-80 rounded-2xl border p-0 text-start shadow-[var(--shadow-lift)]">
           {loading && !data ? (
             <span className="text-muted flex items-center gap-2 p-4 text-xs">
               <Icon name="Clock" size={14} /> טוען תצוגה מקדימה…
