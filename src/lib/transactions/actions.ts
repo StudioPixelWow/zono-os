@@ -115,6 +115,14 @@ export async function finishGovmapSyncAction(datasetId: string) {
   return r;
 }
 
+export async function addCoverageNeighborhoodAction(neighborhood: string) {
+  const { addCoverageNeighborhood } = await import("./service");
+  const r = await addCoverageNeighborhood(neighborhood);
+  revalidatePath("/transactions/coverage");
+  revalidatePath("/transactions");
+  return r;
+}
+
 // ── Non-blocking Madlan sync (live progress) ─────────────────────────────────
 export async function startMadlanSyncAction() {
   const { startMadlanSync } = await import("./service");

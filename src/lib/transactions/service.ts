@@ -458,6 +458,20 @@ export async function startGovmapSync(dealDateRange = "all"): Promise<GovmapStar
   }
 }
 
+/** Add a neighborhood coverage target for the agent's city (each = its own 700m pull). */
+export async function addCoverageNeighborhood(neighborhood: string): Promise<{ created: boolean; city: string | null; name: string | null }> {
+  const { orgId, profile, organization } = await ctx();
+  const market = resolveAgentMarket(profile, organization);
+  if (!market.city) return { created: false, city: null, name: null };
+  const n = normalizeNeighborhoodName(neighborhood);
+  if (!n) return { created: false, city: market.city, name: null };
+  const supabase = await createClient();
+  const { data: ex } = await supabase.from("geo_coverage_targets").select("id").eq("organization_id", orgId).eq("city_name", market.city).eq("neighborhood_name", n).maybeSingle();
+  if (ex) return { created: false, city: market.city, name: n };
+  await supabase.from("geo_coverage_targets").insert({ organization_id: orgId, city_name: market.city, neighborhood_name: n, coverage_status: "pending", priority: 1 } as never);
+  return { created: true, city: market.city, name: n };
+}
+
 export async function pollGovmapSync(runId: string): Promise<{ status: string; found: number; datasetId: string | null }> {
   await ctx();
   const r = await getTransactionsRun(runId);

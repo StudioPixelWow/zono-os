@@ -6,7 +6,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
-import { ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction } from "@/lib/transactions/actions";
+import { addCoverageNeighborhoodAction, ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction } from "@/lib/transactions/actions";
 import type { CoverageBoard } from "@/lib/transactions/service";
 
 const STATUS_LABEL: Record<string, string> = { pending: "ממתין", ready: "מוכן", syncing: "מסנכרן", completed: "הושלם", failed: "נכשל", disabled: "מושבת", pending_neighborhoods: "ממתין לשכונות" };
@@ -19,7 +19,9 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
+  const [newHood, setNewHood] = useState("");
   const run = (fn: () => Promise<unknown>, id?: string) => { setError(null); setBusy(id ?? "all"); start(async () => { try { await fn(); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } finally { setBusy(null); } }); };
+  const addHood = () => { const n = newHood.trim(); if (!n) return; setNewHood(""); run(() => addCoverageNeighborhoodAction(n)); };
 
   return (
     <div className="flex flex-col gap-5">
@@ -37,6 +39,16 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
       </div>
       {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — סנכרון יחזיר נתוני הדגמה בסביבת פיתוח בלבד.</p>}
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
+
+      {!needsConfig && (
+        <div className="bg-card border-line flex flex-wrap items-end gap-3 rounded-[20px] border p-4">
+          <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-sm">
+            <span className="text-muted text-[11px] font-bold">הוסף שכונה לכיסוי (כל שכונה = משיכה נפרדת ברדיוס 700מ׳)</span>
+            <input value={newHood} onChange={(e) => setNewHood(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addHood(); }} placeholder="לדוגמה: גבעת הרקפות, צבעוני, נווה גנים…" className="border-line rounded-xl border px-3 py-2" />
+          </label>
+          <Button onClick={addHood} disabled={pending || !newHood.trim()} leadingIcon={<Icon name="Plus" size={15} />}>הוסף שכונה</Button>
+        </div>
+      )}
 
       {needsConfig ? (
         <div className="bg-card border-line rounded-[20px] border p-6 text-center">
