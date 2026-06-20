@@ -6,7 +6,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
-import { addCoverageNeighborhoodAction, ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction } from "@/lib/transactions/actions";
+import { addCoverageNeighborhoodAction, autoDiscoverNeighborhoodsAction, ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction } from "@/lib/transactions/actions";
 import type { CoverageBoard } from "@/lib/transactions/service";
 
 const STATUS_LABEL: Record<string, string> = { pending: "ממתין", ready: "מוכן", syncing: "מסנכרן", completed: "הושלם", failed: "נכשל", disabled: "מושבת", pending_neighborhoods: "ממתין לשכונות" };
@@ -34,7 +34,8 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
         <div className="flex flex-wrap gap-2">
           <Link href="/transactions" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />עסקאות</Link>
           <Button size="sm" variant="secondary" onClick={() => run(retryFailedSyncsAction)} disabled={pending} leadingIcon={<Icon name="Clock" size={15} />}>נסה כשלונות שוב</Button>
-          <Button onClick={() => run(ensureCoverageTargetsAction)} disabled={pending} leadingIcon={<Icon name="Plus" size={15} />}>צור אזורי כיסוי</Button>
+          <Button size="sm" variant="secondary" onClick={() => run(ensureCoverageTargetsAction)} disabled={pending} leadingIcon={<Icon name="Plus" size={15} />}>צור אזורי כיסוי</Button>
+          <Button onClick={() => run(autoDiscoverNeighborhoodsAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מגלה…" : "גלה שכונות אוטומטית"}</Button>
         </div>
       </div>
       {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — סנכרון יחזיר נתוני הדגמה בסביבת פיתוח בלבד.</p>}

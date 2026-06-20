@@ -123,6 +123,14 @@ export async function addCoverageNeighborhoodAction(neighborhood: string) {
   return r;
 }
 
+export async function autoDiscoverNeighborhoodsAction() {
+  const { autoDiscoverNeighborhoods } = await import("./service");
+  const r = await autoDiscoverNeighborhoods();
+  revalidatePath("/transactions/coverage");
+  revalidatePath("/transactions");
+  return r;
+}
+
 // ── Non-blocking Madlan sync (live progress) ─────────────────────────────────
 export async function startMadlanSyncAction() {
   const { startMadlanSync } = await import("./service");

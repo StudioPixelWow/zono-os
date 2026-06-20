@@ -458,6 +458,42 @@ export async function startGovmapSync(dealDateRange = "all"): Promise<GovmapStar
   }
 }
 
+/**
+ * Auto-discover the agent's city neighborhoods (Geo Layer) and seed them as
+ * coverage targets so the GovMap scan covers the whole city. Deterministic:
+ * OpenStreetMap (official) + neighborhoods already seen in stored transactions.
+ */
+export async function autoDiscoverNeighborhoods(): Promise<{ discovered: number; created: number; sources: string[]; city: string | null; needsConfig: boolean }> {
+  const { orgId, profile, organization } = await ctx();
+  const market = resolveAgentMarket(profile, organization);
+  if (!market.city) return { discovered: 0, created: 0, sources: [], city: null, needsConfig: true };
+  const supabase = await createClient();
+  const { discoverNeighborhoodsOSM, dedupeDiscovered } = await import("./geo");
+
+  const found = new Map<string, { lat: number | null; lng: number | null; source: string }>();
+  // 1) OpenStreetMap (official, deterministic).
+  try {
+    for (const n of dedupeDiscovered(await discoverNeighborhoodsOSM(market.rawCity ?? market.city))) {
+      if (!found.has(n.name)) found.set(n.name, { lat: n.lat, lng: n.lng, source: "osm" });
+    }
+  } catch { /* best-effort */ }
+  // 2) Neighborhoods already present in stored transactions (guaranteed source).
+  const { data: txnHoods } = await supabase.from("property_transactions").select("neighborhood_name").eq("organization_id", orgId).eq("city_name", market.city).not("neighborhood_name", "is", null).limit(4000);
+  for (const t of txnHoods ?? []) {
+    const nn = normalizeNeighborhoodName(t.neighborhood_name as string);
+    if (nn && !found.has(nn)) found.set(nn, { lat: null, lng: null, source: "transactions" });
+  }
+
+  const { data: existing } = await supabase.from("geo_coverage_targets").select("neighborhood_name").eq("organization_id", orgId).eq("city_name", market.city);
+  const have = new Set((existing ?? []).map((e) => e.neighborhood_name).filter(Boolean));
+  const rows = [...found.entries()].filter(([n]) => !have.has(n)).slice(0, 120).map(([n, m]) => ({
+    organization_id: orgId, city_name: market.city, neighborhood_name: n, lat: m.lat, lng: m.lng,
+    coverage_status: "pending", priority: 2, metadata: { source: m.source },
+  }));
+  if (rows.length) await supabase.from("geo_coverage_targets").insert(rows as never);
+  return { discovered: found.size, created: rows.length, sources: [...new Set([...found.values()].map((v) => v.source))], city: market.city, needsConfig: false };
+}
+
 /** Add a neighborhood coverage target for the agent's city (each = its own 700m pull). */
 export async function addCoverageNeighborhood(neighborhood: string): Promise<{ created: boolean; city: string | null; name: string | null }> {
   const { orgId, profile, organization } = await ctx();
