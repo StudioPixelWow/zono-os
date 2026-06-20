@@ -63,6 +63,9 @@ interface OrgData {
   acquisitionOps: { profileId: string; title: string; city: string | null; score: number; privateSeller: number; buyerDemand: number; doubleSide: number; nextAction: string | null; reason: string | null }[];
   competitorSignals: { competitorId: string | null; signalType: string; title: string; description: string | null; severity: string }[];
   routingOverloaded: { userId: string; name: string; agentScore: number; workloadScore: number }[];
+  teamProfiles: { userId: string; name: string; tier: string; trend: string; workloadScore: number; coachingScore: number; performance: number; coachingPlan: string | null; lostDeals: number }[];
+  teamWeakLocalities: { locality: string; status: string; recommendation: string }[];
+  teamOfficeRisk: number;
   graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
   forecastSignals: { id: string; forecastId: string | null; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
@@ -76,7 +79,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -100,6 +103,8 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("agent_intelligence_profiles").select("user_id,agent_score,workload_score,users(full_name)").gte("agent_score", 70).lt("workload_score", 35).limit(15),
     supabase.from("graph_signals").select("id,signal_type,title,description,impact_score").eq("status", "new").in("signal_type", ["hidden_buyer_cluster", "hidden_seller_cluster", "deal_acceleration", "locality_opportunity", "referral_opportunity"]).order("impact_score", { ascending: false }).limit(20),
     supabase.from("deal_forecast_signals").select("id,forecast_id,signal_type,title,description,impact_score").eq("status", "new").order("impact_score", { ascending: false }).limit(30),
+    supabase.from("team_intelligence_profiles").select("user_id,performance_tier,growth_trend,workload_score,coaching_score,performance_score,ai_coaching_plan,lost_deals,users(full_name)").limit(200),
+    supabase.from("team_performance_snapshots").select("office_risk_score,territory_coverage").order("date", { ascending: false }).limit(1),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -160,6 +165,9 @@ async function gatherOrgData(): Promise<OrgData> {
     }),
     competitorSignals: (compSig.data ?? []).map((s) => ({ competitorId: s.competitor_profile_id, signalType: s.signal_type, title: s.title, description: s.description, severity: s.severity })),
     routingOverloaded: (agtOver.data ?? []).map((a) => ({ userId: a.user_id, name: (a as unknown as { users?: { full_name: string } | null }).users?.full_name ?? "סוכן", agentScore: a.agent_score, workloadScore: a.workload_score })),
+    teamProfiles: (tProf.data ?? []).map((t) => ({ userId: t.user_id, name: (t as unknown as { users?: { full_name: string } | null }).users?.full_name ?? "סוכן", tier: t.performance_tier, trend: t.growth_trend, workloadScore: t.workload_score, coachingScore: t.coaching_score, performance: t.performance_score, coachingPlan: t.ai_coaching_plan, lostDeals: t.lost_deals })),
+    teamWeakLocalities: (((tSnap.data ?? [])[0]?.territory_coverage as { locality: string; status: string; recommendation: string }[] | null) ?? []).filter((c) => c.status === "uncovered" || c.status === "vulnerable").slice(0, 8),
+    teamOfficeRisk: (tSnap.data ?? [])[0]?.office_risk_score ?? 0,
     graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     forecastSignals: (fcSig.data ?? []).map((s) => ({ id: s.id, forecastId: s.forecast_id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
@@ -384,6 +392,44 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
     });
   }
 
+  // Team Intelligence — overloaded / declining / coaching-required agents.
+  const teamSeen = new Set<string>();
+  for (const t of d.teamProfiles) {
+    let reason = "", action = "", score = 0, urgency = 0;
+    if (t.workloadScore < 35) { reason = "עומס פעיל גבוה משמעותית מהממוצע"; action = "אזן את התיק ונתב לידים לסוכן פנוי"; score = 76; urgency = 70; }
+    else if (t.tier === "critical" || t.tier === "declining" || t.trend === "declining") { reason = `ביצועים בירידה (${t.tier})${t.lostDeals >= 2 ? ` · ${t.lostDeals} עסקאות אבודות` : ""}`; action = t.coachingPlan ?? "שיחת ליווי ובניית תוכנית שיפור"; score = 74; urgency = 66; }
+    else if (t.coachingScore >= 60) { reason = "זוהה צורך משמעותי בליווי"; action = t.coachingPlan ?? "בנה תוכנית ליווי ממוקדת"; score = 68; urgency = 60; }
+    else continue;
+    if (teamSeen.has(t.userId)) continue; teamSeen.add(t.userId);
+    rows.push({
+      org_id: orgId, entity_type: "team", entity_id: t.userId,
+      attention_score: score, urgency_score: urgency, impact_score: 65, confidence_score: 76,
+      revenue_impact_score: 60, relationship_impact_score: 45, churn_impact_score: 0,
+      title: `${t.name} · ${t.workloadScore < 35 ? "עמוס מדי" : t.coachingScore >= 60 ? "זקוק לליווי" : "ביצועים בירידה"}`,
+      reason, recommended_action: action, expected_outcome: "שיפור ביצועי הסוכן ושימור הכנסה", status: "open",
+    });
+  }
+  // Team Intelligence — weak / vulnerable localities (management coverage gap).
+  for (const l of d.teamWeakLocalities) {
+    rows.push({
+      org_id: orgId, entity_type: "team_office", entity_id: l.locality,
+      attention_score: 64, urgency_score: 55, impact_score: 58, confidence_score: 70,
+      revenue_impact_score: 50, relationship_impact_score: 40, churn_impact_score: 0,
+      title: `${l.locality} · כיסוי חלש`, reason: l.status === "uncovered" ? "אזור ללא מומחה מוביל" : "תלות בסוכן יחיד — אזור פגיע",
+      recommended_action: l.recommendation, expected_outcome: "חיזוק כיסוי אזורי ומניעת אובדן נתח שוק", status: "open",
+    });
+  }
+  // Team Intelligence — office-level risk.
+  if (d.teamOfficeRisk >= 60) {
+    rows.push({
+      org_id: orgId, entity_type: "team_office", entity_id: "office",
+      attention_score: 72, urgency_score: 64, impact_score: 70, confidence_score: 72,
+      revenue_impact_score: 65, relationship_impact_score: 40, churn_impact_score: 0,
+      title: `סיכון משרדי גבוה (${d.teamOfficeRisk})`, reason: "שילוב של עומסים, ירידות ביצועים ודליפת הזדמנויות",
+      recommended_action: "סקור את מודיעין הצוות ופעל לאיזון עומסים וליווי", expected_outcome: "ייצוב ביצועי המשרד", status: "open",
+    });
+  }
+
   return rows.sort((a, b) => (b.attention_score ?? 0) - (a.attention_score ?? 0));
 }
 
@@ -425,6 +471,18 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       title: f.title, description: f.description ?? "הזדמנות הכנסה מהתחזית",
       recommended_action: "קדם את העסקה לסגירה החודש", status: "open",
     });
+  }
+
+  // Team Intelligence — underutilized agents with spare capacity (route more leads).
+  for (const t of d.teamProfiles) {
+    if (t.workloadScore > 88 && t.performance >= 45) {
+      rows.push({
+        org_id: orgId, entity_type: "team", entity_id: t.userId,
+        opportunity_score: clamp(t.performance), impact_score: 60, confidence_score: 72,
+        title: `${t.name} · קיבולת פנויה`, description: "סוכן עם ביצועים טובים וקיבולת פנויה — הזרם אליו יותר לידים.",
+        recommended_action: "הקצה לו לידים נוספים — יש קיבולת פנויה", status: "open",
+      });
+    }
   }
 
   // Knowledge Graph — hidden opportunities from the relationship graph.

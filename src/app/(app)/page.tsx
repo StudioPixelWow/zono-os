@@ -6,6 +6,7 @@ import { CommandSection } from "@/components/dashboard/sections/CommandSection";
 import { CommunicationDashboardSection } from "@/components/dashboard/sections/CommunicationDashboardSection";
 import { CompetitorDashboardSection } from "@/components/dashboard/sections/CompetitorDashboardSection";
 import { ForecastDashboardSection } from "@/components/dashboard/sections/ForecastDashboardSection";
+import { TeamDashboardSection } from "@/components/dashboard/sections/TeamDashboardSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
   MatchingSectionContainer, OpportunitiesSectionContainer,
@@ -29,6 +30,9 @@ export default function Home() {
       <Suspense fallback={null}><MarketSectionContainer /></Suspense>
       <Suspense fallback={null}>
         <ForecastDashboardSection />
+      </Suspense>
+      <Suspense fallback={null}>
+        <TeamDashboardSection />
       </Suspense>
       <Suspense fallback={null}>
         <CommunicationDashboardSection />
