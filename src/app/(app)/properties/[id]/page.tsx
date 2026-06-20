@@ -20,6 +20,7 @@ import {
 import { journeyStageForStatusFallback } from "@/lib/journey/fallback";
 import { PropertyDetailView } from "./PropertyDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
+import { RelationshipSection } from "@/components/graph/RelationshipSection";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,7 @@ export default async function PropertyDetailsPage({
         sellerReadiness={sellerReadiness}
       />
       <CommunicationSection entityType="property" entityId={id} />
+      <RelationshipSection entityType="property" entityId={id} />
     </div>
   );
 }

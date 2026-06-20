@@ -63,6 +63,7 @@ interface OrgData {
   acquisitionOps: { profileId: string; title: string; city: string | null; score: number; privateSeller: number; buyerDemand: number; doubleSide: number; nextAction: string | null; reason: string | null }[];
   competitorSignals: { competitorId: string | null; signalType: string; title: string; description: string | null; severity: string }[];
   routingOverloaded: { userId: string; name: string; agentScore: number; workloadScore: number }[];
+  graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
   externalDuplicates: Set<string>;
   externalCityAvgSqm: Map<string, number>;
@@ -74,7 +75,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -96,6 +97,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("inventory_acquisition_profiles").select("id,acquisition_score,private_seller_score,buyer_demand_score,double_side_potential_score,next_best_action,reason_summary,acquisition_status,external_listings(title,city)").gte("acquisition_score", 55).not("acquisition_status", "in", "(not_relevant,promoted_to_crm,lost)").order("acquisition_score", { ascending: false }).limit(40),
     supabase.from("competitor_signals").select("competitor_profile_id,signal_type,title,description,severity").in("signal_type", ["dominant_broker", "competitor_losing_inventory", "vulnerable_broker", "competitor_growing"]).order("confidence_score", { ascending: false }).limit(30),
     supabase.from("agent_intelligence_profiles").select("user_id,agent_score,workload_score,users(full_name)").gte("agent_score", 70).lt("workload_score", 35).limit(15),
+    supabase.from("graph_signals").select("id,signal_type,title,description,impact_score").eq("status", "new").in("signal_type", ["hidden_buyer_cluster", "hidden_seller_cluster", "deal_acceleration", "locality_opportunity", "referral_opportunity"]).order("impact_score", { ascending: false }).limit(20),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -156,6 +158,7 @@ async function gatherOrgData(): Promise<OrgData> {
     }),
     competitorSignals: (compSig.data ?? []).map((s) => ({ competitorId: s.competitor_profile_id, signalType: s.signal_type, title: s.title, description: s.description, severity: s.severity })),
     routingOverloaded: (agtOver.data ?? []).map((a) => ({ userId: a.user_id, name: (a as unknown as { users?: { full_name: string } | null }).users?.full_name ?? "סוכן", agentScore: a.agent_score, workloadScore: a.workload_score })),
+    graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
     externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
     externalDuplicates: new Set((extD.data ?? []).map((dd) => dd.listing_id)),
@@ -397,6 +400,17 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       rows.push({ org_id: orgId, entity_type: "match", entity_id: mm.id, opportunity_score: clamp(mm.opportunity_score), impact_score: mm.revenue_score, confidence_score: mm.closing_probability, title: `${d.buyerMap.get(mm.buyer_id) ?? "קונה"} ← ${d.propMap.get(mm.property_id)?.title ?? "נכס"} · עסקה קרובה לסגירה`, description: `הסתברות סגירה ${mm.closing_probability}%.`, recommended_action: "לקדם לסגירה — ביקור/הצעה", status: "open" });
     }
   }
+  // Knowledge Graph — hidden opportunities from the relationship graph.
+  for (const g of d.graphSignals) {
+    rows.push({
+      org_id: orgId, entity_type: "graph", entity_id: g.id,
+      opportunity_score: clamp(g.impact), impact_score: clamp(g.impact), confidence_score: 72,
+      title: g.title, description: g.description ?? "הזדמנות נסתרת ממפת הקשרים",
+      recommended_action: g.signalType === "hidden_buyer_cluster" ? "מקד גיוס מלאי לאשכול הקונים" : g.signalType === "deal_acceleration" ? "האץ את הקונה לעבר סגירה" : "נצל את ההזדמנות ממפת הקשרים",
+      status: "open",
+    });
+  }
+
   // Inventory acquisition — broker acquisition opportunities (private sellers,
   // buyer demand, double-side). Links to the acquisition board.
   for (const a of d.acquisitionOps) {

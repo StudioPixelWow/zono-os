@@ -10,6 +10,7 @@ import { getBuyerCommandCenter } from "@/lib/buyer-intelligence/service";
 import { recommendedPropertiesForBuyer } from "@/lib/matching-intelligence/service";
 import { BuyerDetailView } from "./BuyerDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
+import { RelationshipSection } from "@/components/graph/RelationshipSection";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export default async function BuyerDetailsPage({
         recommendations={recommendations}
       />
       <CommunicationSection entityType="buyer" entityId={id} />
+      <RelationshipSection entityType="buyer" entityId={id} />
     </div>
   );
 }

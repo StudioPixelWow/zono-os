@@ -476,6 +476,52 @@ type ExternalListingsRow = {
   updated_at: string;
 };
 
+type GraphEntitiesRow = {
+  id: string;
+  organization_id: string;
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  subtitle: string | null;
+  health_score: number;
+  importance_score: number;
+  activity_score: number;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type GraphRelationshipsRow = {
+  id: string;
+  organization_id: string;
+  source_entity_type: string;
+  source_entity_id: string;
+  target_entity_type: string;
+  target_entity_id: string;
+  relationship_type: string;
+  strength_score: number;
+  confidence_score: number;
+  relationship_status: string;
+  metadata: Json;
+  first_seen_at: string;
+  last_seen_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type GraphSignalsRow = {
+  id: string;
+  organization_id: string;
+  signal_type: string;
+  title: string;
+  description: string | null;
+  confidence_score: number;
+  impact_score: number;
+  source_entities: Json;
+  status: string;
+  created_at: string;
+};
+
 type AgentIntelligenceProfilesRow = {
   id: string;
   organization_id: string;
@@ -2071,6 +2117,18 @@ export interface Database {
       >;
       competitor_signals: TableShape<
         CompetitorSignalsRow,
+        "organization_id" | "signal_type" | "title"
+      >;
+      graph_entities: TableShape<
+        GraphEntitiesRow,
+        "organization_id" | "entity_type" | "entity_id" | "title"
+      >;
+      graph_relationships: TableShape<
+        GraphRelationshipsRow,
+        "organization_id" | "source_entity_type" | "source_entity_id" | "target_entity_type" | "target_entity_id" | "relationship_type"
+      >;
+      graph_signals: TableShape<
+        GraphSignalsRow,
         "organization_id" | "signal_type" | "title"
       >;
       agent_intelligence_profiles: TableShape<
