@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { recommendedProperties } from "@/data/mock";
 import type { RecommendedProperty, Tone } from "@/types";
 import { cn, formatShekels } from "@/lib/utils";
@@ -27,7 +28,7 @@ export function PropertiesSection({
   errorMessage,
 }: PropertiesSectionProps = {}) {
   return (
-    <SectionShell title="הזדמנויות נדל״ן חדשות עבורך" eyebrow="מותאם עבורך">
+    <SectionShell title="הזדמנויות נדל״ן חדשות עבורך" eyebrow="מותאם עבורך" actionHref="/properties" actionLabel="לכל הנכסים">
       {errorMessage && (
         <div className="bg-danger-soft text-danger mb-4 flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-semibold">
           <Icon name="AlertTriangle" size={14} strokeWidth={2.2} />
@@ -36,37 +37,46 @@ export function PropertiesSection({
       )}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {properties.map((p, i) => (
-          <motion.article
+          <motion.div
             key={p.id}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07, duration: 0.45 }}
             whileHover={{ y: -4 }}
-            className="bg-card border-line group flex flex-col overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]"
           >
-            {/* image placeholder */}
+          <Link
+            href={p.href ?? `/properties/${p.id}`}
+            className="bg-card border-line group flex h-full flex-col overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]"
+          >
+            {/* image (real cover when available, gradient fallback) */}
             <div
               className={cn(
-                "relative h-40 bg-gradient-to-br",
+                "relative h-40 overflow-hidden bg-gradient-to-br",
                 p.gradient,
               )}
             >
+              {p.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+              )}
               <span
                 className={cn(
-                  "absolute start-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm",
+                  "absolute start-3 top-3 z-10 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm",
                   tagTone[p.tagTone],
                 )}
               >
                 {p.tag}
               </span>
-              <span className="bg-card/90 text-brand absolute end-3 top-3 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-extrabold shadow-sm backdrop-blur">
+              <span className="bg-card/90 text-brand absolute end-3 top-3 z-10 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-extrabold shadow-sm backdrop-blur">
                 <Icon name="Sparkles" size={12} strokeWidth={2.4} />
                 {p.score}%
               </span>
-              <span className="bg-card/90 text-ink absolute bottom-3 start-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm backdrop-blur">
-                <Icon name="Users" size={12} strokeWidth={2.2} />
-                {p.buyerMatches} התאמות
-              </span>
+              {p.buyerMatches > 0 && (
+                <span className="bg-card/90 text-ink absolute bottom-3 start-3 z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm backdrop-blur">
+                  <Icon name="Users" size={12} strokeWidth={2.2} />
+                  {p.buyerMatches} התאמות
+                </span>
+              )}
             </div>
 
             <div className="flex flex-1 flex-col p-4">
@@ -86,12 +96,13 @@ export function PropertiesSection({
                 <span>קומה {p.floor}</span>
               </div>
 
-              <button className="bg-brand-soft text-brand-strong hover:bg-brand hover:text-white mt-4 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-bold transition">
+              <span className="bg-brand-soft text-brand-strong group-hover:bg-brand group-hover:text-white mt-4 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-bold transition">
                 פרטים
                 <Icon name="ArrowLeft" size={15} strokeWidth={2.2} />
-              </button>
+              </span>
             </div>
-          </motion.article>
+          </Link>
+          </motion.div>
         ))}
       </div>
     </SectionShell>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { heatNeighborhoods, heatmapInsight } from "@/data/mock";
 import type { HeatNeighborhood, Tone } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
@@ -59,10 +60,10 @@ export function HeatmapSection({ neighborhoods = heatNeighborhoods, insight = he
             </label>
           ))}
 
-          <button className="bg-brand hover:bg-brand-strong mt-1 inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition">
+          <Link href="/market" className="bg-brand hover:bg-brand-strong mt-1 inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition">
             <Icon name="Map" size={16} />
-            עדכן מפה
-          </button>
+            למפת השוק המלאה
+          </Link>
 
           <div className="border-line mt-1 grid grid-cols-2 gap-2 border-t pt-4">
             {legend.map((l) => (

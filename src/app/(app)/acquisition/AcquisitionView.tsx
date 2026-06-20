@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import { ACQ_BOARD_COLUMNS } from "@/lib/acquisition/engine";
 import {
   createAcquisitionTaskAction, getAcquisitionDetailAction, promoteAcquisitionAction,
@@ -97,7 +98,9 @@ export function AcquisitionView({ cards, cc }: { cards: AcquisitionCard[]; cc: A
                   {items.map((c) => (
                     <div key={c.profileId} className="bg-card border-line rounded-[18px] border p-3 shadow-[var(--shadow-soft)]">
                       <div className="mb-1 flex items-start justify-between gap-2">
-                        <button onClick={() => openDetail(c.profileId)} className="text-ink hover:text-brand min-w-0 flex-1 truncate text-start text-sm font-bold">{c.title ?? "מודעה"}</button>
+                        <ListingHoverPreview listingId={c.listingId} className="min-w-0 flex-1">
+                          <button onClick={() => openDetail(c.profileId)} className="text-ink hover:text-brand block w-full truncate text-start text-sm font-bold">{c.title ?? "מודעה"}</button>
+                        </ListingHoverPreview>
                         <span className={cn("shrink-0 text-lg font-black", scoreTone(c.acquisitionScore))}>{c.acquisitionScore}</span>
                       </div>
                       <p className="text-muted text-[11px]">{c.city ?? "—"} · {SOURCE_LABELS[c.source] ?? c.source} · {c.price ? formatShekels(c.price) : "—"}</p>

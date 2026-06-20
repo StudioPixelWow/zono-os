@@ -18,6 +18,22 @@ import type { BuyerMatch, HotOpportunity, JourneyProperty, JourneyRailStage, Mar
 
 const GRADIENTS = ["from-violet-200 to-indigo-300", "from-emerald-200 to-teal-300", "from-amber-200 to-orange-300", "from-sky-200 to-blue-300"];
 const grad = (i: number) => GRADIENTS[i % GRADIENTS.length];
+
+/** Map a Decision-Brain entity to its destination page (mirrors the command center). */
+const entityHref = (t: string, id: string): string =>
+  t === "property" ? `/properties/${id}`
+    : t === "seller" ? `/sellers/${id}`
+    : t === "buyer" ? `/buyers/${id}`
+    : t === "external_listing" ? `/external-listings/${id}`
+    : t === "locality" ? "/market"
+    : t === "broker" ? `/broker-intelligence/${id}`
+    : t === "acquisition" ? "/acquisition"
+    : t === "competitor" ? `/competitors/${id}`
+    : t === "routing" ? "/routing"
+    : t === "graph" ? "/graph"
+    : t === "forecast" ? "/forecast"
+    : t === "match" ? "/matches"
+    : "/command";
 const relWhen = (iso: string | null) => {
   if (!iso) return "—";
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -37,12 +53,12 @@ export async function getOpportunityWidgets(): Promise<HotOpportunity[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("opportunity_signals")
-    .select("id,entity_type,title,opportunity_score,recommended_action,description")
+    .select("id,entity_type,entity_id,title,opportunity_score,recommended_action,description")
     .eq("status", "open").order("opportunity_score", { ascending: false }).limit(8);
   if (!data?.length) return mockOpps;
   return data.map((o) => {
     const m = OPP_META[o.entity_type] ?? { kind: "הזדמנות", tone: "purple" as Tone, icon: "Sparkles" };
-    return { id: o.id, kind: m.kind, tone: m.tone, icon: m.icon, title: o.title, relation: o.recommended_action ?? o.description ?? "", cta: "פתח", score: o.opportunity_score };
+    return { id: o.id, kind: m.kind, tone: m.tone, icon: m.icon, title: o.title, relation: o.recommended_action ?? o.description ?? "", cta: "פתח", score: o.opportunity_score, href: entityHref(o.entity_type, o.entity_id) };
   });
 }
 
@@ -54,7 +70,7 @@ export async function getMatchWidgets(): Promise<{ matches: BuyerMatch[]; note: 
   if (!items.length) return { matches: mockMatches, note: "" };
   const matches: BuyerMatch[] = items.map((m) => {
     const [name, property] = m.title.split("←").map((s) => s.trim());
-    return { id: m.matchId, name: name || "קונה", budgetLabel: "", want: property ?? "", property: property ?? "", score: parseInt(m.meta.replace(/\D/g, ""), 10) || 0, reasons: [m.meta] };
+    return { id: m.matchId, name: name || "קונה", budgetLabel: "", want: property ?? "", property: property ?? "", score: parseInt(m.meta.replace(/\D/g, ""), 10) || 0, reasons: [m.meta], href: "/matches" };
   });
   return { matches, note: `${board.total} התאמות פעילות · צנרת ${formatShekels(board.revenuePipeline)}` };
 }
@@ -84,19 +100,33 @@ export async function getJourneyWidgets(): Promise<{ stages: JourneyRailStage[];
   });
 
   const propMap = new Map((props ?? []).map((p) => [p.id, p]));
-  const properties: JourneyProperty[] = journeys
+  const activeJourneys = journeys
     .filter((j) => j.current_stage !== "closed")
     .sort((a, b) => (b.last_activity_at ?? "").localeCompare(a.last_activity_at ?? ""))
-    .slice(0, 4)
-    .map((j, i) => {
-      const p = propMap.get(j.property_id);
-      const def = STAGE_DEFS[j.current_stage as keyof typeof STAGE_DEFS];
-      return {
-        id: j.property_id, address: p ? `${p.title}${p.city ? ` · ${p.city}` : ""}` : "נכס",
-        stage: def?.label ?? j.current_stage, progressLabel: def?.label ?? "", score: 0,
-        nextAction: "המשך תהליך", gradient: grad(i),
-      };
-    });
+    .slice(0, 4);
+
+  // Cover images for the shown journey properties.
+  const jIds = activeJourneys.map((j) => j.property_id);
+  const jImage = new Map<string, string>();
+  if (jIds.length) {
+    const { data: media } = await supabase.from("property_media").select("property_id,url,external_url,is_primary,type").in("property_id", jIds);
+    for (const m of (media ?? []) as { property_id: string; url: string | null; external_url: string | null; is_primary: boolean; type: string }[]) {
+      if (m.type && m.type !== "image" && m.type !== "photo") continue;
+      const url = m.url ?? m.external_url; if (!url) continue;
+      if (!jImage.has(m.property_id) || m.is_primary) jImage.set(m.property_id, url);
+    }
+  }
+
+  const properties: JourneyProperty[] = activeJourneys.map((j, i) => {
+    const p = propMap.get(j.property_id);
+    const def = STAGE_DEFS[j.current_stage as keyof typeof STAGE_DEFS];
+    return {
+      id: j.property_id, address: p ? `${p.title}${p.city ? ` · ${p.city}` : ""}` : "נכס",
+      stage: def?.label ?? j.current_stage, progressLabel: def?.label ?? "", score: 0,
+      nextAction: "המשך תהליך", gradient: grad(i),
+      imageUrl: jImage.get(j.property_id) ?? null, href: `/properties/${j.property_id}`,
+    };
+  });
   return { stages, properties: properties.length ? properties : mockJourneyProps };
 }
 
@@ -111,6 +141,7 @@ export async function getDealWidgets(): Promise<RecentDeal[]> {
   return data.map((d, i) => ({
     id: d.id, type: typeLabel[d.type as string] ?? "נכס", city: d.city ?? "—",
     price: d.price ?? 0, when: relWhen(d.updated_at), xPct: 12 + (i % 5) * 18, yPct: 20 + (i % 3) * 22,
+    href: `/properties/${d.id}`,
   }));
 }
 

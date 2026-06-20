@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
+import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import { getCompetitorDetail } from "@/lib/competitor/service";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,9 @@ export default async function CompetitorProfilePage({ params }: { params: Promis
           {detail.listings.length === 0 ? <p className="text-muted text-sm">אין מודעות פעילות</p> : (
             <ul className="flex flex-col gap-1.5">{detail.listings.map((l) => (
               <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
-                <Link href={`/external-listings/${l.id}`} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{l.title ?? "מודעה"}{l.city ? ` · ${l.city}` : ""}</Link>
+                <ListingHoverPreview listingId={l.id} className="min-w-0 flex-1">
+                  <Link href={`/external-listings/${l.id}`} className="text-ink hover:text-brand block truncate font-semibold">{l.title ?? "מודעה"}{l.city ? ` · ${l.city}` : ""}</Link>
+                </ListingHoverPreview>
                 <span className="text-muted text-[11px]">{l.price ? formatShekels(l.price) : "—"}</span>
               </li>
             ))}</ul>

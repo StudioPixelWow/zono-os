@@ -78,7 +78,11 @@ function deriveTag(row: PropertyRow): { tag: ListingTag; tagTone: Tone } {
   return { tag: "נכס חדש", tagTone: "purple" };
 }
 
-function mapRowToCard(row: PropertyRow, index: number): RecommendedProperty {
+function mapRowToCard(
+  row: PropertyRow,
+  index: number,
+  extras?: { imageUrl?: string | null; buyerMatches?: number },
+): RecommendedProperty {
   const loc = (row.location ?? {}) as PropertyLocation;
   const { tag, tagTone } = deriveTag(row);
   return {
@@ -92,11 +96,11 @@ function mapRowToCard(row: PropertyRow, index: number): RecommendedProperty {
     rooms: formatRooms(row.rooms),
     sqm: row.size_sqm ?? 0,
     floor: row.floor ?? 0,
-    // Buyer-match counts come from the matching module, which is intentionally
-    // not wired in this phase — default to 0 until then.
-    buyerMatches: 0,
+    buyerMatches: extras?.buyerMatches ?? 0,
     score: row.zono_score ?? 0,
     gradient: GRADIENTS[index % GRADIENTS.length],
+    imageUrl: extras?.imageUrl ?? null,
+    href: `/properties/${row.id}`,
   };
 }
 
@@ -131,8 +135,32 @@ export async function listDashboardProperties(): Promise<DashboardPropertiesResu
     return { properties: mockProperties, source: "mock" };
   }
 
+  const ids = (data as PropertyRow[]).map((r) => r.id);
+
+  // Cover images (primary first) + active buyer-match counts, in parallel.
+  const [mediaRes, matchRes] = await Promise.all([
+    supabase.from("property_media").select("property_id,url,external_url,is_primary,sort_order,type").in("property_id", ids),
+    supabase.from("match_intelligence_profiles").select("property_id,match_status").in("property_id", ids).eq("match_status", "active"),
+  ]);
+
+  const imageByProp = new Map<string, string>();
+  for (const m of (mediaRes.data ?? []) as { property_id: string; url: string | null; external_url: string | null; is_primary: boolean; sort_order: number; type: string }[]) {
+    if (m.type && m.type !== "image" && m.type !== "photo") continue;
+    const url = m.url ?? m.external_url;
+    if (!url) continue;
+    const cur = imageByProp.get(m.property_id);
+    // Prefer primary; otherwise keep the first seen.
+    if (!cur || m.is_primary) imageByProp.set(m.property_id, url);
+  }
+  const matchByProp = new Map<string, number>();
+  for (const r of (matchRes.data ?? []) as { property_id: string | null }[]) {
+    if (r.property_id) matchByProp.set(r.property_id, (matchByProp.get(r.property_id) ?? 0) + 1);
+  }
+
   return {
-    properties: data.map((row, i) => mapRowToCard(row as PropertyRow, i)),
+    properties: (data as PropertyRow[]).map((row, i) =>
+      mapRowToCard(row, i, { imageUrl: imageByProp.get(row.id) ?? null, buyerMatches: matchByProp.get(row.id) ?? 0 }),
+    ),
     source: "supabase",
   };
 }

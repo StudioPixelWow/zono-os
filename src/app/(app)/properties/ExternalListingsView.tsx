@@ -6,6 +6,7 @@ import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import {
   buildMarketAnalysisAction,
   getImportDiagnosticsAction,
@@ -297,20 +298,9 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
                 return (
                   <tr key={l.id} className={cn("border-line hover:bg-surface border-b last:border-0", below && "bg-success-soft")}>
                     <td className="px-4 py-3">
-                      <HoverPreview trigger={<a href={`/external-listings/${l.id}`} className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a>}>
-                        <p className="text-ink text-sm font-extrabold">{l.title ?? "מודעה"}</p>
-                        <p className="text-muted mt-0.5 text-[11px]">{[l.neighborhood, l.city].filter(Boolean).join(", ") || "—"}</p>
-                        <div className="text-muted mt-2 grid grid-cols-2 gap-1 text-[11px]">
-                          <span>מחיר: <b className="text-ink">{l.price ? formatShekels(l.price) : "—"}</b></span>
-                          <span>חדרים: <b className="text-ink">{l.rooms ?? "—"}</b></span>
-                          <span>מ״ר: <b className="text-ink">{l.sqm ?? "—"}</b></span>
-                          <span>קומה: <b className="text-ink">{l.floor ?? "—"}{l.total_floors ? `/${l.total_floors}` : ""}</b></span>
-                          <span>₪/מ״ר: <b className="text-ink">{sqmPrice ? sqmPrice.toLocaleString("he-IL") : "—"}</b></span>
-                          <span>הזדמנות: <b className={tone(l.opportunity_score)}>{l.opportunity_score}</b></span>
-                        </div>
-                        <p className="text-muted mt-1 text-[11px]">סוג פרסום: <b className="text-ink">{(SOURCE_TYPE_BADGE[l.listing_source_type] ?? SOURCE_TYPE_BADGE.unknown).label}</b>{l.detected_broker_name ? ` · ${l.detected_broker_name}` : ""}</p>
-                        {l.description && <p className="text-muted mt-1 line-clamp-3 text-[10px] leading-tight">{l.description}</p>}
-                      </HoverPreview>
+                      <ListingHoverPreview listingId={l.id}>
+                        <a href={`/external-listings/${l.id}`} className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a>
+                      </ListingHoverPreview>
                       {below && <span className="text-success mr-2 text-[10px] font-bold">מתחת לממוצע</span>}
                     </td>
                     <td className="px-4 py-3">{(() => {

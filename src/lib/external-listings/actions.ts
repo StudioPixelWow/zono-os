@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, createAcquisitionTask, getImportDiagnostics, promoteExternalListing, runImport, type ImportDiagnostics, type SyncSummary } from "./service";
+import { buildMarketAnalysis, createAcquisitionTask, getImportDiagnostics, getListingPreview, promoteExternalListing, runImport, type ImportDiagnostics, type ListingPreview, type SyncSummary } from "./service";
 
 export interface ExternalActionState {
   error?: string;
@@ -51,6 +51,15 @@ export async function promoteExternalListingAction(listingId: string): Promise<E
 
 export async function getImportDiagnosticsAction(): Promise<ImportDiagnostics> {
   return getImportDiagnostics();
+}
+
+export async function getListingPreviewAction(listingId: string): Promise<ListingPreview | null> {
+  try {
+    return await getListingPreview(listingId);
+  } catch (e) {
+    console.error("[external] preview failed:", e);
+    return null;
+  }
 }
 
 export async function createAcquisitionTaskAction(listingId: string): Promise<ExternalActionState> {

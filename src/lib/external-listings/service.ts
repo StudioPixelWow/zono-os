@@ -434,6 +434,125 @@ export async function getExternalListingDetail(listingId: string): Promise<Exter
   };
 }
 
+// ── Lightweight hover preview (rich, non-table data) ─────────────────────────
+export interface ListingPreview {
+  id: string;
+  title: string | null;
+  city: string | null;
+  neighborhood: string | null;
+  address: string | null;
+  price: number | null;
+  rooms: number | null;
+  sqm: number | null;
+  floor: number | null;
+  totalFloors: number | null;
+  pricePerSqm: number | null;
+  condition: string | null;
+  parking: boolean | null;
+  storage: boolean | null;
+  elevator: boolean | null;
+  balconies: number | null;
+  description: string | null;
+  images: string[];
+  sourceType: string;
+  detectedBrokerName: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  hasAgent: boolean | null;
+  opportunityScore: number;
+  publishedAt: string | null;
+  daysOnMarket: number | null;
+  listingUrl: string | null;
+  /** Derived "important things to know" beyond the raw fields. */
+  insights: string[];
+}
+
+/** Pull up to 3 image URLs out of the flexible `images` JSON column. */
+function extractImageUrls(raw: unknown, max = 3): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (out.length >= max) break;
+    if (typeof item === "string" && item.startsWith("http")) out.push(item);
+    else if (item && typeof item === "object") {
+      const o = item as Record<string, unknown>;
+      const url = o.url ?? o.src ?? o.image ?? o.href;
+      if (typeof url === "string" && url.startsWith("http")) out.push(url);
+    }
+  }
+  return out;
+}
+
+/**
+ * Fast preview for hover cards — surfaces information that is NOT already in the
+ * row (images, description, amenities) plus a few derived insights. RLS-scoped.
+ * Kept to a small number of queries so it stays snappy on hover.
+ */
+export async function getListingPreview(listingId: string): Promise<ListingPreview | null> {
+  const { profile } = await getSessionContext();
+  if (!profile) throw new Error("not authenticated");
+  const supabase = await createClient();
+
+  const { data: l } = await supabase
+    .from("external_listings")
+    .select("id,title,city,neighborhood,address,street,street_number,price,rooms,sqm,area_sqm,floor,total_floors,condition,parking,storage,elevator,balconies,description,images,listing_source_type,detected_broker_name,contact_name,contact_phone,has_agent,opportunity_score,published_at,first_seen_at,listing_url")
+    .eq("id", listingId)
+    .maybeSingle();
+  if (!l) return null;
+
+  const sqm = l.sqm ?? l.area_sqm ?? null;
+  const pricePerSqm = l.price && sqm ? Math.round(l.price / sqm) : null;
+
+  // City average ₪/m² (small, capped) + recent price-drop check — for insights.
+  const [cityRes, dropRes] = await Promise.all([
+    l.city ? supabase.from("external_listings").select("price,sqm,area_sqm").eq("city", l.city).eq("status", "active").limit(200) : Promise.resolve({ data: [] as { price: number | null; sqm: number | null; area_sqm: number | null }[] }),
+    supabase.from("external_listing_history").select("change_type").eq("listing_id", listingId).eq("change_type", "price_changed").limit(1),
+  ]);
+
+  let cityAvgPpsqm = 0; let n = 0;
+  for (const c of cityRes.data ?? []) {
+    const s = c.sqm ?? c.area_sqm ?? null;
+    if (c.price && s) { cityAvgPpsqm += c.price / s; n++; }
+  }
+  cityAvgPpsqm = n ? Math.round(cityAvgPpsqm / n) : 0;
+
+  const daysOnMarket = (() => {
+    const base = l.published_at ?? l.first_seen_at;
+    if (!base) return null;
+    return Math.max(0, Math.floor((Date.now() - new Date(base).getTime()) / 86_400_000));
+  })();
+
+  const addr = l.address ?? ([l.street, l.street_number].filter(Boolean).join(" ") || null);
+
+  const insights: string[] = [];
+  if (pricePerSqm && cityAvgPpsqm > 0) {
+    const diff = Math.round(((pricePerSqm - cityAvgPpsqm) / cityAvgPpsqm) * 100);
+    if (diff <= -8) insights.push(`מתחת לממוצע האזור ב-${Math.abs(diff)}% (₪${pricePerSqm.toLocaleString()}/מ״ר מול ₪${cityAvgPpsqm.toLocaleString()})`);
+    else if (diff >= 8) insights.push(`מעל ממוצע האזור ב-${diff}%`);
+    else insights.push(`מתומחר סביב ממוצע האזור (₪${cityAvgPpsqm.toLocaleString()}/מ״ר)`);
+  }
+  if ((dropRes.data ?? []).length > 0) insights.push("הורד המחיר לאחרונה");
+  if (l.has_agent === false || l.listing_source_type === "private_seller") insights.push("בעלים פרטי — פוטנציאל בלעדיות");
+  if (daysOnMarket != null) {
+    if (daysOnMarket >= 60) insights.push(`${daysOnMarket} ימים בשוק — ייתכן מוכר גמיש`);
+    else if (daysOnMarket <= 3) insights.push("חדש בשוק");
+  }
+  const amenities = [l.parking ? "חניה" : null, l.elevator ? "מעלית" : null, l.storage ? "מחסן" : null, l.balconies ? `${l.balconies} מרפסות` : null].filter(Boolean) as string[];
+  if (amenities.length) insights.push(amenities.join(" · "));
+  if (l.opportunity_score >= 70) insights.push(`ציון הזדמנות גבוה (${l.opportunity_score})`);
+
+  return {
+    id: l.id, title: l.title, city: l.city, neighborhood: l.neighborhood, address: addr,
+    price: l.price, rooms: l.rooms, sqm, floor: l.floor, totalFloors: l.total_floors, pricePerSqm,
+    condition: l.condition, parking: l.parking, storage: l.storage, elevator: l.elevator, balconies: l.balconies,
+    description: l.description, images: extractImageUrls(l.images),
+    sourceType: l.listing_source_type, detectedBrokerName: l.detected_broker_name,
+    contactName: l.contact_name, contactPhone: l.contact_phone, hasAgent: l.has_agent,
+    opportunityScore: l.opportunity_score, publishedAt: l.published_at, daysOnMarket, listingUrl: l.listing_url,
+    insights: insights.slice(0, 5),
+  };
+}
+
 // ── Seller acquisition mode (turn external opportunity into future inventory) ─
 /** Create a seller-acquisition task with outreach script + checklist. */
 export async function createAcquisitionTask(listingId: string): Promise<string> {

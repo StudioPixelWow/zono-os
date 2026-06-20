@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import { verifyBrokerAction } from "@/lib/broker/actions";
 import type { BrokerDetail } from "@/lib/broker/service";
 
@@ -76,7 +77,9 @@ export function BrokerProfileView({ detail }: { detail: BrokerDetail }) {
           {detail.externalListings.length === 0 ? <p className="text-muted text-sm">אין מודעות מקושרות</p> : (
             <ul className="flex flex-col gap-1.5 text-sm">{detail.externalListings.map((l) => (
               <li key={l.id} className="flex items-center justify-between gap-2">
-                <Link href={`/external-listings/${l.id}`} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{l.title ?? "מודעה"}{l.city ? ` · ${l.city}` : ""}</Link>
+                <ListingHoverPreview listingId={l.id} className="min-w-0 flex-1">
+                  <Link href={`/external-listings/${l.id}`} className="text-ink hover:text-brand block truncate font-semibold">{l.title ?? "מודעה"}{l.city ? ` · ${l.city}` : ""}</Link>
+                </ListingHoverPreview>
                 <span className="text-muted text-[11px]">{l.price ? formatShekels(l.price) : "—"} · {l.confidence}%</span>
               </li>
             ))}</ul>

@@ -27,6 +27,8 @@ export interface HotOpportunity {
   relation: string; // נכס/קונה קשור
   cta: string;
   score: number; // 0–100
+  /** Destination for the card CTA. */
+  href?: string;
 }
 
 /** Listing card label. */
@@ -52,6 +54,10 @@ export interface RecommendedProperty {
   score: number;
   /** Gradient classes for the image placeholder. */
   gradient: string;
+  /** Real cover image URL when available (falls back to gradient). */
+  imageUrl?: string | null;
+  /** Destination for the card link. */
+  href?: string;
 }
 
 /** A neighborhood region in the demand heatmap. */
@@ -85,6 +91,8 @@ export interface JourneyProperty {
   score: number;
   nextAction: string;
   gradient: string;
+  imageUrl?: string | null;
+  href?: string;
 }
 
 /** A buyer match preview card. */
@@ -96,6 +104,7 @@ export interface BuyerMatch {
   property: string;
   score: number;
   reasons: string[];
+  href?: string;
 }
 
 /** A recently closed deal. */
@@ -107,6 +116,7 @@ export interface RecentDeal {
   when: string;
   xPct: number;
   yPct: number;
+  href?: string;
 }
 
 /** A market-intelligence stat with a sparkline. */

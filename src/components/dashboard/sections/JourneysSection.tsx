@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { journeyProperties, journeyStages } from "@/data/mock";
 import type { JourneyProperty, JourneyRailStage } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
@@ -16,7 +17,7 @@ const nodeColor = {
 
 export function JourneysSection({ stages = journeyStages, properties = journeyProperties }: { stages?: JourneyRailStage[]; properties?: JourneyProperty[] } = {}) {
   return (
-    <SectionShell title="מסע הנכסים הפעילים שלך" eyebrow="פייפליין חי">
+    <SectionShell title="מסע הנכסים הפעילים שלך" eyebrow="פייפליין חי" actionHref="/properties" actionLabel="לכל הנכסים">
       <div className="bg-card border-line rounded-[24px] border p-5 shadow-[var(--shadow-card)] sm:p-6">
         {/* Timeline rail */}
         <div className="no-scrollbar -mx-1 overflow-x-auto pb-2">
@@ -69,6 +70,9 @@ export function JourneysSection({ stages = journeyStages, properties = journeyPr
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.06 }}
                 whileHover={{ y: -4 }}
+              >
+              <Link
+                href={p.href ?? `/properties/${p.id}`}
                 className={cn(
                   "flex w-[230px] shrink-0 flex-col overflow-hidden rounded-[20px] border bg-card transition-shadow",
                   main
@@ -76,8 +80,12 @@ export function JourneysSection({ stages = journeyStages, properties = journeyPr
                     : "border-line shadow-[var(--shadow-soft)]",
                 )}
               >
-                <div className={cn("relative h-20 bg-gradient-to-br", p.gradient)}>
-                  <span className="bg-card/90 text-brand absolute end-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-extrabold backdrop-blur">
+                <div className={cn("relative h-20 overflow-hidden bg-gradient-to-br", p.gradient)}>
+                  {p.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+                  )}
+                  <span className="bg-card/90 text-brand absolute end-2 top-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-extrabold backdrop-blur">
                     {p.score}
                   </span>
                 </div>
@@ -94,6 +102,7 @@ export function JourneysSection({ stages = journeyStages, properties = journeyPr
                     {p.nextAction}
                   </div>
                 </div>
+              </Link>
               </motion.div>
             );
           })}

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import { createAcquisitionTaskAction, promoteExternalListingAction } from "@/lib/external-listings/actions";
 import type { ExternalListingDetail } from "@/lib/external-listings/service";
 
@@ -223,7 +224,9 @@ export function ExternalListingDetailView({ detail }: { detail: ExternalListingD
             <ul className="flex flex-col gap-1.5">
               {detail.similar.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
-                  <Link href={`/external-listings/${s.id}`} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{s.title ?? "מודעה"} · {SOURCE_LABELS[s.source] ?? s.source}</Link>
+                  <ListingHoverPreview listingId={s.id} className="min-w-0 flex-1">
+                    <Link href={`/external-listings/${s.id}`} className="text-ink hover:text-brand block truncate font-semibold">{s.title ?? "מודעה"} · {SOURCE_LABELS[s.source] ?? s.source}</Link>
+                  </ListingHoverPreview>
                   <span className="text-muted shrink-0 text-[11px]">{s.price ? formatShekels(s.price) : "—"}{s.sqm ? ` · ${s.sqm}מ״ר` : ""}</span>
                   <span className={cn("shrink-0 text-[11px] font-black", tone(s.similarity))}>דומה {s.similarity}%</span>
                 </li>

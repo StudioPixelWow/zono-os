@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { hotOpportunities } from "@/data/mock";
 import type { HotOpportunity, Tone } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,7 @@ const toneAccent: Record<Tone, string> = {
 
 export function OpportunitiesSection({ items = hotOpportunities }: { items?: HotOpportunity[] } = {}) {
   return (
-    <SectionShell title="הזדמנויות חמות עבורך" eyebrow="AI · בזמן אמת">
+    <SectionShell title="הזדמנויות חמות עבורך" eyebrow="AI · בזמן אמת" actionHref="/command" actionLabel="לכל ההזדמנויות">
       <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
         {items.map((o, i) => (
           <motion.article
@@ -62,7 +63,8 @@ export function OpportunitiesSection({ items = hotOpportunities }: { items?: Hot
             </h3>
             <p className="text-muted text-xs">{o.relation}</p>
 
-            <button
+            <Link
+              href={o.href ?? "/command"}
               className={cn(
                 "mt-auto inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90",
                 toneAccent[o.tone],
@@ -70,7 +72,7 @@ export function OpportunitiesSection({ items = hotOpportunities }: { items?: Hot
             >
               {o.cta}
               <Icon name="ArrowLeft" size={15} strokeWidth={2.2} />
-            </button>
+            </Link>
           </motion.article>
         ))}
       </div>

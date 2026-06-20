@@ -1338,6 +1338,88 @@ type MarketAreaSnapshotsRow = {
   updated_at: string;
 };
 
+type TeamIntelligenceProfilesRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  performance_score: number;
+  revenue_score: number;
+  conversion_score: number;
+  activity_score: number;
+  responsiveness_score: number;
+  workload_score: number;
+  forecast_score: number;
+  client_satisfaction_score: number;
+  reliability_score: number;
+  coaching_score: number;
+  active_leads: number;
+  active_buyers: number;
+  active_sellers: number;
+  active_properties: number;
+  active_matches: number;
+  total_revenue: number;
+  forecast_revenue: number;
+  won_deals: number;
+  lost_deals: number;
+  avg_days_to_close: number | null;
+  avg_response_time: number | null;
+  locality_count: number;
+  property_type_count: number;
+  performance_tier: string;
+  growth_trend: string;
+  strengths: Json;
+  weaknesses: Json;
+  coaching_priorities: Json;
+  ai_summary: string | null;
+  ai_growth_plan: string | null;
+  ai_coaching_plan: string | null;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type TeamPerformanceSnapshotsRow = {
+  id: string;
+  organization_id: string;
+  date: string;
+  office_health_score: number;
+  office_growth_score: number;
+  office_risk_score: number;
+  office_revenue: number;
+  office_forecast_revenue: number;
+  total_agents: number;
+  elite_agents: number;
+  declining_agents: number;
+  overloaded_agents: number;
+  underutilized_agents: number;
+  coaching_needed: number;
+  avg_conversion_rate: number;
+  opportunity_leakage: number;
+  weak_localities: number;
+  agent_rankings: Json;
+  workload_distribution: Json;
+  territory_coverage: Json;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type AgentCoachingSignalsRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  signal_type: string;
+  severity: string;
+  confidence_score: number;
+  impact_score: number;
+  title: string;
+  description: string | null;
+  recommendation: string | null;
+  metadata: Json;
+  status: string;
+  created_at: string;
+};
+
 type SellerIntelligenceProfilesRow = {
   id: string;
   org_id: string;
@@ -2200,6 +2282,18 @@ export interface Database {
       deal_forecast_signals: TableShape<
         DealForecastSignalsRow,
         "organization_id" | "signal_type" | "title"
+      >;
+      team_intelligence_profiles: TableShape<
+        TeamIntelligenceProfilesRow,
+        "organization_id" | "user_id"
+      >;
+      team_performance_snapshots: TableShape<
+        TeamPerformanceSnapshotsRow,
+        "organization_id"
+      >;
+      agent_coaching_signals: TableShape<
+        AgentCoachingSignalsRow,
+        "organization_id" | "user_id" | "signal_type" | "title"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,

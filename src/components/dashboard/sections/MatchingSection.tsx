@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { buyerMatches, matchingNote } from "@/data/mock";
 import type { BuyerMatch } from "@/types/dashboard";
 import { Icon } from "../Icon";
@@ -35,7 +36,7 @@ function ScoreRing({ score }: { score: number }) {
 
 export function MatchingSection({ matches = buyerMatches, note = matchingNote }: { matches?: BuyerMatch[]; note?: string } = {}) {
   return (
-    <SectionShell title="התאמות חכמות" eyebrow="AI Matching">
+    <SectionShell title="התאמות חכמות" eyebrow="AI Matching" actionHref="/matches" actionLabel="לכל ההתאמות">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {matches.map((m, i) => (
           <motion.article
@@ -76,10 +77,10 @@ export function MatchingSection({ matches = buyerMatches, note = matchingNote }:
               ))}
             </div>
 
-            <button className="bg-brand hover:bg-brand-strong mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition">
+            <Link href={m.href ?? "/matches"} className="bg-brand hover:bg-brand-strong mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition">
               <Icon name="Send" size={16} />
-              שלח תיק נכס
-            </button>
+              פתח התאמה
+            </Link>
           </motion.article>
         ))}
       </div>

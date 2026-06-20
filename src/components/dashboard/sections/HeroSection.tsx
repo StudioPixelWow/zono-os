@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { heroAssistantMessage, mapPins } from "@/data/mock";
 import { formatShekels } from "@/lib/utils";
 import {
@@ -91,14 +92,14 @@ export function HeroSection() {
         )}
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <button className="bg-brand hover:bg-brand-strong inline-flex h-12 items-center gap-2 rounded-2xl px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(124,58,237,0.32)] transition">
+          <Link href="/command" className="bg-brand hover:bg-brand-strong inline-flex h-12 items-center gap-2 rounded-2xl px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(124,58,237,0.32)] transition">
             <Icon name="Sparkles" size={18} strokeWidth={2.1} />
             צפה בהזדמנויות
-          </button>
-          <button className="bg-card border-line text-ink hover:border-brand-light inline-flex h-12 items-center gap-2 rounded-2xl border px-5 text-sm font-bold transition">
+          </Link>
+          <Link href="/market" className="bg-card border-line text-ink hover:border-brand-light inline-flex h-12 items-center gap-2 rounded-2xl border px-5 text-sm font-bold transition">
             <Icon name="Map" size={18} />
             סרוק שוק היום
-          </button>
+          </Link>
         </div>
 
         {/* live stat row — real operating-area data */}
