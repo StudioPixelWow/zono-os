@@ -5,6 +5,7 @@ import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import { attentionLevel, attentionTone, scoreTone, type Tone } from "@/lib/decision-intelligence/scoring";
 import {
   focusToTaskAction,
@@ -17,6 +18,17 @@ const TONE_TEXT: Record<Tone, string> = { good: "text-success", medium: "text-br
 const fmt = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
 const entityHref = (t: string, id: string) => (t === "property" ? `/properties/${id}` : t === "seller" ? `/sellers/${id}` : t === "buyer" ? `/buyers/${id}` : t === "external_listing" ? `/properties?inv=external` : t === "locality" ? `/market` : t === "broker" ? `/broker-intelligence/${id}` : t === "acquisition" ? `/acquisition` : t === "competitor" ? `/competitors/${id}` : t === "routing" ? `/routing` : t === "graph" ? `/graph` : t === "forecast" ? `/forecast` : t === "team" ? `/team/${id}` : t === "team_office" ? `/team` : t === "revenue" ? `/revenue` : t === "marketing" ? `/marketing` : t === "distribution" ? `/distribution` : t === "social_lead" ? `/social-leads` : t === "deal" ? `/deals` : t === "transaction_radar" ? `/transactions/radar` : "#");
 const ExtBadge = ({ t }: { t: string }) => (t === "external_listing" ? <span className="bg-brand-soft text-brand-strong shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold">חיצוני</span> : null);
+
+/**
+ * Property/listing name with the system-wide rich hover preview (image, price,
+ * insights). For external listings it wraps the link in ListingHoverPreview so
+ * the row matches the rest of the app; other entities render a plain link.
+ */
+function EntityName({ type, id, title, className }: { type: string; id: string; title: string; className?: string }) {
+  const cls = className ?? "text-ink hover:text-brand text-sm font-semibold";
+  const link = <Link href={entityHref(type, id)} className={cls}>{title}</Link>;
+  return type === "external_listing" ? <ListingHoverPreview listingId={id}>{link}</ListingHoverPreview> : link;
+}
 
 function SectionCard({ title, icon, action, children }: { title: string; icon: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -155,7 +167,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
               <li key={`${f.entityId}-${i}`} className="border-line flex items-center gap-3 rounded-2xl border p-3">
                 <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl text-sm font-black", i === 0 ? "bg-danger text-white" : "bg-brand-soft text-brand-strong")}>{i + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5"><Link href={entityHref(f.entityType, f.entityId)} className="text-ink hover:text-brand text-sm font-bold">{f.title}</Link><ExtBadge t={f.entityType} /></span>
+                  <span className="flex items-center gap-1.5"><EntityName type={f.entityType} id={f.entityId} title={f.title} className="text-ink hover:text-brand text-sm font-bold" /><ExtBadge t={f.entityType} /></span>
                   <p className="text-muted text-xs">{f.why}{f.action ? ` · ${f.action}` : ""}</p>
                 </div>
                 <span className={cn("shrink-0 text-sm font-black", TONE_TEXT[attentionTone(f.priority)])}>{f.priority}</span>
@@ -175,7 +187,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
                 <li key={a.id} className="border-line flex items-center gap-2 border-b py-2 last:border-0">
                   <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-bold", TONE_TEXT[attentionTone(a.attention_score)], "bg-surface")}>{attentionLevel(a.attention_score)}</span>
                   <div className="min-w-0 flex-1">
-                    <Link href={entityHref(a.entity_type, a.entity_id)} className="text-ink hover:text-brand text-sm font-semibold">{a.title}</Link>
+                    <EntityName type={a.entity_type} id={a.entity_id} title={a.title} />
                     <p className="text-muted text-[11px]">{a.reason}</p>
                   </div>
                   <span className={cn("shrink-0 text-sm font-black", TONE_TEXT[attentionTone(a.attention_score)])}>{a.attention_score}</span>
@@ -193,7 +205,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
               {criticalRisks.slice(0, 8).map((a) => (
                 <li key={a.id} className="border-line flex items-center justify-between gap-2 border-b py-2 last:border-0">
                   <div className="min-w-0">
-                    <Link href={entityHref(a.entity_type, a.entity_id)} className="text-ink hover:text-brand text-sm font-semibold">{a.title}</Link>
+                    <EntityName type={a.entity_type} id={a.entity_id} title={a.title} />
                     <p className="text-muted text-[11px]">{a.reason}</p>
                   </div>
                   <span className="text-danger shrink-0 text-sm font-black">{a.attention_score}</span>
@@ -210,7 +222,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
               {data.opportunities.slice(0, 8).map((o) => (
                 <li key={o.id} className="border-line flex items-center justify-between gap-2 border-b py-2 last:border-0">
                   <div className="min-w-0">
-                    <span className="flex items-center gap-1.5"><Link href={entityHref(o.entity_type, o.entity_id)} className="text-ink hover:text-brand text-sm font-semibold">{o.title}</Link><ExtBadge t={o.entity_type} /></span>
+                    <span className="flex items-center gap-1.5"><EntityName type={o.entity_type} id={o.entity_id} title={o.title} /><ExtBadge t={o.entity_type} /></span>
                     <p className="text-muted text-[11px]">{o.recommended_action}</p>
                   </div>
                   <span className="text-success shrink-0 text-sm font-black">{o.opportunity_score}</span>
