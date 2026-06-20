@@ -67,6 +67,7 @@ interface OrgData {
   teamWeakLocalities: { locality: string; status: string; recommendation: string }[];
   teamOfficeRisk: number;
   teamLeaks: { id: string; leakType: string; title: string; reason: string | null; impact: number; severity: string; entityType: string | null; entityId: string | null }[];
+  revenue: { gap: number; gapLevel: string; gapScore: number; atRisk: number; forecast90: number; summary: string | null } | null;
   graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
   forecastSignals: { id: string; forecastId: string | null; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
@@ -80,7 +81,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -107,6 +108,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("team_intelligence_profiles").select("user_id,performance_tier,growth_trend,workload_score,coaching_score,performance_score,ai_coaching_plan,lost_deals,users(full_name)").limit(200),
     supabase.from("team_performance_snapshots").select("office_risk_score,territory_coverage").order("date", { ascending: false }).limit(1),
     supabase.from("team_opportunity_leaks").select("id,leak_type,title,reason,lost_revenue_impact,severity,entity_type,entity_id").eq("status", "open").order("lost_revenue_impact", { ascending: false }).limit(15),
+    supabase.from("organization_revenue_profiles").select("revenue_gap,gap_level,revenue_gap_score,revenue_at_risk,forecast_revenue_90,ai_revenue_summary").maybeSingle(),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -171,6 +173,7 @@ async function gatherOrgData(): Promise<OrgData> {
     teamWeakLocalities: (((tSnap.data ?? [])[0]?.territory_coverage as { locality: string; status: string; recommendation: string }[] | null) ?? []).filter((c) => c.status === "uncovered" || c.status === "vulnerable").slice(0, 8),
     teamOfficeRisk: (tSnap.data ?? [])[0]?.office_risk_score ?? 0,
     teamLeaks: (tLeak.data ?? []).map((l) => ({ id: l.id, leakType: l.leak_type, title: l.title, reason: l.reason, impact: l.lost_revenue_impact, severity: l.severity, entityType: l.entity_type, entityId: l.entity_id })),
+    revenue: revP.data ? { gap: revP.data.revenue_gap, gapLevel: revP.data.gap_level, gapScore: revP.data.revenue_gap_score, atRisk: revP.data.revenue_at_risk, forecast90: revP.data.forecast_revenue_90, summary: revP.data.ai_revenue_summary } : null,
     graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     forecastSignals: (fcSig.data ?? []).map((s) => ({ id: s.id, forecastId: s.forecast_id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
@@ -452,6 +455,28 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
       recommended_action: "טפל בדליפה לפני אובדן ההכנסה", expected_outcome: "מניעת אובדן הכנסה", status: "open",
     });
   }
+  // Revenue Intelligence — gap to target + revenue at risk.
+  if (d.revenue) {
+    if ((d.revenue.gapLevel === "risk" || d.revenue.gapLevel === "critical") && d.revenue.gap > 0) {
+      rows.push({
+        org_id: orgId, entity_type: "revenue", entity_id: "org",
+        attention_score: d.revenue.gapLevel === "critical" ? 84 : 74, urgency_score: d.revenue.gapLevel === "critical" ? 80 : 68,
+        impact_score: clamp(100 - d.revenue.gapScore), confidence_score: 72,
+        revenue_impact_score: clamp(100 - d.revenue.gapScore), relationship_impact_score: 30, churn_impact_score: 0,
+        title: `פער הכנסה ליעד · ${Math.round(d.revenue.gap).toLocaleString()}₪`, reason: d.revenue.summary ?? "ההכנסה הצפויה מתחת ליעד",
+        recommended_action: "מקד פעולות בהזדמנויות ההכנסה המהירות במודיעין ההכנסות", expected_outcome: "סגירת הפער ליעד", status: "open",
+      });
+    }
+    if (d.revenue.atRisk > 0) {
+      rows.push({
+        org_id: orgId, entity_type: "revenue", entity_id: "org",
+        attention_score: 72, urgency_score: 70, impact_score: clamp(Math.min(100, d.revenue.atRisk / 2000)), confidence_score: 70,
+        revenue_impact_score: clamp(Math.min(100, d.revenue.atRisk / 2000)), relationship_impact_score: 30, churn_impact_score: 0,
+        title: `הכנסה בסיכון · ${Math.round(d.revenue.atRisk).toLocaleString()}₪`, reason: "עסקאות בסיכון בצנרת",
+        recommended_action: "התערב בעסקאות בסיכון לשמירת ההכנסה", expected_outcome: "שמירת הכנסה צפויה", status: "open",
+      });
+    }
+  }
 
   return rows.sort((a, b) => (b.attention_score ?? 0) - (a.attention_score ?? 0));
 }
@@ -506,6 +531,16 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
         recommended_action: "הקצה לו לידים נוספים — יש קיבולת פנויה", status: "open",
       });
     }
+  }
+
+  // Revenue Intelligence — strong probability-weighted pipeline (revenue opportunity).
+  if (d.revenue && d.revenue.forecast90 > 0) {
+    rows.push({
+      org_id: orgId, entity_type: "revenue", entity_id: "org",
+      opportunity_score: clamp(d.revenue.gapScore), impact_score: clamp(Math.min(100, d.revenue.forecast90 / 5000)), confidence_score: 72,
+      title: `צנרת הכנסות 90 יום · ${Math.round(d.revenue.forecast90).toLocaleString()}₪`,
+      description: d.revenue.summary ?? "צנרת הכנסות משוקללת פעילה", recommended_action: "האץ סגירות למימוש הצנרת", status: "open",
+    });
   }
 
   // Knowledge Graph — hidden opportunities from the relationship graph.

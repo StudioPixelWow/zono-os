@@ -1484,6 +1484,63 @@ type ManagementActionsRow = {
   updated_at: string;
 };
 
+type OrganizationRevenueProfilesRow = {
+  id: string;
+  organization_id: string;
+  current_month_revenue: number;
+  current_quarter_revenue: number;
+  current_year_revenue: number;
+  forecast_revenue_30: number;
+  forecast_revenue_60: number;
+  forecast_revenue_90: number;
+  probability_weighted_revenue: number;
+  revenue_at_risk: number;
+  lost_revenue: number;
+  recovered_revenue: number;
+  revenue_gap: number;
+  growth_rate: number;
+  forecast_confidence: number;
+  revenue_gap_score: number;
+  gap_level: string;
+  ai_revenue_summary: string | null;
+  metadata: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RevenueTargetsRow = {
+  id: string;
+  organization_id: string;
+  scope_type: string;
+  scope_id: string | null;
+  scope_label: string | null;
+  period_type: string;
+  period_start: string;
+  target_amount: number;
+  actual_amount: number;
+  forecast_amount: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RevenueLeakageEventsRow = {
+  id: string;
+  organization_id: string;
+  source: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  owner_user_id: string | null;
+  title: string;
+  reason: string | null;
+  lost_revenue: number;
+  recoverable: boolean;
+  severity: string;
+  status: string;
+  created_at: string;
+};
+
 type TeamPerformanceSnapshotsRow = {
   id: string;
   organization_id: string;
@@ -2416,6 +2473,18 @@ export interface Database {
       management_actions: TableShape<
         ManagementActionsRow,
         "organization_id" | "action_type" | "title"
+      >;
+      organization_revenue_profiles: TableShape<
+        OrganizationRevenueProfilesRow,
+        "organization_id"
+      >;
+      revenue_targets: TableShape<
+        RevenueTargetsRow,
+        "organization_id" | "period_start"
+      >;
+      revenue_leakage_events: TableShape<
+        RevenueLeakageEventsRow,
+        "organization_id" | "source" | "title"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,
