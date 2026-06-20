@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import { buildCompetitorAi, isDominant, scoreCompetitor, type CompetitorAggregate } from "./engine";
+import { normalizeHebrewName } from "@/lib/broker/engine";
 
 type DB = Database["public"]["Tables"];
 export type CompetitorProfileRow = DB["competitor_profiles"]["Row"];
@@ -31,7 +32,7 @@ export async function recomputeCompetitorsForOrg(): Promise<CompetitorRecomputeS
   const d30 = new Date(now - 30 * DAY).toISOString();
 
   const [activeRes, removedRes, brokersRes, mktRes] = await Promise.all([
-    supabase.from("external_listings").select("city,price,sqm,detected_broker_id,broker_detection_status,first_seen_at,listing_source_type")
+    supabase.from("external_listings").select("city,price,sqm,detected_broker_id,detected_broker_name,contact_name,broker_detection_status,first_seen_at,listing_source_type")
       .eq("status", "active").limit(4000),
     supabase.from("external_listings").select("city,detected_broker_id,broker_detection_status,removed_at")
       .eq("status", "removed").not("detected_broker_id", "is", null).gte("removed_at", d30).limit(4000),
@@ -40,10 +41,22 @@ export async function recomputeCompetitorsForOrg(): Promise<CompetitorRecomputeS
   ]);
 
   const active = activeRes.data ?? [];
-  const confirmed = active.filter((l) => l.detected_broker_id && (l.broker_detection_status === "auto" || l.broker_detection_status === "approved"));
-  if (!confirmed.length) return { competitors: 0, signals: 0 };
-
   const brokerMeta = new Map((brokersRes.data ?? []).map((b) => [b.id, { name: b.display_name, type: b.broker_type }]));
+
+  // A "competitor" is any publisher classified as broker/agency OR matched to a
+  // broker profile. Identity = broker_profile_id when known, else the publisher
+  // name — so competitors surface even without a formal broker profile.
+  const identityOf = (l: { detected_broker_id: string | null; detected_broker_name: string | null; contact_name: string | null; listing_source_type: string }): { key: string; brokerProfileId: string | null; name: string; type: string } | null => {
+    const isBrokerish = !!l.detected_broker_id || l.listing_source_type === "broker" || l.listing_source_type === "agency" || l.listing_source_type === "office";
+    if (!isBrokerish) return null;
+    if (l.detected_broker_id) { const m = brokerMeta.get(l.detected_broker_id); return { key: l.detected_broker_id, brokerProfileId: l.detected_broker_id, name: m?.name ?? l.detected_broker_name ?? l.contact_name ?? "מתווך", type: m?.type ?? (l.listing_source_type === "agency" || l.listing_source_type === "office" ? "agency" : "independent_broker") }; }
+    const nm = normalizeHebrewName(l.detected_broker_name ?? l.contact_name);
+    if (!nm) return null;
+    return { key: `name:${nm}`, brokerProfileId: null, name: l.detected_broker_name ?? l.contact_name ?? "מתווך", type: l.listing_source_type === "agency" || l.listing_source_type === "office" ? "agency" : "independent_broker" };
+  };
+  const confirmed = active.filter((l) => identityOf(l) != null);
+  if (!confirmed.length) return { competitors: 0, signals: 0 };
+  const idMeta = new Map<string, { brokerProfileId: string | null; name: string; type: string }>();
 
   // Locality totals (denominator) + market avg ₪/m² per city.
   const localityTotal = new Map<string, number>();
@@ -62,7 +75,9 @@ export async function recomputeCompetitorsForOrg(): Promise<CompetitorRecomputeS
   const byBroker = new Map<string, { localities: Map<string, Loc>; firstSeen: string | null; lastSeen: string | null }>();
   const newLoc = (): Loc => ({ count: 0, priceSum: 0, priceN: 0, sqmSum: 0, sqmN: 0, added7: 0, added30: 0, exclusives: 0 });
   for (const l of confirmed) {
-    const bid = l.detected_broker_id as string; const c = cityNorm(l.city); if (!c) continue;
+    const ident = identityOf(l); if (!ident) continue;
+    const bid = ident.key; idMeta.set(bid, { brokerProfileId: ident.brokerProfileId, name: ident.name, type: ident.type });
+    const c = cityNorm(l.city); if (!c) continue;
     const b = byBroker.get(bid) ?? { localities: new Map(), firstSeen: null, lastSeen: null };
     const loc = b.localities.get(c) ?? newLoc();
     loc.count++;
@@ -95,7 +110,7 @@ export async function recomputeCompetitorsForOrg(): Promise<CompetitorRecomputeS
   const signalsByBroker = new Map<string, { type: string; locality: string | null; title: string; description: string; severity: string; confidence: number }[]>();
 
   for (const [bid, b] of byBroker) {
-    const meta = brokerMeta.get(bid) ?? { name: "מתחרה", type: "unknown" };
+    const meta = idMeta.get(bid) ?? { brokerProfileId: null, name: "מתחרה", type: "unknown" };
     let total = 0, added7 = 0, added30 = 0, removed30 = 0, exclusives = 0, shareSum = 0, maxShare = 0, sqmSum = 0, sqmN = 0;
     let topLocality: string | null = null, topShare = -1;
     const positions: DB["competitor_market_positions"]["Insert"][] = [];
@@ -132,7 +147,8 @@ export async function recomputeCompetitorsForOrg(): Promise<CompetitorRecomputeS
     const dominant = positions.filter((p) => isDominant(meta.type, p.market_share_percent ?? 0)).map((p) => ({ locality: p.locality, share: p.market_share_percent ?? 0 }));
 
     profileRows.push({
-      organization_id: orgId, broker_profile_id: bid, display_name: meta.name, competitor_type: meta.type,
+      organization_id: orgId, broker_profile_id: meta.brokerProfileId, display_name: meta.name, competitor_type: meta.type,
+      metadata: { identity: bid } as never,
       market_share_score: scores.market_share_score, inventory_strength_score: scores.inventory_strength_score,
       growth_score: scores.growth_score, exclusivity_score: scores.exclusivity_score,
       pricing_power_score: scores.pricing_power_score, activity_score: scores.activity_score,
@@ -153,14 +169,15 @@ export async function recomputeCompetitorsForOrg(): Promise<CompetitorRecomputeS
     signalsByBroker.set(bid, sig);
   }
 
-  await supabase.from("competitor_profiles").upsert(profileRows as never, { onConflict: "organization_id,broker_profile_id" });
-  const { data: profs } = await supabase.from("competitor_profiles").select("id,broker_profile_id");
-  const idByBroker = new Map((profs ?? []).map((p) => [p.broker_profile_id, p.id]));
+  // Full regeneration (delete cascades positions + signals via FK).
+  await supabase.from("competitor_profiles").delete().eq("organization_id", orgId);
+  for (let i = 0; i < profileRows.length; i += 500) { const c = profileRows.slice(i, i + 500); if (c.length) await supabase.from("competitor_profiles").insert(c as never); }
+  const { data: profs } = await supabase.from("competitor_profiles").select("id,metadata").eq("organization_id", orgId);
+  const idByBroker = new Map<string, string>();
+  for (const p of profs ?? []) { const k = (p.metadata as { identity?: string })?.identity; if (k) idByBroker.set(k, p.id); }
   const profIds = (profs ?? []).map((p) => p.id);
 
   if (profIds.length) {
-    await supabase.from("competitor_market_positions").delete().in("competitor_profile_id", profIds);
-    await supabase.from("competitor_signals").delete().in("competitor_profile_id", profIds);
     const posRows: DB["competitor_market_positions"]["Insert"][] = [];
     const sigRows: DB["competitor_signals"]["Insert"][] = [];
     for (const [bid, positions] of positionsByBroker) { const pid = idByBroker.get(bid); if (!pid) continue; for (const p of positions) posRows.push({ ...p, competitor_profile_id: pid }); }
@@ -224,7 +241,7 @@ export async function getCompetitorDetail(id: string): Promise<CompetitorDetail 
     supabase.from("competitor_signals").select("*").eq("competitor_profile_id", id),
     profile.broker_profile_id
       ? supabase.from("external_listings").select("id,title,city,price").eq("detected_broker_id", profile.broker_profile_id).eq("status", "active").limit(100)
-      : Promise.resolve({ data: [] as { id: string; title: string | null; city: string | null; price: number | null }[] }),
+      : supabase.from("external_listings").select("id,title,city,price,contact_name,detected_broker_name").or(`detected_broker_name.eq.${profile.display_name},contact_name.eq.${profile.display_name}`).eq("status", "active").limit(100),
   ]);
   return { profile, positions: positions ?? [], signals: signals ?? [], listings: (listingsRes.data ?? []) as { id: string; title: string | null; city: string | null; price: number | null }[] };
 }

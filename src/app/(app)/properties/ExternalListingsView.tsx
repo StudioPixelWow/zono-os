@@ -40,6 +40,18 @@ const SOURCE_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-3 text-sm outline-none transition";
 const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
+/** Inline hover preview — no navigation. Card appears below the trigger. */
+function HoverPreview({ trigger, children }: { trigger: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="group/hp relative inline-block">
+      {trigger}
+      <span className="border-line bg-card pointer-events-none absolute top-full start-0 z-30 mt-1 hidden w-72 rounded-xl border p-3 text-start shadow-[var(--shadow-lift)] group-hover/hp:block">
+        {children}
+      </span>
+    </span>
+  );
+}
+
 interface DebugReport {
   success: boolean;
   provider: string;
@@ -68,6 +80,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
   const [dbgReport, setDbgReport] = useState<DebugReport | null>(null);
   const [dbgError, setDbgError] = useState<string | null>(null);
   const [source, setSource] = useState("");
+  const [sourceType, setSourceType] = useState("");
   const [minRooms, setMinRooms] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -108,11 +121,12 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
 
   const filtered = useMemo(() => listings.filter((l) => {
     if (source && l.source !== source) return false;
+    if (sourceType && l.listing_source_type !== sourceType) return false;
     if (minRooms && (l.rooms ?? 0) < Number(minRooms)) return false;
     if (minPrice && (l.price ?? 0) < Number(minPrice)) return false;
     if (maxPrice && (l.price ?? Infinity) > Number(maxPrice)) return false;
     return true;
-  }), [listings, source, minRooms, minPrice, maxPrice]);
+  }), [listings, source, sourceType, minRooms, minPrice, maxPrice]);
 
   const stats = useMemo(() => {
     const bySource: Record<string, number> = {};
@@ -260,6 +274,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
       {/* Filters */}
       <div className="bg-card border-line flex flex-wrap gap-2 rounded-[20px] border p-3">
         <select className={field} value={source} onChange={(e) => setSource(e.target.value)}><option value="">כל המקורות</option><option value="yad2">יד2</option><option value="madlan">מדלן</option></select>
+        <select className={field} value={sourceType} onChange={(e) => setSourceType(e.target.value)}><option value="">כל סוגי הפרסום</option><option value="private_seller">מוכר פרטי</option><option value="broker">פרסום מתווך</option><option value="agency">משרד תיווך</option><option value="unknown">לא ידוע</option></select>
         <input className={field} type="number" placeholder="חדרים מ-" value={minRooms} onChange={(e) => setMinRooms(e.target.value)} />
         <input className={field} type="number" placeholder="מחיר מ-" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
         <input className={field} type="number" placeholder="מחיר עד" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} />
@@ -281,13 +296,39 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
                 const below = sqmPrice != null && stats.belowThreshold > 0 && sqmPrice < stats.belowThreshold;
                 return (
                   <tr key={l.id} className={cn("border-line hover:bg-surface border-b last:border-0", below && "bg-success-soft")}>
-                    <td className="px-4 py-3"><a href={`/external-listings/${l.id}`} className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a>{below && <span className="text-success mr-2 text-[10px] font-bold">מתחת לממוצע</span>}</td>
+                    <td className="px-4 py-3">
+                      <HoverPreview trigger={<a href={`/external-listings/${l.id}`} className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a>}>
+                        <p className="text-ink text-sm font-extrabold">{l.title ?? "מודעה"}</p>
+                        <p className="text-muted mt-0.5 text-[11px]">{[l.neighborhood, l.city].filter(Boolean).join(", ") || "—"}</p>
+                        <div className="text-muted mt-2 grid grid-cols-2 gap-1 text-[11px]">
+                          <span>מחיר: <b className="text-ink">{l.price ? formatShekels(l.price) : "—"}</b></span>
+                          <span>חדרים: <b className="text-ink">{l.rooms ?? "—"}</b></span>
+                          <span>מ״ר: <b className="text-ink">{l.sqm ?? "—"}</b></span>
+                          <span>קומה: <b className="text-ink">{l.floor ?? "—"}{l.total_floors ? `/${l.total_floors}` : ""}</b></span>
+                          <span>₪/מ״ר: <b className="text-ink">{sqmPrice ? sqmPrice.toLocaleString("he-IL") : "—"}</b></span>
+                          <span>הזדמנות: <b className={tone(l.opportunity_score)}>{l.opportunity_score}</b></span>
+                        </div>
+                        <p className="text-muted mt-1 text-[11px]">סוג פרסום: <b className="text-ink">{(SOURCE_TYPE_BADGE[l.listing_source_type] ?? SOURCE_TYPE_BADGE.unknown).label}</b>{l.detected_broker_name ? ` · ${l.detected_broker_name}` : ""}</p>
+                        {l.description && <p className="text-muted mt-1 line-clamp-3 text-[10px] leading-tight">{l.description}</p>}
+                      </HoverPreview>
+                      {below && <span className="text-success mr-2 text-[10px] font-bold">מתחת לממוצע</span>}
+                    </td>
                     <td className="px-4 py-3">{(() => {
                       const st = SOURCE_TYPE_BADGE[l.listing_source_type] ?? SOURCE_TYPE_BADGE.unknown;
                       const ev = l.broker_evidence && typeof l.broker_evidence === "object" ? JSON.stringify(l.broker_evidence) : "";
                       return (
                         <div className="flex flex-col items-start gap-1">
-                          <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", st.cls)} title={ev}>{l.broker_detection_badge ?? st.label}</span>
+                          <HoverPreview trigger={<span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", st.cls)}>{l.broker_detection_badge ?? st.label}</span>}>
+                            <p className="text-ink text-sm font-extrabold">{l.broker_detection_badge ?? st.label}</p>
+                            <p className="text-muted mt-0.5 text-[11px]">{(DETECTION_STATUS[l.broker_detection_status] ?? DETECTION_STATUS.unknown).label}{l.broker_confidence_score ? ` · ביטחון ${l.broker_confidence_score}%` : ""}</p>
+                            <div className="text-muted mt-2 flex flex-col gap-0.5 text-[11px]">
+                              {l.detected_broker_name && <span>מתווך מזוהה: <b className="text-ink">{l.detected_broker_name}</b></span>}
+                              {l.contact_name && <span>איש קשר: <b className="text-ink">{l.contact_name}</b></span>}
+                              {l.contact_phone && <span>טלפון: <b className="text-ink">{l.contact_phone}</b></span>}
+                              {l.has_agent != null && <span>סוג: <b className="text-ink">{l.has_agent ? "מתווך" : "בעלים פרטי"}</b></span>}
+                            </div>
+                            {ev && ev !== "{}" && <p className="text-muted mt-1 line-clamp-2 text-[10px] leading-tight">ראיות: {ev.slice(0, 160)}</p>}
+                          </HoverPreview>
                           {(() => { const ds = DETECTION_STATUS[l.broker_detection_status] ?? DETECTION_STATUS.unknown; return <span className={cn("text-[10px] font-bold", ds.cls)}>{ds.label}{l.broker_detection_locked ? " 🔒" : ""}</span>; })()}
                           {l.detected_broker_name && <span className="text-muted text-[10px]" title={ev}>{l.detected_broker_name}{l.broker_confidence_score ? ` · ${l.broker_confidence_score}%` : ""}</span>}
                           <span className="flex gap-1">
