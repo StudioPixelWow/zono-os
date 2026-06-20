@@ -6,7 +6,7 @@ import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
-import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
+import { SmartPropertyGrid, type MatchSummary } from "@/components/listings/SmartListings";
 import {
   buildMarketAnalysisAction,
   getImportDiagnosticsAction,
@@ -66,7 +66,7 @@ interface DebugReport {
   env: { apifyToken: boolean; yad2ActorId: boolean; madlanActorId: boolean; cronSecret: boolean };
 }
 
-export function ExternalListingsView({ listings, marketStats, isAdmin = false }: { listings: Row[]; marketStats?: { priceDrops: number; duplicateCandidates: number }; isAdmin?: boolean }) {
+export function ExternalListingsView({ listings, marketStats, isAdmin = false, matches = {} }: { listings: Row[]; marketStats?: { priceDrops: number; duplicateCandidates: number }; isAdmin?: boolean; matches?: Record<string, MatchSummary> }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -171,8 +171,8 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
     <section className="flex flex-col gap-5">
       <div className="bg-card border-line flex flex-wrap items-center justify-between gap-3 rounded-[20px] border p-4">
         <div>
-          <p className="text-ink text-sm font-extrabold">מודעות חיצוניות (יד2 / מדלן)</p>
-          <p className="text-muted text-xs">ייבוא חי דרך Apify מאזורי הפעילות של הארגון. מודעות נשארות חיצוניות עד שתקודם אותן ידנית.</p>
+          <p className="text-ink flex items-center gap-1.5 text-base font-black">AI Market Intelligence <Icon name="Sparkles" size={15} className="text-brand" /></p>
+          <p className="text-muted text-xs">עסקאות ונתונים דומים המשפיעים על השוק · {filtered.length} תוצאות · מדורג לפי AI Score</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => run(importYad2Action)} disabled={pending}>יד2</Button>
@@ -288,72 +288,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false }:
           <p className="text-muted max-w-sm text-sm">לחץ ״סנכרן עכשיו״ כדי למשוך מודעות מאזורי הפעילות (דורש APIFY_TOKEN; בפיתוח יוחזרו נתוני הדמיה).</p>
         </div>
       ) : (
-        <div className="bg-card border-line overflow-x-auto rounded-[20px] border">
-          <table className="w-full min-w-[760px] text-start text-sm">
-            <thead className="text-muted border-line border-b text-xs"><tr>{["מודעה", "סוג פרסום", "מקור", "עיר", "מחיר", "חד׳", "מ״ר", "₪/מ״ר", "הזדמנות", ""].map((h) => <th key={h} className="px-4 py-3 text-start font-bold">{h}</th>)}</tr></thead>
-            <tbody>
-              {filtered.map((l) => {
-                const sqmPrice = l.price && l.sqm ? Math.round(l.price / l.sqm) : null;
-                const below = sqmPrice != null && stats.belowThreshold > 0 && sqmPrice < stats.belowThreshold;
-                return (
-                  <tr key={l.id} className={cn("border-line hover:bg-surface border-b last:border-0", below && "bg-success-soft")}>
-                    <td className="px-4 py-3">
-                      <ListingHoverPreview listingId={l.id}>
-                        <a href={`/external-listings/${l.id}`} className="text-ink hover:text-brand font-bold">{l.title ?? "מודעה"}</a>
-                      </ListingHoverPreview>
-                      {below && <span className="text-success mr-2 text-[10px] font-bold">מתחת לממוצע</span>}
-                    </td>
-                    <td className="px-4 py-3">{(() => {
-                      const st = SOURCE_TYPE_BADGE[l.listing_source_type] ?? SOURCE_TYPE_BADGE.unknown;
-                      const ev = l.broker_evidence && typeof l.broker_evidence === "object" ? JSON.stringify(l.broker_evidence) : "";
-                      return (
-                        <div className="flex flex-col items-start gap-1">
-                          <HoverPreview trigger={<span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", st.cls)}>{l.broker_detection_badge ?? st.label}</span>}>
-                            <p className="text-ink text-sm font-extrabold">{l.broker_detection_badge ?? st.label}</p>
-                            <p className="text-muted mt-0.5 text-[11px]">{(DETECTION_STATUS[l.broker_detection_status] ?? DETECTION_STATUS.unknown).label}{l.broker_confidence_score ? ` · ביטחון ${l.broker_confidence_score}%` : ""}</p>
-                            <div className="text-muted mt-2 flex flex-col gap-0.5 text-[11px]">
-                              {l.detected_broker_name && <span>מתווך מזוהה: <b className="text-ink">{l.detected_broker_name}</b></span>}
-                              {l.contact_name && <span>איש קשר: <b className="text-ink">{l.contact_name}</b></span>}
-                              {l.contact_phone && <span>טלפון: <b className="text-ink">{l.contact_phone}</b></span>}
-                              {l.has_agent != null && <span>סוג: <b className="text-ink">{l.has_agent ? "מתווך" : "בעלים פרטי"}</b></span>}
-                            </div>
-                            {ev && ev !== "{}" && <p className="text-muted mt-1 line-clamp-2 text-[10px] leading-tight">ראיות: {ev.slice(0, 160)}</p>}
-                          </HoverPreview>
-                          {(() => { const ds = DETECTION_STATUS[l.broker_detection_status] ?? DETECTION_STATUS.unknown; return <span className={cn("text-[10px] font-bold", ds.cls)}>{ds.label}{l.broker_detection_locked ? " 🔒" : ""}</span>; })()}
-                          {l.detected_broker_name && <span className="text-muted text-[10px]" title={ev}>{l.detected_broker_name}{l.broker_confidence_score ? ` · ${l.broker_confidence_score}%` : ""}</span>}
-                          <span className="flex gap-1">
-                            {!l.broker_detection_locked && l.broker_detection_status === "needs_review" && (<>
-                              <button className="text-success text-[10px] font-bold" disabled={pending} onClick={() => bk(() => decideListingMatchAction(l.id, "approved"))}>אשר</button>
-                              <button className="text-danger text-[10px] font-bold" disabled={pending} onClick={() => bk(() => decideListingMatchAction(l.id, "rejected"))}>דחה</button>
-                            </>)}
-                            {!l.detected_broker_id && !l.broker_detection_locked && l.listing_source_type !== "private_seller" && (
-                              <button className="text-brand-strong text-[10px] font-bold" disabled={pending} onClick={() => bk(() => createBrokerFromListingAction(l.id))}>צור מתווך</button>
-                            )}
-                          </span>
-                        </div>
-                      );
-                    })()}</td>
-                    <td className="text-muted px-4 py-3">{SOURCE_LABELS[l.source] ?? l.source}</td>
-                    <td className="text-muted px-4 py-3">{l.city ?? "—"}</td>
-                    <td className="text-ink px-4 py-3 font-bold">{l.price ? formatShekels(l.price) : "—"}</td>
-                    <td className="text-muted px-4 py-3">{l.rooms ?? "—"}</td>
-                    <td className="text-muted px-4 py-3">{l.sqm ?? "—"}</td>
-                    <td className="text-muted px-4 py-3">{sqmPrice ? sqmPrice.toLocaleString("he-IL") : "—"}</td>
-                    <td className={cn("px-4 py-3 font-bold", tone(l.opportunity_score))}>{l.opportunity_score}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col items-start gap-1">
-                        {l.promoted_property_id ? <span className="text-success text-xs font-bold">קודם ✓</span> : <Button size="sm" variant="ghost" onClick={() => run(() => promoteExternalListingAction(l.id))} disabled={pending}>קדם ל-CRM</Button>}
-                        {!l.promoted_property_id && (
-                          <button className="text-brand-strong text-[10px] font-bold" disabled={pending} onClick={() => { setError(null); start(async () => { const r = await openAcquisitionAction(l.id); if (r?.error) setError(r.error); else router.push("/acquisition"); }); }}>פתח הזדמנות גיוס</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <SmartPropertyGrid listings={filtered} matches={matches} />
       )}
     </section>
   );

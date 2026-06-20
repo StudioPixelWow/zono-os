@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, createAcquisitionTask, getImportDiagnostics, getListingPreview, promoteExternalListing, runImport, type ImportDiagnostics, type ListingPreview, type SyncSummary } from "./service";
+import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getListingPreview, promoteExternalListing, runImport, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncSummary } from "./service";
 
 export interface ExternalActionState {
   error?: string;
@@ -51,6 +51,15 @@ export async function promoteExternalListingAction(listingId: string): Promise<E
 
 export async function getImportDiagnosticsAction(): Promise<ImportDiagnostics> {
   return getImportDiagnostics();
+}
+
+export async function getExternalListingDetailAction(listingId: string): Promise<ExternalListingDetail | null> {
+  try {
+    return await getExternalListingDetail(listingId);
+  } catch (e) {
+    console.error("[external] detail failed:", e);
+    return null;
+  }
 }
 
 export async function getListingPreviewAction(listingId: string): Promise<ListingPreview | null> {

@@ -434,6 +434,40 @@ export async function getExternalListingDetail(listingId: string): Promise<Exter
   };
 }
 
+// ── Bounded buyer-match enrichment for Smart Cards ───────────────────────────
+export interface ListingMatchSummary { count: number; top: number }
+
+/**
+ * Compute matching-buyer count + top-match % for many listings in one pass.
+ * Loads buyers + intel ONCE and reuses the pure matcher — safe for a list page.
+ */
+export async function enrichListingsBuyerMatches(
+  listings: { id: string; title: string | null; city: string | null; neighborhood: string | null; price: number | null; sqm: number | null; rooms: number | null; has_agent: boolean | null; opportunity_score: number }[],
+): Promise<Record<string, ListingMatchSummary>> {
+  const supabase = await createClient();
+  const [buyersRes, intelRes] = await Promise.all([
+    supabase.from("buyers").select("id,full_name,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,readiness,has_preapproval"),
+    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_conversion_probability,buyer_readiness_score"),
+  ]);
+  const intelMap = new Map((intelRes.data ?? []).map((b) => [b.buyer_id, b]));
+  const buyers: BuyerForMatch[] = (buyersRes.data ?? []).map((b) => {
+    const intel = intelMap.get(b.id);
+    return {
+      id: b.id, name: b.full_name, budgetMin: b.budget_min, budgetMax: b.budget_max,
+      roomsMin: b.rooms_min, roomsMax: b.rooms_max, areas: b.preferred_areas ?? [],
+      readiness: b.readiness ?? intel?.buyer_readiness_score ?? null, hasPreapproval: b.has_preapproval ?? false,
+      conversionProbability: intel?.buyer_conversion_probability ?? null,
+    };
+  });
+  const out: Record<string, ListingMatchSummary> = {};
+  for (const l of listings) {
+    const forDeal: ListingForDeal = { id: l.id, title: l.title, city: l.city, neighborhood: l.neighborhood, price: l.price, sqm: l.sqm, rooms: l.rooms, hasAgent: l.has_agent, opportunityScore: l.opportunity_score };
+    const matches = matchBuyersToListing(forDeal, buyers);
+    out[l.id] = { count: matches.length, top: matches[0]?.matchScore ?? 0 };
+  }
+  return out;
+}
+
 // ── Lightweight hover preview (rich, non-table data) ─────────────────────────
 export interface ListingPreview {
   id: string;

@@ -3,6 +3,7 @@ import { listJourneyBoard, type JourneyBoard } from "@/lib/journey/repository";
 import { listIntelligenceBoard, type IntelligenceBoard } from "@/lib/intelligence/service";
 import { listActivityBoard, type ActivityBoard } from "@/lib/activity/service";
 import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
+import { enrichListingsBuyerMatches, type ListingMatchSummary } from "@/lib/external-listings/service";
 import { matchesInventoryTab, type InventoryTab } from "@/lib/properties/inventory";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -63,6 +64,7 @@ export default async function PropertiesPage({
   let externalListings: ExternalListingRow[] = [];
   let externalMarketStats = { priceDrops: 0, duplicateCandidates: 0 };
   let externalIsAdmin = false;
+  let externalMatches: Record<string, ListingMatchSummary> = {};
   if (tab === "external") {
     try {
       const supabase = await createClient();
@@ -74,6 +76,8 @@ export default async function PropertiesPage({
       externalListings = listingsRes;
       externalMarketStats = statsRes;
       externalIsAdmin = adminRes.data === true;
+      try { externalMatches = await enrichListingsBuyerMatches(externalListings.map((l) => ({ id: l.id, title: l.title, city: l.city, neighborhood: l.neighborhood, price: l.price, sqm: l.sqm ?? l.area_sqm, rooms: l.rooms, has_agent: l.has_agent, opportunity_score: l.opportunity_score }))); }
+      catch (e) { console.error("[external] enrich failed:", e); }
     } catch (e) {
       console.error("[external] list failed:", e);
     }
@@ -107,7 +111,7 @@ export default async function PropertiesPage({
       {activity && <ActivityWidgets board={activity} />}
       <InventoryTabs active={tab} />
       {tab === "external" ? (
-        <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} isAdmin={externalIsAdmin} />
+        <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} isAdmin={externalIsAdmin} matches={externalMatches} />
       ) : (
         <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} />
       )}
