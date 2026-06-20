@@ -96,6 +96,25 @@ export async function debugMadlanAction(city: string, neighbourhood: string | nu
   return debugMadlanDeals(city, neighbourhood);
 }
 
+// ── Non-blocking GovMap sync (PRIMARY, live count) ───────────────────────────
+export async function startGovmapSyncAction() {
+  const { startGovmapSync } = await import("./service");
+  return startGovmapSync("60"); // last 5 years — recent, cost-bounded
+}
+
+export async function pollGovmapSyncAction(runId: string) {
+  const { pollGovmapSync } = await import("./service");
+  return pollGovmapSync(runId);
+}
+
+export async function finishGovmapSyncAction(datasetId: string) {
+  const { finishGovmapSync } = await import("./service");
+  const r = await finishGovmapSync(datasetId);
+  revalidatePath("/transactions");
+  revalidatePath("/transactions/streets");
+  return r;
+}
+
 // ── Non-blocking Madlan sync (live progress) ─────────────────────────────────
 export async function startMadlanSyncAction() {
   const { startMadlanSync } = await import("./service");

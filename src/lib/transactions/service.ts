@@ -14,7 +14,8 @@ import {
   TRANSACTIONS_ACTOR_NAME, type ResearchInput, type ResearchResult, type TxnComparable,
 } from "./engine";
 import {
-  buildTransactionsInput, canonicalCityName, govmapActorId, isTransactionsApifyConfigured, normalizeTransaction, runTransactionsActor,
+  buildCityCoverageInput, buildTransactionsInput, canonicalCityName, fetchDatasetItems, getTransactionsRun, govmapActorId,
+  isTransactionsApifyConfigured, MAX_TXNS_PER_PULL, normalizeTransaction, runTransactionsActor, startTransactionsRun,
   type NormalizedTransaction,
 } from "./providers";
 import { fetchMadlanDealsFromDataset, getMadlanRun, isMadlanConfigured, MADLAN_ACTOR_NAME, MADLAN_SOURCE, madlanActorId, madlanDocId, normalizeMadlanTransaction, runMadlanDeals, startMadlanRun, type NormalizedMadlanTransaction } from "./madlan";
@@ -434,6 +435,70 @@ export async function generateStreetIntelligence(cityName: string, street: strin
     liquidity_score: s.liquidityScore, street_score: s.streetScore, confidence_score: s.confidenceScore, summary_hebrew: s.summaryHebrew,
   } as never, { onConflict: "organization_id,city_name,street" }).select("*").maybeSingle();
   return (data ?? null) as DB["street_intelligence"]["Row"] | null;
+}
+
+// ── Non-blocking GovMap sync (PRIMARY) with live count + neighborhood spider ──
+export interface GovmapStart { runId: string | null; datasetId: string | null; city: string | null; neighborhoods: number; needsConfig: boolean; error: string | null }
+
+/** Start one city-wide GovMap run (centre + all known neighborhoods). Non-blocking. */
+export async function startGovmapSync(dealDateRange = "all"): Promise<GovmapStart> {
+  const { orgId, profile, organization } = await ctx();
+  const market = resolveAgentMarket(profile, organization);
+  if (!market.city) return { runId: null, datasetId: null, city: null, neighborhoods: 0, needsConfig: true, error: null };
+  if (!isTransactionsApifyConfigured()) return { runId: null, datasetId: null, city: market.city, neighborhoods: 0, needsConfig: false, error: "APIFY_TOKEN missing" };
+  await ensureCoverageTargetsForAgent();
+  const supabase = await createClient();
+  const { data: tg } = await supabase.from("geo_coverage_targets").select("neighborhood_name").eq("organization_id", orgId).eq("city_name", market.city).not("neighborhood_name", "is", null);
+  const hoods = [...new Set([...market.neighborhoods, ...(tg ?? []).map((t) => t.neighborhood_name).filter((x): x is string => !!x)])];
+  try {
+    const r = await startTransactionsRun(buildCityCoverageInput(market.city, hoods, dealDateRange, Math.max(3000, MAX_TXNS_PER_PULL)));
+    return { runId: r.runId, datasetId: r.datasetId, city: market.city, neighborhoods: hoods.length, needsConfig: false, error: null };
+  } catch (e) {
+    return { runId: null, datasetId: null, city: market.city, neighborhoods: hoods.length, needsConfig: false, error: e instanceof Error ? e.message : "failed to start" };
+  }
+}
+
+export async function pollGovmapSync(runId: string): Promise<{ status: string; found: number; datasetId: string | null }> {
+  await ctx();
+  const r = await getTransactionsRun(runId);
+  return { status: r.status, found: r.found, datasetId: r.datasetId };
+}
+
+export async function finishGovmapSync(datasetId: string): Promise<{ imported: number; duplicates: number; deals: number; newNeighborhoods: number; error: string | null }> {
+  const { orgId } = await ctx();
+  let imported = 0, duplicates = 0, deals = 0, newNeighborhoods = 0, error: string | null = null;
+  try {
+    const raws = await fetchDatasetItems(datasetId, 6000);
+    deals = raws.length;
+    const normalized = raws.map(normalizeTransaction);
+    const shaped = deduplicateTransactions(normalized.map((t) => ({ ...t, asset_id: t.assetId, city_name: canonicalCityName(t.cityName), normalized_address: t.normalizedAddress, deal_date: t.dealDate, deal_amount: t.dealAmount, area: t.area })));
+    const res = await persistTransactions(orgId, shaped);
+    imported = res.imported; duplicates = res.duplicates;
+    newNeighborhoods = await discoverNeighborhoodCoverage(orgId, normalized);
+  } catch (e) {
+    error = e instanceof Error ? e.message : "govmap finish failed";
+  }
+  return { imported, duplicates, deals, newNeighborhoods, error };
+}
+
+/** Spider: add a coverage target for each neighborhood seen, so the NEXT sync covers it too. */
+async function discoverNeighborhoodCoverage(orgId: string, normalized: NormalizedTransaction[]): Promise<number> {
+  const supabase = await createClient();
+  const byCity = new Map<string, Set<string>>();
+  for (const t of normalized) {
+    const c = canonicalCityName(t.cityName); const h = t.neighborhoodName;
+    if (!c || !h) continue;
+    if (!byCity.has(c)) byCity.set(c, new Set());
+    byCity.get(c)!.add(h);
+  }
+  let created = 0;
+  for (const [city, hoods] of byCity) {
+    const { data: existing } = await supabase.from("geo_coverage_targets").select("neighborhood_name").eq("organization_id", orgId).eq("city_name", city);
+    const have = new Set((existing ?? []).map((e) => e.neighborhood_name).filter(Boolean));
+    const rows = [...hoods].filter((h) => !have.has(h)).slice(0, 40).map((h) => ({ organization_id: orgId, city_name: city, neighborhood_name: h, coverage_status: "completed", priority: 2 }));
+    if (rows.length) { await supabase.from("geo_coverage_targets").insert(rows as never); created += rows.length; }
+  }
+  return created;
 }
 
 /** Rebuild building + street intel for every (street / building) seen in transactions. */

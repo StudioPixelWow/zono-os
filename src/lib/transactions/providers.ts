@@ -148,6 +148,34 @@ export function buildTransactionsInput(city: string, neighborhood: string | null
   return input;
 }
 
+/**
+ * Build a single-run city-wide input covering the city centre PLUS each given
+ * neighborhood (the actor geocodes each as its own 700m cluster). One run.
+ */
+export function buildCityCoverageInput(city: string, neighborhoods: string[], dealDateRange: string, maxItems: number): TransactionsActorInput {
+  const canonical = ACTOR_CITY_BY_KEY.get(cityKey(city));
+  const input: TransactionsActorInput = canonical ? { cities: [canonical] } : { customCities: [city] };
+  const hoods = [...new Set(neighborhoods.map((n) => n.trim()).filter(Boolean))];
+  if (hoods.length) input.neighborhoods = hoods;
+  input.dealDateRange = ["3", "6", "12", "60"].includes(dealDateRange) ? dealDateRange : "all";
+  input.maxItems = maxItems;
+  return input;
+}
+
+// ── Non-blocking GovMap run (client-polled live progress; per-deal items) ─────
+export async function startTransactionsRun(input: TransactionsActorInput): Promise<{ runId: string; datasetId: string | null; status: string }> {
+  const run = await client().actor(govmapActorId()).start(input as Record<string, unknown>, { memory: 1024 });
+  return { runId: run.id, datasetId: run.defaultDatasetId ?? null, status: run.status };
+}
+
+export async function getTransactionsRun(runId: string): Promise<{ status: string; datasetId: string | null; found: number }> {
+  const run = await client().run(runId).get();
+  let found = 0;
+  const datasetId = run?.defaultDatasetId ?? null;
+  if (datasetId) { try { const ds = await client().dataset(datasetId).get(); found = (ds as { itemCount?: number } | undefined)?.itemCount ?? 0; } catch { /* ignore */ } }
+  return { status: run?.status ?? "UNKNOWN", datasetId, found };
+}
+
 /** Run the actor and return its default dataset items (bounded). */
 export async function runTransactionsActor(input: TransactionsActorInput, limit = MAX_TXNS_PER_PULL): Promise<Raw[]> {
   const run = await client().actor(govmapActorId()).call(input as Record<string, unknown>, { timeout: 240, waitSecs: 230, memory: 1024 });
