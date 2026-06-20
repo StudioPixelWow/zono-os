@@ -82,3 +82,16 @@ export async function debugTransactionsAction(city: string, neighborhood: string
   const { debugTransactionsActor } = await import("./providers");
   return debugTransactionsActor(city, neighborhood, 5);
 }
+
+export async function syncMadlanAction() {
+  const { syncMadlanForAgent } = await import("./service");
+  const r = await syncMadlanForAgent();
+  revalidatePath("/transactions");
+  revalidatePath("/transactions/streets");
+  return r;
+}
+
+export async function debugMadlanAction(city: string, neighbourhood: string | null) {
+  const { debugMadlanDeals } = await import("./madlan");
+  return debugMadlanDeals(city, neighbourhood);
+}

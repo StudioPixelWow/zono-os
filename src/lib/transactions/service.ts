@@ -17,6 +17,7 @@ import {
   buildTransactionsInput, canonicalCityName, govmapActorId, isTransactionsApifyConfigured, normalizeTransaction, runTransactionsActor,
   type NormalizedTransaction,
 } from "./providers";
+import { isMadlanConfigured, MADLAN_ACTOR_NAME, MADLAN_SOURCE, madlanActorId, normalizeMadlanTransaction, runMadlanDeals, type NormalizedMadlanTransaction } from "./madlan";
 
 type DB = Database["public"]["Tables"];
 const isDev = process.env.NODE_ENV !== "production";
@@ -169,6 +170,98 @@ async function persistTransactions(orgId: string, normalized: (NormalizedTransac
     if (!error) imported += chunk.length;
   }
   return { imported, duplicates };
+}
+
+// ── Madlan (PRIMARY city-coverage source) ───────────────────────────────────
+export interface MadlanSyncResult { imported: number; duplicates: number; crossSource: number; deals: number; needsConfig: boolean; error: string | null }
+
+/** Pull the full Madlan city transaction list for the agent's city (primary). */
+export async function syncMadlanForAgent(): Promise<MadlanSyncResult> {
+  const { orgId, userId, profile, organization } = await ctx();
+  const market = resolveAgentMarket(profile, organization);
+  if (!market.city) return { imported: 0, duplicates: 0, crossSource: 0, deals: 0, needsConfig: true, error: null };
+  if (!isMadlanConfigured()) {
+    return { imported: 0, duplicates: 0, crossSource: 0, deals: 0, needsConfig: false, error: "APIFY_TOKEN missing — Madlan sync unavailable" };
+  }
+  const supabase = await createClient();
+  const startedAt = new Date().toISOString();
+  let deals = 0, imported = 0, duplicates = 0, crossSource = 0, error: string | null = null;
+  try {
+    // Pull whole city, plus each configured neighborhood for completeness.
+    const scopes: (string | null)[] = market.neighborhoods.length ? [null, ...market.neighborhoods] : [null];
+    const raws: Record<string, unknown>[] = [];
+    for (const n of scopes) {
+      try { raws.push(...await runMadlanDeals(market.city, n)); } catch { /* isolate scope */ }
+    }
+    deals = raws.length;
+    const normalized = raws.map(normalizeMadlanTransaction);
+    const res = await persistMadlanTransactions(orgId, normalized);
+    imported = res.imported; duplicates = res.duplicates; crossSource = res.crossSource;
+  } catch (e) {
+    error = e instanceof Error ? e.message : "madlan sync failed";
+  }
+  await supabase.from("transaction_sync_logs").insert({
+    organization_id: orgId, agent_id: userId, user_id: userId, city_name: market.city,
+    actor_name: MADLAN_ACTOR_NAME, actor_id: madlanActorId(), status: error ? "failed" : "completed",
+    started_at: startedAt, finished_at: new Date().toISOString(), records_imported: imported,
+    duplicates_skipped: duplicates, total_records: deals, error_message: error, raw_response: { source: MADLAN_SOURCE, crossSource },
+  } as never);
+  if (!error) await recomputeDerivedIntelligence();
+  return { imported, duplicates, crossSource, deals, needsConfig: false, error };
+}
+
+/** Insert new Madlan rows; dedup by madlan id + composite; mark cross-source dups vs GovMap. */
+async function persistMadlanTransactions(orgId: string, rows: NormalizedMadlanTransaction[]): Promise<{ imported: number; duplicates: number; crossSource: number }> {
+  if (!rows.length) return { imported: 0, duplicates: 0, crossSource: 0 };
+  const supabase = await createClient();
+  const madlanIds = rows.map((r) => r.madlanTransactionId).filter((x): x is string => !!x);
+  const normAddrs = [...new Set(rows.map((r) => r.normalizedAddress).filter((x): x is string => !!x))];
+
+  const existingMadlanIds = new Set<string>();
+  if (madlanIds.length) {
+    const { data } = await supabase.from("property_transactions").select("madlan_transaction_id").eq("organization_id", orgId).in("madlan_transaction_id", madlanIds);
+    for (const r of data ?? []) if (r.madlan_transaction_id) existingMadlanIds.add(r.madlan_transaction_id);
+  }
+  // Existing rows (any source) at these addresses — for fallback dedup + cross-source linking.
+  const govmapByKey = new Map<string, string>();
+  const existingMadlanKeys = new Set<string>();
+  if (normAddrs.length) {
+    for (let i = 0; i < normAddrs.length; i += 200) {
+      const { data } = await supabase.from("property_transactions").select("id,source_platform,city_name,normalized_address,deal_date,deal_amount,area").eq("organization_id", orgId).in("normalized_address", normAddrs.slice(i, i + 200));
+      for (const r of data ?? []) {
+        const key = `${canonicalCityName(r.city_name) ?? ""}|${r.normalized_address ?? ""}|${r.deal_date ?? ""}|${r.deal_amount ?? ""}|${r.area ?? ""}`;
+        if (r.source_platform === "govmap_transactions") govmapByKey.set(key, r.id);
+        else existingMadlanKeys.add(key);
+      }
+    }
+  }
+
+  const toInsert: DB["property_transactions"]["Insert"][] = [];
+  let duplicates = 0, crossSource = 0;
+  const batchKeys = new Set<string>();
+  for (const t of rows) {
+    const canonCity = canonicalCityName(t.cityName);
+    const key = `${canonCity ?? ""}|${t.normalizedAddress ?? ""}|${t.dealDate ?? ""}|${t.dealAmount ?? ""}|${t.area ?? ""}`;
+    if ((t.madlanTransactionId && existingMadlanIds.has(t.madlanTransactionId)) || existingMadlanKeys.has(key) || batchKeys.has(key)) { duplicates++; continue; }
+    batchKeys.add(key);
+    const govmapId = govmapByKey.get(key) ?? null;
+    if (govmapId) crossSource++;
+    toInsert.push({
+      organization_id: orgId, source_platform: t.sourcePlatform, source_actor: t.sourceActor,
+      madlan_transaction_id: t.madlanTransactionId, deal_date: t.dealDate, deal_amount: t.dealAmount, price_per_sqm: t.pricePerSqm,
+      address: t.address, normalized_address: t.normalizedAddress, city_name: canonCity, neighborhood_name: t.neighborhoodName,
+      street: t.street, street_number: t.streetNumber, rooms: t.rooms, floor: t.floor, area: t.area, property_type: t.propertyType,
+      building_year: t.buildingYear, mediation: t.mediation, source_url: t.sourceUrl, duplicate_of: govmapId,
+      raw_payload: t.rawPayload as never, scraped_at: new Date().toISOString(),
+    });
+  }
+  let imported = 0;
+  for (let i = 0; i < toInsert.length; i += 300) {
+    const chunk = toInsert.slice(i, i + 300);
+    const { error } = await supabase.from("property_transactions").insert(chunk as never);
+    if (!error) imported += chunk.length;
+  }
+  return { imported, duplicates, crossSource };
 }
 
 /** Ensure targets then sync them all for the current agent's city. */

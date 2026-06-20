@@ -6,7 +6,7 @@ import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
-import { refreshRecentAction, syncTransactionsAction, ensureCoverageTargetsAction } from "@/lib/transactions/actions";
+import { syncTransactionsAction, syncMadlanAction, ensureCoverageTargetsAction } from "@/lib/transactions/actions";
 import type { TransactionsBoard } from "@/lib/transactions/service";
 
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—");
@@ -17,7 +17,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const run = (fn: () => Promise<unknown>) => { setError(null); setMsg(null); start(async () => { try { const r = await fn() as { mock?: boolean; needsConfig?: boolean; imported?: number }; if (r?.needsConfig) setError("הגדר עיר/שכונות פעילות בפרופיל כדי לסנכרן עסקאות."); else setMsg(`סונכרנו ${r?.imported ?? 0} עסקאות${r?.mock ? " · נתוני הדגמה (לא הוגדר APIFY_TOKEN)" : ""}.`); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
+  const run = (fn: () => Promise<unknown>) => { setError(null); setMsg(null); start(async () => { try { const r = await fn() as { mock?: boolean; needsConfig?: boolean; imported?: number; deals?: number; crossSource?: number; error?: string }; if (r?.needsConfig) setError("הגדר עיר/שכונות פעילות בפרופיל כדי לסנכרן עסקאות."); else if (r?.error) setError(r.error); else setMsg(`סונכרנו ${r?.imported ?? 0} עסקאות${r?.deals ? ` (מתוך ${r.deals})` : ""}${r?.crossSource ? ` · ${r.crossSource} חופפות ל-GovMap` : ""}${r?.mock ? " · נתוני הדגמה" : ""}.`); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
 
   const { transactions, total, stats, needsConfig, agentCity, apifyConfigured } = board;
 
@@ -31,8 +31,8 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/transactions/coverage" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="Map" size={15} />כיסוי דאטה</Link>
-          <Button size="sm" variant="secondary" onClick={() => run(refreshRecentAction)} disabled={pending} leadingIcon={<Icon name="Clock" size={15} />}>12 חודשים</Button>
-          <Button onClick={() => run(syncTransactionsAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מסנכרן…" : "סנכרן עסקאות"}</Button>
+          <Button size="sm" variant="secondary" onClick={() => run(syncTransactionsAction)} disabled={pending} leadingIcon={<Icon name="Landmark" size={15} />}>GovMap (גיבוי)</Button>
+          <Button onClick={() => run(syncMadlanAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מסנכרן…" : "סנכרן ממדלן"}</Button>
         </div>
       </div>
       {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — בסביבת פיתוח מוצגים נתוני הדגמה מסומנים. בפרודקשן יש להגדיר טוקן לקבלת עסקאות אמת.</p>}
@@ -60,7 +60,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
             <table className="w-full text-right text-sm">
               <thead className="bg-surface text-muted text-[11px] font-bold">
                 <tr>
-                  {["תאריך", "כתובת", "שכונה", "מחיר עסקה", "מ״ר", "₪/מ״ר", "חדרים", "קומה", "סוג", "גוש/חלקה", "מקור"].map((h) => <th key={h} className="px-3 py-2 whitespace-nowrap">{h}</th>)}
+                  {["תאריך", "כתובת", "שכונה", "מחיר עסקה", "מ״ר", "₪/מ״ר", "חדרים", "קומה", "נבנה", "תיווך", "מקור"].map((h) => <th key={h} className="px-3 py-2 whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -74,9 +74,12 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
                     <td className="text-brand-strong px-3 py-2 font-bold whitespace-nowrap">{t.price_per_sqm ? `${fmtNum(t.price_per_sqm)}` : "—"}</td>
                     <td className="text-muted px-3 py-2">{t.rooms ?? "—"}</td>
                     <td className="text-muted px-3 py-2">{t.floor ?? "—"}</td>
-                    <td className="text-muted px-3 py-2 whitespace-nowrap">{t.property_type ?? "—"}</td>
-                    <td className="text-muted px-3 py-2 whitespace-nowrap text-[11px]">{t.gush && t.helka ? `${t.gush}/${t.helka}${t.tat_helka ? `/${t.tat_helka}` : ""}` : "—"}</td>
-                    <td className="text-muted px-3 py-2 whitespace-nowrap text-[11px]">{(t.raw_payload as { _mock?: boolean })?._mock ? "הדגמה" : "govmap"}</td>
+                    <td className="text-muted px-3 py-2">{t.building_year ?? "—"}</td>
+                    <td className="text-muted px-3 py-2 whitespace-nowrap text-[11px]">{t.mediation ?? "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-[11px]">
+                      <span className={cn("rounded-md px-1.5 py-0.5 font-bold", t.source_platform === "madlan_transactions" ? "bg-brand-soft text-brand-strong" : "bg-surface text-muted")}>{t.source_platform === "madlan_transactions" ? "מדלן" : (t.raw_payload as { _mock?: boolean })?._mock ? "הדגמה" : "GovMap"}</span>
+                      {t.duplicate_of && <span className="text-warning mr-1">⚠</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -4,19 +4,21 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
-import { debugTransactionsAction } from "@/lib/transactions/actions";
+import { debugMadlanAction, debugTransactionsAction } from "@/lib/transactions/actions";
 
 interface EnvStatus { apifyToken: boolean; govmapActorId: boolean; actorId: string; cronSecret: boolean }
-type DebugResult = Awaited<ReturnType<typeof debugTransactionsAction>>;
+interface MadlanEnv { apifyToken: boolean; madlanActorId: boolean; actorId: string }
+type DebugResult = Awaited<ReturnType<typeof debugTransactionsAction>> | Awaited<ReturnType<typeof debugMadlanAction>>;
 
-export function DebugView({ env }: { env: EnvStatus }) {
-  const [city, setCity] = useState("חיפה");
+export function DebugView({ env, madlan }: { env: EnvStatus; madlan: MadlanEnv }) {
+  const [city, setCity] = useState("קרית ביאליק");
   const [neighborhood, setNeighborhood] = useState("");
   const [result, setResult] = useState<DebugResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const runDebug = () => { setError(null); setResult(null); start(async () => { try { setResult(await debugTransactionsAction(city.trim(), neighborhood.trim() || null)); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
+  const runMadlan = () => { setError(null); setResult(null); start(async () => { try { setResult(await debugMadlanAction(city.trim(), neighborhood.trim() || null)); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
 
   return (
     <div className="flex flex-col gap-5">
@@ -31,10 +33,15 @@ export function DebugView({ env }: { env: EnvStatus }) {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <EnvTile label="APIFY_TOKEN" ok={env.apifyToken} />
+        <EnvTile label="MADLAN_ACTOR_ID" ok={madlan.madlanActorId} />
         <EnvTile label="GOVMAP_ACTOR_ID" ok={env.govmapActorId} />
         <EnvTile label="CRON_SECRET" ok={env.cronSecret} />
-        <div className="bg-card border-line rounded-2xl border p-3">
-          <p className="text-muted text-[11px] font-bold">Actor ID</p>
+        <div className="bg-card border-line rounded-2xl border p-3 sm:col-span-2">
+          <p className="text-muted text-[11px] font-bold">Madlan Actor</p>
+          <p className="text-ink truncate text-sm font-black">{madlan.actorId}</p>
+        </div>
+        <div className="bg-card border-line rounded-2xl border p-3 sm:col-span-2">
+          <p className="text-muted text-[11px] font-bold">GovMap Actor</p>
           <p className="text-ink truncate text-sm font-black">{env.actorId}</p>
         </div>
       </div>
@@ -43,7 +50,8 @@ export function DebugView({ env }: { env: EnvStatus }) {
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-sm"><span className="text-muted text-[11px] font-bold">עיר</span><input value={city} onChange={(e) => setCity(e.target.value)} className="border-line rounded-xl border px-3 py-2" /></label>
           <label className="flex flex-col gap-1 text-sm"><span className="text-muted text-[11px] font-bold">שכונה (אופציונלי)</span><input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className="border-line rounded-xl border px-3 py-2" /></label>
-          <Button onClick={runDebug} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>{pending ? "מריץ…" : "הרץ בדיקה"}</Button>
+          <Button onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>{pending ? "מריץ…" : "בדוק מדלן"}</Button>
+          <Button variant="secondary" onClick={runDebug} disabled={pending} leadingIcon={<Icon name="Landmark" size={15} />}>בדוק GovMap</Button>
         </div>
         {!env.apifyToken && <p className="text-warning mt-2 text-[11px]">APIFY_TOKEN לא מוגדר — הבדיקה תחזיר NO_TOKEN. הגדר טוקן כדי לבחון את מבנה הדאטה האמיתי.</p>}
       </div>
@@ -55,10 +63,11 @@ export function DebugView({ env }: { env: EnvStatus }) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
             <Info label="סטטוס" value={result.runStatus} />
             <Info label="פריטים" value={String(result.datasetItems)} />
-            <Info label="Actor" value={result.actorId} />
+            <Info label={"dealsFound" in result ? "עסקאות שנמצאו" : "Actor"} value={"dealsFound" in result ? String(result.dealsFound) : result.actorId} />
             <Info label="שגיאה" value={result.error ?? "—"} />
           </div>
-          {result.missingFields.length > 0 && <p className="text-warning text-[11px]">שדות חסרים בדגימה: {result.missingFields.join(", ")}</p>}
+          {"missingFields" in result && result.missingFields.length > 0 && <p className="text-warning text-[11px]">שדות חסרים בדגימה: {result.missingFields.join(", ")}</p>}
+          {"recordKeys" in result && result.recordKeys.length > 0 && <p className="text-muted text-[11px]">מפתחות רשומת עיר: {result.recordKeys.join(", ")}</p>}
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <Block title="קלט שנשלח" obj={result.inputSent} />
             <Block title="דגימה גולמית" obj={result.rawSample} />

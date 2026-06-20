@@ -1762,6 +1762,11 @@ type PropertyTransactionsRow = {
   gush: string | null;
   helka: string | null;
   tat_helka: string | null;
+  madlan_transaction_id: string | null;
+  building_year: number | null;
+  mediation: string | null;
+  source_url: string | null;
+  duplicate_of: string | null;
   raw_payload: Json;
   scraped_at: string | null;
   created_at: string;
