@@ -403,6 +403,7 @@ async function linkResearchGraph(orgId: string, reportId: string, input: Researc
   const supabase = await createClient();
   const rels: DB["entity_relationships"]["Insert"][] = [];
   if (input.propertyListingId) rels.push({ org_id: orgId, source_entity_type: "research_report", source_entity_id: reportId, target_entity_type: "property", target_entity_id: input.propertyListingId, relationship_type: "values", strength_score: 70, status: "active" } as never);
+  if (input.externalListingId) rels.push({ org_id: orgId, source_entity_type: "research_report", source_entity_id: reportId, target_entity_type: "external_listing", target_entity_id: input.externalListingId, relationship_type: "values", strength_score: 70, status: "active" } as never);
   if (input.acquisitionProfileId) rels.push({ org_id: orgId, source_entity_type: "research_report", source_entity_id: reportId, target_entity_type: "acquisition", target_entity_id: input.acquisitionProfileId, relationship_type: "values", strength_score: 70, status: "active" } as never);
   if (rels.length) await supabase.from("entity_relationships").insert(rels as never);
 }

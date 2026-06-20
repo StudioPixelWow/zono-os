@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
-import { createAcquisitionTaskFromAlertAction, setRadarAlertStatusAction } from "@/lib/transactions/actions";
+import { createAcquisitionTaskFromAlertAction, recomputePipelineResearchAction, setRadarAlertStatusAction } from "@/lib/transactions/actions";
 import type { RadarBoard } from "@/lib/transactions/service";
 
 const TYPE_LABEL: Record<string, string> = { below_market: "מתחת לשוק", above_market: "מעל השוק", fair_market: "מחיר הוגן", price_drop: "ירידת מחיר", hot_street: "רחוב חם", needs_review: "לבדיקה", not_enough_data: "אין מספיק דאטה" };
@@ -17,8 +17,10 @@ export function RadarView({ board }: { board: RadarBoard }) {
   const router = useRouter();
   const { alerts, counts } = board;
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<unknown>) => { setError(null); start(async () => { try { await fn(); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
+  const scanPipeline = () => { setError(null); setNote(null); start(async () => { try { const r = await recomputePipelineResearchAction(); setNote(r.needsConfig ? "אין עדיין עסקאות במאגר — סנכרן עסקאות תחילה." : `נותחו ${r.properties + r.externalListings} נכסים · ${r.alerts} התראות חדשות.`); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
 
   return (
     <div className="flex flex-col gap-5">
@@ -28,8 +30,12 @@ export function RadarView({ board }: { board: RadarBoard }) {
           <h1 className="text-ink mt-1 text-2xl font-black">רדאר הזדמנויות</h1>
           <p className="text-muted mt-1 text-sm">הזדמנויות מתחת/מעל לשוק ורחובות חמים — מבוססות אך ורק על עסקאות אמת. ללא נתונים מומצאים.</p>
         </div>
-        <Link href="/transactions" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />עסקאות</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={scanPipeline} disabled={pending} className="bg-brand-strong inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold text-white disabled:opacity-50"><Icon name="Sparkles" size={15} />{pending ? "מנתח…" : "נתח צנרת מול עסקאות"}</button>
+          <Link href="/transactions" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />עסקאות</Link>
+        </div>
       </div>
+      {note && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{note}</p>}
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -43,7 +49,7 @@ export function RadarView({ board }: { board: RadarBoard }) {
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
           <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Flame" size={26} /></span>
           <p className="text-ink text-lg font-extrabold">אין עדיין התראות הזדמנות</p>
-          <p className="text-muted max-w-sm text-sm">הרץ ״מחקר עסקאות״ על נכס/מודעה — אם המחיר מתחת/מעל לשוק לפי עסקאות אמת, תיווצר כאן התראה.</p>
+          <p className="text-muted max-w-sm text-sm">לחץ ״נתח צנרת מול עסקאות״ למעלה — המערכת תנתח את כל הנכסים והמודעות מול עסקאות אמת ותפתח כאן התראות מתחת/מעל לשוק.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
