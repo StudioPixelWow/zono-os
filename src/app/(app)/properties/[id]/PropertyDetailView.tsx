@@ -35,6 +35,7 @@ import type {
   RelationshipRow,
 } from "@/lib/activity/types";
 import { PropertySellersPanel } from "./PropertySellersPanel";
+import { TransactionResearchPanel } from "@/components/transactions/TransactionResearchPanel";
 import type { PropertySellerView } from "@/lib/sellers/service360";
 import type { SellerReadiness } from "@/lib/sellers/propertySellers";
 
@@ -298,6 +299,16 @@ export function PropertyDetailView({
                 {p.description}
               </p>
             )}
+            <div className="mt-5 sm:col-span-2">
+              <TransactionResearchPanel
+                propertyListingId={p.id}
+                cityName={p.city}
+                address={propertyAddressLine(p)}
+                rooms={p.rooms}
+                area={p.size_sqm}
+                askingPrice={p.price}
+              />
+            </div>
           </div>
         )}
 

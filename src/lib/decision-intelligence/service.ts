@@ -72,6 +72,7 @@ interface OrgData {
   distributionOpps: { id: string; signalType: string; title: string; description: string | null; impact: number; propertyId: string | null; communityId: string | null }[];
   socialLeads: { id: string; name: string; intent: string | null; quality: number; status: string; priority: number; action: string | null }[];
   deals: { id: string; stage: string; health: number; risk: number; velocity: number; probability: number; value: number; commission: number; nextAction: string | null; locality: string | null; daysToClose: number | null }[];
+  txnAlerts: { id: string; type: string; score: number; confidence: number; city: string | null; neighborhood: string | null; address: string | null; gap: number | null; value: number | null; reason: string | null; action: string | null }[];
   graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
   forecastSignals: { id: string; forecastId: string | null; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
@@ -85,7 +86,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp, socLeads, dealP] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp, socLeads, dealP, txnAlerts] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -117,6 +118,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("distribution_opportunity_signals").select("id,signal_type,title,description,impact_score,property_id,community_id").eq("status", "new").order("impact_score", { ascending: false }).limit(15),
     supabase.from("social_leads").select("id,person_name,intent,lead_quality_score,status,priority_score,recommended_next_action").in("status", ["new", "reviewed", "qualified"]).order("priority_score", { ascending: false }).limit(15),
     supabase.from("deal_profiles").select("id,deal_stage,deal_health,deal_risk,deal_velocity,deal_probability,deal_value,commission_value,next_best_action,locality,expected_close_date").eq("status", "active").order("deal_value", { ascending: false }).limit(60),
+    supabase.from("transaction_opportunity_radar_alerts").select("id,opportunity_type,opportunity_score,confidence_score,city_name,neighborhood_name,address,gap_from_market_percent,estimated_market_value,reason_hebrew,recommended_action_hebrew").in("status", ["new", "reviewing"]).order("opportunity_score", { ascending: false }).limit(20),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -186,6 +188,7 @@ async function gatherOrgData(): Promise<OrgData> {
     distributionOpps: (distOpp.data ?? []).map((o) => ({ id: o.id, signalType: o.signal_type, title: o.title, description: o.description, impact: o.impact_score, propertyId: o.property_id, communityId: o.community_id })),
     socialLeads: (socLeads.data ?? []).map((s) => ({ id: s.id, name: s.person_name ?? "ליד חברתי", intent: s.intent, quality: s.lead_quality_score, status: s.status, priority: s.priority_score, action: s.recommended_next_action })),
     deals: (dealP.data ?? []).map((d) => ({ id: d.id, stage: d.deal_stage, health: d.deal_health, risk: d.deal_risk, velocity: d.deal_velocity, probability: d.deal_probability, value: d.deal_value, commission: d.commission_value, nextAction: d.next_best_action, locality: d.locality, daysToClose: d.expected_close_date ? Math.round((new Date(d.expected_close_date).getTime() - Date.now()) / EXT_DAY) : null })),
+    txnAlerts: (txnAlerts.data ?? []).map((a) => ({ id: a.id, type: a.opportunity_type, score: a.opportunity_score, confidence: a.confidence_score, city: a.city_name, neighborhood: a.neighborhood_name, address: a.address, gap: a.gap_from_market_percent, value: a.estimated_market_value, reason: a.reason_hebrew, action: a.recommended_action_hebrew })),
     graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     forecastSignals: (fcSig.data ?? []).map((s) => ({ id: s.id, forecastId: s.forecast_id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
@@ -504,6 +507,27 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
     }
   }
 
+  // Transactions Intelligence — overpriced / low-confidence pricing risk.
+  for (const a of d.txnAlerts) {
+    if (a.type === "above_market") {
+      rows.push({
+        org_id: orgId, entity_type: "transaction_radar", entity_id: a.id,
+        attention_score: 72, urgency_score: 64, impact_score: clamp(a.score), confidence_score: clamp(a.confidence),
+        revenue_impact_score: clamp(a.score), relationship_impact_score: 30, churn_impact_score: 0,
+        title: `מחיר מעל השוק · ${a.address ?? a.city ?? "נכס"}`, reason: a.reason ?? `מחיר מבוקש מעל השוק לפי עסקאות אמת${a.gap != null ? ` (${a.gap}%)` : ""}`,
+        recommended_action: a.action ?? "שיחת תמחור מגובה עסקאות אמת עם המוכר", expected_outcome: "תמחור ריאלי והגדלת סיכויי סגירה", status: "open",
+      });
+    } else if (a.type === "needs_review") {
+      rows.push({
+        org_id: orgId, entity_type: "transaction_radar", entity_id: a.id,
+        attention_score: 60, urgency_score: 54, impact_score: clamp(a.score), confidence_score: clamp(a.confidence),
+        revenue_impact_score: clamp(a.score), relationship_impact_score: 25, churn_impact_score: 0,
+        title: `הזדמנות לבדיקה · ${a.address ?? a.city ?? "נכס"}`, reason: a.reason ?? "פוטנציאל קיים אך מעט עסקאות תומכות",
+        recommended_action: a.action ?? "סקור ידנית והרחב כיסוי עסקאות", expected_outcome: "אימות הזדמנות מבוססת עסקאות", status: "open",
+      });
+    }
+  }
+
   // Deal Execution — deals at risk / stalled / ready to close / lost-deal risk.
   for (const dl of d.deals) {
     const title = `עסקה · ${DEAL_STAGE_LABEL_MAP[dl.stage] ?? dl.stage}${dl.locality ? ` · ${dl.locality}` : ""}`;
@@ -721,6 +745,19 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       status: "open",
     });
   }
+  // Transactions Intelligence — below-market + hot-street opportunities.
+  for (const a of d.txnAlerts) {
+    if (a.type !== "below_market" && a.type !== "hot_street") continue;
+    rows.push({
+      org_id: orgId, entity_type: "transaction_radar", entity_id: a.id,
+      opportunity_score: clamp(a.score), impact_score: clamp(a.score), confidence_score: clamp(a.confidence),
+      title: `${a.type === "below_market" ? "מתחת לשוק · " : "רחוב חם · "}${a.address ?? a.city ?? "נכס"}${a.city && a.address ? ` · ${a.city}` : ""}`,
+      description: a.reason ?? (a.type === "below_market" ? `מחיר מתחת לשוק${a.gap != null ? ` (${a.gap}%)` : ""} לפי עסקאות אמת.` : "רחוב במגמת עלייה לפי עסקאות אמת."),
+      recommended_action: a.action ?? "פתח מחקר עסקאות ובחן גיוס/הצגה לקונה",
+      status: "open",
+    });
+  }
+
   // Deal Execution — ready-to-close + high-value deals worth pushing.
   const READY = new Set(["agreement_draft", "legal_review", "signed"]);
   for (const dl of d.deals) {

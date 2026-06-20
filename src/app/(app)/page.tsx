@@ -11,6 +11,7 @@ import { RevenueDashboardSection } from "@/components/dashboard/sections/Revenue
 import { MarketingDashboardSection } from "@/components/dashboard/sections/MarketingDashboardSection";
 import { DistributionDashboardSection } from "@/components/dashboard/sections/DistributionDashboardSection";
 import { SocialLeadsDashboardSection } from "@/components/dashboard/sections/SocialLeadsDashboardSection";
+import { TransactionsDashboardSection } from "@/components/dashboard/sections/TransactionsDashboardSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
   MatchingSectionContainer, OpportunitiesSectionContainer,
@@ -32,6 +33,7 @@ export default function Home() {
       <Suspense fallback={null}><MatchingSectionContainer /></Suspense>
       <Suspense fallback={null}><DealsSectionContainer /></Suspense>
       <Suspense fallback={null}><MarketSectionContainer /></Suspense>
+      <Suspense fallback={null}><TransactionsDashboardSection /></Suspense>
       <Suspense fallback={null}>
         <ForecastDashboardSection />
       </Suspense>

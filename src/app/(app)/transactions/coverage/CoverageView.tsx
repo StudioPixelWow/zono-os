@@ -1,0 +1,87 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { Icon } from "@/components/dashboard/Icon";
+import { Button } from "@/components/ui/Button";
+import { ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction } from "@/lib/transactions/actions";
+import type { CoverageBoard } from "@/lib/transactions/service";
+
+const STATUS_LABEL: Record<string, string> = { pending: "ממתין", ready: "מוכן", syncing: "מסנכרן", completed: "הושלם", failed: "נכשל", disabled: "מושבת", pending_neighborhoods: "ממתין לשכונות" };
+const STATUS_TONE: Record<string, string> = { completed: "text-success", failed: "text-danger", syncing: "text-warning", pending: "text-muted", pending_neighborhoods: "text-warning", disabled: "text-muted" };
+const fmt = (s: string | null) => (s ? new Date(s).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
+
+export function CoverageView({ board }: { board: CoverageBoard }) {
+  const router = useRouter();
+  const { targets, logs, needsConfig, agentCity, apifyConfigured } = board;
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [busy, setBusy] = useState<string | null>(null);
+  const run = (fn: () => Promise<unknown>, id?: string) => { setError(null); setBusy(id ?? "all"); start(async () => { try { await fn(); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } finally { setBusy(null); } }); };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
+        <div>
+          <p className="text-brand text-xs font-bold">Transactions · Coverage</p>
+          <h1 className="text-ink mt-1 text-2xl font-black">כיסוי דאטה{agentCity ? ` · ${agentCity}` : ""}</h1>
+          <p className="text-muted mt-1 text-sm">כל שורה היא אזור משיכה אחד (עיר/שכונה). בערים גדולות מומלץ כיסוי לפי שכונות — סנכרון עיר אחד אינו מבטיח כיסוי מלא.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/transactions" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />עסקאות</Link>
+          <Button size="sm" variant="secondary" onClick={() => run(retryFailedSyncsAction)} disabled={pending} leadingIcon={<Icon name="Clock" size={15} />}>נסה כשלונות שוב</Button>
+          <Button onClick={() => run(ensureCoverageTargetsAction)} disabled={pending} leadingIcon={<Icon name="Plus" size={15} />}>צור אזורי כיסוי</Button>
+        </div>
+      </div>
+      {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — סנכרון יחזיר נתוני הדגמה בסביבת פיתוח בלבד.</p>}
+      {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
+
+      {needsConfig ? (
+        <div className="bg-card border-line rounded-[20px] border p-6 text-center">
+          <p className="text-ink font-extrabold">לא הוגדר אזור עבודה</p>
+          <p className="text-muted mt-1 text-sm">הגדר עיר/שכונות בפרופיל ואז ״צור אזורי כיסוי״.</p>
+        </div>
+      ) : (
+        <div className="bg-card border-line overflow-hidden rounded-[20px] border">
+          <table className="w-full text-right text-sm">
+            <thead className="bg-surface text-muted text-[11px] font-bold">
+              <tr>{["עיר", "שכונה", "סטטוס", "עסקאות שנמצאו", "סנכרון אחרון", "שגיאה", ""].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {targets.length === 0 ? (
+                <tr><td colSpan={7} className="text-muted px-3 py-6 text-center">אין אזורי כיסוי — לחץ ״צור אזורי כיסוי״.</td></tr>
+              ) : targets.map((t) => (
+                <tr key={t.id} className="border-line border-t">
+                  <td className="text-ink px-3 py-2 font-semibold">{t.city_name}</td>
+                  <td className="text-muted px-3 py-2">{t.neighborhood_name ?? "— (כלל-עירוני)"}</td>
+                  <td className={cn("px-3 py-2 font-bold", STATUS_TONE[t.coverage_status] ?? "text-muted")}>{STATUS_LABEL[t.coverage_status] ?? t.coverage_status}</td>
+                  <td className="text-ink px-3 py-2 font-bold">{t.transactions_found}</td>
+                  <td className="text-muted px-3 py-2 whitespace-nowrap">{fmt(t.last_sync_at)}</td>
+                  <td className="text-danger px-3 py-2 text-[11px]">{t.last_error ?? "—"}</td>
+                  <td className="px-3 py-2"><button className="text-brand-strong text-[11px] font-bold disabled:opacity-50" disabled={pending} onClick={() => run(() => syncCoverageTargetAction(t.id), t.id)}>{busy === t.id ? "מסנכרן…" : "סנכרן"}</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div>
+        <p className="text-ink mb-2 text-sm font-extrabold">יומני סנכרון אחרונים</p>
+        <div className="bg-card border-line rounded-[20px] border p-4">
+          {logs.length === 0 ? <p className="text-muted text-sm">אין יומנים עדיין.</p> : (
+            <ul className="flex flex-col gap-1.5 text-sm">{logs.map((l) => (
+              <li key={l.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-ink min-w-0 flex-1 truncate font-semibold">{l.city_name}{l.neighborhood_name ? ` · ${l.neighborhood_name}` : ""} <span className={cn("text-[10px]", STATUS_TONE[l.status] ?? "text-muted")}>· {STATUS_LABEL[l.status] ?? l.status}</span></span>
+                <span className="text-muted text-[11px]">יובאו {l.records_imported} · כפילויות {l.duplicates_skipped} · {fmt(l.created_at)}</span>
+                {l.error_message && <span className="text-danger text-[10px]">{l.error_message}</span>}
+              </li>
+            ))}</ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

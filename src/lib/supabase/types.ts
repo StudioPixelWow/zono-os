@@ -143,6 +143,9 @@ type UsersRow = {
   last_seen_at: string | null;
   operating_city: string | null;
   operating_neighborhoods: string[];
+  primary_city: string | null;
+  primary_neighborhoods: Json;
+  market_coverage_enabled: boolean;
   property_types: PropertyType[];
   deal_types: ListingKind[];
   min_price: number | null;
@@ -1711,6 +1714,182 @@ type CommunityLeadAttributionRow = {
   created_at: string;
 };
 
+type GeoCoverageTargetsRow = {
+  id: string;
+  organization_id: string;
+  city_name: string;
+  city_name_he: string | null;
+  locality_id: string | null;
+  neighborhood_name: string | null;
+  neighborhood_name_he: string | null;
+  lat: number | null;
+  lng: number | null;
+  radius_meters: number;
+  priority: number;
+  coverage_status: string;
+  last_sync_at: string | null;
+  transactions_found: number;
+  last_error: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyTransactionsRow = {
+  id: string;
+  organization_id: string;
+  source_platform: string;
+  source_actor: string;
+  source_run_id: string | null;
+  asset_id: string | null;
+  external_id: string | null;
+  deal_date: string | null;
+  deal_amount: number | null;
+  price_per_sqm: number | null;
+  address: string | null;
+  normalized_address: string | null;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  street: string | null;
+  street_number: string | null;
+  lat: number | null;
+  lng: number | null;
+  rooms: number | null;
+  floor: string | null;
+  area: number | null;
+  property_type: string | null;
+  is_first_hand: boolean | null;
+  gush: string | null;
+  helka: string | null;
+  tat_helka: string | null;
+  raw_payload: Json;
+  scraped_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type TransactionSyncLogsRow = {
+  id: string;
+  organization_id: string;
+  agent_id: string | null;
+  user_id: string | null;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  coverage_target_id: string | null;
+  actor_name: string | null;
+  actor_id: string | null;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  records_imported: number;
+  duplicates_skipped: number;
+  failed_records: number;
+  total_records: number;
+  error_message: string | null;
+  raw_response: Json;
+  created_at: string;
+};
+
+type PropertyResearchReportsRow = {
+  id: string;
+  organization_id: string;
+  property_listing_id: string | null;
+  external_listing_id: string | null;
+  acquisition_profile_id: string | null;
+  created_by: string | null;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  address: string | null;
+  normalized_address: string | null;
+  rooms: number | null;
+  area: number | null;
+  asking_price: number | null;
+  asking_price_per_sqm: number | null;
+  estimated_market_value: number | null;
+  avg_price_per_sqm: number | null;
+  median_price_per_sqm: number | null;
+  min_price_per_sqm: number | null;
+  max_price_per_sqm: number | null;
+  gap_from_market_percent: number | null;
+  comparable_transactions: Json;
+  confidence_score: number;
+  confidence_level: string;
+  explanation_hebrew: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type BuildingIntelligenceRow = {
+  id: string;
+  organization_id: string;
+  city_name: string | null;
+  street: string | null;
+  house_number: string | null;
+  normalized_address: string | null;
+  transactions_count: number;
+  last_transaction_date: string | null;
+  avg_price_per_sqm: number | null;
+  median_price_per_sqm: number | null;
+  min_price_per_sqm: number | null;
+  max_price_per_sqm: number | null;
+  avg_deal_amount: number | null;
+  price_trend_12m: number | null;
+  price_trend_24m: number | null;
+  confidence_score: number;
+  summary_hebrew: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type StreetIntelligenceRow = {
+  id: string;
+  organization_id: string;
+  city_name: string | null;
+  street: string | null;
+  transactions_count: number;
+  avg_price_per_sqm: number | null;
+  median_price_per_sqm: number | null;
+  min_price_per_sqm: number | null;
+  max_price_per_sqm: number | null;
+  avg_deal_amount: number | null;
+  price_trend_6m: number | null;
+  price_trend_12m: number | null;
+  price_trend_24m: number | null;
+  liquidity_score: number | null;
+  street_score: number | null;
+  confidence_score: number;
+  summary_hebrew: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type TransactionOpportunityRadarAlertsRow = {
+  id: string;
+  organization_id: string;
+  property_listing_id: string | null;
+  external_listing_id: string | null;
+  acquisition_profile_id: string | null;
+  research_report_id: string | null;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  address: string | null;
+  asking_price: number | null;
+  estimated_market_value: number | null;
+  gap_from_market_percent: number | null;
+  opportunity_score: number;
+  confidence_score: number;
+  opportunity_type: string;
+  reason_hebrew: string | null;
+  recommended_action_hebrew: string | null;
+  status: string;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 type DealProfilesRow = {
   id: string;
   organization_id: string;
@@ -3089,6 +3268,34 @@ export interface Database {
       deal_tasks: TableShape<
         DealTasksRow,
         "organization_id" | "deal_profile_id" | "title"
+      >;
+      geo_coverage_targets: TableShape<
+        GeoCoverageTargetsRow,
+        "organization_id" | "city_name"
+      >;
+      property_transactions: TableShape<
+        PropertyTransactionsRow,
+        "organization_id"
+      >;
+      transaction_sync_logs: TableShape<
+        TransactionSyncLogsRow,
+        "organization_id"
+      >;
+      property_research_reports: TableShape<
+        PropertyResearchReportsRow,
+        "organization_id"
+      >;
+      building_intelligence: TableShape<
+        BuildingIntelligenceRow,
+        "organization_id"
+      >;
+      street_intelligence: TableShape<
+        StreetIntelligenceRow,
+        "organization_id"
+      >;
+      transaction_opportunity_radar_alerts: TableShape<
+        TransactionOpportunityRadarAlertsRow,
+        "organization_id"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,
