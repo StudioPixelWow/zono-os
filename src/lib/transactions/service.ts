@@ -17,7 +17,7 @@ import {
   buildTransactionsInput, canonicalCityName, govmapActorId, isTransactionsApifyConfigured, normalizeTransaction, runTransactionsActor,
   type NormalizedTransaction,
 } from "./providers";
-import { isMadlanConfigured, MADLAN_ACTOR_NAME, MADLAN_SOURCE, madlanActorId, normalizeMadlanTransaction, runMadlanDeals, type NormalizedMadlanTransaction } from "./madlan";
+import { fetchMadlanDealsFromDataset, getMadlanRun, isMadlanConfigured, MADLAN_ACTOR_NAME, MADLAN_SOURCE, madlanActorId, normalizeMadlanTransaction, runMadlanDeals, startMadlanRun, type NormalizedMadlanTransaction } from "./madlan";
 
 type DB = Database["public"]["Tables"];
 const isDev = process.env.NODE_ENV !== "production";
@@ -203,6 +203,56 @@ export async function syncMadlanForAgent(): Promise<MadlanSyncResult> {
   } catch (e) {
     error = e instanceof Error ? e.message : "madlan sync failed";
   }
+  await supabase.from("transaction_sync_logs").insert({
+    organization_id: orgId, agent_id: userId, user_id: userId, city_name: market.city,
+    actor_name: MADLAN_ACTOR_NAME, actor_id: madlanActorId(), status: error ? "failed" : "completed",
+    started_at: startedAt, finished_at: new Date().toISOString(), records_imported: imported,
+    duplicates_skipped: duplicates, total_records: deals, error_message: error, raw_response: { source: MADLAN_SOURCE, crossSource },
+  } as never);
+  if (!error) await recomputeDerivedIntelligence();
+  return { imported, duplicates, crossSource, deals, needsConfig: false, error };
+}
+
+// ── Non-blocking Madlan sync (client-polled live progress) ───────────────────
+export interface MadlanStart { runId: string | null; datasetId: string | null; city: string | null; needsConfig: boolean; error: string | null }
+
+/** Kick off the Madlan run (returns immediately) so the UI can poll progress. */
+export async function startMadlanSync(): Promise<MadlanStart> {
+  const { profile, organization } = await ctx();
+  const market = resolveAgentMarket(profile, organization);
+  if (!market.city) return { runId: null, datasetId: null, city: null, needsConfig: true, error: null };
+  if (!isMadlanConfigured()) return { runId: null, datasetId: null, city: market.city, needsConfig: false, error: "APIFY_TOKEN missing — Madlan sync unavailable" };
+  const madlanCity = market.rawCity ?? market.city;
+  try {
+    const r = await startMadlanRun(madlanCity, null);
+    return { runId: r.runId, datasetId: r.datasetId, city: madlanCity, needsConfig: false, error: null };
+  } catch (e) {
+    return { runId: null, datasetId: null, city: madlanCity, needsConfig: false, error: e instanceof Error ? e.message : "failed to start" };
+  }
+}
+
+/** Poll the run's status (the actor builds one city record, so `found` flips to ≥1 near the end). */
+export async function pollMadlanSync(runId: string): Promise<{ status: string; found: number; datasetId: string | null }> {
+  await ctx();
+  const r = await getMadlanRun(runId);
+  return { status: r.status, found: r.found, datasetId: r.datasetId };
+}
+
+/** After the run SUCCEEDED: fetch + persist the deals, log, recompute. */
+export async function finishMadlanSync(datasetId: string): Promise<MadlanSyncResult> {
+  const { orgId, userId, profile, organization } = await ctx();
+  const market = resolveAgentMarket(profile, organization);
+  const startedAt = new Date().toISOString();
+  let deals = 0, imported = 0, duplicates = 0, crossSource = 0, error: string | null = null;
+  try {
+    const raws = await fetchMadlanDealsFromDataset(datasetId);
+    deals = raws.length;
+    const res = await persistMadlanTransactions(orgId, raws.map(normalizeMadlanTransaction));
+    imported = res.imported; duplicates = res.duplicates; crossSource = res.crossSource;
+  } catch (e) {
+    error = e instanceof Error ? e.message : "madlan finish failed";
+  }
+  const supabase = await createClient();
   await supabase.from("transaction_sync_logs").insert({
     organization_id: orgId, agent_id: userId, user_id: userId, city_name: market.city,
     actor_name: MADLAN_ACTOR_NAME, actor_id: madlanActorId(), status: error ? "failed" : "completed",

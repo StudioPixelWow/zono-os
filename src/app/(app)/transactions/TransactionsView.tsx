@@ -6,7 +6,7 @@ import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
-import { syncTransactionsAction, syncMadlanAction, ensureCoverageTargetsAction } from "@/lib/transactions/actions";
+import { syncTransactionsAction, ensureCoverageTargetsAction, startMadlanSyncAction, pollMadlanSyncAction, finishMadlanSyncAction } from "@/lib/transactions/actions";
 import type { TransactionsBoard } from "@/lib/transactions/service";
 
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—");
@@ -17,7 +17,39 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [progress, setProgress] = useState<{ status: string; elapsed: number } | null>(null);
   const run = (fn: () => Promise<unknown>) => { setError(null); setMsg(null); start(async () => { try { const r = await fn() as { mock?: boolean; needsConfig?: boolean; imported?: number; deals?: number; crossSource?: number; error?: string }; if (r?.needsConfig) setError("הגדר עיר/שכונות פעילות בפרופיל כדי לסנכרן עסקאות."); else if (r?.error) setError(r.error); else setMsg(`סונכרנו ${r?.imported ?? 0} עסקאות${r?.deals ? ` (מתוך ${r.deals})` : ""}${r?.crossSource ? ` · ${r.crossSource} חופפות ל-GovMap` : ""}${r?.mock ? " · נתוני הדגמה" : ""}.`); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
+
+  // Non-blocking Madlan sync with live progress (avoids serverless timeout).
+  const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const runMadlan = () => {
+    setError(null); setMsg(null); setProgress(null);
+    start(async () => {
+      try {
+        const s = await startMadlanSyncAction();
+        if (s.needsConfig) { setError("הגדר עיר/שכונות פעילות בפרופיל כדי לסנכרן עסקאות."); return; }
+        if (s.error || !s.runId) { setError(s.error ?? "כשל בהתחלת ריצת מדלן"); return; }
+        const t0 = Date.now();
+        let datasetId = s.datasetId; let status = "RUNNING";
+        const TERMINAL = ["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"];
+        setProgress({ status: "RUNNING", elapsed: 0 });
+        for (let i = 0; i < 160; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const p = await pollMadlanSyncAction(s.runId);
+          status = p.status; if (p.datasetId) datasetId = p.datasetId;
+          setProgress({ status, elapsed: Math.round((Date.now() - t0) / 1000) });
+          if (TERMINAL.includes(status)) break;
+        }
+        if (status !== "SUCCEEDED") { setProgress(null); setError(`ריצת מדלן הסתיימה בסטטוס ${status}`); return; }
+        setProgress({ status: "SAVING", elapsed: Math.round((Date.now() - t0) / 1000) });
+        const r = await finishMadlanSyncAction(datasetId!);
+        setProgress(null);
+        if (r.error) setError(r.error);
+        else setMsg(`סונכרנו ${r.imported} עסקאות${r.deals ? ` (מתוך ${r.deals})` : ""}${r.crossSource ? ` · ${r.crossSource} חופפות ל-GovMap` : ""}.`);
+        router.refresh();
+      } catch (e) { setProgress(null); setError(e instanceof Error ? e.message : "שגיאה"); }
+    });
+  };
 
   const { transactions, total, stats, needsConfig, agentCity, apifyConfigured } = board;
 
@@ -32,10 +64,16 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
         <div className="flex flex-wrap gap-2">
           <Link href="/transactions/coverage" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="Map" size={15} />כיסוי דאטה</Link>
           <Button size="sm" variant="secondary" onClick={() => run(syncTransactionsAction)} disabled={pending} leadingIcon={<Icon name="Landmark" size={15} />}>GovMap (גיבוי)</Button>
-          <Button onClick={() => run(syncMadlanAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מסנכרן…" : "סנכרן ממדלן"}</Button>
+          <Button onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מסנכרן…" : "סנכרן ממדלן"}</Button>
         </div>
       </div>
       {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — בסביבת פיתוח מוצגים נתוני הדגמה מסומנים. בפרודקשן יש להגדיר טוקן לקבלת עסקאות אמת.</p>}
+      {progress && (
+        <p className="bg-brand-soft text-brand-strong flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold">
+          <Icon name="Clock" size={15} />
+          {progress.status === "SAVING" ? `מעבד ושומר עסקאות… (${fmtElapsed(progress.elapsed)})` : `מריץ את מדלן ומושך את עסקאות העיר… (${fmtElapsed(progress.elapsed)}) — זה לוקח כדקה-שתיים, אפשר להמשיך לעבוד`}
+        </p>
+      )}
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
 

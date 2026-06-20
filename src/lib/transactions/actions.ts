@@ -95,3 +95,22 @@ export async function debugMadlanAction(city: string, neighbourhood: string | nu
   const { debugMadlanDeals } = await import("./madlan");
   return debugMadlanDeals(city, neighbourhood);
 }
+
+// ── Non-blocking Madlan sync (live progress) ─────────────────────────────────
+export async function startMadlanSyncAction() {
+  const { startMadlanSync } = await import("./service");
+  return startMadlanSync();
+}
+
+export async function pollMadlanSyncAction(runId: string) {
+  const { pollMadlanSync } = await import("./service");
+  return pollMadlanSync(runId);
+}
+
+export async function finishMadlanSyncAction(datasetId: string) {
+  const { finishMadlanSync } = await import("./service");
+  const r = await finishMadlanSync(datasetId);
+  revalidatePath("/transactions");
+  revalidatePath("/transactions/streets");
+  return r;
+}

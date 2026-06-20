@@ -87,12 +87,31 @@ export function buildMadlanInput(city: string, neighbourhood: string | null): Re
   return input;
 }
 
-/** Pull the per-city record(s) and flatten their `deals` arrays. */
+/** Pull the per-city record(s) and flatten their `deals` arrays (blocking). */
 export async function runMadlanDeals(city: string, neighbourhood: string | null): Promise<Raw[]> {
   const run = await client().actor(madlanActorId()).call(buildMadlanInput(city, neighbourhood), { timeout: 300, waitSecs: 290, memory: 1024 });
   if (run.status !== "SUCCEEDED") throw new Error(`actor ${madlanActorId()} status=${run.status}`);
   if (!run.defaultDatasetId) return [];
   const { items } = await client().dataset(run.defaultDatasetId).listItems({ limit: 10 });
+  return extractDeals(items as Raw[]);
+}
+
+// ── Non-blocking run (client-polled live progress) ───────────────────────────
+export async function startMadlanRun(city: string, neighbourhood: string | null): Promise<{ runId: string; datasetId: string | null; status: string }> {
+  const run = await client().actor(madlanActorId()).start(buildMadlanInput(city, neighbourhood), { memory: 1024 });
+  return { runId: run.id, datasetId: run.defaultDatasetId ?? null, status: run.status };
+}
+
+export async function getMadlanRun(runId: string): Promise<{ status: string; datasetId: string | null; found: number; startedAt: string | null }> {
+  const run = await client().run(runId).get();
+  let found = 0;
+  const datasetId = run?.defaultDatasetId ?? null;
+  if (datasetId) { try { const ds = await client().dataset(datasetId).get(); found = (ds as { itemCount?: number } | undefined)?.itemCount ?? 0; } catch { /* ignore */ } }
+  return { status: run?.status ?? "UNKNOWN", datasetId, found, startedAt: run?.startedAt ? new Date(run.startedAt).toISOString() : null };
+}
+
+export async function fetchMadlanDealsFromDataset(datasetId: string): Promise<Raw[]> {
+  const { items } = await client().dataset(datasetId).listItems({ limit: 10 });
   return extractDeals(items as Raw[]);
 }
 
