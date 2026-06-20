@@ -5,7 +5,7 @@
  * Deterministic. No LLM. Never invents transaction data in production.
  */
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import {
@@ -459,24 +459,46 @@ export async function startGovmapSync(dealDateRange = "all"): Promise<GovmapStar
 }
 
 /**
+ * National neighborhoods reference (israel_neighborhoods) for a city — shared
+ * across ALL orgs. Read the cache; if empty, fetch from OpenStreetMap once and
+ * write it to the national table (service role) so every future agent in this
+ * city gets it instantly. Deterministic; never invents data.
+ */
+async function getNationalNeighborhoods(city: string, rawCity: string): Promise<DB["israel_neighborhoods"]["Row"][]> {
+  const supabase = await createClient();
+  const { data: cached } = await supabase.from("israel_neighborhoods").select("*").eq("city_name", city).limit(500);
+  if (cached && cached.length) return cached as DB["israel_neighborhoods"]["Row"][];
+  // Lazy-fill from OSM into the shared national table.
+  try {
+    const { discoverNeighborhoodsOSM, dedupeDiscovered } = await import("./geo");
+    const osm = dedupeDiscovered(await discoverNeighborhoodsOSM(rawCity));
+    if (!osm.length) return [];
+    const rows = osm.map((n) => ({ city_name: city, name_he: n.name, normalized_name: n.name, place_type: n.place, lat: n.lat, lng: n.lng, source: "osm", confidence_score: 60, is_verified: false }));
+    const admin = createServiceRoleClient();
+    await admin.from("israel_neighborhoods").upsert(rows as never, { onConflict: "city_name,normalized_name" });
+    const { data: fresh } = await supabase.from("israel_neighborhoods").select("*").eq("city_name", city).limit(500);
+    return (fresh ?? []) as DB["israel_neighborhoods"]["Row"][];
+  } catch { return []; }
+}
+
+/**
  * Auto-discover the agent's city neighborhoods (Geo Layer) and seed them as
  * coverage targets so the GovMap scan covers the whole city. Deterministic:
- * OpenStreetMap (official) + neighborhoods already seen in stored transactions.
+ * national israel_neighborhoods reference (OSM-backed) + neighborhoods already
+ * seen in stored transactions.
  */
 export async function autoDiscoverNeighborhoods(): Promise<{ discovered: number; created: number; sources: string[]; city: string | null; needsConfig: boolean }> {
   const { orgId, profile, organization } = await ctx();
   const market = resolveAgentMarket(profile, organization);
   if (!market.city) return { discovered: 0, created: 0, sources: [], city: null, needsConfig: true };
   const supabase = await createClient();
-  const { discoverNeighborhoodsOSM, dedupeDiscovered } = await import("./geo");
 
   const found = new Map<string, { lat: number | null; lng: number | null; source: string }>();
-  // 1) OpenStreetMap (official, deterministic).
-  try {
-    for (const n of dedupeDiscovered(await discoverNeighborhoodsOSM(market.rawCity ?? market.city))) {
-      if (!found.has(n.name)) found.set(n.name, { lat: n.lat, lng: n.lng, source: "osm" });
-    }
-  } catch { /* best-effort */ }
+  // 1) National reference (israel_neighborhoods) — shared across all orgs.
+  //    Lazily populated from OSM the first time any agent works in this city.
+  for (const n of await getNationalNeighborhoods(market.city, market.rawCity ?? market.city)) {
+    if (!found.has(n.normalized_name)) found.set(n.normalized_name, { lat: n.lat, lng: n.lng, source: n.source });
+  }
   // 2) Neighborhoods already present in stored transactions (guaranteed source).
   const { data: txnHoods } = await supabase.from("property_transactions").select("neighborhood_name").eq("organization_id", orgId).eq("city_name", market.city).not("neighborhood_name", "is", null).limit(4000);
   for (const t of txnHoods ?? []) {

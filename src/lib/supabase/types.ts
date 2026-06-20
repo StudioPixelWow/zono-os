@@ -2942,6 +2942,24 @@ type IsraelLocalitiesRow = {
   updated_at: string;
 };
 
+type IsraelNeighborhoodsRow = {
+  id: string;
+  locality_code: string | null;
+  city_name: string;
+  name_he: string;
+  normalized_name: string;
+  place_type: string | null;
+  lat: number | null;
+  lng: number | null;
+  source: string;
+  confidence_score: number;
+  is_verified: boolean;
+  aliases: Json;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 type OrgOperatingLocalitiesRow = {
   id: string;
   organization_id: string;
@@ -3412,6 +3430,7 @@ export interface Database {
       documents: TableShape<DocumentsRow, "org_id" | "title">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
       israel_localities: TableShape<IsraelLocalitiesRow, "locality_code" | "name_he">;
+      israel_neighborhoods: TableShape<IsraelNeighborhoodsRow, "city_name" | "name_he" | "normalized_name">;
       organization_operating_localities: TableShape<
         OrgOperatingLocalitiesRow,
         "organization_id" | "locality_id"
