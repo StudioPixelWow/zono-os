@@ -15,6 +15,7 @@ const HREFS: Record<string, string> = {
   buyers: "/buyers",
   sellers: "/sellers",
   matches: "/matches",
+  forecast: "/forecast",
   acquisition: "/acquisition",
   competitors: "/competitors",
   routing: "/routing",

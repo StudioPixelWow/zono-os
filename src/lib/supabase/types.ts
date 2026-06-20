@@ -476,6 +476,76 @@ type ExternalListingsRow = {
   updated_at: string;
 };
 
+type DealForecastsRow = {
+  id: string;
+  organization_id: string;
+  match_id: string | null;
+  deal_id: string | null;
+  buyer_id: string | null;
+  seller_id: string | null;
+  property_id: string | null;
+  assigned_agent_id: string | null;
+  locality: string | null;
+  property_type: string | null;
+  forecast_stage: string;
+  closing_probability: number;
+  expected_close_date: string | null;
+  expected_days_to_close: number | null;
+  estimated_deal_value: number | null;
+  estimated_commission: number | null;
+  probability_weighted_revenue: number;
+  deal_health_score: number;
+  deal_risk_score: number;
+  urgency_score: number;
+  momentum_score: number;
+  confidence_score: number;
+  primary_blocker: string | null;
+  next_best_action: string | null;
+  forecast_reason: string | null;
+  ai_summary: string | null;
+  ai_risk_summary: string | null;
+  ai_recommendation_summary: string | null;
+  status: string;
+  metadata: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PipelineSnapshotsRow = {
+  id: string;
+  organization_id: string;
+  date: string;
+  total_pipeline_value: number;
+  probability_weighted_revenue: number;
+  expected_commission: number;
+  active_forecasts_count: number;
+  high_probability_count: number;
+  at_risk_count: number;
+  expected_closes_7d: number;
+  expected_closes_30d: number;
+  by_agent: Json;
+  by_locality: Json;
+  by_property_type: Json;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type DealForecastSignalsRow = {
+  id: string;
+  organization_id: string;
+  forecast_id: string | null;
+  signal_type: string;
+  title: string;
+  description: string | null;
+  impact_score: number;
+  confidence_score: number;
+  metadata: Json;
+  status: string;
+  created_at: string;
+};
+
 type GraphEntitiesRow = {
   id: string;
   organization_id: string;
@@ -2117,6 +2187,18 @@ export interface Database {
       >;
       competitor_signals: TableShape<
         CompetitorSignalsRow,
+        "organization_id" | "signal_type" | "title"
+      >;
+      deal_forecasts: TableShape<
+        DealForecastsRow,
+        "organization_id"
+      >;
+      pipeline_snapshots: TableShape<
+        PipelineSnapshotsRow,
+        "organization_id"
+      >;
+      deal_forecast_signals: TableShape<
+        DealForecastSignalsRow,
         "organization_id" | "signal_type" | "title"
       >;
       graph_entities: TableShape<

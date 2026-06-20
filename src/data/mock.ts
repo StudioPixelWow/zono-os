@@ -34,6 +34,7 @@ export const navItems: NavItem[] = [
   { id: "buyers", label: "קונים", icon: "Users" },
   { id: "sellers", label: "מוכרים", icon: "UserCheck" },
   { id: "matches", label: "התאמות", icon: "Sparkles" },
+  { id: "forecast", label: "תחזית עסקאות", icon: "TrendingUp" },
   { id: "acquisition", label: "גיוס נכסים", icon: "Building" },
   { id: "competitors", label: "מתחרים", icon: "BarChart3" },
   { id: "routing", label: "ניתוב לידים", icon: "Route" },

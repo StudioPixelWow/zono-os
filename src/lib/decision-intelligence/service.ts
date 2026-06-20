@@ -64,6 +64,7 @@ interface OrgData {
   competitorSignals: { competitorId: string | null; signalType: string; title: string; description: string | null; severity: string }[];
   routingOverloaded: { userId: string; name: string; agentScore: number; workloadScore: number }[];
   graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
+  forecastSignals: { id: string; forecastId: string | null; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
   externalDuplicates: Set<string>;
   externalCityAvgSqm: Map<string, number>;
@@ -75,7 +76,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -98,6 +99,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("competitor_signals").select("competitor_profile_id,signal_type,title,description,severity").in("signal_type", ["dominant_broker", "competitor_losing_inventory", "vulnerable_broker", "competitor_growing"]).order("confidence_score", { ascending: false }).limit(30),
     supabase.from("agent_intelligence_profiles").select("user_id,agent_score,workload_score,users(full_name)").gte("agent_score", 70).lt("workload_score", 35).limit(15),
     supabase.from("graph_signals").select("id,signal_type,title,description,impact_score").eq("status", "new").in("signal_type", ["hidden_buyer_cluster", "hidden_seller_cluster", "deal_acceleration", "locality_opportunity", "referral_opportunity"]).order("impact_score", { ascending: false }).limit(20),
+    supabase.from("deal_forecast_signals").select("id,forecast_id,signal_type,title,description,impact_score").eq("status", "new").order("impact_score", { ascending: false }).limit(30),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -159,6 +161,7 @@ async function gatherOrgData(): Promise<OrgData> {
     competitorSignals: (compSig.data ?? []).map((s) => ({ competitorId: s.competitor_profile_id, signalType: s.signal_type, title: s.title, description: s.description, severity: s.severity })),
     routingOverloaded: (agtOver.data ?? []).map((a) => ({ userId: a.user_id, name: (a as unknown as { users?: { full_name: string } | null }).users?.full_name ?? "סוכן", agentScore: a.agent_score, workloadScore: a.workload_score })),
     graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
+    forecastSignals: (fcSig.data ?? []).map((s) => ({ id: s.id, forecastId: s.forecast_id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
     externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
     externalDuplicates: new Set((extD.data ?? []).map((dd) => dd.listing_id)),
@@ -357,6 +360,19 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
     });
   }
 
+  // Deal Forecast — at-risk revenue + intervention needed.
+  for (const f of d.forecastSignals) {
+    if (!(f.signalType === "deal_at_risk" || f.signalType === "intervention_needed" || f.signalType === "revenue_gap")) continue;
+    const urgent = f.signalType === "intervention_needed";
+    rows.push({
+      org_id: orgId, entity_type: "forecast", entity_id: f.forecastId ?? f.id,
+      attention_score: urgent ? 80 : 70, urgency_score: urgent ? 82 : 68, impact_score: clamp(f.impact), confidence_score: 72,
+      revenue_impact_score: clamp(f.impact), relationship_impact_score: 50, churn_impact_score: 40,
+      title: f.title, reason: f.description ?? "", recommended_action: urgent ? "התערב מיידית לשמירת ההכנסה" : "טפל בעסקה בסיכון",
+      expected_outcome: "שמירת הכנסה ומימוש הצנרת", status: "open",
+    });
+  }
+
   // Lead routing — overloaded top performers (route new leads elsewhere).
   for (const a of d.routingOverloaded) {
     rows.push({
@@ -400,6 +416,17 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       rows.push({ org_id: orgId, entity_type: "match", entity_id: mm.id, opportunity_score: clamp(mm.opportunity_score), impact_score: mm.revenue_score, confidence_score: mm.closing_probability, title: `${d.buyerMap.get(mm.buyer_id) ?? "קונה"} ← ${d.propMap.get(mm.property_id)?.title ?? "נכס"} · עסקה קרובה לסגירה`, description: `הסתברות סגירה ${mm.closing_probability}%.`, recommended_action: "לקדם לסגירה — ביקור/הצעה", status: "open" });
     }
   }
+  // Deal Forecast — likely-to-close + strong pipeline as revenue opportunities.
+  for (const f of d.forecastSignals) {
+    if (!(f.signalType === "deal_likely_to_close" || f.signalType === "agent_pipeline_strong" || f.signalType === "locality_pipeline_hot")) continue;
+    rows.push({
+      org_id: orgId, entity_type: "forecast", entity_id: f.forecastId ?? f.id,
+      opportunity_score: clamp(f.impact), impact_score: clamp(f.impact), confidence_score: 75,
+      title: f.title, description: f.description ?? "הזדמנות הכנסה מהתחזית",
+      recommended_action: "קדם את העסקה לסגירה החודש", status: "open",
+    });
+  }
+
   // Knowledge Graph — hidden opportunities from the relationship graph.
   for (const g of d.graphSignals) {
     rows.push({

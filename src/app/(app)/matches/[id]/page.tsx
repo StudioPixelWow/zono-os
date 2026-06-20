@@ -4,6 +4,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { getMatchCommandCenter } from "@/lib/matching-intelligence/service";
 import { MatchCommandCenter } from "./MatchCommandCenter";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
+import { MatchForecastSection } from "@/components/forecast/MatchForecastSection";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function MatchDetailPage({
         <Icon name="ChevronRight" size={16} />
         חזרה להתאמות
       </Link>
+      <MatchForecastSection matchId={id} />
       <MatchCommandCenter data={data} />
       <CommunicationSection entityType="match" entityId={id} />
     </div>
