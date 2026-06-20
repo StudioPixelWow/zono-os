@@ -20,8 +20,23 @@ import {
   normalizeNeighborhoodName, normalizeStreetName, normalizeTransactionAddress, normalizeTransactionArea, normalizeTransactionRooms,
 } from "./engine";
 
-export const DEFAULT_GOVMAP_ACTOR = "swerve/madlan-deals";
+export const DEFAULT_GOVMAP_ACTOR = "swerve/nadlan-deals";
 export const MAX_TXNS_PER_PULL = 1000;
+
+/** Canonical city names accepted by the actor's `cities` enum (exact spellings). */
+const ACTOR_CITY_ENUM = [
+  "ירושלים", "תל אביב -יפו", "חיפה", "ראשון לציון", "פתח תקווה", "אשדוד", "באר שבע", "נתניה", "חולון", "בני ברק",
+  "רמת גן", "בת ים", "רחובות", "אשקלון", "בית שמש", "כפר סבא", "הרצלייה", "מודיעין-מכבים-רעות", "חדרה", "נצרת",
+  "לוד", "רעננה", "רמלה", "מודיעין עילית", "רהט", "גבעתיים", "קריית אתא", "נהרייה", "הוד השרון", "אום אל-פחם",
+  "קריית גת", "אילת", "עכו", "ביתר עילית", "נס ציונה", "כרמיאל", "רמת השרון", "עפולה", "אלעד", "טבריה", "ראש העין",
+  "נצרת עילית", "טייבה", "קריית מוצקין", "שפרעם", "קריית ים", "קריית ביאליק", "מעלה אדומים", "יבנה", "פרדס חנה-כרכור",
+  "קריית אונו", "אור יהודה", "דימונה", "צפת", "טמרה", "נתיבות", "יהוד-מונוסון", "סח'נין", "באקה אל-גרביה", "גדרה",
+  "אופקים", "מגדל העמק", "מבשרת ציון", "ערד", "גבעת שמואל", "טירה", "ערערה", "נשר", "קריית שמונה", "עראבה", "שדרות",
+  "זכרון יעקב", "קריית מלאכי", "גן יבנה", "מעלות-תרשיחא", "מגאר", "כפר קאסם", "יקנעם עילית", "קלנסווה", "כפר יונה", "כפר כנא",
+];
+/** Normalize for fuzzy matching: drop punctuation/dashes/quotes, unify קרית→קריית, collapse spaces. */
+const cityKey = (s: string) => s.replace(/["'׳״]/g, "").replace(/[-]/g, " ").replace(/\s+/g, " ").trim().replace(/^קרית /, "קריית ");
+const ACTOR_CITY_BY_KEY = new Map(ACTOR_CITY_ENUM.map((c) => [cityKey(c), c]));
 
 export interface NormalizedTransaction {
   sourcePlatform: string;
@@ -63,9 +78,10 @@ export interface TransactionDebugResult {
 
 export interface TransactionsActorInput {
   cities?: string[];
+  customCities?: string[];
   neighborhoods?: string[];
-  dealDateRange?: string; // "all" | "12" | ...
-  dealType?: string;
+  dealDateRange?: string; // "all" | "3" | "6" | "12" | "60"
+  maxItems?: number;
 }
 
 type Raw = Record<string, unknown>;
@@ -105,9 +121,16 @@ export function transactionsEnvStatus(): { apifyToken: boolean; govmapActorId: b
   };
 }
 
-/** Build actor input for a coverage target. */
-export function buildTransactionsInput(city: string, neighborhood: string | null, dealDateRange: string): TransactionsActorInput {
-  const input: TransactionsActorInput = { cities: [city], dealDateRange, dealType: "all" };
+/**
+ * Build actor input for a coverage target. Routes the city to the actor's
+ * `cities` enum when it matches a known spelling (fuzzy: קרית→קריית, dashes),
+ * otherwise to free-text `customCities`. Always caps `maxItems` for cost.
+ */
+export function buildTransactionsInput(city: string, neighborhood: string | null, dealDateRange: string, maxItems = MAX_TXNS_PER_PULL): TransactionsActorInput {
+  const canonical = ACTOR_CITY_BY_KEY.get(cityKey(city));
+  const input: TransactionsActorInput = canonical ? { cities: [canonical] } : { customCities: [city] };
+  input.dealDateRange = dealDateRange === "12" || dealDateRange === "3" || dealDateRange === "6" || dealDateRange === "60" ? dealDateRange : "all";
+  input.maxItems = maxItems;
   if (neighborhood) input.neighborhoods = [neighborhood];
   return input;
 }
@@ -171,7 +194,7 @@ const EXPECTED_FIELDS = ["dealDate", "dealAmount", "pricePerSqm", "address", "ci
 /** Non-destructive diagnostic run — never throws, never persists. */
 export async function debugTransactionsActor(city: string, neighborhood: string | null, limit = 5): Promise<TransactionDebugResult> {
   const actorId = govmapActorId();
-  const inputSent = buildTransactionsInput(city, neighborhood, "all") as Record<string, unknown>;
+  const inputSent = buildTransactionsInput(city, neighborhood, "12", limit) as Record<string, unknown>;
   if (!process.env.APIFY_TOKEN) {
     return { actorId, runStatus: "NO_TOKEN", datasetItems: 0, inputSent, rawSample: null, normalizedSample: null, missingFields: EXPECTED_FIELDS, error: "APIFY_TOKEN missing" };
   }
