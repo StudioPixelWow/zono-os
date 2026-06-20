@@ -6,6 +6,7 @@
  */
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { latestResearchForProperties } from "@/lib/transactions/service";
 import { logActivityEvent } from "@/lib/activity/service";
 import { getEntityTimeline } from "@/lib/activity/service";
 import {
@@ -139,7 +140,32 @@ export async function generateSellerMissions(orgId: string, sellerId: string): P
 
 export async function generateSellerRisks(orgId: string, sellerId: string, ctx: SellerScoreContext): Promise<SellerRiskRow[]> {
   await sellerRiskRepository.clearOpen(sellerId);
-  const rows = detectSellerRisks(ctx).map((r) => ({
+  const candidates = detectSellerRisks(ctx);
+  // Consume Transactions Intelligence: if the seller's own listing(s) are priced
+  // materially above the sold-price market value, that's a deal-blocking
+  // expectation gap. Deterministic, from real transactions — never invented.
+  try {
+    const supabase = await createClient();
+    const { data: props } = await supabase.from("properties").select("id").eq("seller_id", sellerId).limit(50);
+    const propertyIds = (props ?? []).map((p) => p.id);
+    if (propertyIds.length) {
+      const research = await latestResearchForProperties(orgId, propertyIds);
+      const overpriced = [...research.values()]
+        .filter((r) => r.gap_from_market_percent != null && r.gap_from_market_percent >= 15 && (Array.isArray(r.comparable_transactions) ? (r.comparable_transactions as unknown[]).length : 0) > 0)
+        .sort((a, b) => (b.gap_from_market_percent ?? 0) - (a.gap_from_market_percent ?? 0));
+      if (overpriced.length) {
+        const top = Math.round(overpriced[0].gap_from_market_percent ?? 0);
+        candidates.push({
+          riskType: "price_expectation_gap",
+          severity: top >= 25 ? "high" : "medium",
+          title: "פער ציפיות מחיר מול עסקאות",
+          description: `${overpriced.length} נכס/ים של המוכר מתומחרים עד ${top}% מעל שווי עסקאות אמת באזור. סיכון לקיפאון ולמשא ומתן ממושך.`,
+          recommendedAction: "לקיים שיחת ציפיות מחיר מבוססת עסקאות עם המוכר",
+        });
+      }
+    }
+  } catch { /* additive — never block seller risk generation */ }
+  const rows = candidates.map((r) => ({
     org_id: orgId,
     seller_id: sellerId,
     risk_type: r.riskType,

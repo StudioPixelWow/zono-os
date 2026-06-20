@@ -12,6 +12,7 @@ import type { Database } from "@/lib/supabase/types";
 import { activityEventRepository } from "@/lib/activity/repository";
 import { createRelationship, logActivityEvent, logScoreChanged } from "@/lib/activity/service";
 import { EVENT_TYPES, RELATIONSHIP_TYPES } from "@/lib/activity/types";
+import { latestResearchForProperties } from "@/lib/transactions/service";
 import { computeAllScores, type ScoreContext, type ScoreSet } from "./scoring";
 import {
   defaultCalendar,
@@ -313,6 +314,34 @@ export async function generatePropertyRisks(
       recommendedAction: "לחזק את הקשר עם המוכר — שיחת עדכון / דוח",
     });
   }
+  // Consume Transactions Intelligence: asking price materially above the sold-price
+  // market value is a listing risk (stale inventory, buyer drop-off). Deterministic,
+  // sourced from real government transactions — never invented.
+  try {
+    const researchMap = await latestResearchForProperties(property.org_id, [property.id]);
+    const research = researchMap.get(property.id);
+    const comps = Array.isArray(research?.comparable_transactions) ? (research!.comparable_transactions as unknown[]).length : 0;
+    if (research && research.gap_from_market_percent != null && comps > 0) {
+      const gap = research.gap_from_market_percent;
+      if (gap >= 12) {
+        candidates.push({
+          riskType: "overpriced_vs_transactions",
+          severity: gap >= 20 ? "high" : "medium",
+          title: "מחיר מעל שווי עסקאות",
+          description: `המחיר המבוקש כ-${Math.round(gap)}% מעל שווי השוק לפי ${comps} עסקאות אמת. סיכון לקיפאון המודעה ולנשירת קונים.`,
+          recommendedAction: "לבחון התאמת מחיר עם המוכר לפי עסקאות אזוריות",
+        });
+      } else if ((research.confidence_score ?? 0) < 40) {
+        candidates.push({
+          riskType: "weak_market_evidence",
+          severity: "low",
+          title: "ראיות שוק חלשות",
+          description: `מעט עסקאות להשוואה באזור (ביטחון ${research.confidence_score ?? 0}%). קושי לאמוד שווי מדויק.`,
+          recommendedAction: "להרחיב כיסוי עסקאות באזור",
+        });
+      }
+    }
+  } catch { /* research is additive — never block risk generation */ }
   const rows = candidates.map((r) => ({
     org_id: property.org_id,
     property_id: property.id,

@@ -7,11 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import { buildForecastAi, computeForecast, deriveForecastAction, type ForecastInput } from "./engine";
+import { latestResearchForProperties } from "@/lib/transactions/service";
 
 type DB = Database["public"]["Tables"];
 export type DealForecastRow = DB["deal_forecasts"]["Row"];
 export type PipelineSnapshotRow = DB["pipeline_snapshots"]["Row"];
 const cityNorm = (s: string | null | undefined) => (s ? s.trim().toLowerCase() : "");
+const clamp100 = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+const compCount = (j: unknown) => (Array.isArray(j) ? (j as unknown[]).length : 0);
 
 async function requireProfile() {
   const { profile } = await getSessionContext();
@@ -56,6 +59,16 @@ export async function generateForecastsForOrg(): Promise<ForecastRecomputeSummar
   const signalRows: DB["deal_forecast_signals"]["Insert"][] = [];
   const summary: ForecastRecomputeSummary = { forecasts: 0, likely: 0, atRisk: 0 };
 
+  // Consume Transactions Intelligence: a managed property priced above sold-price
+  // market value lowers deal health (appraisal/buyer resistance). Deterministic.
+  const research = await latestResearchForProperties(orgId, [...new Set(matches.map((m) => m.property_id).filter((x): x is string => !!x))]);
+  const priceGapPenalty = (propertyId: string | null): number => {
+    const rr = propertyId ? research.get(propertyId) : undefined;
+    const gap = rr?.gap_from_market_percent;
+    if (rr && gap != null && gap >= 12 && compCount(rr.comparable_transactions) > 0) return Math.min(12, Math.round((gap - 10) * 0.5));
+    return 0;
+  };
+
   for (const m of matches) {
     const prop = propMap.get(m.property_id);
     const b = bi.get(m.buyer_id);
@@ -71,7 +84,7 @@ export async function generateForecastsForOrg(): Promise<ForecastRecomputeSummar
       buyerReadiness: b?.buyer_readiness_score ?? 50, buyerFinancing: b?.buyer_financing_score ?? 50,
       buyerEngagement: b?.buyer_engagement_score ?? 50, buyerConversion: b?.buyer_conversion_probability ?? 50,
       sellerTrust: s?.seller_trust_score ?? 55, sellerChurnRisk: s?.seller_churn_risk_score ?? 30,
-      propertyHealth: p?.health_score ?? 55, propertyMomentum: p?.momentum_score ?? 50, propertyExposure: p?.exposure_score ?? 50,
+      propertyHealth: Math.max(20, (p?.health_score ?? 55) - priceGapPenalty(m.property_id)), propertyMomentum: p?.momentum_score ?? 50, propertyExposure: p?.exposure_score ?? 50,
       daysSinceContact: comm?.days_since_contact ?? null, followupRisk: comm?.followup_risk_score ?? 30,
       openCommitments: comm?.open_commitments_count ?? 0, negativeSentiment: (comm?.sentiment_score ?? 55) < 40,
       relationshipStrength: m.compatibility_score, dealAcceleration: accelBuyers.has(m.buyer_id),
@@ -106,11 +119,15 @@ export async function generateForecastsForOrg(): Promise<ForecastRecomputeSummar
   summary.forecasts = rows.length;
 
   // Per-forecast signals — re-read to get ids.
-  const { data: saved } = await supabase.from("deal_forecasts").select("id,closing_probability,deal_risk_score,probability_weighted_revenue,estimated_commission,locality,next_best_action,primary_blocker").eq("organization_id", orgId).eq("status", "active");
+  const { data: saved } = await supabase.from("deal_forecasts").select("id,property_id,closing_probability,deal_risk_score,probability_weighted_revenue,estimated_commission,locality,next_best_action,primary_blocker").eq("organization_id", orgId).eq("status", "active");
   await supabase.from("deal_forecast_signals").delete().eq("organization_id", orgId).eq("status", "new");
   for (const fc of saved ?? []) {
     if (fc.closing_probability >= 70) signalRows.push({ organization_id: orgId, forecast_id: fc.id, signal_type: "deal_likely_to_close", title: `עסקה צפויה להיסגר${fc.locality ? ` · ${fc.locality}` : ""}`, description: `סיכוי ${fc.closing_probability}% · הכנסה צפויה`, impact_score: 80, confidence_score: 75 });
     if (fc.deal_risk_score >= 65) signalRows.push({ organization_id: orgId, forecast_id: fc.id, signal_type: fc.deal_risk_score >= 75 ? "intervention_needed" : "deal_at_risk", title: `עסקה בסיכון${fc.locality ? ` · ${fc.locality}` : ""}`, description: fc.primary_blocker ? `חסם: ${fc.primary_blocker}` : `סיכון ${fc.deal_risk_score}`, impact_score: 75, confidence_score: 72, metadata: { action: fc.next_best_action } as never });
+    const rr = fc.property_id ? research.get(fc.property_id) : undefined;
+    if (rr && rr.gap_from_market_percent != null && rr.gap_from_market_percent >= 12 && compCount(rr.comparable_transactions) > 0) {
+      signalRows.push({ organization_id: orgId, forecast_id: fc.id, signal_type: "pricing_gap_vs_transactions", title: `פער מחיר מול עסקאות${fc.locality ? ` · ${fc.locality}` : ""}`, description: `מחיר ~${Math.round(rr.gap_from_market_percent)}% מעל שווי עסקאות אמת — סיכון להתנגדות קונה/שמאי`, impact_score: 62, confidence_score: clamp100(rr.confidence_score ?? 50), metadata: { gap: rr.gap_from_market_percent, comparables: compCount(rr.comparable_transactions) } as never });
+    }
   }
   if (signalRows.length) await supabase.from("deal_forecast_signals").insert(signalRows as never);
 

@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import { buildRevenueAi, gapLevel, growthRate, revenueGapScore, simulateGrowth, type GrowthScenario } from "./engine";
+import { latestResearchForProperties } from "@/lib/transactions/service";
 
 type DB = Database["public"]["Tables"];
 const DAY = 86_400_000;
@@ -106,6 +107,27 @@ export async function recomputeRevenueIntelligence(): Promise<RevenueRecomputeSu
     leakRows.push({ organization_id: orgId, source: "broken_commitment", entity_type: c.entity_type, entity_id: c.entity_id, owner_user_id: null,
       title: "התחייבות שנשברה", reason: c.commitment_text, lost_revenue: 5000, recoverable: true, severity: "medium", status: "open" });
   }
+  // Consume Transactions Intelligence: managed listings priced materially above
+  // sold-price market value are stale-inventory revenue leakage (slow sale → lost
+  // commission velocity). Deterministic, from real transactions; high confidence only.
+  try {
+    const { data: managed } = await supabase.from("properties").select("id,price,status,city")
+      .eq("org_id", orgId).in("status", ["published", "active", "ready", "under_offer"]).limit(300);
+    const ids = (managed ?? []).map((p) => p.id);
+    if (ids.length) {
+      const research = await latestResearchForProperties(orgId, ids);
+      for (const p of managed ?? []) {
+        const rr = research.get(p.id);
+        const comps = Array.isArray(rr?.comparable_transactions) ? (rr!.comparable_transactions as unknown[]).length : 0;
+        if (rr && rr.gap_from_market_percent != null && rr.gap_from_market_percent >= 18 && (rr.confidence_score ?? 0) >= 50 && comps > 0) {
+          const lost = Math.round((p.price ?? 0) * 0.02 * 0.15); // ~15% commission velocity at risk
+          leakRows.push({ organization_id: orgId, source: "overpriced_inventory", entity_type: "property", entity_id: p.id, owner_user_id: null,
+            title: `נכס מעל שווי עסקאות${p.city ? ` · ${p.city}` : ""}`, reason: `מחיר ~${Math.round(rr.gap_from_market_percent)}% מעל שווי עסקאות אמת (${comps} עסקאות) — סיכון לקיפאון מלאי ואובדן קצב עמלות`,
+            lost_revenue: lost, recoverable: true, severity: rr.gap_from_market_percent >= 28 ? "high" : "medium", status: "open" });
+        }
+      }
+    }
+  } catch { /* additive — never block the leakage ledger */ }
   await supabase.from("revenue_leakage_events").delete().eq("organization_id", orgId);
   for (let i = 0; i < leakRows.length; i += 500) { const c = leakRows.slice(i, i + 500); if (c.length) await supabase.from("revenue_leakage_events").insert(c as never); }
 
