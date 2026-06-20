@@ -21,6 +21,14 @@ const VERIFY_LABEL: Record<string, { t: string; c: string }> = {
 };
 const TYPE_LABEL: Record<string, string> = { agency: "משרד תיווך", office: "משרד", independent_broker: "מתווך עצמאי", team: "צוות", unknown: "לא ידוע" };
 
+function LogoCell({ url, name }: { url: string | null; name: string }) {
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt="" className="border-line h-8 w-8 rounded-lg border object-contain" loading="lazy" />;
+  }
+  return <span className="bg-brand-soft text-brand-strong grid h-8 w-8 place-items-center rounded-lg text-xs font-black">{name.trim().charAt(0) || "?"}</span>;
+}
+
 // Parse pasted CSV (header row required). Columns: display_name,phone,email,website,agency_name,city,service_areas,license_number,aliases
 function parseCsv(text: string) {
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
@@ -48,6 +56,13 @@ export function BrokerIntelligenceView({ board, cityFilter }: { board: BrokerBoa
   const [csv, setCsv] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [nf, setNf] = useState({ displayName: "", phone: "", agencyName: "", city: "" });
+  const [logoOnly, setLogoOnly] = useState(false);
+  const [competitorOnly, setCompetitorOnly] = useState(false);
+
+  const isCompetitor = (p: BrokerBoard["profiles"][number]) => (p.metadata as { is_competitor?: boolean } | null)?.is_competitor === true;
+  const withLogo = board.profiles.filter((p) => p.logo_url).length;
+  const competitors = board.profiles.filter(isCompetitor).length;
+  const filteredProfiles = board.profiles.filter((p) => (!logoOnly || !!p.logo_url) && (!competitorOnly || isCompetitor(p)));
 
   const run = (fn: () => Promise<BrokerActionState>) => { setError(null); setMsg(null); start(async () => { const r = await fn(); if (r?.error) setError(r.error); else { if (r?.message) setMsg(r.message); router.refresh(); } }); };
   const search = () => { router.push(`/broker-intelligence${city.trim() ? `?city=${encodeURIComponent(city.trim())}` : ""}`); };
@@ -70,10 +85,12 @@ export function BrokerIntelligenceView({ board, cityFilter }: { board: BrokerBoa
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="פרופילי מתווכים" value={board.counts.profiles} />
         <Stat label="ממתינים לבדיקה" value={board.counts.pending} />
         <Stat label="מאומתים" value={board.counts.verified} />
+        <Stat label="עם לוגו" value={withLogo} />
+        <Stat label="מתחרים מסומנים" value={competitors} />
       </div>
 
       {showNew && (
@@ -116,18 +133,23 @@ export function BrokerIntelligenceView({ board, cityFilter }: { board: BrokerBoa
 
       {/* Broker profiles table */}
       <div className="bg-card border-line rounded-[20px] border p-4">
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-ink text-sm font-extrabold">פרופילי מתווכים</p>
-          <div className="flex gap-2"><input className={field} placeholder="חפש לפי עיר" value={city} onChange={(e) => setCity(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} /><Button size="sm" variant="ghost" onClick={search}>חפש</Button></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setLogoOnly((v) => !v)} className={cn("rounded-lg px-2.5 py-1 text-[11px] font-bold transition", logoOnly ? "bg-brand text-white" : "bg-surface text-muted")}>לוגו זוהה</button>
+            <button onClick={() => setCompetitorOnly((v) => !v)} className={cn("rounded-lg px-2.5 py-1 text-[11px] font-bold transition", competitorOnly ? "bg-danger text-white" : "bg-surface text-muted")}>מתחרים</button>
+            <input className={field} placeholder="חפש לפי עיר" value={city} onChange={(e) => setCity(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} /><Button size="sm" variant="ghost" onClick={search}>חפש</Button>
+          </div>
         </div>
-        {board.profiles.length === 0 ? <p className="text-muted text-sm">אין עדיין פרופילי מתווכים. ייבא CSV או צור פרופיל.</p> : (
+        {filteredProfiles.length === 0 ? <p className="text-muted text-sm">{board.profiles.length === 0 ? "אין עדיין פרופילי מתווכים. ייבא CSV או צור פרופיל." : "אין תוצאות לסינון הנוכחי."}</p> : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-start text-sm">
-              <thead className="text-muted border-line border-b text-xs"><tr>{["שם", "סוג", "עיר", "טלפון", "מודעות", "אימות", ""].map((h) => <th key={h} className="px-3 py-2 text-start font-bold">{h}</th>)}</tr></thead>
+            <table className="w-full min-w-[680px] text-start text-sm">
+              <thead className="text-muted border-line border-b text-xs"><tr>{["לוגו", "שם", "סוג", "עיר", "טלפון", "מודעות", "אימות", ""].map((h) => <th key={h} className="px-3 py-2 text-start font-bold">{h}</th>)}</tr></thead>
               <tbody>
-                {board.profiles.map((p) => (
+                {filteredProfiles.map((p) => (
                   <tr key={p.id} className="border-line hover:bg-surface border-b last:border-0">
-                    <td className="px-3 py-2"><Link href={`/broker-intelligence/${p.id}`} className="text-ink hover:text-brand font-bold">{p.display_name}</Link></td>
+                    <td className="px-3 py-2"><LogoCell url={p.logo_url} name={p.display_name} /></td>
+                    <td className="px-3 py-2"><Link href={`/broker-intelligence/${p.id}`} className="text-ink hover:text-brand font-bold">{p.display_name}{isCompetitor(p) && <span className="bg-danger-soft text-danger ms-1.5 rounded px-1 py-0.5 text-[9px] font-bold">מתחרה</span>}</Link></td>
                     <td className="text-muted px-3 py-2">{TYPE_LABEL[p.broker_type] ?? p.broker_type}</td>
                     <td className="text-muted px-3 py-2">{p.primary_city ?? "—"}</td>
                     <td className="text-muted px-3 py-2">{p.phone ?? "—"}</td>

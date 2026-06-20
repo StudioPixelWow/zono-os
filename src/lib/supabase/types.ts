@@ -113,6 +113,7 @@ type OrganizationsRow = {
   default_property_types: PropertyType[];
   default_deal_types: ListingKind[];
   onboarding_completed: boolean;
+  broker_enrichment_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -827,6 +828,36 @@ type BrokerProfilesRow = {
   created_by_user_id: string | null;
   verified_by_user_id: string | null;
   verified_at: string | null;
+  logo_url: string | null;
+  logo_storage_path: string | null;
+  logo_hash: string | null;
+  logo_embedding: Json | null;
+  brand_colors: Json;
+  region: string | null;
+  emails: Json;
+  google_business_url: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  linkedin_url: string | null;
+  enrichment_status: string;
+  last_enriched_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BrokerLogoAssetsRow = {
+  id: string;
+  org_id: string;
+  broker_id: string;
+  original_url: string | null;
+  storage_path: string | null;
+  image_hash: string | null;
+  embedding: Json | null;
+  width: number | null;
+  height: number | null;
+  source: string | null;
+  confidence_score: number;
+  status: string;
   created_at: string;
   updated_at: string;
 };
@@ -902,6 +933,8 @@ type PropertyBrokerMatchesRow = {
   confidence_score: number;
   status: string;
   evidence: Json;
+  is_exclusive_probability: number;
+  is_competitor_listing: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -2245,6 +2278,10 @@ export interface Database {
       >;
       property_broker_matches: TableShape<
         PropertyBrokerMatchesRow,
+        "org_id" | "broker_id"
+      >;
+      broker_logo_assets: TableShape<
+        BrokerLogoAssetsRow,
         "org_id" | "broker_id"
       >;
       inventory_acquisition_profiles: TableShape<

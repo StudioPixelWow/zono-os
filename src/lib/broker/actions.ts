@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import {
   createBrokerFromListing, createBrokerProfile, decideListingMatch, decideMatchReview, importBrokersFromCsv,
-  mergeBrokers, runBrokerDetectionForOrg, verifyBroker, type BrokerInput,
+  markBrokerCompetitor, mergeBrokers, runBrokerDetectionForOrg, verifyBroker, type BrokerInput,
 } from "./service";
+import { enrichBrokerProfile, type EnrichmentResult } from "./enrichment";
+import { registerLogoAsset } from "./logo";
 import { initializeOrganizationDecisionBrain } from "@/lib/decision-intelligence/service";
 
 export interface BrokerActionState { error?: string; ok?: boolean; message?: string }
@@ -58,5 +60,29 @@ export async function createBrokerFromListingAction(listingId: string): Promise<
 
 export async function decideListingMatchAction(listingId: string, decision: "approved" | "rejected"): Promise<BrokerActionState> {
   try { await decideListingMatch(listingId, decision); revalidate(); return { ok: true }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "העדכון נכשל" }; }
+}
+
+export interface EnrichActionState extends BrokerActionState { result?: EnrichmentResult }
+export async function enrichBrokerAction(brokerId: string): Promise<EnrichActionState> {
+  try {
+    const result = await enrichBrokerProfile(brokerId);
+    revalidatePath(`/broker-intelligence/${brokerId}`); revalidate();
+    return { ok: true, message: result.message, result };
+  } catch (e) { return { error: e instanceof Error ? e.message : "ההעשרה נכשלה" }; }
+}
+
+export async function uploadBrokerLogoAction(brokerId: string, url: string): Promise<BrokerActionState> {
+  try {
+    if (!/^https?:\/\//i.test(url)) return { error: "כתובת לוגו לא תקינה (נדרש http/https)" };
+    const r = await registerLogoAsset({ brokerId, url, source: "manual_upload", status: "manual", setAsPrimary: true });
+    if (!r.assetId) return { error: "שמירת הלוגו נכשלה" };
+    revalidatePath(`/broker-intelligence/${brokerId}`); revalidate();
+    return { ok: true, message: "הלוגו נשמר" };
+  } catch (e) { return { error: e instanceof Error ? e.message : "שמירת הלוגו נכשלה" }; }
+}
+
+export async function markBrokerCompetitorAction(brokerId: string, isCompetitor: boolean): Promise<BrokerActionState> {
+  try { await markBrokerCompetitor(brokerId, isCompetitor); revalidatePath(`/broker-intelligence/${brokerId}`); revalidate(); return { ok: true }; }
   catch (e) { return { error: e instanceof Error ? e.message : "העדכון נכשל" }; }
 }

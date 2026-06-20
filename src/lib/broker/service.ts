@@ -369,20 +369,63 @@ export interface BrokerDetail {
   sources: DB["broker_sources"]["Row"][];
   serviceAreas: DB["broker_service_areas"]["Row"][];
   externalListings: { id: string; title: string | null; city: string | null; price: number | null; confidence: number }[];
+  logoAssets: DB["broker_logo_assets"]["Row"][];
+  isCompetitor: boolean;
 }
 
 export async function getBrokerProfileDetail(id: string): Promise<BrokerDetail | null> {
   const supabase = await createClient();
   const { data: profile } = await supabase.from("broker_profiles").select("*").eq("id", id).maybeSingle();
   if (!profile) return null;
-  const [{ data: aliases }, { data: sources }, { data: areas }, { data: listings }] = await Promise.all([
+  const [{ data: aliases }, { data: sources }, { data: areas }, { data: listings }, { data: logos }] = await Promise.all([
     supabase.from("broker_aliases").select("*").eq("broker_id", id).limit(100),
     supabase.from("broker_sources").select("*").eq("broker_id", id).limit(100),
     supabase.from("broker_service_areas").select("*").eq("broker_id", id).limit(100),
     supabase.from("external_listings").select("id,title,city,price,broker_confidence_score").eq("detected_broker_id", id).limit(100),
+    supabase.from("broker_logo_assets").select("*").eq("broker_id", id).order("created_at", { ascending: false }).limit(50),
   ]);
   return {
     profile, aliases: aliases ?? [], sources: sources ?? [], serviceAreas: areas ?? [],
     externalListings: (listings ?? []).map((l) => ({ id: l.id, title: l.title, city: l.city, price: l.price, confidence: l.broker_confidence_score })),
+    logoAssets: logos ?? [],
+    isCompetitor: (profile.metadata as { is_competitor?: boolean } | null)?.is_competitor === true,
+  };
+}
+
+/** Flag/unflag a broker profile as a tracked competitor (stored on metadata). */
+export async function markBrokerCompetitor(brokerId: string, isCompetitor: boolean): Promise<void> {
+  await requireProfile();
+  const supabase = await createClient();
+  const { data: cur } = await supabase.from("broker_profiles").select("metadata").eq("id", brokerId).maybeSingle();
+  const meta = { ...((cur?.metadata as Record<string, unknown>) ?? {}), is_competitor: isCompetitor };
+  await supabase.from("broker_profiles").update({ metadata: meta as never }).eq("id", brokerId);
+  await logActivityEvent({ eventType: isCompetitor ? "broker.marked_competitor" : "broker.unmarked_competitor", entityType: "broker", entityId: brokerId, title: isCompetitor ? "סומן כמתחרה" : "הוסר סימון מתחרה" });
+}
+
+export interface BrokerAnalytics {
+  totalAgencies: number; totalBrokers: number; withLogo: number; needsReview: number;
+  competitors: number; topCities: { city: string; count: number }[]; logoMatchRate: number;
+  byVerification: { status: string; count: number }[];
+}
+
+export async function getBrokerAnalytics(): Promise<BrokerAnalytics> {
+  const supabase = await createClient();
+  const { data: profs } = await supabase.from("broker_profiles").select("broker_type,verification_status,primary_city,logo_url,enrichment_status,metadata,listings_count").limit(2000);
+  const rows = profs ?? [];
+  const agencyTypes = new Set(["agency", "office"]);
+  const cityCount = new Map<string, number>();
+  for (const r of rows) { if (r.primary_city) cityCount.set(r.primary_city, (cityCount.get(r.primary_city) ?? 0) + 1); }
+  const verMap = new Map<string, number>();
+  for (const r of rows) verMap.set(r.verification_status, (verMap.get(r.verification_status) ?? 0) + 1);
+  const withLogo = rows.filter((r) => !!r.logo_url).length;
+  return {
+    totalAgencies: rows.filter((r) => agencyTypes.has(r.broker_type)).length,
+    totalBrokers: rows.length,
+    withLogo,
+    needsReview: rows.filter((r) => r.verification_status === "unverified" || r.enrichment_status === "needs_review").length,
+    competitors: rows.filter((r) => (r.metadata as { is_competitor?: boolean } | null)?.is_competitor === true).length,
+    topCities: [...cityCount.entries()].map(([city, count]) => ({ city, count })).sort((a, b) => b.count - a.count).slice(0, 6),
+    logoMatchRate: rows.length ? Math.round((withLogo / rows.length) * 100) : 0,
+    byVerification: [...verMap.entries()].map(([status, count]) => ({ status, count })),
   };
 }
