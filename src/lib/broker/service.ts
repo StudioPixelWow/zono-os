@@ -115,12 +115,63 @@ async function loadCandidates(supabase: Client): Promise<BrokerCandidate[]> {
 }
 
 /**
+ * Auto-register a broker profile for every publisher classified as broker/agency
+ * that we don't already have. Uses ONLY the public listing's name/phone as
+ * evidence; created as 'unverified'. Deduped by normalized phone, else name.
+ */
+export async function ensureBrokerProfilesFromListings(db: Client, orgId: string): Promise<number> {
+  const { data: listings } = await db
+    .from("external_listings")
+    .select("id,contact_name,contact_phone,detected_broker_name,city,listing_source_type,listing_url,source")
+    .eq("status", "active").is("promoted_property_id", null)
+    .in("listing_source_type", ["broker", "agency", "office"]).limit(2000);
+  if (!listings?.length) return 0;
+
+  const { data: existing } = await db.from("broker_profiles").select("id,normalized_name,normalized_phone");
+  const byPhone = new Map<string, string>(); const byName = new Map<string, string>();
+  for (const b of existing ?? []) { if (b.normalized_phone) byPhone.set(b.normalized_phone, b.id); if (b.normalized_name) byName.set(b.normalized_name, b.id); }
+
+  const now = new Date().toISOString();
+  let created = 0;
+  for (const l of listings) {
+    const rawName = l.detected_broker_name ?? l.contact_name;
+    const normName = normalizeHebrewName(rawName);
+    const normPhone = normalizePhoneNumber(l.contact_phone);
+    if (!normName && !normPhone) continue;
+    if (normPhone && byPhone.has(normPhone)) continue;
+    if (!normPhone && normName && byName.has(normName)) continue;
+    const isAgency = l.listing_source_type === "agency" || l.listing_source_type === "office";
+    const { data: prof } = await db.from("broker_profiles").insert({
+      org_id: orgId, display_name: rawName ?? "מתווך", normalized_name: normName || (rawName ?? "מתווך"),
+      broker_type: (isAgency ? "agency" : "independent_broker") as never, agency_name: isAgency ? rawName : null,
+      normalized_agency: isAgency ? normalizeAgencyName(rawName) : null,
+      phone: l.contact_phone ?? null, normalized_phone: normPhone || null,
+      primary_city: l.city ?? null, verification_status: "unverified", confidence_score: 45,
+    } as never).select("id").single();
+    if (!prof?.id) continue;
+    created++;
+    if (normPhone) byPhone.set(normPhone, prof.id);
+    if (normName) byName.set(normName, prof.id);
+    const aliases: DB["broker_aliases"]["Insert"][] = [];
+    if (normName) aliases.push({ org_id: orgId, broker_id: prof.id, alias_type: "name", value: rawName!, normalized_value: normName, source: "auto:listing" });
+    if (normPhone) aliases.push({ org_id: orgId, broker_id: prof.id, alias_type: "phone", value: l.contact_phone!, normalized_value: normPhone, source: "auto:listing" });
+    if (aliases.length) await db.from("broker_aliases").insert(aliases as never);
+    await db.from("broker_sources").insert({ org_id: orgId, broker_id: prof.id, source_type: `external:${l.source}`, url: l.listing_url, evidence: { contactName: l.contact_name, city: l.city } as never, captured_at: now } as never);
+    if (l.city) await db.from("broker_service_areas").insert({ org_id: orgId, broker_id: prof.id, city_name: l.city } as never);
+  }
+  return created;
+}
+
+/**
  * Core detection — works with any client (RLS user OR service-role cron).
  * Skips listings LOCKED by a human decision (approved/rejected). Applies
  * heuristic classification for listings with no broker-profile match.
  */
 export async function detectForOrg(db: Client, orgId: string): Promise<DetectionSummary> {
   const summary: DetectionSummary = { scanned: 0, matched: 0, needsReview: 0, unknown: 0 };
+  // Auto-register newly seen broker/agency publishers into the broker DB first,
+  // so detection can match listings to real profiles.
+  try { await ensureBrokerProfilesFromListings(db, orgId); } catch (e) { console.error("[broker] auto-register failed:", e); }
   const candidates = await loadCandidates(db);
   const { data: listings } = await db
     .from("external_listings")
