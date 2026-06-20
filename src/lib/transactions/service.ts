@@ -10,7 +10,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import {
   buildingIntelligence, detectOpportunity, deduplicateTransactions, isLargeCity, normalizeCityName,
-  normalizeNeighborhoodName, normalizeStreetName, priceStats, priceTrend, researchProperty, streetIntelligence,
+  normalizeNeighborhoodName, normalizeStreetName, normalizeTransactionAddress, priceStats, priceTrend, researchProperty, streetIntelligence,
   TRANSACTIONS_ACTOR_NAME, type ResearchInput, type ResearchResult, type TxnComparable,
 } from "./engine";
 import {
@@ -368,32 +368,35 @@ export interface ResearchSaveInput extends ResearchInput {
   acquisitionProfileId?: string | null;
 }
 
-export async function researchPropertyAgainstTransactions(input: ResearchSaveInput, save = false): Promise<{ result: ResearchResult; reportId: string | null; streetTrend12m: number | null }> {
+export async function researchPropertyAgainstTransactions(input: ResearchSaveInput, save = false, preloadedPool?: TxnComparable[]): Promise<{ result: ResearchResult; reportId: string | null; streetTrend12m: number | null }> {
   const { orgId, userId } = await ctx();
-  const pool = await loadPool(orgId, { city: input.cityName });
+  const pool = preloadedPool ?? await loadPool(orgId, { city: input.cityName });
   const result = researchProperty(input, pool);
   const street = input.street ? normalizeStreetName(input.street) : (input.normalizedAddress ? normalizeStreetName(input.normalizedAddress) : null);
   const streetTxns = street ? pool.filter((t) => normalizeStreetName(t.street ?? t.normalized_address) === street) : [];
   const streetTrend12m = priceTrend(streetTxns, 12);
 
-  let reportId: string | null = null;
-  if (save) {
-    const supabase = await createClient();
-    const { data } = await supabase.from("property_research_reports").insert({
-      organization_id: orgId, property_listing_id: input.propertyListingId ?? null, external_listing_id: input.externalListingId ?? null,
-      acquisition_profile_id: input.acquisitionProfileId ?? null, created_by: userId,
-      city_name: input.cityName, neighborhood_name: input.neighborhoodName, address: input.normalizedAddress, normalized_address: input.normalizedAddress,
-      rooms: input.rooms, area: input.area, asking_price: input.askingPrice, asking_price_per_sqm: result.askingPpsqm,
-      estimated_market_value: result.estimatedMarketValue, avg_price_per_sqm: result.avgPpsqm, median_price_per_sqm: result.medianPpsqm,
-      min_price_per_sqm: result.minPpsqm, max_price_per_sqm: result.maxPpsqm, gap_from_market_percent: result.gapFromMarketPercent,
-      comparable_transactions: result.comparables.slice(0, 20) as never, confidence_score: result.confidenceScore, confidence_level: result.confidenceLevel,
-      explanation_hebrew: result.explanationHebrew,
-    } as never).select("id").maybeSingle();
-    reportId = data?.id ?? null;
-    // Knowledge Graph: research_report ↔ property/external/acquisition.
-    if (reportId) await linkResearchGraph(orgId, reportId, input);
-  }
+  const reportId = save ? await saveResearchReport(orgId, userId, input, result) : null;
   return { result, reportId, streetTrend12m };
+}
+
+/** Persist one research report + link it into the Knowledge Graph. Shared by
+ *  single-property research and the pipeline-wide recompute. */
+async function saveResearchReport(orgId: string, userId: string, input: ResearchSaveInput, result: ResearchResult): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("property_research_reports").insert({
+    organization_id: orgId, property_listing_id: input.propertyListingId ?? null, external_listing_id: input.externalListingId ?? null,
+    acquisition_profile_id: input.acquisitionProfileId ?? null, created_by: userId,
+    city_name: input.cityName, neighborhood_name: input.neighborhoodName, address: input.normalizedAddress, normalized_address: input.normalizedAddress,
+    rooms: input.rooms, area: input.area, asking_price: input.askingPrice, asking_price_per_sqm: result.askingPpsqm,
+    estimated_market_value: result.estimatedMarketValue, avg_price_per_sqm: result.avgPpsqm, median_price_per_sqm: result.medianPpsqm,
+    min_price_per_sqm: result.minPpsqm, max_price_per_sqm: result.maxPpsqm, gap_from_market_percent: result.gapFromMarketPercent,
+    comparable_transactions: result.comparables.slice(0, 20) as never, confidence_score: result.confidenceScore, confidence_level: result.confidenceLevel,
+    explanation_hebrew: result.explanationHebrew,
+  } as never).select("id").maybeSingle();
+  const reportId = data?.id ?? null;
+  if (reportId) await linkResearchGraph(orgId, reportId, input);
+  return reportId;
 }
 
 async function linkResearchGraph(orgId: string, reportId: string, input: ResearchSaveInput) {
@@ -590,12 +593,22 @@ export async function recomputeDerivedIntelligence(): Promise<{ buildings: numbe
 }
 
 // ── Opportunity radar ────────────────────────────────────────────────────────
-export async function detectTransactionOpportunity(input: ResearchSaveInput): Promise<{ alertId: string | null; type: string; score: number }> {
+export async function detectTransactionOpportunity(input: ResearchSaveInput, preloadedPool?: TxnComparable[]): Promise<{ alertId: string | null; type: string; score: number }> {
   const { orgId } = await ctx();
-  const { result, reportId, streetTrend12m } = await researchPropertyAgainstTransactions(input, true);
+  const { result, reportId, streetTrend12m } = await researchPropertyAgainstTransactions(input, true, preloadedPool);
   const radar = detectOpportunity(result, streetTrend12m);
   if (radar.opportunityType === "fair_market" || radar.opportunityType === "not_enough_data") return { alertId: null, type: radar.opportunityType, score: radar.opportunityScore };
+  const alertId = await saveRadarAlert(orgId, input, result, radar, reportId);
+  return { alertId, type: radar.opportunityType, score: radar.opportunityScore };
+}
+
+/** Persist one opportunity-radar alert (de-duped per property/external listing)
+ *  + link it into the Knowledge Graph. Shared by single + batch recompute. */
+async function saveRadarAlert(orgId: string, input: ResearchSaveInput, result: ResearchResult, radar: ReturnType<typeof detectOpportunity>, reportId: string | null): Promise<string | null> {
   const supabase = await createClient();
+  // Avoid stacking duplicate open alerts for the same listing on recompute.
+  if (input.propertyListingId) await supabase.from("transaction_opportunity_radar_alerts").update({ status: "superseded" } as never).eq("organization_id", orgId).eq("property_listing_id", input.propertyListingId).in("status", ["new", "reviewing"]);
+  else if (input.externalListingId) await supabase.from("transaction_opportunity_radar_alerts").update({ status: "superseded" } as never).eq("organization_id", orgId).eq("external_listing_id", input.externalListingId).in("status", ["new", "reviewing"]);
   const { data } = await supabase.from("transaction_opportunity_radar_alerts").insert({
     organization_id: orgId, property_listing_id: input.propertyListingId ?? null, external_listing_id: input.externalListingId ?? null,
     acquisition_profile_id: input.acquisitionProfileId ?? null, research_report_id: reportId,
@@ -604,11 +617,105 @@ export async function detectTransactionOpportunity(input: ResearchSaveInput): Pr
     opportunity_score: radar.opportunityScore, confidence_score: result.confidenceScore, opportunity_type: radar.opportunityType,
     reason_hebrew: radar.reasonHebrew, recommended_action_hebrew: radar.recommendedActionHebrew, status: "new",
   } as never).select("id").maybeSingle();
-  // Knowledge Graph: opportunity_alert ↔ acquisition.
   if (data?.id && input.acquisitionProfileId) {
     await supabase.from("entity_relationships").insert({ org_id: orgId, source_entity_type: "transaction_radar", source_entity_id: data.id, target_entity_type: "acquisition", target_entity_id: input.acquisitionProfileId, relationship_type: "signals_opportunity", strength_score: Math.round(radar.opportunityScore), status: "active" } as never);
   }
-  return { alertId: data?.id ?? null, type: radar.opportunityType, score: radar.opportunityScore };
+  return data?.id ?? null;
+}
+
+// ── Pipeline research recompute (DEEP INTEGRATION FOUNDATION) ─────────────────
+// For every active property + open external listing in the org, value it against
+// the sold-price transaction pool and persist a research report (+ radar alert
+// when it's an opportunity). This is the shared substrate the acquisition,
+// property, seller, forecast and revenue brains read from. Deterministic; never
+// invents data; bounded; failures are isolated per-listing.
+export interface PipelineResearchResult {
+  properties: number; externalListings: number; reports: number; alerts: number; skipped: number; needsConfig: boolean;
+}
+
+export async function recomputePipelineResearch(limitPerSide = 60): Promise<PipelineResearchResult> {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  // Need at least some transactions, otherwise research is meaningless.
+  const { count: txnCount } = await supabase.from("property_transactions").select("id", { count: "exact", head: true }).eq("organization_id", orgId);
+  if (!txnCount) return { properties: 0, externalListings: 0, reports: 0, alerts: 0, skipped: 0, needsConfig: true };
+
+  const poolByCity = new Map<string, TxnComparable[]>();
+  const poolFor = async (city: string | null): Promise<TxnComparable[]> => {
+    const key = canonicalCityName(city) ?? "";
+    if (!key) return [];
+    if (!poolByCity.has(key)) poolByCity.set(key, await loadPool(orgId, { city }));
+    return poolByCity.get(key) ?? [];
+  };
+
+  let reports = 0, alerts = 0, skipped = 0, propCount = 0, extCount = 0;
+  const runOne = async (input: ResearchSaveInput) => {
+    const pool = await poolFor(input.cityName);
+    if (!pool.length) { skipped++; return; }
+    try {
+      const r = await detectTransactionOpportunity(input, pool);
+      reports++;
+      if (r.alertId) alerts++;
+    } catch { skipped++; }
+  };
+
+  // Active managed properties (exclude closed/dead states).
+  const { data: props } = await supabase.from("properties")
+    .select("id,city,neighborhood,location,building_number,rooms,size_sqm,price,status")
+    .eq("org_id", orgId).not("city", "is", null)
+    .not("status", "in", "(sold,rented,withdrawn,archived)")
+    .order("updated_at", { ascending: false }).limit(limitPerSide);
+  for (const p of props ?? []) {
+    const loc = (p.location ?? {}) as { address?: string; neighborhood?: string };
+    const addr = loc.address ?? null;
+    const normalized = normalizeTransactionAddress({ address: addr, street: addr, streetNumber: p.building_number });
+    await runOne({
+      propertyListingId: p.id, cityName: p.city, neighborhoodName: normalizeNeighborhoodName(p.neighborhood ?? loc.neighborhood ?? null),
+      normalizedAddress: normalized, street: normalizeStreetName(addr), rooms: p.rooms, area: p.size_sqm, askingPrice: p.price ?? null,
+    });
+    propCount++;
+  }
+
+  // Open external listings (not yet promoted / removed).
+  const { data: ext } = await supabase.from("external_listings")
+    .select("id,city,neighborhood,street,street_number,address,rooms,area_sqm,sqm,price,status,promoted_property_id,removed_at")
+    .eq("org_id", orgId).not("city", "is", null).is("promoted_property_id", null).is("removed_at", null)
+    .not("status", "in", "(rejected,archived,duplicate)")
+    .order("opportunity_score", { ascending: false }).limit(limitPerSide);
+  for (const e of ext ?? []) {
+    const normalized = normalizeTransactionAddress({ address: e.address, street: e.street, streetNumber: e.street_number });
+    await runOne({
+      externalListingId: e.id, cityName: e.city, neighborhoodName: normalizeNeighborhoodName(e.neighborhood),
+      normalizedAddress: normalized, street: normalizeStreetName(e.street ?? e.address), rooms: e.rooms, area: e.area_sqm ?? e.sqm, askingPrice: e.price,
+    });
+    extCount++;
+  }
+  return { properties: propCount, externalListings: extCount, reports, alerts, skipped, needsConfig: false };
+}
+
+/** Read the latest research report for a property listing (deep-integration read
+ *  model used by the acquisition/property/seller/forecast/revenue brains). */
+export async function latestResearchForProperties(orgId: string, propertyIds: string[]): Promise<Map<string, DB["property_research_reports"]["Row"]>> {
+  const out = new Map<string, DB["property_research_reports"]["Row"]>();
+  if (!propertyIds.length) return out;
+  const supabase = await createClient();
+  const { data } = await supabase.from("property_research_reports").select("*").eq("organization_id", orgId).in("property_listing_id", propertyIds).order("created_at", { ascending: false }).limit(1000);
+  for (const r of (data ?? []) as DB["property_research_reports"]["Row"][]) {
+    const pid = r.property_listing_id; if (pid && !out.has(pid)) out.set(pid, r);
+  }
+  return out;
+}
+
+/** Same as above but keyed by external listing id. */
+export async function latestResearchForExternalListings(orgId: string, externalIds: string[]): Promise<Map<string, DB["property_research_reports"]["Row"]>> {
+  const out = new Map<string, DB["property_research_reports"]["Row"]>();
+  if (!externalIds.length) return out;
+  const supabase = await createClient();
+  const { data } = await supabase.from("property_research_reports").select("*").eq("organization_id", orgId).in("external_listing_id", externalIds).order("created_at", { ascending: false }).limit(1000);
+  for (const r of (data ?? []) as DB["property_research_reports"]["Row"][]) {
+    const eid = r.external_listing_id; if (eid && !out.has(eid)) out.set(eid, r);
+  }
+  return out;
 }
 
 export async function setRadarAlertStatus(alertId: string, status: string): Promise<void> {

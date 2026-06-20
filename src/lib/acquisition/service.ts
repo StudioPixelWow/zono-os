@@ -9,6 +9,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 import { promoteExternalListing } from "@/lib/external-listings/service";
 import { matchBuyersToListing, type BuyerForMatch, type ListingForDeal } from "@/lib/external-listings/deal";
+import { latestResearchForExternalListings } from "@/lib/transactions/service";
 import type { Database } from "@/lib/supabase/types";
 import {
   buildAcquisitionActions, buildAcquisitionAi, calculateAcquisitionScore, deriveAcquisitionStatus,
@@ -49,6 +50,10 @@ export async function recomputeAcquisitionForOrg(): Promise<RecomputeSummary> {
   const listings = listingsRes.data ?? [];
   if (!listings.length) return { profiles: 0, qualified: 0, needsReview: 0 };
 
+  // Sold-price transaction valuation (deep integration) — latest research report
+  // per external listing, produced by recomputePipelineResearch(). Never invented.
+  const research = await latestResearchForExternalListings(orgId, listings.map((l) => l.id));
+
   const intel = new Map((intelRes.data ?? []).map((b) => [b.buyer_id, b]));
   const buyers: BuyerForMatch[] = (buyersRes.data ?? []).map((b) => ({
     id: b.id, name: b.full_name, budgetMin: b.budget_min, budgetMax: b.budget_max,
@@ -75,6 +80,8 @@ export async function recomputeAcquisitionForOrg(): Promise<RecomputeSummary> {
     const sqmP = l.price && l.sqm ? l.price / l.sqm : null;
     const belowAverage = !!(sqmP && mk?.avgSqm && sqmP <= mk.avgSqm * 0.9);
 
+    const rr = research.get(l.id);
+    const comps = Array.isArray(rr?.comparable_transactions) ? (rr!.comparable_transactions as unknown[]).length : 0;
     const input: AcquisitionInput = {
       listingSourceType: l.listing_source_type, brokerDetectionStatus: l.broker_detection_status,
       hasAgent: l.has_agent, hasPhone: !!l.contact_phone, hasName: !!l.contact_name,
@@ -82,6 +89,7 @@ export async function recomputeAcquisitionForOrg(): Promise<RecomputeSummary> {
       duplicateConfidence: l.duplicate_confidence_score ?? 0, daysSinceSynced: daysSince(l.last_synced_at),
       matchingBuyers: matches.length, topBuyerReadiness: matches[0]?.closingProbability ?? 0,
       marketDemand: mk?.demand ?? 0, marketSupply: mk?.supply ?? 50, marketOpportunity: mk?.opp ?? 0, price: l.price,
+      transactionGapPercent: rr?.gap_from_market_percent ?? null, transactionConfidence: rr?.confidence_score ?? 0, transactionComparables: comps,
     };
     const scores = calculateAcquisitionScore(input);
     const cityLabel = l.city ?? "";
@@ -99,6 +107,8 @@ export async function recomputeAcquisitionForOrg(): Promise<RecomputeSummary> {
       buyer_demand_score: scores.buyer_demand_score, price_opportunity_score: scores.price_opportunity_score,
       market_gap_score: scores.market_gap_score, contactability_score: scores.contactability_score,
       broker_competition_score: scores.broker_competition_score, double_side_potential_score: scores.double_side_potential_score,
+      transaction_valuation_score: scores.transaction_valuation_score, transaction_gap_percent: rr?.gap_from_market_percent ?? null,
+      transaction_confidence: rr?.confidence_score ?? 0, transaction_comparables: comps, research_report_id: rr?.id ?? null,
       acquisition_status: status, next_best_action: null, reason_summary: ai.reason,
       ai_summary: ai.ai_summary, ai_outreach_strategy: ai.ai_outreach_strategy, ai_risk_summary: ai.ai_risk_summary,
       metadata: { matchingBuyers: matches.length } as never, last_calculated_at: new Date().toISOString(),

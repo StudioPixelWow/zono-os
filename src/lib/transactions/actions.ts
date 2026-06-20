@@ -123,6 +123,16 @@ export async function addCoverageNeighborhoodAction(neighborhood: string) {
   return r;
 }
 
+export async function recomputePipelineResearchAction() {
+  const { recomputePipelineResearch } = await import("./service");
+  const r = await recomputePipelineResearch();
+  revalidatePath("/transactions");
+  revalidatePath("/transactions/radar");
+  revalidatePath("/acquisition");
+  revalidatePath("/command");
+  return r;
+}
+
 export async function autoDiscoverNeighborhoodsAction() {
   const { autoDiscoverNeighborhoods } = await import("./service");
   const r = await autoDiscoverNeighborhoods();

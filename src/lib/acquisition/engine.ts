@@ -45,6 +45,10 @@ export interface AcquisitionInput {
   marketDemand: number; // 0..100
   marketSupply: number; // 0..100
   marketOpportunity: number; // 0..100
+  // sold-price transaction valuation (from property_research_reports) — optional
+  transactionGapPercent?: number | null; // asking vs sold-price market value; negative = below market
+  transactionConfidence?: number; // 0..100 confidence of the valuation
+  transactionComparables?: number; // # comparable sold transactions used
   // business
   price: number | null;
 }
@@ -57,6 +61,7 @@ export interface AcquisitionScores {
   contactability_score: number;
   broker_competition_score: number;
   double_side_potential_score: number;
+  transaction_valuation_score: number;
   acquisition_score: number;
 }
 
@@ -112,6 +117,28 @@ export function calculateBrokerCompetitionScore(i: AcquisitionInput): number {
   return 10; // private seller — little competition
 }
 
+/**
+ * Sold-price transaction valuation: how attractively the asking price sits vs
+ * the market value derived from real government sold-price comparables. Negative
+ * gap (below market) = strong acquisition value; weighted by valuation
+ * confidence. Returns 0 when there's no sold-price evidence (never invents).
+ */
+export function calculateTransactionValuationScore(i: AcquisitionInput): number {
+  const gap = i.transactionGapPercent;
+  const conf = clamp(i.transactionConfidence ?? 0);
+  const comps = i.transactionComparables ?? 0;
+  if (gap == null || comps <= 0) return 0; // no sold-price comparables → no signal
+  let s: number;
+  if (gap <= -12) s = 92;
+  else if (gap <= -6) s = 78;
+  else if (gap < 0) s = 62;
+  else if (gap <= 5) s = 45;
+  else if (gap <= 12) s = 30;
+  else s = 18;
+  const confFactor = 0.55 + 0.45 * (conf / 100);
+  return clamp(s * confFactor);
+}
+
 export function calculateDoubleSidePotentialScore(privateSeller: number, buyerDemand: number, priceOpp: number): number {
   // Win the seller side (private) AND already have buyers + attractive price.
   let s = privateSeller * 0.4 + buyerDemand * 0.4 + priceOpp * 0.2;
@@ -127,18 +154,25 @@ export function calculateAcquisitionScore(i: AcquisitionInput): AcquisitionScore
   const contact = calculateContactabilityScore(i);
   const competition = calculateBrokerCompetitionScore(i);
   const doubleSide = calculateDoubleSidePotentialScore(priv, demand, price);
+  const txnVal = calculateTransactionValuationScore(i);
 
   // Weighted: private-seller acquirability + buyer demand drive it; broker
   // competition penalizes; contactability gates real-world reachability.
   let s = priv * 0.34 + demand * 0.22 + price * 0.16 + gap * 0.12 + contact * 0.16;
   s -= competition * 0.18; // de-prioritize broker/agency/exclusive
   if (doubleSide >= 75) s += 8;
+  // Sold-price evidence: a verified below-market gap is a strong buy signal; a
+  // verified over-market gap tempers the score. Neutral band leaves it unchanged.
+  if (txnVal > 0) {
+    if (txnVal >= 70) s += (txnVal - 60) * 0.18;       // up to ~+6
+    else if (txnVal <= 35) s -= (45 - txnVal) * 0.12;  // mild over-market penalty
+  }
   const acquisition = clamp(s);
 
   return {
     private_seller_score: priv, buyer_demand_score: demand, price_opportunity_score: price,
     market_gap_score: gap, contactability_score: contact, broker_competition_score: competition,
-    double_side_potential_score: doubleSide, acquisition_score: acquisition,
+    double_side_potential_score: doubleSide, transaction_valuation_score: txnVal, acquisition_score: acquisition,
   };
 }
 
@@ -166,6 +200,9 @@ export function buildAcquisitionActions(i: AcquisitionInput, scores: Acquisition
   }
   if (scores.price_opportunity_score >= 60) {
     out.push({ actionType: "compare_price", title: "השווה מחיר לשוק", description: i.belowAverage ? "מתחת לממוצע השוק." : "בדוק מיצוב מחיר.", urgency: 45, impact: scores.price_opportunity_score, confidence: 70, expectedOutcome: "טיעון ערך לשיחה" });
+  }
+  if (scores.transaction_valuation_score >= 70 && (i.transactionComparables ?? 0) > 0) {
+    out.push({ actionType: "review_transactions", title: "בדוק עסקאות אזור (מתחת לשווי)", description: `המחיר ~${Math.abs(Math.round(i.transactionGapPercent ?? 0))}% מתחת לשווי עסקאות אמת — טיעון גיוס/רכישה חזק.`, urgency: clamp(60 + scores.transaction_valuation_score * 0.2), impact: scores.transaction_valuation_score, confidence: clamp(i.transactionConfidence ?? 0), expectedOutcome: "תמחור מבוסס עסקאות אמת" });
   }
   if (i.listingSourceType === "unknown" || i.brokerDetectionStatus === "needs_review") {
     out.push({ actionType: "review_listing", title: "בדוק אם זה מתווך", description: "מפרסם לא מזוהה — דורש סיווג ידני.", urgency: 55, impact: 40, confidence: 60, expectedOutcome: "סיווג נכון של מקור" });
@@ -217,6 +254,11 @@ export function buildAcquisitionAi(i: AcquisitionInput, scores: AcquisitionScore
   if (i.priceDropCount > 0) reasons.push("ירידת מחיר");
   if (i.matchingBuyers > 0) reasons.push(`${i.matchingBuyers} קונים תואמים`);
   if (scores.market_gap_score >= 60) reasons.push("פער היצע באזור");
+  const gap = i.transactionGapPercent;
+  if (gap != null && (i.transactionComparables ?? 0) > 0) {
+    if (gap <= -6) reasons.push(`${Math.abs(Math.round(gap))}% מתחת לשווי עסקאות`);
+    else if (gap >= 8) reasons.push(`${Math.round(gap)}% מעל שווי עסקאות`);
+  }
   if (!reasons.length) reasons.push("הזדמנות למעקב");
   const reason = reasons.join(" · ");
 
@@ -224,8 +266,10 @@ export function buildAcquisitionAi(i: AcquisitionInput, scores: AcquisitionScore
   const ai_outreach_strategy = i.listingSourceType === "private_seller"
     ? `פנייה ישירה לבעלים: הצג ביקוש קיים${i.matchingBuyers ? ` (${i.matchingBuyers} קונים)` : ""}, הצע הערכת שווי ללא התחייבות, ובנה אמון עם מומחיות מקומית.`
     : `מודעת מתווך/משרד — לא יעד גיוס ישיר. שקול שיתוף פעולה או הצגת קונה. אין לפנות כבעלים.`;
+  const overMarket = i.transactionGapPercent != null && (i.transactionComparables ?? 0) > 0 && i.transactionGapPercent >= 8;
   const ai_risk_summary = i.listingSourceType !== "private_seller"
     ? "סיכון: תחרות ברוקר — הזדמנות גיוס נמוכה."
+    : overMarket ? `סיכון: מחיר מבוקש ~${Math.round(i.transactionGapPercent!)}% מעל שווי עסקאות אזוריות — ציפיות מוכר גבוהות.`
     : scores.contactability_score < 50 ? "סיכון: פרטי קשר חלקיים — קושי ביצירת קשר." : "סיכון נמוך — בעלים פרטי עם פרטי קשר.";
   return { ai_summary, ai_outreach_strategy, ai_risk_summary, reason };
 }

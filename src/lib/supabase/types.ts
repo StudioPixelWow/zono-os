@@ -764,6 +764,11 @@ type InventoryAcquisitionProfilesRow = {
   contactability_score: number;
   broker_competition_score: number;
   double_side_potential_score: number;
+  transaction_valuation_score: number;
+  transaction_gap_percent: number | null;
+  transaction_confidence: number;
+  transaction_comparables: number;
+  research_report_id: string | null;
   acquisition_status: string;
   next_best_action: string | null;
   reason_summary: string | null;
