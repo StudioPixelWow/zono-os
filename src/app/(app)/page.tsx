@@ -10,6 +10,7 @@ import { TeamDashboardSection } from "@/components/dashboard/sections/TeamDashbo
 import { RevenueDashboardSection } from "@/components/dashboard/sections/RevenueDashboardSection";
 import { MarketingDashboardSection } from "@/components/dashboard/sections/MarketingDashboardSection";
 import { DistributionDashboardSection } from "@/components/dashboard/sections/DistributionDashboardSection";
+import { SocialLeadsDashboardSection } from "@/components/dashboard/sections/SocialLeadsDashboardSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
   MatchingSectionContainer, OpportunitiesSectionContainer,
@@ -39,6 +40,9 @@ export default function Home() {
       </Suspense>
       <Suspense fallback={null}>
         <TeamDashboardSection />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SocialLeadsDashboardSection />
       </Suspense>
       <Suspense fallback={null}>
         <DistributionDashboardSection />

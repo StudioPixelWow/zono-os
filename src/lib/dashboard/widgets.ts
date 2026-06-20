@@ -38,6 +38,7 @@ const entityHref = (t: string, id: string): string =>
     : t === "revenue" ? "/revenue"
     : t === "marketing" ? "/marketing"
     : t === "distribution" ? "/distribution"
+    : t === "social_lead" ? "/social-leads"
     : "/command";
 const relWhen = (iso: string | null) => {
   if (!iso) return "—";

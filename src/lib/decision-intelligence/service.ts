@@ -70,6 +70,7 @@ interface OrgData {
   revenue: { gap: number; gapLevel: string; gapScore: number; atRisk: number; forecast90: number; summary: string | null } | null;
   marketingOpps: { id: string; signalType: string; title: string; description: string | null; impact: number; entityType: string | null; entityId: string | null; action: string | null }[];
   distributionOpps: { id: string; signalType: string; title: string; description: string | null; impact: number; propertyId: string | null; communityId: string | null }[];
+  socialLeads: { id: string; name: string; intent: string | null; quality: number; status: string; priority: number; action: string | null }[];
   graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
   forecastSignals: { id: string; forecastId: string | null; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
@@ -83,7 +84,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp, socLeads] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -113,6 +114,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("organization_revenue_profiles").select("revenue_gap,gap_level,revenue_gap_score,revenue_at_risk,forecast_revenue_90,ai_revenue_summary").maybeSingle(),
     supabase.from("marketing_opportunity_signals").select("id,signal_type,title,description,impact_score,entity_type,entity_id,recommended_action").eq("status", "open").order("impact_score", { ascending: false }).limit(15),
     supabase.from("distribution_opportunity_signals").select("id,signal_type,title,description,impact_score,property_id,community_id").eq("status", "new").order("impact_score", { ascending: false }).limit(15),
+    supabase.from("social_leads").select("id,person_name,intent,lead_quality_score,status,priority_score,recommended_next_action").in("status", ["new", "reviewed", "qualified"]).order("priority_score", { ascending: false }).limit(15),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -180,6 +182,7 @@ async function gatherOrgData(): Promise<OrgData> {
     revenue: revP.data ? { gap: revP.data.revenue_gap, gapLevel: revP.data.gap_level, gapScore: revP.data.revenue_gap_score, atRisk: revP.data.revenue_at_risk, forecast90: revP.data.forecast_revenue_90, summary: revP.data.ai_revenue_summary } : null,
     marketingOpps: (mktOpp.data ?? []).map((o) => ({ id: o.id, signalType: o.signal_type, title: o.title, description: o.description, impact: o.impact_score, entityType: o.entity_type, entityId: o.entity_id, action: o.recommended_action })),
     distributionOpps: (distOpp.data ?? []).map((o) => ({ id: o.id, signalType: o.signal_type, title: o.title, description: o.description, impact: o.impact_score, propertyId: o.property_id, communityId: o.community_id })),
+    socialLeads: (socLeads.data ?? []).map((s) => ({ id: s.id, name: s.person_name ?? "ליד חברתי", intent: s.intent, quality: s.lead_quality_score, status: s.status, priority: s.priority_score, action: s.recommended_next_action })),
     graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     forecastSignals: (fcSig.data ?? []).map((s) => ({ id: s.id, forecastId: s.forecast_id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
@@ -461,6 +464,20 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
       recommended_action: "טפל בדליפה לפני אובדן ההכנסה", expected_outcome: "מניעת אובדן הכנסה", status: "open",
     });
   }
+  // Social Lead Capture — unreviewed / high-intent social leads need a human.
+  for (const s of d.socialLeads.slice(0, 8)) {
+    const highIntent = s.quality >= 70;
+    const unreviewed = s.status === "new";
+    if (!highIntent && !unreviewed) continue;
+    rows.push({
+      org_id: orgId, entity_type: "social_lead", entity_id: s.id,
+      attention_score: highIntent ? 78 : 66, urgency_score: highIntent ? 76 : 60, impact_score: clamp(s.quality), confidence_score: 72,
+      revenue_impact_score: clamp(s.quality), relationship_impact_score: 50, churn_impact_score: 0,
+      title: `ליד חברתי · ${s.name}`, reason: highIntent ? `כוונה גבוהה (${s.quality})` : "ליד חברתי חדש לבדיקה",
+      recommended_action: s.action ?? "סקור והמר במרכז הלידים החברתיים", expected_outcome: "המרה לליד CRM ומימוש הזדמנות", status: "open",
+    });
+  }
+
   // Revenue Intelligence — gap to target + revenue at risk.
   if (d.revenue) {
     if ((d.revenue.gapLevel === "risk" || d.revenue.gapLevel === "critical") && d.revenue.gap > 0) {

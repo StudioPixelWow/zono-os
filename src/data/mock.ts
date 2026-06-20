@@ -40,6 +40,7 @@ export const navItems: NavItem[] = [
   { id: "competitors", label: "מתחרים", icon: "BarChart3" },
   { id: "marketing", label: "מודיעין שיווק", icon: "Megaphone" },
   { id: "distribution", label: "קהילות והפצה", icon: "Send" },
+  { id: "social-leads", label: "לידים חברתיים", icon: "MessageCircle" },
   { id: "routing", label: "ניתוב לידים", icon: "Route" },
   { id: "team", label: "מודיעין צוות", icon: "UserCheck" },
   { id: "graph", label: "מפת קשרים", icon: "Sparkles" },

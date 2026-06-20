@@ -1697,6 +1697,92 @@ type CommunityActivityLogsRow = {
   created_at: string;
 };
 
+type SocialInteractionsRow = {
+  id: string;
+  organization_id: string;
+  platform: string | null;
+  community_id: string | null;
+  property_id: string | null;
+  distribution_queue_id: string | null;
+  daily_distribution_item_id: string | null;
+  external_post_url: string | null;
+  external_post_id: string | null;
+  external_comment_id: string | null;
+  person_name: string | null;
+  profile_url: string | null;
+  interaction_type: string;
+  message_text: string | null;
+  detected_intent: string | null;
+  sentiment: string | null;
+  lead_score: number;
+  status: string;
+  raw_payload: Json;
+  interaction_score: number;
+  intent_score: number;
+  lead_probability: number;
+  engagement_level: string;
+  intent_confidence: number;
+  lead_quality: number;
+  urgency_score: number;
+  source_platform: string | null;
+  source_post_url: string | null;
+  source_post_id: string | null;
+  source_user_name: string | null;
+  source_profile_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SocialLeadsRow = {
+  id: string;
+  organization_id: string;
+  lead_id: string | null;
+  social_interaction_id: string;
+  property_id: string | null;
+  community_id: string | null;
+  distribution_item_id: string | null;
+  campaign_id: string | null;
+  platform: string | null;
+  source_url: string | null;
+  profile_url: string | null;
+  person_name: string | null;
+  intent: string | null;
+  lead_score: number;
+  ai_summary: string | null;
+  ai_next_action: string | null;
+  status: string;
+  lead_quality_score: number;
+  priority_score: number;
+  intent_confidence: number;
+  urgency_score: number;
+  recommended_next_action: string | null;
+  assigned_agent_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  converted_buyer_id: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SocialFollowupsRow = {
+  id: string;
+  organization_id: string;
+  social_lead_id: string | null;
+  lead_id: string | null;
+  community_id: string | null;
+  property_id: string | null;
+  user_id: string | null;
+  due_at: string | null;
+  priority: string;
+  reason: string | null;
+  title: string | null;
+  status: string;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 type DistributionQueueRow = {
   id: string;
   organization_id: string;
@@ -2864,6 +2950,18 @@ export interface Database {
       >;
       distribution_queue: TableShape<
         DistributionQueueRow,
+        "organization_id"
+      >;
+      social_interactions: TableShape<
+        SocialInteractionsRow,
+        "organization_id"
+      >;
+      social_leads: TableShape<
+        SocialLeadsRow,
+        "organization_id" | "social_interaction_id"
+      >;
+      social_followups: TableShape<
+        SocialFollowupsRow,
         "organization_id"
       >;
       graph_entities: TableShape<
