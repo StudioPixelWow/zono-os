@@ -21,7 +21,7 @@ const STATUS_LABEL: Record<string, string> = { strong: "כיסוי חזק", sing
 
 export function TeamView({ board }: { board: TeamBoard }) {
   const router = useRouter();
-  const { snapshot, agents, revenueLeaders, forecastLeaders, needsAttention, coaching, workload, territory, leakage, managementActions } = board;
+  const { snapshot, office, agents, revenueLeaders, forecastLeaders, needsAttention, coaching, workload, territory, leaks, actions } = board;
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -51,6 +51,23 @@ export function TeamView({ board }: { board: TeamBoard }) {
         <Stat label="צנרת צפויה" value={snapshot ? formatShekels(snapshot.office_forecast_revenue) : "—"} icon="Building2" tone="text-success" />
         <Stat label="זקוקים לליווי" value={snapshot ? String(snapshot.coaching_needed) : "—"} icon="Users" tone="text-warning" />
       </div>
+
+      {office && (
+        <div className="bg-card border-line rounded-[20px] border p-4">
+          <p className="text-ink mb-2 text-sm font-extrabold">מרכיבי בריאות המשרד</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {([
+              ["לידים", office.lead_health], ["צנרת", office.pipeline_health], ["מלאי", office.inventory_health], ["תחזית", office.forecast_health], ["תקשורת", office.communication_health],
+              ["סוכנים", office.agent_health], ["שוק", office.market_health], ["ניתוב", office.routing_health], ["התאמות", office.matching_health], ["החלטות", office.decision_health],
+            ] as [string, number][]).map(([label, val]) => (
+              <div key={label} className="bg-surface rounded-xl p-2">
+                <p className="text-muted text-[10px] font-bold">{label}</p>
+                <p className={cn("text-lg font-black", tone(val))}>{val}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {empty ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
@@ -120,11 +137,11 @@ export function TeamView({ board }: { board: TeamBoard }) {
 
           {/* 8) Opportunity Leakage */}
           <Panel title="דליפת הזדמנויות" icon="AlertTriangle">
-            {leakage.length === 0 ? <p className="text-muted text-sm">אין דליפה משמעותית ✓</p> : (
-              <ul className="flex flex-col gap-1.5">{leakage.map((l) => (
-                <li key={l.userId} className="flex items-center justify-between gap-2 text-sm">
-                  <Link href={`/team/${l.userId}`} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{l.name}</Link>
-                  <span className="text-danger text-xs font-black">{l.lost} עסקאות אבודות</span>
+            {leaks.length === 0 ? <p className="text-muted text-sm">אין דליפה משמעותית ✓</p> : (
+              <ul className="flex flex-col gap-1.5">{leaks.slice(0, 8).map((l) => (
+                <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-ink min-w-0 flex-1 truncate font-semibold">{l.title}</span>
+                  <span className="text-danger shrink-0 text-xs font-black">{formatShekels(l.lost_revenue_impact)}</span>
                 </li>
               ))}</ul>
             )}
@@ -143,16 +160,21 @@ export function TeamView({ board }: { board: TeamBoard }) {
             )}
           </Panel>
 
-          {/* 10) Management Actions */}
-          <div className="bg-card border-line rounded-[20px] border p-4 lg:col-span-2">
-            <p className="text-ink mb-2 text-sm font-extrabold">פעולות ניהול היום</p>
-            {managementActions.length === 0 ? <p className="text-muted text-sm">אין פעולות דחופות ✓</p> : (
-              <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">{managementActions.map((m, i) => (
-                <li key={i} className="border-line rounded-xl border p-2 text-sm">
-                  <Link href={m.href} className="text-ink hover:text-brand font-semibold">{m.title}</Link>
-                  <p className="text-muted text-[11px]">{m.reason}</p>
+          {/* 10) Management Actions — the core CEO output */}
+          <div className="bg-brand-soft border-line rounded-[20px] border p-4 lg:col-span-2">
+            <div className="mb-2 flex items-center gap-2"><span className="bg-brand text-white grid h-7 w-7 place-items-center rounded-lg"><Icon name="Flame" size={14} /></span><p className="text-ink text-sm font-extrabold">פעולות ניהול היום — מדורג</p></div>
+            {actions.length === 0 ? <p className="text-muted text-sm">אין פעולות דחופות ✓</p> : (
+              <ol className="flex flex-col gap-1.5">{actions.map((m) => (
+                <li key={m.id} className="bg-card border-line flex flex-wrap items-center gap-2 rounded-xl border p-2.5 text-sm">
+                  <span className="bg-brand text-white grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black">{m.rank_position}</span>
+                  <span className="min-w-0 flex-1">
+                    {m.href ? <Link href={m.href} className="text-ink hover:text-brand font-bold">{m.title}</Link> : <span className="text-ink font-bold">{m.title}</span>}
+                    <span className="text-muted block text-[11px]">{m.reason}{m.ownerName ? ` · אחראי: ${m.ownerName}` : ""}</span>
+                  </span>
+                  {m.expected_revenue_impact > 0 && <span className="text-success shrink-0 text-[11px] font-bold">+{formatShekels(m.expected_revenue_impact)}</span>}
+                  <span className={cn("shrink-0 text-xs font-black", tone(m.priority_score))}>{m.priority_score}</span>
                 </li>
-              ))}</ul>
+              ))}</ol>
             )}
           </div>
         </div>

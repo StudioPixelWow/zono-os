@@ -66,6 +66,19 @@ export async function TeamDashboardSection() {
           )}
         </div>
       </div>
+
+      {board.actions.length > 0 && (
+        <div className="bg-card border-line rounded-[20px] border p-4">
+          <p className="text-ink mb-2 text-sm font-extrabold">פעולות ניהול היום</p>
+          <ol className="flex flex-col gap-1">{board.actions.slice(0, 5).map((m) => (
+            <li key={m.id} className="flex items-center gap-2 text-sm">
+              <span className="bg-brand text-white grid h-5 w-5 shrink-0 place-items-center rounded text-[10px] font-black">{m.rank_position}</span>
+              {m.href ? <Link href={m.href} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{m.title}</Link> : <span className="text-ink min-w-0 flex-1 truncate font-semibold">{m.title}</span>}
+              {m.expected_revenue_impact > 0 && <span className="text-success shrink-0 text-[11px] font-bold">+{formatShekels(m.expected_revenue_impact)}</span>}
+            </li>
+          ))}</ol>
+        </div>
+      )}
     </section>
   );
 }

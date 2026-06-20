@@ -91,6 +91,30 @@ export default async function AgentTeamProfilePage({ params }: { params: Promise
             ))}</ul>
           )}
         </div>
+
+        <div className="bg-card border-line rounded-[22px] border p-5">
+          <h3 className="text-ink mb-2 text-sm font-extrabold">דליפת הזדמנויות</h3>
+          {detail.leaks.length === 0 ? <p className="text-muted text-sm">אין דליפה משויכת ✓</p> : (
+            <ul className="flex flex-col gap-1.5">{detail.leaks.map((l) => (
+              <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-ink min-w-0 flex-1 truncate font-semibold">{l.title}</span>
+                <span className="text-danger shrink-0 text-[11px] font-black">{formatShekels(l.lost_revenue_impact)}</span>
+              </li>
+            ))}</ul>
+          )}
+        </div>
+
+        <div className="bg-card border-line rounded-[22px] border p-5">
+          <h3 className="text-ink mb-2 text-sm font-extrabold">המלצות ניהול</h3>
+          {detail.recommendations.length === 0 ? <p className="text-muted text-sm">אין המלצות פתוחות</p> : (
+            <ul className="flex flex-col gap-1.5">{detail.recommendations.map((r) => (
+              <li key={r.id} className="border-line rounded-xl border p-2 text-sm">
+                {r.href ? <Link href={r.href} className="text-ink hover:text-brand font-semibold">{r.title}</Link> : <span className="text-ink font-semibold">{r.title}</span>}
+                <p className="text-muted text-[11px]">{r.reason}{r.expected_revenue_impact > 0 ? ` · +${formatShekels(r.expected_revenue_impact)}` : ""}</p>
+              </li>
+            ))}</ul>
+          )}
+        </div>
       </div>
     </div>
   );

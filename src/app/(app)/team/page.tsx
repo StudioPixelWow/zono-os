@@ -9,7 +9,7 @@ export default async function TeamPage() {
     board = await getTeamBoard();
   } catch (e) {
     console.error("[team] load failed:", e);
-    board = { snapshot: null, agents: [], topPerformers: [], revenueLeaders: [], forecastLeaders: [], needsAttention: [], coaching: [], workload: [], territory: [], leakage: [], managementActions: [] };
+    board = { snapshot: null, office: null, agents: [], topPerformers: [], revenueLeaders: [], forecastLeaders: [], needsAttention: [], coaching: [], workload: [], territory: [], leaks: [], actions: [] };
   }
   return <TeamView board={board} />;
 }

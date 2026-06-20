@@ -169,6 +169,40 @@ export function calculateCoachingScore(s: Omit<TeamScores, "coaching_score">, m:
   return clamp(need);
 }
 
+// ── Communication + Relationship scores (Agent Twin 2.0) ─────────────────────
+export function calculateCommunicationScore(m: AgentMetrics): number {
+  let s = m.avgCommHealth != null ? m.avgCommHealth : 60;
+  if (m.missedFollowups > 0) s -= Math.min(25, m.missedFollowups * 6);
+  if (m.openCommitments > 2) s -= 8;
+  if (m.avgResponseMinutes != null && m.avgResponseMinutes <= 60) s += 6;
+  return clamp(s);
+}
+
+/** Relationship capital — optional graph relationship strength (0..100) reinforces it. */
+export function calculateRelationshipScore(m: AgentMetrics, graphStrength?: number | null): number {
+  const base = graphStrength != null
+    ? graphStrength * 0.5 + (m.avgCommHealth ?? 55) * 0.3 + Math.min(100, m.wonDeals * 10) * 0.2
+    : (m.avgCommHealth ?? 55) * 0.5 + Math.min(100, m.wonDeals * 10) * 0.3 + Math.min(100, (m.activeBuyers + m.activeSellers) * 8) * 0.2;
+  return clamp(base);
+}
+
+// ── Office health level + management priority ────────────────────────────────
+export function officeHealthLevel(score: number): "elite" | "strong" | "healthy" | "warning" | "critical" {
+  if (score >= 85) return "elite";
+  if (score >= 70) return "strong";
+  if (score >= 55) return "healthy";
+  if (score >= 38) return "warning";
+  return "critical";
+}
+export const OFFICE_LEVEL_LABEL: Record<string, string> = {
+  elite: "מצוין", strong: "חזק", healthy: "תקין", warning: "אזהרה", critical: "קריטי",
+};
+
+/** Combined manager-priority for a ranked action. */
+export function managementPriority(impact: number, urgency: number): number {
+  return clamp(impact * 0.6 + urgency * 0.4);
+}
+
 export function computeTeamScores(m: AgentMetrics): TeamScores {
   const revenue_score = calculateRevenueScore(m);
   const conversion_score = calculateConversionScore(m);

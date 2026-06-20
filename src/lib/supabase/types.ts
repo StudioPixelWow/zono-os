@@ -1406,7 +1406,80 @@ type TeamIntelligenceProfilesRow = {
   ai_summary: string | null;
   ai_growth_plan: string | null;
   ai_coaching_plan: string | null;
+  role: string | null;
+  branch: string | null;
+  start_date: string | null;
+  communication_score: number;
+  relationship_score: number;
+  strongest_locality: string | null;
+  strongest_property_type: string | null;
+  strongest_customer_type: string | null;
+  ai_strengths: Json;
+  ai_weaknesses: Json;
   last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type OfficeIntelligenceProfilesRow = {
+  id: string;
+  organization_id: string;
+  office_health_score: number;
+  health_level: string;
+  lead_health: number;
+  pipeline_health: number;
+  inventory_health: number;
+  forecast_health: number;
+  communication_health: number;
+  agent_health: number;
+  market_health: number;
+  routing_health: number;
+  matching_health: number;
+  decision_health: number;
+  growth_score: number;
+  risk_score: number;
+  ai_office_summary: string | null;
+  ai_management_plan: string | null;
+  metadata: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type TeamOpportunityLeaksRow = {
+  id: string;
+  organization_id: string;
+  leak_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  owner_user_id: string | null;
+  title: string;
+  reason: string | null;
+  lost_revenue_impact: number;
+  severity: string;
+  recommended_action: string | null;
+  status: string;
+  created_at: string;
+};
+
+type ManagementActionsRow = {
+  id: string;
+  organization_id: string;
+  action_type: string;
+  title: string;
+  reason: string | null;
+  priority_score: number;
+  urgency_score: number;
+  impact_score: number;
+  expected_revenue_impact: number;
+  expected_conversion_lift: number;
+  recommended_owner_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  href: string | null;
+  rank_position: number | null;
+  status: string;
+  metadata: Json;
   created_at: string;
   updated_at: string;
 };
@@ -2331,6 +2404,18 @@ export interface Database {
       agent_coaching_signals: TableShape<
         AgentCoachingSignalsRow,
         "organization_id" | "user_id" | "signal_type" | "title"
+      >;
+      office_intelligence_profiles: TableShape<
+        OfficeIntelligenceProfilesRow,
+        "organization_id"
+      >;
+      team_opportunity_leaks: TableShape<
+        TeamOpportunityLeaksRow,
+        "organization_id" | "leak_type" | "title"
+      >;
+      management_actions: TableShape<
+        ManagementActionsRow,
+        "organization_id" | "action_type" | "title"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,
