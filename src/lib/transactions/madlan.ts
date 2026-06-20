@@ -96,14 +96,53 @@ export async function runMadlanDeals(city: string, neighbourhood: string | null)
   return extractDeals(items as Raw[]);
 }
 
-/** Each dataset item is a city record; the transactions live under a deals array. */
+const DEAL_ARRAY_KEYS = ["deals", "recentDeals", "transactions", "dealList", "soldDeals", "closedDeals", "data"];
+const looksLikeDeal = (o: Raw): boolean => {
+  const k = Object.keys(o).join(",").toLowerCase();
+  return /price|amount|deal|sold|מחיר/.test(k) && /date|address|sqm|area|room|כתובת|תאריך/.test(k);
+};
+
+/**
+ * Flatten the actor output to individual deal rows. Robust to both shapes:
+ *  (a) one city record holding a nested deals array (deals/recentDeals/...),
+ *  (b) each dataset item already IS a deal row.
+ * Also scans nested objects for the first deal-like array.
+ */
 export function extractDeals(records: Raw[]): Raw[] {
   const out: Raw[] = [];
   for (const rec of records) {
     const cityName = str(pick(rec, ["cityHebrew", "city", "cityName"]));
-    const arr = pick(rec, ["deals", "recentDeals", "transactions", "dealList", "soldDeals"]);
-    if (Array.isArray(arr)) {
-      for (const d of arr) if (d && typeof d === "object") out.push({ ...(d as Raw), __cityName: cityName });
+    // (b) the record itself is a deal
+    if (looksLikeDeal(rec) && !DEAL_ARRAY_KEYS.some((k) => Array.isArray(rec[k]))) {
+      out.push(rec);
+      continue;
+    }
+    // (a) named arrays
+    let pushed = false;
+    for (const key of DEAL_ARRAY_KEYS) {
+      const arr = rec[key];
+      if (Array.isArray(arr) && arr.length && arr[0] && typeof arr[0] === "object" && looksLikeDeal(arr[0] as Raw)) {
+        for (const d of arr) if (d && typeof d === "object") out.push({ ...(d as Raw), __cityName: cityName });
+        pushed = true;
+      }
+    }
+    if (pushed) continue;
+    // (c) deep scan for the first deal-like array anywhere in the record
+    const stack: unknown[] = [rec];
+    let depth = 0;
+    while (stack.length && depth < 5000) {
+      depth++;
+      const o = stack.pop();
+      if (!o || typeof o !== "object") continue;
+      if (Array.isArray(o)) {
+        if (o.length && o[0] && typeof o[0] === "object" && looksLikeDeal(o[0] as Raw)) {
+          for (const d of o) if (d && typeof d === "object") out.push({ ...(d as Raw), __cityName: cityName });
+          break;
+        }
+        for (const v of o) stack.push(v);
+      } else {
+        for (const v of Object.values(o as Raw)) stack.push(v);
+      }
     }
   }
   return out;
