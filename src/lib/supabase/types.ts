@@ -1697,6 +1697,26 @@ type CommunityActivityLogsRow = {
   created_at: string;
 };
 
+type DistributionQueueRow = {
+  id: string;
+  organization_id: string;
+  distribution_plan_id: string | null;
+  distribution_plan_item_id: string | null;
+  daily_distribution_item_id: string | null;
+  property_id: string | null;
+  community_id: string | null;
+  content_id: string | null;
+  platform: string | null;
+  publish_mode: string;
+  scheduled_at: string | null;
+  status: string;
+  external_post_url: string | null;
+  external_post_id: string | null;
+  failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type CommunityIntelligenceProfilesRow = {
   id: string;
   organization_id: string;
@@ -2841,6 +2861,10 @@ export interface Database {
       community_activity_logs: TableShape<
         CommunityActivityLogsRow,
         "organization_id" | "activity_type"
+      >;
+      distribution_queue: TableShape<
+        DistributionQueueRow,
+        "organization_id"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,

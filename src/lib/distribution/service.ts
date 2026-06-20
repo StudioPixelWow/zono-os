@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import { buildPostContent, chooseAngle, type PropertyForPost } from "./content";
+import { communityLevel, COMMUNITY_LEVEL_LABEL, computeCommunityScores } from "@/lib/marketing/engine";
 
 type DB = Database["public"]["Tables"];
 type CommunityRow = DB["community_profiles"]["Row"];
@@ -56,10 +57,41 @@ export async function recomputeDistributionIntelligence(): Promise<DistRecompute
     supabase.from("market_area_snapshots").select("locality_name,demand_score,date").order("date", { ascending: false }).limit(400),
   ]);
   const communities = commRes.data ?? [];
-  const intelByComm = new Map((intelRes.data ?? []).map((i) => [i.community_id, i]));
   const properties = (propsRes.data ?? []).filter((p) => ACTIVE_PROP.has(p.status as string));
   const demandByCity = new Map<string, number>();
   for (const m of marketRes.data ?? []) { const k = cityNorm(m.locality_name); if (!demandByCity.has(k)) demandByCity.set(k, m.demand_score); }
+
+  // ── Community intelligence (self-sufficient — every approved community gets a
+  //    full profile with scores, level, recommended use and risk summary). ─────
+  const intelByComm = new Map<string, IntelRow>();
+  const intelRows: DB["community_intelligence_profiles"]["Insert"][] = communities.map((c) => {
+    const scores = computeCommunityScores({
+      membersCount: c.members_count, engagementScore: c.engagement_score, leadScore: c.lead_score, dealScore: c.deal_score,
+      roiScore: c.roi_score, trustScore: c.trust_score, status: c.status, audienceType: c.audience_type,
+      audienceDemand: 60, growthProxy: Math.min(100, 40 + Math.round(Math.log10(Math.max(1, c.members_count)) * 15)),
+    });
+    const spamRisk = c.members_count > 0 && c.members_count < 50 ? 35 : 10;
+    const complianceRisk = c.privacy_level === "private" ? 45 : c.privacy_level === "closed" ? 25 : 10;
+    const baseLevel = communityLevel(scores, c.status);
+    const level = spamRisk >= 50 || complianceRisk >= 50 ? "risky" : baseLevel;
+    const reachScore = clamp(Math.min(100, Math.log10(Math.max(1, c.members_count)) * 28));
+    return {
+      organization_id: orgId, community_id: c.id, ...scores,
+      level: baseLevel, intelligence_level: level, reach_score: reachScore, trust_score: c.trust_score, influence_score: scores.community_influence_score,
+      spam_risk_score: spamRisk, compliance_risk_score: complianceRisk,
+      ai_summary: `${c.name}: קהילה ${COMMUNITY_LEVEL_LABEL[baseLevel]} · בריאות ${scores.community_health_score} · ROI ${scores.roi_score} · סיכון ${Math.max(spamRisk, complianceRisk)}.`,
+      strengths: (scores.lead_quality_score >= 60 ? ["איכות לידים גבוהה"] : []).concat(scores.deal_generation_score >= 60 ? ["יצירת עסקאות"] : []) as never,
+      weaknesses: (scores.activity_score < 40 ? ["פעילות נמוכה"] : []).concat(reachScore < 40 ? ["חשיפה מוגבלת"] : []) as never,
+      recommended_use: level === "risky" ? "הימנע מהפצה — סיכון תאימות" : scores.deal_generation_score >= 60 ? "מומלצת להפצת נכסים אקטיבית" : "מתאימה לחיזוק נוכחות ומודעות",
+      risk_summary: spamRisk >= 35 || complianceRisk >= 25 ? "שים לב לכללי הקהילה ולמדיניות ספאם." : "סיכון תאימות נמוך.",
+      last_calculated_at: new Date().toISOString(),
+    };
+  });
+  // Upsert (never wipe non-approved communities' intel — marketing owns those).
+  for (let i = 0; i < intelRows.length; i += 500) { const cc = intelRows.slice(i, i + 500); if (cc.length) await supabase.from("community_intelligence_profiles").upsert(cc as never, { onConflict: "organization_id,community_id" }); }
+  const approvedIds = communities.map((c) => c.id);
+  if (approvedIds.length) { const { data: freshIntel } = await supabase.from("community_intelligence_profiles").select("*").in("community_id", approvedIds); for (const i of freshIntel ?? []) intelByComm.set(i.community_id, i); }
+  void intelRes;
 
   // Community DNA (deterministic from community fields + intel).
   const dnaRows: DB["community_dna_profiles"]["Insert"][] = communities.map((c) => ({
@@ -235,7 +267,7 @@ export async function markDailyItem(itemId: string, status: string, opts?: { url
   if (status === "manual_published") { patch.manual_published_at = new Date().toISOString(); if (opts?.url) patch.manual_post_url = opts.url; }
   if (status === "skipped") patch.skipped_reason = opts?.reason ?? null;
   if (status === "failed") patch.failure_reason = opts?.reason ?? null;
-  const { data: item } = await supabase.from("daily_distribution_items").update(patch as never).eq("id", itemId).select("batch_id,community_id,property_id,distribution_plan_item_id").single();
+  const { data: item } = await supabase.from("daily_distribution_items").update(patch as never).eq("id", itemId).select("batch_id,community_id,property_id,distribution_plan_id,distribution_plan_item_id").single();
   if (!item) return;
   // Recompute batch counters.
   const { data: siblings } = await supabase.from("daily_distribution_items").select("status").eq("batch_id", item.batch_id);
@@ -247,6 +279,14 @@ export async function markDailyItem(itemId: string, status: string, opts?: { url
   if (status === "manual_published") {
     await supabase.from("community_activity_logs").insert({ organization_id: orgId, community_id: item.community_id, activity_type: "post_manual_published", entity_type: "property", entity_id: item.property_id, title: "פורסם ידנית" } as never);
     if (item.distribution_plan_item_id) await supabase.from("distribution_plan_items").update({ status: "manual_published" } as never).eq("id", item.distribution_plan_item_id);
+    // Record an assisted-manual entry in the future publishing queue (audit trail).
+    await supabase.from("distribution_queue").insert({
+      organization_id: orgId, distribution_plan_id: item.distribution_plan_id, distribution_plan_item_id: item.distribution_plan_item_id,
+      daily_distribution_item_id: itemId, property_id: item.property_id, community_id: item.community_id,
+      publish_mode: "assisted_manual", status: "manual_posted", external_post_url: opts?.url ?? null,
+    } as never);
+  } else if (status === "skipped") {
+    await supabase.from("community_activity_logs").insert({ organization_id: orgId, community_id: item.community_id, activity_type: "post_skipped", entity_type: "property", entity_id: item.property_id, title: "דולג" } as never);
   }
 }
 
