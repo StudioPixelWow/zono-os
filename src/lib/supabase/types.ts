@@ -1697,6 +1697,108 @@ type CommunityActivityLogsRow = {
   created_at: string;
 };
 
+type CommunityLeadAttributionRow = {
+  id: string;
+  organization_id: string;
+  community_id: string | null;
+  lead_id: string | null;
+  property_id: string | null;
+  campaign_id: string | null;
+  distribution_item_id: string | null;
+  source_interaction_id: string | null;
+  attribution_confidence: number;
+  attribution_reason: string | null;
+  created_at: string;
+};
+
+type DealProfilesRow = {
+  id: string;
+  organization_id: string;
+  match_id: string | null;
+  deal_id: string | null;
+  buyer_id: string | null;
+  seller_id: string | null;
+  property_id: string | null;
+  assigned_agent_id: string | null;
+  deal_stage: string;
+  deal_health: number;
+  deal_risk: number;
+  deal_velocity: number;
+  deal_probability: number;
+  deal_value: number;
+  commission_value: number;
+  expected_close_date: string | null;
+  primary_blocker: string | null;
+  next_best_action: string | null;
+  ai_summary: string | null;
+  status: string;
+  locality: string | null;
+  metadata: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DealJourneysRow = {
+  id: string;
+  organization_id: string;
+  deal_profile_id: string;
+  stage: string;
+  entered_at: string;
+  exited_at: string | null;
+  duration_hours: number | null;
+  owner_id: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+type DealNegotiationsRow = {
+  id: string;
+  organization_id: string;
+  deal_profile_id: string;
+  asking_price: number | null;
+  buyer_offer: number | null;
+  seller_counter_offer: number | null;
+  current_gap: number;
+  price_movement: number;
+  concessions: Json;
+  agreement_probability: number;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DealObjectionsRow = {
+  id: string;
+  organization_id: string;
+  deal_profile_id: string;
+  objection_type: string;
+  severity: string;
+  resolved: boolean;
+  owner_id: string | null;
+  description: string | null;
+  recommended_action: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DealTasksRow = {
+  id: string;
+  organization_id: string;
+  deal_profile_id: string;
+  title: string;
+  owner_id: string | null;
+  priority: string;
+  deadline: string | null;
+  impact_score: number;
+  status: string;
+  reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type SocialInteractionsRow = {
   id: string;
   organization_id: string;
@@ -2948,6 +3050,10 @@ export interface Database {
         CommunityActivityLogsRow,
         "organization_id" | "activity_type"
       >;
+      community_lead_attribution: TableShape<
+        CommunityLeadAttributionRow,
+        "organization_id"
+      >;
       distribution_queue: TableShape<
         DistributionQueueRow,
         "organization_id"
@@ -2963,6 +3069,26 @@ export interface Database {
       social_followups: TableShape<
         SocialFollowupsRow,
         "organization_id"
+      >;
+      deal_profiles: TableShape<
+        DealProfilesRow,
+        "organization_id"
+      >;
+      deal_journeys: TableShape<
+        DealJourneysRow,
+        "organization_id" | "deal_profile_id" | "stage"
+      >;
+      deal_negotiations: TableShape<
+        DealNegotiationsRow,
+        "organization_id" | "deal_profile_id"
+      >;
+      deal_objections: TableShape<
+        DealObjectionsRow,
+        "organization_id" | "deal_profile_id" | "objection_type"
+      >;
+      deal_tasks: TableShape<
+        DealTasksRow,
+        "organization_id" | "deal_profile_id" | "title"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,

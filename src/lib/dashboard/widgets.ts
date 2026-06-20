@@ -33,6 +33,7 @@ const entityHref = (t: string, id: string): string =>
     : t === "graph" ? "/graph"
     : t === "forecast" ? "/forecast"
     : t === "match" ? "/matches"
+    : t === "deal" ? "/deals"
     : t === "team" ? `/team/${id}`
     : t === "team_office" ? "/team"
     : t === "revenue" ? "/revenue"
@@ -53,6 +54,7 @@ const OPP_META: Record<string, { kind: string; tone: Tone; icon: string }> = {
   seller: { kind: "מוכר", tone: "blue", icon: "Shield" },
   buyer: { kind: "קונה", tone: "green", icon: "Users" },
   match: { kind: "עסקה", tone: "purple", icon: "Sparkles" },
+  deal: { kind: "עסקה מנוהלת", tone: "purple", icon: "Handshake" },
 };
 
 export async function getOpportunityWidgets(): Promise<HotOpportunity[]> {

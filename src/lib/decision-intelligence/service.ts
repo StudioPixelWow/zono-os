@@ -71,6 +71,7 @@ interface OrgData {
   marketingOpps: { id: string; signalType: string; title: string; description: string | null; impact: number; entityType: string | null; entityId: string | null; action: string | null }[];
   distributionOpps: { id: string; signalType: string; title: string; description: string | null; impact: number; propertyId: string | null; communityId: string | null }[];
   socialLeads: { id: string; name: string; intent: string | null; quality: number; status: string; priority: number; action: string | null }[];
+  deals: { id: string; stage: string; health: number; risk: number; velocity: number; probability: number; value: number; commission: number; nextAction: string | null; locality: string | null; daysToClose: number | null }[];
   graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
   forecastSignals: { id: string; forecastId: string | null; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
@@ -84,7 +85,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp, socLeads] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp, socLeads, dealP] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -115,6 +116,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("marketing_opportunity_signals").select("id,signal_type,title,description,impact_score,entity_type,entity_id,recommended_action").eq("status", "open").order("impact_score", { ascending: false }).limit(15),
     supabase.from("distribution_opportunity_signals").select("id,signal_type,title,description,impact_score,property_id,community_id").eq("status", "new").order("impact_score", { ascending: false }).limit(15),
     supabase.from("social_leads").select("id,person_name,intent,lead_quality_score,status,priority_score,recommended_next_action").in("status", ["new", "reviewed", "qualified"]).order("priority_score", { ascending: false }).limit(15),
+    supabase.from("deal_profiles").select("id,deal_stage,deal_health,deal_risk,deal_velocity,deal_probability,deal_value,commission_value,next_best_action,locality,expected_close_date").eq("status", "active").order("deal_value", { ascending: false }).limit(60),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -183,6 +185,7 @@ async function gatherOrgData(): Promise<OrgData> {
     marketingOpps: (mktOpp.data ?? []).map((o) => ({ id: o.id, signalType: o.signal_type, title: o.title, description: o.description, impact: o.impact_score, entityType: o.entity_type, entityId: o.entity_id, action: o.recommended_action })),
     distributionOpps: (distOpp.data ?? []).map((o) => ({ id: o.id, signalType: o.signal_type, title: o.title, description: o.description, impact: o.impact_score, propertyId: o.property_id, communityId: o.community_id })),
     socialLeads: (socLeads.data ?? []).map((s) => ({ id: s.id, name: s.person_name ?? "ליד חברתי", intent: s.intent, quality: s.lead_quality_score, status: s.status, priority: s.priority_score, action: s.recommended_next_action })),
+    deals: (dealP.data ?? []).map((d) => ({ id: d.id, stage: d.deal_stage, health: d.deal_health, risk: d.deal_risk, velocity: d.deal_velocity, probability: d.deal_probability, value: d.deal_value, commission: d.commission_value, nextAction: d.next_best_action, locality: d.locality, daysToClose: d.expected_close_date ? Math.round((new Date(d.expected_close_date).getTime() - Date.now()) / EXT_DAY) : null })),
     graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     forecastSignals: (fcSig.data ?? []).map((s) => ({ id: s.id, forecastId: s.forecast_id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
@@ -501,8 +504,44 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
     }
   }
 
+  // Deal Execution — deals at risk / stalled / ready to close / lost-deal risk.
+  for (const dl of d.deals) {
+    const title = `עסקה · ${DEAL_STAGE_LABEL_MAP[dl.stage] ?? dl.stage}${dl.locality ? ` · ${dl.locality}` : ""}`;
+    if (dl.risk >= 70) {
+      rows.push({
+        org_id: orgId, entity_type: "deal", entity_id: dl.id,
+        attention_score: 86, urgency_score: 84, impact_score: clamp(Math.min(100, dl.commission / 1000)), confidence_score: 74,
+        revenue_impact_score: clamp(Math.min(100, dl.commission / 1000)), relationship_impact_score: 40, churn_impact_score: clamp(dl.risk),
+        title: `סיכון אובדן עסקה · ${title}`, reason: `סיכון גבוה מאוד (${dl.risk}) — העסקה עלולה ללכת לאיבוד`,
+        recommended_action: dl.nextAction ?? "התערב מיידית לשמירת העסקה", expected_outcome: "מניעת אובדן העסקה וההכנסה", status: "open",
+      });
+    } else if (dl.risk >= 55) {
+      rows.push({
+        org_id: orgId, entity_type: "deal", entity_id: dl.id,
+        attention_score: 76, urgency_score: 72, impact_score: clamp(Math.min(100, dl.commission / 1000)), confidence_score: 72,
+        revenue_impact_score: clamp(Math.min(100, dl.commission / 1000)), relationship_impact_score: 35, churn_impact_score: clamp(dl.risk),
+        title: `עסקה בסיכון · ${title}`, reason: `סיכון מוגבר (${dl.risk}) בעסקה פעילה`,
+        recommended_action: dl.nextAction ?? "טפל בחסמים לשמירת העסקה", expected_outcome: "ייצוב העסקה", status: "open",
+      });
+    } else if (dl.velocity <= 30) {
+      rows.push({
+        org_id: orgId, entity_type: "deal", entity_id: dl.id,
+        attention_score: 68, urgency_score: 66, impact_score: clamp(Math.min(100, dl.commission / 1000)), confidence_score: 68,
+        revenue_impact_score: clamp(Math.min(100, dl.commission / 1000)), relationship_impact_score: 30, churn_impact_score: 40,
+        title: `עסקה תקועה · ${title}`, reason: `מהירות נמוכה (${dl.velocity}) — העסקה לא מתקדמת`,
+        recommended_action: dl.nextAction ?? "האץ את העסקה לשלב הבא", expected_outcome: "חידוש מומנטום", status: "open",
+      });
+    }
+  }
+
   return rows.sort((a, b) => (b.attention_score ?? 0) - (a.attention_score ?? 0));
 }
+
+const DEAL_STAGE_LABEL_MAP: Record<string, string> = {
+  new_opportunity: "הזדמנות חדשה", contacted: "יצירת קשר", meeting_scheduled: "פגישה נקבעה", property_visit: "ביקור בנכס",
+  negotiation: "משא ומתן", offer_sent: "הצעה נשלחה", offer_received: "הצעה התקבלה", agreement_draft: "טיוטת הסכם",
+  legal_review: "בדיקה משפטית", signed: "נחתם", closed: "נסגר", lost: "אבוד",
+};
 
 function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
   const rows: OppInsert[] = [];
@@ -679,6 +718,22 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       title: `${doubleSide ? "דו״צ פוטנציאלי · " : ""}${l.title ?? "מודעה חיצונית"}${l.city ? ` · ${l.city}` : ""}`,
       description: `מודעה חיצונית: ${reasons.join(" · ")}.`,
       recommended_action: doubleSide ? "פעולת דו״צ: גייס את הבעלים והצג לקונה התואם" : fitsBuyer ? "התאם לקונה הפעיל ותאם הצגה" : privateOwner ? "צור קשר עם הבעלים לבדיקת בלעדיות" : "בדוק את המודעה ושקול יצירת קשר",
+      status: "open",
+    });
+  }
+  // Deal Execution — ready-to-close + high-value deals worth pushing.
+  const READY = new Set(["agreement_draft", "legal_review", "signed"]);
+  for (const dl of d.deals) {
+    const readyToClose = READY.has(dl.stage) && dl.probability >= 75 && dl.risk < 55;
+    const highValue = dl.commission >= 60_000 && dl.probability >= 55;
+    if (!readyToClose && !highValue) continue;
+    const label = DEAL_STAGE_LABEL_MAP[dl.stage] ?? dl.stage;
+    rows.push({
+      org_id: orgId, entity_type: "deal", entity_id: dl.id,
+      opportunity_score: clamp(readyToClose ? 88 : Math.max(72, dl.probability)), impact_score: clamp(Math.min(100, dl.commission / 1000)), confidence_score: 76,
+      title: `${readyToClose ? "עסקה לסגירה · " : "עסקה בעלת ערך גבוה · "}${label}${dl.locality ? ` · ${dl.locality}` : ""}`,
+      description: `עמלה צפויה ${Math.round(dl.commission).toLocaleString()}₪ · סיכוי ${dl.probability}%${readyToClose ? " · קרובה לסגירה" : ""}.`,
+      recommended_action: dl.nextAction ?? (readyToClose ? "השלם את הסגירה במרכז ניהול העסקאות" : "תעדף ודחוף את העסקה לסגירה"),
       status: "open",
     });
   }
