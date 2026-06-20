@@ -365,9 +365,11 @@ export async function getTransactionsBoard(filters: TransactionsFilters = {}): P
   const { orgId, profile, organization } = await ctx();
   const supabase = await createClient();
   const market = resolveAgentMarket(profile, organization);
+  // Transactions are already coverage-scoped to the agent's city, so we do NOT
+  // implicitly filter by the profile city (the actor's spelling, e.g. "קריית"
+  // vs the profile's "קרית", can differ). Only an explicit city filter applies.
   let q = supabase.from("property_transactions").select("*").eq("organization_id", orgId);
   if (filters.city) q = q.eq("city_name", normalizeCityName(filters.city) ?? "");
-  else if (market.city) q = q.eq("city_name", market.city);
   if (filters.neighborhood) q = q.eq("neighborhood_name", normalizeNeighborhoodName(filters.neighborhood) ?? "");
   if (filters.street) q = q.eq("street", normalizeStreetName(filters.street) ?? "");
   if (filters.propertyType) q = q.eq("property_type", filters.propertyType);
