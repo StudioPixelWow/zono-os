@@ -17,7 +17,13 @@ import {
   buildTransactionsInput, canonicalCityName, govmapActorId, isTransactionsApifyConfigured, normalizeTransaction, runTransactionsActor,
   type NormalizedTransaction,
 } from "./providers";
-import { fetchMadlanDealsFromDataset, getMadlanRun, isMadlanConfigured, MADLAN_ACTOR_NAME, MADLAN_SOURCE, madlanActorId, normalizeMadlanTransaction, runMadlanDeals, startMadlanRun, type NormalizedMadlanTransaction } from "./madlan";
+import { fetchMadlanDealsFromDataset, getMadlanRun, isMadlanConfigured, MADLAN_ACTOR_NAME, MADLAN_SOURCE, madlanActorId, madlanDocId, normalizeMadlanTransaction, runMadlanDeals, startMadlanRun, type NormalizedMadlanTransaction } from "./madlan";
+
+const MADLAN_MAX_ROWS = 1000;
+/** Newest-first, capped to the most recent N — matches Madlan's city page. */
+function topRecent(rows: NormalizedMadlanTransaction[]): NormalizedMadlanTransaction[] {
+  return [...rows].sort((a, b) => (b.dealDate ?? "").localeCompare(a.dealDate ?? "")).slice(0, MADLAN_MAX_ROWS);
+}
 
 type DB = Database["public"]["Tables"];
 const isDev = process.env.NODE_ENV !== "production";
@@ -189,16 +195,11 @@ export async function syncMadlanForAgent(): Promise<MadlanSyncResult> {
   const startedAt = new Date().toISOString();
   let deals = 0, imported = 0, duplicates = 0, crossSource = 0, error: string | null = null;
   try {
-    // Madlan expects the agent's own city spelling (קרית…), not GovMap canonical.
-    const madlanCity = market.rawCity ?? market.city!;
-    const scopes: (string | null)[] = market.neighborhoods.length ? [null, ...market.neighborhoods] : [null];
-    const raws: Record<string, unknown>[] = [];
-    for (const n of scopes) {
-      try { raws.push(...await runMadlanDeals(madlanCity, n)); } catch { /* isolate scope */ }
-    }
+    // Madlan needs the precise area docId (קרית-ביאליק-ישראל), not a free name.
+    const madlanCity = madlanDocId(market.rawCity ?? market.city!);
+    const raws = await runMadlanDeals(madlanCity, null);
     deals = raws.length;
-    const normalized = raws.map(normalizeMadlanTransaction);
-    const res = await persistMadlanTransactions(orgId, normalized);
+    const res = await persistMadlanTransactions(orgId, topRecent(raws.map(normalizeMadlanTransaction)));
     imported = res.imported; duplicates = res.duplicates; crossSource = res.crossSource;
   } catch (e) {
     error = e instanceof Error ? e.message : "madlan sync failed";
@@ -209,7 +210,6 @@ export async function syncMadlanForAgent(): Promise<MadlanSyncResult> {
     started_at: startedAt, finished_at: new Date().toISOString(), records_imported: imported,
     duplicates_skipped: duplicates, total_records: deals, error_message: error, raw_response: { source: MADLAN_SOURCE, crossSource },
   } as never);
-  if (!error) await recomputeDerivedIntelligence();
   return { imported, duplicates, crossSource, deals, needsConfig: false, error };
 }
 
@@ -222,7 +222,7 @@ export async function startMadlanSync(): Promise<MadlanStart> {
   const market = resolveAgentMarket(profile, organization);
   if (!market.city) return { runId: null, datasetId: null, city: null, needsConfig: true, error: null };
   if (!isMadlanConfigured()) return { runId: null, datasetId: null, city: market.city, needsConfig: false, error: "APIFY_TOKEN missing — Madlan sync unavailable" };
-  const madlanCity = market.rawCity ?? market.city;
+  const madlanCity = madlanDocId(market.rawCity ?? market.city!);
   try {
     const r = await startMadlanRun(madlanCity, null);
     return { runId: r.runId, datasetId: r.datasetId, city: madlanCity, needsConfig: false, error: null };
@@ -247,7 +247,7 @@ export async function finishMadlanSync(datasetId: string): Promise<MadlanSyncRes
   try {
     const raws = await fetchMadlanDealsFromDataset(datasetId);
     deals = raws.length;
-    const res = await persistMadlanTransactions(orgId, raws.map(normalizeMadlanTransaction));
+    const res = await persistMadlanTransactions(orgId, topRecent(raws.map(normalizeMadlanTransaction)));
     imported = res.imported; duplicates = res.duplicates; crossSource = res.crossSource;
   } catch (e) {
     error = e instanceof Error ? e.message : "madlan finish failed";
@@ -259,7 +259,8 @@ export async function finishMadlanSync(datasetId: string): Promise<MadlanSyncRes
     started_at: startedAt, finished_at: new Date().toISOString(), records_imported: imported,
     duplicates_skipped: duplicates, total_records: deals, error_message: error, raw_response: { source: MADLAN_SOURCE, crossSource },
   } as never);
-  if (!error) await recomputeDerivedIntelligence();
+  // NOTE: heavy street/building recompute is intentionally NOT awaited here — it
+  // can take long and froze the finish step. It runs on the GovMap sync instead.
   return { imported, duplicates, crossSource, deals, needsConfig: false, error };
 }
 

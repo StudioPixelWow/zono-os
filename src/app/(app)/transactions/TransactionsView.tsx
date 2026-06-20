@@ -33,7 +33,8 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
         let datasetId = s.datasetId; let status = "RUNNING";
         const TERMINAL = ["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"];
         setProgress({ status: "RUNNING", elapsed: 0 });
-        for (let i = 0; i < 160; i++) {
+        // No hard time cap on the pull — keep polling until the run finishes.
+        for (let i = 0; i < 400; i++) {
           await new Promise((r) => setTimeout(r, 3000));
           const p = await pollMadlanSyncAction(s.runId);
           status = p.status; if (p.datasetId) datasetId = p.datasetId;

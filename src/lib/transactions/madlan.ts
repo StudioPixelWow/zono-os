@@ -87,6 +87,21 @@ export function buildMadlanInput(city: string, neighbourhood: string | null): Re
   return input;
 }
 
+/**
+ * Build Madlan's precise area docId (e.g. "קרית-ביאליק-ישראל") so the actor
+ * returns ONLY that city — not the whole metro. Normalizes common spellings:
+ * "ק.ביאליק" / "ק ביאליק" → "קרית …", "קריית" → "קרית" (Madlan's spelling).
+ */
+export function madlanDocId(city: string): string {
+  let s = String(city).trim().replace(/["'׳״]/g, "");
+  // Expand the "ק." / "ק'" / "ק " abbreviation to "קרית " (but not when already "קרית…").
+  if (/^ק[.'׳״]\s*\S/.test(s) || /^ק\s+\S/.test(s)) s = s.replace(/^ק[.'׳״]?\s*/, "קרית ");
+  s = s.replace(/קריית/g, "קרית");          // Madlan uses one-yud קרית
+  s = s.replace(/\s+ישראל$/, "").trim();      // avoid double suffix
+  s = s.replace(/\s+/g, "-");
+  return `${s}-ישראל`;
+}
+
 /** Pull the per-city record(s) and flatten their `deals` arrays (blocking). */
 export async function runMadlanDeals(city: string, neighbourhood: string | null): Promise<Raw[]> {
   const run = await client().actor(madlanActorId()).call(buildMadlanInput(city, neighbourhood), { timeout: 300, waitSecs: 290, memory: 1024 });
