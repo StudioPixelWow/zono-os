@@ -36,6 +36,7 @@ const entityHref = (t: string, id: string): string =>
     : t === "team" ? `/team/${id}`
     : t === "team_office" ? "/team"
     : t === "revenue" ? "/revenue"
+    : t === "marketing" ? "/marketing"
     : "/command";
 const relWhen = (iso: string | null) => {
   if (!iso) return "—";

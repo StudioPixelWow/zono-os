@@ -1484,6 +1484,99 @@ type ManagementActionsRow = {
   updated_at: string;
 };
 
+type CommunityProfilesRow = {
+  id: string;
+  organization_id: string;
+  name: string;
+  platform: string;
+  city: string | null;
+  locality: string | null;
+  audience_type: string;
+  members_count: number;
+  engagement_score: number;
+  lead_score: number;
+  deal_score: number;
+  roi_score: number;
+  trust_score: number;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type CommunityIntelligenceProfilesRow = {
+  id: string;
+  organization_id: string;
+  community_id: string;
+  activity_score: number;
+  lead_quality_score: number;
+  deal_generation_score: number;
+  audience_match_score: number;
+  roi_score: number;
+  growth_score: number;
+  community_health_score: number;
+  community_influence_score: number;
+  level: string;
+  ai_summary: string | null;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyMarketingProfilesRow = {
+  id: string;
+  organization_id: string;
+  property_id: string;
+  target_audience: Json;
+  buyer_personas: Json;
+  motivators: Json;
+  objections: Json;
+  pain_points: Json;
+  angles: Json;
+  recommended_channels: Json;
+  recommended_communities: Json;
+  recommended_content_types: Json;
+  recommended_publishing_times: Json;
+  recommended_budget_level: string | null;
+  expected_lead_volume: number;
+  expected_conversion: number;
+  marketing_score: number;
+  ai_summary: string | null;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BuyerSegmentsRow = {
+  id: string;
+  organization_id: string;
+  segment_key: string;
+  label: string;
+  segment_size: number;
+  segment_quality: number;
+  segment_activity: number;
+  segment_conversion: number;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type MarketingOpportunitySignalsRow = {
+  id: string;
+  organization_id: string;
+  signal_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  title: string;
+  description: string | null;
+  impact_score: number;
+  confidence_score: number;
+  recommended_action: string | null;
+  metadata: Json;
+  status: string;
+  created_at: string;
+};
+
 type OrganizationRevenueProfilesRow = {
   id: string;
   organization_id: string;
@@ -2485,6 +2578,26 @@ export interface Database {
       revenue_leakage_events: TableShape<
         RevenueLeakageEventsRow,
         "organization_id" | "source" | "title"
+      >;
+      community_profiles: TableShape<
+        CommunityProfilesRow,
+        "organization_id" | "name"
+      >;
+      community_intelligence_profiles: TableShape<
+        CommunityIntelligenceProfilesRow,
+        "organization_id" | "community_id"
+      >;
+      property_marketing_profiles: TableShape<
+        PropertyMarketingProfilesRow,
+        "organization_id" | "property_id"
+      >;
+      buyer_segments: TableShape<
+        BuyerSegmentsRow,
+        "organization_id" | "segment_key" | "label"
+      >;
+      marketing_opportunity_signals: TableShape<
+        MarketingOpportunitySignalsRow,
+        "organization_id" | "signal_type" | "title"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,
