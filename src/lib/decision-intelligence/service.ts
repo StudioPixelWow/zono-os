@@ -62,6 +62,7 @@ interface OrgData {
   brokerDominance: { brokerId: string; brokerName: string; city: string; count: number }[];
   acquisitionOps: { profileId: string; title: string; city: string | null; score: number; privateSeller: number; buyerDemand: number; doubleSide: number; nextAction: string | null; reason: string | null }[];
   competitorSignals: { competitorId: string | null; signalType: string; title: string; description: string | null; severity: string }[];
+  routingOverloaded: { userId: string; name: string; agentScore: number; workloadScore: number }[];
   externalPriceDrops: Set<string>;
   externalDuplicates: Set<string>;
   externalCityAvgSqm: Map<string, number>;
@@ -73,7 +74,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -94,6 +95,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("external_listings").select("detected_broker_id,detected_broker_name,city").not("detected_broker_id", "is", null).eq("status", "active").in("broker_detection_status", ["auto", "approved"]).limit(1000),
     supabase.from("inventory_acquisition_profiles").select("id,acquisition_score,private_seller_score,buyer_demand_score,double_side_potential_score,next_best_action,reason_summary,acquisition_status,external_listings(title,city)").gte("acquisition_score", 55).not("acquisition_status", "in", "(not_relevant,promoted_to_crm,lost)").order("acquisition_score", { ascending: false }).limit(40),
     supabase.from("competitor_signals").select("competitor_profile_id,signal_type,title,description,severity").in("signal_type", ["dominant_broker", "competitor_losing_inventory", "vulnerable_broker", "competitor_growing"]).order("confidence_score", { ascending: false }).limit(30),
+    supabase.from("agent_intelligence_profiles").select("user_id,agent_score,workload_score,users(full_name)").gte("agent_score", 70).lt("workload_score", 35).limit(15),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -153,6 +155,7 @@ async function gatherOrgData(): Promise<OrgData> {
       return { profileId: a.id, title: l?.title ?? "מודעה חיצונית", city: l?.city ?? null, score: a.acquisition_score, privateSeller: a.private_seller_score, buyerDemand: a.buyer_demand_score, doubleSide: a.double_side_potential_score, nextAction: a.next_best_action, reason: a.reason_summary };
     }),
     competitorSignals: (compSig.data ?? []).map((s) => ({ competitorId: s.competitor_profile_id, signalType: s.signal_type, title: s.title, description: s.description, severity: s.severity })),
+    routingOverloaded: (agtOver.data ?? []).map((a) => ({ userId: a.user_id, name: (a as unknown as { users?: { full_name: string } | null }).users?.full_name ?? "סוכן", agentScore: a.agent_score, workloadScore: a.workload_score })),
     externalListings,
     externalPriceDrops: new Set((extH.data ?? []).map((h) => h.listing_id)),
     externalDuplicates: new Set((extD.data ?? []).map((dd) => dd.listing_id)),
@@ -348,6 +351,17 @@ function buildAttentionRows(orgId: string, d: OrgData): AttentionInsert[] {
       title: s.title, reason: s.description ?? "",
       recommended_action: isOpportunity ? "מקד מאמצי גיוס מול המתחרה הנחלש" : s.signalType === "dominant_broker" ? "נתח את שליטת המתחרה ובנה אסטרטגיה" : "עקוב אחר המתחרה המתחזק",
       expected_outcome: isOpportunity ? "גיוס מלאי מהמתחרה" : "מיצוב תחרותי", status: "open",
+    });
+  }
+
+  // Lead routing — overloaded top performers (route new leads elsewhere).
+  for (const a of d.routingOverloaded) {
+    rows.push({
+      org_id: orgId, entity_type: "routing", entity_id: a.userId,
+      attention_score: 70, urgency_score: 65, impact_score: 60, confidence_score: 75,
+      revenue_impact_score: 55, relationship_impact_score: 45, churn_impact_score: 0,
+      title: `${a.name} עמוס מדי`, reason: `מוביל ביצועים (${a.agentScore}) בעומס גבוה — נתב לידים חדשים לסוכן אחר`,
+      recommended_action: "אזן עומסים — נתב לידים נכנסים לסוכן פנוי", expected_outcome: "מניעת צוואר בקבוק והגדלת המרה", status: "open",
     });
   }
 

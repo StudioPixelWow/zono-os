@@ -476,6 +476,103 @@ type ExternalListingsRow = {
   updated_at: string;
 };
 
+type AgentIntelligenceProfilesRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  agent_score: number;
+  territory_score: number;
+  conversion_score: number;
+  responsiveness_score: number;
+  expertise_score: number;
+  customer_score: number;
+  workload_score: number;
+  momentum_score: number;
+  satisfaction_score: number;
+  reliability_score: number;
+  active_leads: number;
+  active_buyers: number;
+  active_sellers: number;
+  active_properties: number;
+  active_matches: number;
+  total_closed_deals: number;
+  total_revenue: number;
+  avg_response_minutes: number | null;
+  avg_days_to_close: number | null;
+  primary_localities: Json;
+  primary_property_types: Json;
+  primary_deal_types: Json;
+  strengths: Json;
+  weaknesses: Json;
+  next_best_growth_area: string | null;
+  ai_summary: string | null;
+  ai_growth_advice: string | null;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type AgentLocalityPerformanceRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  locality: string;
+  leads_count: number;
+  meetings_count: number;
+  deals_count: number;
+  revenue: number;
+  avg_days_to_close: number | null;
+  conversion_rate: number;
+  satisfaction_rate: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type AgentPropertyTypePerformanceRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  property_type: string;
+  leads_count: number;
+  deals_count: number;
+  conversion_rate: number;
+  avg_days_to_close: number | null;
+  revenue: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type LeadRoutingProfilesRow = {
+  id: string;
+  organization_id: string;
+  lead_id: string;
+  recommended_agent_id: string | null;
+  assigned_agent_id: string | null;
+  routing_score: number;
+  confidence_score: number;
+  expected_conversion_probability: number;
+  expected_days_to_close: number | null;
+  expected_revenue: number | null;
+  routing_reason: string | null;
+  routing_factors: Json;
+  ai_routing_reason: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type LeadRoutingCandidatesRow = {
+  id: string;
+  organization_id: string;
+  routing_profile_id: string;
+  user_id: string;
+  rank: number;
+  score: number;
+  probability: number;
+  reason: string | null;
+  created_at: string;
+};
+
 type CompetitorProfilesRow = {
   id: string;
   organization_id: string;
@@ -1975,6 +2072,26 @@ export interface Database {
       competitor_signals: TableShape<
         CompetitorSignalsRow,
         "organization_id" | "signal_type" | "title"
+      >;
+      agent_intelligence_profiles: TableShape<
+        AgentIntelligenceProfilesRow,
+        "organization_id" | "user_id"
+      >;
+      agent_locality_performance: TableShape<
+        AgentLocalityPerformanceRow,
+        "organization_id" | "user_id" | "locality"
+      >;
+      agent_property_type_performance: TableShape<
+        AgentPropertyTypePerformanceRow,
+        "organization_id" | "user_id" | "property_type"
+      >;
+      lead_routing_profiles: TableShape<
+        LeadRoutingProfilesRow,
+        "organization_id" | "lead_id"
+      >;
+      lead_routing_candidates: TableShape<
+        LeadRoutingCandidatesRow,
+        "organization_id" | "routing_profile_id" | "user_id"
       >;
       seller_intelligence_profiles: TableShape<
         SellerIntelligenceProfilesRow,
