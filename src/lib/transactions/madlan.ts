@@ -96,10 +96,18 @@ export async function runMadlanDeals(city: string, neighbourhood: string | null)
   return extractDeals(items as Raw[]);
 }
 
-const DEAL_ARRAY_KEYS = ["deals", "recentDeals", "transactions", "dealList", "soldDeals", "closedDeals", "data"];
+const DEAL_ARRAY_KEYS = ["deals", "recentDeals", "transactions", "dealList", "soldDeals", "closedDeals", "dealsList", "data"];
+// Keys that mark an aggregate CITY/analytics record — never a single deal.
+const AGGREGATE_KEYS = ["pricesbyrooms", "demographics", "hierarchy", "ratings", "yearlydeals", "schoolsrating", "demographicindex", "bulletinsforsale", "bulletinsforrent", "insights", "neighborhoods", "boundaries", "roi"];
 const looksLikeDeal = (o: Raw): boolean => {
-  const k = Object.keys(o).join(",").toLowerCase();
-  return /price|amount|deal|sold|מחיר/.test(k) && /date|address|sqm|area|room|כתובת|תאריך/.test(k);
+  const keys = Object.keys(o).map((s) => s.toLowerCase());
+  if (keys.filter((k) => AGGREGATE_KEYS.includes(k)).length >= 2) return false; // analytics record
+  const k = keys.join(",");
+  const hasPrice = /(deal|sold|closed)?(price|amount)|מחיר/.test(k);
+  const hasAddr = /address|street|כתובת|rechov/.test(k);
+  const hasDate = /date|תאריך/.test(k);
+  // A real deal row needs a price AND (a specific address OR a date).
+  return hasPrice && (hasAddr || hasDate);
 };
 
 /**

@@ -29,7 +29,9 @@ async function ctx() {
 }
 
 // ── Agent market coverage resolution ─────────────────────────────────────────
-interface AgentMarket { city: string | null; neighborhoods: string[] }
+// `city` is the canonical GovMap spelling (קריית…) used for storage + filtering.
+// `rawCity` is the agent's original spelling (קרית…) — what Madlan expects.
+interface AgentMarket { city: string | null; rawCity: string | null; neighborhoods: string[] }
 
 function resolveAgentMarket(profile: DB["users"]["Row"], org: DB["organizations"]["Row"] | null): AgentMarket {
   const city = profile.primary_city || profile.operating_city || (org?.operating_cities?.[0] ?? null);
@@ -37,7 +39,7 @@ function resolveAgentMarket(profile: DB["users"]["Row"], org: DB["organizations"
   const neighborhoods = (primary.length ? primary : profile.operating_neighborhoods?.length ? profile.operating_neighborhoods : org?.operating_neighborhoods ?? [])
     .map((n) => normalizeNeighborhoodName(n))
     .filter((n): n is string => !!n);
-  return { city: canonicalCityName(city), neighborhoods };
+  return { city: canonicalCityName(city), rawCity: city ? String(city).trim() : null, neighborhoods };
 }
 
 export interface CoverageEnsureResult { created: number; city: string | null; needsConfig: boolean; largeCityWarning: boolean }
@@ -187,11 +189,12 @@ export async function syncMadlanForAgent(): Promise<MadlanSyncResult> {
   const startedAt = new Date().toISOString();
   let deals = 0, imported = 0, duplicates = 0, crossSource = 0, error: string | null = null;
   try {
-    // Pull whole city, plus each configured neighborhood for completeness.
+    // Madlan expects the agent's own city spelling (קרית…), not GovMap canonical.
+    const madlanCity = market.rawCity ?? market.city!;
     const scopes: (string | null)[] = market.neighborhoods.length ? [null, ...market.neighborhoods] : [null];
     const raws: Record<string, unknown>[] = [];
     for (const n of scopes) {
-      try { raws.push(...await runMadlanDeals(market.city, n)); } catch { /* isolate scope */ }
+      try { raws.push(...await runMadlanDeals(madlanCity, n)); } catch { /* isolate scope */ }
     }
     deals = raws.length;
     const normalized = raws.map(normalizeMadlanTransaction);
