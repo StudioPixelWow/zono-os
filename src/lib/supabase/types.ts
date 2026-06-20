@@ -1500,8 +1500,201 @@ type CommunityProfilesRow = {
   trust_score: number;
   status: string;
   notes: string | null;
+  normalized_name: string | null;
+  community_type: string;
+  source_type: string;
+  external_community_id: string | null;
+  source_url: string | null;
+  privacy_level: string;
+  locality_id: string | null;
+  neighborhood: string | null;
+  service_areas: string[];
+  language: string;
+  description: string | null;
+  rules_summary: string | null;
+  admin_names: string[];
+  tags: string[];
+  metadata: Json;
+  approval_status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type CommunityDnaProfilesRow = {
+  id: string;
+  organization_id: string;
+  community_id: string;
+  audience_mix: Json;
+  property_type_fit: Json;
+  budget_ranges: Json;
+  preferred_localities: string[];
+  preferred_neighborhoods: string[];
+  best_content_types: string[];
+  best_posting_times: Json;
+  communication_style: string | null;
+  community_strengths: Json;
+  community_weaknesses: Json;
+  confidence_score: number;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type PropertyCommunityMatchesRow = {
+  id: string;
+  organization_id: string;
+  property_id: string;
+  community_id: string;
+  match_score: number;
+  audience_score: number;
+  location_score: number;
+  property_type_score: number;
+  budget_score: number;
+  engagement_score: number;
+  historical_score: number;
+  lead_potential_score: number;
+  deal_potential_score: number;
+  compliance_score: number;
+  confidence_score: number;
+  recommended_rank: number | null;
+  reason: string | null;
+  expected_reach: number;
+  expected_leads: number;
+  expected_deals: number;
+  expected_revenue: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type DistributionPlansRow = {
+  id: string;
+  organization_id: string;
+  property_id: string;
+  marketing_profile_id: string | null;
+  status: string;
+  distribution_score: number;
+  expected_reach: number;
+  expected_leads: number;
+  expected_matches: number;
+  expected_deals: number;
+  expected_revenue: number;
+  recommended_strategy: string | null;
+  recommended_frequency: string | null;
+  recommended_time_window: string | null;
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DistributionPlanItemsRow = {
+  id: string;
+  organization_id: string;
+  distribution_plan_id: string;
+  community_id: string;
+  property_community_match_id: string | null;
+  channel: string | null;
+  recommended_order: number | null;
+  recommended_posting_time: string | null;
+  recommended_frequency: string | null;
+  expected_reach: number;
+  expected_leads: number;
+  expected_deals: number;
+  expected_revenue: number;
+  status: string;
+  reason: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type DailyDistributionBatchesRow = {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  batch_date: string;
+  status: string;
+  total_items: number;
+  published_items: number;
+  skipped_items: number;
+  failed_items: number;
+  expected_reach: number;
+  expected_leads: number;
+  expected_deals: number;
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DailyDistributionItemsRow = {
+  id: string;
+  organization_id: string;
+  batch_id: string;
+  user_id: string | null;
+  property_id: string | null;
+  community_id: string | null;
+  distribution_plan_id: string | null;
+  distribution_plan_item_id: string | null;
+  platform: string | null;
+  community_url: string | null;
+  property_title: string | null;
+  community_name: string | null;
+  recommended_time: string | null;
+  priority_score: number;
+  expected_reach: number;
+  expected_leads: number;
+  expected_deals: number;
+  post_text: string | null;
+  post_title: string | null;
+  suggested_cta: string | null;
+  suggested_hashtags: string[];
+  creative_url: string | null;
+  image_url: string | null;
+  copy_payload: Json;
+  status: string;
+  manual_post_url: string | null;
+  manual_published_at: string | null;
+  skipped_reason: string | null;
+  failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DistributionOpportunitySignalsRow = {
+  id: string;
+  organization_id: string;
+  signal_type: string;
+  community_id: string | null;
+  property_id: string | null;
+  user_id: string | null;
+  locality: string | null;
+  title: string;
+  description: string | null;
+  impact_score: number;
+  expected_leads: number;
+  expected_deals: number;
+  expected_revenue: number;
+  urgency_score: number;
+  confidence_score: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type CommunityActivityLogsRow = {
+  id: string;
+  organization_id: string;
+  community_id: string | null;
+  activity_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  title: string | null;
+  description: string | null;
+  metadata: Json;
+  created_at: string;
 };
 
 type CommunityIntelligenceProfilesRow = {
@@ -1518,6 +1711,24 @@ type CommunityIntelligenceProfilesRow = {
   community_influence_score: number;
   level: string;
   ai_summary: string | null;
+  reach_score: number;
+  trust_score: number;
+  influence_score: number;
+  spam_risk_score: number;
+  compliance_risk_score: number;
+  intelligence_level: string;
+  leads_generated: number;
+  buyers_created: number;
+  sellers_created: number;
+  matches_created: number;
+  deals_created: number;
+  estimated_revenue: number;
+  estimated_commission: number;
+  last_distribution_at: string | null;
+  strengths: Json;
+  weaknesses: Json;
+  recommended_use: string | null;
+  risk_summary: string | null;
   last_calculated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -2598,6 +2809,38 @@ export interface Database {
       marketing_opportunity_signals: TableShape<
         MarketingOpportunitySignalsRow,
         "organization_id" | "signal_type" | "title"
+      >;
+      community_dna_profiles: TableShape<
+        CommunityDnaProfilesRow,
+        "organization_id" | "community_id"
+      >;
+      property_community_matches: TableShape<
+        PropertyCommunityMatchesRow,
+        "organization_id" | "property_id" | "community_id"
+      >;
+      distribution_plans: TableShape<
+        DistributionPlansRow,
+        "organization_id" | "property_id"
+      >;
+      distribution_plan_items: TableShape<
+        DistributionPlanItemsRow,
+        "organization_id" | "distribution_plan_id" | "community_id"
+      >;
+      daily_distribution_batches: TableShape<
+        DailyDistributionBatchesRow,
+        "organization_id"
+      >;
+      daily_distribution_items: TableShape<
+        DailyDistributionItemsRow,
+        "organization_id" | "batch_id"
+      >;
+      distribution_opportunity_signals: TableShape<
+        DistributionOpportunitySignalsRow,
+        "organization_id" | "signal_type" | "title"
+      >;
+      community_activity_logs: TableShape<
+        CommunityActivityLogsRow,
+        "organization_id" | "activity_type"
       >;
       graph_entities: TableShape<
         GraphEntitiesRow,

@@ -69,6 +69,7 @@ interface OrgData {
   teamLeaks: { id: string; leakType: string; title: string; reason: string | null; impact: number; severity: string; entityType: string | null; entityId: string | null }[];
   revenue: { gap: number; gapLevel: string; gapScore: number; atRisk: number; forecast90: number; summary: string | null } | null;
   marketingOpps: { id: string; signalType: string; title: string; description: string | null; impact: number; entityType: string | null; entityId: string | null; action: string | null }[];
+  distributionOpps: { id: string; signalType: string; title: string; description: string | null; impact: number; propertyId: string | null; communityId: string | null }[];
   graphSignals: { id: string; signalType: string; title: string; description: string | null; impact: number }[];
   forecastSignals: { id: string; forecastId: string | null; signalType: string; title: string; description: string | null; impact: number }[];
   externalPriceDrops: Set<string>;
@@ -82,7 +83,7 @@ async function gatherOrgData(): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
-  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp] = await Promise.all([
+  const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
     supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
@@ -111,6 +112,7 @@ async function gatherOrgData(): Promise<OrgData> {
     supabase.from("team_opportunity_leaks").select("id,leak_type,title,reason,lost_revenue_impact,severity,entity_type,entity_id").eq("status", "open").order("lost_revenue_impact", { ascending: false }).limit(15),
     supabase.from("organization_revenue_profiles").select("revenue_gap,gap_level,revenue_gap_score,revenue_at_risk,forecast_revenue_90,ai_revenue_summary").maybeSingle(),
     supabase.from("marketing_opportunity_signals").select("id,signal_type,title,description,impact_score,entity_type,entity_id,recommended_action").eq("status", "open").order("impact_score", { ascending: false }).limit(15),
+    supabase.from("distribution_opportunity_signals").select("id,signal_type,title,description,impact_score,property_id,community_id").eq("status", "new").order("impact_score", { ascending: false }).limit(15),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -177,6 +179,7 @@ async function gatherOrgData(): Promise<OrgData> {
     teamLeaks: (tLeak.data ?? []).map((l) => ({ id: l.id, leakType: l.leak_type, title: l.title, reason: l.reason, impact: l.lost_revenue_impact, severity: l.severity, entityType: l.entity_type, entityId: l.entity_id })),
     revenue: revP.data ? { gap: revP.data.revenue_gap, gapLevel: revP.data.gap_level, gapScore: revP.data.revenue_gap_score, atRisk: revP.data.revenue_at_risk, forecast90: revP.data.forecast_revenue_90, summary: revP.data.ai_revenue_summary } : null,
     marketingOpps: (mktOpp.data ?? []).map((o) => ({ id: o.id, signalType: o.signal_type, title: o.title, description: o.description, impact: o.impact_score, entityType: o.entity_type, entityId: o.entity_id, action: o.recommended_action })),
+    distributionOpps: (distOpp.data ?? []).map((o) => ({ id: o.id, signalType: o.signal_type, title: o.title, description: o.description, impact: o.impact_score, propertyId: o.property_id, communityId: o.community_id })),
     graphSignals: (grSig.data ?? []).map((s) => ({ id: s.id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     forecastSignals: (fcSig.data ?? []).map((s) => ({ id: s.id, forecastId: s.forecast_id, signalType: s.signal_type, title: s.title, description: s.description, impact: s.impact_score })),
     externalListings,
@@ -544,6 +547,17 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       opportunity_score: clamp(mo.impact), impact_score: clamp(mo.impact), confidence_score: 70,
       title: `שיווק: ${mo.title}`, description: mo.description ?? "הזדמנות שיווקית",
       recommended_action: mo.action ?? "פעל במרכז מודיעין השיווק", status: "open",
+    });
+  }
+
+  // Distribution Intelligence — community/distribution opportunities.
+  for (const dop of d.distributionOpps.slice(0, 8)) {
+    const isProp = !!dop.propertyId;
+    rows.push({
+      org_id: orgId, entity_type: isProp ? "property" : "distribution", entity_id: isProp ? dop.propertyId! : "org",
+      opportunity_score: clamp(dop.impact), impact_score: clamp(dop.impact), confidence_score: 70,
+      title: `הפצה: ${dop.title}`, description: dop.description ?? "הזדמנות הפצה קהילתית",
+      recommended_action: "פעל במודיעין קהילות והפצה", status: "open",
     });
   }
 

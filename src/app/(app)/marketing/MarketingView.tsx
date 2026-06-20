@@ -42,6 +42,8 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
           <p className="text-muted mt-1 text-sm">מה לשווק, היכן, למי, מתי ולמה — לפני שמערכת פרסום קיימת. דטרמיניסטי, ללא פרסום אוטומטי.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/distribution"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Send" size={15} />}>קהילות והפצה</Button></Link>
+          <Link href="/distribution/daily"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Megaphone" size={15} />}>שולחן יומי</Button></Link>
           <Button size="sm" variant="secondary" onClick={() => setShowNew((v) => !v)} leadingIcon={<Icon name="Plus" size={15} />}>קהילה חדשה</Button>
           <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין שיווק"}</Button>
         </div>

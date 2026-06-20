@@ -9,6 +9,7 @@ import { ForecastDashboardSection } from "@/components/dashboard/sections/Foreca
 import { TeamDashboardSection } from "@/components/dashboard/sections/TeamDashboardSection";
 import { RevenueDashboardSection } from "@/components/dashboard/sections/RevenueDashboardSection";
 import { MarketingDashboardSection } from "@/components/dashboard/sections/MarketingDashboardSection";
+import { DistributionDashboardSection } from "@/components/dashboard/sections/DistributionDashboardSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
   MatchingSectionContainer, OpportunitiesSectionContainer,
@@ -38,6 +39,9 @@ export default function Home() {
       </Suspense>
       <Suspense fallback={null}>
         <TeamDashboardSection />
+      </Suspense>
+      <Suspense fallback={null}>
+        <DistributionDashboardSection />
       </Suspense>
       <Suspense fallback={null}>
         <MarketingDashboardSection />
