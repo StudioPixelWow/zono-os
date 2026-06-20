@@ -38,6 +38,19 @@ const ACTOR_CITY_ENUM = [
 const cityKey = (s: string) => s.replace(/["'׳״]/g, "").replace(/[-]/g, " ").replace(/\s+/g, " ").trim().replace(/^קרית /, "קריית ");
 const ACTOR_CITY_BY_KEY = new Map(ACTOR_CITY_ENUM.map((c) => [cityKey(c), c]));
 
+/**
+ * Canonical city name used consistently for BOTH storage and filtering so that
+ * the profile spelling ("קרית ביאליק") and the actor's spelling ("קריית ביאליק")
+ * resolve to one identity. Returns the actor's enum spelling when matched,
+ * otherwise the cleaned/unified key.
+ */
+export function canonicalCityName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const key = cityKey(String(raw));
+  if (!key) return null;
+  return ACTOR_CITY_BY_KEY.get(key) ?? key;
+}
+
 export interface NormalizedTransaction {
   sourcePlatform: string;
   sourceActor: string;

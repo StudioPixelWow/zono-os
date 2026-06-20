@@ -14,7 +14,7 @@ import {
   TRANSACTIONS_ACTOR_NAME, type ResearchInput, type ResearchResult, type TxnComparable,
 } from "./engine";
 import {
-  buildTransactionsInput, govmapActorId, isTransactionsApifyConfigured, normalizeTransaction, runTransactionsActor,
+  buildTransactionsInput, canonicalCityName, govmapActorId, isTransactionsApifyConfigured, normalizeTransaction, runTransactionsActor,
   type NormalizedTransaction,
 } from "./providers";
 
@@ -36,7 +36,7 @@ function resolveAgentMarket(profile: DB["users"]["Row"], org: DB["organizations"
   const neighborhoods = (primary.length ? primary : profile.operating_neighborhoods?.length ? profile.operating_neighborhoods : org?.operating_neighborhoods ?? [])
     .map((n) => normalizeNeighborhoodName(n))
     .filter((n): n is string => !!n);
-  return { city: city ? normalizeCityName(city) : null, neighborhoods };
+  return { city: canonicalCityName(city), neighborhoods };
 }
 
 export interface CoverageEnsureResult { created: number; city: string | null; needsConfig: boolean; largeCityWarning: boolean }
@@ -108,7 +108,7 @@ export async function syncCoverageTarget(targetId: string, dealDateRange = "all"
 
   let imported = 0; let duplicates = 0;
   if (!error) {
-    const normalized = deduplicateTransactions(raws.map(normalizeTransaction).map((t) => ({ ...t, asset_id: t.assetId, city_name: t.cityName, normalized_address: t.normalizedAddress, deal_date: t.dealDate, deal_amount: t.dealAmount, area: t.area })));
+    const normalized = deduplicateTransactions(raws.map(normalizeTransaction).map((t) => ({ ...t, asset_id: t.assetId, city_name: canonicalCityName(t.cityName), normalized_address: t.normalizedAddress, deal_date: t.dealDate, deal_amount: t.dealAmount, area: t.area })));
     const res = await persistTransactions(orgId, normalized);
     imported = res.imported; duplicates = res.duplicates;
   }
@@ -156,7 +156,7 @@ async function persistTransactions(orgId: string, normalized: (NormalizedTransac
     toInsert.push({
       organization_id: orgId, source_platform: t.sourcePlatform, source_actor: t.sourceActor,
       asset_id: t.assetId, external_id: t.externalId, deal_date: t.dealDate, deal_amount: t.dealAmount, price_per_sqm: t.pricePerSqm,
-      address: t.address, normalized_address: t.normalizedAddress, city_name: t.cityName, neighborhood_name: t.neighborhoodName,
+      address: t.address, normalized_address: t.normalizedAddress, city_name: canonicalCityName(t.cityName), neighborhood_name: t.neighborhoodName,
       street: t.street, street_number: t.streetNumber, lat: t.lat, lng: t.lng, rooms: t.rooms, floor: t.floor, area: t.area,
       property_type: t.propertyType, is_first_hand: t.isFirstHand, gush: t.gush, helka: t.helka, tat_helka: t.tatHelka,
       raw_payload: t.rawPayload as never, scraped_at: new Date().toISOString(),
@@ -205,7 +205,7 @@ export async function retryFailedTransactionSyncs(): Promise<{ retried: number; 
 async function loadPool(orgId: string, opts: { city?: string | null; neighborhood?: string | null; street?: string | null; normalizedAddress?: string | null }): Promise<TxnComparable[]> {
   const supabase = await createClient();
   let q = supabase.from("property_transactions").select("id,deal_date,deal_amount,price_per_sqm,address,normalized_address,city_name,neighborhood_name,street,rooms,area,property_type").eq("organization_id", orgId);
-  if (opts.city) q = q.eq("city_name", normalizeCityName(opts.city) ?? "");
+  if (opts.city) q = q.eq("city_name", canonicalCityName(opts.city) ?? "");
   if (opts.normalizedAddress) q = q.eq("normalized_address", opts.normalizedAddress);
   else if (opts.street) q = q.eq("street", normalizeStreetName(opts.street) ?? "");
   else if (opts.neighborhood) q = q.eq("neighborhood_name", normalizeNeighborhoodName(opts.neighborhood) ?? "");
@@ -365,11 +365,11 @@ export async function getTransactionsBoard(filters: TransactionsFilters = {}): P
   const { orgId, profile, organization } = await ctx();
   const supabase = await createClient();
   const market = resolveAgentMarket(profile, organization);
-  // Transactions are already coverage-scoped to the agent's city, so we do NOT
-  // implicitly filter by the profile city (the actor's spelling, e.g. "קריית"
-  // vs the profile's "קרית", can differ). Only an explicit city filter applies.
+  // City is canonicalized identically on storage and here, so the profile
+  // spelling ("קרית ביאליק") and the actor's ("קריית ביאליק") match as one.
   let q = supabase.from("property_transactions").select("*").eq("organization_id", orgId);
-  if (filters.city) q = q.eq("city_name", normalizeCityName(filters.city) ?? "");
+  if (filters.city) q = q.eq("city_name", canonicalCityName(filters.city) ?? "");
+  else if (market.city) q = q.eq("city_name", market.city);
   if (filters.neighborhood) q = q.eq("neighborhood_name", normalizeNeighborhoodName(filters.neighborhood) ?? "");
   if (filters.street) q = q.eq("street", normalizeStreetName(filters.street) ?? "");
   if (filters.propertyType) q = q.eq("property_type", filters.propertyType);
