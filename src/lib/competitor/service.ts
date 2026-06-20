@@ -230,7 +230,7 @@ export interface CompetitorDetail {
   profile: CompetitorProfileRow;
   positions: DB["competitor_market_positions"]["Row"][];
   signals: DB["competitor_signals"]["Row"][];
-  listings: { id: string; title: string | null; city: string | null; price: number | null }[];
+  listings: DB["external_listings"]["Row"][];
 }
 export async function getCompetitorDetail(id: string): Promise<CompetitorDetail | null> {
   const supabase = await createClient();
@@ -240,8 +240,8 @@ export async function getCompetitorDetail(id: string): Promise<CompetitorDetail 
     supabase.from("competitor_market_positions").select("*").eq("competitor_profile_id", id).order("listings_count", { ascending: false }),
     supabase.from("competitor_signals").select("*").eq("competitor_profile_id", id),
     profile.broker_profile_id
-      ? supabase.from("external_listings").select("id,title,city,price").eq("detected_broker_id", profile.broker_profile_id).eq("status", "active").limit(100)
-      : supabase.from("external_listings").select("id,title,city,price,contact_name,detected_broker_name").or(`detected_broker_name.eq.${profile.display_name},contact_name.eq.${profile.display_name}`).eq("status", "active").limit(100),
+      ? supabase.from("external_listings").select("*").eq("detected_broker_id", profile.broker_profile_id).eq("status", "active").order("opportunity_score", { ascending: false }).limit(100)
+      : supabase.from("external_listings").select("*").or(`detected_broker_name.eq.${profile.display_name},contact_name.eq.${profile.display_name}`).eq("status", "active").order("opportunity_score", { ascending: false }).limit(100),
   ]);
-  return { profile, positions: positions ?? [], signals: signals ?? [], listings: (listingsRes.data ?? []) as { id: string; title: string | null; city: string | null; price: number | null }[] };
+  return { profile, positions: positions ?? [], signals: signals ?? [], listings: (listingsRes.data ?? []) as DB["external_listings"]["Row"][] };
 }

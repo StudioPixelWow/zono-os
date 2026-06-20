@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { cn, formatShekels } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
-import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
+import { SmartPropertyGrid } from "@/components/listings/SmartListings";
 import { getCompetitorDetail } from "@/lib/competitor/service";
 
 export const dynamic = "force-dynamic";
@@ -52,17 +52,10 @@ export default async function CompetitorProfilePage({ params }: { params: Promis
           <h3 className="text-ink mb-2 mt-4 text-sm font-extrabold">סיגנלים</h3>
           {detail.signals.length === 0 ? <p className="text-muted text-sm">—</p> : <ul className="flex flex-col gap-1">{detail.signals.map((s) => <li key={s.id} className="text-muted text-xs"><b className="text-ink">{s.title}</b> · {s.description}</li>)}</ul>}
         </div>
-        <div className="bg-card border-line rounded-[22px] border p-5 lg:col-span-2">
-          <h3 className="text-ink mb-2 text-sm font-extrabold">מודעות מקושרות ({detail.listings.length})</h3>
-          {detail.listings.length === 0 ? <p className="text-muted text-sm">אין מודעות פעילות</p> : (
-            <ul className="flex flex-col gap-1.5">{detail.listings.map((l) => (
-              <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
-                <ListingHoverPreview listingId={l.id} className="min-w-0 flex-1">
-                  <Link href={`/external-listings/${l.id}`} className="text-ink hover:text-brand block truncate font-semibold">{l.title ?? "מודעה"}{l.city ? ` · ${l.city}` : ""}</Link>
-                </ListingHoverPreview>
-                <span className="text-muted text-[11px]">{l.price ? formatShekels(l.price) : "—"}</span>
-              </li>
-            ))}</ul>
+        <div className="lg:col-span-2">
+          <h3 className="text-ink mb-3 text-sm font-extrabold">מודעות מקושרות ({detail.listings.length})</h3>
+          {detail.listings.length === 0 ? <p className="text-muted bg-card border-line rounded-[22px] border p-5 text-sm">אין מודעות פעילות</p> : (
+            <SmartPropertyGrid listings={detail.listings} matches={{}} />
           )}
         </div>
       </div>

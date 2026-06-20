@@ -368,7 +368,7 @@ export interface BrokerDetail {
   aliases: DB["broker_aliases"]["Row"][];
   sources: DB["broker_sources"]["Row"][];
   serviceAreas: DB["broker_service_areas"]["Row"][];
-  externalListings: { id: string; title: string | null; city: string | null; price: number | null; confidence: number }[];
+  externalListings: DB["external_listings"]["Row"][];
   logoAssets: DB["broker_logo_assets"]["Row"][];
   isCompetitor: boolean;
 }
@@ -381,12 +381,12 @@ export async function getBrokerProfileDetail(id: string): Promise<BrokerDetail |
     supabase.from("broker_aliases").select("*").eq("broker_id", id).limit(100),
     supabase.from("broker_sources").select("*").eq("broker_id", id).limit(100),
     supabase.from("broker_service_areas").select("*").eq("broker_id", id).limit(100),
-    supabase.from("external_listings").select("id,title,city,price,broker_confidence_score").eq("detected_broker_id", id).limit(100),
+    supabase.from("external_listings").select("*").eq("detected_broker_id", id).order("opportunity_score", { ascending: false }).limit(100),
     supabase.from("broker_logo_assets").select("*").eq("broker_id", id).order("created_at", { ascending: false }).limit(50),
   ]);
   return {
     profile, aliases: aliases ?? [], sources: sources ?? [], serviceAreas: areas ?? [],
-    externalListings: (listings ?? []).map((l) => ({ id: l.id, title: l.title, city: l.city, price: l.price, confidence: l.broker_confidence_score })),
+    externalListings: (listings ?? []) as DB["external_listings"]["Row"][],
     logoAssets: logos ?? [],
     isCompetitor: (profile.metadata as { is_competitor?: boolean } | null)?.is_competitor === true,
   };
