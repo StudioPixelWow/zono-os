@@ -123,7 +123,7 @@ export function AIOfficeView({ cc }: { cc: AIOfficeCommandCenter | null }) {
             <Metric label="הכנסה מהפניות" value={ils(cc.metrics.referralRevenue)} tone="text-success" />
           </div>
           <section className="flex flex-col gap-2">
-            <h2 className="text-ink flex items-center gap-2 text-lg font-black"><Icon name="Sparkles" size={17} />סימולציות "מה אם"</h2>
+            <h2 className="text-ink flex items-center gap-2 text-lg font-black"><Icon name="Sparkles" size={17} />סימולציות ״מה אם״</h2>
             {cc.isManager && (
               <div className="flex flex-wrap gap-2">
                 {SCENARIOS.map((s) => (
