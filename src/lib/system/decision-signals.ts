@@ -221,3 +221,39 @@ export async function buildAgentSiteAttentionRows(orgId: string): Promise<Attent
   } catch { /* agent-site signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Automation & Workflow OS → Decision Brain. Consumes workflow lifecycle:
+ * runs pending approval (workflow_recommended), blocked/failed runs
+ * (workflow_blocked / workflow_failed), generated opportunities
+ * (workflow_generated_opportunity) and "create this workflow" hints. Additive
+ * + best-effort: automation signals never block the Decision Brain.
+ */
+export async function buildAutomationAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    const { count: pending } = await supabase.from("automation_runs")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("status", "pending_review");
+    if ((pending ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "automation", entity_id: orgId,
+        attention_score: 80, urgency_score: 84, impact_score: 64, confidence_score: 92, revenue_impact_score: 55, relationship_impact_score: 20, churn_impact_score: 0,
+        title: `${pending} ריצות אוטומציה ממתינות לאישור`, reason: "אוטומציות הכינו פעולות וממתינות לאישור אנושי", recommended_action: "אשר או דחה במרכז האוטומציה", expected_outcome: "ביצוע מתוזמר של פעולות מוכנות", status: "open" });
+    }
+    const { count: failed } = await supabase.from("automation_runs")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).in("status", ["failed", "blocked"]).gte("created_at", new Date(Date.now() - DAY * 3).toISOString());
+    if ((failed ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "automation", entity_id: orgId,
+        attention_score: 68, urgency_score: 60, impact_score: 50, confidence_score: 85, revenue_impact_score: 30, relationship_impact_score: 10, churn_impact_score: 0,
+        title: `${failed} ריצות אוטומציה נכשלו/נחסמו`, reason: "ריצות אוטומציה לא הושלמו ב-3 הימים האחרונים", recommended_action: "בדוק יומני ריצה במרכז האוטומציה", expected_outcome: "תיקון תהליכים ושיפור אמינות", status: "open" });
+    }
+    const { count: recos } = await supabase.from("automation_recommendations")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("status", "open");
+    if ((recos ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "automation", entity_id: orgId,
+        attention_score: 58, urgency_score: 40, impact_score: 60, confidence_score: 80, revenue_impact_score: 48, relationship_impact_score: 15, churn_impact_score: 0,
+        title: `${recos} אוטומציות מומלצות להפעלה`, reason: "מנוע ההחלטות זיהה תהליכים שכדאי להפעיל", recommended_action: "עיין בהמלצות במרכז האוטומציה", expected_outcome: "כיסוי רחב יותר של פעולות מתוזמרות", status: "open" });
+    }
+  } catch { /* automation signals are additive — never block the Decision Brain */ }
+  return rows;
+}
