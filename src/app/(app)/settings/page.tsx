@@ -25,6 +25,7 @@ const GROUPS: { title: string; items: { label: string; href: string; icon: strin
   {
     title: "גילוי וניווט",
     items: [
+      { label: "מודיעין המלצות", href: "/recommendations", icon: "Sparkles", desc: "המלצות מוסברות לכל הישויות" },
       { label: "מרכז התראות", href: "/notifications", icon: "Bell", desc: "כל הסיגנלים במקום אחד" },
       { label: "מדריך מודולים", href: "/search/modules", icon: "Search", desc: "כל המודולים במערכת" },
     ],
