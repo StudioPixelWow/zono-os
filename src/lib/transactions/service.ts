@@ -464,20 +464,35 @@ export async function startGovmapSync(dealDateRange = "all"): Promise<GovmapStar
 
 /**
  * National neighborhoods reference (israel_neighborhoods) for a city — shared
- * across ALL orgs. Read the cache; if empty, fetch from OpenStreetMap once and
- * write it to the national table (service role) so every future agent in this
- * city gets it instantly. Deterministic; never invents data.
+ * across ALL orgs. Read the cache; if empty, discover from two best-effort
+ * sources and write them to the national table (service role) so every future
+ * agent in this city gets them instantly:
+ *   1) OpenStreetMap (official, source="osm", confidence 60) — authoritative.
+ *   2) OpenAI (source="openai", confidence 45, is_verified=false) — fills the
+ *      gap where OSM is sparse; treated as a suggestion, validated by the
+ *      per-neighborhood transaction scan (no sold deals → simply stays empty).
  */
 async function getNationalNeighborhoods(city: string, rawCity: string): Promise<DB["israel_neighborhoods"]["Row"][]> {
   const supabase = await createClient();
   const { data: cached } = await supabase.from("israel_neighborhoods").select("*").eq("city_name", city).limit(500);
   if (cached && cached.length) return cached as DB["israel_neighborhoods"]["Row"][];
-  // Lazy-fill from OSM into the shared national table.
   try {
-    const { discoverNeighborhoodsOSM, dedupeDiscovered } = await import("./geo");
-    const osm = dedupeDiscovered(await discoverNeighborhoodsOSM(rawCity));
-    if (!osm.length) return [];
-    const rows = osm.map((n) => ({ city_name: city, name_he: n.name, normalized_name: n.name, place_type: n.place, lat: n.lat, lng: n.lng, source: "osm", confidence_score: 60, is_verified: false }));
+    const { discoverNeighborhoodsOSM, discoverNeighborhoodsAI, dedupeDiscovered } = await import("./geo");
+    // Run both sources; OSM first (authoritative), AI second (gap filler).
+    const [osmRaw, aiRaw] = await Promise.all([
+      discoverNeighborhoodsOSM(rawCity).catch(() => []),
+      discoverNeighborhoodsAI(rawCity).catch(() => []),
+    ]);
+    // Merge with OSM taking precedence on name collisions (dedupeDiscovered keeps first).
+    const merged = dedupeDiscovered([...osmRaw, ...aiRaw]);
+    if (!merged.length) return [];
+    const rows = merged.map((n) => ({
+      city_name: city, name_he: n.name, normalized_name: n.name, place_type: n.place,
+      lat: n.lat, lng: n.lng,
+      source: n.source,
+      confidence_score: n.source === "osm" ? 60 : 45,
+      is_verified: false,
+    }));
     const admin = createServiceRoleClient();
     await admin.from("israel_neighborhoods").upsert(rows as never, { onConflict: "city_name,normalized_name" });
     const { data: fresh } = await supabase.from("israel_neighborhoods").select("*").eq("city_name", city).limit(500);

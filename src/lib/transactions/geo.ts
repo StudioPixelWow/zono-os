@@ -1,9 +1,13 @@
 /**
- * Geo neighborhood discovery — DETERMINISTIC, server-only, NO LLM.
- * Pulls a city's neighborhoods from OpenStreetMap (official, free, no key) so
- * the GovMap scan can cover the whole city (each neighborhood = its own 700m
- * pull). Defensive: any failure returns []. This is the first concrete piece of
- * the ZONO Geo Intelligence Layer — a real source of truth, never invented.
+ * Geo neighborhood discovery — server-only.
+ * Two sources, both best-effort:
+ *   1) OpenStreetMap (official, free, no key) — authoritative but sparse for many
+ *      Israeli cities.
+ *   2) OpenAI (optional, gated by OPENAI_API_KEY) — fills the gap where OSM is
+ *      empty. AI output is treated as a SUGGESTION: labeled source="openai",
+ *      is_verified=false, and validated downstream by the per-neighborhood
+ *      transaction scan (a name with no sold transactions simply stays empty).
+ * Any failure returns []. Each neighborhood = its own 700m GovMap pull.
  */
 import "server-only";
 import { normalizeNeighborhoodName } from "./engine";
@@ -58,6 +62,67 @@ out tags center 300;`;
     } catch { /* try next endpoint */ }
   }
   return [];
+}
+
+/** True when the OpenAI-backed discovery is available (key configured). */
+export function isAiDiscoveryConfigured(): boolean {
+  return !!process.env.OPENAI_API_KEY;
+}
+
+/**
+ * Ask OpenAI to list the residential neighborhoods of an Israeli city. Used only
+ * as a fallback/supplement to OSM. Strict JSON output, low temperature to reduce
+ * variance. Results are SUGGESTIONS (source="openai", unverified) — never treated
+ * as ground truth; the GovMap transaction scan validates each one. Returns [] when
+ * the key is missing or on any failure (never throws).
+ */
+export async function discoverNeighborhoodsAI(city: string): Promise<DiscoveredNeighborhood[]> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return [];
+  const cityName = city.trim();
+  if (!cityName) return [];
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "אתה מומחה גאוגרפיה של ערים בישראל. החזר אך ורק JSON בפורמט " +
+              '{"neighborhoods": ["שם שכונה", ...]} — רשימת שמות השכונות המוכרות בעיר, ' +
+              "בעברית, ללא הסברים, ללא רחובות, ללא ערים שכנות. אם אינך בטוח לגבי עיר מסוימת, החזר רשימה ריקה.",
+          },
+          { role: "user", content: `רשום את כל השכונות בעיר "${cityName}".` },
+        ],
+      }),
+      signal: AbortSignal.timeout(28_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const content = json.choices?.[0]?.message?.content?.trim();
+    if (!content) return [];
+    let parsed: unknown;
+    try { parsed = JSON.parse(content); } catch { return []; }
+    const list = (parsed as { neighborhoods?: unknown })?.neighborhoods;
+    if (!Array.isArray(list)) return [];
+    const out: DiscoveredNeighborhood[] = [];
+    const seen = new Set<string>();
+    for (const item of list) {
+      if (typeof item !== "string") continue;
+      const name = item.trim();
+      if (!name || name.length > 40 || seen.has(name)) continue;
+      seen.add(name);
+      out.push({ name, place: "neighbourhood", lat: null, lng: null, source: "openai" });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 /** Normalize + dedup a discovered set into clean unique neighborhood names. */
