@@ -71,3 +71,37 @@ export async function buildInfraAttentionRows(orgId: string): Promise<AttentionI
 
   return rows;
 }
+
+/**
+ * Recommendation Intelligence OS → Decision Brain (Part 15). Surfaces the
+ * highest-value open, reviewable recommendations as attention items so they
+ * flow into Today's Focus / Priority Queue. Transaction-backed (high source
+ * confidence) and high-revenue recommendations are prioritised. Additive and
+ * best-effort — never blocks the Decision Brain. No auto-send is implied; these
+ * are surfaced for review only.
+ */
+export async function buildRecommendationAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    const { data } = await supabase.from("recommendations")
+      .select("id,title_hebrew,reason_hebrew,next_best_action_hebrew,recommendation_score,urgency_score,impact_score,confidence_score,expected_revenue,review_status,source_confidence")
+      .eq("organization_id", orgId).in("status", ["new", "reviewed"])
+      .gte("recommendation_score", 70).neq("review_status", "needs_more_data")
+      .order("recommendation_score", { ascending: false }).limit(8);
+    for (const r of (data ?? []) as { id: string; title_hebrew: string; reason_hebrew: string | null; next_best_action_hebrew: string | null; recommendation_score: number; urgency_score: number; impact_score: number; confidence_score: number; expected_revenue: number; source_confidence: string }[]) {
+      const backed = r.source_confidence === "verified" || r.source_confidence === "high";
+      rows.push({
+        org_id: orgId, entity_type: "recommendation", entity_id: r.id,
+        attention_score: clamp((r.recommendation_score + r.urgency_score) / 2),
+        urgency_score: clamp(r.urgency_score), impact_score: clamp(r.impact_score), confidence_score: clamp(r.confidence_score),
+        revenue_impact_score: clamp(r.impact_score), relationship_impact_score: 0, churn_impact_score: 0,
+        title: backed ? `המלצה מגובת-עסקאות: ${r.title_hebrew}` : `המלצה בעלת ערך: ${r.title_hebrew}`,
+        reason: r.reason_hebrew ?? "המלצה מוסברת בעלת ציון גבוה", recommended_action: r.next_best_action_hebrew ?? "בדוק ואשר ב׳מודיעין המלצות׳",
+        expected_outcome: r.expected_revenue > 0 ? `הכנסה צפויה ₪${Math.round(r.expected_revenue).toLocaleString("he-IL")}` : "קידום עסקה",
+        status: "open",
+      });
+    }
+  } catch { /* recommendation signals are additive — never block the Decision Brain */ }
+  return rows;
+}
