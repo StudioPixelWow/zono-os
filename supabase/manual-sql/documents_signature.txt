@@ -1,0 +1,274 @@
+-- ============================================================================
+-- ZONO — Digital Documents & Signature OS
+-- ----------------------------------------------------------------------------
+-- Extends the existing public.documents table with a rich document-category +
+-- signature lifecycle model, and adds the satellite tables for templates,
+-- versions, participants, signature requests (DRAFT only — never auto-sent),
+-- recorded signatures, audit logs, per-deal checklists, requirements and
+-- folders. Idempotent. Org column: new tables use organization_id; the legacy
+-- documents table keeps org_id. RLS: org-scoped; system templates/requirements
+-- (organization_id NULL) are readable by everyone. No autonomous sending.
+-- ============================================================================
+
+-- ── extend documents ──────────────────────────────────────────────────────────
+alter table public.documents
+  add column if not exists doc_category text,
+  add column if not exists signature_status text not null default 'draft',
+  add column if not exists template_id uuid,
+  add column if not exists folder_id uuid,
+  add column if not exists current_version integer not null default 1,
+  add column if not exists match_id uuid references public.matching_results(id) on delete set null,
+  add column if not exists requirement_key text,
+  add column if not exists is_required boolean not null default false,
+  add column if not exists source text not null default 'manual',
+  add column if not exists rejected_reason text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'documents_doc_category_chk') then
+    alter table public.documents add constraint documents_doc_category_chk check (doc_category is null or doc_category in (
+      'buyer_representation','seller_representation','exclusive_agreement','marketing_authorization',
+      'viewing_form','offer','negotiation','deal_checklist','purchase_agreement','broker_fee',
+      'lead_consent','referral_agreement','office_document','custom'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'documents_signature_status_chk') then
+    alter table public.documents add constraint documents_signature_status_chk check (signature_status in (
+      'draft','pending_signature','partially_signed','completed','rejected','expired','cancelled'));
+  end if;
+end $$;
+
+create index if not exists documents_signature_status_idx on public.documents(org_id, signature_status);
+create index if not exists documents_doc_category_idx on public.documents(org_id, doc_category);
+create index if not exists documents_deal_idx on public.documents(deal_id);
+
+-- ── document_templates (system + org) ─────────────────────────────────────────
+create table if not exists public.document_templates (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid references public.organizations(id) on delete cascade,
+  template_key     text not null unique,
+  name_he          text not null,
+  doc_category     text not null,
+  description_he   text,
+  body_template    text,
+  default_participants jsonb not null default '[]'::jsonb,
+  applies_to_stage text,
+  is_system        boolean not null default false,
+  is_active        boolean not null default true,
+  sort_order       integer not null default 0,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+-- ── document_versions ─────────────────────────────────────────────────────────
+create table if not exists public.document_versions (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  document_id      uuid not null references public.documents(id) on delete cascade,
+  version          integer not null default 1,
+  file_url         text,
+  storage_path     text,
+  change_note      text,
+  created_by       uuid references public.users(id) on delete set null,
+  created_at       timestamptz not null default now()
+);
+
+-- ── document_participants ─────────────────────────────────────────────────────
+create table if not exists public.document_participants (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  document_id      uuid not null references public.documents(id) on delete cascade,
+  role             text not null default 'signer',
+  participant_type text not null default 'external',
+  user_id          uuid references public.users(id) on delete set null,
+  contact_name     text,
+  contact_email    text,
+  contact_phone    text,
+  order_index      integer not null default 0,
+  status           text not null default 'pending',
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint document_participants_role_chk check (role in ('signer','viewer','approver')),
+  constraint document_participants_status_chk check (status in ('pending','signed','rejected','viewed'))
+);
+
+-- ── document_requests (signature requests — DRAFT/manual; never auto-sent) ─────
+create table if not exists public.document_requests (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  document_id      uuid not null references public.documents(id) on delete cascade,
+  requested_by     uuid references public.users(id) on delete set null,
+  channel          text not null default 'manual',
+  status           text not null default 'draft',
+  provider_ref     text,
+  due_at           timestamptz,
+  note             text,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint document_requests_channel_chk check (channel in ('manual','docusign','dropbox_sign','adobe_sign','israeli_provider')),
+  constraint document_requests_status_chk check (status in ('draft','pending','completed','cancelled'))
+);
+
+-- ── document_signatures (recorded signatures + audit metadata) ────────────────
+create table if not exists public.document_signatures (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  document_id      uuid not null references public.documents(id) on delete cascade,
+  participant_id   uuid references public.document_participants(id) on delete set null,
+  signer_name      text not null,
+  signed_at        timestamptz not null default now(),
+  ip_hash          text,
+  device           text,
+  method           text not null default 'manual',
+  signature_ref    text,
+  created_at       timestamptz not null default now(),
+  constraint document_signatures_method_chk check (method in ('manual','digital'))
+);
+
+-- ── document_audit_logs ───────────────────────────────────────────────────────
+create table if not exists public.document_audit_logs (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  document_id      uuid references public.documents(id) on delete cascade,
+  actor_user_id    uuid references public.users(id) on delete set null,
+  event            text not null,
+  detail           text,
+  ip_hash          text,
+  created_at       timestamptz not null default now()
+);
+
+-- ── document_requirements (what is required, per context/stage) ───────────────
+create table if not exists public.document_requirements (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid references public.organizations(id) on delete cascade,
+  context          text not null default 'deal',
+  stage            text,
+  doc_category     text not null,
+  is_blocking      boolean not null default false,
+  blocks_stage     text,
+  description_he   text,
+  is_system        boolean not null default false,
+  sort_order       integer not null default 0,
+  created_at       timestamptz not null default now()
+);
+
+-- ── document_checklists (per-deal computed snapshot) ──────────────────────────
+create table if not exists public.document_checklists (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  deal_id          uuid references public.deals(id) on delete cascade,
+  context          text not null default 'deal',
+  stage            text,
+  total_required   integer not null default 0,
+  completed_count  integer not null default 0,
+  missing_count    integer not null default 0,
+  blocking_count   integer not null default 0,
+  completion_pct   integer not null default 0,
+  risk_level       text not null default 'low',
+  items            jsonb not null default '[]'::jsonb,
+  computed_at      timestamptz not null default now(),
+  constraint document_checklists_risk_chk check (risk_level in ('low','medium','high','critical')),
+  constraint document_checklists_deal_uniq unique (organization_id, deal_id)
+);
+
+-- ── document_folders ──────────────────────────────────────────────────────────
+create table if not exists public.document_folders (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  name             text not null,
+  parent_id        uuid references public.document_folders(id) on delete cascade,
+  entity_type      text,
+  entity_id        uuid,
+  created_by       uuid references public.users(id) on delete set null,
+  created_at       timestamptz not null default now()
+);
+
+-- ── indexes ───────────────────────────────────────────────────────────────────
+create index if not exists doc_templates_org_idx     on public.document_templates(organization_id);
+create index if not exists doc_versions_doc_idx       on public.document_versions(document_id);
+create index if not exists doc_participants_doc_idx    on public.document_participants(document_id);
+create index if not exists doc_requests_doc_idx        on public.document_requests(document_id);
+create index if not exists doc_requests_org_status_idx on public.document_requests(organization_id, status);
+create index if not exists doc_signatures_doc_idx      on public.document_signatures(document_id);
+create index if not exists doc_audit_doc_idx           on public.document_audit_logs(document_id);
+create index if not exists doc_requirements_ctx_idx    on public.document_requirements(context, stage);
+create index if not exists doc_checklists_deal_idx     on public.document_checklists(deal_id);
+create index if not exists doc_folders_org_idx         on public.document_folders(organization_id, entity_type);
+
+-- ── updated_at triggers ──────────────────────────────────────────────────────
+do $$
+declare t text;
+  tbls text[] := array['document_templates','document_participants','document_requests'];
+begin
+  foreach t in array tbls loop
+    execute format('drop trigger if exists trg_%1$s_updated on public.%1$I;', t);
+    execute format('create trigger trg_%1$s_updated before update on public.%1$I for each row execute function public.set_updated_at();', t);
+  end loop;
+end $$;
+
+-- ── RLS ──────────────────────────────────────────────────────────────────────
+-- Org-scoped tables (agent may write on their own org rows).
+do $$
+declare t text;
+  tbls text[] := array[
+    'document_versions','document_participants','document_requests','document_signatures',
+    'document_audit_logs','document_checklists','document_folders'
+  ];
+begin
+  foreach t in array tbls loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format('drop policy if exists "%1$s_select" on public.%1$I;', t);
+    execute format('create policy "%1$s_select" on public.%1$I for select to authenticated using (organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_insert" on public.%1$I;', t);
+    execute format('create policy "%1$s_insert" on public.%1$I for insert to authenticated with check (organization_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+    execute format('drop policy if exists "%1$s_update" on public.%1$I;', t);
+    execute format('create policy "%1$s_update" on public.%1$I for update to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''agent'')) with check (organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_delete" on public.%1$I;', t);
+    execute format('create policy "%1$s_delete" on public.%1$I for delete to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''manager''));', t);
+  end loop;
+end $$;
+
+-- Templates + requirements: system rows (organization_id null) readable by all; org rows org-scoped; writes manager-gated.
+do $$
+declare t text;
+  tbls text[] := array['document_templates','document_requirements'];
+begin
+  foreach t in array tbls loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format('drop policy if exists "%1$s_select" on public.%1$I;', t);
+    execute format('create policy "%1$s_select" on public.%1$I for select to authenticated using (organization_id is null or organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_insert" on public.%1$I;', t);
+    execute format('create policy "%1$s_insert" on public.%1$I for insert to authenticated with check (organization_id = public.current_org_id() and public.has_min_role(''manager''));', t);
+    execute format('drop policy if exists "%1$s_update" on public.%1$I;', t);
+    execute format('create policy "%1$s_update" on public.%1$I for update to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''manager'')) with check (organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_delete" on public.%1$I;', t);
+    execute format('create policy "%1$s_delete" on public.%1$I for delete to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''manager''));', t);
+  end loop;
+end $$;
+
+-- ── seed: system document templates (one per category) ────────────────────────
+insert into public.document_templates (template_key, organization_id, name_he, doc_category, description_he, applies_to_stage, is_system, sort_order) values
+  ('tpl_buyer_representation', null, 'הסכם ייצוג קונה', 'buyer_representation', 'הסכם ייצוג בלעדי מול קונה', 'qualified', true, 1),
+  ('tpl_seller_representation', null, 'הסכם ייצוג מוכר', 'seller_representation', 'הסכם ייצוג מול מוכר', 'qualified', true, 2),
+  ('tpl_exclusive_agreement', null, 'הסכם בלעדיות', 'exclusive_agreement', 'הסכם בלעדיות לשיווק נכס', 'qualified', true, 3),
+  ('tpl_marketing_authorization', null, 'אישור שיווק נכס', 'marketing_authorization', 'הרשאת שיווק והפצה מהמוכר', 'qualified', true, 4),
+  ('tpl_viewing_form', null, 'טופס צפייה בנכס', 'viewing_form', 'טופס תיעוד סיור/צפייה', 'negotiation', true, 5),
+  ('tpl_offer', null, 'מסמך הצעה', 'offer', 'מסמך הצעת רכישה', 'negotiation', true, 6),
+  ('tpl_negotiation', null, 'מסמך משא ומתן', 'negotiation', 'תיעוד תנאי משא ומתן', 'negotiation', true, 7),
+  ('tpl_deal_checklist', null, 'רשימת בדיקה לעסקה', 'deal_checklist', 'רשימת מסמכים נדרשים לעסקה', 'agreement', true, 8),
+  ('tpl_purchase_agreement', null, 'הסכם רכישה', 'purchase_agreement', 'הסכם רכישה מחייב', 'contract', true, 9),
+  ('tpl_broker_fee', null, 'הסכם דמי תיווך', 'broker_fee', 'הסכם עמלת תיווך', 'agreement', true, 10),
+  ('tpl_lead_consent', null, 'הסכמת ליד', 'lead_consent', 'הסכמת יצירת קשר ושמירת מידע', 'new', true, 11),
+  ('tpl_referral_agreement', null, 'הסכם הפניה', 'referral_agreement', 'הסכם הפניה בין סוכנים', 'new', true, 12),
+  ('tpl_office_document', null, 'מסמך משרד', 'office_document', 'מסמך פנימי של המשרד', null, true, 13),
+  ('tpl_custom', null, 'מסמך מותאם', 'custom', 'מסמך מותאם אישית', null, true, 14)
+on conflict (template_key) do update set name_he = excluded.name_he, doc_category = excluded.doc_category, description_he = excluded.description_he, applies_to_stage = excluded.applies_to_stage, is_active = true;
+
+-- ── seed: system deal-stage requirements (what blocks progress) ───────────────
+insert into public.document_requirements (organization_id, context, stage, doc_category, is_blocking, blocks_stage, description_he, is_system, sort_order) values
+  (null, 'deal', 'qualified', 'buyer_representation', false, null, 'מומלץ הסכם ייצוג קונה בשלב ההסמכה', true, 1),
+  (null, 'deal', 'qualified', 'seller_representation', false, null, 'מומלץ הסכם ייצוג מוכר בשלב ההסמכה', true, 2),
+  (null, 'deal', 'agreement', 'broker_fee', true, 'contract', 'הסכם דמי תיווך נדרש למעבר לחוזה', true, 3),
+  (null, 'deal', 'agreement', 'deal_checklist', false, null, 'רשימת בדיקה לעסקה', true, 4),
+  (null, 'deal', 'contract', 'purchase_agreement', true, 'closing', 'הסכם רכישה חתום נדרש למעבר לסגירה', true, 5),
+  (null, 'deal', 'closing', 'purchase_agreement', true, 'won', 'הסכם רכישה חתום נדרש לסגירת העסקה', true, 6)
+on conflict do nothing;
