@@ -3988,6 +3988,69 @@ type CommunityDealAttributionRow = {
   id: string; organization_id: string; community_id: string | null; property_id: string | null; attribution_confidence: number | null;
 };
 
+// ── WhatsApp Execution OS ───────────────────────────────────────────────────
+type WhatsappAccountsRow = {
+  id: string; organization_id: string; provider: string; connection_status: string; app_id_status: string;
+  phone_number_status: string; webhook_status: string; token_status: string; business_hours: Json;
+  auto_reply_allowed: boolean; approval_required: boolean; default_tone: string; safety_rules: Json;
+  last_checked_at: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappConversationsRow = {
+  id: string; organization_id: string; contact_phone_hash: string | null; contact_name: string | null; channel: string;
+  buyer_id: string | null; seller_id: string | null; lead_id: string | null; property_id: string | null; assigned_agent_id: string | null;
+  state: string; intent: string; lead_score: number; urgency_score: number; unread: boolean; missed_call_flag: boolean;
+  last_message: string | null; last_message_at: string | null; summary: Json; next_best_action: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappMessagesRow = {
+  id: string; organization_id: string; conversation_id: string | null; direction: string; source: string; body: string | null;
+  intent: string | null; is_voice_note: boolean; transcript: string | null; transcription_status: string; status: string; metadata: Json; created_at: string;
+};
+type WhatsappDraftsRow = {
+  id: string; organization_id: string; conversation_id: string | null; campaign_id: string | null; created_by: string | null;
+  body: string; kind: string; risk_level: string; requires_approval: boolean; approval_status: string; approved_by: string | null;
+  approved_at: string | null; send_status: string; sent_at: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappCallEventsRow = {
+  id: string; organization_id: string; conversation_id: string | null; contact_phone_hash: string | null; contact_name: string | null;
+  event_type: string; source: string; recovery_status: string; recovered_lead_id: string | null; agent_id: string | null; occurred_at: string; metadata: Json; created_at: string;
+};
+type WhatsappFollowupsRow = {
+  id: string; organization_id: string; conversation_id: string | null; followup_type: string; stage: number; mode: string;
+  body: string | null; due_at: string | null; status: string; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappCampaignsRow = {
+  id: string; organization_id: string; name: string; goal: string; segment_id: string | null; property_id: string | null;
+  message_template: string | null; status: string; audience_size: number; drafts_created: number; sent_count: number;
+  replied_count: number; converted_count: number; created_by: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappSegmentsRow = {
+  id: string; organization_id: string; name: string; segment_key: string; predicate: Json; member_count: number;
+  computed_at: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappSmartLinksRow = {
+  id: string; organization_id: string; slug: string; link_type: string; property_id: string | null; campaign_id: string | null;
+  title: string | null; destination: string | null; click_count: number; conversion_count: number; created_by: string | null;
+  is_active: boolean; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappSmartLinkEventsRow = {
+  id: string; organization_id: string; smart_link_id: string | null; event_type: string; utm_source: string | null; phone_hash: string | null; ip_hash: string | null; created_at: string;
+};
+type WhatsappKnowledgeBaseRow = {
+  id: string; organization_id: string; scope: string; question: string | null; answer: string; status: string; risk_level: string;
+  allowed_for_auto_reply: boolean; approved_by: string | null; version: number; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappAiActionsRow = {
+  id: string; organization_id: string; conversation_id: string | null; agent_mode: string | null; action_type: string; title: string;
+  detail: string | null; requires_approval: boolean; status: string; applied_table: string | null; applied_id: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type WhatsappDailyMissionsRow = {
+  id: string; organization_id: string; agent_id: string | null; mission_date: string; title: string; reason: string | null;
+  recommended_action: string | null; priority: number; conversation_id: string | null; status: string; created_at: string;
+};
+type WhatsappAuditLogsRow = {
+  id: string; organization_id: string; actor_user_id: string | null; event: string; detail: string | null; risk_level: string | null; conversation_id: string | null; created_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4453,6 +4516,20 @@ export interface Database {
       community_comments: TableShape<CommunityCommentsRow, "organization_id">;
       messenger_threads: TableShape<MessengerThreadsRow, "organization_id">;
       social_account_sync_logs: TableShape<SocialAccountSyncLogsRow, "organization_id" | "event">;
+      whatsapp_accounts: TableShape<WhatsappAccountsRow, "organization_id">;
+      whatsapp_conversations: TableShape<WhatsappConversationsRow, "organization_id">;
+      whatsapp_messages: TableShape<WhatsappMessagesRow, "organization_id">;
+      whatsapp_drafts: TableShape<WhatsappDraftsRow, "organization_id" | "body">;
+      whatsapp_call_events: TableShape<WhatsappCallEventsRow, "organization_id">;
+      whatsapp_followups: TableShape<WhatsappFollowupsRow, "organization_id">;
+      whatsapp_campaigns: TableShape<WhatsappCampaignsRow, "organization_id" | "name">;
+      whatsapp_segments: TableShape<WhatsappSegmentsRow, "organization_id" | "name" | "segment_key">;
+      whatsapp_smart_links: TableShape<WhatsappSmartLinksRow, "organization_id" | "slug">;
+      whatsapp_smart_link_events: TableShape<WhatsappSmartLinkEventsRow, "organization_id">;
+      whatsapp_knowledge_base: TableShape<WhatsappKnowledgeBaseRow, "organization_id" | "answer">;
+      whatsapp_ai_actions: TableShape<WhatsappAiActionsRow, "organization_id" | "action_type" | "title">;
+      whatsapp_daily_missions: TableShape<WhatsappDailyMissionsRow, "organization_id" | "title">;
+      whatsapp_audit_logs: TableShape<WhatsappAuditLogsRow, "organization_id" | "event">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
       community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
