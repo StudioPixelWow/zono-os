@@ -3037,6 +3037,16 @@ type AuditLogRow = {
   created_at: string;
 };
 
+type NotificationStateRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  item_key: string;
+  state: string;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3488,6 +3498,7 @@ export interface Database {
       >;
       engine_runs: TableShape<EngineRunsRow, "engine_key">;
       audit_log: TableShape<AuditLogRow, "action" | "category">;
+      notification_state: TableShape<NotificationStateRow, "user_id" | "item_key">;
     };
     Views: { [_ in never]: never };
     Functions: {

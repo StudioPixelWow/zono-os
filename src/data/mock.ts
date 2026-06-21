@@ -49,6 +49,7 @@ export const navItems: NavItem[] = [
   { id: "team", label: "מודיעין צוות", icon: "UserCheck" },
   { id: "graph", label: "מפת קשרים", icon: "Sparkles" },
   { id: "operating-areas", label: "אזורי פעילות", icon: "MapPin" },
+  { id: "notifications", label: "מרכז התראות", icon: "Bell" },
   { id: "system-health", label: "מנועי חישוב", icon: "Settings" },
   { id: "data-quality", label: "איכות דאטה", icon: "Shield" },
   { id: "permissions", label: "הרשאות", icon: "UserCheck" },
