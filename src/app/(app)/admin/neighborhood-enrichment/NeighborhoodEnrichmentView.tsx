@@ -37,7 +37,10 @@ export function NeighborhoodEnrichmentView({ status, coverage }: { status: Enric
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
-  const [counters, setCounters] = useState({ done: status.done, empty: status.empty, failed: status.failed, remaining: status.remaining });
+  // Live progress during the loop; null = show the fresh server status (so the
+  // button re-enables correctly after upload/refresh, not a stale snapshot).
+  const [live, setLive] = useState<{ done: number; empty: number; failed: number; remaining: number } | null>(null);
+  const view = live ?? { done: status.done, empty: status.empty, failed: status.failed, remaining: status.remaining };
   const stopRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const addLog = (s: string) => setLog((l) => [`${new Date().toLocaleTimeString("he-IL")} · ${s}`, ...l].slice(0, 200));
@@ -57,17 +60,19 @@ export function NeighborhoodEnrichmentView({ status, coverage }: { status: Enric
   const runLoop = async () => {
     if (!status.configured) { setError("OPENAI_API_KEY לא מוגדר."); return; }
     setError(null); setNote(null); setRunning(true); stopRef.current = false;
+    let acc = { done: status.done, empty: status.empty, failed: status.failed, remaining: status.remaining };
     try {
       // Resumable loop: each batch persists to the DB, so a reload continues.
       while (!stopRef.current) {
         const r = await processNextBatchAction(4);
-        setCounters((c) => ({ done: c.done + r.done, empty: c.empty + r.empty, failed: c.failed + r.failed, remaining: r.remaining }));
+        acc = { done: acc.done + r.done, empty: acc.empty + r.empty, failed: acc.failed + r.failed, remaining: r.remaining };
+        setLive({ ...acc });
         for (const c of r.cities) addLog(`${c.city}: ${c.count} שכונות · ${STATUS_LABEL[c.status] ?? c.status}`);
         if (r.remaining <= 0 || r.processed === 0) { addLog("✓ העיבוד הושלם"); break; }
         await new Promise((res) => setTimeout(res, 400));
       }
     } catch (e) { setError(e instanceof Error ? e.message : "שגיאה בעיבוד"); }
-    finally { setRunning(false); router.refresh(); }
+    finally { setRunning(false); setLive(null); router.refresh(); }
   };
 
   const exportCsv = async (kind: "neighborhoods" | "coverage") => {
@@ -90,7 +95,7 @@ export function NeighborhoodEnrichmentView({ status, coverage }: { status: Enric
     finally { setBusy(null); }
   };
 
-  const pct = status.total ? Math.round(((counters.done + counters.empty + counters.failed) / status.total) * 100) : 0;
+  const pct = status.total ? Math.round(((view.done + view.empty + view.failed) / status.total) * 100) : 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -113,7 +118,7 @@ export function NeighborhoodEnrichmentView({ status, coverage }: { status: Enric
         <Button onClick={() => fileRef.current?.click()} loading={busy === "upload"} disabled={running} leadingIcon={<Icon name="Plus" size={15} />}>העלה קובץ ערים</Button>
         {status.total > 0 && (running
           ? <Button variant="danger" onClick={() => { stopRef.current = true; }} leadingIcon={<Icon name="Minus" size={15} />}>עצור</Button>
-          : <Button onClick={runLoop} disabled={!status.configured || counters.remaining <= 0} leadingIcon={<Icon name="Sparkles" size={16} />}>{counters.remaining > 0 ? "התחל / המשך עיבוד" : "הכל עובד ✓"}</Button>)}
+          : <Button onClick={runLoop} disabled={!status.configured || view.remaining <= 0} leadingIcon={<Icon name="Sparkles" size={16} />}>{view.remaining > 0 ? "התחל / המשך עיבוד" : "הכל עובד ✓"}</Button>)}
         <Button size="sm" variant="secondary" onClick={() => exportCsv("neighborhoods")} loading={busy === "neighborhoods"} disabled={running}>ייצוא שכונות CSV</Button>
         <Button size="sm" variant="secondary" onClick={() => exportCsv("coverage")} loading={busy === "coverage"} disabled={running}>ייצוא דוח כיסוי</Button>
         {running && <span className="text-brand-strong inline-flex items-center gap-1.5 text-sm font-bold"><Spinner size={15} />מעבד…</span>}
@@ -124,14 +129,14 @@ export function NeighborhoodEnrichmentView({ status, coverage }: { status: Enric
         <div className="bg-card border-line rounded-[20px] border p-4">
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="text-ink font-extrabold">התקדמות</span>
-            <span className="text-muted">{counters.done + counters.empty + counters.failed} / {status.total} ערים · {pct}%</span>
+            <span className="text-muted">{view.done + view.empty + view.failed} / {status.total} ערים · {pct}%</span>
           </div>
           <div className="bg-surface h-2.5 w-full overflow-hidden rounded-full"><div className="bg-brand h-full rounded-full transition-all" style={{ width: `${pct}%` }} /></div>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
             <Stat label="סה״כ ערים" value={status.total} tone="text-brand-strong" />
-            <Stat label="הושלמו" value={counters.done} tone="text-success" />
-            <Stat label="ריקות" value={counters.empty} tone="text-muted" />
-            <Stat label="נכשלו" value={counters.failed} tone="text-danger" />
+            <Stat label="הושלמו" value={view.done} tone="text-success" />
+            <Stat label="ריקות" value={view.empty} tone="text-muted" />
+            <Stat label="נכשלו" value={view.failed} tone="text-danger" />
             <Stat label="שכונות שנשמרו" value={status.neighborhoods} tone="text-brand-strong" />
           </div>
         </div>

@@ -63,19 +63,23 @@ export interface EnrichmentStatus {
 export async function getEnrichmentStatus(): Promise<EnrichmentStatus> {
   await requireManager();
   const supabase = await createClient();
-  const [{ data: cities }, { count: hoods }] = await Promise.all([
-    supabase.from("neighborhood_enrichment_cities").select("status,attempts").limit(20000),
+  // Use COUNT queries (head:true) so we get true totals — fetching rows would be
+  // capped by PostgREST max-rows (1000) and undercount large uploads.
+  const [totalR, pendingR, doneR, emptyR, failedR, retryableR, hoodsR] = await Promise.all([
+    supabase.from("neighborhood_enrichment_cities").select("id", { count: "exact", head: true }),
+    supabase.from("neighborhood_enrichment_cities").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase.from("neighborhood_enrichment_cities").select("id", { count: "exact", head: true }).eq("status", "done"),
+    supabase.from("neighborhood_enrichment_cities").select("id", { count: "exact", head: true }).eq("status", "empty"),
+    supabase.from("neighborhood_enrichment_cities").select("id", { count: "exact", head: true }).eq("status", "failed"),
+    supabase.from("neighborhood_enrichment_cities").select("id", { count: "exact", head: true }).eq("status", "failed").lt("attempts", MAX_ATTEMPTS),
     supabase.from("neighborhoods").select("id", { count: "exact", head: true }),
   ]);
-  const rows = (cities ?? []) as { status: string; attempts: number }[];
-  const by = (s: string) => rows.filter((r) => r.status === s).length;
-  const failed = rows.filter((r) => r.status === "failed").length;
-  const pending = rows.filter((r) => r.status === "pending").length;
-  const retryable = rows.filter((r) => r.status === "failed" && r.attempts < MAX_ATTEMPTS).length;
+  const pending = pendingR.count ?? 0;
+  const retryable = retryableR.count ?? 0;
   return {
     configured: isEnrichmentConfigured(),
-    total: rows.length, pending, done: by("done"), empty: by("empty"), failed,
-    neighborhoods: hoods ?? 0, remaining: pending + retryable,
+    total: totalR.count ?? 0, pending, done: doneR.count ?? 0, empty: emptyR.count ?? 0, failed: failedR.count ?? 0,
+    neighborhoods: hoodsR.count ?? 0, remaining: pending + retryable,
   };
 }
 
