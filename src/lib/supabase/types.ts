@@ -3725,6 +3725,63 @@ type AutomationRecommendationsRow = {
   updated_at: string;
 };
 
+// ── Automation Copy & Communication OS ──────────────────────────────────────
+type AutomationCopyTemplatesRow = {
+  id: string;
+  template_key: string;
+  category: string;
+  voice: string;
+  priority_label: string | null;
+  title_he: string;
+  subtitle_he: string | null;
+  short_description_he: string | null;
+  full_description_he: string;
+  task_title_he: string | null;
+  task_description_he: string | null;
+  agent_guidance_he: string;
+  manager_guidance_he: string;
+  revenue_impact_he: string;
+  urgency_reason_he: string | null;
+  expected_outcome_he: string | null;
+  decision_brain_summary_he: string;
+  success_definition_he: string | null;
+  client_draft_message_he: string | null;
+  portal_message_he: string | null;
+  website_message_he: string | null;
+  audit_log_text_he: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+type AutomationMessageVariantsRow = {
+  id: string;
+  template_key: string;
+  channel: string;
+  voice: string;
+  message_he: string;
+  created_at: string;
+};
+type AutomationVoicesRow = {
+  voice_key: string;
+  name_he: string;
+  description_he: string;
+  tone_he: string;
+  sort_order: number;
+};
+type AutomationPriorityLabelsRow = {
+  label_key: string;
+  label_he: string;
+  description_he: string;
+  tone: string;
+  sort_order: number;
+};
+type AutomationMicrocopyRow = {
+  id: string;
+  scope: string;
+  copy_key: string;
+  text_he: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4280,6 +4337,11 @@ export interface Database {
       automation_actions: TableShape<AutomationActionsRow, "organization_id" | "run_id" | "action_type" | "title">;
       automation_templates: TableShape<AutomationTemplatesRow, "template_key" | "name" | "trigger_type">;
       automation_recommendations: TableShape<AutomationRecommendationsRow, "organization_id" | "title">;
+      automation_copy_templates: TableShape<AutomationCopyTemplatesRow, "template_key" | "category" | "title_he" | "full_description_he" | "agent_guidance_he" | "manager_guidance_he" | "revenue_impact_he" | "decision_brain_summary_he">;
+      automation_message_variants: TableShape<AutomationMessageVariantsRow, "template_key" | "channel" | "message_he">;
+      automation_voices: TableShape<AutomationVoicesRow, "voice_key" | "name_he" | "description_he" | "tone_he">;
+      automation_priority_labels: TableShape<AutomationPriorityLabelsRow, "label_key" | "label_he" | "description_he">;
+      automation_microcopy: TableShape<AutomationMicrocopyRow, "scope" | "copy_key" | "text_he">;
     };
     Views: { [_ in never]: never };
     Functions: {

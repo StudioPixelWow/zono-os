@@ -6,6 +6,7 @@ import {
   type ActionSummary,
 } from "./service";
 import { enableTemplate, disableTemplate, runTemplateTest, duplicateTemplate } from "./library";
+import { getCopyForTemplate, type TemplateCopy } from "./copy";
 import type { RunEntity, TriggerContext } from "./engine";
 
 export interface AutomationActionState { ok?: boolean; error?: string; message?: string; runId?: string }
@@ -65,4 +66,7 @@ export async function runTemplateTestAction(templateKey: string): Promise<Automa
 export async function duplicateTemplateAction(templateKey: string): Promise<AutomationActionState> {
   try { await duplicateTemplate(templateKey); revalidate(); return { ok: true, message: "נוצר עותק עבודה (מושהה) — ערוך והפעל" }; }
   catch (e) { return { error: e instanceof Error ? e.message : "שכפול התבנית נכשל" }; }
+}
+export async function getTemplateCopyAction(templateKey: string): Promise<TemplateCopy | null> {
+  return getCopyForTemplate(templateKey);
 }

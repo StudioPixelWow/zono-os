@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import {
-  enableTemplateAction, disableTemplateAction, runTemplateTestAction, duplicateTemplateAction,
+  enableTemplateAction, disableTemplateAction, runTemplateTestAction, duplicateTemplateAction, getTemplateCopyAction,
 } from "@/lib/automation/actions";
+import type { TemplateCopy } from "@/lib/automation/copy";
 import { actionLabel, triggerLabel } from "@/lib/automation/engine";
 import { libraryCategoryLabel, LIBRARY_CATEGORIES, RISK_LABELS, type LibraryTemplate, type LibrarySummary, type LibraryRecommendation } from "@/lib/automation/library";
 
@@ -127,8 +128,13 @@ type Runner = ReturnType<typeof useActionRunner>;
 
 function TemplateCard({ t, r, isManager, recommended, reason }: { t: LibraryTemplate; r: Runner; isManager: boolean; recommended?: boolean; reason?: string }) {
   const [open, setOpen] = useState(false);
+  const [copy, setCopy] = useState<TemplateCopy | null>(null);
   const wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) =>
     r.run(async () => { const res = await fn(); if (res.error) throw new Error(res.error); return res; }, { id, pendingMessage: pending, success: (x) => x.message ?? null });
+  const toggle = async () => {
+    const next = !open; setOpen(next);
+    if (next && !copy) { try { setCopy(await getTemplateCopyAction(t.template_key)); } catch { /* silent */ } }
+  };
 
   return (
     <div className="bg-card border-line rounded-2xl border p-4 shadow-sm">
@@ -145,13 +151,32 @@ function TemplateCard({ t, r, isManager, recommended, reason }: { t: LibraryTemp
           <p className="text-muted mt-1 text-[12px]">טריגר: {triggerLabel(t.trigger_type)} · השפעה: {t.expected_impact ?? "—"} · חיסכון ~{t.expected_time_saved_minutes} דק׳ · תפקיד: {t.required_role === "manager" ? "מנהל" : "סוכן"}</p>
           {reason && <p className="text-brand-strong mt-0.5 text-[12px]">✓ {reason}</p>}
         </div>
-        <button onClick={() => setOpen(!open)} className="text-brand-strong whitespace-nowrap text-[12px] font-bold">{open ? "סגור" : "תצוגה"}</button>
+        <button onClick={toggle} className="text-brand-strong whitespace-nowrap text-[12px] font-bold">{open ? "סגור" : "תצוגה"}</button>
       </div>
 
       {open && (
-        <div className="border-line mt-3 flex flex-col gap-2 border-t pt-3">
-          {t.business_goal && <p className="text-ink text-[13px]">🎯 {t.business_goal}</p>}
-          {t.description && <p className="text-muted text-[12px]">{t.description}</p>}
+        <div className="border-line mt-3 flex flex-col gap-3 border-t pt-3">
+          {copy ? (
+            <>
+              <p className="text-ink text-[13px] leading-relaxed">{copy.full}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <CopyBox icon="UserCheck" title="הנחיית סוכן" text={copy.agent_guidance} />
+                <CopyBox icon="Users" title="הנחיית מנהל" text={copy.manager_guidance} />
+                <CopyBox icon="TrendingUp" title="השפעת הכנסה" text={copy.revenue_impact} tone="text-success" />
+                <CopyBox icon="Flame" title="למה עכשיו" text={copy.urgency_reason ?? "—"} tone="text-warning" />
+                <CopyBox icon="Sparkles" title="תקציר מנהלים (Decision Brain)" text={copy.decision_brain_summary} />
+                <CopyBox icon="Shield" title="הגדרת הצלחה" text={copy.success_definition ?? copy.expected_outcome ?? "—"} />
+              </div>
+              {(copy.client_draft || copy.portal_message || copy.website_message) && (
+                <div className="bg-surface rounded-xl p-3">
+                  <p className="text-ink mb-1 text-[12px] font-bold">טיוטות הודעה ללקוח · לעולם לא נשלחות אוטומטית</p>
+                  {copy.client_draft && <p className="text-muted mb-1 text-[12px]">💬 {copy.client_draft}</p>}
+                  {copy.portal_message && <p className="text-muted mb-1 text-[12px]">🔑 {copy.portal_message}</p>}
+                  {copy.website_message && <p className="text-muted text-[12px]">🌐 {copy.website_message}</p>}
+                </div>
+              )}
+            </>
+          ) : <p className="text-muted text-[12px]">טוען טקסט...</p>}
           <div className="flex flex-wrap gap-1">
             {t.actions.map((a, i) => <span key={i} className="bg-surface text-ink rounded-full px-2 py-0.5 text-[11px] font-semibold">{i + 1}. {actionLabel(a)}</span>)}
           </div>
@@ -198,3 +223,11 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
   );
 }
 function Empty({ text }: { text: string }) { return <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">{text}</div>; }
+function CopyBox({ icon, title, text, tone }: { icon: string; title: string; text: string; tone?: string }) {
+  return (
+    <div className="border-line rounded-xl border p-2.5">
+      <p className={`mb-0.5 flex items-center gap-1 text-[11px] font-bold ${tone ?? "text-brand-strong"}`}><Icon name={icon} size={12} />{title}</p>
+      <p className="text-ink text-[12px] leading-relaxed">{text}</p>
+    </div>
+  );
+}
