@@ -3840,6 +3840,60 @@ type AutomationMicrocopyRow = {
   text_he: string;
 };
 
+// ── Mortgage & Financing Intelligence OS ────────────────────────────────────
+type BuyerFinancialProfilesRow = {
+  id: string;
+  organization_id: string;
+  buyer_id: string;
+  monthly_income: number | null;
+  household_income: number | null;
+  employment_type: string | null;
+  self_employed: boolean;
+  salary_employed: boolean;
+  existing_mortgage: number | null;
+  monthly_debt: number | null;
+  available_equity: number | null;
+  available_down_payment: number | null;
+  investment_capital: number | null;
+  recommended_budget: number | null;
+  max_budget: number | null;
+  safe_budget: number | null;
+  monthly_payment_estimate: number | null;
+  down_payment_gap: number | null;
+  financing_gap: number | null;
+  required_equity: number | null;
+  cash_gap: number | null;
+  financial_readiness_score: number | null;
+  financing_confidence_score: number | null;
+  approval_probability: number | null;
+  financing_strength: number | null;
+  purchase_readiness: number | null;
+  overall_readiness: number | null;
+  financing_risk: string;
+  readiness_band: string;
+  primary_gap: string | null;
+  notes: string | null;
+  inputs_complete: boolean;
+  metadata: Json;
+  computed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+type FinancingSignalsRow = {
+  id: string;
+  organization_id: string;
+  buyer_id: string | null;
+  deal_id: string | null;
+  signal_type: string;
+  score: number;
+  title: string;
+  reason: string | null;
+  recommended_action: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4287,6 +4341,8 @@ export interface Database {
       document_requirements: TableShape<DocumentRequirementsRow, "context" | "doc_category">;
       document_checklists: TableShape<DocumentChecklistsRow, "organization_id">;
       document_folders: TableShape<DocumentFoldersRow, "organization_id" | "name">;
+      buyer_financial_profiles: TableShape<BuyerFinancialProfilesRow, "organization_id" | "buyer_id">;
+      financing_signals: TableShape<FinancingSignalsRow, "organization_id" | "signal_type" | "title">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
       israel_localities: TableShape<IsraelLocalitiesRow, "locality_code" | "name_he">;
       israel_neighborhoods: TableShape<IsraelNeighborhoodsRow, "city_name" | "name_he" | "normalized_name">;
