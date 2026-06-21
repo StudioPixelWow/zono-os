@@ -51,6 +51,7 @@ export const navItems: NavItem[] = [
   { id: "operating-areas", label: "אזורי פעילות", icon: "MapPin" },
   { id: "system-health", label: "מנועי חישוב", icon: "Settings" },
   { id: "data-quality", label: "איכות דאטה", icon: "Shield" },
+  { id: "modules", label: "מדריך מודולים", icon: "Search" },
   { id: "journey", label: "מסע נכס", icon: "Route" },
   { id: "marketing", label: "שיווק", icon: "Megaphone" },
   { id: "reports", label: "דוחות", icon: "BarChart3" },

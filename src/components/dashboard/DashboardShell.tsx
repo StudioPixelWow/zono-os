@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
+import { CommandPalette } from "@/components/search/CommandPalette";
 
 /**
  * App frame: RTL slim sidebar (right/start side) + header + scrolling main +
@@ -20,6 +21,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <MobileNav />
+      <CommandPalette />
     </div>
   );
 }
