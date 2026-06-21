@@ -18,7 +18,7 @@ import { getBuyerById } from "@/lib/buyers/repository";
 import { getSellerById } from "@/lib/sellers/repository";
 import { getPropertyById } from "@/lib/properties/repository";
 import {
-  buildScoredRecommendation, rankRecommendations, type EvidenceItem,
+  buildScoredRecommendation, rankRecommendations, expireOldRecommendations, type EvidenceItem,
   type RecommendationSignals, type RecommendationType,
 } from "./engine";
 
@@ -440,10 +440,10 @@ export async function generateAcquisitionRecommendations(acquisitionProfileId: s
   await ctx();
   const supabase = await createClient();
   const { data: prof } = await supabase.from("inventory_acquisition_profiles")
-    .select("id,external_listing_id,acquisition_score,opportunity_score").eq("id", acquisitionProfileId).maybeSingle();
+    .select("id,external_listing_id,acquisition_score,buyer_demand_score").eq("id", acquisitionProfileId).maybeSingle();
   if (!prof) throw new Error("פרופיל הרכש לא נמצא");
-  const p = prof as { id: string; external_listing_id: string | null; acquisition_score: number | null; opportunity_score: number | null };
-  const score = p.acquisition_score ?? p.opportunity_score ?? 0;
+  const p = prof as { id: string; external_listing_id: string | null; acquisition_score: number | null; buyer_demand_score: number | null };
+  const score = p.acquisition_score ?? p.buyer_demand_score ?? 0;
   const inputs: RecInput[] = [{
     type: "acquisition_seller_outreach", targetType: "acquisition", targetId: acquisitionProfileId,
     title: "פנייה למוכר בהזדמנות רכש",
@@ -543,4 +543,161 @@ export async function getRecommendationCommandCenter(): Promise<RecommendationCo
     recentlyConverted: all.filter((r) => r.status === "converted").slice(0, 10),
     needsData: open.filter((r) => r.review_status === "needs_more_data").slice(0, 10),
   };
+}
+
+// ── Part 11 · Recommendation packages (review-only, never auto-sent) ──────────
+const PACKAGE_TITLES: Record<string, string> = {
+  buyer_package: "חבילת קונה", seller_package: "חבילת מוכר", property_package: "חבילת נכס",
+  lead_package: "חבילת ליד", agent_daily_package: "חבילת יום סוכן", office_package: "חבילת משרד",
+  transaction_research_package: "חבילת מחקר עסקאות", neighborhood_package: "חבילת שכונה", street_package: "חבילת רחוב",
+};
+
+/**
+ * Bundle the open recommendations for one entity into a reviewable package. The
+ * package is created in `draft` / `ready_for_review` — it is NEVER sent. Sections
+ * are grouped by recommendation type so the agent can review before any action.
+ */
+export async function buildRecommendationPackage(entityType: string, entityId: string, packageType: string) {
+  const { orgId, userId } = await ctx();
+  const supabase = await createClient();
+  const recs = await listRecommendationsForEntity(entityType, entityId);
+  const open = recs.filter((r) => r.status === "new" || r.status === "reviewed");
+  if (!open.length) throw new Error("אין המלצות פתוחות לבניית חבילה");
+
+  // Group into sections by type.
+  const byType = new Map<string, RecommendationView[]>();
+  for (const r of open) {
+    const arr = byType.get(r.recommendation_type) ?? [];
+    arr.push(r); byType.set(r.recommendation_type, arr);
+  }
+  const sections = [...byType.entries()].map(([type, items]) => ({
+    title: items[0].title_hebrew, type, count: items.length,
+    recommendation_ids: items.map((i) => i.id),
+  }));
+  const confidence = Math.round(open.reduce((a, r) => a + r.confidence_score, 0) / open.length);
+  const packageScore = Math.round(open.reduce((a, r) => a + r.recommendation_score, 0) / open.length);
+
+  const { data, error } = await supabase.from("recommendation_packages").insert({
+    organization_id: orgId, package_type: packageType, entity_type: entityType, entity_id: entityId,
+    title_hebrew: PACKAGE_TITLES[packageType] ?? "חבילת המלצות",
+    summary_hebrew: `${open.length} המלצות · ביטחון ${confidence}`,
+    sections: sections as never, recommendation_ids: open.map((r) => r.id) as never,
+    included_actions: open.map((r) => ({ id: r.id, action: r.next_best_action_hebrew })) as never,
+    confidence_score: confidence, package_score: packageScore,
+    status: "ready_for_review", created_by: userId,
+  } as never).select("id").single();
+  if (error) throw new Error(error.message);
+  return { packageId: (data as { id: string }).id, recommendations: open.length };
+}
+
+// ── Part 12 · Recommendation map points ──────────────────────────────────────
+/**
+ * Aggregate open recommendations by city/neighborhood into map points, blended
+ * with transaction supply. Deterministic; safe to re-run (replaces prior points).
+ */
+export async function generateRecommendationMapPoints() {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+
+  // Pull open recommendations with geo context from their supporting_geo / target.
+  const { data: recs } = await supabase.from("recommendations")
+    .select("id,recommendation_score,confidence_score,supporting_geo,target_entity_type")
+    .eq("organization_id", orgId).in("status", ["new", "reviewed"]).limit(2000);
+  const rows = (recs ?? []) as { recommendation_score: number; confidence_score: number; supporting_geo: { city?: string; neighborhood?: string } | null }[];
+
+  const buckets = new Map<string, { city: string; neighborhood: string | null; scores: number[]; conf: number[]; count: number }>();
+  for (const r of rows) {
+    const city = r.supporting_geo?.city;
+    if (!city) continue;
+    const neighborhood = r.supporting_geo?.neighborhood ?? null;
+    const key = `${city}|${neighborhood ?? ""}`;
+    const b = buckets.get(key) ?? { city, neighborhood, scores: [], conf: [], count: 0 };
+    b.scores.push(r.recommendation_score); b.conf.push(r.confidence_score); b.count++;
+    buckets.set(key, b);
+  }
+
+  // Transaction supply per city (real comparables → supply_score).
+  await supabase.from("recommendation_map_points").delete().eq("organization_id", orgId);
+  if (!buckets.size) return { points: 0 };
+
+  const points = [...buckets.values()].map((b) => {
+    const avgScore = Math.round(b.scores.reduce((a, n) => a + n, 0) / b.scores.length);
+    const avgConf = Math.round(b.conf.reduce((a, n) => a + n, 0) / b.conf.length);
+    return {
+      organization_id: orgId, entity_type: "opportunity" as const, city_name: b.city, neighborhood_name: b.neighborhood,
+      score: avgScore, recommendation_count: b.count, opportunity_score: avgScore,
+      demand_score: Math.min(100, b.count * 10), confidence_score: avgConf,
+    };
+  });
+  await supabase.from("recommendation_map_points").insert(points as never);
+  return { points: points.length };
+}
+
+export async function getRecommendationMapPoints() {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  const { data } = await supabase.from("recommendation_map_points")
+    .select("id,city_name,neighborhood_name,score,recommendation_count,opportunity_score,demand_score,confidence_score")
+    .eq("organization_id", orgId).order("score", { ascending: false }).limit(300);
+  return (data ?? []) as { id: string; city_name: string | null; neighborhood_name: string | null; score: number; recommendation_count: number; opportunity_score: number; demand_score: number; confidence_score: number }[];
+}
+
+// ── Lifecycle (review-only; no auto-send / no auto-contact) ───────────────────
+async function logEvent(recommendationId: string, eventType: string, notes?: string) {
+  const { orgId, userId } = await ctx();
+  const supabase = await createClient();
+  await supabase.from("recommendation_events").insert({
+    organization_id: orgId, recommendation_id: recommendationId, event_type: eventType, actor_user_id: userId, notes: notes ?? null,
+  } as never);
+}
+
+export async function reviewRecommendation(id: string, decision: "approved" | "rejected" | "needs_more_data") {
+  const { orgId, userId } = await ctx();
+  const supabase = await createClient();
+  const status = decision === "approved" ? "accepted" : decision === "rejected" ? "rejected" : "reviewed";
+  await supabase.from("recommendations").update({
+    review_status: decision, status, reviewed_by: userId, reviewed_at: new Date().toISOString(),
+  } as never).eq("organization_id", orgId).eq("id", id);
+  await logEvent(id, decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : "viewed");
+  return { ok: true };
+}
+
+export async function markRecommendationConverted(id: string) {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  await supabase.from("recommendations").update({
+    status: "converted", converted_at: new Date().toISOString(),
+  } as never).eq("organization_id", orgId).eq("id", id);
+  await logEvent(id, "converted");
+  return { ok: true };
+}
+
+export async function createTaskFromRecommendation(id: string) {
+  const { orgId, userId } = await ctx();
+  const supabase = await createClient();
+  const { data: rec } = await supabase.from("recommendations")
+    .select("title_hebrew,next_best_action_hebrew,target_entity_type,target_entity_id,assigned_user_id")
+    .eq("organization_id", orgId).eq("id", id).maybeSingle();
+  if (!rec) throw new Error("ההמלצה לא נמצאה");
+  const r = rec as { title_hebrew: string; next_best_action_hebrew: string | null; target_entity_type: string; target_entity_id: string | null; assigned_user_id: string | null };
+  const { data: task, error } = await supabase.from("tasks").insert({
+    org_id: orgId, created_by: userId, assignee_id: r.assigned_user_id ?? userId,
+    title: r.title_hebrew, description: r.next_best_action_hebrew, status: "todo", priority: "high",
+    entity_type: r.target_entity_type, entity_id: r.target_entity_id, intelligence_source: "recommendation",
+  } as never).select("id").single();
+  if (error) throw new Error(error.message);
+  await logEvent(id, "task_created", (task as { id: string }).id);
+  return { taskId: (task as { id: string }).id };
+}
+
+export async function expireStaleRecommendations() {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  const { data } = await supabase.from("recommendations")
+    .select("id,status,expires_at,created_at").eq("organization_id", orgId).in("status", ["new", "reviewed"]).limit(2000);
+  const ids = expireOldRecommendations((data ?? []) as { id: string; status: string; expires_at?: string | null; created_at?: string }[]);
+  if (ids.length) {
+    await supabase.from("recommendations").update({ status: "expired" } as never).in("id", ids);
+  }
+  return { expired: ids.length };
 }
