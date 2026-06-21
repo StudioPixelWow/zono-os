@@ -3008,6 +3008,21 @@ type UserOperatingLocalitiesRow = {
   updated_at: string;
 };
 
+type EngineRunsRow = {
+  id: string;
+  organization_id: string;
+  engine_key: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  rows_processed: number | null;
+  result_summary: Json;
+  error_message: string | null;
+  triggered_by: string | null;
+  created_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3457,6 +3472,7 @@ export interface Database {
         UserOperatingLocalitiesRow,
         "user_id" | "locality_id"
       >;
+      engine_runs: TableShape<EngineRunsRow, "engine_key">;
     };
     Views: { [_ in never]: never };
     Functions: {
