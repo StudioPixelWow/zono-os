@@ -5,6 +5,7 @@ import {
   approveRun, rejectRun, reverseRun, getRunActions, getRunLogs,
   type ActionSummary,
 } from "./service";
+import { enableTemplate, disableTemplate, runTemplateTest, duplicateTemplate } from "./library";
 import type { RunEntity, TriggerContext } from "./engine";
 
 export interface AutomationActionState { ok?: boolean; error?: string; message?: string; runId?: string }
@@ -46,4 +47,22 @@ export async function reverseRunAction(runId: string): Promise<AutomationActionS
 export async function getRunDetailAction(runId: string): Promise<{ actions: ActionSummary[]; logs: { level: string; message: string; created_at: string; step_action_type: string | null }[] }> {
   const [actions, logs] = await Promise.all([getRunActions(runId), getRunLogs(runId)]);
   return { actions, logs };
+}
+
+// ── Automation Library OS actions ────────────────────────────────────────────
+export async function enableTemplateAction(templateKey: string): Promise<AutomationActionState> {
+  try { await enableTemplate(templateKey); revalidate(); return { ok: true, message: "התבנית הופעלה — תהליך נוצר ופעיל" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "הפעלת התבנית נכשלה" }; }
+}
+export async function disableTemplateAction(templateKey: string): Promise<AutomationActionState> {
+  try { const r = await disableTemplate(templateKey); revalidate(); return { ok: true, message: `הושבתו ${r.disabled} תהליכים` }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "השבתת התבנית נכשלה" }; }
+}
+export async function runTemplateTestAction(templateKey: string): Promise<AutomationActionState> {
+  try { const r = await runTemplateTest(templateKey); revalidate(); return { ok: true, runId: r.runId, message: r.status === "blocked" ? "בדיקה נחסמה — תנאים לא התקיימו" : "בדיקה הוכנה — ממתינה לאישור ביומני הריצה" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "בדיקת התבנית נכשלה" }; }
+}
+export async function duplicateTemplateAction(templateKey: string): Promise<AutomationActionState> {
+  try { await duplicateTemplate(templateKey); revalidate(); return { ok: true, message: "נוצר עותק עבודה (מושהה) — ערוך והפעל" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "שכפול התבנית נכשל" }; }
 }

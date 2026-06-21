@@ -3691,6 +3691,26 @@ type AutomationTemplatesRow = {
   is_active: boolean;
   sort_order: number;
   created_at: string;
+  // Automation Library OS (rich system-template model)
+  organization_id: string | null;
+  subcategory: string | null;
+  title_hebrew: string | null;
+  description_hebrew: string | null;
+  business_goal_hebrew: string | null;
+  conditions: Json;
+  actions: Json;
+  priority: number;
+  risk_level: string | null;
+  default_enabled: boolean;
+  required_role: string;
+  related_modules: string[];
+  decision_brain_signal_type: string | null;
+  expected_impact: string | null;
+  expected_revenue_impact: number;
+  expected_time_saved_minutes: number;
+  audit_level: string;
+  metadata: Json;
+  updated_at: string;
 };
 type AutomationRecommendationsRow = {
   id: string;

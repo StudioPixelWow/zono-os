@@ -28,7 +28,12 @@ export type TriggerType =
 export type ActionType =
   | "create_task" | "create_follow_up" | "create_recommendation" | "create_activity"
   | "create_alert" | "assign_user" | "change_status" | "create_opportunity"
-  | "create_decision_signal" | "create_dashboard_card" | "create_notification" | "create_queue_item";
+  | "create_decision_signal" | "create_dashboard_card" | "create_notification" | "create_queue_item"
+  // Automation Library OS — richer (still safe, human-supervised, tracked-by-default) actions
+  | "request_approval" | "create_portal_refresh_suggestion" | "create_distribution_item"
+  | "create_document_checklist_item" | "create_signature_request_draft" | "create_research_request"
+  | "create_pricing_review" | "create_routing_review" | "create_revenue_review" | "create_manager_alert"
+  | "create_agent_coaching_signal" | "create_data_quality_issue" | "create_audit_log";
 
 export type ConditionType =
   | "lead_not_contacted_hours" | "property_inactive_days" | "deal_at_risk"
@@ -78,6 +83,20 @@ export const ACTIONS: {
   { type: "create_dashboard_card", label: "יצירת כרטיס דשבורד", reversible: true, materializes: "queue" },
   { type: "create_notification", label: "יצירת התראה אישית", reversible: true, materializes: "notification" },
   { type: "create_queue_item", label: "יצירת פריט בתור", reversible: true, materializes: "queue" },
+  // Automation Library OS — tracked-by-default (human enacts); manager_alert→notify, audit_log→activity
+  { type: "request_approval", label: "בקשת אישור", reversible: true, materializes: "queue" },
+  { type: "create_portal_refresh_suggestion", label: "הצעת רענון פורטל", reversible: true, materializes: "queue" },
+  { type: "create_distribution_item", label: "יצירת פריט הפצה", reversible: true, materializes: "queue" },
+  { type: "create_document_checklist_item", label: "פריט ברשימת מסמכים", reversible: true, materializes: "queue" },
+  { type: "create_signature_request_draft", label: "טיוטת בקשת חתימה", reversible: true, materializes: "queue" },
+  { type: "create_research_request", label: "בקשת מחקר", reversible: true, materializes: "queue" },
+  { type: "create_pricing_review", label: "בדיקת תמחור", reversible: true, materializes: "queue" },
+  { type: "create_routing_review", label: "בדיקת ניתוב", reversible: true, materializes: "queue" },
+  { type: "create_revenue_review", label: "בדיקת הכנסות", reversible: true, materializes: "queue" },
+  { type: "create_manager_alert", label: "התראת מנהל", reversible: true, materializes: "notification" },
+  { type: "create_agent_coaching_signal", label: "אות חניכת סוכן", reversible: true, materializes: "queue" },
+  { type: "create_data_quality_issue", label: "בעיית איכות נתונים", reversible: true, materializes: "queue" },
+  { type: "create_audit_log", label: "רישום ביקורת", reversible: true, materializes: "activity" },
 ];
 
 export const CONDITIONS: { type: ConditionType; label: string; operator: ConditionOperator; valueKind: "number" | "boolean" }[] = [
