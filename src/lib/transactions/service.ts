@@ -94,13 +94,23 @@ export async function ensureCoverageTargetsForCity(orgId: string, rawCity: strin
   return { created: rows.length, city };
 }
 
-/** Neighborhood names from the national reference for a city (for coverage seeding). */
+/**
+ * Neighborhood names from the national reference for a city (for coverage
+ * seeding). Prefers REAL neighborhoods over the low-confidence generated area
+ * placeholders ("מרכז היישוב", "צפון היישוב"…) from the national seed, so we
+ * don't create dozens of meaningless 700m GovMap pulls per city. Falls back to
+ * the generated placeholders only when a city has no real neighborhoods.
+ */
 export async function nationalNeighborhoodNames(rawCity: string): Promise<string[]> {
   const city = canonicalCityName(rawCity) ?? rawCity?.trim();
   if (!city) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("israel_neighborhoods").select("normalized_name").eq("city_name", city).limit(500);
-  return [...new Set((data ?? []).map((r) => r.normalized_name).filter((n): n is string => !!n))];
+  const { data } = await supabase.from("israel_neighborhoods").select("normalized_name,source,confidence_score").eq("city_name", city).limit(800);
+  const rows = (data ?? []) as { normalized_name: string | null; source: string | null; confidence_score: number | null }[];
+  const isReal = (r: typeof rows[number]) => r.source !== "generated_area_seed" || (r.confidence_score ?? 0) >= 50;
+  const real = rows.filter(isReal);
+  const use = real.length ? real : rows;
+  return [...new Set(use.map((r) => r.normalized_name).filter((n): n is string => !!n))];
 }
 
 // ── Dev-only, clearly-marked mock transactions ───────────────────────────────
@@ -576,8 +586,12 @@ export async function autoDiscoverNeighborhoods(): Promise<{ discovered: number;
 
   const found = new Map<string, { lat: number | null; lng: number | null; source: string }>();
   // 1) National reference (israel_neighborhoods) — shared across all orgs.
-  //    Lazily populated from OSM the first time any agent works in this city.
-  for (const n of await getNationalNeighborhoods(market.city, market.rawCity ?? market.city)) {
+  //    Prefer REAL neighborhoods over the low-confidence generated area
+  //    placeholders from the national seed, so coverage targets are meaningful.
+  const national = await getNationalNeighborhoods(market.city, market.rawCity ?? market.city);
+  const isReal = (n: { source: string; confidence_score: number | null }) => n.source !== "generated_area_seed" || (n.confidence_score ?? 0) >= 50;
+  const realNational = national.filter(isReal);
+  for (const n of (realNational.length ? realNational : national)) {
     if (!found.has(n.normalized_name)) found.set(n.normalized_name, { lat: n.lat, lng: n.lng, source: n.source });
   }
   // 2) Neighborhoods already present in stored transactions (guaranteed source).
