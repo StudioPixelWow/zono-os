@@ -86,9 +86,17 @@ export async function getEnrichmentStatus(): Promise<EnrichmentStatus> {
 // ── AI research ────────────────────────────────────────────────────────────────
 interface AiHood { neighborhood_name: string; confidence_score: number; reason?: string }
 
-async function researchCity(cityName: string, cityCode: string): Promise<{ list: AiHood[]; raw: unknown } | null> {
+/**
+ * Calls OpenAI for a city's real neighborhoods. On any API/parse failure it
+ * THROWS a descriptive error (status code + short body) instead of swallowing
+ * it — so the queue's `error` column and the live log show the real reason
+ * (e.g. "OpenAI 401: invalid api key", "OpenAI 429: insufficient_quota") rather
+ * than a generic "no response". A truly empty (but successful) answer returns
+ * an empty list, which is a valid "no known neighborhoods" result.
+ */
+async function researchCity(cityName: string, cityCode: string): Promise<{ list: AiHood[]; raw: unknown }> {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return null;
+  if (!key) throw new Error("OPENAI_API_KEY חסר בסביבה");
   const prompt = `אתה חוקר דאטה גאוגרפי של נדל"ן בישראל.
 החזר JSON של שכונות אמיתיות עבור היישוב הבא:
 יישוב: ${cityName}
@@ -103,12 +111,14 @@ async function researchCity(cityName: string, cityCode: string): Promise<{ list:
 - כלול confidence_score בין 0 ל-1 לכל שכונה.
 - כלול reason קצר מדוע השכונה כנראה אמיתית.
 החזר JSON בלבד בפורמט: {"neighborhoods":[{"neighborhood_name":"...","confidence_score":0.92,"reason":"..."}]}`;
+  const model = process.env.OPENAI_ENRICHMENT_MODEL || "gpt-4o-mini";
+  let res: Response;
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "gpt-4o-mini", temperature: 0.2, response_format: { type: "json_object" },
+        model, temperature: 0.2, response_format: { type: "json_object" },
         messages: [
           { role: "system", content: "אתה חוקר דאטה גאוגרפי. ענה ב-JSON תקין בלבד." },
           { role: "user", content: prompt },
@@ -116,31 +126,41 @@ async function researchCity(cityName: string, cityCode: string): Promise<{ list:
       }),
       signal: AbortSignal.timeout(28_000),
     });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = json.choices?.[0]?.message?.content?.trim();
-    if (!content) return null;
-    let parsed: unknown;
-    try { parsed = JSON.parse(content); } catch { return null; }
-    const arr = Array.isArray(parsed) ? parsed : (parsed as { neighborhoods?: unknown })?.neighborhoods;
-    if (!Array.isArray(arr)) return { list: [], raw: parsed };
-    const list: AiHood[] = [];
-    for (const it of arr) {
-      const name = typeof it?.neighborhood_name === "string" ? it.neighborhood_name.trim() : "";
-      if (!name || name.length > 50) continue;
-      const score = typeof it?.confidence_score === "number" ? Math.max(0, Math.min(1, it.confidence_score)) : 0.5;
-      list.push({ neighborhood_name: name, confidence_score: score, reason: typeof it?.reason === "string" ? it.reason : undefined });
-    }
-    return { list, raw: parsed };
-  } catch {
-    return null;
+  } catch (e) {
+    // Network / timeout / abort — surface it, don't hide it.
+    throw new Error(`שגיאת רשת מול OpenAI: ${e instanceof Error ? e.message : "unknown"}`);
   }
+  if (!res.ok) {
+    // Capture the real OpenAI error (status + a short snippet of the body) so the
+    // user can tell 401 (bad key) from 429 (quota) from model-access issues.
+    let detail = "";
+    try {
+      const body = (await res.json()) as { error?: { message?: string; code?: string; type?: string } };
+      detail = body.error?.message || body.error?.code || body.error?.type || "";
+    } catch { try { detail = (await res.text()).slice(0, 200); } catch { /* ignore */ } }
+    throw new Error(`OpenAI ${res.status}${detail ? `: ${detail.slice(0, 220)}` : ""}`);
+  }
+  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const content = json.choices?.[0]?.message?.content?.trim();
+  if (!content) throw new Error("OpenAI החזיר תשובה ריקה");
+  let parsed: unknown;
+  try { parsed = JSON.parse(content); } catch { throw new Error("OpenAI החזיר JSON לא תקין"); }
+  const arr = Array.isArray(parsed) ? parsed : (parsed as { neighborhoods?: unknown })?.neighborhoods;
+  if (!Array.isArray(arr)) return { list: [], raw: parsed };
+  const list: AiHood[] = [];
+  for (const it of arr) {
+    const name = typeof it?.neighborhood_name === "string" ? it.neighborhood_name.trim() : "";
+    if (!name || name.length > 50) continue;
+    const score = typeof it?.confidence_score === "number" ? Math.max(0, Math.min(1, it.confidence_score)) : 0.5;
+    list.push({ neighborhood_name: name, confidence_score: score, reason: typeof it?.reason === "string" ? it.reason : undefined });
+  }
+  return { list, raw: parsed };
 }
 
 const confLevel = (s: number) => (s >= 0.75 ? "high" : s >= 0.5 ? "medium" : "low");
 
 // ── Process one batch (chunked, resumable) ───────────────────────────────────
-export interface BatchResult { processed: number; done: number; empty: number; failed: number; remaining: number; cities: { city: string; count: number; status: string }[] }
+export interface BatchResult { processed: number; done: number; empty: number; failed: number; remaining: number; cities: { city: string; count: number; status: string; error?: string }[]; lastError?: string }
 
 export async function processNextBatch(limit = 4): Promise<BatchResult> {
   await requireManager();
@@ -161,7 +181,6 @@ export async function processNextBatch(limit = 4): Promise<BatchResult> {
     out.processed++;
     try {
       const research = await researchCity(c.city_name, c.city_code);
-      if (research === null) throw new Error("AI לא החזיר תשובה");
 
       // Normalize + dedupe within the city.
       const seen = new Set<string>();
@@ -201,13 +220,15 @@ export async function processNextBatch(limit = 4): Promise<BatchResult> {
       if (status === "done") out.done++; else out.empty++;
       out.cities.push({ city: c.city_name, count: rows.length, status });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "failed";
       const attempts = c.attempts + 1;
       const status = attempts >= MAX_ATTEMPTS ? "failed" : "pending"; // keep retrying until max
       await admin.from("neighborhood_enrichment_cities").update({
-        status, attempts, error: e instanceof Error ? e.message : "failed",
+        status, attempts, error: msg,
       } as never).eq("id", c.id);
       out.failed++;
-      out.cities.push({ city: c.city_name, count: 0, status });
+      out.lastError = msg;
+      out.cities.push({ city: c.city_name, count: 0, status, error: msg });
     }
   }
 

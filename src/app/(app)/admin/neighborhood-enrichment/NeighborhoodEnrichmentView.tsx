@@ -67,7 +67,12 @@ export function NeighborhoodEnrichmentView({ status, coverage }: { status: Enric
         const r = await processNextBatchAction(4);
         acc = { done: acc.done + r.done, empty: acc.empty + r.empty, failed: acc.failed + r.failed, remaining: r.remaining };
         setLive({ ...acc });
-        for (const c of r.cities) addLog(`${c.city}: ${c.count} שכונות · ${STATUS_LABEL[c.status] ?? c.status}`);
+        for (const c of r.cities) addLog(c.error ? `${c.city}: ✗ ${c.error}` : `${c.city}: ${c.count} שכונות · ${STATUS_LABEL[c.status] ?? c.status}`);
+        // If every city in the batch failed with the same API error, surface it
+        // loudly — that's almost always an OpenAI key/quota/model problem, not data.
+        if (r.lastError && r.done === 0 && r.empty === 0 && r.failed > 0) {
+          setError(`שגיאת OpenAI חוזרת: ${r.lastError} — בדוק מפתח/מכסה/הרשאת מודל בחשבון ה-API.`);
+        }
         if (r.remaining <= 0 || r.processed === 0) { addLog("✓ העיבוד הושלם"); break; }
         await new Promise((res) => setTimeout(res, 400));
       }
