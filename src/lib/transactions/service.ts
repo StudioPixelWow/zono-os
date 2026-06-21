@@ -476,28 +476,59 @@ async function getNationalNeighborhoods(city: string, rawCity: string): Promise<
   const supabase = await createClient();
   const { data: cached } = await supabase.from("israel_neighborhoods").select("*").eq("city_name", city).limit(500);
   if (cached && cached.length) return cached as DB["israel_neighborhoods"]["Row"][];
+  await discoverAndCacheCity(rawCity);
+  const { data: fresh } = await supabase.from("israel_neighborhoods").select("*").eq("city_name", city).limit(500);
+  return (fresh ?? []) as DB["israel_neighborhoods"]["Row"][];
+}
+
+/**
+ * Discover a city's neighborhoods (OSM + OpenAI) and cache them into the shared
+ * national israel_neighborhoods table via the service role. Idempotent: returns
+ * -1 if already cached, the count discovered otherwise, 0 if nothing found.
+ * Session-independent — callable from onboarding, cron, or any flow.
+ */
+async function discoverAndCacheCity(rawCity: string): Promise<number> {
+  const admin = createServiceRoleClient();
+  const city = canonicalCityName(rawCity) ?? rawCity.trim();
+  if (!city) return 0;
   try {
+    const { data: existing } = await admin.from("israel_neighborhoods").select("id").eq("city_name", city).limit(1);
+    if (existing && existing.length) return -1; // already cached — shared across all orgs
     const { discoverNeighborhoodsOSM, discoverNeighborhoodsAI, dedupeDiscovered } = await import("./geo");
-    // Run both sources; OSM first (authoritative), AI second (gap filler).
+    // OSM (authoritative) + OpenAI (gap filler) in parallel.
     const [osmRaw, aiRaw] = await Promise.all([
       discoverNeighborhoodsOSM(rawCity).catch(() => []),
       discoverNeighborhoodsAI(rawCity).catch(() => []),
     ]);
-    // Merge with OSM taking precedence on name collisions (dedupeDiscovered keeps first).
-    const merged = dedupeDiscovered([...osmRaw, ...aiRaw]);
-    if (!merged.length) return [];
+    const merged = dedupeDiscovered([...osmRaw, ...aiRaw]); // OSM wins on name collisions
+    if (!merged.length) return 0;
     const rows = merged.map((n) => ({
       city_name: city, name_he: n.name, normalized_name: n.name, place_type: n.place,
-      lat: n.lat, lng: n.lng,
-      source: n.source,
-      confidence_score: n.source === "osm" ? 60 : 45,
-      is_verified: false,
+      lat: n.lat, lng: n.lng, source: n.source,
+      confidence_score: n.source === "osm" ? 60 : 45, is_verified: false,
     }));
-    const admin = createServiceRoleClient();
     await admin.from("israel_neighborhoods").upsert(rows as never, { onConflict: "city_name,normalized_name" });
-    const { data: fresh } = await supabase.from("israel_neighborhoods").select("*").eq("city_name", city).limit(500);
-    return (fresh ?? []) as DB["israel_neighborhoods"]["Row"][];
-  } catch { return []; }
+    return merged.length;
+  } catch { return 0; }
+}
+
+/**
+ * Ensure the national neighborhood reference is populated for a set of cities.
+ * Mandatory early step (called from onboarding) so neighborhoods are available
+ * system-wide — for coverage, external listings, internal properties, marketing,
+ * etc. — not just the transactions page. Best-effort, never throws.
+ */
+export async function ensureNationalNeighborhoods(cities: string[]): Promise<{ city: string; discovered: number }[]> {
+  const out: { city: string; discovered: number }[] = [];
+  const seen = new Set<string>();
+  for (const raw of cities) {
+    const key = canonicalCityName(raw) ?? raw?.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    try { out.push({ city: key, discovered: await discoverAndCacheCity(raw) }); }
+    catch { out.push({ city: key, discovered: 0 }); }
+  }
+  return out;
 }
 
 /**

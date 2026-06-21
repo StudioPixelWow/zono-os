@@ -124,6 +124,17 @@ export async function completeOnboarding(
     }));
     await setOrgOperatingLocalities(org.id, rows);
     await setUserOperatingLocalities(user.id, rows);
+
+    // Mandatory early step: populate the shared national neighborhood reference
+    // (OSM + OpenAI) for the agent's operating cities, so neighborhoods are
+    // available system-wide from day one — coverage scans, external listings,
+    // internal properties, marketing. Best-effort: never blocks onboarding.
+    try {
+      const { ensureNationalNeighborhoods } = await import("@/lib/transactions/service");
+      await ensureNationalNeighborhoods(localities.map((l) => l.nameHe));
+    } catch (geoError) {
+      console.error("[onboarding] neighborhood discovery skipped:", geoError);
+    }
   } catch (error) {
     console.error("[onboarding] failed:", error);
     return { error: "אירעה שגיאה בשמירת הנתונים. נסה/י שוב." };
