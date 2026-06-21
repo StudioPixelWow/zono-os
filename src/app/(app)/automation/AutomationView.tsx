@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
@@ -37,12 +38,15 @@ export function AutomationView({ cc }: { cc: AutomationCommandCenter }) {
 
   return (
     <main dir="rtl" className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6">
-      <header className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span className="bg-brand-soft text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="Route" size={18} /></span>
-          <h1 className="text-ink text-2xl font-black">אוטומציה ותהליכי עבודה</h1>
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="bg-brand-soft text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="Route" size={18} /></span>
+            <h1 className="text-ink text-2xl font-black">אוטומציה ותהליכי עבודה</h1>
+          </div>
+          <p className="text-muted text-sm">שכבת התזמור של ZONO — מכינה, עוקבת ומתזמרת פעולות. כל אוטומציה מפוקחת אנושית, ניתנת לביטול ומתועדת.</p>
         </div>
-        <p className="text-muted text-sm">שכבת התזמור של ZONO — מכינה, עוקבת ומתזמרת פעולות. כל אוטומציה מפוקחת אנושית, ניתנת לביטול ומתועדת.</p>
+        <Link href="/automation/library" className="bg-brand-soft text-brand-strong mt-1 inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold"><Icon name="Presentation" size={15} />ספריית 595 אוטומציות ←</Link>
       </header>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

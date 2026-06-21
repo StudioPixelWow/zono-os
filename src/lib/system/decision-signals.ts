@@ -254,6 +254,18 @@ export async function buildAutomationAttentionRows(orgId: string): Promise<Atten
         attention_score: 58, urgency_score: 40, impact_score: 60, confidence_score: 80, revenue_impact_score: 48, relationship_impact_score: 15, churn_impact_score: 0,
         title: `${recos} אוטומציות מומלצות להפעלה`, reason: "מנוע ההחלטות זיהה תהליכים שכדאי להפעיל", recommended_action: "עיין בהמלצות במרכז האוטומציה", expected_outcome: "כיסוי רחב יותר של פעולות מתוזמרות", status: "open" });
     }
+    // Library coverage nudge: full library seeded but org enabled none yet.
+    const { count: enabledLib } = await supabase.from("automation_workflows")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).not("template_key", "is", null);
+    if ((enabledLib ?? 0) === 0) {
+      const { count: libTotal } = await supabase.from("automation_templates")
+        .select("id", { count: "exact", head: true }).not("risk_level", "is", null);
+      if ((libTotal ?? 0) > 0) {
+        rows.push({ org_id: orgId, entity_type: "automation", entity_id: orgId,
+          attention_score: 54, urgency_score: 32, impact_score: 64, confidence_score: 78, revenue_impact_score: 50, relationship_impact_score: 12, churn_impact_score: 0,
+          title: `${libTotal} אוטומציות מוכנות — אף אחת לא הופעלה`, reason: "ספריית האוטומציות זמינה אך טרם הופעלו תהליכים", recommended_action: "הפעל אוטומציות בטוחות מומלצות בספרייה", expected_outcome: "התחלת תזמור פעולות וחיסכון בזמן", status: "open" });
+      }
+    }
   } catch { /* automation signals are additive — never block the Decision Brain */ }
   return rows;
 }

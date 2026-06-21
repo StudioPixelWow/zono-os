@@ -65,16 +65,20 @@ export async function getAutomationLibrary(filters?: LibraryFilters): Promise<{ 
   const templates0 = (tplData ?? []) as Record<string, unknown>[];
 
   // workflows already created from library templates (enabled status + run/fail counts)
-  const { data: wfData } = await supabase.from("automation_workflows").select("template_key,is_enabled,run_count,last_run_at").eq("organization_id", orgId).not("template_key", "is", null);
+  const { data: wfData } = await supabase.from("automation_workflows").select("id,template_key,is_enabled,run_count,last_run_at").eq("organization_id", orgId).not("template_key", "is", null);
   const wfByKey = new Map<string, { enabled: boolean; runs: number; lastRunAt: string | null }>();
-  for (const w of (wfData ?? []) as { template_key: string; is_enabled: boolean; run_count: number; last_run_at: string | null }[]) {
+  const keyByWfId = new Map<string, string>();
+  for (const w of (wfData ?? []) as { id: string; template_key: string; is_enabled: boolean; run_count: number; last_run_at: string | null }[]) {
+    keyByWfId.set(w.id, w.template_key);
     const prev = wfByKey.get(w.template_key);
     wfByKey.set(w.template_key, { enabled: (prev?.enabled || w.is_enabled) ?? false, runs: (prev?.runs ?? 0) + (w.run_count ?? 0), lastRunAt: w.last_run_at ?? prev?.lastRunAt ?? null });
   }
-  // failed run counts per workflow template
+  // failed/blocked run counts attributed back to the template
   const { data: failData } = await supabase.from("automation_runs").select("workflow_id,status").eq("organization_id", orgId).in("status", ["failed", "blocked"]);
-  const failByWf = new Map<string, number>();
-  for (const r of (failData ?? []) as { workflow_id: string; status: string }[]) failByWf.set(r.workflow_id, (failByWf.get(r.workflow_id) ?? 0) + 1);
+  const failByKey = new Map<string, number>();
+  for (const r of (failData ?? []) as { workflow_id: string; status: string }[]) {
+    const k = keyByWfId.get(r.workflow_id); if (k) failByKey.set(k, (failByKey.get(k) ?? 0) + 1);
+  }
 
   let templates: LibraryTemplate[] = templates0.map((t) => {
     const key = t.template_key as string;
@@ -88,7 +92,7 @@ export async function getAutomationLibrary(filters?: LibraryFilters): Promise<{ 
       required_role: (t.required_role as string) ?? "agent", related_modules: (t.related_modules as string[]) ?? [],
       decision_brain_signal_type: (t.decision_brain_signal_type as string) ?? null, expected_impact: (t.expected_impact as string) ?? null,
       expected_revenue_impact: (t.expected_revenue_impact as number) ?? 0, expected_time_saved_minutes: (t.expected_time_saved_minutes as number) ?? 0,
-      priority: (t.priority as number) ?? 3, enabled: wf?.enabled ?? false, runs: wf?.runs ?? 0, failed: 0, lastRunAt: wf?.lastRunAt ?? null,
+      priority: (t.priority as number) ?? 3, enabled: wf?.enabled ?? false, runs: wf?.runs ?? 0, failed: failByKey.get(key) ?? 0, lastRunAt: wf?.lastRunAt ?? null,
     };
   });
 
