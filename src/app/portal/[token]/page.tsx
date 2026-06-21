@@ -72,8 +72,8 @@ function Section({ s }: { s: PublicPortalSection }) {
             {c.rooms != null && <Field label="חדרים" value={str(c.rooms)} />}
             {c.area != null && <Field label='מ״ר' value={str(c.area)} />}
             {Array.isArray(c.areas) && c.areas.length > 0 && <Field label="אזורים" value={(c.areas as string[]).join(", ")} />}
-            {(c.city || c.neighborhood) && <Field label="מיקום" value={`${str(c.city)}${c.neighborhood ? " · " + c.neighborhood : ""}`} />}
-            {c.status && <Field label="סטטוס" value={str(c.status)} />}
+            {Boolean(c.city || c.neighborhood) && <Field label="מיקום" value={`${str(c.city)}${c.neighborhood ? " · " + c.neighborhood : ""}`} />}
+            {Boolean(c.status) && <Field label="סטטוס" value={str(c.status)} />}
           </dl>
         </Card>
       );
@@ -95,7 +95,7 @@ function Section({ s }: { s: PublicPortalSection }) {
                   {it.data.rooms != null && <span>{str(it.data.rooms)} חד׳</span>}
                   {it.data.area != null && <span>{str(it.data.area)} מ״ר</span>}
                 </div>
-                {it.data.why && <p className="text-brand-strong mt-1 text-[12px]">✓ {str(it.data.why)}</p>}
+                {Boolean(it.data.why) && <p className="text-brand-strong mt-1 text-[12px]">✓ {str(it.data.why)}</p>}
               </div>
             ))}
           </div>
@@ -127,9 +127,9 @@ function Section({ s }: { s: PublicPortalSection }) {
             {c.estimated_market_value != null && <Field label="הערכת שווי" value={fmtMoney(c.estimated_market_value)} />}
             {c.asking_price != null && <Field label="מחיר מבוקש" value={fmtMoney(c.asking_price)} />}
             {c.avg_price_sqm != null && <Field label='ממוצע מ״ר' value={fmtMoney(c.avg_price_sqm)} />}
-            {c.confidence && <Field label="רמת ביטחון" value={str(c.confidence)} />}
+            {Boolean(c.confidence) && <Field label="רמת ביטחון" value={str(c.confidence)} />}
           </dl>
-          {c.explanation && <p className="text-muted mt-3 text-[13px]">{str(c.explanation)}</p>}
+          {Boolean(c.explanation) && <p className="text-muted mt-3 text-[13px]">{str(c.explanation)}</p>}
         </Card>
       );
     case "buyer_demand":
@@ -146,11 +146,11 @@ function Section({ s }: { s: PublicPortalSection }) {
       return (
         <Card title={s.title}>
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            {c.demand && <Field label="ביקוש" value={str(c.demand)} />}
-            {c.supply && <Field label="היצע" value={str(c.supply)} />}
-            {c.trend && <Field label="מגמה" value={str(c.trend)} />}
+            {Boolean(c.demand) && <Field label="ביקוש" value={str(c.demand)} />}
+            {Boolean(c.supply) && <Field label="היצע" value={str(c.supply)} />}
+            {Boolean(c.trend) && <Field label="מגמה" value={str(c.trend)} />}
             {c.avg_price_sqm != null && <Field label='ממוצע מ״ר' value={fmtMoney(c.avg_price_sqm)} />}
-            {c.confidence && <Field label="ביטחון" value={str(c.confidence)} />}
+            {Boolean(c.confidence) && <Field label="ביטחון" value={str(c.confidence)} />}
           </dl>
         </Card>
       );
@@ -169,11 +169,11 @@ function Section({ s }: { s: PublicPortalSection }) {
       return (
         <Card title={s.title}>
           <div className="flex flex-col gap-1 text-sm">
-            {c.agent_name && <p className="text-ink font-bold">{str(c.agent_name)}</p>}
-            {c.office_name && <p className="text-muted">{str(c.office_name)}</p>}
+            {Boolean(c.agent_name) && <p className="text-ink font-bold">{str(c.agent_name)}</p>}
+            {Boolean(c.office_name) && <p className="text-muted">{str(c.office_name)}</p>}
             <div className="mt-2 flex flex-wrap gap-2">
-              {c.agent_phone && <a href={`tel:${str(c.agent_phone)}`} className="bg-brand rounded-xl px-4 py-2 text-sm font-bold text-white">📞 התקשר</a>}
-              {c.agent_email && <a href={`mailto:${str(c.agent_email)}`} className="bg-surface text-ink rounded-xl px-4 py-2 text-sm font-bold">✉ אימייל</a>}
+              {Boolean(c.agent_phone) && <a href={`tel:${str(c.agent_phone)}`} className="bg-brand rounded-xl px-4 py-2 text-sm font-bold text-white">📞 התקשר</a>}
+              {Boolean(c.agent_email) && <a href={`mailto:${str(c.agent_email)}`} className="bg-surface text-ink rounded-xl px-4 py-2 text-sm font-bold">✉ אימייל</a>}
             </div>
           </div>
         </Card>
