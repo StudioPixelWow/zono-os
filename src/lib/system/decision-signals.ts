@@ -105,3 +105,36 @@ export async function buildRecommendationAttentionRows(orgId: string): Promise<A
   } catch { /* recommendation signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Territory Intelligence OS → Decision Brain (Part 17). Surfaces the highest-
+ * value territory signals (white space, revenue opportunity, acquisition
+ * hotspot, competitor threat, decline) as attention items so "where to work"
+ * flows into Today's Focus / Priority Queue. Additive + best-effort. No auto-
+ * assignment implied — these are surfaced for review only.
+ */
+export async function buildTerritoryAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  const PRIORITY = new Set(["white_space", "revenue_opportunity", "acquisition_hotspot", "competitor_dominance", "territory_decline", "inventory_gap"]);
+  try {
+    const { data } = await supabase.from("territory_signals")
+      .select("territory_profile_id,signal_type,score,confidence_score,title,reason,recommended_action")
+      .eq("organization_id", orgId).eq("status", "open").gte("score", 60)
+      .order("score", { ascending: false }).limit(10);
+    for (const s of (data ?? []) as { territory_profile_id: string | null; signal_type: string; score: number; confidence_score: number; title: string; reason: string | null; recommended_action: string | null }[]) {
+      if (!PRIORITY.has(s.signal_type)) continue;
+      rows.push({
+        org_id: orgId, entity_type: "territory", entity_id: s.territory_profile_id ?? orgId,
+        attention_score: clamp(s.score), urgency_score: clamp(s.score * 0.8), impact_score: clamp(s.score),
+        confidence_score: clamp(s.confidence_score),
+        revenue_impact_score: s.signal_type === "revenue_opportunity" ? clamp(s.score) : clamp(s.score * 0.6),
+        relationship_impact_score: 0, churn_impact_score: 0,
+        title: s.title, reason: s.reason ?? "סיגנל טריטוריאלי בעל ציון גבוה",
+        recommended_action: s.recommended_action ?? "בדוק ב׳מודיעין טריטוריות׳",
+        expected_outcome: "מיקוד נכון של פעילות וגיוס", status: "open",
+      });
+    }
+  } catch { /* territory signals are additive — never block the Decision Brain */ }
+  return rows;
+}
