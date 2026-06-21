@@ -3965,6 +3965,29 @@ type AiSimulationsRow = {
   summary: string | null; created_by: string | null; created_at: string;
 };
 
+// ── Facebook Community Discovery & Execution OS ─────────────────────────────
+type CommunityCommentsRow = {
+  id: string; organization_id: string; community_id: string | null; property_id: string | null; agent_id: string | null;
+  source: string; author_name: string | null; comment_text: string | null; intent: string; intent_score: number;
+  lead_created: boolean; social_lead_id: string | null; status: string; metadata: Json; created_at: string; updated_at: string;
+};
+type MessengerThreadsRow = {
+  id: string; organization_id: string; community_id: string | null; property_id: string | null; agent_id: string | null;
+  source: string; contact_name: string | null; last_message: string | null; intent: string; intent_score: number;
+  lead_created: boolean; social_lead_id: string | null; status: string; metadata: Json; created_at: string; updated_at: string;
+};
+type SocialAccountSyncLogsRow = {
+  id: string; organization_id: string; social_account_id: string | null; event: string; status: string; detail: string | null; created_at: string;
+};
+// Minimal shapes for existing Distribution-OS tables consumed by the community layer.
+type SocialAccountsRow = {
+  id: string; organization_id: string; user_id: string | null; provider: string; connection_status: string;
+  last_sync_at: string | null; created_at: string;
+};
+type CommunityDealAttributionRow = {
+  id: string; organization_id: string; community_id: string | null; property_id: string | null; attribution_confidence: number | null;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4427,6 +4450,11 @@ export interface Database {
       ai_focus_items: TableShape<AiFocusItemsRow, "organization_id" | "title">;
       ai_growth_plans: TableShape<AiGrowthPlansRow, "organization_id" | "plan_type" | "title">;
       ai_simulations: TableShape<AiSimulationsRow, "organization_id" | "scenario_key" | "title">;
+      community_comments: TableShape<CommunityCommentsRow, "organization_id">;
+      messenger_threads: TableShape<MessengerThreadsRow, "organization_id">;
+      social_account_sync_logs: TableShape<SocialAccountSyncLogsRow, "organization_id" | "event">;
+      social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
+      community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
       israel_localities: TableShape<IsraelLocalitiesRow, "locality_code" | "name_he">;
       israel_neighborhoods: TableShape<IsraelNeighborhoodsRow, "city_name" | "name_he" | "normalized_name">;
