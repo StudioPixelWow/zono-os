@@ -10,8 +10,8 @@ import {
   enableTemplateAction, disableTemplateAction, runTemplateTestAction, duplicateTemplateAction, getTemplateCopyAction,
 } from "@/lib/automation/actions";
 import type { TemplateCopy } from "@/lib/automation/copy";
-import { actionLabel, triggerLabel } from "@/lib/automation/engine";
-import { libraryCategoryLabel, LIBRARY_CATEGORIES, RISK_LABELS, type LibraryTemplate, type LibrarySummary, type LibraryRecommendation } from "@/lib/automation/library";
+import { actionLabel, triggerLabel, libraryCategoryLabel, LIBRARY_CATEGORIES, RISK_LABELS } from "@/lib/automation/engine";
+import type { LibraryTemplate, LibrarySummary, LibraryRecommendation } from "@/lib/automation/library";
 
 type Tab = "all" | "category" | "recommended" | "enabled" | "disabled" | "risk" | "impact" | "recent" | "errors";
 

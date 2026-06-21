@@ -20,22 +20,9 @@ async function ctx() {
   return { userId: user.id, orgId: profile.org_id, isManager, supabase };
 }
 
-// ── category metadata (20 library categories) ────────────────────────────────
-export const LIBRARY_CATEGORIES: { key: string; label: string }[] = [
-  { key: "lead", label: "לידים" }, { key: "buyer", label: "קונים" }, { key: "seller", label: "מוכרים" },
-  { key: "property", label: "נכסים" }, { key: "match", label: "התאמות" }, { key: "deal", label: "עסקאות" },
-  { key: "recommendation", label: "המלצות" }, { key: "territory", label: "טריטוריה" },
-  { key: "transaction", label: "עסקאות ותמחור" }, { key: "acquisition", label: "גיוס מלאי" },
-  { key: "marketing", label: "שיווק והפצה" }, { key: "social", label: "לידים חברתיים" },
-  { key: "portal", label: "פורטל לקוחות" }, { key: "website", label: "לידים מאתרים" },
-  { key: "revenue", label: "הכנסות ותחזית" }, { key: "team", label: "צוות וניתוב" },
-  { key: "document", label: "מסמכים וחתימות" }, { key: "referral", label: "הפניות והמלצות" },
-  { key: "dataquality", label: "איכות נתונים ובריאות" }, { key: "manager", label: "ניהול וצמיחת משרד" },
-];
-export const libraryCategoryLabel = (k: string) => LIBRARY_CATEGORIES.find((c) => c.key === k)?.label ?? k;
-export const RISK_LABELS: Record<string, string> = {
-  safe: "בטוח", review_required: "דורש בדיקה", manager_approval_required: "דורש אישור מנהל", disabled_by_default: "כבוי כברירת מחדל",
-};
+// Client-safe category/risk metadata lives in engine.ts; re-export for server callers.
+import { LIBRARY_CATEGORIES, libraryCategoryLabel, RISK_LABELS } from "./engine";
+export { LIBRARY_CATEGORIES, libraryCategoryLabel, RISK_LABELS };
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 export interface LibraryTemplate {
