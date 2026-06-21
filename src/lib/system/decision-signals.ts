@@ -269,3 +269,39 @@ export async function buildAutomationAttentionRows(orgId: string): Promise<Atten
   } catch { /* automation signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Documents & Signature OS → Decision Brain. Surfaces signature/compliance
+ * risk: documents awaiting signature, deals blocked by missing required
+ * documents, and documents expiring soon. Additive + best-effort.
+ */
+export async function buildDocumentAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    const { count: pending } = await supabase.from("documents")
+      .select("id", { count: "exact", head: true }).eq("org_id", orgId).in("signature_status", ["pending_signature", "partially_signed"]);
+    if ((pending ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "document", entity_id: orgId,
+        attention_score: 74, urgency_score: 78, impact_score: 60, confidence_score: 90, revenue_impact_score: 55, relationship_impact_score: 25, churn_impact_score: 10,
+        title: `${pending} מסמכים ממתינים לחתימה`, reason: "מסמכים שנשלחו/הוכנו לחתימה וטרם הושלמו", recommended_action: "השלם חתימות במרכז המסמכים", expected_outcome: "קידום עסקאות ועמידה בדרישות", status: "open" });
+    }
+    const { data: blocked } = await supabase.from("document_checklists")
+      .select("blocking_count").eq("organization_id", orgId).gt("blocking_count", 0);
+    const blockedDeals = (blocked ?? []).length;
+    if (blockedDeals > 0) {
+      rows.push({ org_id: orgId, entity_type: "document", entity_id: orgId,
+        attention_score: 86, urgency_score: 88, impact_score: 76, confidence_score: 92, revenue_impact_score: 72, relationship_impact_score: 20, churn_impact_score: 14,
+        title: `${blockedDeals} עסקאות חסומות בשל מסמכים חסרים`, reason: "מסמך חוסם נדרש חסר או לא חתום", recommended_action: "השלם את המסמכים החוסמים כדי לקדם את העסקה", expected_outcome: "שחרור חסם והאצת סגירה", status: "open" });
+    }
+    const { count: expiring } = await supabase.from("documents")
+      .select("id", { count: "exact", head: true }).eq("org_id", orgId).neq("signature_status", "completed")
+      .gte("expires_at", new Date().toISOString()).lte("expires_at", new Date(Date.now() + DAY * 14).toISOString());
+    if ((expiring ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "document", entity_id: orgId,
+        attention_score: 64, urgency_score: 70, impact_score: 50, confidence_score: 85, revenue_impact_score: 40, relationship_impact_score: 15, churn_impact_score: 8,
+        title: `${expiring} מסמכים פגי תוקף בקרוב`, reason: "מסמכים שתוקפם יפוג ב-14 הימים הקרובים", recommended_action: "חדש או החתם לפני פקיעת התוקף", expected_outcome: "שמירה על תקפות ועמידה בדרישות", status: "open" });
+    }
+  } catch { /* document signals are additive — never block the Decision Brain */ }
+  return rows;
+}
