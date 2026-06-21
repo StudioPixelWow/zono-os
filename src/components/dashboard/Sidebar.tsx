@@ -59,7 +59,7 @@ export function Sidebar() {
         Z
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1.5">
+      <nav className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {navItems.map((item) => {
           const href = HREFS[item.id];
           const active = isActive(href);
