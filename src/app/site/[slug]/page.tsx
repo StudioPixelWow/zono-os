@@ -14,9 +14,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!site || site === "disabled") return { title: "אתר משרד · ZONO" };
   const title = `${site.office.name}${site.office.address ? " · " + site.office.address : ""}`;
   const description = site.office.description ?? site.office.headline ?? "משרד נדל\"ן מוביל";
+  const host = (await headers()).get("host");
+  const canonical = host ? `https://${host}/site/${slug}` : undefined;
   return {
     title, description,
-    openGraph: { title, description, type: "website", images: site.office.cover ? [site.office.cover] : undefined },
+    alternates: canonical ? { canonical } : undefined,
+    openGraph: { title, description, type: "website", url: canonical, images: site.office.cover ? [site.office.cover] : undefined },
     twitter: { card: "summary_large_image", title, description },
   };
 }
@@ -117,6 +120,7 @@ export default async function OfficeSitePage({ params }: { params: Promise<{ slu
                 <p className="mt-2 text-sm font-bold">{a.name}</p>
                 {a.title && <p className="text-[12px] text-[#64748b]">{a.title}</p>}
                 {a.phone && <a href={`tel:${a.phone}`} className="mt-1 inline-block text-[12px] font-bold text-[#7C3AED]">📞 {a.phone}</a>}
+                {a.siteSlug && <Link href={`/agent/${a.siteSlug}`} className="mt-1 block text-[12px] font-bold text-[#7C3AED]">לאתר האישי ←</Link>}
               </div>
             ))}</div>
           </Section>

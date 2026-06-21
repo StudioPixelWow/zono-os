@@ -94,7 +94,7 @@ export async function toggleWebsiteSection(section: string, enabled: boolean) {
 
 // ── Public site assembly (service-role, public-safe only) ────────────────────
 export interface PublicProperty { id: string; title: string; price: number; city: string | null; neighborhood: string | null; rooms: number | null; area: number | null; type: string; status: string; image: string | null; tag: string | null }
-export interface PublicAgent { id: string; name: string; title: string | null; phone: string | null; avatar: string | null }
+export interface PublicAgent { id: string; name: string; title: string | null; phone: string | null; avatar: string | null; siteSlug: string | null }
 export interface PublicProject { id: string; name: string; city: string | null; status: string; units: number | null; developer: string | null }
 export interface PublicTransaction { neighborhood: string | null; rooms: number | null; area: number | null; price: number | null; date: string | null }
 export interface PublicSite {
@@ -149,6 +149,14 @@ export async function getPublicOfficeSite(slug: string): Promise<PublicSite | "d
 
   const testimonials = ((s.testimonials as { name: string; text: string; rating: number }[] | undefined) ?? []).slice(0, 6);
 
+  // Office → agent personal sites: link each agent card to their published site.
+  const agentRows = (agentsR.data ?? []) as { id: string; full_name: string; title: string | null; phone: string | null; avatar_url: string | null }[];
+  const slugByAgent = new Map<string, string>();
+  if (agentRows.length) {
+    const { data: agentSites } = await admin.from("agent_websites").select("user_id,slug").eq("organization_id", orgId).eq("status", "published").in("user_id", agentRows.map((a) => a.id));
+    for (const r of (agentSites ?? []) as { user_id: string; slug: string | null }[]) { if (r.slug) slugByAgent.set(r.user_id, r.slug); }
+  }
+
   return {
     slug,
     office: {
@@ -163,7 +171,7 @@ export async function getPublicOfficeSite(slug: string): Promise<PublicSite | "d
     kpis: { properties: kpiPropsR.count ?? props.length, agents: kpiAgentsR.count ?? 0, territories: kpiTerrR.count ?? territories.length, rating: testimonials.length ? Math.round((testimonials.reduce((a, t) => a + (t.rating || 5), 0) / testimonials.length) * 10) / 10 : 4.9 },
     featured,
     newest: props.slice(0, 8).map(propRow),
-    agents: ((agentsR.data ?? []) as { id: string; full_name: string; title: string | null; phone: string | null; avatar_url: string | null }[]).map((a) => ({ id: a.id, name: a.full_name, title: a.title, phone: a.phone, avatar: a.avatar_url })),
+    agents: agentRows.map((a) => ({ id: a.id, name: a.full_name, title: a.title, phone: a.phone, avatar: a.avatar_url, siteSlug: slugByAgent.get(a.id) ?? null })),
     projects: ((projectsR.data ?? []) as { id: string; name: string; city: string | null; status: string; total_units: number | null; developer_name: string | null }[]).map((p) => ({ id: p.id, name: p.name, city: p.city, status: p.status, units: p.total_units, developer: p.developer_name })),
     territories, transactions: txns.map((t) => ({ neighborhood: t.neighborhood_name, rooms: t.rooms, area: t.area, price: t.deal_amount, date: t.deal_date })), hotAreas,
     testimonials,

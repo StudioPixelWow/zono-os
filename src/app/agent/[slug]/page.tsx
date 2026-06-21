@@ -13,7 +13,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!site || site === "disabled") return { title: "אתר סוכן · ZONO" };
   const title = `${site.agent.name}${site.agent.title ? " · " + site.agent.title : ""}`;
   const description = site.agent.bio ?? site.agent.headline ?? 'יועץ נדל"ן';
-  return { title, description, openGraph: { title, description, type: "profile", images: site.agent.image ? [site.agent.image] : undefined }, twitter: { card: "summary_large_image", title, description } };
+  const host = (await headers()).get("host");
+  const canonical = host ? `https://${host}/agent/${slug}` : undefined;
+  return { title, description, alternates: canonical ? { canonical } : undefined, openGraph: { title, description, type: "profile", url: canonical, images: site.agent.image ? [site.agent.image] : undefined }, twitter: { card: "summary_large_image", title, description } };
 }
 
 export default async function AgentSitePage({ params }: { params: Promise<{ slug: string }> }) {
@@ -26,9 +28,11 @@ export default async function AgentSitePage({ params }: { params: Promise<{ slug
   if (site === "disabled") return <Inactive title="האתר אינו פעיל כרגע" />;
   const A = site.agent; const S = site.sections;
 
+  // Person schema for the agent website (vs the office's RealEstateAgent/Organization schema).
   const schema = {
-    "@context": "https://schema.org", "@type": "RealEstateAgent", name: A.name, jobTitle: A.title, description: A.bio,
-    telephone: A.phone, email: A.email, image: A.image, worksFor: A.office ? { "@type": "Organization", name: A.office } : undefined,
+    "@context": "https://schema.org", "@type": "Person", name: A.name, jobTitle: A.title ?? 'יועץ נדל"ן', description: A.bio,
+    telephone: A.phone, email: A.email, image: A.image, knowsAbout: A.specialties.length ? A.specialties : undefined,
+    worksFor: A.office ? { "@type": "RealEstateAgent", name: A.office } : undefined,
   };
 
   return (
