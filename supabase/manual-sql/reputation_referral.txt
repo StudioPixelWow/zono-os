@@ -1,0 +1,210 @@
+-- ============================================================================
+-- ZONO — Review, Referral & Reputation Intelligence OS
+-- ----------------------------------------------------------------------------
+-- A referral-intelligence layer (not a testimonials page): who recommends us,
+-- who referred whom, which clients/streets/neighborhoods/buildings/agents
+-- generate trust & business, and which closed deals should yield reviews /
+-- referrals / advocates. Idempotent. Org column: organization_id. Org-scoped
+-- RLS. Review/referral REQUESTS are drafts only — never auto-sent.
+--
+-- Consolidation note: the spec's 14 tables are folded into 7 (sources/categories
+-- as text columns; relationships/networks via referrals + Knowledge Graph;
+-- rewards/touchpoints as columns/metadata; reputation_profiles merged into
+-- reputation_scores) to avoid fragmentation while preserving every capability.
+-- ============================================================================
+
+-- ── client_reviews ────────────────────────────────────────────────────────────
+create table if not exists public.client_reviews (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  buyer_id         uuid references public.buyers(id) on delete set null,
+  seller_id        uuid references public.sellers(id) on delete set null,
+  deal_id          uuid references public.deals(id) on delete set null,
+  agent_id         uuid references public.users(id) on delete set null,
+  reviewer_name    text,
+  rating           integer check (rating is null or (rating between 1 and 5)),
+  sentiment        text not null default 'neutral',
+  quality_score    integer,
+  source           text not null default 'manual',
+  category         text not null default 'overall',
+  review_text      text,
+  conversion_impact integer not null default 0,
+  is_featured      boolean not null default false,
+  status           text not null default 'pending',
+  city             text,
+  neighborhood     text,
+  street           text,
+  building         text,
+  metadata         jsonb not null default '{}'::jsonb,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint client_reviews_sentiment_chk check (sentiment in ('positive','neutral','negative')),
+  constraint client_reviews_status_chk check (status in ('pending','approved','published','rejected'))
+);
+
+-- ── review_requests (drafts; never auto-sent) ─────────────────────────────────
+create table if not exists public.review_requests (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  buyer_id         uuid references public.buyers(id) on delete set null,
+  seller_id        uuid references public.sellers(id) on delete set null,
+  deal_id          uuid references public.deals(id) on delete set null,
+  requested_by     uuid references public.users(id) on delete set null,
+  channel          text not null default 'manual',
+  status           text not null default 'draft',
+  note             text,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint review_requests_channel_chk check (channel in ('manual','portal','website','whatsapp_draft','email_draft')),
+  constraint review_requests_status_chk check (status in ('draft','pending','completed','declined'))
+);
+
+-- ── referrals ─────────────────────────────────────────────────────────────────
+create table if not exists public.referrals (
+  id                  uuid primary key default gen_random_uuid(),
+  organization_id     uuid not null references public.organizations(id) on delete cascade,
+  referrer_buyer_id   uuid references public.buyers(id) on delete set null,
+  referrer_seller_id  uuid references public.sellers(id) on delete set null,
+  referred_lead_id    uuid references public.leads(id) on delete set null,
+  referred_buyer_id   uuid references public.buyers(id) on delete set null,
+  agent_id            uuid references public.users(id) on delete set null,
+  deal_id             uuid references public.deals(id) on delete set null,
+  status              text not null default 'new',
+  converted           boolean not null default false,
+  revenue             integer not null default 0,
+  commission          integer not null default 0,
+  influence_score     integer,
+  source_city         text,
+  source_neighborhood text,
+  source_street       text,
+  source_building     text,
+  note                text,
+  metadata            jsonb not null default '{}'::jsonb,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  constraint referrals_status_chk check (status in ('new','contacted','qualified','converted','lost'))
+);
+
+-- ── client_advocates ──────────────────────────────────────────────────────────
+create table if not exists public.client_advocates (
+  id                  uuid primary key default gen_random_uuid(),
+  organization_id     uuid not null references public.organizations(id) on delete cascade,
+  client_type         text not null default 'buyer',
+  client_id           uuid not null,
+  client_name         text,
+  advocate_score      integer not null default 0,
+  advocate_level      text not null default 'none',
+  deals_completed     integer not null default 0,
+  reviews_count       integer not null default 0,
+  referrals_count     integer not null default 0,
+  repeat_business     boolean not null default false,
+  relationship_strength integer,
+  satisfaction_score  integer,
+  referral_revenue    integer not null default 0,
+  last_computed_at    timestamptz,
+  metadata            jsonb not null default '{}'::jsonb,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  constraint client_advocates_type_chk check (client_type in ('buyer','seller')),
+  constraint client_advocates_level_chk check (advocate_level in ('none','bronze','silver','gold','ambassador','elite_ambassador')),
+  constraint client_advocates_uniq unique (organization_id, client_type, client_id)
+);
+
+-- ── reputation_scores (geo + agent + office) ──────────────────────────────────
+create table if not exists public.reputation_scores (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  scope            text not null,
+  scope_key        text not null,
+  label            text,
+  review_score     integer not null default 0,
+  referral_score   integer not null default 0,
+  influence_score  integer not null default 0,
+  trust_score      integer not null default 0,
+  review_count     integer not null default 0,
+  referral_count   integer not null default 0,
+  computed_at      timestamptz not null default now(),
+  constraint reputation_scores_scope_chk check (scope in ('neighborhood','street','building','office','agent')),
+  constraint reputation_scores_uniq unique (organization_id, scope, scope_key)
+);
+
+-- ── reputation_signals (Decision Brain + Automation feed) ─────────────────────
+create table if not exists public.reputation_signals (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  signal_type      text not null,
+  buyer_id         uuid references public.buyers(id) on delete set null,
+  seller_id        uuid references public.sellers(id) on delete set null,
+  deal_id          uuid references public.deals(id) on delete set null,
+  scope_key        text,
+  score            integer not null default 50,
+  title            text not null,
+  reason           text,
+  recommended_action text,
+  status           text not null default 'open',
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint reputation_signals_type_chk check (signal_type in (
+    'review_opportunity','referral_opportunity','high_influence_client','ambassador_candidate',
+    'referral_revenue','neighborhood_reputation','street_reputation','building_reputation',
+    'repeat_client','review_followup','referral_followup')),
+  constraint reputation_signals_status_chk check (status in ('open','resolved','dismissed'))
+);
+
+-- ── review_campaigns ──────────────────────────────────────────────────────────
+create table if not exists public.review_campaigns (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  name             text not null,
+  status           text not null default 'draft',
+  target           text,
+  requests_count   integer not null default 0,
+  reviews_count    integer not null default 0,
+  created_by       uuid references public.users(id) on delete set null,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint review_campaigns_status_chk check (status in ('draft','active','completed','archived'))
+);
+
+-- ── indexes ───────────────────────────────────────────────────────────────────
+create index if not exists client_reviews_org_idx     on public.client_reviews(organization_id, status);
+create index if not exists client_reviews_geo_idx       on public.client_reviews(organization_id, neighborhood);
+create index if not exists client_reviews_agent_idx     on public.client_reviews(agent_id);
+create index if not exists review_requests_org_idx      on public.review_requests(organization_id, status);
+create index if not exists referrals_org_idx            on public.referrals(organization_id, status);
+create index if not exists referrals_agent_idx          on public.referrals(agent_id);
+create index if not exists referrals_referrer_idx       on public.referrals(referrer_buyer_id);
+create index if not exists client_advocates_org_idx     on public.client_advocates(organization_id, advocate_level);
+create index if not exists client_advocates_score_idx    on public.client_advocates(organization_id, advocate_score);
+create index if not exists reputation_scores_scope_idx   on public.reputation_scores(organization_id, scope);
+create index if not exists reputation_signals_org_idx    on public.reputation_signals(organization_id, status);
+create index if not exists review_campaigns_org_idx      on public.review_campaigns(organization_id, status);
+
+-- ── updated_at triggers ──────────────────────────────────────────────────────
+do $$
+declare t text;
+  tbls text[] := array['client_reviews','review_requests','referrals','client_advocates','reputation_signals','review_campaigns'];
+begin
+  foreach t in array tbls loop
+    execute format('drop trigger if exists trg_%1$s_updated on public.%1$I;', t);
+    execute format('create trigger trg_%1$s_updated before update on public.%1$I for each row execute function public.set_updated_at();', t);
+  end loop;
+end $$;
+
+-- ── RLS (org-scoped; agent may write on their own org rows) ───────────────────
+do $$
+declare t text;
+  tbls text[] := array['client_reviews','review_requests','referrals','client_advocates','reputation_scores','reputation_signals','review_campaigns'];
+begin
+  foreach t in array tbls loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format('drop policy if exists "%1$s_select" on public.%1$I;', t);
+    execute format('create policy "%1$s_select" on public.%1$I for select to authenticated using (organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_insert" on public.%1$I;', t);
+    execute format('create policy "%1$s_insert" on public.%1$I for insert to authenticated with check (organization_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+    execute format('drop policy if exists "%1$s_update" on public.%1$I;', t);
+    execute format('create policy "%1$s_update" on public.%1$I for update to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''agent'')) with check (organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_delete" on public.%1$I;', t);
+    execute format('create policy "%1$s_delete" on public.%1$I for delete to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''manager''));', t);
+  end loop;
+end $$;
