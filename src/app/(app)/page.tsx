@@ -17,6 +17,7 @@ import { AutomationDashboardSection } from "@/components/dashboard/sections/Auto
 import { DocumentsDashboardSection } from "@/components/dashboard/sections/DocumentsDashboardSection";
 import { FinancingDashboardSection } from "@/components/dashboard/sections/FinancingDashboardSection";
 import { ReputationDashboardSection } from "@/components/dashboard/sections/ReputationDashboardSection";
+import { AIOfficeDashboardSection } from "@/components/dashboard/sections/AIOfficeDashboardSection";
 import { OperatingAreasSection } from "@/components/dashboard/sections/OperatingAreasSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
@@ -30,6 +31,7 @@ export default function Home() {
   return (
     <>
       <HeroSection />
+      <Suspense fallback={null}><AIOfficeDashboardSection /></Suspense>
       <Suspense fallback={null}><OperatingAreasSection /></Suspense>
       <Suspense fallback={null}><OpportunitiesSectionContainer /></Suspense>
       <Suspense fallback={<PropertiesSkeleton />}>

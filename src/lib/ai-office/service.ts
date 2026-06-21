@@ -31,7 +31,7 @@ type DB = Awaited<ReturnType<typeof createClient>>;
 // ── snapshot from the Decision Brain (read-only) ──────────────────────────────
 async function headCount(supabase: DB, table: string, col: string, orgId: string, extra?: (q: ReturnType<DB["from"]>) => unknown): Promise<number> {
   try {
-    let q = supabase.from(table as "deals").select("id", { count: "exact", head: true }).eq(col, orgId);
+    const q = supabase.from(table as "deals").select("id", { count: "exact", head: true }).eq(col, orgId);
     if (extra) extra(q as unknown as ReturnType<DB["from"]>);
     const { count } = await q; return count ?? 0;
   } catch { return 0; }

@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 /** Routes wired so far. Items without a route stay visual-only for now. */
 const HREFS: Record<string, string> = {
   home: "/",
+  "ai-office": "/ai-office",
   command: "/command",
   map: "/market",
   properties: "/properties",
