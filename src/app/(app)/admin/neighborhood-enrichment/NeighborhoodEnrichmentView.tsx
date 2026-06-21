@@ -64,7 +64,7 @@ export function NeighborhoodEnrichmentView({ status, coverage }: { status: Enric
     try {
       // Resumable loop: each batch persists to the DB, so a reload continues.
       while (!stopRef.current) {
-        const r = await processNextBatchAction(4);
+        const r = await processNextBatchAction(3);
         acc = { done: acc.done + r.done, empty: acc.empty + r.empty, failed: acc.failed + r.failed, remaining: r.remaining };
         setLive({ ...acc });
         for (const c of r.cities) addLog(c.error ? `${c.city}: ✗ ${c.error}` : `${c.city}: ${c.count} שכונות · ${STATUS_LABEL[c.status] ?? c.status}`);

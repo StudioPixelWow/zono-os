@@ -97,34 +97,38 @@ interface AiHood { neighborhood_name: string; confidence_score: number; reason?:
 async function researchCity(cityName: string, cityCode: string): Promise<{ list: AiHood[]; raw: unknown }> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY חסר בסביבה");
-  const prompt = `אתה חוקר דאטה גאוגרפי של נדל"ן בישראל.
-החזר JSON של שכונות אמיתיות עבור היישוב הבא:
+  const prompt = `אתה חוקר דאטה גאוגרפי של נדל"ן בישראל, עם ידע מקיף על חלוקת השכונות והרבעים של יישובי ישראל.
+מטרה: החזר רשימה **מקיפה ומלאה ככל האפשר** של כל השכונות, הרבעים והאזורים המוכרים ביישוב הבא — לא רק את המרכזיים.
 יישוב: ${cityName}
 סמל יישוב: ${cityCode}
 כללים:
-- החזר רק שמות שכונות אמיתיים, מוכרים, או בשימוש מקומי.
-- אל תיצור אזורים מלאכותיים/כיווניים (צפון/דרום/מרכז היישוב וכו') אלא אם זה שם שכונה אמיתי בשימוש.
-- אל תכלול רחובות.
-- אל תכלול ערים שכנות.
-- אם זה קיבוץ/מושב/יישוב קטן ללא שכונות פנימיות אמיתיות — החזר מערך ריק.
+- כלול את כל השכונות, הרבעים (למשל "רובע יזרעאל"), השיכונים והאזורים המוכרים ביישוב — שאף לרשימה מלאה, גם 20-40 שכונות אם קיימות.
+- כלול שכונות ותיקות, שכונות חדשות, רבעים רשמיים, ושמות אזורים בשימוש מקומי.
+- אל תיצור שמות מומצאים. אל תיצור אזורים כיווניים גנריים (צפון/דרום/מרכז היישוב) אלא אם זה שם רובע/אזור אמיתי בשימוש (כמו "צפון הכרם").
+- אל תכלול רחובות בודדים.
+- אל תכלול ערים/יישובים שכנים.
+- אם זה קיבוץ/מושב/יישוב קטן באמת ללא חלוקה פנימית — החזר מערך ריק.
 - העדף שמות בעברית.
-- כלול confidence_score בין 0 ל-1 לכל שכונה.
-- כלול reason קצר מדוע השכונה כנראה אמיתית.
+- כלול confidence_score בין 0 ל-1 לכל שכונה (גבוה לשכונות ידועות ומתועדות).
+- כלול reason קצר.
 החזר JSON בלבד בפורמט: {"neighborhoods":[{"neighborhood_name":"...","confidence_score":0.92,"reason":"..."}]}`;
-  const model = process.env.OPENAI_ENRICHMENT_MODEL || "gpt-4o-mini";
+  // Default to a stronger model: gpt-4o-mini under-returns (it gave 3 for עכו
+  // where the full list is ~30). gpt-4o has far better recall of real Israeli
+  // neighborhoods. Override with OPENAI_ENRICHMENT_MODEL if desired.
+  const model = process.env.OPENAI_ENRICHMENT_MODEL || "gpt-4o";
   let res: Response;
   try {
     res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model, temperature: 0.2, response_format: { type: "json_object" },
+        model, temperature: 0.2, max_tokens: 4000, response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "אתה חוקר דאטה גאוגרפי. ענה ב-JSON תקין בלבד." },
+          { role: "system", content: "אתה חוקר דאטה גאוגרפי עם ידע מקיף על שכונות ורבעים בישראל. ענה ב-JSON תקין בלבד, עם רשימה מלאה." },
           { role: "user", content: prompt },
         ],
       }),
-      signal: AbortSignal.timeout(28_000),
+      signal: AbortSignal.timeout(40_000),
     });
   } catch (e) {
     // Network / timeout / abort — surface it, don't hide it.
