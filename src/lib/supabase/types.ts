@@ -3894,6 +3894,46 @@ type FinancingSignalsRow = {
   updated_at: string;
 };
 
+// ── Review, Referral & Reputation Intelligence OS ───────────────────────────
+type ClientReviewsRow = {
+  id: string; organization_id: string; buyer_id: string | null; seller_id: string | null; deal_id: string | null;
+  agent_id: string | null; reviewer_name: string | null; rating: number | null; sentiment: string;
+  quality_score: number | null; source: string; category: string; review_text: string | null;
+  conversion_impact: number; is_featured: boolean; status: string; city: string | null; neighborhood: string | null;
+  street: string | null; building: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type ReviewRequestsRow = {
+  id: string; organization_id: string; buyer_id: string | null; seller_id: string | null; deal_id: string | null;
+  requested_by: string | null; channel: string; status: string; note: string | null; created_at: string; updated_at: string;
+};
+type ReferralsRow = {
+  id: string; organization_id: string; referrer_buyer_id: string | null; referrer_seller_id: string | null;
+  referred_lead_id: string | null; referred_buyer_id: string | null; agent_id: string | null; deal_id: string | null;
+  status: string; converted: boolean; revenue: number; commission: number; influence_score: number | null;
+  source_city: string | null; source_neighborhood: string | null; source_street: string | null; source_building: string | null;
+  note: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type ClientAdvocatesRow = {
+  id: string; organization_id: string; client_type: string; client_id: string; client_name: string | null;
+  advocate_score: number; advocate_level: string; deals_completed: number; reviews_count: number; referrals_count: number;
+  repeat_business: boolean; relationship_strength: number | null; satisfaction_score: number | null;
+  referral_revenue: number; last_computed_at: string | null; metadata: Json; created_at: string; updated_at: string;
+};
+type ReputationScoresRow = {
+  id: string; organization_id: string; scope: string; scope_key: string; label: string | null;
+  review_score: number; referral_score: number; influence_score: number; trust_score: number;
+  review_count: number; referral_count: number; computed_at: string;
+};
+type ReputationSignalsRow = {
+  id: string; organization_id: string; signal_type: string; buyer_id: string | null; seller_id: string | null;
+  deal_id: string | null; scope_key: string | null; score: number; title: string; reason: string | null;
+  recommended_action: string | null; status: string; created_at: string; updated_at: string;
+};
+type ReviewCampaignsRow = {
+  id: string; organization_id: string; name: string; status: string; target: string | null;
+  requests_count: number; reviews_count: number; created_by: string | null; created_at: string; updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4343,6 +4383,13 @@ export interface Database {
       document_folders: TableShape<DocumentFoldersRow, "organization_id" | "name">;
       buyer_financial_profiles: TableShape<BuyerFinancialProfilesRow, "organization_id" | "buyer_id">;
       financing_signals: TableShape<FinancingSignalsRow, "organization_id" | "signal_type" | "title">;
+      client_reviews: TableShape<ClientReviewsRow, "organization_id">;
+      review_requests: TableShape<ReviewRequestsRow, "organization_id">;
+      referrals: TableShape<ReferralsRow, "organization_id">;
+      client_advocates: TableShape<ClientAdvocatesRow, "organization_id" | "client_type" | "client_id">;
+      reputation_scores: TableShape<ReputationScoresRow, "organization_id" | "scope" | "scope_key">;
+      reputation_signals: TableShape<ReputationSignalsRow, "organization_id" | "signal_type" | "title">;
+      review_campaigns: TableShape<ReviewCampaignsRow, "organization_id" | "name">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
       israel_localities: TableShape<IsraelLocalitiesRow, "locality_code" | "name_he">;
       israel_neighborhoods: TableShape<IsraelNeighborhoodsRow, "city_name" | "name_he" | "normalized_name">;
