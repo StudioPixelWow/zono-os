@@ -185,7 +185,7 @@ export async function getPublicOfficeProperties(slug: string, filters?: { city?:
   const orgId = (site as { organization_id: string }).organization_id;
   let q = admin.from("properties").select("id,title,price,city,neighborhood,rooms,size_sqm,type,status,primary_image_url").eq("org_id", orgId).in("status", ["active", "published", "under_offer"]).order("created_at", { ascending: false }).limit(120);
   if (filters?.city) q = q.eq("city", filters.city);
-  if (filters?.type) q = q.eq("type", filters.type);
+  if (filters?.type) q = q.eq("type", filters.type as never);
   if (filters?.rooms) q = q.gte("rooms", filters.rooms);
   if (filters?.maxPrice) q = q.lte("price", filters.maxPrice);
   const { data } = await q;
