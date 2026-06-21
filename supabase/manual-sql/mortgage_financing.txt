@@ -1,19 +1,7 @@
--- ============================================================================
--- ZONO — Mortgage & Financing Intelligence OS
--- ----------------------------------------------------------------------------
--- A financial-intelligence layer (NOT a calculator) that answers: can this
--- buyer actually purchase, how much can they afford, what financing risk /
--- opportunity exists, and how does financing affect deal probability & revenue.
--- buyer_financial_profiles stores raw financial inputs + deterministically
--- computed affordability/readiness outputs. financing_signals feeds Decision
--- Brain + Automation. Idempotent. Org column: organization_id. Org-scoped RLS.
--- ============================================================================
-
 create table if not exists public.buyer_financial_profiles (
   id                       uuid primary key default gen_random_uuid(),
   organization_id          uuid not null references public.organizations(id) on delete cascade,
   buyer_id                 uuid not null references public.buyers(id) on delete cascade,
-  -- raw financial inputs
   monthly_income           integer,
   household_income         integer,
   employment_type          text,
@@ -24,7 +12,6 @@ create table if not exists public.buyer_financial_profiles (
   available_equity         integer,
   available_down_payment   integer,
   investment_capital       integer,
-  -- computed affordability outputs
   recommended_budget       integer,
   max_budget               integer,
   safe_budget              integer,
@@ -33,7 +20,6 @@ create table if not exists public.buyer_financial_profiles (
   financing_gap            integer,
   required_equity          integer,
   cash_gap                 integer,
-  -- computed scores (0-100)
   financial_readiness_score  integer,
   financing_confidence_score integer,
   approval_probability       integer,
@@ -53,7 +39,6 @@ create table if not exists public.buyer_financial_profiles (
   constraint bfp_readiness_band_chk check (readiness_band in ('unknown','not_ready','needs_help','nearly_ready','ready')),
   constraint bfp_buyer_uniq unique (organization_id, buyer_id)
 );
-
 create table if not exists public.financing_signals (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -72,16 +57,12 @@ create table if not exists public.financing_signals (
     'buyer_missing_financing_data','financing_ready','buyer_can_upgrade_budget','buyer_budget_unrealistic')),
   constraint financing_signals_status_chk check (status in ('open','resolved','dismissed'))
 );
-
--- ── indexes ───────────────────────────────────────────────────────────────────
 create index if not exists bfp_org_idx        on public.buyer_financial_profiles(organization_id);
 create index if not exists bfp_buyer_idx       on public.buyer_financial_profiles(buyer_id);
 create index if not exists bfp_readiness_idx    on public.buyer_financial_profiles(organization_id, readiness_band);
 create index if not exists bfp_risk_idx         on public.buyer_financial_profiles(organization_id, financing_risk);
 create index if not exists financing_signals_org_idx on public.financing_signals(organization_id, status);
 create index if not exists financing_signals_buyer_idx on public.financing_signals(buyer_id);
-
--- ── updated_at triggers ──────────────────────────────────────────────────────
 do $$
 declare t text;
   tbls text[] := array['buyer_financial_profiles','financing_signals'];
@@ -91,8 +72,6 @@ begin
     execute format('create trigger trg_%1$s_updated before update on public.%1$I for each row execute function public.set_updated_at();', t);
   end loop;
 end $$;
-
--- ── RLS (org-scoped; agent may write on their own org rows) ───────────────────
 do $$
 declare t text;
   tbls text[] := array['buyer_financial_profiles','financing_signals'];

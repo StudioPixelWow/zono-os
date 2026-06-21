@@ -1,9 +1,3 @@
--- ============================================================================
--- automation_copy — חלק 7 מתוך 8
--- הרץ את החלקים לפי הסדר (1,2,3...). חלק 1 יוצר את הטבלאות; השאר מזינים נתונים.
--- בטוח להריץ שוב (idempotent).
--- ============================================================================
-
 insert into public.automation_message_variants (template_key,channel,voice,message_he) values
   ('lib.lead.new_lead_created', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא חדש ליד נוצר. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.lead.new_lead_created', 'website', 'agent', 'תודה על פנייתך. סוכן/ת מטעמנו ייצור/תיצור קשר בהקדם להמשך אישי בנושא חדש ליד נוצר.'),
@@ -25,7 +19,6 @@ insert into public.automation_message_variants (template_key,channel,voice,messa
   ('lib.lead.lead_clicked_whatsapp', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא ליד נלחץ וואטסאפ. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.lead.lead_clicked_whatsapp', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא ליד נלחץ וואטסאפ. הסוכן/ת שלך זמין/ה להמשך.'),
   ('lib.lead.lead_clicked_whatsapp', 'website', 'agent', 'תודה על פנייתך. סוכן/ת מטעמנו ייצור/תיצור קשר בהקדם להמשך אישי בנושא ליד נלחץ וואטסאפ.');
-
 insert into public.automation_message_variants (template_key,channel,voice,message_he) values
   ('lib.lead.lead_connected_to_hot_territory', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא ליד מחובר חם טריטוריה. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.lead.lead_connected_to_hot_territory', 'website', 'agent', 'תודה על פנייתך. סוכן/ת מטעמנו ייצור/תיצור קשר בהקדם להמשך אישי בנושא ליד מחובר חם טריטוריה.'),
@@ -47,7 +40,6 @@ insert into public.automation_message_variants (template_key,channel,voice,messa
   ('lib.buyer.buyer_interacted_with_3_properties', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא קונה באינטראקציה עם 3+ נכסים. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.buyer.buyer_interacted_with_3_properties', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא קונה באינטראקציה עם 3+ נכסים. הסוכן/ת שלך זמין/ה להמשך.'),
   ('lib.buyer.buyer_should_receive_recommendation_package', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא קונה קבלת המלצה חבילה. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)');
-
 insert into public.automation_message_variants (template_key,channel,voice,message_he) values
   ('lib.buyer.buyer_should_receive_recommendation_package', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא קונה קבלת המלצה חבילה. הסוכן/ת שלך זמין/ה להמשך.'),
   ('lib.buyer.buyer_should_receive_transaction_package', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא קונה קבלת עסקה חבילה. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
@@ -69,7 +61,6 @@ insert into public.automation_message_variants (template_key,channel,voice,messa
   ('lib.buyer.buyer_portal_viewed', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא קונה פורטל נצפה. הסוכן/ת שלך זמין/ה להמשך.'),
   ('lib.seller.seller_created', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא מוכר נוצר. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.seller.seller_commitment_fulfilled', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא מוכר התחייבות מומשה. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)');
-
 insert into public.automation_message_variants (template_key,channel,voice,message_he) values
   ('lib.seller.seller_commitment_fulfilled', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא מוכר התחייבות מומשה. הסוכן/ת שלך זמין/ה להמשך.'),
   ('lib.seller.seller_price_above_transactions', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא מוכר מחיר מעל עסקאות. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
@@ -91,7 +82,6 @@ insert into public.automation_message_variants (template_key,channel,voice,messa
   ('lib.seller.seller_should_get_building_intelligence', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא מוכר קבלת בניין מודיעין. הסוכן/ת שלך זמין/ה להמשך.'),
   ('lib.seller.seller_should_get_street_intelligence', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא מוכר קבלת רחוב מודיעין. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.seller.seller_should_get_street_intelligence', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא מוכר קבלת רחוב מודיעין. הסוכן/ת שלך זמין/ה להמשך.');
-
 insert into public.automation_message_variants (template_key,channel,voice,message_he) values
   ('lib.seller.seller_should_get_market_update', 'client', 'agent', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא מוכר קבלת שוק עדכון. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.seller.seller_should_get_market_update', 'portal', 'agent', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא מוכר קבלת שוק עדכון. הסוכן/ת שלך זמין/ה להמשך.'),
@@ -113,7 +103,6 @@ insert into public.automation_message_variants (template_key,channel,voice,messa
   ('lib.deal.deal_property_price_risk', 'client', 'executive', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא עסקה נכס מחיר סיכון. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.deal.deal_closed', 'client', 'executive', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא עסקה נסגרה. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.deal.deal_closed', 'portal', 'executive', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא עסקה נסגרה. הסוכן/ת שלך זמין/ה להמשך.');
-
 insert into public.automation_message_variants (template_key,channel,voice,message_he) values
   ('lib.deal.deal_requires_agent_follow_up', 'client', 'executive', 'שלום, ראינו שזה הזמן הנכון להתקדם יחד בנושא עסקה דורש סוכן מעקב. נשמח לתאם שיחה קצרה ולהציג את הצעדים הבאים המתאימים בדיוק עבורך. (טיוטה — לאישור הסוכן לפני שליחה)'),
   ('lib.deal.deal_requires_agent_follow_up', 'portal', 'executive', 'עדכון אישי בפורטל: הכנו עבורך מידע ממוקד בנושא עסקה דורש סוכן מעקב. הסוכן/ת שלך זמין/ה להמשך.'),

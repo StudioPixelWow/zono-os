@@ -1,19 +1,3 @@
--- ============================================================================
--- ZONO — Review, Referral & Reputation Intelligence OS
--- ----------------------------------------------------------------------------
--- A referral-intelligence layer (not a testimonials page): who recommends us,
--- who referred whom, which clients/streets/neighborhoods/buildings/agents
--- generate trust & business, and which closed deals should yield reviews /
--- referrals / advocates. Idempotent. Org column: organization_id. Org-scoped
--- RLS. Review/referral REQUESTS are drafts only — never auto-sent.
---
--- Consolidation note: the spec's 14 tables are folded into 7 (sources/categories
--- as text columns; relationships/networks via referrals + Knowledge Graph;
--- rewards/touchpoints as columns/metadata; reputation_profiles merged into
--- reputation_scores) to avoid fragmentation while preserving every capability.
--- ============================================================================
-
--- ── client_reviews ────────────────────────────────────────────────────────────
 create table if not exists public.client_reviews (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -41,8 +25,6 @@ create table if not exists public.client_reviews (
   constraint client_reviews_sentiment_chk check (sentiment in ('positive','neutral','negative')),
   constraint client_reviews_status_chk check (status in ('pending','approved','published','rejected'))
 );
-
--- ── review_requests (drafts; never auto-sent) ─────────────────────────────────
 create table if not exists public.review_requests (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -58,8 +40,6 @@ create table if not exists public.review_requests (
   constraint review_requests_channel_chk check (channel in ('manual','portal','website','whatsapp_draft','email_draft')),
   constraint review_requests_status_chk check (status in ('draft','pending','completed','declined'))
 );
-
--- ── referrals ─────────────────────────────────────────────────────────────────
 create table if not exists public.referrals (
   id                  uuid primary key default gen_random_uuid(),
   organization_id     uuid not null references public.organizations(id) on delete cascade,
@@ -84,8 +64,6 @@ create table if not exists public.referrals (
   updated_at          timestamptz not null default now(),
   constraint referrals_status_chk check (status in ('new','contacted','qualified','converted','lost'))
 );
-
--- ── client_advocates ──────────────────────────────────────────────────────────
 create table if not exists public.client_advocates (
   id                  uuid primary key default gen_random_uuid(),
   organization_id     uuid not null references public.organizations(id) on delete cascade,
@@ -109,8 +87,6 @@ create table if not exists public.client_advocates (
   constraint client_advocates_level_chk check (advocate_level in ('none','bronze','silver','gold','ambassador','elite_ambassador')),
   constraint client_advocates_uniq unique (organization_id, client_type, client_id)
 );
-
--- ── reputation_scores (geo + agent + office) ──────────────────────────────────
 create table if not exists public.reputation_scores (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -127,8 +103,6 @@ create table if not exists public.reputation_scores (
   constraint reputation_scores_scope_chk check (scope in ('neighborhood','street','building','office','agent')),
   constraint reputation_scores_uniq unique (organization_id, scope, scope_key)
 );
-
--- ── reputation_signals (Decision Brain + Automation feed) ─────────────────────
 create table if not exists public.reputation_signals (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -150,8 +124,6 @@ create table if not exists public.reputation_signals (
     'repeat_client','review_followup','referral_followup')),
   constraint reputation_signals_status_chk check (status in ('open','resolved','dismissed'))
 );
-
--- ── review_campaigns ──────────────────────────────────────────────────────────
 create table if not exists public.review_campaigns (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -165,8 +137,6 @@ create table if not exists public.review_campaigns (
   updated_at       timestamptz not null default now(),
   constraint review_campaigns_status_chk check (status in ('draft','active','completed','archived'))
 );
-
--- ── indexes ───────────────────────────────────────────────────────────────────
 create index if not exists client_reviews_org_idx     on public.client_reviews(organization_id, status);
 create index if not exists client_reviews_geo_idx       on public.client_reviews(organization_id, neighborhood);
 create index if not exists client_reviews_agent_idx     on public.client_reviews(agent_id);
@@ -179,8 +149,6 @@ create index if not exists client_advocates_score_idx    on public.client_advoca
 create index if not exists reputation_scores_scope_idx   on public.reputation_scores(organization_id, scope);
 create index if not exists reputation_signals_org_idx    on public.reputation_signals(organization_id, status);
 create index if not exists review_campaigns_org_idx      on public.review_campaigns(organization_id, status);
-
--- ── updated_at triggers ──────────────────────────────────────────────────────
 do $$
 declare t text;
   tbls text[] := array['client_reviews','review_requests','referrals','client_advocates','reputation_signals','review_campaigns'];
@@ -190,8 +158,6 @@ begin
     execute format('create trigger trg_%1$s_updated before update on public.%1$I for each row execute function public.set_updated_at();', t);
   end loop;
 end $$;
-
--- ── RLS (org-scoped; agent may write on their own org rows) ───────────────────
 do $$
 declare t text;
   tbls text[] := array['client_reviews','review_requests','referrals','client_advocates','reputation_scores','reputation_signals','review_campaigns'];

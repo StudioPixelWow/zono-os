@@ -1,18 +1,3 @@
--- ============================================================================
--- automation_library — חלק 1 מתוך 6
--- הרץ את החלקים לפי הסדר (1,2,3...). חלק 1 יוצר את הטבלאות; השאר מזינים נתונים.
--- בטוח להריץ שוב (idempotent).
--- ============================================================================
-
--- ============================================================================
--- ZONO — Automation Library OS (system template library)
--- ----------------------------------------------------------------------------
--- Extends automation_templates with the rich library model and seeds the full
--- system library of predefined smart workflow templates (organization_id NULL =
--- system template). Idempotent: upsert by template_key. Safe-by-default — only
--- risk_level='safe' rows are default_enabled. No autonomous external comms.
--- ============================================================================
-
 alter table public.automation_templates
   add column if not exists organization_id uuid references public.organizations(id) on delete cascade,
   add column if not exists subcategory text,
@@ -33,13 +18,9 @@ alter table public.automation_templates
   add column if not exists audit_level text not null default 'standard',
   add column if not exists metadata jsonb not null default '{}'::jsonb,
   add column if not exists updated_at timestamptz not null default now();
-
 create index if not exists automation_templates_lib_idx on public.automation_templates(category, risk_level);
-
 create index if not exists automation_templates_org_idx on public.automation_templates(organization_id);
-
 alter table public.automation_steps drop constraint if exists automation_steps_action_chk;
-
 alter table public.automation_steps add constraint automation_steps_action_chk check (action_type in (
   'create_task','create_follow_up','create_recommendation','create_activity',
   'create_alert','assign_user','change_status','create_opportunity',
@@ -48,8 +29,6 @@ alter table public.automation_steps add constraint automation_steps_action_chk c
   'create_document_checklist_item','create_signature_request_draft','create_research_request',
   'create_pricing_review','create_routing_review','create_revenue_review','create_manager_alert',
   'create_agent_coaching_signal','create_data_quality_issue','create_audit_log'));
-
--- Seeded in small batches so a partial paste can never truncate one giant statement.
 insert into public.automation_templates
   (template_key, organization_id, category, subcategory, name, title_hebrew, description, description_hebrew,
    business_goal_hebrew, trigger_type, conditions, default_conditions, actions, default_steps, priority,

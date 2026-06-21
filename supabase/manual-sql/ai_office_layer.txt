@@ -1,20 +1,3 @@
--- ============================================================================
--- ZONO — Autonomous Office AI Layer (reasoning layer above all systems)
--- ----------------------------------------------------------------------------
--- The highest-level layer. It does NOT act automatically: it observes,
--- analyzes, prioritizes, explains, recommends, simulates and guides. The
--- Decision Brain (attention_items / opportunity_signals) is the SOURCE layer;
--- this layer is the REASONING layer and does not duplicate its logic. Saved
--- artifacts (briefs, opportunities, risks, focus, growth plans, simulations)
--- live here. Idempotent. Org column: organization_id. Org-scoped RLS.
---
--- Consolidation note: the spec's 12 tables are folded into 6 — ai_briefs covers
--- daily/weekly/monthly/executive (brief_type); ai_office_profiles /
--- ai_agent_profiles are brief metadata; ai_recommendation_chains are expressed
--- via ai_focus_items ordering + the Decision Brain.
--- ============================================================================
-
--- ── ai_briefs (daily / weekly / monthly / executive) ─────────────────────────
 create table if not exists public.ai_briefs (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -33,8 +16,6 @@ create table if not exists public.ai_briefs (
   constraint ai_briefs_type_chk check (brief_type in ('daily','weekly','monthly','executive')),
   constraint ai_briefs_scope_chk check (scope in ('agent','manager','executive'))
 );
-
--- ── ai_opportunities ──────────────────────────────────────────────────────────
 create table if not exists public.ai_opportunities (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -53,8 +34,6 @@ create table if not exists public.ai_opportunities (
   updated_at       timestamptz not null default now(),
   constraint ai_opportunities_status_chk check (status in ('open','accepted','dismissed','converted'))
 );
-
--- ── ai_risks ──────────────────────────────────────────────────────────────────
 create table if not exists public.ai_risks (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -73,8 +52,6 @@ create table if not exists public.ai_risks (
   constraint ai_risks_severity_chk check (severity in ('low','medium','high','critical')),
   constraint ai_risks_status_chk check (status in ('open','mitigating','resolved','dismissed'))
 );
-
--- ── ai_focus_items (today's focus, per role) ──────────────────────────────────
 create table if not exists public.ai_focus_items (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -92,8 +69,6 @@ create table if not exists public.ai_focus_items (
   constraint ai_focus_role_chk check (role in ('agent','manager','executive')),
   constraint ai_focus_status_chk check (status in ('open','done','dismissed'))
 );
-
--- ── ai_growth_plans ────────────────────────────────────────────────────────────
 create table if not exists public.ai_growth_plans (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -110,8 +85,6 @@ create table if not exists public.ai_growth_plans (
   constraint ai_growth_type_chk check (plan_type in ('growth_90d','office','territory_expansion','recruitment','revenue_acceleration','market_share')),
   constraint ai_growth_status_chk check (status in ('draft','active','completed','archived'))
 );
-
--- ── ai_simulations ──────────────────────────────────────────────────────────────
 create table if not exists public.ai_simulations (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
@@ -123,16 +96,12 @@ create table if not exists public.ai_simulations (
   created_by       uuid references public.users(id) on delete set null,
   created_at       timestamptz not null default now()
 );
-
--- ── indexes ───────────────────────────────────────────────────────────────────
 create index if not exists ai_briefs_org_idx        on public.ai_briefs(organization_id, brief_type);
 create index if not exists ai_opportunities_org_idx  on public.ai_opportunities(organization_id, status);
 create index if not exists ai_risks_org_idx          on public.ai_risks(organization_id, status);
 create index if not exists ai_focus_org_idx          on public.ai_focus_items(organization_id, role, status);
 create index if not exists ai_growth_org_idx         on public.ai_growth_plans(organization_id, status);
 create index if not exists ai_simulations_org_idx    on public.ai_simulations(organization_id);
-
--- ── updated_at triggers ──────────────────────────────────────────────────────
 do $$
 declare t text;
   tbls text[] := array['ai_opportunities','ai_risks','ai_growth_plans'];
@@ -142,8 +111,6 @@ begin
     execute format('create trigger trg_%1$s_updated before update on public.%1$I for each row execute function public.set_updated_at();', t);
   end loop;
 end $$;
-
--- ── RLS (org-scoped; agent may write on their own org rows) ───────────────────
 do $$
 declare t text;
   tbls text[] := array['ai_briefs','ai_opportunities','ai_risks','ai_focus_items','ai_growth_plans','ai_simulations'];
