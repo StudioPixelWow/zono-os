@@ -16,6 +16,7 @@ import { TerritoryDashboardSection } from "@/components/dashboard/sections/Terri
 import { AutomationDashboardSection } from "@/components/dashboard/sections/AutomationDashboardSection";
 import { DocumentsDashboardSection } from "@/components/dashboard/sections/DocumentsDashboardSection";
 import { FinancingDashboardSection } from "@/components/dashboard/sections/FinancingDashboardSection";
+import { ReputationDashboardSection } from "@/components/dashboard/sections/ReputationDashboardSection";
 import { OperatingAreasSection } from "@/components/dashboard/sections/OperatingAreasSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
@@ -44,6 +45,7 @@ export default function Home() {
       <Suspense fallback={null}><AutomationDashboardSection /></Suspense>
       <Suspense fallback={null}><DocumentsDashboardSection /></Suspense>
       <Suspense fallback={null}><FinancingDashboardSection /></Suspense>
+      <Suspense fallback={null}><ReputationDashboardSection /></Suspense>
       <Suspense fallback={null}>
         <ForecastDashboardSection />
       </Suspense>

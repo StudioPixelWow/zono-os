@@ -53,6 +53,7 @@ export const navItems: NavItem[] = [
   { id: "portals", label: "פורטלים ללקוחות", icon: "Send" },
   { id: "documents", label: "מסמכים וחתימות", icon: "Presentation" },
   { id: "financing", label: "משכנתא ומימון", icon: "Landmark" },
+  { id: "reputation", label: "מוניטין והפניות", icon: "Handshake" },
   { id: "automation", label: "אוטומציה ותהליכים", icon: "Route" },
   { id: "office-website", label: "אתר המשרד", icon: "Building2" },
   { id: "agent-website", label: "האתר האישי שלי", icon: "UserCheck" },

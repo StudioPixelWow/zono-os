@@ -339,3 +339,33 @@ export async function buildFinancingAttentionRows(orgId: string): Promise<Attent
   } catch { /* financing signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Review, Referral & Reputation OS → Decision Brain. Surfaces review/referral
+ * opportunities, ambassador candidates, high-influence clients and referral
+ * revenue. Reads the precomputed reputation_signals. Additive + best-effort.
+ */
+export async function buildReputationAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  const SCORES: Record<string, { att: number; urg: number; imp: number; rev: number; rel: number }> = {
+    review_opportunity: { att: 64, urg: 56, imp: 50, rev: 30, rel: 40 },
+    referral_opportunity: { att: 74, urg: 64, imp: 64, rev: 60, rel: 45 },
+    ambassador_candidate: { att: 82, urg: 58, imp: 76, rev: 70, rel: 60 },
+    high_influence_client: { att: 78, urg: 60, imp: 70, rev: 64, rel: 55 },
+    referral_revenue: { att: 70, urg: 50, imp: 66, rev: 72, rel: 40 },
+  };
+  try {
+    const { data } = await supabase.from("reputation_signals")
+      .select("signal_type,buyer_id,title,reason,recommended_action").eq("organization_id", orgId).eq("status", "open")
+      .order("score", { ascending: false }).limit(12);
+    for (const s of (data ?? []) as { signal_type: string; buyer_id: string | null; title: string; reason: string | null; recommended_action: string | null }[]) {
+      const sc = SCORES[s.signal_type]; if (!sc) continue;
+      rows.push({ org_id: orgId, entity_type: "reputation", entity_id: s.buyer_id ?? orgId,
+        attention_score: sc.att, urgency_score: sc.urg, impact_score: sc.imp, confidence_score: 86,
+        revenue_impact_score: sc.rev, relationship_impact_score: sc.rel, churn_impact_score: 0,
+        title: s.title, reason: s.reason ?? "אות מוניטין/הפניה", recommended_action: s.recommended_action ?? "בדוק במרכז המוניטין", expected_outcome: "הגדלת הפניות, ביקורות והכנסה חוזרת", status: "open" });
+    }
+  } catch { /* reputation signals are additive — never block the Decision Brain */ }
+  return rows;
+}
