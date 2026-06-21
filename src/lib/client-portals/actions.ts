@@ -7,7 +7,7 @@ import {
 } from "./service";
 import { logActivityEvent } from "@/lib/activity/service";
 
-export interface PortalActionState { ok?: boolean; error?: string; message?: string; token?: string; portalId?: string }
+export interface PortalActionState { ok?: boolean; error?: string; message?: string; token?: string; slug?: string; portalId?: string }
 
 function revalidate() {
   revalidatePath("/portals");
@@ -19,7 +19,7 @@ export async function createClientPortalAction(entityType: string, entityId: str
   try {
     const r = await createClientPortal({ entityType, entityId, portalType, visibility });
     revalidate();
-    return { ok: true, portalId: r.portalId, token: r.token, message: "הפורטל נוצר — אשר אותו והעתק את הקישור" };
+    return { ok: true, portalId: r.portalId, token: r.token, slug: r.slug, message: "הפורטל נוצר — אשר אותו והעתק את הקישור" };
   } catch (e) { return { error: e instanceof Error ? e.message : "יצירת הפורטל נכשלה" }; }
 }
 

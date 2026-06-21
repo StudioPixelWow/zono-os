@@ -23,6 +23,7 @@ import { CommunicationSection } from "@/components/communication/CommunicationSe
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
 import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
 import { listRecommendationsForEntity } from "@/lib/recommendations/service";
+import { CreatePortalButton } from "@/components/portals/CreatePortalButton";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,7 @@ export default async function PropertyDetailsPage({
         sellerReadiness={sellerReadiness}
       />
       <EntityRecommendationsPanel entityType="property" entityId={id} recommendations={await listRecommendationsForEntity("property", id).catch(() => [])} />
+      <CreatePortalButton entityType="property" entityId={id} portalType="property" label="צור פורטל נכס / מוכר" />
       <CommunicationSection entityType="property" entityId={id} />
       <RelationshipSection entityType="property" entityId={id} />
     </div>

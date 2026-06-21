@@ -344,11 +344,12 @@ export interface PublicPortal { title: string | null; description: string | null
  * never org id, token hash, internal scores or raw payloads.
  */
 export async function getPublicPortalByToken(token: string): Promise<PublicPortal | "inactive" | null> {
-  if (!token || token.length < 10) return null;
+  if (!token || token.length < 8) return null;
   const admin = createServiceRoleClient();
+  // Accept either the high-entropy token (hash stored) or the stored slug.
   const { data: portal } = await admin.from("client_portals")
     .select("id,portal_type,title_hebrew,description_hebrew,client_name,status,expires_at")
-    .eq("access_token_hash", sha256(token)).maybeSingle();
+    .or(`access_token_hash.eq.${sha256(token)},access_slug.eq.${token}`).maybeSingle();
   if (!portal) return null;
   const p = portal as { id: string; portal_type: string; title_hebrew: string | null; description_hebrew: string | null; client_name: string | null; status: string; expires_at: string | null };
   if (p.status !== "active") return "inactive";
@@ -377,7 +378,7 @@ export async function getPublicPortalByToken(token: string): Promise<PublicPorta
 export async function logPortalView(token: string, meta: { ip?: string; userAgent?: string; referrer?: string }) {
   if (!token) return;
   const admin = createServiceRoleClient();
-  const { data: portal } = await admin.from("client_portals").select("id,organization_id,entity_type,entity_id,view_count,portal_type").eq("access_token_hash", sha256(token)).maybeSingle();
+  const { data: portal } = await admin.from("client_portals").select("id,organization_id,entity_type,entity_id,view_count,portal_type").or(`access_token_hash.eq.${sha256(token)},access_slug.eq.${token}`).maybeSingle();
   if (!portal) return;
   const p = portal as { id: string; organization_id: string; entity_type: string; entity_id: string; view_count: number; portal_type: string };
   await admin.from("client_portals").update({ view_count: (p.view_count ?? 0) + 1, last_viewed_at: new Date().toISOString() } as never).eq("id", p.id);
