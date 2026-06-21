@@ -171,3 +171,32 @@ export async function buildPortalAttentionRows(orgId: string): Promise<Attention
   } catch { /* portal signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Office Website OS → Decision Brain. Surfaces new website leads (last 24h) that
+ * need handling, plus a "site ready but not published" nudge, into Today's Focus
+ * / Priority Queue. Additive + best-effort. No auto-send.
+ */
+export async function buildOfficeSiteAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  const now = Date.now();
+  try {
+    const { count: freshLeads } = await supabase.from("office_website_leads")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId)
+      .gte("created_at", new Date(now - DAY).toISOString());
+    if ((freshLeads ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "office_website", entity_id: orgId,
+        attention_score: 78, urgency_score: 82, impact_score: 66, confidence_score: 90, revenue_impact_score: 62, relationship_impact_score: 30, churn_impact_score: 0,
+        title: `${freshLeads} פניות חדשות מאתר המשרד`, reason: "פניות חדשות מהאתר ב-24 השעות האחרונות — מהירות תגובה קריטית", recommended_action: "טפל בפניות מאתר המשרד עכשיו", expected_outcome: "המרת פניות ללקוחות", status: "open" });
+    }
+    const { data: site } = await supabase.from("office_websites").select("status").eq("organization_id", orgId).maybeSingle();
+    const status = (site as { status?: string } | null)?.status;
+    if (status === "draft") {
+      rows.push({ org_id: orgId, entity_type: "office_website", entity_id: orgId,
+        attention_score: 44, urgency_score: 42, impact_score: 50, confidence_score: 85, revenue_impact_score: 40, relationship_impact_score: 10, churn_impact_score: 0,
+        title: "אתר המשרד מוכן אך לא פורסם", reason: "האתר בטיוטה — פרסום יפתח ערוץ לידים חדש", recommended_action: "ערוך, אשר ופרסם את אתר המשרד", expected_outcome: "ערוץ לידים אורגני", status: "open" });
+    }
+  } catch { /* office-site signals are additive — never block the Decision Brain */ }
+  return rows;
+}

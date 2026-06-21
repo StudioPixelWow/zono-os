@@ -7,7 +7,7 @@
  */
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
-import { buildInfraAttentionRows, buildRecommendationAttentionRows, buildTerritoryAttentionRows, buildPortalAttentionRows } from "@/lib/system/decision-signals";
+import { buildInfraAttentionRows, buildRecommendationAttentionRows, buildTerritoryAttentionRows, buildPortalAttentionRows, buildOfficeSiteAttentionRows } from "@/lib/system/decision-signals";
 import type { Database } from "@/lib/supabase/types";
 import {
   calculateAttentionScore,
@@ -793,6 +793,7 @@ export async function recalculateOrganizationDecisionBrain(): Promise<void> {
     ...(await buildRecommendationAttentionRows(orgId)),
     ...(await buildTerritoryAttentionRows(orgId)),
     ...(await buildPortalAttentionRows(orgId)),
+    ...(await buildOfficeSiteAttentionRows(orgId)),
   ];
   const oppRows = buildOpportunityRows(orgId, d);
 

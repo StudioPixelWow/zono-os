@@ -51,6 +51,7 @@ export const navItems: NavItem[] = [
   { id: "recommendations", label: "מודיעין המלצות", icon: "Sparkles" },
   { id: "territories", label: "מודיעין טריטוריות", icon: "Map" },
   { id: "portals", label: "פורטלים ללקוחות", icon: "Send" },
+  { id: "office-website", label: "אתר המשרד", icon: "Building2" },
   { id: "operating-areas", label: "אזורי פעילות", icon: "MapPin" },
   { id: "notifications", label: "מרכז התראות", icon: "Bell" },
   { id: "system-health", label: "מנועי חישוב", icon: "Settings" },
