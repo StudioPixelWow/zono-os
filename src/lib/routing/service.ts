@@ -172,6 +172,14 @@ export async function routeUnassignedLeads(): Promise<RoutingSummary> {
   const ptByUser = new Map<string, Map<string, { deals: number; conv: number }>>();
   for (const p of ptRes.data ?? []) { const m = ptByUser.get(p.user_id) ?? new Map(); m.set(p.property_type, { deals: p.deals_count, conv: p.conversion_rate }); ptByUser.set(p.user_id, m); }
 
+  // Territory Intelligence integration: city territory strength (health) so we
+  // can boost agents who operate in a strong territory (no auto-assign).
+  const cityHealth = new Map<string, number>();
+  try {
+    const { data: terr } = await supabase.from("territory_profiles").select("city_name,territory_health_score").eq("organization_id", orgId).eq("territory_type", "city").limit(2000);
+    for (const t of (terr ?? []) as { city_name: string | null; territory_health_score: number }[]) { if (t.city_name) cityHealth.set(cityNorm(t.city_name), t.territory_health_score); }
+  } catch { /* territory boost is additive — never block routing */ }
+
   const leads = leadsRes.data ?? [];
   let routed = 0;
   for (const lead of leads) {
@@ -183,8 +191,20 @@ export async function routeUnassignedLeads(): Promise<RoutingSummary> {
       const pt = p?.type ? ptByUser.get(a.userId)?.get(p.type) : undefined;
       return { ...a, localityDeals: loc?.deals ?? 0, localityConversion: loc?.conv ?? 0, propertyTypeDeals: pt?.deals ?? 0, propertyTypeConversion: pt?.conv ?? 0 };
     });
-    const candidates = rankAgentsForLead(ctx, enriched);
+    let candidates = rankAgentsForLead(ctx, enriched);
     if (!candidates.length) continue;
+
+    // Territory boost: when the lead's city is a strong territory, prefer agents
+    // already active there. Deterministic, additive, re-ranked. No auto-assign.
+    const health = cityKey ? (cityHealth.get(cityKey) ?? 0) : 0;
+    if (health >= 60) {
+      candidates = candidates.map((c) => {
+        const activeHere = (locByUser.get(c.userId)?.get(cityKey)?.deals ?? 0) > 0;
+        if (!activeHere) return c;
+        const boost = Math.min(10, Math.round((health - 50) / 4));
+        return { ...c, score: Math.min(100, c.score + boost), reasons: [...c.reasons, `טריטוריה חזקה (${health})`] };
+      }).sort((a, b) => b.score - a.score).map((c, i) => ({ ...c, rank: i + 1 }));
+    }
     const top = candidates[0];
     const conf = routingConfidence(candidates);
     const { data: rp } = await supabase.from("lead_routing_profiles").upsert({
