@@ -39,6 +39,7 @@ const HREFS: Record<string, string> = {
   "mock-registry": "/admin/mock-registry",
   "audit-log": "/admin/audit-log",
   "modules": "/search/modules",
+  settings: "/settings",
 };
 
 /**
