@@ -18,6 +18,7 @@ import { DocumentsDashboardSection } from "@/components/dashboard/sections/Docum
 import { FinancingDashboardSection } from "@/components/dashboard/sections/FinancingDashboardSection";
 import { ReputationDashboardSection } from "@/components/dashboard/sections/ReputationDashboardSection";
 import { AIOfficeDashboardSection } from "@/components/dashboard/sections/AIOfficeDashboardSection";
+import { CommunitiesDashboardSection } from "@/components/dashboard/sections/CommunitiesDashboardSection";
 import { OperatingAreasSection } from "@/components/dashboard/sections/OperatingAreasSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
@@ -48,6 +49,7 @@ export default function Home() {
       <Suspense fallback={null}><DocumentsDashboardSection /></Suspense>
       <Suspense fallback={null}><FinancingDashboardSection /></Suspense>
       <Suspense fallback={null}><ReputationDashboardSection /></Suspense>
+      <Suspense fallback={null}><CommunitiesDashboardSection /></Suspense>
       <Suspense fallback={null}>
         <ForecastDashboardSection />
       </Suspense>

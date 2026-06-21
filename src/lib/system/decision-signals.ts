@@ -369,3 +369,32 @@ export async function buildReputationAttentionRows(orgId: string): Promise<Atten
   } catch { /* reputation signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Community Discovery & Execution OS → Decision Brain. Surfaces hot community
+ * comments awaiting conversion, high-ROI communities worth doubling down on, and
+ * low-ROI communities worth reviewing. Additive + best-effort.
+ */
+export async function buildCommunityAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    const { count: hot } = await supabase.from("community_comments")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("status", "new")
+      .in("intent", ["viewing_request", "buyer_intent", "seller_intent", "price_request"]);
+    if ((hot ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "community", entity_id: orgId,
+        attention_score: 76, urgency_score: 80, impact_score: 58, confidence_score: 84, revenue_impact_score: 55, relationship_impact_score: 30, churn_impact_score: 0,
+        title: `${hot} תגובות בכוונה גבוהה בקהילות`, reason: "תגובות עם כוונת קנייה/מכירה/צפייה שטרם הומרו לליד", recommended_action: "המר תגובות חמות ללידים במרכז הקהילות", expected_outcome: "לכידת לידים חמים מקהילות", status: "open" });
+    }
+    const { data: top } = await supabase.from("community_profiles")
+      .select("name,roi_score").eq("organization_id", orgId).gte("roi_score", 75).order("roi_score", { ascending: false }).limit(1);
+    const best = (top ?? [])[0] as { name: string; roi_score: number } | undefined;
+    if (best) {
+      rows.push({ org_id: orgId, entity_type: "community", entity_id: orgId,
+        attention_score: 70, urgency_score: 52, impact_score: 66, confidence_score: 86, revenue_impact_score: 64, relationship_impact_score: 24, churn_impact_score: 0,
+        title: `קהילת ROI גבוה — ${best.name}`, reason: "קהילה בעלת תשואה גבוהה שכדאי להגביר בה פעילות", recommended_action: "הגבר פרסום וגיוס מקהילה זו", expected_outcome: "הגדלת לידים והכנסה מקהילה מובילה", status: "open" });
+    }
+  } catch { /* community signals are additive — never block the Decision Brain */ }
+  return rows;
+}
