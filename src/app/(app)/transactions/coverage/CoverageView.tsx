@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
@@ -45,6 +45,19 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
       success: (r) => r.created ? `נוספה שכונה: ${r.name} (${r.city}). לחץ ״סנכרן״ בשורה כדי למשוך עסקאות.` : `השכונה "${n}" כבר קיימת בכיסוי.`,
     });
   };
+
+  // Hands-free first run: if the agent has a city but no neighborhood-level
+  // coverage yet, discover automatically the first time they open this page —
+  // so neighborhoods get created without anyone clicking a button.
+  const autoTried = useRef(false);
+  const hasNeighborhoodTargets = targets.some((t) => t.neighborhood_name);
+  useEffect(() => {
+    if (autoTried.current) return;
+    if (needsConfig || !agentCity || hasNeighborhoodTargets) return;
+    autoTried.current = true;
+    discover();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsConfig, agentCity, hasNeighborhoodTargets]);
 
   return (
     <div className="flex flex-col gap-5">
