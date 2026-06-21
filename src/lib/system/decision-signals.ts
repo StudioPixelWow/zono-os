@@ -65,7 +65,7 @@ export async function buildInfraAttentionRows(orgId: string): Promise<AttentionI
     }
 
     // routing_gap — open leads with no owner
-    const { count: unrouted } = await supabase.from("leads").select("id", { count: "exact", head: true }).eq("org_id", orgId).is("owner_id", null).in("stage", OPEN_LEAD_STAGES);
+    const { count: unrouted } = await supabase.from("leads").select("id", { count: "exact", head: true }).eq("org_id", orgId).is("owner_id", null).in("stage", OPEN_LEAD_STAGES as never);
     if ((unrouted ?? 0) > 0) add(`${unrouted} לידים ללא שיוך`, "לידים פתוחים ללא בעלים — סיכון לאובדן", "נתב לידים ב׳ניתוב לידים׳", 70, 60);
   } catch { /* infra signals are additive — never block the Decision Brain */ }
 
