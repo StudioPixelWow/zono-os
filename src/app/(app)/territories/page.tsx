@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 const EMPTY: TerritoryCommandCenter = {
   total: 0, strongest: null, fastestGrowing: null, highestRevenue: null, highestAcquisition: null,
   biggestThreat: null, biggestOpportunity: null, rankings: [], whiteSpace: [], dominance: [],
-  revenueOps: [], neighborhoods: [], signals: [], expectedRevenueTotal: 0,
+  revenueOps: [], neighborhoods: [], signals: [], streets: [], clusters: [], dna: [], coverageGaps: [],
+  expectedRevenueTotal: 0, graphNodes: 0, lowConfidence: 0,
 };
 
 export default async function TerritoriesPage() {
