@@ -32,6 +32,10 @@ const HREFS: Record<string, string> = {
   "operating-areas": "/settings/operating-areas",
   "system-health": "/admin/system-health",
   "data-quality": "/admin/data-quality",
+  "permissions": "/admin/permissions",
+  "configuration": "/admin/configuration",
+  "mock-registry": "/admin/mock-registry",
+  "audit-log": "/admin/audit-log",
   "modules": "/search/modules",
 };
 

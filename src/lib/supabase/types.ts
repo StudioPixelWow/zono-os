@@ -3023,6 +3023,20 @@ type EngineRunsRow = {
   created_at: string;
 };
 
+type AuditLogRow = {
+  id: string;
+  organization_id: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  action: string;
+  category: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  summary: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3473,6 +3487,7 @@ export interface Database {
         "user_id" | "locality_id"
       >;
       engine_runs: TableShape<EngineRunsRow, "engine_key">;
+      audit_log: TableShape<AuditLogRow, "action" | "category">;
     };
     Views: { [_ in never]: never };
     Functions: {

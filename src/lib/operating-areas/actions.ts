@@ -4,6 +4,7 @@
  * the settings page (+ transactions, which can consume newly-added cities).
  */
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit/service";
 import {
   addOperatingArea, disableOperatingArea, enableOperatingArea, setPrimaryOperatingArea,
   syncOperatingArea, updateOperatingArea, type AddAreaOptions,
@@ -18,6 +19,7 @@ function revalidate() {
 
 export async function addOperatingAreaAction(localityId: string, opts: AddAreaOptions = {}) {
   const r = await addOperatingArea(localityId, opts);
+  await logAudit({ action: "operating_area.add", category: "area", entityType: "operating_area", entityId: r.areaId, summary: `נוספה עיר פעילות: ${r.cityName}` });
   revalidate();
   return r;
 }
@@ -29,16 +31,19 @@ export async function updateOperatingAreaAction(areaId: string, updates: Paramet
 
 export async function setPrimaryOperatingAreaAction(areaId: string) {
   await setPrimaryOperatingArea(areaId);
+  await logAudit({ action: "operating_area.set_primary", category: "area", entityType: "operating_area", entityId: areaId, summary: "עיר ראשית עודכנה" });
   revalidate();
 }
 
 export async function disableOperatingAreaAction(areaId: string) {
   await disableOperatingArea(areaId);
+  await logAudit({ action: "operating_area.disable", category: "area", entityType: "operating_area", entityId: areaId, summary: "עיר פעילות כובתה" });
   revalidate();
 }
 
 export async function enableOperatingAreaAction(areaId: string) {
   await enableOperatingArea(areaId);
+  await logAudit({ action: "operating_area.enable", category: "area", entityType: "operating_area", entityId: areaId, summary: "עיר פעילות הופעלה" });
   revalidate();
 }
 
