@@ -80,10 +80,11 @@ async function neighborhoodInsight(orgId: string, city: string | null, neighborh
 
 async function agentContact(orgId: string, createdBy: string | null): Promise<Record<string, unknown>> {
   const admin = createServiceRoleClient();
-  let agent: { full_name: string; email: string; phone: string | null } | null = null;
+  let agent: { full_name: string | null; email: string | null; phone: string | null } | null = null;
   if (createdBy) {
-    const { data } = await admin.from("users").select("full_name,email,phone").eq("id", createdBy).maybeSingle();
-    agent = (data as typeof agent) ?? null;
+    const { data } = await admin.from("users").select("*").eq("id", createdBy).maybeSingle();
+    const r = (data ?? null) as Record<string, unknown> | null;
+    if (r) agent = { full_name: (r.full_name as string) ?? null, email: (r.email as string) ?? null, phone: (r.phone as string) ?? null };
   }
   const { data: org } = await admin.from("organizations").select("name").eq("id", orgId).maybeSingle();
   return { agent_name: agent?.full_name ?? null, agent_email: agent?.email ?? null, agent_phone: agent?.phone ?? null, office_name: (org as { name?: string } | null)?.name ?? null };
