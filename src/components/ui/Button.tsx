@@ -10,6 +10,25 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Icon rendered before the label (RTL: on the right). */
   leadingIcon?: ReactNode;
   fullWidth?: boolean;
+  /** Shows an inline spinner and disables the button while an action runs. */
+  loading?: boolean;
+}
+
+/** Inline spinner (currentColor) for in-progress buttons. */
+export function Spinner({ size = 15 }: { size?: number }) {
+  return (
+    <svg
+      className="animate-spin"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
@@ -35,8 +54,10 @@ export function Button({
   size = "md",
   leadingIcon,
   fullWidth,
+  loading = false,
   className,
   children,
+  disabled,
   ...props
 }: ButtonProps) {
   return (
@@ -50,9 +71,11 @@ export function Button({
         fullWidth && "w-full",
         className,
       )}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
-      {leadingIcon}
+      {loading ? <Spinner size={size === "lg" ? 18 : 15} /> : leadingIcon}
       {children}
     </button>
   );

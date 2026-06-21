@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { ActionFeedback } from "@/components/ui/ActionFeedback";
+import { useActionRunner } from "@/components/ui/useActionRunner";
 import { DEAL_STAGE_LABEL, DEAL_STAGE_ORDER, OBJECTION_LABEL, type DealStage } from "@/lib/deals/engine";
 import { advanceDealStageAction, recomputeDealsAction, resolveObjectionAction, setDealTaskStatusAction } from "@/lib/deals/actions";
 import type { DealsBoard, DealRow } from "@/lib/deals/service";
@@ -18,11 +18,15 @@ const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL
 const nextStage = (s: string): DealStage | null => { const i = DEAL_STAGE_ORDER.indexOf(s as DealStage); return i >= 0 && i < DEAL_STAGE_ORDER.length - 1 ? DEAL_STAGE_ORDER[i + 1] : null; };
 
 export function DealsView({ board }: { board: DealsBoard }) {
-  const router = useRouter();
   const { deals, pipeline, negotiations, objections, tasks, atRisk, upcomingClosings, revenue } = board;
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const run = (fn: () => Promise<unknown>) => { setError(null); start(async () => { try { await fn(); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } }); };
+  const runner = useActionRunner();
+  const { pending } = runner;
+  const run = (fn: () => Promise<unknown>) => runner.run(fn);
+  const build = () => runner.run(recomputeDealsAction, {
+    id: "build",
+    pendingMessage: "בונה Deal Twin לכל התאמה פעילה (מסע, משימות, התנגדויות)…",
+    success: (r) => `נבנו ${r.deals} עסקאות · ${r.tasks} משימות.`,
+  });
 
   const empty = deals.length === 0;
 
@@ -34,9 +38,9 @@ export function DealsView({ board }: { board: DealsBoard }) {
           <h1 className="text-ink mt-1 text-2xl font-black">ניהול עסקאות</h1>
           <p className="text-muted mt-1 text-sm">כל הזדמנות הופכת לעסקה מנוהלת — מסע, משא ומתן, התנגדויות ומשימות. דטרמיניסטי, ללא יצירת קשר אוטומטית.</p>
         </div>
-        <Button onClick={() => run(recomputeDealsAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "בנה עסקאות"}</Button>
+        <Button onClick={build} loading={runner.busyId === "build"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{runner.busyId === "build" ? "בונה…" : "בנה עסקאות"}</Button>
       </div>
-      {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
+      <ActionFeedback runner={runner} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="עסקאות פעילות" value={String(deals.length)} icon="Handshake" tone="text-brand-strong" />

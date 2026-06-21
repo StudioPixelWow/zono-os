@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
-import { Button } from "@/components/ui/Button";
+import { Button, Spinner } from "@/components/ui/Button";
+import { ActionFeedback } from "@/components/ui/ActionFeedback";
+import { useActionRunner } from "@/components/ui/useActionRunner";
 import { addCoverageNeighborhoodAction, autoDiscoverNeighborhoodsAction, ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction } from "@/lib/transactions/actions";
 import type { CoverageBoard } from "@/lib/transactions/service";
 
@@ -14,14 +15,36 @@ const STATUS_TONE: Record<string, string> = { completed: "text-success", failed:
 const fmt = (s: string | null) => (s ? new Date(s).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
 
 export function CoverageView({ board }: { board: CoverageBoard }) {
-  const router = useRouter();
   const { targets, logs, needsConfig, agentCity, apifyConfigured } = board;
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const [busy, setBusy] = useState<string | null>(null);
+  const runner = useActionRunner();
+  const { pending, busyId } = runner;
   const [newHood, setNewHood] = useState("");
-  const run = (fn: () => Promise<unknown>, id?: string) => { setError(null); setBusy(id ?? "all"); start(async () => { try { await fn(); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "שגיאה"); } finally { setBusy(null); } }); };
-  const addHood = () => { const n = newHood.trim(); if (!n) return; setNewHood(""); run(() => addCoverageNeighborhoodAction(n)); };
+
+  const discover = () => runner.run(autoDiscoverNeighborhoodsAction, {
+    id: "discover", pendingMessage: "מגלה שכונות מ-OpenStreetMap ומעסקאות שכבר נמשכו…",
+    success: (r) => r.needsConfig ? "לא הוגדר אזור עבודה — הגדר עיר בפרופיל תחילה."
+      : r.discovered === 0 ? "לא נמצאו שכונות חדשות לעיר זו כרגע. נסה להוסיף שכונה ידנית למטה."
+      : `נמצאו ${r.discovered} שכונות · נוצרו ${r.created} אזורי כיסוי חדשים${r.sources.length ? ` (מקורות: ${r.sources.join(", ")})` : ""}.`,
+  });
+  const ensure = () => runner.run(ensureCoverageTargetsAction, {
+    id: "ensure", pendingMessage: "יוצר אזורי כיסוי לפי אזור העבודה…",
+    success: (r) => r.needsConfig ? "לא הוגדר אזור עבודה." : `נוצרו ${r.created} אזורי כיסוי${r.largeCityWarning ? " · עיר גדולה — מומלץ כיסוי לפי שכונות" : ""}.`,
+  });
+  const retry = () => runner.run(retryFailedSyncsAction, {
+    id: "retry", pendingMessage: "מנסה שוב סנכרונים שנכשלו…",
+    success: (r) => r.retried === 0 ? "אין סנכרונים שנכשלו לנסות מחדש." : `נוסו מחדש ${r.retried} · יובאו ${r.imported} עסקאות.`,
+  });
+  const syncTarget = (id: string, label: string) => runner.run(() => syncCoverageTargetAction(id), {
+    id, pendingMessage: `מסנכרן עסקאות · ${label}…`,
+    success: (r) => r.error ? `שגיאה: ${r.error}` : `${label}: יובאו ${r.imported} · כפילויות ${r.duplicates} · סה״כ ${r.total}${r.mock ? " (נתוני הדגמה)" : ""}.`,
+  });
+  const addHood = () => {
+    const n = newHood.trim(); if (!n) return; setNewHood("");
+    runner.run(() => addCoverageNeighborhoodAction(n), {
+      pendingMessage: `מוסיף את השכונה "${n}" לכיסוי…`,
+      success: (r) => r.created ? `נוספה שכונה: ${r.name} (${r.city}). לחץ ״סנכרן״ בשורה כדי למשוך עסקאות.` : `השכונה "${n}" כבר קיימת בכיסוי.`,
+    });
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -33,13 +56,13 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/transactions" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />עסקאות</Link>
-          <Button size="sm" variant="secondary" onClick={() => run(retryFailedSyncsAction)} disabled={pending} leadingIcon={<Icon name="Clock" size={15} />}>נסה כשלונות שוב</Button>
-          <Button size="sm" variant="secondary" onClick={() => run(ensureCoverageTargetsAction)} disabled={pending} leadingIcon={<Icon name="Plus" size={15} />}>צור אזורי כיסוי</Button>
-          <Button onClick={() => run(autoDiscoverNeighborhoodsAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מגלה…" : "גלה שכונות אוטומטית"}</Button>
+          <Button size="sm" variant="secondary" onClick={retry} loading={busyId === "retry"} disabled={pending} leadingIcon={<Icon name="Clock" size={15} />}>נסה כשלונות שוב</Button>
+          <Button size="sm" variant="secondary" onClick={ensure} loading={busyId === "ensure"} disabled={pending} leadingIcon={<Icon name="Plus" size={15} />}>צור אזורי כיסוי</Button>
+          <Button onClick={discover} loading={busyId === "discover"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{busyId === "discover" ? "מגלה…" : "גלה שכונות אוטומטית"}</Button>
         </div>
       </div>
       {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — סנכרון יחזיר נתוני הדגמה בסביבת פיתוח בלבד.</p>}
-      {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
+      <ActionFeedback runner={runner} />
 
       {!needsConfig && (
         <div className="bg-card border-line flex flex-wrap items-end gap-3 rounded-[20px] border p-4">
@@ -47,7 +70,7 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
             <span className="text-muted text-[11px] font-bold">הוסף שכונה לכיסוי (כל שכונה = משיכה נפרדת ברדיוס 700מ׳)</span>
             <input value={newHood} onChange={(e) => setNewHood(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addHood(); }} placeholder="לדוגמה: גבעת הרקפות, צבעוני, נווה גנים…" className="border-line rounded-xl border px-3 py-2" />
           </label>
-          <Button onClick={addHood} disabled={pending || !newHood.trim()} leadingIcon={<Icon name="Plus" size={15} />}>הוסף שכונה</Button>
+          <Button onClick={addHood} loading={busyId === "__global__"} disabled={pending || !newHood.trim()} leadingIcon={<Icon name="Plus" size={15} />}>הוסף שכונה</Button>
         </div>
       )}
 
@@ -73,7 +96,7 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
                   <td className="text-ink px-3 py-2 font-bold">{t.transactions_found}</td>
                   <td className="text-muted px-3 py-2 whitespace-nowrap">{fmt(t.last_sync_at)}</td>
                   <td className="text-danger px-3 py-2 text-[11px]">{t.last_error ?? "—"}</td>
-                  <td className="px-3 py-2"><button className="text-brand-strong text-[11px] font-bold disabled:opacity-50" disabled={pending} onClick={() => run(() => syncCoverageTargetAction(t.id), t.id)}>{busy === t.id ? "מסנכרן…" : "סנכרן"}</button></td>
+                  <td className="px-3 py-2"><button className="text-brand-strong inline-flex items-center gap-1 text-[11px] font-bold disabled:opacity-50" disabled={pending} onClick={() => syncTarget(t.id, t.neighborhood_name ?? t.city_name)}>{busyId === t.id && <Spinner size={11} />}{busyId === t.id ? "מסנכרן…" : "סנכרן"}</button></td>
                 </tr>
               ))}
             </tbody>
