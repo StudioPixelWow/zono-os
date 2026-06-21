@@ -2902,9 +2902,67 @@ type DocumentsRow = {
   unit_id: string | null;
   project_id: string | null;
   deal_id: string | null;
+  // Documents & Signature OS extensions
+  doc_category: string | null;
+  signature_status: string;
+  template_id: string | null;
+  folder_id: string | null;
+  current_version: number;
+  match_id: string | null;
+  requirement_key: string | null;
+  is_required: boolean;
+  source: string;
+  rejected_reason: string | null;
+  metadata: Json;
   created_at: string;
   updated_at: string;
 }
+
+// ── Documents & Signature OS ────────────────────────────────────────────────
+type DocumentTemplatesRow = {
+  id: string; organization_id: string | null; template_key: string; name_he: string;
+  doc_category: string; description_he: string | null; body_template: string | null;
+  default_participants: Json; applies_to_stage: string | null; is_system: boolean;
+  is_active: boolean; sort_order: number; created_at: string; updated_at: string;
+};
+type DocumentVersionsRow = {
+  id: string; organization_id: string; document_id: string; version: number;
+  file_url: string | null; storage_path: string | null; change_note: string | null;
+  created_by: string | null; created_at: string;
+};
+type DocumentParticipantsRow = {
+  id: string; organization_id: string; document_id: string; role: string; participant_type: string;
+  user_id: string | null; contact_name: string | null; contact_email: string | null; contact_phone: string | null;
+  order_index: number; status: string; created_at: string; updated_at: string;
+};
+type DocumentRequestsRow = {
+  id: string; organization_id: string; document_id: string; requested_by: string | null;
+  channel: string; status: string; provider_ref: string | null; due_at: string | null;
+  note: string | null; created_at: string; updated_at: string;
+};
+type DocumentSignaturesRow = {
+  id: string; organization_id: string; document_id: string; participant_id: string | null;
+  signer_name: string; signed_at: string; ip_hash: string | null; device: string | null;
+  method: string; signature_ref: string | null; created_at: string;
+};
+type DocumentAuditLogsRow = {
+  id: string; organization_id: string; document_id: string | null; actor_user_id: string | null;
+  event: string; detail: string | null; ip_hash: string | null; created_at: string;
+};
+type DocumentRequirementsRow = {
+  id: string; organization_id: string | null; context: string; stage: string | null;
+  doc_category: string; is_blocking: boolean; blocks_stage: string | null;
+  description_he: string | null; is_system: boolean; sort_order: number; created_at: string;
+};
+type DocumentChecklistsRow = {
+  id: string; organization_id: string; deal_id: string | null; context: string; stage: string | null;
+  total_required: number; completed_count: number; missing_count: number; blocking_count: number;
+  completion_pct: number; risk_level: string; items: Json; computed_at: string;
+};
+type DocumentFoldersRow = {
+  id: string; organization_id: string; name: string; parent_id: string | null;
+  entity_type: string | null; entity_id: string | null; created_by: string | null; created_at: string;
+};
 
 type NotificationsRow = {
   id: string;
@@ -4220,6 +4278,15 @@ export interface Database {
       meetings: TableShape<MeetingsRow, "org_id" | "title" | "start_at">;
       automations: TableShape<AutomationsRow, "org_id" | "name" | "trigger">;
       documents: TableShape<DocumentsRow, "org_id" | "title">;
+      document_templates: TableShape<DocumentTemplatesRow, "template_key" | "name_he" | "doc_category">;
+      document_versions: TableShape<DocumentVersionsRow, "organization_id" | "document_id">;
+      document_participants: TableShape<DocumentParticipantsRow, "organization_id" | "document_id">;
+      document_requests: TableShape<DocumentRequestsRow, "organization_id" | "document_id">;
+      document_signatures: TableShape<DocumentSignaturesRow, "organization_id" | "document_id" | "signer_name">;
+      document_audit_logs: TableShape<DocumentAuditLogsRow, "organization_id" | "event">;
+      document_requirements: TableShape<DocumentRequirementsRow, "context" | "doc_category">;
+      document_checklists: TableShape<DocumentChecklistsRow, "organization_id">;
+      document_folders: TableShape<DocumentFoldersRow, "organization_id" | "name">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
       israel_localities: TableShape<IsraelLocalitiesRow, "locality_code" | "name_he">;
       israel_neighborhoods: TableShape<IsraelNeighborhoodsRow, "city_name" | "name_he" | "normalized_name">;
