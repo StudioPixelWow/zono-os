@@ -11,13 +11,15 @@ import {
 
 export interface RecActionState { ok?: boolean; error?: string; message?: string }
 
-const revalidate = () => {
+function revalidate() {
   revalidatePath("/recommendations");
   revalidatePath("/recommendations/map");
   revalidatePath("/");
   revalidatePath("/command");
-};
+}
 
+// NOTE: In a "use server" module every export must be an async function — do not
+// use `export const x = () => ...` arrow form (Turbopack rejects it).
 async function run(fn: () => Promise<unknown>, okMsg: (r: unknown) => string): Promise<RecActionState> {
   try {
     const r = await fn();
@@ -29,38 +31,52 @@ async function run(fn: () => Promise<unknown>, okMsg: (r: unknown) => string): P
 }
 
 // ── Generators ───────────────────────────────────────────────────────────────
-export const generateBuyerRecommendationsAction = (buyerId: string) =>
-  run(() => generateBuyerRecommendations(buyerId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
-export const generateSellerRecommendationsAction = (sellerId: string) =>
-  run(() => generateSellerRecommendations(sellerId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
-export const generatePropertyRecommendationsAction = (propertyId: string) =>
-  run(() => generatePropertyRecommendations(propertyId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
-export const generateLeadRecommendationsAction = (leadId: string) =>
-  run(() => generateLeadRecommendations(leadId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
-export const generateAcquisitionRecommendationsAction = (acquisitionProfileId: string) =>
-  run(() => generateAcquisitionRecommendations(acquisitionProfileId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
-export const generateDealRecommendationsAction = (dealProfileId: string) =>
-  run(() => generateDealRecommendations(dealProfileId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
+export async function generateBuyerRecommendationsAction(buyerId: string): Promise<RecActionState> {
+  return run(() => generateBuyerRecommendations(buyerId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
+}
+export async function generateSellerRecommendationsAction(sellerId: string): Promise<RecActionState> {
+  return run(() => generateSellerRecommendations(sellerId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
+}
+export async function generatePropertyRecommendationsAction(propertyId: string): Promise<RecActionState> {
+  return run(() => generatePropertyRecommendations(propertyId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
+}
+export async function generateLeadRecommendationsAction(leadId: string): Promise<RecActionState> {
+  return run(() => generateLeadRecommendations(leadId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
+}
+export async function generateAcquisitionRecommendationsAction(acquisitionProfileId: string): Promise<RecActionState> {
+  return run(() => generateAcquisitionRecommendations(acquisitionProfileId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
+}
+export async function generateDealRecommendationsAction(dealProfileId: string): Promise<RecActionState> {
+  return run(() => generateDealRecommendations(dealProfileId), (r) => `נוצרו ${(r as { created: number }).created} המלצות`);
+}
 
 // ── Packages + map ───────────────────────────────────────────────────────────
-export const buildRecommendationPackageAction = (entityType: string, entityId: string, packageType: string) =>
-  run(() => buildRecommendationPackage(entityType, entityId, packageType), (r) => `נבנתה חבילה עם ${(r as { recommendations: number }).recommendations} המלצות`);
-export const generateRecommendationMapPointsAction = () =>
-  run(() => generateRecommendationMapPoints(), (r) => `${(r as { points: number }).points} נקודות על המפה`);
+export async function buildRecommendationPackageAction(entityType: string, entityId: string, packageType: string): Promise<RecActionState> {
+  return run(() => buildRecommendationPackage(entityType, entityId, packageType), (r) => `נבנתה חבילה עם ${(r as { recommendations: number }).recommendations} המלצות`);
+}
+export async function generateRecommendationMapPointsAction(): Promise<RecActionState> {
+  return run(() => generateRecommendationMapPoints(), (r) => `${(r as { points: number }).points} נקודות על המפה`);
+}
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
-export const approveRecommendationAction = (id: string) =>
-  run(() => reviewRecommendation(id, "approved"), () => "ההמלצה אושרה");
-export const rejectRecommendationAction = (id: string) =>
-  run(() => reviewRecommendation(id, "rejected"), () => "ההמלצה נדחתה");
-export const markRecommendationConvertedAction = (id: string) =>
-  run(() => markRecommendationConverted(id), () => "ההמלצה סומנה כהומרה");
-export const createTaskFromRecommendationAction = (id: string) =>
-  run(() => createTaskFromRecommendation(id), () => "נוצרה משימה מההמלצה");
-export const expireStaleRecommendationsAction = () =>
-  run(() => expireStaleRecommendations(), (r) => `${(r as { expired: number }).expired} המלצות פגו`);
-export const recomputeAllRecommendationsAction = () =>
-  run(() => recomputeAllRecommendations(), (r) => {
+export async function approveRecommendationAction(id: string): Promise<RecActionState> {
+  return run(() => reviewRecommendation(id, "approved"), () => "ההמלצה אושרה");
+}
+export async function rejectRecommendationAction(id: string): Promise<RecActionState> {
+  return run(() => reviewRecommendation(id, "rejected"), () => "ההמלצה נדחתה");
+}
+export async function markRecommendationConvertedAction(id: string): Promise<RecActionState> {
+  return run(() => markRecommendationConverted(id), () => "ההמלצה סומנה כהומרה");
+}
+export async function createTaskFromRecommendationAction(id: string): Promise<RecActionState> {
+  return run(() => createTaskFromRecommendation(id), () => "נוצרה משימה מההמלצה");
+}
+export async function expireStaleRecommendationsAction(): Promise<RecActionState> {
+  return run(() => expireStaleRecommendations(), (r) => `${(r as { expired: number }).expired} המלצות פגו`);
+}
+export async function recomputeAllRecommendationsAction(): Promise<RecActionState> {
+  return run(() => recomputeAllRecommendations(), (r) => {
     const x = r as { created: number; entities: number };
     return `נוצרו ${x.created} המלצות מ-${x.entities} ישויות`;
   });
+}
