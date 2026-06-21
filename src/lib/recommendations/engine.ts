@@ -43,7 +43,10 @@ export type RecommendationType =
   | "acquisition_seller_outreach" | "acquisition_property_research" | "deal_closing_action"
   | "deal_negotiation_action" | "agent_street_focus" | "agent_locality_focus" | "office_growth_focus"
   | "community_promotion" | "territory_focus" | "referral_opportunity" | "document_required"
-  | "signature_required" | "calculator_required" | "call_summary_required";
+  | "signature_required" | "calculator_required" | "call_summary_required"
+  // Territory Intelligence types
+  | "street_focus" | "building_cluster_focus" | "territory_acquisition" | "territory_marketing"
+  | "territory_revenue" | "territory_coverage_gap" | "territory_competitor_threat";
 
 /** A single explainable piece of evidence attached to a recommendation. */
 export interface EvidenceItem {
@@ -249,6 +252,13 @@ const NEXT_ACTION_BY_TYPE: Record<RecommendationType, string> = {
   signature_required: "השג את החתימה הנדרשת",
   calculator_required: "השתמש במחשבון המתאים",
   call_summary_required: "סכם את השיחה/פגישה האחרונה",
+  street_focus: "מקד פעילות ברחוב המומלץ",
+  building_cluster_focus: "פנה לבעלים בבניין בעל הזדמנות",
+  territory_acquisition: "הרץ גיוס נכסים יזום בטריטוריה",
+  territory_marketing: "הגדל פרסום ושיווק באזור",
+  territory_revenue: "מקד מאמץ באזור בעל פוטנציאל ההכנסה הגבוה",
+  territory_coverage_gap: "שייך סוכן לאזור ההזדמנות ללא כיסוי",
+  territory_competitor_threat: "בנה אסטרטגיית התמודדות מול שליטת מתחרים",
 };
 
 export function deriveNextBestAction(type: RecommendationType, priority: RecommendationPriority): string {

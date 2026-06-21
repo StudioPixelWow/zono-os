@@ -17,6 +17,9 @@ import { getSessionContext } from "@/lib/auth/session";
 import {
   scoreTerritory, generateTerritorySignals, rankTerritories, type TerritoryMetrics, type TerritoryScores,
 } from "./engine";
+import {
+  buildScoredRecommendation, type EvidenceItem, type RecommendationType,
+} from "@/lib/recommendations/engine";
 
 async function ctx() {
   const { user, profile } = await getSessionContext();
@@ -309,6 +312,84 @@ export async function generateTerritories() {
 }
 
 const clampNum = (n: number) => Math.max(0, Math.min(100, Math.round(Number.isFinite(n) ? n : 0)));
+
+// ── Final Patch: Territory → Recommendation OS ───────────────────────────────
+const SIGNAL_REC_TYPE: Record<string, RecommendationType | undefined> = {
+  white_space: "territory_marketing", revenue_opportunity: "territory_revenue",
+  acquisition_hotspot: "territory_acquisition", inventory_gap: "territory_acquisition",
+  competitor_dominance: "territory_competitor_threat", agent_gap: "territory_coverage_gap",
+  office_gap: "territory_coverage_gap", growth_area: "territory_focus",
+};
+
+/**
+ * Build territory-sourced recommendations from the latest territory signals,
+ * top streets and top building clusters, and write them into the Recommendation
+ * OS (`recommendations` table). Evidence-gated via the recommendation engine.
+ * Regenerates: clears prior un-actioned territory recs first. Review-only.
+ */
+export async function generateTerritoryRecommendations() {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+
+  const [sigR, streetR, clusterR] = await Promise.all([
+    supabase.from("territory_signals").select("territory_profile_id,signal_type,score,confidence_score,title,reason,recommended_action").eq("organization_id", orgId).eq("status", "open").gte("score", 55).order("score", { ascending: false }).limit(60),
+    supabase.from("street_territory_profiles").select("id,city_name,street,revenue_opportunity,acquisition_opportunity,buyer_trend,transaction_count_365d,confidence_score").eq("organization_id", orgId).order("revenue_opportunity", { ascending: false }).limit(15),
+    supabase.from("building_cluster_profiles").select("id,city_name,street,cluster_key,turnover_score,acquisition_score,transaction_count,confidence_score").eq("organization_id", orgId).order("turnover_score", { ascending: false }).limit(15),
+  ]);
+
+  type Row = Record<string, unknown>;
+  const rows: Row[] = [];
+  const push = (
+    type: RecommendationType, sourceType: string, sourceId: string, targetType: string, targetId: string | null,
+    title: string, opportunity: number, evidence: EvidenceItem[], reason: string,
+  ) => {
+    const scored = buildScoredRecommendation({
+      type, evidence,
+      signals: { revenueImpact: opportunity, marketDemand: opportunity, urgencySignal: clampNum(opportunity * 0.8), entityFit: opportunity },
+    });
+    rows.push({
+      organization_id: orgId, source_entity_type: sourceType, source_entity_id: sourceId,
+      target_entity_type: targetType, target_entity_id: targetId, recommendation_type: type,
+      title_hebrew: title, reason_hebrew: scored.reason_hebrew, next_best_action_hebrew: scored.next_best_action_hebrew,
+      recommendation_score: scored.recommendation_score, confidence_score: scored.confidence_score,
+      urgency_score: scored.urgency_score, impact_score: scored.impact_score,
+      expected_revenue: scored.expected_revenue, expected_commission: scored.expected_commission,
+      expected_conversion_lift: scored.expected_conversion_lift, evidence: evidence as never,
+      supporting_geo: {} as never, supporting_market: {} as never,
+      status: "new", review_status: scored.review_status, source_confidence: scored.source_confidence,
+      generated_by: "territory_engine", generation_reason: reason,
+    });
+  };
+
+  // From signals
+  for (const s of (sigR.data ?? []) as { territory_profile_id: string | null; signal_type: string; score: number; confidence_score: number; title: string; reason: string | null }[]) {
+    const type = SIGNAL_REC_TYPE[s.signal_type];
+    if (!type || !s.territory_profile_id) continue;
+    push(type, "territory", s.territory_profile_id, "territory", s.territory_profile_id, s.title,
+      s.score, [{ kind: "geo", label_hebrew: s.reason ?? s.title, weight: clampNum(s.score) }], `territory_signal_${s.signal_type}`);
+  }
+  // From streets
+  for (const st of ((streetR.data ?? []) as { id: string; city_name: string | null; street: string; revenue_opportunity: number; transaction_count_365d: number; confidence_score: number }[]).filter((x) => x.revenue_opportunity >= 55).slice(0, 8)) {
+    push("street_focus", "street", st.id, "street", st.id, `התמקד ברחוב ${st.city_name} · ${st.street}`,
+      st.revenue_opportunity, [{ kind: "transaction", label_hebrew: `${st.transaction_count_365d} עסקאות · פוטנציאל הכנסה ${st.revenue_opportunity}`, weight: clampNum(st.revenue_opportunity), detail: "מבוסס מודיעין רחוב" }], "street_revenue_opportunity");
+  }
+  // From building clusters
+  for (const c of ((clusterR.data ?? []) as { id: string; city_name: string | null; street: string | null; turnover_score: number; acquisition_score: number; transaction_count: number }[]).filter((x) => x.turnover_score >= 55 || x.acquisition_score >= 55).slice(0, 8)) {
+    push("building_cluster_focus", "building_cluster", c.id, "building", c.id, `גייס נכסים בבניין ${c.city_name}${c.street ? " · " + c.street : ""}`,
+      Math.max(c.turnover_score, c.acquisition_score), [{ kind: "transaction", label_hebrew: `תחלופה ${c.turnover_score} · ${c.transaction_count} עסקאות`, weight: clampNum(Math.max(c.turnover_score, c.acquisition_score)), detail: "מבוסס מודיעין בניין" }], "building_turnover");
+  }
+
+  // Regenerate: clear prior un-actioned territory recs, then insert.
+  await supabase.from("recommendations").delete().eq("organization_id", orgId).eq("generated_by", "territory_engine").in("status", ["new", "reviewed"]);
+  if (!rows.length) return { created: 0 };
+  const { data, error } = await supabase.from("recommendations").insert(rows as never).select("id");
+  if (error) throw new Error(error.message);
+  const ids = (data ?? []) as { id: string }[];
+  if (ids.length) {
+    await supabase.from("recommendation_events").insert(ids.map((r) => ({ organization_id: orgId, recommendation_id: r.id, event_type: "generated" })) as never);
+  }
+  return { created: ids.length };
+}
 
 // ── Part 1: Knowledge Graph (nodes for high-value territories + edges) ────────
 async function populateTerritoryGraph(
