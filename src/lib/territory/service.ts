@@ -49,14 +49,19 @@ export async function generateTerritories() {
   const supabase = await createClient();
   const now = Date.now();
 
-  const [txnR, propR, extR, buyersR, compR, recR, agentsR] = await Promise.all([
+  const [txnR, propR, extR, buyersR, compR, recR, agentsR, matchR, streetR, buildingR] = await Promise.all([
     supabase.from("property_transactions").select("city_name,neighborhood_name,deal_date,price_per_sqm").eq("organization_id", orgId).limit(20000),
-    supabase.from("properties").select("city,neighborhood,status").eq("org_id", orgId).limit(20000),
+    supabase.from("properties").select("id,city,neighborhood,status,type").eq("org_id", orgId).limit(20000),
     supabase.from("external_listings").select("city,neighborhood").eq("org_id", orgId).limit(20000),
-    supabase.from("buyers").select("preferred_areas").eq("org_id", orgId).limit(20000),
+    supabase.from("buyers").select("preferred_areas,preferred_types").eq("org_id", orgId).limit(20000),
     supabase.from("competitor_market_positions").select("locality,competitor_profile_id,listings_count,private_seller_loss_count").eq("organization_id", orgId).limit(20000),
     supabase.from("recommendations").select("supporting_geo").eq("organization_id", orgId).in("status", ["new", "reviewed"]).limit(20000),
     supabase.from("user_operating_localities").select("city_name,user_id,is_active").eq("organization_id", orgId).limit(20000),
+    // Part 5: real pipeline mapping via match property_id → territory geo.
+    supabase.from("match_intelligence_profiles").select("property_id,match_status,closing_probability,estimated_deal_value,estimated_commission").eq("org_id", orgId).limit(20000),
+    // Parts 3-4: consume already-computed transaction-derived intelligence.
+    supabase.from("street_intelligence").select("city_name,street,transactions_count,avg_price_per_sqm,price_trend_6m,price_trend_12m,liquidity_score,street_score,confidence_score").eq("organization_id", orgId).limit(20000),
+    supabase.from("building_intelligence").select("city_name,street,house_number,normalized_address,transactions_count,last_transaction_date,avg_price_per_sqm,price_trend_12m,confidence_score").eq("organization_id", orgId).limit(20000),
   ]);
 
   const cities = new Map<string, Agg>();
@@ -78,15 +83,22 @@ export async function generateTerritories() {
     if (t.neighborhood_name) apply(getHood(t.city_name, t.neighborhood_name));
   }
 
-  // Internal properties → inventory + active deals
-  for (const p of (propR.data ?? []) as { city: string | null; neighborhood: string | null; status: string }[]) {
+  // Internal properties → inventory + active deals + geo map + dominant type
+  const propGeo = new Map<string, { city: string; neighborhood: string | null }>();
+  const propTypeByKey = new Map<string, Map<string, number>>(); // territory_key → type → count
+  const bumpType = (key: string, type: string | null) => { if (!type) return; const m = propTypeByKey.get(key) ?? new Map(); m.set(type, (m.get(type) ?? 0) + 1); propTypeByKey.set(key, m); };
+  for (const p of (propR.data ?? []) as { id: string; city: string | null; neighborhood: string | null; status: string; type: string | null }[]) {
     if (!p.city) continue;
+    propGeo.set(p.id, { city: cityKey(p.city), neighborhood: p.neighborhood ? p.neighborhood.trim() : null });
     const active = !["sold", "rented", "withdrawn", "archived", "draft"].includes(p.status);
     const deal = p.status === "under_offer";
-    const apply = (a: Agg) => { if (active) a.internalInventory++; a.activeProperties++; if (deal) a.activeDeals++; };
-    apply(getCity(p.city));
-    if (p.neighborhood) apply(getHood(p.city, p.neighborhood));
+    const apply = (a: Agg, key: string) => { if (active) a.internalInventory++; a.activeProperties++; if (deal) a.activeDeals++; bumpType(key, p.type); };
+    apply(getCity(p.city), cityKey(p.city));
+    if (p.neighborhood) apply(getHood(p.city, p.neighborhood), hoodKey(p.city, p.neighborhood));
   }
+
+  // Dominant buyer type per city (from preferred_types)
+  const buyerTypeByCity = new Map<string, Map<string, number>>();
 
   // External inventory
   for (const e of (extR.data ?? []) as { city: string | null; neighborhood: string | null }[]) {
@@ -95,9 +107,37 @@ export async function generateTerritories() {
     if (e.neighborhood) getHood(e.city, e.neighborhood).externalInventory++;
   }
 
-  // Buyers → demand per preferred city (city-level; shared to neighborhoods later)
-  for (const b of (buyersR.data ?? []) as { preferred_areas: string[] | null }[]) {
-    for (const area of b.preferred_areas ?? []) { if (area) getCity(area).activeBuyers++; }
+  // Buyers → demand per preferred city + dominant buyer type per city.
+  for (const b of (buyersR.data ?? []) as { preferred_areas: string[] | null; preferred_types: string[] | null }[]) {
+    for (const area of b.preferred_areas ?? []) {
+      if (!area) continue;
+      getCity(area).activeBuyers++;
+      const k = cityKey(area);
+      const tm = buyerTypeByCity.get(k) ?? new Map<string, number>();
+      for (const ty of b.preferred_types ?? []) { if (ty) tm.set(ty, (tm.get(ty) ?? 0) + 1); }
+      buyerTypeByCity.set(k, tm);
+    }
+  }
+
+  // Part 5: map matches → territory via property geo (real pipeline, not just under_offer).
+  const matchAggByKey = new Map<string, { matches: number; likely: number; atRisk: number; revenue: number; commission: number }>();
+  const bumpMatch = (key: string, m: { closing: number; commission: number; value: number }) => {
+    const a = matchAggByKey.get(key) ?? { matches: 0, likely: 0, atRisk: 0, revenue: 0, commission: 0 };
+    a.matches++;
+    if (m.closing >= 60) a.likely++;
+    if (m.closing < 40) a.atRisk++;
+    a.commission += Math.round((m.commission || 0) * (m.closing / 100));
+    a.revenue += Math.round((m.value || 0) * (m.closing / 100));
+    matchAggByKey.set(key, a);
+  };
+  for (const m of (matchR.data ?? []) as { property_id: string; match_status: string; closing_probability: number; estimated_deal_value: number | null; estimated_commission: number | null }[]) {
+    if (m.match_status !== "active") continue;
+    const geo = propGeo.get(m.property_id); if (!geo) continue;
+    const payload = { closing: m.closing_probability ?? 0, commission: m.estimated_commission ?? 0, value: m.estimated_deal_value ?? 0 };
+    bumpMatch(cityKey(geo.city), payload);
+    if (geo.neighborhood) bumpMatch(hoodKey(geo.city, geo.neighborhood), payload);
+    const cAgg = getCity(geo.city); cAgg.activeMatches++;
+    if (geo.neighborhood) getHood(geo.city, geo.neighborhood).activeMatches++;
   }
 
   // Competitors per locality (city)
@@ -143,9 +183,19 @@ export async function generateTerritories() {
     ...[...hoods.entries()].map(([key, agg]) => ({ type: "neighborhood" as const, key, agg })),
   ];
 
+  const dominant = (m: Map<string, number> | undefined): string | null => {
+    if (!m || !m.size) return null;
+    return [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
+
   const rows = allAggs.map(({ type, key, agg }) => {
     agg.avgPriceSqm = agg.ppsqmCount ? Math.round(agg.ppsqmSum / agg.ppsqmCount) : null;
     const s: TerritoryScores = scoreTerritory(agg);
+    // Part 5: prefer real pipeline revenue (match commission × probability) over estimate.
+    const mAgg = matchAggByKey.get(key);
+    const expectedRevenue = mAgg && mAgg.commission > 0 ? mAgg.commission : s.expected_revenue;
+    const dominantPropertyType = dominant(propTypeByKey.get(key));
+    const dominantBuyerType = dominant(buyerTypeByCity.get(agg.city));
     return {
       organization_id: orgId, territory_type: type, territory_key: key,
       city_name: agg.city, neighborhood_name: agg.neighborhood, street: null,
@@ -158,20 +208,22 @@ export async function generateTerritories() {
       active_deals: agg.activeDeals, active_matches: agg.activeMatches,
       external_inventory: agg.externalInventory, internal_inventory: agg.internalInventory,
       transaction_volume_90d: agg.transactionVolume90d, transaction_volume_365d: agg.transactionVolume365d,
-      avg_price_sqm: agg.avgPriceSqm, expected_revenue: s.expected_revenue,
-      expected_commission: Math.round(s.expected_revenue * 0.5),
+      avg_price_sqm: agg.avgPriceSqm, expected_revenue: expectedRevenue,
+      expected_commission: Math.round(expectedRevenue),
       competitor_count: agg.competitorCount, assigned_agents_count: agg.assignedAgents,
       recommendation_count: agg.recommendationCount, confidence_score: s.confidence_score,
       summary_hebrew: `${s.territory_level} · הזדמנות ${s.opportunity_score} · שטח לבן ${s.white_space_score}`,
       last_calculated_at: new Date().toISOString(),
-      _scores: s, _agg: agg,
+      _scores: s, _agg: agg, _dominantPropertyType: dominantPropertyType, _dominantBuyerType: dominantBuyerType,
+      _likelyCloses: mAgg?.likely ?? 0, _atRisk: mAgg?.atRisk ?? 0,
     };
   });
 
   if (!rows.length) return { territories: 0, signals: 0 };
 
   // Upsert profiles (strip helper fields).
-  const persistRows = rows.map(({ _scores, _agg, ...r }) => r); // eslint-disable-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const persistRows = rows.map(({ _scores, _agg, _dominantPropertyType, _dominantBuyerType, _likelyCloses, _atRisk, ...r }) => r);
   await supabase.from("territory_profiles").upsert(persistRows as never, { onConflict: "organization_id,territory_type,territory_key" });
 
   // Re-read ids for signal/dna/snapshot linkage.
@@ -180,15 +232,18 @@ export async function generateTerritories() {
   const idByKey = new Map<string, string>();
   for (const s of (saved ?? []) as { id: string; territory_type: string; territory_key: string }[]) idByKey.set(`${s.territory_type}|${s.territory_key}`, s.id);
 
-  // Regenerate signals (clear open, insert fresh).
+  // Regenerate signals (clear open, insert fresh). Build DNA + snapshots inline.
   await supabase.from("territory_signals").delete().eq("organization_id", orgId).eq("status", "open");
   const signalRows: Record<string, unknown>[] = [];
   const snapshotRows: Record<string, unknown>[] = [];
+  const dnaRows: Record<string, unknown>[] = [];
+  const graphNodes: Record<string, unknown>[] = [];
   for (const r of rows) {
     const pid = idByKey.get(`${r.territory_type}|${r.territory_key}`);
     if (!pid) continue;
     const name = r.neighborhood_name ? `${r.city_name} · ${r.neighborhood_name}` : r.city_name ?? r.territory_key;
-    for (const sig of generateTerritorySignals(name, r._scores, r._agg)) {
+    const sigs = generateTerritorySignals(name, r._scores, r._agg);
+    for (const sig of sigs) {
       signalRows.push({
         organization_id: orgId, territory_profile_id: pid, signal_type: sig.signal_type,
         score: sig.score, confidence_score: sig.confidence_score, title: sig.title,
@@ -200,11 +255,160 @@ export async function generateTerritories() {
       scores: { opportunity: r.opportunity_score, revenue: r.revenue_score, growth: r.growth_score, white_space: r.white_space_score, health: r.territory_health_score } as never,
       metrics: { buyers: r.active_buyers, internal: r.internal_inventory, txn365: r.transaction_volume_365d } as never,
     });
+
+    // Part 2: Territory DNA (derived from real aggregates; honest confidence).
+    const a = r._agg, sc = r._scores;
+    const strengths: string[] = [];
+    const weaknesses: string[] = [];
+    if (sc.demand_score >= 60) strengths.push("ביקוש גבוה"); else if (sc.demand_score <= 30) weaknesses.push("ביקוש נמוך");
+    if (sc.penetration_score >= 55) strengths.push("חדירה חזקה"); else if (sc.penetration_score <= 30) weaknesses.push("חדירה נמוכה");
+    if (sc.acquisition_score >= 60) strengths.push("פוטנציאל גיוס");
+    if (sc.competition_score >= 60) weaknesses.push("תחרות גבוהה");
+    if (sc.supply_score <= 30 && sc.demand_score >= 50) weaknesses.push("מחסור מלאי");
+    const strategy = sc.white_space_score >= 60 ? "כניסה אגרסיבית: גייס מלאי ומקד שיווק"
+      : sc.dominance_score >= 60 ? "שמירה על שליטה: העמק קשרים והגן על נתח"
+      : sc.opportunity_score >= 60 ? "השקעה ממוקדת בהזדמנות" : "מעקב ובחינת כדאיות";
+    dnaRows.push({
+      organization_id: orgId, territory_profile_id: pid,
+      strongest_property_type: r._dominantPropertyType, strongest_buyer_type: r._dominantBuyerType,
+      transaction_velocity: clampNum(a.transactionVolume90d * 10), inventory_balance: clampNum(sc.supply_score - sc.demand_score + 50),
+      buyer_demand: sc.demand_score, seller_activity: clampNum(a.activeSellers * 15 + a.privateSellerCount! * 8),
+      acquisition_potential: sc.acquisition_score, revenue_potential: sc.revenue_score,
+      recommendation_density: clampNum(a.recommendationCount * 12),
+      dna_summary_hebrew: `${name}: ${strengths.length ? "חוזק: " + strengths.join(", ") + ". " : ""}${weaknesses.length ? "חולשה: " + weaknesses.join(", ") + ". " : ""}אסטרטגיה: ${strategy}`,
+      metadata: { strengths, weaknesses, recommended_strategy_hebrew: strategy, likely_closes: r._likelyCloses, at_risk_deals: r._atRisk } as never,
+    });
+
+    // Part 1: Knowledge Graph node for high-value territories only (no flooding).
+    const highValue = sc.territory_health_score >= 60 || sc.opportunity_score >= 60
+      || ["critical", "weak", "dominant"].includes(sc.territory_level) || sigs.length > 0;
+    if (highValue) {
+      graphNodes.push({
+        organization_id: orgId, entity_type: "territory", entity_id: pid, title: name,
+        subtitle: `${sc.territory_level} · הזדמנות ${sc.opportunity_score}`,
+        health_score: clampNum(sc.territory_health_score), importance_score: clampNum(sc.opportunity_score),
+        activity_score: clampNum(a.transactionVolume90d * 8 + a.activeMatches * 6),
+        metadata: { territory_type: r.territory_type, white_space: sc.white_space_score, buyers: a.activeBuyers, properties: a.activeProperties, competitors: a.competitorCount } as never,
+      });
+    }
   }
   if (signalRows.length) await supabase.from("territory_signals").insert(signalRows as never);
   if (snapshotRows.length) await supabase.from("territory_snapshots").insert(snapshotRows as never);
+  if (dnaRows.length) await supabase.from("territory_dna_profiles").upsert(dnaRows as never, { onConflict: "organization_id,territory_profile_id" });
 
-  return { territories: rows.length, signals: signalRows.length };
+  // Part 1: graph nodes + edges (territory↔competitor, neighborhood→city part_of).
+  await populateTerritoryGraph(orgId, graphNodes, idByKey, cities, compR.data as never);
+
+  // Part 3: street territory profiles (consume street_intelligence + org context).
+  const streets = await populateStreetTerritories(orgId, streetR.data as never, cities);
+
+  // Part 4: building cluster profiles (consume building_intelligence).
+  const clusters = await populateBuildingClusters(orgId, buildingR.data as never);
+
+  return { territories: rows.length, signals: signalRows.length, dna: dnaRows.length, graphNodes: graphNodes.length, streets, clusters };
+}
+
+const clampNum = (n: number) => Math.max(0, Math.min(100, Math.round(Number.isFinite(n) ? n : 0)));
+
+// ── Part 1: Knowledge Graph (nodes for high-value territories + edges) ────────
+async function populateTerritoryGraph(
+  orgId: string, nodes: Record<string, unknown>[], idByKey: Map<string, string>,
+  cities: Map<string, Agg>, comps: { locality: string | null; competitor_profile_id: string; listings_count: number }[],
+) {
+  const supabase = await createClient();
+  if (!nodes.length) return;
+  await supabase.from("graph_entities").upsert(nodes as never, { onConflict: "organization_id,entity_type,entity_id" });
+
+  const edges: Record<string, unknown>[] = [];
+  const now = new Date().toISOString();
+  const nodePids = new Set(nodes.map((n) => n.entity_id as string));
+
+  // territory↔competitor: link each city territory to its competitors (bounded).
+  const byCity = new Map<string, { id: string; listings: number }[]>();
+  for (const c of comps ?? []) {
+    if (!c.locality) continue;
+    const arr = byCity.get(cityKey(c.locality)) ?? []; arr.push({ id: c.competitor_profile_id, listings: c.listings_count ?? 0 }); byCity.set(cityKey(c.locality), arr);
+  }
+  for (const [city, list] of byCity) {
+    const pid = idByKey.get(`city|${city}`);
+    if (!pid || !nodePids.has(pid)) continue;
+    for (const c of list.slice(0, 5)) {
+      edges.push({
+        organization_id: orgId, source_entity_type: "territory", source_entity_id: pid,
+        target_entity_type: "competitor", target_entity_id: c.id, relationship_type: "competes_in",
+        strength_score: clampNum(40 + c.listings * 5), confidence_score: 70, relationship_status: "active",
+        first_seen_at: now, last_seen_at: now,
+      });
+    }
+  }
+  // neighborhood→city part_of edges (only when both are high-value nodes).
+  for (const [key, pid] of idByKey) {
+    if (!key.startsWith("neighborhood|") || !nodePids.has(pid)) continue;
+    const cityName = (cities.size ? key.slice("neighborhood|".length).split("|")[0] : "");
+    const cityPid = idByKey.get(`city|${cityName}`);
+    if (cityPid && nodePids.has(cityPid)) {
+      edges.push({
+        organization_id: orgId, source_entity_type: "territory", source_entity_id: pid,
+        target_entity_type: "territory", target_entity_id: cityPid, relationship_type: "part_of",
+        strength_score: 80, confidence_score: 90, relationship_status: "active", first_seen_at: now, last_seen_at: now,
+      });
+    }
+  }
+  if (edges.length) await supabase.from("graph_relationships").upsert(edges as never, { onConflict: "organization_id,source_entity_type,source_entity_id,target_entity_type,target_entity_id,relationship_type" });
+}
+
+// ── Part 3: Street Territory 2.0 (consume street_intelligence + org context) ──
+interface StreetIntel { city_name: string | null; street: string | null; transactions_count: number; avg_price_per_sqm: number | null; price_trend_6m: number | null; price_trend_12m: number | null; liquidity_score: number | null; street_score: number | null; confidence_score: number }
+async function populateStreetTerritories(orgId: string, streetIntel: StreetIntel[], cities: Map<string, Agg>): Promise<number> {
+  const supabase = await createClient();
+  const rows = (streetIntel ?? []).filter((s) => s.city_name && s.street).map((s) => {
+    const city = cities.get(cityKey(s.city_name!));
+    const competitorPressure = city ? clampNum((city.competitorCount ?? 0) * 12 + (city.competitorListings ?? 0) * 2) : 0;
+    const buyerDemand = city ? clampNum((city.activeBuyers ?? 0) * 8 + (s.transactions_count ?? 0) * 4) : clampNum((s.transactions_count ?? 0) * 4);
+    const officePenetration = city ? clampNum((city.internalInventory ?? 0) * 6) : 0;
+    const liquidity = s.liquidity_score ?? clampNum((s.transactions_count ?? 0) * 6);
+    const trend = s.price_trend_12m ?? 0;
+    const acquisitionOpp = clampNum(50 + trend * 2 + (city?.privateSellerCount ?? 0) * 5);
+    const revenueOpp = clampNum((s.avg_price_per_sqm ?? 0) / 600 + (s.transactions_count ?? 0) * 4 + buyerDemand * 0.3);
+    const streetScore = clampNum((s.street_score ?? 0) * 0.4 + buyerDemand * 0.3 + liquidity * 0.3);
+    return {
+      organization_id: orgId, city_name: cityKey(s.city_name!), neighborhood_name: null, street: s.street!.trim(),
+      transaction_trend: clampNum(50 + trend), buyer_trend: buyerDemand, seller_trend: clampNum((city?.privateSellerCount ?? 0) * 8),
+      acquisition_opportunity: acquisitionOpp, competitor_pressure: competitorPressure, office_penetration: officePenetration,
+      revenue_opportunity: revenueOpp, transaction_count_365d: s.transactions_count ?? 0, avg_price_sqm: s.avg_price_per_sqm,
+      confidence_score: s.confidence_score ?? clampNum((s.transactions_count ?? 0) * 10),
+      metadata: { liquidity_score: liquidity, street_territory_score: streetScore, price_trend_6m: s.price_trend_6m, price_trend_12m: s.price_trend_12m } as never,
+    };
+  });
+  if (rows.length) await supabase.from("street_territory_profiles").upsert(rows as never, { onConflict: "organization_id,city_name,street" });
+  return rows.length;
+}
+
+// ── Part 4: Building Cluster Intelligence (consume building_intelligence) ─────
+interface BuildingIntel { city_name: string | null; street: string | null; house_number: string | null; normalized_address: string | null; transactions_count: number; last_transaction_date: string | null; avg_price_per_sqm: number | null; price_trend_12m: number | null; confidence_score: number }
+async function populateBuildingClusters(orgId: string, buildingIntel: BuildingIntel[]): Promise<number> {
+  const supabase = await createClient();
+  const now = Date.now();
+  const rows = (buildingIntel ?? []).filter((b) => b.city_name && (b.normalized_address || b.street)).map((b) => {
+    const clusterKey = (b.normalized_address || `${b.city_name}|${b.street}|${b.house_number ?? ""}`).trim();
+    const turnover = clampNum((b.transactions_count ?? 0) * 18);
+    const recencyDays = b.last_transaction_date ? (now - new Date(b.last_transaction_date).getTime()) / DAY : 9999;
+    const activity = clampNum(turnover * (recencyDays < 365 ? 1 : 0.5));
+    const investor = clampNum(turnover * 0.6 + ((b.price_trend_12m ?? 0) > 0 ? 25 : 0));
+    const acquisition = clampNum(turnover * 0.5 + (recencyDays > 730 ? 20 : 0));
+    return {
+      organization_id: orgId, city_name: cityKey(b.city_name!), neighborhood_name: null, street: b.street, cluster_key: clusterKey,
+      turnover_score: turnover, investor_score: investor, acquisition_score: acquisition, activity_score: activity,
+      transaction_count: b.transactions_count ?? 0, avg_price_sqm: b.avg_price_per_sqm,
+      confidence_score: b.confidence_score ?? clampNum((b.transactions_count ?? 0) * 12),
+      metadata: {
+        last_transaction_date: b.last_transaction_date, price_trend_12m: b.price_trend_12m,
+        recommended_action_hebrew: turnover >= 60 ? "בניין בעל תחלופה גבוהה — פנה לבעלים לגיוס" : acquisition >= 60 ? "פוטנציאל רכש — בדוק בעלים" : "מעקב",
+      } as never,
+    };
+  });
+  if (rows.length) await supabase.from("building_cluster_profiles").upsert(rows as never, { onConflict: "organization_id,cluster_key" });
+  return rows.length;
 }
 
 // ── Reads for UI ─────────────────────────────────────────────────────────────
@@ -225,13 +429,31 @@ export interface TerritorySignalRow {
 
 const TERR_COLS = "id,territory_type,territory_key,city_name,neighborhood_name,demand_score,supply_score,acquisition_score,revenue_score,competition_score,dominance_score,penetration_score,opportunity_score,growth_score,white_space_score,territory_health_score,territory_level,internal_inventory,external_inventory,transaction_volume_90d,transaction_volume_365d,active_buyers,competitor_count,assigned_agents_count,recommendation_count,expected_revenue,confidence_score,summary_hebrew,avg_price_sqm";
 
+export interface StreetTerritoryRow {
+  id: string; city_name: string | null; street: string; transaction_trend: number; buyer_trend: number;
+  acquisition_opportunity: number; competitor_pressure: number; office_penetration: number; revenue_opportunity: number;
+  transaction_count_365d: number; avg_price_sqm: number | null; confidence_score: number;
+}
+export interface BuildingClusterRow {
+  id: string; city_name: string | null; street: string | null; cluster_key: string; turnover_score: number;
+  investor_score: number; acquisition_score: number; activity_score: number; transaction_count: number;
+  avg_price_sqm: number | null; confidence_score: number;
+}
+export interface TerritoryDnaRow {
+  id: string; territory_profile_id: string; strongest_property_type: string | null; strongest_buyer_type: string | null;
+  buyer_demand: number; seller_activity: number; acquisition_potential: number; revenue_potential: number;
+  recommendation_density: number; dna_summary_hebrew: string | null;
+}
+
 export interface TerritoryCommandCenter {
   total: number;
   strongest: TerritoryRow | null; fastestGrowing: TerritoryRow | null; highestRevenue: TerritoryRow | null;
   highestAcquisition: TerritoryRow | null; biggestThreat: TerritoryRow | null; biggestOpportunity: TerritoryRow | null;
   rankings: TerritoryRow[]; whiteSpace: TerritoryRow[]; dominance: TerritoryRow[]; revenueOps: TerritoryRow[];
   neighborhoods: TerritoryRow[]; signals: TerritorySignalRow[];
-  expectedRevenueTotal: number;
+  streets: StreetTerritoryRow[]; clusters: BuildingClusterRow[]; dna: TerritoryDnaRow[];
+  coverageGaps: TerritoryRow[];
+  expectedRevenueTotal: number; graphNodes: number; lowConfidence: number;
 }
 
 const top = (rows: TerritoryRow[], key: keyof TerritoryRow) =>
@@ -240,9 +462,13 @@ const top = (rows: TerritoryRow[], key: keyof TerritoryRow) =>
 export async function getTerritoryCommandCenter(): Promise<TerritoryCommandCenter> {
   const { orgId } = await ctx();
   const supabase = await createClient();
-  const [profR, sigR] = await Promise.all([
+  const [profR, sigR, streetR, clusterR, dnaR, graphR] = await Promise.all([
     supabase.from("territory_profiles").select(TERR_COLS).eq("organization_id", orgId).limit(2000),
     supabase.from("territory_signals").select("id,territory_profile_id,signal_type,score,confidence_score,title,reason,recommended_action").eq("organization_id", orgId).eq("status", "open").order("score", { ascending: false }).limit(60),
+    supabase.from("street_territory_profiles").select("id,city_name,street,transaction_trend,buyer_trend,acquisition_opportunity,competitor_pressure,office_penetration,revenue_opportunity,transaction_count_365d,avg_price_sqm,confidence_score").eq("organization_id", orgId).order("revenue_opportunity", { ascending: false }).limit(40),
+    supabase.from("building_cluster_profiles").select("id,city_name,street,cluster_key,turnover_score,investor_score,acquisition_score,activity_score,transaction_count,avg_price_sqm,confidence_score").eq("organization_id", orgId).order("turnover_score", { ascending: false }).limit(40),
+    supabase.from("territory_dna_profiles").select("id,territory_profile_id,strongest_property_type,strongest_buyer_type,buyer_demand,seller_activity,acquisition_potential,revenue_potential,recommendation_density,dna_summary_hebrew").eq("organization_id", orgId).order("revenue_potential", { ascending: false }).limit(20),
+    supabase.from("graph_entities").select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("entity_type", "territory"),
   ]);
   const all = (profR.data ?? []) as TerritoryRow[];
   const ranked = rankTerritories(all);
@@ -260,6 +486,13 @@ export async function getTerritoryCommandCenter(): Promise<TerritoryCommandCente
     revenueOps: [...all].sort((a, b) => b.revenue_score - a.revenue_score).slice(0, 12),
     neighborhoods: ranked.filter((t) => t.territory_type === "neighborhood").slice(0, 20),
     signals: (sigR.data ?? []) as TerritorySignalRow[],
+    streets: (streetR.data ?? []) as StreetTerritoryRow[],
+    clusters: (clusterR.data ?? []) as BuildingClusterRow[],
+    dna: (dnaR.data ?? []) as TerritoryDnaRow[],
+    // Coverage gaps (Part 7/Team): opportunity territories with no assigned agent.
+    coverageGaps: [...all].filter((t) => t.assigned_agents_count === 0 && t.opportunity_score >= 50).sort((a, b) => b.opportunity_score - a.opportunity_score).slice(0, 10),
     expectedRevenueTotal: all.reduce((a, t) => a + (t.expected_revenue ?? 0), 0),
+    graphNodes: graphR.count ?? 0,
+    lowConfidence: all.filter((t) => t.confidence_score < 30).length,
   };
 }
