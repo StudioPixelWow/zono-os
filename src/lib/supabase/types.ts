@@ -3433,6 +3433,70 @@ type ClientPortalItemsRow = {
   updated_at: string;
 };
 
+// ── Office Website Generator OS ──────────────────────────────────────────────
+type OfficeWebsitesRow = {
+  id: string;
+  organization_id: string;
+  slug: string | null;
+  status: string;
+  office_name: string | null;
+  headline_hebrew: string | null;
+  description_hebrew: string | null;
+  cover_image_url: string | null;
+  logo_url: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  address: string | null;
+  office_hours: string | null;
+  social_links: Json;
+  enabled_sections: Json;
+  featured_property_ids: string[];
+  featured_project_ids: string[];
+  testimonials: Json;
+  theme: Json;
+  seo: Json;
+  view_count: number;
+  last_published_at: string | null;
+  created_by: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type OfficeWebsiteLeadsRow = {
+  id: string;
+  organization_id: string;
+  website_id: string | null;
+  lead_id: string | null;
+  source_section: string;
+  full_name: string | null;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  property_type: string | null;
+  rooms: string | null;
+  message: string | null;
+  intent: string | null;
+  status: string;
+  metadata: Json;
+  created_at: string;
+};
+
+type OfficeWebsiteEventsRow = {
+  id: string;
+  organization_id: string;
+  website_id: string | null;
+  event_type: string;
+  path: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  ip_hash: string | null;
+  user_agent_hash: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3954,6 +4018,18 @@ export interface Database {
       client_portal_items: TableShape<
         ClientPortalItemsRow,
         "organization_id" | "item_type"
+      >;
+      office_websites: TableShape<
+        OfficeWebsitesRow,
+        "organization_id"
+      >;
+      office_website_leads: TableShape<
+        OfficeWebsiteLeadsRow,
+        "organization_id"
+      >;
+      office_website_events: TableShape<
+        OfficeWebsiteEventsRow,
+        "organization_id" | "event_type"
       >;
     };
     Views: { [_ in never]: never };
