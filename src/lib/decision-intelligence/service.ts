@@ -7,6 +7,7 @@
  */
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { buildInfraAttentionRows } from "@/lib/system/decision-signals";
 import type { Database } from "@/lib/supabase/types";
 import {
   calculateAttentionScore,
@@ -783,7 +784,10 @@ export async function recalculateOrganizationDecisionBrain(): Promise<void> {
   await decisionIntelligenceRepository.ensure(orgId);
   const d = await gatherOrgData();
 
-  const attentionRows = buildAttentionRows(orgId, d);
+  // Entity attention (property/seller/etc) + additive INFRASTRUCTURE signals
+  // (data quality, engine staleness, coverage gaps, missing operating area,
+  // routing gap) so platform health surfaces in Today's Focus / Priority Queue.
+  const attentionRows = [...buildAttentionRows(orgId, d), ...(await buildInfraAttentionRows(orgId))];
   const oppRows = buildOpportunityRows(orgId, d);
 
   await attentionRepository.clearOpen(orgId);
