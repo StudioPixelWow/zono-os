@@ -31,6 +31,7 @@ const HREFS: Record<string, string> = {
   graph: "/graph",
   "operating-areas": "/settings/operating-areas",
   "system-health": "/admin/system-health",
+  "data-quality": "/admin/data-quality",
 };
 
 /**
