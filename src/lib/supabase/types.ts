@@ -3934,6 +3934,37 @@ type ReviewCampaignsRow = {
   requests_count: number; reviews_count: number; created_by: string | null; created_at: string; updated_at: string;
 };
 
+// ── Autonomous Office AI Layer ──────────────────────────────────────────────
+type AiBriefsRow = {
+  id: string; organization_id: string; brief_type: string; scope: string;
+  period_start: string | null; period_end: string | null; headline: string | null; summary: string | null;
+  sections: Json; opportunity_count: number; risk_count: number; focus_count: number;
+  generated_by: string | null; created_at: string;
+};
+type AiOpportunitiesRow = {
+  id: string; organization_id: string; category: string; title: string; reason: string | null;
+  recommended_action: string | null; source_module: string | null; entity_type: string | null; entity_id: string | null;
+  impact_score: number; revenue_impact: number; score: number; status: string; created_at: string; updated_at: string;
+};
+type AiRisksRow = {
+  id: string; organization_id: string; category: string; title: string; reason: string | null;
+  recommended_action: string | null; source_module: string | null; entity_type: string | null; entity_id: string | null;
+  severity: string; score: number; status: string; created_at: string; updated_at: string;
+};
+type AiFocusItemsRow = {
+  id: string; organization_id: string; role: string; rank: number; title: string; reason: string | null;
+  recommended_action: string | null; source_module: string | null; entity_type: string | null; entity_id: string | null;
+  impact_score: number; status: string; created_at: string;
+};
+type AiGrowthPlansRow = {
+  id: string; organization_id: string; plan_type: string; horizon_days: number; title: string; summary: string | null;
+  steps: Json; expected_revenue_impact: number; status: string; created_by: string | null; created_at: string; updated_at: string;
+};
+type AiSimulationsRow = {
+  id: string; organization_id: string; scenario_key: string; title: string; inputs: Json; projections: Json;
+  summary: string | null; created_by: string | null; created_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4390,6 +4421,12 @@ export interface Database {
       reputation_scores: TableShape<ReputationScoresRow, "organization_id" | "scope" | "scope_key">;
       reputation_signals: TableShape<ReputationSignalsRow, "organization_id" | "signal_type" | "title">;
       review_campaigns: TableShape<ReviewCampaignsRow, "organization_id" | "name">;
+      ai_briefs: TableShape<AiBriefsRow, "organization_id">;
+      ai_opportunities: TableShape<AiOpportunitiesRow, "organization_id" | "title">;
+      ai_risks: TableShape<AiRisksRow, "organization_id" | "title">;
+      ai_focus_items: TableShape<AiFocusItemsRow, "organization_id" | "title">;
+      ai_growth_plans: TableShape<AiGrowthPlansRow, "organization_id" | "plan_type" | "title">;
+      ai_simulations: TableShape<AiSimulationsRow, "organization_id" | "scenario_key" | "title">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
       israel_localities: TableShape<IsraelLocalitiesRow, "locality_code" | "name_he">;
       israel_neighborhoods: TableShape<IsraelNeighborhoodsRow, "city_name" | "name_he" | "normalized_name">;

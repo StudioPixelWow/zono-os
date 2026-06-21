@@ -1,0 +1,162 @@
+-- ============================================================================
+-- ZONO — Autonomous Office AI Layer (reasoning layer above all systems)
+-- ----------------------------------------------------------------------------
+-- The highest-level layer. It does NOT act automatically: it observes,
+-- analyzes, prioritizes, explains, recommends, simulates and guides. The
+-- Decision Brain (attention_items / opportunity_signals) is the SOURCE layer;
+-- this layer is the REASONING layer and does not duplicate its logic. Saved
+-- artifacts (briefs, opportunities, risks, focus, growth plans, simulations)
+-- live here. Idempotent. Org column: organization_id. Org-scoped RLS.
+--
+-- Consolidation note: the spec's 12 tables are folded into 6 — ai_briefs covers
+-- daily/weekly/monthly/executive (brief_type); ai_office_profiles /
+-- ai_agent_profiles are brief metadata; ai_recommendation_chains are expressed
+-- via ai_focus_items ordering + the Decision Brain.
+-- ============================================================================
+
+-- ── ai_briefs (daily / weekly / monthly / executive) ─────────────────────────
+create table if not exists public.ai_briefs (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  brief_type       text not null default 'daily',
+  scope            text not null default 'manager',
+  period_start     date,
+  period_end       date,
+  headline         text,
+  summary          text,
+  sections         jsonb not null default '[]'::jsonb,
+  opportunity_count integer not null default 0,
+  risk_count       integer not null default 0,
+  focus_count      integer not null default 0,
+  generated_by     uuid references public.users(id) on delete set null,
+  created_at       timestamptz not null default now(),
+  constraint ai_briefs_type_chk check (brief_type in ('daily','weekly','monthly','executive')),
+  constraint ai_briefs_scope_chk check (scope in ('agent','manager','executive'))
+);
+
+-- ── ai_opportunities ──────────────────────────────────────────────────────────
+create table if not exists public.ai_opportunities (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  category         text not null default 'revenue',
+  title            text not null,
+  reason           text,
+  recommended_action text,
+  source_module    text,
+  entity_type      text,
+  entity_id        uuid,
+  impact_score     integer not null default 50,
+  revenue_impact   integer not null default 0,
+  score            integer not null default 50,
+  status           text not null default 'open',
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint ai_opportunities_status_chk check (status in ('open','accepted','dismissed','converted'))
+);
+
+-- ── ai_risks ──────────────────────────────────────────────────────────────────
+create table if not exists public.ai_risks (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  category         text not null default 'revenue',
+  title            text not null,
+  reason           text,
+  recommended_action text,
+  source_module    text,
+  entity_type      text,
+  entity_id        uuid,
+  severity         text not null default 'medium',
+  score            integer not null default 50,
+  status           text not null default 'open',
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint ai_risks_severity_chk check (severity in ('low','medium','high','critical')),
+  constraint ai_risks_status_chk check (status in ('open','mitigating','resolved','dismissed'))
+);
+
+-- ── ai_focus_items (today's focus, per role) ──────────────────────────────────
+create table if not exists public.ai_focus_items (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  role             text not null default 'manager',
+  rank             integer not null default 0,
+  title            text not null,
+  reason           text,
+  recommended_action text,
+  source_module    text,
+  entity_type      text,
+  entity_id        uuid,
+  impact_score     integer not null default 50,
+  status           text not null default 'open',
+  created_at       timestamptz not null default now(),
+  constraint ai_focus_role_chk check (role in ('agent','manager','executive')),
+  constraint ai_focus_status_chk check (status in ('open','done','dismissed'))
+);
+
+-- ── ai_growth_plans ────────────────────────────────────────────────────────────
+create table if not exists public.ai_growth_plans (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  plan_type        text not null default 'growth_90d',
+  horizon_days     integer not null default 90,
+  title            text not null,
+  summary          text,
+  steps            jsonb not null default '[]'::jsonb,
+  expected_revenue_impact integer not null default 0,
+  status           text not null default 'draft',
+  created_by       uuid references public.users(id) on delete set null,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint ai_growth_type_chk check (plan_type in ('growth_90d','office','territory_expansion','recruitment','revenue_acceleration','market_share')),
+  constraint ai_growth_status_chk check (status in ('draft','active','completed','archived'))
+);
+
+-- ── ai_simulations ──────────────────────────────────────────────────────────────
+create table if not exists public.ai_simulations (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  scenario_key     text not null,
+  title            text not null,
+  inputs           jsonb not null default '{}'::jsonb,
+  projections      jsonb not null default '{}'::jsonb,
+  summary          text,
+  created_by       uuid references public.users(id) on delete set null,
+  created_at       timestamptz not null default now()
+);
+
+-- ── indexes ───────────────────────────────────────────────────────────────────
+create index if not exists ai_briefs_org_idx        on public.ai_briefs(organization_id, brief_type);
+create index if not exists ai_opportunities_org_idx  on public.ai_opportunities(organization_id, status);
+create index if not exists ai_risks_org_idx          on public.ai_risks(organization_id, status);
+create index if not exists ai_focus_org_idx          on public.ai_focus_items(organization_id, role, status);
+create index if not exists ai_growth_org_idx         on public.ai_growth_plans(organization_id, status);
+create index if not exists ai_simulations_org_idx    on public.ai_simulations(organization_id);
+
+-- ── updated_at triggers ──────────────────────────────────────────────────────
+do $$
+declare t text;
+  tbls text[] := array['ai_opportunities','ai_risks','ai_growth_plans'];
+begin
+  foreach t in array tbls loop
+    execute format('drop trigger if exists trg_%1$s_updated on public.%1$I;', t);
+    execute format('create trigger trg_%1$s_updated before update on public.%1$I for each row execute function public.set_updated_at();', t);
+  end loop;
+end $$;
+
+-- ── RLS (org-scoped; agent may write on their own org rows) ───────────────────
+do $$
+declare t text;
+  tbls text[] := array['ai_briefs','ai_opportunities','ai_risks','ai_focus_items','ai_growth_plans','ai_simulations'];
+begin
+  foreach t in array tbls loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format('drop policy if exists "%1$s_select" on public.%1$I;', t);
+    execute format('create policy "%1$s_select" on public.%1$I for select to authenticated using (organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_insert" on public.%1$I;', t);
+    execute format('create policy "%1$s_insert" on public.%1$I for insert to authenticated with check (organization_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+    execute format('drop policy if exists "%1$s_update" on public.%1$I;', t);
+    execute format('create policy "%1$s_update" on public.%1$I for update to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''agent'')) with check (organization_id = public.current_org_id());', t);
+    execute format('drop policy if exists "%1$s_delete" on public.%1$I;', t);
+    execute format('create policy "%1$s_delete" on public.%1$I for delete to authenticated using (organization_id = public.current_org_id() and public.has_min_role(''manager''));', t);
+  end loop;
+end $$;
