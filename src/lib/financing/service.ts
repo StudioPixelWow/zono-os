@@ -28,7 +28,8 @@ export interface BuyerFinancing {
 }
 export interface FinancingCommandCenter {
   financingReady: number; financingRisks: number; cashGapAlerts: number; readyToPurchase: number;
-  totalPurchasingPower: number; profiles: BuyerFinancing[]; isManager: boolean;
+  totalPurchasingPower: number; profiles: BuyerFinancing[];
+  buyersNeedingProfile: { id: string; name: string; budget_max: number | null }[]; isManager: boolean;
 }
 
 function mapRow(row: Record<string, unknown>, name: string, desired: number | null): BuyerFinancing {
@@ -62,7 +63,12 @@ export async function getFinancingCommandCenter(): Promise<FinancingCommandCente
   const readyToPurchase = profiles.filter((p) => p.readiness_band === "ready" && (p.cash_gap ?? 0) <= 0).length;
   const totalPurchasingPower = profiles.reduce((s, p) => s + (p.max_budget ?? 0), 0);
 
-  return { financingReady, financingRisks, cashGapAlerts, readyToPurchase, totalPurchasingPower, profiles, isManager };
+  const haveProfile = new Set(buyerIds);
+  const { data: allBuyers } = await supabase.from("buyers").select("id,full_name,budget_max").eq("org_id", orgId).order("updated_at", { ascending: false }).limit(100);
+  const buyersNeedingProfile = ((allBuyers ?? []) as { id: string; full_name: string; budget_max: number | null }[])
+    .filter((b) => !haveProfile.has(b.id)).slice(0, 40).map((b) => ({ id: b.id, name: b.full_name, budget_max: b.budget_max ?? null }));
+
+  return { financingReady, financingRisks, cashGapAlerts, readyToPurchase, totalPurchasingPower, profiles, buyersNeedingProfile, isManager };
 }
 
 // ── per-buyer ─────────────────────────────────────────────────────────────────

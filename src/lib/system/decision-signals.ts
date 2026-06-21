@@ -305,3 +305,37 @@ export async function buildDocumentAttentionRows(orgId: string): Promise<Attenti
   } catch { /* document signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Mortgage & Financing Intelligence OS → Decision Brain. Surfaces financing
+ * risk (buyers who may not be able to purchase), high-readiness buyers worth
+ * prioritising, and cash-gap alerts. Additive + best-effort.
+ */
+export async function buildFinancingAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    const { count: risk } = await supabase.from("buyer_financial_profiles")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).in("financing_risk", ["high", "critical"]);
+    if ((risk ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "financing", entity_id: orgId,
+        attention_score: 80, urgency_score: 78, impact_score: 72, confidence_score: 88, revenue_impact_score: 70, relationship_impact_score: 20, churn_impact_score: 18,
+        title: `${risk} קונים בסיכון מימוני`, reason: "סבירות אישור נמוכה או פער מזומן — עלול לעכב/לבטל עסקה", recommended_action: "הפנה לייעוץ מימוני וודא ריאליות התקציב", expected_outcome: "הפחתת סיכון לעיכוב עסקאות", status: "open" });
+    }
+    const { count: ready } = await supabase.from("buyer_financial_profiles")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("readiness_band", "ready");
+    if ((ready ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "financing", entity_id: orgId,
+        attention_score: 76, urgency_score: 66, impact_score: 70, confidence_score: 90, revenue_impact_score: 74, relationship_impact_score: 24, churn_impact_score: 0,
+        title: `${ready} קונים מוכנים מימונית לרכישה`, reason: "כושר רכישה גבוה והון עצמי מספק — בשלים לקידום", recommended_action: "תעדף הצגת נכסים מתאימים והאץ לעסקה", expected_outcome: "האצת הכנסה מקונים בשלים", status: "open" });
+    }
+    const { count: cash } = await supabase.from("buyer_financial_profiles")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).gt("cash_gap", 0);
+    if ((cash ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "financing", entity_id: orgId,
+        attention_score: 66, urgency_score: 58, impact_score: 56, confidence_score: 84, revenue_impact_score: 50, relationship_impact_score: 18, churn_impact_score: 12,
+        title: `${cash} קונים עם פער מזומן`, reason: "חסר הון עצמי להשלמת הרכישה", recommended_action: "בחן מקורות הון נוספים או התאם תקציב", expected_outcome: "גישור פער המזומן וקידום העסקה", status: "open" });
+    }
+  } catch { /* financing signals are additive — never block the Decision Brain */ }
+  return rows;
+}

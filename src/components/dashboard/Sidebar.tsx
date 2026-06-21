@@ -33,6 +33,7 @@ const HREFS: Record<string, string> = {
   territories: "/territories",
   portals: "/portals",
   documents: "/documents",
+  financing: "/financing",
   automation: "/automation",
   "office-website": "/office-website",
   "agent-website": "/agent-website",
