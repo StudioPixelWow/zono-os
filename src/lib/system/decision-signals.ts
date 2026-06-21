@@ -200,3 +200,24 @@ export async function buildOfficeSiteAttentionRows(orgId: string): Promise<Atten
   } catch { /* office-site signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Agent Website OS → Decision Brain. Surfaces new agent-website leads (last 24h)
+ * that need handling into Today's Focus / Priority Queue. Additive + best-effort.
+ */
+export async function buildAgentSiteAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  const now = Date.now();
+  try {
+    const { count: fresh } = await supabase.from("agent_website_leads")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId)
+      .gte("created_at", new Date(now - DAY).toISOString());
+    if ((fresh ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "agent_website", entity_id: orgId,
+        attention_score: 78, urgency_score: 82, impact_score: 66, confidence_score: 90, revenue_impact_score: 62, relationship_impact_score: 30, churn_impact_score: 0,
+        title: `${fresh} פניות חדשות מאתרי הסוכנים`, reason: "פניות חדשות מאתרים אישיים ב-24 השעות האחרונות", recommended_action: "טפל בפניות מאתרי הסוכנים עכשיו", expected_outcome: "המרת פניות ללקוחות", status: "open" });
+    }
+  } catch { /* agent-site signals are additive — never block the Decision Brain */ }
+  return rows;
+}
