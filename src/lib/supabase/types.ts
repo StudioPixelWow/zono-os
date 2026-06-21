@@ -3212,6 +3212,154 @@ type RecommendationMapPointsRow = {
   updated_at: string;
 };
 
+// ── Territory Intelligence OS ────────────────────────────────────────────────
+type TerritoryProfilesRow = {
+  id: string;
+  organization_id: string;
+  territory_type: string;
+  territory_key: string;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  street: string | null;
+  demand_score: number;
+  supply_score: number;
+  acquisition_score: number;
+  revenue_score: number;
+  forecast_score: number;
+  competition_score: number;
+  dominance_score: number;
+  penetration_score: number;
+  opportunity_score: number;
+  growth_score: number;
+  white_space_score: number;
+  territory_health_score: number;
+  territory_level: string;
+  active_buyers: number;
+  active_sellers: number;
+  active_properties: number;
+  active_deals: number;
+  active_matches: number;
+  external_inventory: number;
+  internal_inventory: number;
+  transaction_volume_90d: number;
+  transaction_volume_365d: number;
+  avg_price: number | null;
+  avg_price_sqm: number | null;
+  expected_revenue: number;
+  expected_commission: number;
+  competitor_count: number;
+  dominant_competitor_id: string | null;
+  assigned_agents_count: number;
+  recommendation_count: number;
+  confidence_score: number;
+  summary_hebrew: string | null;
+  metadata: Json;
+  last_calculated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type TerritorySignalsRow = {
+  id: string;
+  organization_id: string;
+  territory_profile_id: string | null;
+  signal_type: string;
+  score: number;
+  confidence_score: number;
+  title: string;
+  reason: string | null;
+  recommended_action: string | null;
+  status: string;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type TerritoryAssignmentsRow = {
+  id: string;
+  organization_id: string;
+  territory_profile_id: string;
+  user_id: string | null;
+  role: string | null;
+  priority: number;
+  ownership_level: string;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type TerritorySnapshotsRow = {
+  id: string;
+  organization_id: string;
+  territory_profile_id: string | null;
+  territory_type: string | null;
+  territory_key: string | null;
+  scores: Json;
+  metrics: Json;
+  snapshot_date: string;
+  created_at: string;
+};
+
+type TerritoryDnaProfilesRow = {
+  id: string;
+  organization_id: string;
+  territory_profile_id: string;
+  strongest_property_type: string | null;
+  strongest_buyer_type: string | null;
+  transaction_velocity: number;
+  inventory_balance: number;
+  buyer_demand: number;
+  seller_activity: number;
+  acquisition_potential: number;
+  revenue_potential: number;
+  recommendation_density: number;
+  dominant_competitor_id: string | null;
+  dna_summary_hebrew: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type StreetTerritoryProfilesRow = {
+  id: string;
+  organization_id: string;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  street: string;
+  transaction_trend: number;
+  buyer_trend: number;
+  seller_trend: number;
+  acquisition_opportunity: number;
+  competitor_pressure: number;
+  office_penetration: number;
+  revenue_opportunity: number;
+  transaction_count_365d: number;
+  avg_price_sqm: number | null;
+  confidence_score: number;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type BuildingClusterProfilesRow = {
+  id: string;
+  organization_id: string;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  street: string | null;
+  cluster_key: string;
+  turnover_score: number;
+  investor_score: number;
+  acquisition_score: number;
+  activity_score: number;
+  transaction_count: number;
+  avg_price_sqm: number | null;
+  confidence_score: number;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3689,6 +3837,34 @@ export interface Database {
       recommendation_map_points: TableShape<
         RecommendationMapPointsRow,
         "organization_id"
+      >;
+      territory_profiles: TableShape<
+        TerritoryProfilesRow,
+        "organization_id" | "territory_type" | "territory_key"
+      >;
+      territory_signals: TableShape<
+        TerritorySignalsRow,
+        "organization_id" | "signal_type" | "title"
+      >;
+      territory_assignments: TableShape<
+        TerritoryAssignmentsRow,
+        "organization_id" | "territory_profile_id"
+      >;
+      territory_snapshots: TableShape<
+        TerritorySnapshotsRow,
+        "organization_id"
+      >;
+      territory_dna_profiles: TableShape<
+        TerritoryDnaProfilesRow,
+        "organization_id" | "territory_profile_id"
+      >;
+      street_territory_profiles: TableShape<
+        StreetTerritoryProfilesRow,
+        "organization_id" | "street"
+      >;
+      building_cluster_profiles: TableShape<
+        BuildingClusterProfilesRow,
+        "organization_id" | "cluster_key"
       >;
     };
     Views: { [_ in never]: never };
