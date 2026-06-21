@@ -12,6 +12,7 @@ import { MarketingDashboardSection } from "@/components/dashboard/sections/Marke
 import { DistributionDashboardSection } from "@/components/dashboard/sections/DistributionDashboardSection";
 import { SocialLeadsDashboardSection } from "@/components/dashboard/sections/SocialLeadsDashboardSection";
 import { TransactionsDashboardSection } from "@/components/dashboard/sections/TransactionsDashboardSection";
+import { OperatingAreasSection } from "@/components/dashboard/sections/OperatingAreasSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
   MatchingSectionContainer, OpportunitiesSectionContainer,
@@ -24,6 +25,7 @@ export default function Home() {
   return (
     <>
       <HeroSection />
+      <Suspense fallback={null}><OperatingAreasSection /></Suspense>
       <Suspense fallback={null}><OpportunitiesSectionContainer /></Suspense>
       <Suspense fallback={<PropertiesSkeleton />}>
         <PropertiesSectionContainer />

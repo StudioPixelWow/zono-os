@@ -29,6 +29,7 @@ const HREFS: Record<string, string> = {
   routing: "/routing",
   team: "/team",
   graph: "/graph",
+  "operating-areas": "/settings/operating-areas",
 };
 
 /**

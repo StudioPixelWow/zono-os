@@ -72,6 +72,37 @@ export async function ensureCoverageTargetsForAgent(): Promise<CoverageEnsureRes
   return { created: rows.length, city: market.city, needsConfig: false, largeCityWarning: isLargeCity(market.city) && !market.neighborhoods.length };
 }
 
+/**
+ * Ensure coverage targets for ONE specific city (+ optional neighborhoods),
+ * independent of the agent's primary market. Used by Operating Areas when a
+ * city is added/synced. Idempotent — only inserts missing targets. Org-scoped.
+ */
+export async function ensureCoverageTargetsForCity(orgId: string, rawCity: string, neighborhoods: string[] = []): Promise<{ created: number; city: string | null }> {
+  const city = canonicalCityName(rawCity);
+  if (!city) return { created: 0, city: null };
+  const supabase = await createClient();
+  const { data: existing } = await supabase.from("geo_coverage_targets").select("city_name,neighborhood_name").eq("organization_id", orgId).eq("city_name", city);
+  const have = new Set((existing ?? []).map((e) => `${e.city_name}|${e.neighborhood_name ?? ""}`));
+  const hoods = neighborhoods.map((n) => normalizeNeighborhoodName(n)).filter((n): n is string => !!n);
+  const rows: DB["geo_coverage_targets"]["Insert"][] = [];
+  if (hoods.length) {
+    for (const n of hoods) if (!have.has(`${city}|${n}`)) rows.push({ organization_id: orgId, city_name: city, neighborhood_name: n, coverage_status: "pending", priority: 1 });
+  } else if (!have.has(`${city}|`)) {
+    rows.push({ organization_id: orgId, city_name: city, coverage_status: "pending_neighborhoods", priority: 1, metadata: isLargeCity(city) ? { warning: "עיר גדולה — מומלץ להגדיר שכונות לכיסוי מלא" } : {} });
+  }
+  if (rows.length) await supabase.from("geo_coverage_targets").insert(rows as never);
+  return { created: rows.length, city };
+}
+
+/** Neighborhood names from the national reference for a city (for coverage seeding). */
+export async function nationalNeighborhoodNames(rawCity: string): Promise<string[]> {
+  const city = canonicalCityName(rawCity) ?? rawCity?.trim();
+  if (!city) return [];
+  const supabase = await createClient();
+  const { data } = await supabase.from("israel_neighborhoods").select("normalized_name").eq("city_name", city).limit(500);
+  return [...new Set((data ?? []).map((r) => r.normalized_name).filter((n): n is string => !!n))];
+}
+
 // ── Dev-only, clearly-marked mock transactions ───────────────────────────────
 function devMockRaws(city: string, neighborhood: string | null, n = 24): Record<string, unknown>[] {
   const streets = ["הרצל", "ויצמן", "בן גוריון", "רוטשילד", "ז׳בוטינסקי"];

@@ -48,6 +48,7 @@ export const navItems: NavItem[] = [
   { id: "routing", label: "ניתוב לידים", icon: "Route" },
   { id: "team", label: "מודיעין צוות", icon: "UserCheck" },
   { id: "graph", label: "מפת קשרים", icon: "Sparkles" },
+  { id: "operating-areas", label: "אזורי פעילות", icon: "MapPin" },
   { id: "journey", label: "מסע נכס", icon: "Route" },
   { id: "marketing", label: "שיווק", icon: "Megaphone" },
   { id: "reports", label: "דוחות", icon: "BarChart3" },
