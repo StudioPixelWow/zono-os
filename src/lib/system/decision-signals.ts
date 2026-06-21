@@ -138,3 +138,36 @@ export async function buildTerritoryAttentionRows(orgId: string): Promise<Attent
   } catch { /* territory signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+/**
+ * Client Portal OS → Decision Brain (Part 15). Surfaces portal lifecycle signals
+ * — viewed (hot: client engaged → follow up today), active-but-not-viewed after
+ * 48h (nudge), and draft-ready-to-send — as attention items into Today's Focus /
+ * Priority Queue. Additive + best-effort. No auto-send implied.
+ */
+export async function buildPortalAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  const now = Date.now();
+  const TYPE_HE: Record<string, string> = { buyer: "הקונה", seller: "המוכר", property: "המוכר", lead: "הליד", deal: "הלקוח" };
+  try {
+    const { data } = await supabase.from("client_portals")
+      .select("id,portal_type,client_name,status,view_count,last_viewed_at,created_at")
+      .eq("organization_id", orgId).in("status", ["draft", "active"]).order("created_at", { ascending: false }).limit(200);
+    for (const p of (data ?? []) as { id: string; portal_type: string; client_name: string | null; status: string; view_count: number; last_viewed_at: string | null; created_at: string }[]) {
+      const who = TYPE_HE[p.portal_type] ?? "הלקוח";
+      const name = p.client_name ? ` (${p.client_name})` : "";
+      if (p.status === "active" && p.view_count > 0 && p.last_viewed_at && (now - new Date(p.last_viewed_at).getTime()) < 2 * DAY) {
+        rows.push({ org_id: orgId, entity_type: "client_portal", entity_id: p.id, attention_score: 82, urgency_score: 84, impact_score: 70, confidence_score: 90, revenue_impact_score: 60, relationship_impact_score: 40, churn_impact_score: 0,
+          title: `${who} צפה/תה בפורטל${name}`, reason: "הלקוח התעניין בפורטל לאחרונה — חלון הזדמנות חם", recommended_action: "צור פולואפ עם הלקוח היום", expected_outcome: "קידום עסקה", status: "open" });
+      } else if (p.status === "active" && p.view_count === 0 && (now - new Date(p.created_at).getTime()) > 2 * DAY) {
+        rows.push({ org_id: orgId, entity_type: "client_portal", entity_id: p.id, attention_score: 56, urgency_score: 58, impact_score: 50, confidence_score: 80, revenue_impact_score: 40, relationship_impact_score: 30, churn_impact_score: 20,
+          title: `פורטל${name} טרם נצפה`, reason: "הפורטל פעיל מעל 48 שעות ולא נצפה", recommended_action: "ודא שהקישור הגיע ובצע תזכורת", expected_outcome: "הגברת מעורבות", status: "open" });
+      } else if (p.status === "draft") {
+        rows.push({ org_id: orgId, entity_type: "client_portal", entity_id: p.id, attention_score: 48, urgency_score: 46, impact_score: 44, confidence_score: 85, revenue_impact_score: 30, relationship_impact_score: 20, churn_impact_score: 0,
+          title: `פורטל${name} מוכן אך לא הופעל`, reason: "פורטל בטיוטה — אשר והפעל כדי לשתף", recommended_action: "אשר את הפורטל ושלח קישור", expected_outcome: "חוויית לקוח פרימיום", status: "open" });
+      }
+    }
+  } catch { /* portal signals are additive — never block the Decision Brain */ }
+  return rows;
+}
