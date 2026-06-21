@@ -9,6 +9,8 @@ import { SellerCommandCenter } from "./SellerCommandCenter";
 import { Seller360Sections } from "./Seller360Sections";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
+import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
+import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,7 @@ export default async function SellerDetailPage({
 
       {seller360 && <Seller360Sections seller={seller360.seller} properties={seller360.properties} />}
 
+      <EntityRecommendationsPanel entityType="seller" entityId={id} recommendations={await listRecommendationsForEntity("seller", id).catch(() => [])} />
       <CommunicationSection entityType="seller" entityId={id} />
       <RelationshipSection entityType="seller" entityId={id} />
 

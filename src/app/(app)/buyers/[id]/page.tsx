@@ -11,6 +11,8 @@ import { recommendedPropertiesForBuyer } from "@/lib/matching-intelligence/servi
 import { BuyerDetailView } from "./BuyerDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
+import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
+import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,7 @@ export default async function BuyerDetailsPage({
         commandCenter={commandCenter}
         recommendations={recommendations}
       />
+      <EntityRecommendationsPanel entityType="buyer" entityId={id} recommendations={await listRecommendationsForEntity("buyer", id).catch(() => [])} />
       <CommunicationSection entityType="buyer" entityId={id} />
       <RelationshipSection entityType="buyer" entityId={id} />
     </div>

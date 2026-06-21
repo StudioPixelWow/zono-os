@@ -21,6 +21,8 @@ import { journeyStageForStatusFallback } from "@/lib/journey/fallback";
 import { PropertyDetailView } from "./PropertyDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
+import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
+import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +92,7 @@ export default async function PropertyDetailsPage({
         propertySellers={propertySellers}
         sellerReadiness={sellerReadiness}
       />
+      <EntityRecommendationsPanel entityType="property" entityId={id} recommendations={await listRecommendationsForEntity("property", id).catch(() => [])} />
       <CommunicationSection entityType="property" entityId={id} />
       <RelationshipSection entityType="property" entityId={id} />
     </div>
