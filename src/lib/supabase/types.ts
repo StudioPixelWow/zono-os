@@ -3360,6 +3360,79 @@ type BuildingClusterProfilesRow = {
   updated_at: string;
 };
 
+// ── Client Portal OS ─────────────────────────────────────────────────────────
+type ClientPortalsRow = {
+  id: string;
+  organization_id: string;
+  portal_type: string;
+  entity_type: string;
+  entity_id: string;
+  client_name: string | null;
+  client_email: string | null;
+  client_phone: string | null;
+  title_hebrew: string | null;
+  description_hebrew: string | null;
+  access_token_hash: string;
+  access_slug: string | null;
+  status: string;
+  visibility_level: string;
+  expires_at: string | null;
+  last_viewed_at: string | null;
+  view_count: number;
+  created_by: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type ClientPortalViewsRow = {
+  id: string;
+  organization_id: string;
+  portal_id: string | null;
+  viewed_at: string;
+  ip_hash: string | null;
+  user_agent_hash: string | null;
+  referrer: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+type ClientPortalSectionsRow = {
+  id: string;
+  organization_id: string;
+  portal_id: string | null;
+  section_type: string;
+  title_hebrew: string | null;
+  content: Json;
+  sort_order: number;
+  is_visible: boolean;
+  requires_approval: boolean;
+  approved_by: string | null;
+  approved_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type ClientPortalItemsRow = {
+  id: string;
+  organization_id: string;
+  portal_id: string | null;
+  section_id: string | null;
+  item_type: string;
+  source_entity_type: string | null;
+  source_entity_id: string | null;
+  title_hebrew: string | null;
+  description_hebrew: string | null;
+  data: Json;
+  is_visible: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3865,6 +3938,22 @@ export interface Database {
       building_cluster_profiles: TableShape<
         BuildingClusterProfilesRow,
         "organization_id" | "cluster_key"
+      >;
+      client_portals: TableShape<
+        ClientPortalsRow,
+        "organization_id" | "portal_type" | "entity_type" | "entity_id" | "access_token_hash"
+      >;
+      client_portal_views: TableShape<
+        ClientPortalViewsRow,
+        "organization_id"
+      >;
+      client_portal_sections: TableShape<
+        ClientPortalSectionsRow,
+        "organization_id" | "section_type"
+      >;
+      client_portal_items: TableShape<
+        ClientPortalItemsRow,
+        "organization_id" | "item_type"
       >;
     };
     Views: { [_ in never]: never };
