@@ -52,6 +52,7 @@ export const navItems: NavItem[] = [
   { id: "notifications", label: "מרכז התראות", icon: "Bell" },
   { id: "system-health", label: "מנועי חישוב", icon: "Settings" },
   { id: "data-quality", label: "איכות דאטה", icon: "Shield" },
+  { id: "neighborhood-enrichment", label: "העשרת שכונות", icon: "MapPin" },
   { id: "permissions", label: "הרשאות", icon: "UserCheck" },
   { id: "configuration", label: "תצורה", icon: "Settings" },
   { id: "mock-registry", label: "רישום Mock", icon: "Eye" },

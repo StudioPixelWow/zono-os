@@ -3047,6 +3047,35 @@ type NotificationStateRow = {
   updated_at: string;
 };
 
+type NeighborhoodsRow = {
+  id: string;
+  city_code: string;
+  city_name: string;
+  neighborhood_name: string;
+  normalized_name: string | null;
+  confidence_score: number | null;
+  confidence_level: string | null;
+  source_type: string | null;
+  status: string | null;
+  raw_ai_response: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type NeighborhoodEnrichmentCitiesRow = {
+  id: string;
+  city_code: string;
+  city_name: string;
+  row_index: number;
+  status: string;
+  attempts: number;
+  neighborhoods_count: number;
+  confidence_summary: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3499,6 +3528,8 @@ export interface Database {
       engine_runs: TableShape<EngineRunsRow, "engine_key">;
       audit_log: TableShape<AuditLogRow, "action" | "category">;
       notification_state: TableShape<NotificationStateRow, "user_id" | "item_key">;
+      neighborhoods: TableShape<NeighborhoodsRow, "city_code" | "city_name" | "neighborhood_name">;
+      neighborhood_enrichment_cities: TableShape<NeighborhoodEnrichmentCitiesRow, "city_code" | "city_name">;
     };
     Views: { [_ in never]: never };
     Functions: {
