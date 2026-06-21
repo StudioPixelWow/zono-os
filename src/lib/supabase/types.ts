@@ -3567,6 +3567,144 @@ type AgentWebsiteEventsRow = {
   created_at: string;
 };
 
+// ── Automation & Workflow OS ────────────────────────────────────────────────
+type AutomationWorkflowsRow = {
+  id: string;
+  organization_id: string;
+  created_by: string | null;
+  name: string;
+  description: string | null;
+  category: string;
+  status: string;
+  is_enabled: boolean;
+  trigger_type: string;
+  scope: string;
+  owner_user_id: string | null;
+  require_approval: boolean;
+  run_count: number;
+  last_run_at: string | null;
+  opportunities_generated: number;
+  tasks_generated: number;
+  template_key: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+type AutomationTriggersRow = {
+  id: string;
+  organization_id: string;
+  workflow_id: string;
+  trigger_type: string;
+  config: Json;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+type AutomationConditionsRow = {
+  id: string;
+  organization_id: string;
+  workflow_id: string;
+  condition_type: string;
+  operator: string;
+  value_number: number | null;
+  value_text: string | null;
+  config: Json;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+type AutomationStepsRow = {
+  id: string;
+  organization_id: string;
+  workflow_id: string;
+  step_order: number;
+  action_type: string;
+  title: string | null;
+  config: Json;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+type AutomationRunsRow = {
+  id: string;
+  organization_id: string;
+  workflow_id: string;
+  triggered_by: string | null;
+  trigger_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  entity_label: string | null;
+  owner_user_id: string | null;
+  status: string;
+  blocked_reason: string | null;
+  error_message: string | null;
+  actions_prepared: number;
+  actions_applied: number;
+  opportunities_generated: number;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  applied_at: string | null;
+  reversed_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+type AutomationRunLogsRow = {
+  id: string;
+  organization_id: string;
+  run_id: string;
+  workflow_id: string | null;
+  level: string;
+  message: string;
+  step_action_type: string | null;
+  created_at: string;
+};
+type AutomationActionsRow = {
+  id: string;
+  organization_id: string;
+  run_id: string;
+  workflow_id: string | null;
+  action_type: string;
+  title: string;
+  description: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  payload: Json;
+  status: string;
+  applied_table: string | null;
+  applied_id: string | null;
+  applied_at: string | null;
+  reversed_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+type AutomationTemplatesRow = {
+  id: string;
+  template_key: string;
+  name: string;
+  description: string | null;
+  category: string;
+  trigger_type: string;
+  default_conditions: Json;
+  default_steps: Json;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+};
+type AutomationRecommendationsRow = {
+  id: string;
+  organization_id: string;
+  template_key: string | null;
+  title: string;
+  reason: string | null;
+  category: string;
+  impact_score: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4113,6 +4251,15 @@ export interface Database {
         AgentWebsiteEventsRow,
         "organization_id" | "event_type"
       >;
+      automation_workflows: TableShape<AutomationWorkflowsRow, "organization_id" | "name">;
+      automation_triggers: TableShape<AutomationTriggersRow, "organization_id" | "workflow_id" | "trigger_type">;
+      automation_conditions: TableShape<AutomationConditionsRow, "organization_id" | "workflow_id" | "condition_type">;
+      automation_steps: TableShape<AutomationStepsRow, "organization_id" | "workflow_id" | "action_type">;
+      automation_runs: TableShape<AutomationRunsRow, "organization_id" | "workflow_id">;
+      automation_run_logs: TableShape<AutomationRunLogsRow, "organization_id" | "run_id" | "message">;
+      automation_actions: TableShape<AutomationActionsRow, "organization_id" | "run_id" | "action_type" | "title">;
+      automation_templates: TableShape<AutomationTemplatesRow, "template_key" | "name" | "trigger_type">;
+      automation_recommendations: TableShape<AutomationRecommendationsRow, "organization_id" | "title">;
     };
     Views: { [_ in never]: never };
     Functions: {

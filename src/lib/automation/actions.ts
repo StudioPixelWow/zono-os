@@ -1,0 +1,49 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import {
+  createWorkflowFromTemplate, setWorkflowEnabled, runWorkflow,
+  approveRun, rejectRun, reverseRun, getRunActions, getRunLogs,
+  type ActionSummary,
+} from "./service";
+import type { RunEntity, TriggerContext } from "./engine";
+
+export interface AutomationActionState { ok?: boolean; error?: string; message?: string; runId?: string }
+
+function revalidate() {
+  try { revalidatePath("/automation"); revalidatePath("/"); } catch { /* noop */ }
+}
+
+export async function createWorkflowFromTemplateAction(templateKey: string): Promise<AutomationActionState> {
+  try { await createWorkflowFromTemplate(templateKey); revalidate(); return { ok: true, message: "התהליך נוצר — בדוק, הפעל והרץ" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "יצירת התהליך נכשלה" }; }
+}
+
+export async function setWorkflowEnabledAction(workflowId: string, enabled: boolean): Promise<AutomationActionState> {
+  try { await setWorkflowEnabled(workflowId, enabled); revalidate(); return { ok: true, message: enabled ? "התהליך הופעל" : "התהליך הושהה" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "עדכון התהליך נכשל" }; }
+}
+
+export async function runWorkflowAction(workflowId: string, entity?: RunEntity, facts?: TriggerContext): Promise<AutomationActionState> {
+  try { const r = await runWorkflow(workflowId, entity, facts); revalidate(); return { ok: true, runId: r.runId, message: r.status === "blocked" ? "הריצה נחסמה — תנאים לא התקיימו" : "הריצה הוכנה וממתינה לאישור" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "הרצת התהליך נכשלה" }; }
+}
+
+export async function approveRunAction(runId: string): Promise<AutomationActionState> {
+  try { const r = await approveRun(runId); revalidate(); return { ok: true, message: `אושר — ${r.applied} פעולות הוחלו (${r.opportunities} הזדמנויות)` }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "אישור הריצה נכשל" }; }
+}
+
+export async function rejectRunAction(runId: string): Promise<AutomationActionState> {
+  try { await rejectRun(runId); revalidate(); return { ok: true, message: "הריצה נדחתה" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "דחיית הריצה נכשלה" }; }
+}
+
+export async function reverseRunAction(runId: string): Promise<AutomationActionState> {
+  try { const r = await reverseRun(runId); revalidate(); return { ok: true, message: `הריצה בוטלה — ${r.reversed} פעולות הוסרו` }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "ביטול הריצה נכשל" }; }
+}
+
+export async function getRunDetailAction(runId: string): Promise<{ actions: ActionSummary[]; logs: { level: string; message: string; created_at: string; step_action_type: string | null }[] }> {
+  const [actions, logs] = await Promise.all([getRunActions(runId), getRunLogs(runId)]);
+  return { actions, logs };
+}
