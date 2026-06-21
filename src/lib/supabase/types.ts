@@ -3076,6 +3076,142 @@ type NeighborhoodEnrichmentCitiesRow = {
   updated_at: string;
 };
 
+// ── Recommendation Intelligence OS ──────────────────────────────────────────
+type RecommendationProfilesRow = {
+  id: string;
+  organization_id: string;
+  entity_type: string;
+  entity_id: string;
+  recommendation_health_score: number;
+  recommendation_readiness_score: number;
+  recommendation_confidence_score: number;
+  open_recommendations_count: number;
+  high_priority_recommendations_count: number;
+  accepted_recommendations_count: number;
+  rejected_recommendations_count: number;
+  converted_recommendations_count: number;
+  last_generated_at: string | null;
+  summary_hebrew: string | null;
+  next_best_recommendation_id: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type RecommendationsRow = {
+  id: string;
+  organization_id: string;
+  source_entity_type: string;
+  source_entity_id: string;
+  target_entity_type: string;
+  target_entity_id: string | null;
+  recommendation_type: string;
+  title_hebrew: string;
+  description_hebrew: string | null;
+  reason_hebrew: string | null;
+  next_best_action_hebrew: string | null;
+  recommendation_score: number;
+  confidence_score: number;
+  urgency_score: number;
+  impact_score: number;
+  expected_revenue: number;
+  expected_commission: number;
+  expected_conversion_lift: number;
+  expected_days_to_value: number | null;
+  evidence: Json;
+  supporting_transactions: Json;
+  supporting_properties: Json;
+  supporting_buyers: Json;
+  supporting_sellers: Json;
+  supporting_deals: Json;
+  supporting_geo: Json;
+  supporting_market: Json;
+  status: string;
+  review_status: string;
+  assigned_user_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  converted_at: string | null;
+  expires_at: string | null;
+  generated_by: string;
+  generation_reason: string | null;
+  source_confidence: string;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type RecommendationPackagesRow = {
+  id: string;
+  organization_id: string;
+  package_type: string;
+  entity_type: string;
+  entity_id: string;
+  title_hebrew: string | null;
+  summary_hebrew: string | null;
+  sections: Json;
+  recommendation_ids: string[];
+  included_properties: Json;
+  included_transactions: Json;
+  included_market_insights: Json;
+  included_actions: Json;
+  confidence_score: number;
+  package_score: number;
+  status: string;
+  created_by: string | null;
+  approved_by: string | null;
+  sent_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type RecommendationEventsRow = {
+  id: string;
+  organization_id: string;
+  recommendation_id: string | null;
+  event_type: string;
+  actor_user_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  notes: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+type RecommendationFeedbackRow = {
+  id: string;
+  organization_id: string;
+  recommendation_id: string | null;
+  user_id: string | null;
+  feedback_type: string | null;
+  rating: number | null;
+  notes: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+type RecommendationMapPointsRow = {
+  id: string;
+  organization_id: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  lat: number | null;
+  lng: number | null;
+  city_name: string | null;
+  neighborhood_name: string | null;
+  street: string | null;
+  score: number;
+  recommendation_count: number;
+  opportunity_score: number;
+  demand_score: number;
+  supply_score: number;
+  confidence_score: number;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -3530,6 +3666,30 @@ export interface Database {
       notification_state: TableShape<NotificationStateRow, "user_id" | "item_key">;
       neighborhoods: TableShape<NeighborhoodsRow, "city_code" | "city_name" | "neighborhood_name">;
       neighborhood_enrichment_cities: TableShape<NeighborhoodEnrichmentCitiesRow, "city_code" | "city_name">;
+      recommendation_profiles: TableShape<
+        RecommendationProfilesRow,
+        "organization_id" | "entity_type" | "entity_id"
+      >;
+      recommendations: TableShape<
+        RecommendationsRow,
+        "organization_id" | "source_entity_type" | "source_entity_id" | "target_entity_type" | "recommendation_type" | "title_hebrew"
+      >;
+      recommendation_packages: TableShape<
+        RecommendationPackagesRow,
+        "organization_id" | "package_type" | "entity_type" | "entity_id"
+      >;
+      recommendation_events: TableShape<
+        RecommendationEventsRow,
+        "organization_id" | "event_type"
+      >;
+      recommendation_feedback: TableShape<
+        RecommendationFeedbackRow,
+        "organization_id"
+      >;
+      recommendation_map_points: TableShape<
+        RecommendationMapPointsRow,
+        "organization_id"
+      >;
     };
     Views: { [_ in never]: never };
     Functions: {
