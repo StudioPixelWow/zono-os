@@ -701,3 +701,36 @@ export async function expireStaleRecommendations() {
   }
   return { expired: ids.length };
 }
+
+// ── Org-wide recompute (so the command center is populated end-to-end) ────────
+/**
+ * Generate recommendations across the org's active buyers, sellers and
+ * properties (capped per entity to stay within serverless limits), then expire
+ * stale ones and refresh the map. Best-effort per entity — one failure never
+ * stops the run. Returns counts. Manager+ typically triggers this.
+ */
+export async function recomputeAllRecommendations(perEntityCap = 40) {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  const [buyersR, sellersR, propsR] = await Promise.all([
+    supabase.from("buyers").select("id").eq("org_id", orgId).limit(perEntityCap),
+    supabase.from("sellers").select("id").eq("org_id", orgId).limit(perEntityCap),
+    supabase.from("properties").select("id").eq("org_id", orgId).in("status", ["active", "published", "under_offer"]).limit(perEntityCap),
+  ]);
+  const buyerIds = ((buyersR.data ?? []) as { id: string }[]).map((r) => r.id);
+  const sellerIds = ((sellersR.data ?? []) as { id: string }[]).map((r) => r.id);
+  const propertyIds = ((propsR.data ?? []) as { id: string }[]).map((r) => r.id);
+
+  let created = 0; let entities = 0;
+  const safe = async (fn: () => Promise<{ created: number }>) => {
+    try { const r = await fn(); created += r.created; entities++; } catch { /* skip failed entity */ }
+  };
+  for (const id of buyerIds) await safe(() => generateBuyerRecommendations(id));
+  for (const id of sellerIds) await safe(() => generateSellerRecommendations(id));
+  for (const id of propertyIds) await safe(() => generatePropertyRecommendations(id));
+
+  let expired = 0;
+  try { expired = (await expireStaleRecommendations()).expired; } catch { /* best-effort */ }
+  try { await generateRecommendationMapPoints(); } catch { /* best-effort */ }
+  return { created, entities, buyers: buyerIds.length, sellers: sellerIds.length, properties: propertyIds.length, expired };
+}

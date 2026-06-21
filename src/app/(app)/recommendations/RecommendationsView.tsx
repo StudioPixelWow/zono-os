@@ -10,6 +10,7 @@ import type { RecommendationCommandCenter, RecommendationView } from "@/lib/reco
 import {
   approveRecommendationAction, rejectRecommendationAction, markRecommendationConvertedAction,
   createTaskFromRecommendationAction, generateRecommendationMapPointsAction, expireStaleRecommendationsAction,
+  recomputeAllRecommendationsAction,
 } from "@/lib/recommendations/actions";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -54,6 +55,7 @@ export function RecommendationsView({ cc }: { cc: RecommendationCommandCenter })
           <p className="text-muted mt-1 text-sm">המלצות מוסברות, מגובות-ראיות, לכל הישויות. כל ההמלצות לבדיקה בלבד — שום דבר לא נשלח אוטומטית.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button loading={pending && busyId === "all"} onClick={() => act("all", recomputeAllRecommendationsAction)} leadingIcon={<Icon name="Sparkles" size={16} />}>צור המלצות</Button>
           <Link href="/recommendations/map" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="Map" size={15} />מפת המלצות</Link>
           <Button size="sm" variant="secondary" loading={pending && busyId === "map"} onClick={() => act("map", generateRecommendationMapPointsAction)}>רענן מפה</Button>
           <Button size="sm" variant="secondary" loading={pending && busyId === "expire"} onClick={() => act("expire", expireStaleRecommendationsAction)}>פוג ישנות</Button>
@@ -167,7 +169,7 @@ function RecCard({ r, busy, onApprove, onReject, onConvert, onTask }: {
   );
 }
 
-function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function Section({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
   return (
     <div className="bg-card border-line rounded-[20px] border p-4">
       <p className="text-ink mb-3 flex items-center gap-1.5 text-sm font-extrabold"><Icon name={icon} size={16} className="text-brand" />{title}</p>

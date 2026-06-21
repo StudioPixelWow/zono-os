@@ -6,6 +6,7 @@ import {
   generateLeadRecommendations, generateAcquisitionRecommendations, generateDealRecommendations,
   buildRecommendationPackage, generateRecommendationMapPoints, reviewRecommendation,
   markRecommendationConverted, createTaskFromRecommendation, expireStaleRecommendations,
+  recomputeAllRecommendations,
 } from "./service";
 
 export interface RecActionState { ok?: boolean; error?: string; message?: string }
@@ -58,3 +59,8 @@ export const createTaskFromRecommendationAction = (id: string) =>
   run(() => createTaskFromRecommendation(id), () => "נוצרה משימה מההמלצה");
 export const expireStaleRecommendationsAction = () =>
   run(() => expireStaleRecommendations(), (r) => `${(r as { expired: number }).expired} המלצות פגו`);
+export const recomputeAllRecommendationsAction = () =>
+  run(() => recomputeAllRecommendations(), (r) => {
+    const x = r as { created: number; entities: number };
+    return `נוצרו ${x.created} המלצות מ-${x.entities} ישויות`;
+  });
