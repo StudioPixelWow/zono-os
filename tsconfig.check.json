@@ -1,8 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "noEmit": true },
-  "include": [
-    "src/components/dashboard/DemoBadge.tsx",
-    "src/components/dashboard/sections/HeroSection.tsx"
-  ]
+  "include": ["src/components/dashboard/Sidebar.tsx"]
 }
