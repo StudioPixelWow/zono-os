@@ -33,9 +33,18 @@ import {
   generateOutputsAction, favoriteOutputAction, approveOutputAction, rejectOutputAction, duplicateOutputAction, regenerateOutputAction,
 } from "@/lib/creative-studio/output-actions";
 import { OUTPUT_TYPE_LABELS } from "@/lib/creative-studio/production-engine";
+import {
+  generateVisualAction, variationVisualAction, approveVisualAction, rejectVisualAction, favoriteVisualAction,
+} from "@/lib/creative-studio/visual-actions";
+import { VISUAL_TYPE_LABELS, VARIATION_MODES } from "@/lib/creative-studio/visual-dna";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
 
-type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string };
+type Visual = Record<string, unknown> & {
+  id: string; visual_type: string; provider: string; image_url: string | null; generation_reason: string | null; overall_score: number;
+  brand_match_score: number; realism_score: number; property_relevance_score: number; marketing_relevance_score: number; conversion_score: number; status: string; is_approved: boolean; is_rejected: boolean; is_favorite: boolean;
+};
+
+type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
 type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[] };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
@@ -75,13 +84,14 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; orgId: string; userId: string }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
   const creativeAssets = (creativeAssetsRaw ?? []) as unknown as CreativeAsset[];
   const copyAssets = (copyAssetsRaw ?? []) as unknown as Copy[];
   const creativeOutputs = (creativeOutputsRaw ?? []) as unknown as Output[];
+  const visuals = (visualsRaw ?? []) as unknown as Visual[];
   const router = useRouter();
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
@@ -185,6 +195,9 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
 
       {/* CREATIVE PRODUCTION ENGINE — Phase 7 */}
       <OutputsSection outputs={creativeOutputs} assets={creativeAssets} et={et} eid={eid} r={r} wrap={wrap} />
+
+      {/* AI VISUAL GENERATION — Phase 8 */}
+      <VisualsSection visuals={visuals} outputs={creativeOutputs} et={et} eid={eid} r={r} wrap={wrap} />
 
       {/* SECTION 7 — GENERATOR PLACEHOLDER */}
       <section className="bg-brand-soft/30 border-line rounded-2xl border border-dashed p-6 text-center">
@@ -708,7 +721,9 @@ function CreativePreview({ data, scale = 1 }: { data: RenderData; scale?: number
       case "property_features": case "project_details": case "investment_block": return <div key={key} style={{ display: "flex", flexWrap: "wrap", gap: 4 * scale }}>{(b.items ?? []).map((it, j) => <span key={j} style={{ background: "rgba(255,255,255,0.12)", color: p.text, fontSize: 11 * scale, fontWeight: 700, padding: `${3 * scale}px ${8 * scale}px`, borderRadius: 6 }}>{it}</span>)}</div>;
       case "agent_card": case "developer_block": case "testimonial_block": return <div key={key} style={{ color: p.text, fontSize: 12 * scale, fontWeight: 700, opacity: 0.9 }}>{b.text}</div>;
       case "logo_slot": return <div key={key} style={{ color: p.text, fontSize: 13 * scale, fontWeight: 900, opacity: 0.85 }}>{b.text}</div>;
-      case "image_placeholder": return <div key={key} style={{ background: "rgba(255,255,255,0.08)", border: `1px dashed ${p.muted}`, borderRadius: 10 * scale, color: p.muted, fontSize: 10 * scale, display: "grid", placeItems: "center", minHeight: 60 * scale, flex: "0 0 auto" }}>🖼 {b.text}</div>;
+      case "image_placeholder": return b.imageUrl
+        ? <img key={key} src={b.imageUrl} alt="" style={{ width: "100%", borderRadius: 10 * scale, objectFit: "cover", maxHeight: 180 * scale }} />
+        : <div key={key} style={{ background: "rgba(255,255,255,0.08)", border: `1px dashed ${p.muted}`, borderRadius: 10 * scale, color: p.muted, fontSize: 10 * scale, display: "grid", placeItems: "center", minHeight: 60 * scale, flex: "0 0 auto" }}>🖼 {b.text}</div>;
       default: return null;
     }
   };
@@ -790,6 +805,65 @@ function OutputDrawer({ o, onClose }: { o: Output; onClose: () => void }) {
         </div>
         <p className="text-muted mt-3 text-[12px]">קריאייטיב ערוך מובנה — נשמר כאובייקט render ולא כתמונה. בשלב הוויזואלי הבא ZONO יזריק תמונות אמיתיות למקומות המסומנים.</p>
       </div>
+    </div>
+  );
+}
+
+function VisualsSection({ visuals, outputs, et, eid, r, wrap }: { visuals: Visual[]; outputs: Output[]; et: string; eid: string; r: Runner; wrap: Wrap }) {
+  const [outputId, setOutputId] = useState(outputs[0]?.id ?? "");
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">ויזואלים</h2>
+          <p className="text-muted text-[12px]">ZONO מייצר תמונות שיווק אוטומטית מתוך ה-DNA הוויזואלי, הקמפיין והנכס. ויזואל מאושר מוזרק אוטומטית לקריאייטיב. ללא כתיבת פרומפטים — הכל מאחורי הקלעים.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <select value={outputId} onChange={(e) => setOutputId(e.target.value)} className="border-line bg-surface text-ink h-9 max-w-[220px] rounded-lg border px-2 text-sm">
+            <option value="">בחר קריאייטיב</option>
+            {outputs.map((o) => <option key={o.id} value={o.id}>{(OUTPUT_TYPE_LABELS[o.output_type] ?? o.output_type)} · {o.title}</option>)}
+          </select>
+          <Button size="sm" loading={r.busyId === "gen-visual"} disabled={!outputId} onClick={() => wrap(() => generateVisualAction({ creativeOutputId: outputId, entityType: et, entityId: eid }), "gen-visual", "ZONO מייצר ויזואל...")}>
+            <Icon name="Sparkles" size={14} />צור ויזואל
+          </Button>
+        </div>
+      </div>
+      {visuals.length === 0 ? (
+        <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין ויזואלים עדיין — בחר קריאייטיב ולחץ ״צור ויזואל״.</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {visuals.map((v) => <VisualCard key={v.id} v={v} et={et} eid={eid} wrap={wrap} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function VisualCard({ v, et, eid, wrap }: { v: Visual; et: string; eid: string; wrap: Wrap }) {
+  const [showVar, setShowVar] = useState(false);
+  return (
+    <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${v.is_approved ? "ring-1 ring-success" : v.is_rejected ? "opacity-60" : ""}`}>
+      {v.image_url
+        ? <img src={v.image_url} alt={v.visual_type} className="aspect-square w-full rounded-xl object-cover" />
+        : <div className="bg-surface text-muted grid aspect-square w-full place-items-center rounded-xl text-[11px]">אין תצוגה</div>}
+      <div className="flex items-center justify-between gap-1 px-0.5">
+        <span className="text-muted text-[10px] font-bold">{VISUAL_TYPE_LABELS[v.visual_type] ?? v.visual_type}</span>
+        <span className="text-success text-sm font-black">{v.overall_score}</span>
+      </div>
+      <span className="text-muted text-[9px] font-bold">{v.provider === "mock" ? "הדגמה" : v.provider}</span>
+      <div className="border-line flex flex-wrap gap-1.5 border-t pt-2 text-[10px]">
+        <button onClick={() => wrap(() => approveVisualAction({ visualId: v.id, entityType: et, entityId: eid }), `va-${v.id}`)} className={`font-bold ${v.is_approved ? "text-success" : "text-muted"}`}><Icon name="UserCheck" size={12} /> אשר</button>
+        <button onClick={() => wrap(() => rejectVisualAction({ visualId: v.id, entityType: et, entityId: eid }), `vr-${v.id}`)} className="text-danger font-bold">דחה</button>
+        <button onClick={() => wrap(() => favoriteVisualAction({ visualId: v.id, value: !v.is_favorite, entityType: et, entityId: eid }), `vf-${v.id}`)} className={`font-bold ${v.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={12} /></button>
+        <button onClick={() => setShowVar(!showVar)} className="text-brand-strong font-bold">וריאציות</button>
+      </div>
+      {showVar && (
+        <div className="border-line flex flex-wrap gap-1 border-t pt-2">
+          {VARIATION_MODES.slice(0, 6).map((m) => (
+            <button key={m.key} onClick={() => wrap(() => variationVisualAction({ visualId: v.id, mode: m.key, entityType: et, entityId: eid }), `vv-${v.id}-${m.key}`)} className="bg-surface text-ink rounded-full px-2 py-0.5 text-[10px] font-bold">{m.label}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

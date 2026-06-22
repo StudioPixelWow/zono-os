@@ -1,0 +1,20 @@
+insert into storage.buckets (id, name, public)
+values ('generated-zono-visuals', 'generated-zono-visuals', true)
+on conflict (id) do nothing;
+
+create policy "generated_zono_visuals_read"
+on storage.objects for select to authenticated
+using (bucket_id = 'generated-zono-visuals');
+
+create policy "generated_zono_visuals_insert"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'generated-zono-visuals');
+
+create policy "generated_zono_visuals_update"
+on storage.objects for update to authenticated
+using (bucket_id = 'generated-zono-visuals')
+with check (bucket_id = 'generated-zono-visuals');
+
+create policy "generated_zono_visuals_delete"
+on storage.objects for delete to authenticated
+using (bucket_id = 'generated-zono-visuals');
