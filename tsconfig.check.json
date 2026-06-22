@@ -1,2 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/app/(app)/creative-studio/CreativeStudioView.tsx"] }
+  "include": ["src/lib/creative-studio/master-prompt.ts", "src/lib/creative-studio/quick-creative-service.ts"] }

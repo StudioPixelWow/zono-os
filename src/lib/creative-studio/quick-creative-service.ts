@@ -12,6 +12,7 @@ import { isUuid } from "@/lib/utils";
 import type { Json } from "@/lib/supabase/types";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
+import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
 import { validateCreative } from "./creative-director/validation";
 import { getEffectiveBrand } from "@/lib/brand-identity/service";
 
@@ -23,7 +24,7 @@ function providedFeatures(i: QuickInput): string[] {
   return f;
 }
 /** Run every variation through the proven Creative Director framework + validation. */
-function directorFields(type: QuickType, input: QuickInput, brand: BrandSnapshot, v: QuickVar): Record<string, unknown> {
+function directorFields(type: QuickType, input: QuickInput, brand: BrandSnapshot, v: QuickVar, idx = 0): Record<string, unknown> {
   const dir = buildCreativeDirection({
     companyName: brand.officeName || brand.agentName || "ZONO", primaryColor: brand.colors[0] || "#0F3D2E", textColor: brand.colors[1] || "#FFFFFF",
     format: v.render.format, headline: v.headline, subheadline: v.subheadline, lines: (v.body || "").split(/\n+/).filter(Boolean).slice(0, 3), trust: input.address ?? undefined, cta: v.cta,
@@ -31,8 +32,15 @@ function directorFields(type: QuickType, input: QuickInput, brand: BrandSnapshot
     city: input.city ?? null, neighborhood: input.neighborhood ?? null, providedFeatures: providedFeatures(input),
   });
   const val = validateCreative({ direction: dir, headline: v.headline, copy: v.body, cta: v.cta, providedFeatures: providedFeatures(input), hasPropertyImage: Boolean(input.propertyImage), brandColors: brand.colors });
+  // Strong, brand-aware Nano-Banana master prompt — each of the 4 variations
+  // gets a distinct strategic style (#P3-6/8/9).
+  const master = buildMasterCreativePrompt({
+    style: VARIATION_STYLES[idx % VARIATION_STYLES.length], brand, headline: v.headline, subheadline: v.subheadline,
+    bodyLines: (v.body || "").split(/\n+/).filter(Boolean), cta: v.cta, format: v.render.format,
+    facts: providedFeatures(input), hasPropertyImage: Boolean(input.propertyImage), city: input.city ?? null, neighborhood: input.neighborhood ?? null,
+  });
   return {
-    internal_prompt: dir.internalPrompt, creative_strategy: dir.strategy, visual_hook: dir.visualHook, scroll_stop_reason: dir.scrollStopReason,
+    internal_prompt: master.nanoBananaPrompt, creative_strategy: master.styleLabel, visual_hook: master.visualDirection, scroll_stop_reason: dir.scrollStopReason,
     creative_director_metadata: { layout: dir.layoutRecommendation, typography: dir.typographyRecommendation, blacklistHits: val.blacklistHits, fakeRealEstateHits: val.fakeRealEstateHits, passed: val.passed, notes: val.notes } as unknown,
     scroll_stop_score: val.scrollStopScore, creative_director_score: val.creativeDirectorScore, anti_ai_score: val.antiAiScore, rtl_readability_score: val.rtlReadabilityScore,
   };
