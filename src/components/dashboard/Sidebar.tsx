@@ -59,7 +59,7 @@ const NAV_GROUPS: NavGroup[] = [
   ]},
   { key: "marketing", label: "שיווק", icon: "Megaphone", items: [
     { id: "marketing", label: "מודיעין שיווק", icon: "Megaphone" },
-    { id: "creative-studio", label: "סטודיו שיווק", icon: "Presentation" },
+    { id: "creative-studio", label: "ZONO קריאייטיב", icon: "Presentation" },
     { id: "communities", label: "קהילות", icon: "Users" },
     { id: "distribution", label: "הפצה יומית", icon: "Send" },
     { id: "social-leads", label: "לידים חברתיים", icon: "MessageCircle" },

@@ -127,7 +127,7 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
             <h1 className="text-ink text-2xl font-black">{studio.entityName}</h1>
             <span className="bg-surface text-muted rounded-full px-2 py-0.5 text-[11px] font-bold">{ENTITY_LABELS[et] ?? et}</span>
           </div>
-          <p className="text-muted text-sm">סטודיו שיווק נדל״ן — כל החומרים, הסגנון וה-DNA השיווקי במקום אחד.</p>
+          <p className="text-muted text-sm">ZONO קריאייטיב — כל החומרים, הסגנון וה-DNA השיווקי במקום אחד.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={() => setUploadOpen(true)}><Icon name="Plus" size={14} />העלאת חומרים</Button>

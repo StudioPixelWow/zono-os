@@ -152,4 +152,24 @@ export async function listStudioEntities(): Promise<StudioEntityRef[]> {
   return refs.sort((a, b) => b.assetCount - a.assetCount);
 }
 
+/** Selectable entities for the ZONO Creative launcher — real rows with UUIDs,
+ *  so the user picks from a dropdown instead of typing a raw id (#P2-5/#P2-8). */
+export interface SelectableEntity { id: string; name: string }
+export async function listSelectableEntities(): Promise<Record<string, SelectableEntity[]>> {
+  const { orgId, supabase } = await ctx();
+  const [agents, properties, projects, org] = await Promise.all([
+    supabase.from("users").select("id,full_name").eq("org_id", orgId).neq("status", "disabled").order("full_name").limit(200),
+    supabase.from("properties").select("id,title,city").eq("org_id", orgId).neq("status", "archived").order("created_at", { ascending: false }).limit(200),
+    supabase.from("projects").select("id,name").eq("org_id", orgId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("organizations").select("id,name").eq("id", orgId).maybeSingle(),
+  ]);
+  const o = org.data as { id: string; name: string } | null;
+  return {
+    agent: ((agents.data ?? []) as { id: string; full_name: string }[]).map((a) => ({ id: a.id, name: a.full_name })),
+    property: ((properties.data ?? []) as { id: string; title: string; city: string | null }[]).map((p) => ({ id: p.id, name: p.city ? `${p.title} · ${p.city}` : p.title })),
+    project: ((projects.data ?? []) as { id: string; name: string }[]).map((p) => ({ id: p.id, name: p.name })),
+    office: o ? [{ id: o.id, name: o.name }] : [],
+  };
+}
+
 export type { Json };

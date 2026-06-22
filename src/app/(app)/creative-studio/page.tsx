@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
-import { listStudioEntities, type StudioEntityRef } from "@/lib/creative-studio/service";
+import { listStudioEntities, listSelectableEntities, type StudioEntityRef, type SelectableEntity } from "@/lib/creative-studio/service";
 import { ENTITY_LABELS, ENTITY_ICONS } from "@/lib/creative-studio/engine";
 import { StudioLauncher } from "./StudioLauncher";
 
@@ -8,19 +8,21 @@ export const dynamic = "force-dynamic";
 
 export default async function CreativeStudioLauncherPage() {
   let entities: StudioEntityRef[] = [];
+  let selectable: Record<string, SelectableEntity[]> = {};
   try { entities = await listStudioEntities(); } catch (e) { console.error("[creative-studio] launcher failed:", e); }
+  try { selectable = await listSelectableEntities(); } catch (e) { console.error("[creative-studio] selectable failed:", e); }
 
   return (
     <main dir="rtl" className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6">
       <header className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <span className="bg-brand text-white grid h-9 w-9 place-items-center rounded-xl"><Icon name="Presentation" size={18} /></span>
-          <h1 className="text-ink text-2xl font-black">סטודיו שיווק נדל״ן</h1>
+          <h1 className="text-ink text-2xl font-black">ZONO קריאייטיב</h1>
         </div>
         <p className="text-muted text-sm">כל החומרים, הסגנון וה-DNA השיווקי של הסוכן, הנכס או הפרויקט — במקום אחד.</p>
       </header>
 
-      <StudioLauncher />
+      <StudioLauncher entities={selectable} />
 
       <section className="flex flex-col gap-2">
         <h2 className="text-ink text-sm font-black">סטודיואים פעילים</h2>

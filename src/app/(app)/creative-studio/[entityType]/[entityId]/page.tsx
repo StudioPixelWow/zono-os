@@ -6,14 +6,28 @@ import { listEntityCopy, type CopyRow } from "@/lib/creative-studio/copy-service
 import { listEntityOutputs, type OutputRow } from "@/lib/creative-studio/output-service";
 import { listEntityVisuals, type VisualRow } from "@/lib/creative-studio/visual-service";
 import { listQuickOutputs, type QuickOutputRow } from "@/lib/creative-studio/quick-creative-service";
+import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { isUuid } from "@/lib/utils";
 import { CreativeStudioView } from "../../CreativeStudioView";
 
 export const dynamic = "force-dynamic";
 
 export default async function CreativeStudioEntityPage({ params }: { params: Promise<{ entityType: string; entityId: string }> }) {
-  const { entityType, entityId } = await params;
+  const { entityType, entityId: rawEntityId } = await params;
+  const entityId = decodeURIComponent(rawEntityId);
+
+  // Guard: never run uuid queries with a human-readable name/slug (#P2-8).
+  if (!isUuid(entityId)) {
+    return (
+      <main dir="rtl" className="mx-auto w-full max-w-3xl px-4 py-10 text-center">
+        <h1 className="text-ink text-xl font-black">בחירת ישות לא תקינה</h1>
+        <p className="text-muted mt-2 text-sm">פתיחת קריאייטיב לישות מתבצעת מהבחירה ב-ZONO קריאייטיב — לא דרך הקלדת מזהה.</p>
+        <Link href="/creative" className="text-brand-strong mt-4 inline-block text-sm font-bold">← חזרה ל-ZONO קריאייטיב</Link>
+      </main>
+    );
+  }
   let studio: CreativeStudio | null = null;
   let concepts: ConceptRow[] = [];
   let campaigns: CampaignListItem[] = [];

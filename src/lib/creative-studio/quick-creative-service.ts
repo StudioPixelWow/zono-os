@@ -8,6 +8,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { isUuid } from "@/lib/utils";
 import type { Json } from "@/lib/supabase/types";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
@@ -51,8 +52,10 @@ export interface BrandResolved { snapshot: BrandSnapshot; warnings: string[]; ag
 export async function resolveBrandSnapshot(opts: { entityType?: string; entityId?: string; agentId?: string | null }): Promise<BrandResolved> {
   const { orgId, userId, supabase } = await ctx();
   let warnings: string[] = [];
-  // agent = explicit agent entity, else the current user
-  const agentId = opts.entityType === "agent" ? (opts.entityId ?? null) : (opts.agentId ?? userId);
+  // agent = explicit agent entity (only if a real UUID), else the current user.
+  // Guards against URL-encoded names/slugs reaching uuid columns (#P2-8).
+  const safeEntityId = isUuid(opts.entityId) ? opts.entityId : undefined;
+  const agentId = opts.entityType === "agent" && safeEntityId ? safeEntityId : (opts.agentId ?? userId);
   let agentName: string | null = null; let agentPhoto: string | null = null; let agentWhatsapp: string | null = null;
   try { const { data } = await supabase.from("users").select("full_name,avatar_url,phone").eq("org_id", orgId).eq("id", agentId as string).maybeSingle(); const u = data as { full_name?: string; avatar_url?: string; phone?: string } | null; agentName = u?.full_name ?? null; agentPhoto = u?.avatar_url ?? null; agentWhatsapp = u?.phone ?? null; } catch { /* ignore */ }
   if (!agentPhoto) warnings.push("חסרה תמונת סוכן");
@@ -63,7 +66,7 @@ export async function resolveBrandSnapshot(opts: { entityType?: string; entityId
 
   let colors: string[] = []; let luxury = 50; let modern = 50; let dnaActive = false;
   try {
-    const et = opts.entityType ?? "agent"; const eid = opts.entityId ?? (agentId as string);
+    const et = opts.entityType ?? "agent"; const eid = safeEntityId ?? (agentId as string);
     const { data } = await supabase.from("zono_marketing_dna_profiles").select("primary_colors,accent_colors,luxury_score,modern_score").eq("entity_type", et).eq("entity_id", eid).maybeSingle();
     const d = data as Record<string, unknown> | null;
     if (d) { dnaActive = true; const arr = (v: unknown) => (Array.isArray(v) ? (v as unknown[]).filter((x) => typeof x === "string") as string[] : []); colors = [...arr(d.primary_colors), ...arr(d.accent_colors)].slice(0, 3); luxury = typeof d.luxury_score === "number" ? d.luxury_score as number : 50; modern = typeof d.modern_score === "number" ? d.modern_score as number : 50; }
@@ -95,7 +98,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   if (missing.length) throw new Error(`חסרים שדות חובה: ${missing.join(", ")}`);
 
   const brand = await resolveBrandSnapshot({ entityType: g.entityType, entityId: g.entityId });
-  const propertyId = g.propertyId ?? (g.entityType === "property" ? g.entityId ?? null : null);
+  const propertyId = g.propertyId ?? (g.entityType === "property" && isUuid(g.entityId) ? g.entityId : null);
 
   const { data: reqRow, error: reqErr } = await supabase.from("zono_quick_creative_requests").insert({
     org_id: orgId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
@@ -122,8 +125,8 @@ export async function listQuickOutputs(opts: { entityType?: string; entityId?: s
   const { orgId, supabase } = await ctx();
   let q = supabase.from("zono_quick_creative_outputs").select("*").eq("org_id", orgId).neq("status", "deleted");
   // scope to this entity's creatives where possible
-  if (opts.entityType === "property" && opts.entityId) q = q.eq("property_id", opts.entityId);
-  else if (opts.entityType === "agent" && opts.entityId) q = q.eq("agent_id", opts.entityId);
+  if (opts.entityType === "property" && isUuid(opts.entityId)) q = q.eq("property_id", opts.entityId);
+  else if (opts.entityType === "agent" && isUuid(opts.entityId)) q = q.eq("agent_id", opts.entityId);
   const { data } = await q.order("is_favorite", { ascending: false }).order("created_at", { ascending: false }).limit(60);
   return (data ?? []) as QuickOutputRow[];
 }
