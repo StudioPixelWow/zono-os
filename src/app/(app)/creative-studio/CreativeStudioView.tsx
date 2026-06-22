@@ -38,7 +38,7 @@ import {
 } from "@/lib/creative-studio/visual-actions";
 import { VISUAL_TYPE_LABELS, VARIATION_MODES } from "@/lib/creative-studio/visual-dna";
 import {
-  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction, generateQuickImageAction,
+  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction,
 } from "@/lib/creative-studio/quick-creative-actions";
 import { QUICK_TYPE_LABELS } from "@/lib/creative-studio/quick-creative-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
@@ -923,14 +923,7 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
       {o.image_url
         ? <img src={o.image_url} alt={o.variant_name} className="aspect-[4/5] w-full rounded-xl object-cover" />
-        : <CreativePreview data={o.render_data} scale={0.8} />}
-      <button
-        type="button"
-        onClick={() => wrap(() => generateQuickImageAction({ outputId: o.id, entityType: et, entityId: eid }), `qi-${o.id}`, "מייצר תמונה ב-Nano Banana…")}
-        className="bg-ink text-card inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-bold"
-      >
-        <Icon name="Sparkles" size={12} />{o.image_url ? "צור תמונה מחדש · Nano Banana" : "צור תמונה · Nano Banana"}
-      </button>
+        : <div className="relative"><CreativePreview data={o.render_data} scale={0.8} /><span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">תצוגה · התמונה בהפקה</span></div>}
       <div className="flex items-center justify-between gap-1 px-0.5">
         <span className="text-muted text-[10px] font-bold">{o.variant_name}</span>
         <span className="text-success text-sm font-black">{o.overall_score}</span>

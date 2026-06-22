@@ -13,7 +13,7 @@ import type { Json } from "@/lib/supabase/types";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
 import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
-import { generateNanoBananaImage } from "./visual-providers";
+import { generateNanoBananaImage, nanoBananaConfigured } from "./visual-providers";
 import { validateCreative } from "./creative-director/validation";
 import { getEffectiveBrand } from "@/lib/brand-identity/service";
 
@@ -130,8 +130,20 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
     ...directorFields(g.requestType, g.input, brand.snapshot, v),
   }));
-  await supabase.from("zono_quick_creative_outputs").insert(rows as never);
+  const { data: inserted } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
+  const ids = ((inserted ?? []) as { id: string }[]).map((r) => r.id);
+  // Auto-generate the FINAL image (Gemini Nano Banana) for every variation —
+  // no manual button. Best-effort: if a provider key is missing or a call
+  // fails, the variation is still created (its render shows until an image
+  // exists). We never fabricate a placeholder image.
+  await generateImagesForOutputs(supabase, orgId, ids);
   return { requestId, created: rows.length };
+}
+
+/** Generate the Nano Banana image for many outputs in parallel; never throws. */
+async function generateImagesForOutputs(supabase: DB, orgId: string, outputIds: string[]): Promise<void> {
+  if (!outputIds.length || !nanoBananaConfigured()) return;
+  await Promise.allSettled(outputIds.map((id) => genImageForOutput(supabase, orgId, id)));
 }
 
 export async function listQuickOutputs(opts: { entityType?: string; entityId?: string; propertyId?: string | null }): Promise<QuickOutputRow[]> {
@@ -222,7 +234,9 @@ async function generateQuickCreativeFromRequest(supabase: DB, orgId: string, rq:
     seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
     ...directorFields(rq.request_type as QuickType, input, brandSnap, v),
   }));
-  await supabase.from("zono_quick_creative_outputs").insert(rows as never);
+  const { data: inserted } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
+  const ids = ((inserted ?? []) as { id: string }[]).map((r) => r.id);
+  await generateImagesForOutputs(supabase, orgId, ids);
   return { created: rows.length };
 }
 
@@ -234,6 +248,11 @@ const VISUAL_BUCKET = "generated-zono-visuals";
  */
 export async function generateQuickCreativeImage(outputId: string): Promise<{ imageUrl: string; provider: string }> {
   const { orgId, supabase } = await ctx();
+  return genImageForOutput(supabase, orgId, outputId);
+}
+
+/** Core: generate + upload + persist the Nano Banana image for one output. */
+async function genImageForOutput(supabase: DB, orgId: string, outputId: string): Promise<{ imageUrl: string; provider: string }> {
   const { data: o } = await supabase
     .from("zono_quick_creative_outputs")
     .select("id,internal_prompt,render_data,request_id")
