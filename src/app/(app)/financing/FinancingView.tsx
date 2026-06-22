@@ -8,8 +8,9 @@ import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { saveFinancialProfileAction, recomputeAllFinancingAction } from "@/lib/financing/actions";
 import { RISK_LABELS, BAND_LABELS, RISK_TONE, BAND_TONE } from "@/lib/financing/engine";
 import type { FinancingCommandCenter, BuyerFinancing } from "@/lib/financing/service";
+import { MortgageCalculators } from "./MortgageCalculators";
 
-type Tab = "all" | "ready" | "risks" | "cashgap" | "add";
+type Tab = "all" | "ready" | "risks" | "cashgap" | "add" | "calc";
 const ils = (n: number | null | undefined) => (n != null ? `${Math.round(n).toLocaleString("he-IL")} ₪` : "—");
 
 export function FinancingView({ cc }: { cc: FinancingCommandCenter }) {
@@ -26,6 +27,7 @@ export function FinancingView({ cc }: { cc: FinancingCommandCenter }) {
     { id: "ready", label: "מוכנים לרכישה", icon: "TrendingUp" },
     { id: "risks", label: "סיכוני מימון", icon: "AlertTriangle" },
     { id: "cashgap", label: "פערי מזומן", icon: "Minus" },
+    { id: "calc", label: "מחשבונים", icon: "Calculator" },
     { id: "add", label: "הוסף פרופיל", icon: "Plus" },
   ];
 
@@ -68,7 +70,7 @@ export function FinancingView({ cc }: { cc: FinancingCommandCenter }) {
         ))}
       </nav>
 
-      {tab === "add" ? <AddProfile cc={cc} r={r} /> : (
+      {tab === "calc" ? <MortgageCalculators /> : tab === "add" ? <AddProfile cc={cc} r={r} /> : (
         list.length === 0 ? <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין פרופילים להצגה</div>
           : <div className="flex flex-col gap-2">{list.map((p) => <ProfileCard key={p.buyer_id} p={p} />)}</div>
       )}
