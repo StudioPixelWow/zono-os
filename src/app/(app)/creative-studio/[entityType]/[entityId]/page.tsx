@@ -38,6 +38,7 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
   let visuals: VisualRow[] = [];
   let quickOutputs: QuickOutputRow[] = [];
   let orgId = ""; let userId = ""; let isManager = false;
+  let quickPrefill: Record<string, string | boolean | number> | undefined;
   try {
     const { user, profile } = await getSessionContext();
     orgId = profile?.org_id ?? ""; userId = user?.id ?? "";
@@ -51,6 +52,33 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
     creativeOutputs = await listEntityOutputs(entityType, entityId);
     visuals = await listEntityVisuals(entityType, entityId);
     quickOutputs = await listQuickOutputs({ entityType, entityId });
+    // Prefill the quick-creative wizard from the property so the agent never
+    // retypes address/price/rooms/area/floor/parking/image (#P3-4).
+    if (entityType === "property") {
+      try {
+        const { getPropertyById, getPropertyMedia } = await import("@/lib/properties/repository");
+        const { propertyLocation } = await import("@/lib/properties/labels");
+        const [p, mediaRes] = await Promise.all([getPropertyById(entityId), getPropertyMedia(entityId)]);
+        if (p) {
+          const loc = propertyLocation(p);
+          quickPrefill = {
+            address: [loc.address, p.building_number].filter(Boolean).join(" ") || p.title || "",
+            city: p.city ?? "",
+            neighborhood: p.neighborhood ?? loc.neighborhood ?? "",
+            price: p.price ? String(p.price) : "",
+            rooms: p.rooms != null ? String(p.rooms) : "",
+            sizeSqm: p.size_sqm != null ? String(p.size_sqm) : "",
+            floor: p.floor != null ? String(p.floor) : "",
+            parking: p.parking_count != null ? String(p.parking_count) : "",
+            storage: Boolean(p.has_storage),
+            balcony: Boolean(p.has_balcony),
+            elevator: Boolean(p.has_elevator),
+            importantText: p.marketing_description ?? p.description ?? "",
+            propertyImage: mediaRes.coverUrl ?? "",
+          };
+        }
+      } catch (e) { console.error("[creative-studio] property prefill failed:", e); }
+    }
   } catch (e) { console.error("[creative-studio] load failed:", e); }
 
   if (!studio) {
@@ -61,5 +89,5 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
       </main>
     );
   }
-  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} />;
+  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} quickPrefill={quickPrefill} />;
 }

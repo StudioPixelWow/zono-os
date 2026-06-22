@@ -94,7 +94,7 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, quickOutputs: quickOutputsRaw, isManager = false, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; quickOutputs?: Record<string, unknown>[]; isManager?: boolean; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, quickOutputs: quickOutputsRaw, isManager = false, orgId, userId, quickPrefill }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; quickOutputs?: Record<string, unknown>[]; isManager?: boolean; orgId: string; userId: string; quickPrefill?: Record<string, string | boolean | number> }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
@@ -155,7 +155,7 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
       <ActionFeedback runner={r} />
 
       {/* QUICK CREATIVE TEMPLATES — יצירה מהירה */}
-      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} canViewPrompt={isManager} orgId={orgId} userId={userId} />
+      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} canViewPrompt={isManager} orgId={orgId} userId={userId} prefill={quickPrefill} />
 
       {/* SECTION 2 — ASSETS LIBRARY */}
       <section className="flex flex-col gap-3">
@@ -888,7 +888,7 @@ const QUICK_CARDS: { type: string; title: string; desc: string; cta: string }[] 
   { type: "property_ad_post", title: "פוסט פרסום דירה", desc: "צרו מודעת נכס ממותגת עם תמונה, פרטים וקריאה לפעולה.", cta: "צור פוסט פרסום דירה" },
 ];
 
-function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, userId }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean; orgId: string; userId: string }) {
+function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, userId, prefill }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean; orgId: string; userId: string; prefill?: Record<string, string | boolean | number> }) {
   const [wizardType, setWizardType] = useState<string | null>(null);
   return (
     <section className="flex flex-col gap-3">
@@ -910,7 +910,7 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, us
           </div>
         </div>
       )}
-      {wizardType && <QuickCreativeWizard type={wizardType} et={et} eid={eid} orgId={orgId} userId={userId} onClose={() => setWizardType(null)} />}
+      {wizardType && <QuickCreativeWizard type={wizardType} et={et} eid={eid} orgId={orgId} userId={userId} prefill={prefill} onClose={() => setWizardType(null)} />}
     </section>
   );
 }
@@ -1015,12 +1015,13 @@ function ImageUploadField({ label, value, orgId, userId, et, eid, onChange }: { 
   );
 }
 
-function QuickCreativeWizard({ type, et, eid, orgId, userId, onClose }: { type: string; et: string; eid: string; orgId: string; userId: string; onClose: () => void }) {
+function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }: { type: string; et: string; eid: string; orgId: string; userId: string; prefill?: Record<string, string | boolean | number>; onClose: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [format, setFormat] = useState("feed_4_5");
   const [improve, setImprove] = useState(false);
-  const [f, setF] = useState<Record<string, string | boolean | number>>({});
+  // Prefill from the launching property (#P3-4) so the agent doesn't retype.
+  const [f, setF] = useState<Record<string, string | boolean | number>>(() => ({ ...(prefill ?? {}) }));
   const [brand, setBrand] = useState<{ warnings?: string[]; agentName?: string | null; officeName?: string | null; colors?: string[]; agentPhoto?: string | null; officeLogo?: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

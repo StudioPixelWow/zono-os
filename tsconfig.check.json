@@ -1,2 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/components/property/RealEstatePropertyCard.tsx", "src/app/(app)/properties/PropertiesListView.tsx", "src/app/(app)/creative-studio/CreativeStudioView.tsx"] }
+  "include": ["src/app/(app)/creative-studio/CreativeStudioView.tsx", "src/app/(app)/creative-studio/[entityType]/[entityId]/page.tsx"] }
