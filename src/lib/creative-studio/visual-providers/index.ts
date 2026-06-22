@@ -101,23 +101,15 @@ async function fetchImageInline(url: string): Promise<{ mimeType: string; data: 
   } catch { return null; }
 }
 
-/**
- * Generate a REAL finished ad image via Gemini Nano Banana
- * (gemini-2.5-flash-image-preview). The master prompt drives the design and the
- * property photo (when present) is passed as a visual reference/anchor. Throws
- * when no key — caller surfaces a clear "connect provider" message (no fake image).
- */
-export async function generateNanoBananaImage(prompt: string, referenceImageUrl?: string | null): Promise<NanoBananaResult> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY חסר — חבר ספק תמונות כדי לייצר תמונה סופית");
-  const model = process.env.ZONO_NANO_BANANA_MODEL || "gemini-2.5-flash-image-preview";
+// Candidate image models, tried in order. The GA name is `gemini-2.5-flash-image`
+// (the `-preview` alias was retired); older keys may only expose the 2.0 model.
+function nanoBananaModels(): string[] {
+  const override = process.env.ZONO_NANO_BANANA_MODEL;
+  const defaults = ["gemini-2.5-flash-image", "gemini-2.5-flash-image-preview", "gemini-2.0-flash-preview-image-generation"];
+  return override ? [override, ...defaults.filter((m) => m !== override)] : defaults;
+}
 
-  const parts: Record<string, unknown>[] = [{ text: prompt }];
-  if (referenceImageUrl) {
-    const ref = await fetchImageInline(referenceImageUrl);
-    if (ref) parts.push({ inlineData: ref });
-  }
-
+async function callNanoBananaModel(model: string, key: string, parts: Record<string, unknown>[]): Promise<NanoBananaResult | { notFound: true; status: number; body: string }> {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
     method: "POST", headers: { "content-type": "application/json" },
     // IMAGE generation via generateContent REQUIRES responseModalities, else the
@@ -126,7 +118,9 @@ export async function generateNanoBananaImage(prompt: string, referenceImageUrl?
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Nano Banana failed (${res.status}) ${body.slice(0, 300)}`);
+    // 404 / NOT_FOUND → this model id isn't available on the key; let caller try next.
+    if (res.status === 404) return { notFound: true, status: res.status, body: body.slice(0, 200) };
+    throw new Error(`Nano Banana failed (${res.status}) model=${model} ${body.slice(0, 300)}`);
   }
   const json = await res.json();
   const outParts = json?.candidates?.[0]?.content?.parts ?? [];
@@ -138,7 +132,32 @@ export async function generateNanoBananaImage(prompt: string, referenceImageUrl?
     const txt = outParts.map((p: Record<string, unknown>) => p.text).filter(Boolean).join(" ").slice(0, 200);
     throw new Error(`Nano Banana לא החזיר תמונה (model=${model} finish=${finish}) ${txt}`);
   }
-  return { b64, mime, provider: "nano-banana" };
+  return { b64, mime, provider: `nano-banana:${model}` };
+}
+
+/**
+ * Generate a REAL finished ad image via Gemini Nano Banana. Tries the GA model
+ * first and falls through on 404 to alternates, so it self-heals across API
+ * versions. Throws when no key (caller surfaces a clear message — no fake image).
+ */
+export async function generateNanoBananaImage(prompt: string, referenceImageUrl?: string | null): Promise<NanoBananaResult> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY חסר — חבר ספק תמונות כדי לייצר תמונה סופית");
+
+  const parts: Record<string, unknown>[] = [{ text: prompt }];
+  if (referenceImageUrl) {
+    const ref = await fetchImageInline(referenceImageUrl);
+    if (ref) parts.push({ inlineData: ref });
+  }
+
+  const models = nanoBananaModels();
+  const tried: string[] = [];
+  for (const model of models) {
+    const r = await callNanoBananaModel(model, key, parts);
+    if ("notFound" in r) { tried.push(`${model}(404)`); continue; }
+    return r;
+  }
+  throw new Error(`Nano Banana failed (404) — no available image model. Tried: ${tried.join(", ")}. Set ZONO_NANO_BANANA_MODEL to a model your key supports (ListModels).`);
 }
 
 // ── Provider resolution for the FINAL ad image ─────────────────────────────────
