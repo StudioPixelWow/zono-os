@@ -1,0 +1,20 @@
+insert into storage.buckets (id, name, public)
+values ('zono-marketing-assets', 'zono-marketing-assets', true)
+on conflict (id) do nothing;
+
+create policy "zono_marketing_assets_read"
+on storage.objects for select to authenticated
+using (bucket_id = 'zono-marketing-assets');
+
+create policy "zono_marketing_assets_insert"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'zono-marketing-assets');
+
+create policy "zono_marketing_assets_update"
+on storage.objects for update to authenticated
+using (bucket_id = 'zono-marketing-assets')
+with check (bucket_id = 'zono-marketing-assets');
+
+create policy "zono_marketing_assets_delete"
+on storage.objects for delete to authenticated
+using (bucket_id = 'zono-marketing-assets');

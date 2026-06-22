@@ -30,6 +30,7 @@ const HREFS: Record<string, string> = {
   whatsapp: "/whatsapp",
   communication: "/communication",
   journeys: "/journeys",
+  "creative-studio": "/creative-studio",
   "social-leads": "/social-leads",
   routing: "/routing",
   team: "/team",

@@ -49,6 +49,7 @@ export const navItems: NavItem[] = [
   { id: "whatsapp", label: "WhatsApp OS", icon: "MessageCircle" },
   { id: "communication", label: "מודיעין תקשורת", icon: "Sparkles" },
   { id: "journeys", label: "מודיעין מסעות", icon: "Route" },
+  { id: "creative-studio", label: "סטודיו שיווק", icon: "Presentation" },
   { id: "social-leads", label: "לידים חברתיים", icon: "MessageCircle" },
   { id: "routing", label: "ניתוב לידים", icon: "Route" },
   { id: "team", label: "מודיעין צוות", icon: "UserCheck" },

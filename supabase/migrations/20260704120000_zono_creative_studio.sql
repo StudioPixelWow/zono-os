@@ -1,0 +1,218 @@
+-- ============================================================================
+-- ZONO — Creative Studio + Real Estate Marketing DNA Engine (Phase 1)
+-- ----------------------------------------------------------------------------
+-- Foundation only: assets, marketing DNA, feedback learning, analysis jobs and
+-- briefs. NO ad generation, NO AI calls yet (architecture is AI-ready). Flexible
+-- entity model (entity_type + entity_id) for agent/office/property/project.
+-- org_id added for tenant isolation (ZONO convention). Org-scoped RLS.
+-- Storage bucket + policies are provided separately (storage schema lives
+-- outside these table migrations).
+-- ============================================================================
+
+-- 1) zono_marketing_assets ----------------------------------------------------
+create table public.zono_marketing_assets (
+  id                       uuid primary key default gen_random_uuid(),
+  org_id                   uuid not null references public.organizations(id) on delete cascade,
+  entity_type              text not null,
+  entity_id                uuid not null,
+  uploaded_by              uuid references public.users(id) on delete set null,
+  asset_type               text not null,
+  asset_category           text,
+  title                    text,
+  description              text,
+  file_url                 text not null,
+  file_path                text,
+  file_name                text,
+  file_mime_type           text,
+  file_size                bigint,
+  thumbnail_url            text,
+  source_type              text not null default 'manual_upload',
+  status                   text not null default 'active',
+  is_approved_reference    boolean not null default false,
+  is_rejected_reference    boolean not null default false,
+  is_competitor_reference  boolean not null default false,
+  is_property_photo        boolean not null default false,
+  is_floor_plan            boolean not null default false,
+  is_project_render        boolean not null default false,
+  is_agent_brand_asset     boolean not null default false,
+  tags                     text[] not null default '{}',
+  ai_summary               text,
+  ai_extracted_colors      jsonb not null default '[]'::jsonb,
+  ai_detected_style        jsonb not null default '{}'::jsonb,
+  ai_detected_text         jsonb not null default '{}'::jsonb,
+  ai_real_estate_features  jsonb not null default '{}'::jsonb,
+  ai_visual_features       jsonb not null default '{}'::jsonb,
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now()
+);
+create index zono_assets_org_idx     on public.zono_marketing_assets(org_id);
+create index zono_assets_entity_idx  on public.zono_marketing_assets(entity_type, entity_id);
+create index zono_assets_type_idx    on public.zono_marketing_assets(asset_type);
+create index zono_assets_status_idx  on public.zono_marketing_assets(status);
+
+-- 2) zono_marketing_dna_profiles ----------------------------------------------
+create table public.zono_marketing_dna_profiles (
+  id                            uuid primary key default gen_random_uuid(),
+  org_id                        uuid not null references public.organizations(id) on delete cascade,
+  entity_type                   text not null,
+  entity_id                     uuid not null,
+  profile_status                text not null default 'draft',
+  dna_summary                   text,
+  visual_personality            text,
+  copywriting_tone              text,
+  real_estate_positioning       text,
+  primary_colors                jsonb not null default '[]'::jsonb,
+  secondary_colors              jsonb not null default '[]'::jsonb,
+  accent_colors                 jsonb not null default '[]'::jsonb,
+  forbidden_colors              jsonb not null default '[]'::jsonb,
+  preferred_typography          jsonb not null default '{}'::jsonb,
+  forbidden_typography          jsonb not null default '{}'::jsonb,
+  preferred_layouts             jsonb not null default '[]'::jsonb,
+  rejected_layouts              jsonb not null default '[]'::jsonb,
+  preferred_visual_styles       jsonb not null default '[]'::jsonb,
+  rejected_visual_styles        jsonb not null default '[]'::jsonb,
+  preferred_image_styles        jsonb not null default '[]'::jsonb,
+  rejected_image_styles         jsonb not null default '[]'::jsonb,
+  preferred_campaign_angles     jsonb not null default '[]'::jsonb,
+  rejected_campaign_angles      jsonb not null default '[]'::jsonb,
+  preferred_cta_styles          jsonb not null default '[]'::jsonb,
+  whatsapp_cta_style            jsonb not null default '{}'::jsonb,
+  target_audiences              jsonb not null default '[]'::jsonb,
+  property_marketing_style      jsonb not null default '{}'::jsonb,
+  project_marketing_style       jsonb not null default '{}'::jsonb,
+  agent_marketing_style         jsonb not null default '{}'::jsonb,
+  seller_recruitment_style      jsonb not null default '{}'::jsonb,
+  buyer_recruitment_style       jsonb not null default '{}'::jsonb,
+  neighborhood_storytelling_style jsonb not null default '{}'::jsonb,
+  brand_rules                   jsonb not null default '[]'::jsonb,
+  avoid_rules                   jsonb not null default '[]'::jsonb,
+  luxury_score                  integer not null default 50 check (luxury_score between 0 and 100),
+  urgency_score                 integer not null default 50 check (urgency_score between 0 and 100),
+  modern_score                  integer not null default 50 check (modern_score between 0 and 100),
+  sales_aggressiveness_score    integer not null default 50 check (sales_aggressiveness_score between 0 and 100),
+  investment_focus_score        integer not null default 50 check (investment_focus_score between 0 and 100),
+  lifestyle_focus_score         integer not null default 50 check (lifestyle_focus_score between 0 and 100),
+  seller_focus_score            integer not null default 50 check (seller_focus_score between 0 and 100),
+  buyer_focus_score             integer not null default 50 check (buyer_focus_score between 0 and 100),
+  visual_density_score          integer not null default 50 check (visual_density_score between 0 and 100),
+  ai_generated_score            integer not null default 50 check (ai_generated_score between 0 and 100),
+  approved_patterns             jsonb not null default '[]'::jsonb,
+  rejected_patterns             jsonb not null default '[]'::jsonb,
+  agent_notes                   text,
+  office_notes                  text,
+  seller_notes                  text,
+  zono_notes                    text,
+  ai_confidence_score           integer not null default 0 check (ai_confidence_score between 0 and 100),
+  last_analyzed_at              timestamptz,
+  created_at                    timestamptz not null default now(),
+  updated_at                    timestamptz not null default now(),
+  constraint zono_dna_entity_uniq unique (entity_type, entity_id)
+);
+create index zono_dna_org_idx    on public.zono_marketing_dna_profiles(org_id);
+create index zono_dna_entity_idx on public.zono_marketing_dna_profiles(entity_type, entity_id);
+
+-- 3) zono_marketing_feedback --------------------------------------------------
+create table public.zono_marketing_feedback (
+  id              uuid primary key default gen_random_uuid(),
+  org_id          uuid not null references public.organizations(id) on delete cascade,
+  entity_type     text not null,
+  entity_id       uuid not null,
+  asset_id        uuid references public.zono_marketing_assets(id) on delete set null,
+  feedback_source text not null default 'manual',
+  feedback_type   text not null,
+  feedback_value  text,
+  feedback_note   text,
+  created_by      uuid references public.users(id) on delete set null,
+  created_at      timestamptz not null default now()
+);
+create index zono_feedback_org_idx    on public.zono_marketing_feedback(org_id);
+create index zono_feedback_entity_idx on public.zono_marketing_feedback(entity_type, entity_id);
+
+-- 4) zono_marketing_analysis_jobs ---------------------------------------------
+create table public.zono_marketing_analysis_jobs (
+  id                uuid primary key default gen_random_uuid(),
+  org_id            uuid not null references public.organizations(id) on delete cascade,
+  entity_type       text not null,
+  entity_id         uuid not null,
+  status            text not null default 'pending',
+  job_type          text not null default 'marketing_dna_analysis',
+  input_asset_ids   uuid[] not null default '{}',
+  result_profile_id uuid references public.zono_marketing_dna_profiles(id) on delete set null,
+  error_message     text,
+  started_at        timestamptz,
+  finished_at       timestamptz,
+  created_at        timestamptz not null default now()
+);
+create index zono_jobs_org_idx    on public.zono_marketing_analysis_jobs(org_id);
+create index zono_jobs_entity_idx on public.zono_marketing_analysis_jobs(entity_type, entity_id);
+create index zono_jobs_status_idx on public.zono_marketing_analysis_jobs(status);
+
+-- 5) zono_marketing_briefs ----------------------------------------------------
+create table public.zono_marketing_briefs (
+  id                    uuid primary key default gen_random_uuid(),
+  org_id                uuid not null references public.organizations(id) on delete cascade,
+  entity_type           text not null,
+  entity_id             uuid not null,
+  title                 text not null,
+  objective             text,
+  platform              text,
+  format                text,
+  campaign_type         text,
+  target_audience       text,
+  main_message          text,
+  property_id           uuid references public.properties(id) on delete set null,
+  project_id            uuid references public.projects(id) on delete set null,
+  agent_id              uuid references public.users(id) on delete set null,
+  office_id             uuid references public.organizations(id) on delete set null,
+  full_copy             jsonb not null default '{}'::jsonb,
+  required_assets       jsonb not null default '[]'::jsonb,
+  marketing_constraints jsonb not null default '{}'::jsonb,
+  status                text not null default 'draft',
+  created_by            uuid references public.users(id) on delete set null,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+create index zono_briefs_org_idx    on public.zono_marketing_briefs(org_id);
+create index zono_briefs_entity_idx on public.zono_marketing_briefs(entity_type, entity_id);
+
+-- updated_at triggers ---------------------------------------------------------
+create trigger trg_zono_assets_updated before update on public.zono_marketing_assets for each row execute function public.set_updated_at();
+create trigger trg_zono_dna_updated before update on public.zono_marketing_dna_profiles for each row execute function public.set_updated_at();
+create trigger trg_zono_briefs_updated before update on public.zono_marketing_briefs for each row execute function public.set_updated_at();
+
+-- RLS — org-scoped for all five tables ----------------------------------------
+-- TODO(phase-2): tighten to per-entity visibility (agent sees only own assets)
+-- once entity ACLs are modeled; current policy is org-scoped + authenticated.
+do $$
+declare t text;
+  tbls text[] := array[
+    'zono_marketing_assets','zono_marketing_dna_profiles','zono_marketing_feedback',
+    'zono_marketing_analysis_jobs','zono_marketing_briefs'
+  ];
+begin
+  foreach t in array tbls loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format(
+      'create policy "%1$s_select" on public.%1$I for select to authenticated '
+      || 'using (org_id = public.current_org_id());', t);
+    execute format(
+      'create policy "%1$s_insert" on public.%1$I for insert to authenticated '
+      || 'with check (org_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+    execute format(
+      'create policy "%1$s_update" on public.%1$I for update to authenticated '
+      || 'using (org_id = public.current_org_id() and public.has_min_role(''agent'')) '
+      || 'with check (org_id = public.current_org_id());', t);
+    execute format(
+      'create policy "%1$s_delete" on public.%1$I for delete to authenticated '
+      || 'using (org_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+  end loop;
+end $$;
+
+grant select, insert, update, delete on
+  public.zono_marketing_assets, public.zono_marketing_dna_profiles, public.zono_marketing_feedback,
+  public.zono_marketing_analysis_jobs, public.zono_marketing_briefs
+  to authenticated;
+grant all privileges on
+  public.zono_marketing_assets, public.zono_marketing_dna_profiles, public.zono_marketing_feedback,
+  public.zono_marketing_analysis_jobs, public.zono_marketing_briefs
+  to service_role;

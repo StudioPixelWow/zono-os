@@ -4140,6 +4140,38 @@ type JourneyVelocityRow = {
   id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; velocity_state: string; days_in_stage: number; avg_days_per_stage: number | null; stage_changes_30d: number; computed_at: string;
 };
 
+// ── ZONO Creative Studio + Marketing DNA (org_id convention) ────────────────
+type ZonoMarketingAssetsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; uploaded_by: string | null; asset_type: string; asset_category: string | null;
+  title: string | null; description: string | null; file_url: string; file_path: string | null; file_name: string | null; file_mime_type: string | null; file_size: number | null; thumbnail_url: string | null;
+  source_type: string; status: string; is_approved_reference: boolean; is_rejected_reference: boolean; is_competitor_reference: boolean; is_property_photo: boolean; is_floor_plan: boolean; is_project_render: boolean; is_agent_brand_asset: boolean;
+  tags: string[]; ai_summary: string | null; ai_extracted_colors: Json; ai_detected_style: Json; ai_detected_text: Json; ai_real_estate_features: Json; ai_visual_features: Json; created_at: string; updated_at: string;
+};
+type ZonoMarketingDnaProfilesRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; profile_status: string;
+  dna_summary: string | null; visual_personality: string | null; copywriting_tone: string | null; real_estate_positioning: string | null;
+  primary_colors: Json; secondary_colors: Json; accent_colors: Json; forbidden_colors: Json;
+  preferred_typography: Json; forbidden_typography: Json; preferred_layouts: Json; rejected_layouts: Json;
+  preferred_visual_styles: Json; rejected_visual_styles: Json; preferred_image_styles: Json; rejected_image_styles: Json;
+  preferred_campaign_angles: Json; rejected_campaign_angles: Json; preferred_cta_styles: Json; whatsapp_cta_style: Json; target_audiences: Json;
+  property_marketing_style: Json; project_marketing_style: Json; agent_marketing_style: Json; seller_recruitment_style: Json; buyer_recruitment_style: Json; neighborhood_storytelling_style: Json;
+  brand_rules: Json; avoid_rules: Json;
+  luxury_score: number; urgency_score: number; modern_score: number; sales_aggressiveness_score: number; investment_focus_score: number; lifestyle_focus_score: number; seller_focus_score: number; buyer_focus_score: number; visual_density_score: number; ai_generated_score: number;
+  approved_patterns: Json; rejected_patterns: Json;
+  agent_notes: string | null; office_notes: string | null; seller_notes: string | null; zono_notes: string | null;
+  ai_confidence_score: number; last_analyzed_at: string | null; created_at: string; updated_at: string;
+};
+type ZonoMarketingFeedbackRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; asset_id: string | null; feedback_source: string; feedback_type: string; feedback_value: string | null; feedback_note: string | null; created_by: string | null; created_at: string;
+};
+type ZonoMarketingAnalysisJobsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; status: string; job_type: string; input_asset_ids: string[]; result_profile_id: string | null; error_message: string | null; started_at: string | null; finished_at: string | null; created_at: string;
+};
+type ZonoMarketingBriefsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; title: string; objective: string | null; platform: string | null; format: string | null; campaign_type: string | null; target_audience: string | null; main_message: string | null;
+  property_id: string | null; project_id: string | null; agent_id: string | null; office_id: string | null; full_copy: Json; required_assets: Json; marketing_constraints: Json; status: string; created_by: string | null; created_at: string; updated_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4639,6 +4671,11 @@ export interface Database {
       journey_predictions: TableShape<JourneyPredictionsRow, "org_id" | "entity_type" | "entity_id">;
       journey_blockers: TableShape<JourneyBlockersRow, "org_id" | "entity_type" | "entity_id" | "blocker_type">;
       journey_velocity: TableShape<JourneyVelocityRow, "org_id" | "entity_type" | "entity_id">;
+      zono_marketing_assets: TableShape<ZonoMarketingAssetsRow, "org_id" | "entity_type" | "entity_id" | "asset_type" | "file_url">;
+      zono_marketing_dna_profiles: TableShape<ZonoMarketingDnaProfilesRow, "org_id" | "entity_type" | "entity_id">;
+      zono_marketing_feedback: TableShape<ZonoMarketingFeedbackRow, "org_id" | "entity_type" | "entity_id" | "feedback_type">;
+      zono_marketing_analysis_jobs: TableShape<ZonoMarketingAnalysisJobsRow, "org_id" | "entity_type" | "entity_id">;
+      zono_marketing_briefs: TableShape<ZonoMarketingBriefsRow, "org_id" | "entity_type" | "entity_id" | "title">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
       community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
