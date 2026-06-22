@@ -1,0 +1,180 @@
+// ============================================================================
+// ZONO — Quick Creative Templates · Service (server-only)
+// ----------------------------------------------------------------------------
+// Resolves the brand snapshot (agent photo/phone, office logo/name, DNA colors),
+// generates 4 branded render-object variations per request, scores + persists.
+// Approve/favorite/reject feed the learning loop. RLS-scoped. No invented content.
+// ============================================================================
+import "server-only";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
+import type { Json } from "@/lib/supabase/types";
+import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
+
+async function ctx() {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile) throw new Error("not authenticated");
+  const supabase = await createClient();
+  return { userId: user.id, orgId: profile.org_id, supabase };
+}
+type DB = Awaited<ReturnType<typeof createClient>>;
+export type QuickOutputRow = Record<string, unknown>;
+
+export interface BrandResolved { snapshot: BrandSnapshot; warnings: string[]; agentId: string | null; officeId: string | null }
+
+export async function resolveBrandSnapshot(opts: { entityType?: string; entityId?: string; agentId?: string | null }): Promise<BrandResolved> {
+  const { orgId, userId, supabase } = await ctx();
+  const warnings: string[] = [];
+  // agent = explicit agent entity, else the current user
+  const agentId = opts.entityType === "agent" ? (opts.entityId ?? null) : (opts.agentId ?? userId);
+  let agentName: string | null = null; let agentPhoto: string | null = null; let agentWhatsapp: string | null = null;
+  try { const { data } = await supabase.from("users").select("full_name,avatar_url,phone").eq("org_id", orgId).eq("id", agentId as string).maybeSingle(); const u = data as { full_name?: string; avatar_url?: string; phone?: string } | null; agentName = u?.full_name ?? null; agentPhoto = u?.avatar_url ?? null; agentWhatsapp = u?.phone ?? null; } catch { /* ignore */ }
+  if (!agentPhoto) warnings.push("חסרה תמונת סוכן");
+
+  let officeName: string | null = null; let officeLogo: string | null = null;
+  try { const { data } = await supabase.from("organizations").select("name,logo_url").eq("id", orgId).maybeSingle(); const o = data as { name?: string; logo_url?: string } | null; officeName = o?.name ?? null; officeLogo = o?.logo_url ?? null; } catch { /* ignore */ }
+  if (!officeLogo) warnings.push("חסר לוגו משרד");
+
+  let colors: string[] = []; let luxury = 50; let modern = 50; let dnaActive = false;
+  try {
+    const et = opts.entityType ?? "agent"; const eid = opts.entityId ?? (agentId as string);
+    const { data } = await supabase.from("zono_marketing_dna_profiles").select("primary_colors,accent_colors,luxury_score,modern_score").eq("entity_type", et).eq("entity_id", eid).maybeSingle();
+    const d = data as Record<string, unknown> | null;
+    if (d) { dnaActive = true; const arr = (v: unknown) => (Array.isArray(v) ? (v as unknown[]).filter((x) => typeof x === "string") as string[] : []); colors = [...arr(d.primary_colors), ...arr(d.accent_colors)].slice(0, 3); luxury = typeof d.luxury_score === "number" ? d.luxury_score as number : 50; modern = typeof d.modern_score === "number" ? d.modern_score as number : 50; }
+  } catch { /* ignore */ }
+  if (!colors.length) warnings.push("חסרים צבעי מותג");
+  if (!dnaActive) warnings.push("אין Marketing DNA פעיל");
+
+  return { snapshot: { agentName, agentPhoto, agentWhatsapp, officeName, officeLogo, colors, luxury, modern }, warnings, agentId: agentId ?? null, officeId: orgId };
+}
+
+export interface GenerateQuickInput {
+  requestType: QuickType; input: QuickInput; format: string;
+  entityType?: string; entityId?: string; propertyId?: string | null; dealId?: string | null;
+}
+export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ requestId: string; created: number }> {
+  const { orgId, userId, supabase } = await ctx();
+  const missing = validateRequired(g.requestType, g.input);
+  if (missing.length) throw new Error(`חסרים שדות חובה: ${missing.join(", ")}`);
+
+  const brand = await resolveBrandSnapshot({ entityType: g.entityType, entityId: g.entityId });
+  const propertyId = g.propertyId ?? (g.entityType === "property" ? g.entityId ?? null : null);
+
+  const { data: reqRow, error: reqErr } = await supabase.from("zono_quick_creative_requests").insert({
+    org_id: orgId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
+    request_type: g.requestType, status: "generated", input_data: g.input as unknown as Json,
+    brand_snapshot: brand.snapshot as unknown as Json, marketing_dna_snapshot: { colors: brand.snapshot.colors, luxury: brand.snapshot.luxury, modern: brand.snapshot.modern } as Json, created_by: userId,
+  }).select("id").single();
+  if (reqErr || !reqRow) throw new Error(reqErr?.message ?? "יצירת הבקשה נכשלה");
+  const requestId = (reqRow as { id: string }).id;
+
+  const variations = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
+  const rows = variations.map((v) => ({
+    org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
+    output_type: g.requestType, variant_name: v.variantName, format: g.format, title: `${v.variantName} · ${v.headline}`,
+    render_data: v.render as unknown as Json, headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
+    brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
+    seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
+  }));
+  await supabase.from("zono_quick_creative_outputs").insert(rows as never);
+  return { requestId, created: rows.length };
+}
+
+export async function listQuickOutputs(opts: { entityType?: string; entityId?: string; propertyId?: string | null }): Promise<QuickOutputRow[]> {
+  const { orgId, supabase } = await ctx();
+  let q = supabase.from("zono_quick_creative_outputs").select("*").eq("org_id", orgId).neq("status", "deleted");
+  // scope to this entity's creatives where possible
+  if (opts.entityType === "property" && opts.entityId) q = q.eq("property_id", opts.entityId);
+  else if (opts.entityType === "agent" && opts.entityId) q = q.eq("agent_id", opts.entityId);
+  const { data } = await q.order("is_favorite", { ascending: false }).order("created_at", { ascending: false }).limit(60);
+  return (data ?? []) as QuickOutputRow[];
+}
+
+export async function setQuickFavorite(outputId: string, value: boolean): Promise<void> {
+  const { orgId, supabase } = await ctx();
+  await supabase.from("zono_quick_creative_outputs").update({ is_favorite: value }).eq("org_id", orgId).eq("id", outputId);
+}
+export async function approveQuickOutput(outputId: string): Promise<void> {
+  const { orgId, userId, supabase } = await ctx();
+  const { data } = await supabase.from("zono_quick_creative_outputs").update({ is_approved: true, status: "approved" }).eq("org_id", orgId).eq("id", outputId).select("output_type,variant_name,agent_id,property_id").single();
+  const row = data as { output_type: string; variant_name: string; agent_id: string | null; property_id: string | null } | null;
+  if (row) await learn(supabase, orgId, row, "quick_approved", userId);
+}
+export async function rejectQuickOutput(outputId: string): Promise<void> {
+  const { orgId, userId, supabase } = await ctx();
+  const { data } = await supabase.from("zono_quick_creative_outputs").update({ is_approved: false, status: "rejected" }).eq("org_id", orgId).eq("id", outputId).select("output_type,variant_name,agent_id,property_id").single();
+  const row = data as { output_type: string; variant_name: string; agent_id: string | null; property_id: string | null } | null;
+  if (row) await learn(supabase, orgId, row, "quick_rejected", userId);
+}
+export async function duplicateQuickOutput(outputId: string): Promise<void> {
+  const { orgId, supabase } = await ctx();
+  const { data } = await supabase.from("zono_quick_creative_outputs").select("*").eq("org_id", orgId).eq("id", outputId).maybeSingle();
+  const o = data as Record<string, unknown> | null;
+  if (!o) throw new Error("הפלט לא נמצא");
+  await supabase.from("zono_quick_creative_outputs").insert({
+    org_id: orgId, request_id: o.request_id, agent_id: o.agent_id, office_id: o.office_id, property_id: o.property_id, deal_id: o.deal_id,
+    output_type: o.output_type, variant_name: `${o.variant_name as string} (עותק)`, format: o.format, title: `${o.title as string} (עותק)`,
+    render_data: o.render_data as Json, headline: o.headline, subheadline: o.subheadline, body_text: o.body_text, cta_text: o.cta_text,
+    brand_match_score: o.brand_match_score, readability_score: o.readability_score, conversion_score: o.conversion_score, seller_lead_score: o.seller_lead_score, buyer_lead_score: o.buyer_lead_score, overall_score: o.overall_score, status: "generated",
+  } as never);
+}
+export async function editQuickText(outputId: string, patch: { headline?: string; subheadline?: string; body_text?: string; cta_text?: string }): Promise<void> {
+  const { orgId, supabase } = await ctx();
+  // also reflect into render_data blocks
+  const { data } = await supabase.from("zono_quick_creative_outputs").select("render_data").eq("org_id", orgId).eq("id", outputId).maybeSingle();
+  const rd = (data as { render_data?: Record<string, unknown> } | null)?.render_data;
+  const update: Record<string, unknown> = { ...patch };
+  if (rd && Array.isArray((rd as { blocks?: unknown[] }).blocks)) {
+    const blocks = ((rd as { blocks: Record<string, unknown>[] }).blocks).map((b) => {
+      if (b.component === "headline" && patch.headline !== undefined) return { ...b, text: patch.headline };
+      if (b.component === "whatsapp_cta" && patch.cta_text !== undefined) return { ...b, text: patch.cta_text };
+      return b;
+    });
+    update.render_data = { ...rd, blocks } as unknown as Json;
+  }
+  await supabase.from("zono_quick_creative_outputs").update(update as never).eq("org_id", orgId).eq("id", outputId);
+}
+/** Replace the property/hero image inside render_data. */
+export async function replaceQuickImage(outputId: string, imageUrl: string): Promise<void> {
+  const { orgId, supabase } = await ctx();
+  const { data } = await supabase.from("zono_quick_creative_outputs").select("render_data").eq("org_id", orgId).eq("id", outputId).maybeSingle();
+  const rd = (data as { render_data?: Record<string, unknown> } | null)?.render_data;
+  if (rd && Array.isArray((rd as { blocks?: unknown[] }).blocks)) {
+    const blocks = ((rd as { blocks: Record<string, unknown>[] }).blocks).map((b) => b.component === "image_placeholder" ? { ...b, imageUrl } : b);
+    await supabase.from("zono_quick_creative_outputs").update({ render_data: { ...rd, blocks } as unknown as Json, preview_url: imageUrl, thumbnail_url: imageUrl }).eq("org_id", orgId).eq("id", outputId);
+  }
+}
+export async function regenerateQuickRequest(requestId: string): Promise<{ created: number }> {
+  const { orgId, supabase } = await ctx();
+  const { data: req } = await supabase.from("zono_quick_creative_requests").select("*").eq("org_id", orgId).eq("id", requestId).maybeSingle();
+  const rq = req as Record<string, unknown> | null;
+  if (!rq) throw new Error("הבקשה לא נמצאה");
+  const out = await supabase.from("zono_quick_creative_outputs").select("format").eq("org_id", orgId).eq("request_id", requestId).limit(1).maybeSingle();
+  const format = (out.data as { format?: string } | null)?.format ?? "feed_4_5";
+  // archive prior non-approved
+  await supabase.from("zono_quick_creative_outputs").update({ status: "archived" }).eq("org_id", orgId).eq("request_id", requestId).eq("status", "generated").eq("is_approved", false).eq("is_favorite", false);
+  const r = await generateQuickCreativeFromRequest(supabase, orgId, rq, format);
+  return r;
+}
+async function generateQuickCreativeFromRequest(supabase: DB, orgId: string, rq: Record<string, unknown>, format: string): Promise<{ created: number }> {
+  const brandSnap = (rq.brand_snapshot ?? {}) as BrandSnapshot;
+  const input = (rq.input_data ?? {}) as QuickInput;
+  const variations = buildQuickVariations(rq.request_type as QuickType, input, brandSnap, format);
+  const rows = variations.map((v) => ({
+    org_id: orgId, request_id: rq.id, agent_id: rq.agent_id, office_id: rq.office_id, property_id: rq.property_id, deal_id: rq.deal_id,
+    output_type: rq.request_type, variant_name: v.variantName, format, title: `${v.variantName} · ${v.headline}`,
+    render_data: v.render as unknown as Json, headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
+    brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
+    seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
+  }));
+  await supabase.from("zono_quick_creative_outputs").insert(rows as never);
+  return { created: rows.length };
+}
+
+async function learn(supabase: DB, orgId: string, row: { output_type: string; variant_name: string; agent_id: string | null; property_id: string | null }, feedbackType: string, userId: string) {
+  try {
+    const entityType = row.property_id ? "property" : "agent";
+    const entityId = row.property_id ?? row.agent_id ?? orgId;
+    await supabase.from("zono_marketing_feedback").insert({ org_id: orgId, entity_type: entityType, entity_id: entityId, feedback_source: "quick_creative", feedback_type: feedbackType, feedback_value: `${row.output_type}:${row.variant_name}`, created_by: userId });
+  } catch { /* best-effort */ }
+}

@@ -4205,6 +4205,17 @@ type ZonoVisualAssetsRow = {
   visual_dna_snapshot: Json; metadata: Json; brand_match_score: number; realism_score: number; property_relevance_score: number; marketing_relevance_score: number; conversion_score: number; overall_score: number;
   status: string; is_approved: boolean; is_rejected: boolean; is_favorite: boolean; created_at: string; updated_at: string;
 };
+type ZonoQuickCreativeRequestsRow = {
+  id: string; org_id: string; agent_id: string | null; office_id: string | null; property_id: string | null; deal_id: string | null;
+  request_type: string; status: string; input_data: Json; brand_snapshot: Json; marketing_dna_snapshot: Json; created_by: string | null; created_at: string; updated_at: string;
+};
+type ZonoQuickCreativeOutputsRow = {
+  id: string; org_id: string; request_id: string; agent_id: string | null; office_id: string | null; property_id: string | null; deal_id: string | null;
+  output_type: string; variant_name: string; format: string; title: string | null; render_data: Json; preview_url: string | null; thumbnail_url: string | null;
+  headline: string | null; subheadline: string | null; body_text: string | null; cta_text: string | null;
+  brand_match_score: number; readability_score: number; conversion_score: number; seller_lead_score: number; buyer_lead_score: number; overall_score: number;
+  is_favorite: boolean; is_approved: boolean; status: string; created_at: string; updated_at: string;
+};
 type ZonoMarketingBriefsRow = {
   id: string; org_id: string; entity_type: string; entity_id: string; title: string; objective: string | null; platform: string | null; format: string | null; campaign_type: string | null; target_audience: string | null; main_message: string | null;
   property_id: string | null; project_id: string | null; agent_id: string | null; office_id: string | null; full_copy: Json; required_assets: Json; marketing_constraints: Json; status: string; created_by: string | null; created_at: string; updated_at: string;
@@ -4721,6 +4732,8 @@ export interface Database {
       zono_copy_assets: TableShape<ZonoCopyAssetsRow, "org_id" | "entity_type" | "entity_id" | "copy_type">;
       zono_creative_outputs: TableShape<ZonoCreativeOutputsRow, "org_id" | "entity_type" | "entity_id" | "output_type">;
       zono_visual_assets: TableShape<ZonoVisualAssetsRow, "org_id" | "entity_type" | "entity_id" | "visual_type">;
+      zono_quick_creative_requests: TableShape<ZonoQuickCreativeRequestsRow, "org_id" | "request_type">;
+      zono_quick_creative_outputs: TableShape<ZonoQuickCreativeOutputsRow, "org_id" | "request_id" | "output_type" | "variant_name" | "format">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
       community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;

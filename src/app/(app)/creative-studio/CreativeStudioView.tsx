@@ -37,7 +37,16 @@ import {
   generateVisualAction, variationVisualAction, approveVisualAction, rejectVisualAction, favoriteVisualAction,
 } from "@/lib/creative-studio/visual-actions";
 import { VISUAL_TYPE_LABELS, VARIATION_MODES } from "@/lib/creative-studio/visual-dna";
+import {
+  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction,
+} from "@/lib/creative-studio/quick-creative-actions";
+import { QUICK_TYPE_LABELS } from "@/lib/creative-studio/quick-creative-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
+
+type QuickOutput = Record<string, unknown> & {
+  id: string; request_id: string; output_type: string; variant_name: string; format: string; title: string | null; render_data: RenderData;
+  headline: string | null; cta_text: string | null; overall_score: number; brand_match_score: number; readability_score: number; seller_lead_score: number; buyer_lead_score: number; is_approved: boolean; is_favorite: boolean; status: string;
+};
 
 type Visual = Record<string, unknown> & {
   id: string; visual_type: string; provider: string; image_url: string | null; generation_reason: string | null; overall_score: number;
@@ -84,7 +93,7 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, quickOutputs: quickOutputsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; quickOutputs?: Record<string, unknown>[]; orgId: string; userId: string }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
@@ -92,6 +101,7 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
   const copyAssets = (copyAssetsRaw ?? []) as unknown as Copy[];
   const creativeOutputs = (creativeOutputsRaw ?? []) as unknown as Output[];
   const visuals = (visualsRaw ?? []) as unknown as Visual[];
+  const quickOutputs = (quickOutputsRaw ?? []) as unknown as QuickOutput[];
   const router = useRouter();
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
@@ -142,6 +152,9 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
       {studio.stats.lastAnalyzedAt && <p className="text-muted text-[12px]">ניתוח אחרון: {new Date(studio.stats.lastAnalyzedAt).toLocaleString("he-IL")}</p>}
 
       <ActionFeedback runner={r} />
+
+      {/* QUICK CREATIVE TEMPLATES — יצירה מהירה */}
+      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} />
 
       {/* SECTION 2 — ASSETS LIBRARY */}
       <section className="flex flex-col gap-3">
@@ -864,6 +877,187 @@ function VisualCard({ v, et, eid, wrap }: { v: Visual; et: string; eid: string; 
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const QUICK_CARDS: { type: string; title: string; desc: string; cta: string }[] = [
+  { type: "testimonial_post", title: "פוסט המלצה", desc: "הפכו המלצה של מוכר או קונה לפוסט ממותג שמחזק אמון.", cta: "צור פוסט המלצה" },
+  { type: "sold_post", title: "פוסט נמכר", desc: "צרו פוסט נמכר ממותג שמביא עוד מוכרים.", cta: "צור פוסט נמכר" },
+  { type: "property_ad_post", title: "פוסט פרסום דירה", desc: "צרו מודעת נכס ממותגת עם תמונה, פרטים וקריאה לפעולה.", cta: "צור פוסט פרסום דירה" },
+];
+
+function QuickCreativeSection({ outputs, et, eid, wrap }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap }) {
+  const [wizardType, setWizardType] = useState<string | null>(null);
+  return (
+    <section className="flex flex-col gap-3">
+      <div><h2 className="text-ink text-lg font-black">יצירה מהירה</h2><p className="text-muted text-[12px]">לחצו, מלאו טופס קצר וקבלו 4 וריאציות עיצוב ממותגות ומוכנות לפרסום.</p></div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {QUICK_CARDS.map((c) => (
+          <div key={c.type} className="bg-card border-line flex flex-col gap-2 rounded-2xl border p-4 shadow-sm">
+            <p className="text-ink font-black">{c.title}</p>
+            <p className="text-muted flex-1 text-[12px]">{c.desc}</p>
+            <Button size="sm" onClick={() => setWizardType(c.type)}><Icon name="Sparkles" size={14} />{c.cta}</Button>
+          </div>
+        ))}
+      </div>
+      {outputs.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-ink text-sm font-black">תוצאות יצירה מהירה</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {outputs.map((o) => <QuickResultCard key={o.id} o={o} et={et} eid={eid} wrap={wrap} />)}
+          </div>
+        </div>
+      )}
+      {wizardType && <QuickCreativeWizard type={wizardType} et={et} eid={eid} onClose={() => setWizardType(null)} />}
+    </section>
+  );
+}
+
+function QuickResultCard({ o, et, eid, wrap }: { o: QuickOutput; et: string; eid: string; wrap: Wrap }) {
+  return (
+    <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
+      <CreativePreview data={o.render_data} scale={0.8} />
+      <div className="flex items-center justify-between gap-1 px-0.5">
+        <span className="text-muted text-[10px] font-bold">{o.variant_name}</span>
+        <span className="text-success text-sm font-black">{o.overall_score}</span>
+      </div>
+      <div className="text-muted flex flex-wrap gap-1 px-0.5 text-[9px] font-bold">
+        <span>מוכרים {o.seller_lead_score}</span><span>·</span><span>קונים {o.buyer_lead_score}</span>
+      </div>
+      <div className="border-line flex flex-wrap gap-1.5 border-t pt-2 text-[10px]">
+        <button onClick={() => wrap(() => approveQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qa-${o.id}`)} className={`font-bold ${o.is_approved ? "text-success" : "text-muted"}`}><Icon name="UserCheck" size={12} /> אשר</button>
+        <button onClick={() => wrap(() => rejectQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qj-${o.id}`)} className="text-danger font-bold">דחה</button>
+        <button onClick={() => wrap(() => favoriteQuickAction({ outputId: o.id, value: !o.is_favorite, entityType: et, entityId: eid }), `qf-${o.id}`)} className={`font-bold ${o.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={12} /></button>
+        <button onClick={() => wrap(() => regenerateQuickAction({ requestId: o.request_id, entityType: et, entityId: eid }), `qg-${o.id}`)} className="text-muted font-bold"><Icon name="Sparkles" size={12} /></button>
+        <button onClick={() => wrap(() => duplicateQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qd-${o.id}`)} className="text-muted font-bold"><Icon name="Plus" size={12} /></button>
+        <span className="text-muted/50 cursor-not-allowed" title="בקרוב">PNG</span>
+      </div>
+    </div>
+  );
+}
+
+function QuickCreativeWizard({ type, et, eid, onClose }: { type: string; et: string; eid: string; onClose: () => void }) {
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [format, setFormat] = useState("feed_4_5");
+  const [improve, setImprove] = useState(false);
+  const [f, setF] = useState<Record<string, string | boolean | number>>({});
+  const [brand, setBrand] = useState<{ warnings?: string[]; agentName?: string | null; officeName?: string | null; colors?: string[]; agentPhoto?: string | null; officeLogo?: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const set = (k: string, v: string | boolean | number) => setF((p) => ({ ...p, [k]: v }));
+  const str = (k: string) => (typeof f[k] === "string" ? (f[k] as string) : "");
+
+  const loadBrand = async () => { const b = await brandPreviewAction({ entityType: et, entityId: eid }); setBrand(b); };
+  const goStep3 = () => { setStep(3); loadBrand(); };
+
+  const requiredOk = type === "testimonial_post" ? (str("testimonialText") && str("recommenderName") && str("address"))
+    : type === "sold_post" ? !!str("address")
+    : (str("address") && str("importantText"));
+
+  const submit = async () => {
+    setBusy(true); setErr(null);
+    const input: Record<string, unknown> = {
+      propertyImage: str("propertyImage") || null, neighborhood: str("neighborhood") || null, city: str("city") || null, address: str("address") || null, customCta: str("customCta") || null,
+      testimonialText: str("testimonialText") || null, recommenderName: str("recommenderName") || null, stars: f.stars ? Number(f.stars) : null, dealDate: str("dealDate") || null,
+      propertyType: str("propertyType") || null, salePrice: str("salePrice") || null, exclusive: !!f.exclusive, saleTime: str("saleTime") || null, sellerName: str("sellerName") || null,
+      importantText: str("importantText") || null, price: str("price") || null, rooms: str("rooms") || null, sizeSqm: str("sizeSqm") || null, floor: str("floor") || null, parking: str("parking") || null, storage: !!f.storage, balcony: !!f.balcony, elevator: !!f.elevator, evacuationDate: str("evacuationDate") || null,
+      improveText: improve,
+    };
+    const res = await generateQuickCreativeAction({ requestType: type as never, input: input as never, format, entityType: et, entityId: eid });
+    if (res.error) { setErr(res.error); setBusy(false); return; }
+    onClose(); router.refresh();
+  };
+
+  const Field = (k: string, label: string, ph?: string) => (
+    <label key={k} className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">{label}</span>
+      <input defaultValue={str(k)} onChange={(e) => set(k, e.target.value)} placeholder={ph} className="border-line bg-surface text-ink h-9 rounded-lg border px-3 text-sm" /></label>
+  );
+  const Area = (k: string, label: string, ph?: string) => (
+    <label key={k} className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">{label}</span>
+      <textarea defaultValue={str(k)} onChange={(e) => set(k, e.target.value)} placeholder={ph} rows={3} className="border-line bg-surface text-ink rounded-lg border px-3 py-2 text-sm" /></label>
+  );
+  const Check = (k: string, label: string) => (
+    <label key={k} className="text-ink flex items-center gap-1.5 text-[12px]"><input type="checkbox" checked={!!f[k]} onChange={(e) => set(k, e.target.checked)} />{label}</label>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-ink text-lg font-black">{QUICK_TYPE_LABELS[type] ?? type} · שלב {step}/4</h3>
+          <button onClick={onClose} className="text-muted"><Icon name="Minus" size={18} /></button>
+        </div>
+
+        {step === 1 && (
+          <div className="flex flex-col gap-3">
+            <p className="text-muted text-sm">בחרו פורמט והמשיכו למילוי הפרטים.</p>
+            <div className="flex gap-2">
+              {[["feed_4_5", "פוסט פיד 4:5"], ["story_9_16", "סטורי 9:16"]].map(([v, l]) => (
+                <button key={v} onClick={() => setFormat(v)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${format === v ? "bg-brand text-white" : "bg-surface text-muted"}`}>{l}</button>
+              ))}
+            </div>
+            <Button size="sm" className="w-fit" onClick={() => setStep(2)}>המשך</Button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="flex flex-col gap-3">
+            {type === "testimonial_post" && (<>
+              {Area("testimonialText", "טקסט המלצה *", "ההמלצה כלשונה — ZONO לא ימציא תוכן")}
+              {Field("recommenderName", "שם הממליץ / מוכר *")}
+              {Field("address", "כתובת עסקה *")}
+              <div className="grid grid-cols-2 gap-2">{Field("neighborhood", "שכונה")}{Field("city", "עיר")}</div>
+              <div className="grid grid-cols-2 gap-2">{Field("stars", "דירוג כוכבים (1-5)")}{Field("dealDate", "תאריך עסקה")}</div>
+              <label className="text-ink flex items-center gap-1.5 text-[12px]"><input type="checkbox" checked={improve} onChange={(e) => setImprove(e.target.checked)} />שיפור ניסוח (תיקון דקדוק קל בלבד)</label>
+            </>)}
+            {type === "sold_post" && (<>
+              {Field("address", "כתובת עסקה *")}
+              <div className="grid grid-cols-2 gap-2">{Field("propertyType", "סוג נכס")}{Field("salePrice", "מחיר מכירה")}</div>
+              <div className="grid grid-cols-2 gap-2">{Field("neighborhood", "שכונה")}{Field("city", "עיר")}</div>
+              <div className="grid grid-cols-2 gap-2">{Field("saleTime", "זמן מכירה")}{Field("sellerName", "שם מוכר")}</div>
+              {Check("exclusive", "נמכר בבלעדיות")}
+            </>)}
+            {type === "property_ad_post" && (<>
+              {Field("address", "כתובת הדירה *")}
+              {Area("importantText", "טקסט חשוב של הדירה *", "הטקסט כלשונו — ZONO לא ימציא פרטים")}
+              <div className="grid grid-cols-2 gap-2">{Field("price", "מחיר")}{Field("rooms", "חדרים")}</div>
+              <div className="grid grid-cols-2 gap-2">{Field("sizeSqm", "שטח (מ״ר)")}{Field("floor", "קומה")}</div>
+              <div className="grid grid-cols-2 gap-2">{Field("parking", "חניות")}{Field("neighborhood", "שכונה")}</div>
+              <div className="flex flex-wrap gap-3">{Check("storage", "מחסן")}{Check("balcony", "מרפסת")}{Check("elevator", "מעלית")}</div>
+            </>)}
+            {Field("propertyImage", "תמונת דירה (קישור URL, אופציונלי)")}
+            {Field("customCta", "CTA מותאם (אופציונלי)")}
+            {!requiredOk && <p className="text-warning text-[12px]">יש למלא את שדות החובה המסומנים ב-*</p>}
+            <div className="flex gap-2"><Button size="sm" disabled={!requiredOk} onClick={goStep3}>המשך</Button><Button size="sm" variant="ghost" onClick={() => setStep(1)}>חזרה</Button></div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="flex flex-col gap-3">
+            <p className="text-ink text-sm font-black">תצוגת מותג</p>
+            {!brand ? <p className="text-muted text-sm">טוען נתוני מותג...</p> : (
+              <div className="bg-surface flex flex-col gap-2 rounded-xl p-3 text-[13px]">
+                <span className="text-ink">סוכן: {brand.agentName ?? "—"}{brand.agentPhoto ? " · תמונה ✓" : ""}</span>
+                <span className="text-ink">משרד: {brand.officeName ?? "—"}{brand.officeLogo ? " · לוגו ✓" : ""}</span>
+                <div className="flex items-center gap-2"><span className="text-muted">צבעים:</span>{(brand.colors ?? []).length ? (brand.colors ?? []).map((c, i) => <span key={i} className="border-line h-5 w-5 rounded-full border" style={{ background: c }} />) : <span className="text-muted">—</span>}</div>
+                {(brand.warnings ?? []).length > 0 && <div className="text-warning text-[12px]">{(brand.warnings ?? []).join(" · ")} (ניתן להמשיך בכל מקרה)</div>}
+              </div>
+            )}
+            <div className="flex gap-2"><Button size="sm" onClick={() => setStep(4)}>המשך ליצירה</Button><Button size="sm" variant="ghost" onClick={() => setStep(2)}>חזרה</Button></div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="flex flex-col gap-3">
+            <p className="text-ink text-sm">ZONO ייצר 4 וריאציות ממותגות: Premium Clean · Modern Sales · Trust/Authority · Bold Social.</p>
+            {err && <p className="text-danger text-[12px]">{err}</p>}
+            <div className="flex gap-2"><Button size="sm" loading={busy} onClick={submit}><Icon name="Sparkles" size={14} />צור 4 וריאציות</Button><Button size="sm" variant="ghost" onClick={() => setStep(3)}>חזרה</Button></div>
+            <p className="text-muted text-[11px]">לאחר היצירה הוריאציות יופיעו ב״תוצאות יצירה מהירה״ לאישור ועריכה.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,72 @@
+create table public.zono_quick_creative_requests (
+  id                     uuid primary key default gen_random_uuid(),
+  org_id                 uuid not null references public.organizations(id) on delete cascade,
+  agent_id               uuid references public.users(id) on delete set null,
+  office_id              uuid references public.organizations(id) on delete set null,
+  property_id            uuid references public.properties(id) on delete set null,
+  deal_id                uuid references public.deals(id) on delete set null,
+  request_type           text not null,
+  status                 text not null default 'draft',
+  input_data             jsonb not null default '{}'::jsonb,
+  brand_snapshot         jsonb not null default '{}'::jsonb,
+  marketing_dna_snapshot jsonb not null default '{}'::jsonb,
+  created_by             uuid references public.users(id) on delete set null,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+create index zono_qc_req_org_idx  on public.zono_quick_creative_requests(org_id);
+create index zono_qc_req_type_idx on public.zono_quick_creative_requests(request_type);
+
+create table public.zono_quick_creative_outputs (
+  id                     uuid primary key default gen_random_uuid(),
+  org_id                 uuid not null references public.organizations(id) on delete cascade,
+  request_id             uuid not null references public.zono_quick_creative_requests(id) on delete cascade,
+  agent_id               uuid references public.users(id) on delete set null,
+  office_id              uuid references public.organizations(id) on delete set null,
+  property_id            uuid references public.properties(id) on delete set null,
+  deal_id                uuid references public.deals(id) on delete set null,
+  output_type            text not null,
+  variant_name           text not null,
+  format                 text not null,
+  title                  text,
+  render_data            jsonb not null default '{}'::jsonb,
+  preview_url            text,
+  thumbnail_url          text,
+  headline               text,
+  subheadline            text,
+  body_text              text,
+  cta_text               text,
+  brand_match_score      integer not null default 0 check (brand_match_score between 0 and 100),
+  readability_score      integer not null default 0 check (readability_score between 0 and 100),
+  conversion_score       integer not null default 0 check (conversion_score between 0 and 100),
+  seller_lead_score      integer not null default 0 check (seller_lead_score between 0 and 100),
+  buyer_lead_score       integer not null default 0 check (buyer_lead_score between 0 and 100),
+  overall_score          integer not null default 0 check (overall_score between 0 and 100),
+  is_favorite            boolean not null default false,
+  is_approved            boolean not null default false,
+  status                 text not null default 'generated',
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+create index zono_qc_out_org_idx     on public.zono_quick_creative_outputs(org_id);
+create index zono_qc_out_request_idx on public.zono_quick_creative_outputs(request_id);
+create index zono_qc_out_status_idx  on public.zono_quick_creative_outputs(status);
+
+create trigger trg_zono_qc_req_updated before update on public.zono_quick_creative_requests for each row execute function public.set_updated_at();
+create trigger trg_zono_qc_out_updated before update on public.zono_quick_creative_outputs for each row execute function public.set_updated_at();
+
+do $$
+declare t text;
+  tbls text[] := array['zono_quick_creative_requests','zono_quick_creative_outputs'];
+begin
+  foreach t in array tbls loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format('create policy "%1$s_select" on public.%1$I for select to authenticated using (org_id = public.current_org_id());', t);
+    execute format('create policy "%1$s_insert" on public.%1$I for insert to authenticated with check (org_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+    execute format('create policy "%1$s_update" on public.%1$I for update to authenticated using (org_id = public.current_org_id() and public.has_min_role(''agent'')) with check (org_id = public.current_org_id());', t);
+    execute format('create policy "%1$s_delete" on public.%1$I for delete to authenticated using (org_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+  end loop;
+end $$;
+
+grant select, insert, update, delete on public.zono_quick_creative_requests, public.zono_quick_creative_outputs to authenticated;
+grant all privileges on public.zono_quick_creative_requests, public.zono_quick_creative_outputs to service_role;
