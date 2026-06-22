@@ -199,15 +199,23 @@ export function PropertiesListView({
             <Link
               key={p.id}
               href={`/properties/${p.id}`}
-              className="bg-card border-line hover:shadow-[var(--shadow-lift)] flex flex-col gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)] transition-shadow"
+              className="bg-card border-line hover:shadow-[var(--shadow-lift)] flex flex-col gap-3 overflow-hidden rounded-[22px] border p-5 shadow-[var(--shadow-card)] transition-shadow"
             >
+              <div className="bg-surface relative -mx-5 -mt-5 mb-1 aspect-[16/10] overflow-hidden">
+                {p.primary_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.primary_image_url} alt={p.title} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="text-muted grid h-full place-items-center">
+                    <Icon name="Building2" size={32} />
+                  </div>
+                )}
+                <span className="absolute end-3 top-3"><Badge tone={PROPERTY_STATUS_TONES[p.status]} size="sm">{PROPERTY_STATUS_LABELS[p.status]}</Badge></span>
+              </div>
               <div className="flex items-start justify-between gap-2">
                 <h3 className="text-ink text-base font-extrabold leading-snug">
                   {p.title}
                 </h3>
-                <Badge tone={PROPERTY_STATUS_TONES[p.status]} size="sm">
-                  {PROPERTY_STATUS_LABELS[p.status]}
-                </Badge>
               </div>
               <p className="text-muted text-sm">
                 {PROPERTY_TYPE_LABELS[p.type]} · {propertyAddressLine(p)}

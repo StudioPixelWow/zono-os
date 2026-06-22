@@ -284,6 +284,33 @@ export async function listPropertyMedia(
   return data ?? [];
 }
 
+export interface PropertyMediaResult {
+  media: PropertyMediaRow[];
+  images: PropertyMediaRow[];
+  primary: PropertyMediaRow | null;
+  /** Best cover URL: primary image → first image → null. */
+  coverUrl: string | null;
+  diagnostics: { propertyId: string; mediaCount: number; imageCount: number; primaryMediaId: string | null };
+}
+/**
+ * Canonical property-media reader. ONE source of truth for the detail page,
+ * cards and ZONO Creative — ordered media, primary, and a guaranteed cover
+ * fallback (primary image → first image). Includes diagnostics for debugging.
+ */
+export async function getPropertyMedia(propertyId: string): Promise<PropertyMediaResult> {
+  const media = await listPropertyMedia(propertyId);
+  const images = media.filter((m) => m.type === "image");
+  const primary = images.find((m) => m.is_primary) ?? null;
+  const cover = primary ?? images[0] ?? null;
+  return {
+    media,
+    images,
+    primary,
+    coverUrl: cover?.url ?? null,
+    diagnostics: { propertyId, mediaCount: media.length, imageCount: images.length, primaryMediaId: primary?.id ?? null },
+  };
+}
+
 // ── Related records for the details page (read-only this phase) ──────────────
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];

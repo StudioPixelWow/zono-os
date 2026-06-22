@@ -138,10 +138,12 @@ export function PropertyWizard({
   draftId,
   initial,
   initialMedia,
+  editMode = false,
 }: {
   draftId: string;
   initial: PropertyInput;
   initialMedia: MediaRow[];
+  editMode?: boolean;
 }) {
   const org = useCurrentOrganization();
   const user = useCurrentUser();
@@ -299,7 +301,7 @@ export function PropertyWizard({
             <Icon name="ChevronRight" size={16} />
             חזרה לנכסים
           </Link>
-          <h1 className="text-ink mt-1 text-2xl font-black">העלאת נכס חדש</h1>
+          <h1 className="text-ink mt-1 text-2xl font-black">{editMode ? "עריכת נכס" : "העלאת נכס חדש"}</h1>
         </div>
         <div className="flex items-center gap-3">
           <AutoSaveIndicator state={saveState} />
@@ -605,9 +607,15 @@ export function PropertyWizard({
           {saveState === "saved" ? "נשמר אוטומטית ✓" : saveState === "saving" ? "שומר…" : ""}
         </span>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => void discardDraftAction(draftId)}>
-            ביטול
-          </Button>
+          {editMode ? (
+            <Link href={`/properties/${draftId}`}>
+              <Button variant="ghost">חזרה לנכס</Button>
+            </Link>
+          ) : (
+            <Button variant="ghost" onClick={() => void discardDraftAction(draftId)}>
+              ביטול
+            </Button>
+          )}
           {step > 1 && (
             <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>הקודם</Button>
           )}
@@ -615,7 +623,7 @@ export function PropertyWizard({
             <Button onClick={() => setStep((s) => s + 1)}>הבא</Button>
           ) : (
             <Button onClick={publish} disabled={publishing}>
-              {publishing ? "מפרסם…" : "פרסום נכס"}
+              {publishing ? "שומר…" : editMode ? "שמור ופרסם" : "פרסום נכס"}
             </Button>
           )}
         </div>
