@@ -29,7 +29,18 @@ import {
   generateCopyAction, favoriteCopyAction, approveCopyAction, rejectCopyAction, regenerateCopyAction,
 } from "@/lib/creative-studio/copy-actions";
 import { COPY_TYPE_LABELS } from "@/lib/creative-studio/copy-engine";
+import {
+  generateOutputsAction, favoriteOutputAction, approveOutputAction, rejectOutputAction, duplicateOutputAction, regenerateOutputAction,
+} from "@/lib/creative-studio/output-actions";
+import { OUTPUT_TYPE_LABELS } from "@/lib/creative-studio/production-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
+
+type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string };
+type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[] };
+type Output = Record<string, unknown> & {
+  id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
+  brand_match_score: number; marketing_match_score: number; readability_score: number; hierarchy_score: number; conversion_score: number; is_approved: boolean; is_favorite: boolean;
+};
 
 type Copy = Record<string, unknown> & {
   id: string; creative_asset_id: string | null; copy_type: string; title: string | null; headline: string | null; subheadline: string | null; body: string | null; cta: string | null;
@@ -64,12 +75,13 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; orgId: string; userId: string }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
   const creativeAssets = (creativeAssetsRaw ?? []) as unknown as CreativeAsset[];
   const copyAssets = (copyAssetsRaw ?? []) as unknown as Copy[];
+  const creativeOutputs = (creativeOutputsRaw ?? []) as unknown as Output[];
   const router = useRouter();
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
@@ -170,6 +182,9 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
 
       {/* COPY GENERATION ENGINE — Phase 6 */}
       <CopySection copy={copyAssets} assets={creativeAssets} et={et} eid={eid} r={r} wrap={wrap} />
+
+      {/* CREATIVE PRODUCTION ENGINE — Phase 7 */}
+      <OutputsSection outputs={creativeOutputs} assets={creativeAssets} et={et} eid={eid} r={r} wrap={wrap} />
 
       {/* SECTION 7 — GENERATOR PLACEHOLDER */}
       <section className="bg-brand-soft/30 border-line rounded-2xl border border-dashed p-6 text-center">
@@ -673,6 +688,107 @@ function CopyDrawer({ c, onClose }: { c: Copy; onClose: () => void }) {
           <DrawerRow label="פלטפורמה" value={c.platform} />
         </div>
         {c.reasoning && <div className="bg-brand-soft/30 mt-4 rounded-xl p-3"><span className="text-brand-strong text-[11px] font-bold">למה ZONO כתב כך</span><p className="text-ink mt-0.5 text-[13px]">{c.reasoning}</p></div>}
+      </div>
+    </div>
+  );
+}
+
+// ── HTML/CSS render-object preview (editable structure, not an image) ──────────
+function CreativePreview({ data, scale = 1 }: { data: RenderData; scale?: number }) {
+  const p = data.palette;
+  const block = (b: RenderBlock, i: number) => {
+    const key = `${b.component}-${i}`;
+    switch (b.component) {
+      case "eyebrow": return <div key={key} style={{ color: p.accent, fontSize: 11 * scale, fontWeight: 800, letterSpacing: 1 }}>{b.text}</div>;
+      case "headline": return <div key={key} style={{ color: p.text, fontSize: 26 * scale, fontWeight: 900, lineHeight: 1.05 }}>{b.text}</div>;
+      case "subheadline": return <div key={key} style={{ color: p.muted, fontSize: 14 * scale, fontWeight: 600 }}>{b.text}</div>;
+      case "cta_button": case "whatsapp_cta": return <div key={key} style={{ alignSelf: "center", background: p.accent, color: p.onAccent, fontSize: 13 * scale, fontWeight: 800, padding: `${8 * scale}px ${16 * scale}px`, borderRadius: 999, marginTop: "auto" }}>{b.component === "whatsapp_cta" ? "💬 " : ""}{b.text}</div>;
+      case "price_badge": return <div key={key} style={{ alignSelf: "flex-start", background: p.text, color: p.bg, fontSize: 14 * scale, fontWeight: 900, padding: `${4 * scale}px ${10 * scale}px`, borderRadius: 8 }}>{b.text}</div>;
+      case "location_badge": return <div key={key} style={{ color: p.muted, fontSize: 12 * scale, fontWeight: 700 }}>📍 {b.text}</div>;
+      case "property_features": case "project_details": case "investment_block": return <div key={key} style={{ display: "flex", flexWrap: "wrap", gap: 4 * scale }}>{(b.items ?? []).map((it, j) => <span key={j} style={{ background: "rgba(255,255,255,0.12)", color: p.text, fontSize: 11 * scale, fontWeight: 700, padding: `${3 * scale}px ${8 * scale}px`, borderRadius: 6 }}>{it}</span>)}</div>;
+      case "agent_card": case "developer_block": case "testimonial_block": return <div key={key} style={{ color: p.text, fontSize: 12 * scale, fontWeight: 700, opacity: 0.9 }}>{b.text}</div>;
+      case "logo_slot": return <div key={key} style={{ color: p.text, fontSize: 13 * scale, fontWeight: 900, opacity: 0.85 }}>{b.text}</div>;
+      case "image_placeholder": return <div key={key} style={{ background: "rgba(255,255,255,0.08)", border: `1px dashed ${p.muted}`, borderRadius: 10 * scale, color: p.muted, fontSize: 10 * scale, display: "grid", placeItems: "center", minHeight: 60 * scale, flex: "0 0 auto" }}>🖼 {b.text}</div>;
+      default: return null;
+    }
+  };
+  return (
+    <div dir="rtl" style={{ aspectRatio: `${data.width} / ${data.height}`, background: `linear-gradient(160deg, ${p.bg2}, ${p.bg})`, borderRadius: 12, padding: 16 * scale, display: "flex", flexDirection: "column", gap: 8 * scale, overflow: "hidden", width: "100%" }}>
+      {data.blocks.map(block)}
+    </div>
+  );
+}
+
+function OutputsSection({ outputs, assets, et, eid, r, wrap }: { outputs: Output[]; assets: CreativeAsset[]; et: string; eid: string; r: Runner; wrap: Wrap }) {
+  const [assetId, setAssetId] = useState(assets[0]?.id ?? "");
+  const [open, setOpen] = useState<Output | null>(null);
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">קריאייטיב מוכן</h2>
+          <p className="text-muted text-[12px]">ZONO מפיק וריאציות קריאייטיב ערוכות (HTML/CSS) המבוססות על ה-DNA, הקמפיין, הנכס והקופי. התמונות יתווספו בשלב הוויזואלי הבא.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <select value={assetId} onChange={(e) => setAssetId(e.target.value)} className="border-line bg-surface text-ink h-9 max-w-[220px] rounded-lg border px-2 text-sm">
+            <option value="">בחר נכס שיווק</option>
+            {assets.map((a) => <option key={a.id} value={a.id}>{(CREATIVE_ASSET_TYPE_LABELS[a.asset_type] ?? a.asset_type)} · {a.title}</option>)}
+          </select>
+          <Button size="sm" loading={r.busyId === "gen-output"} disabled={!assetId} onClick={() => wrap(() => generateOutputsAction({ creativeAssetId: assetId, entityType: et, entityId: eid }), "gen-output", "ZONO מפיק קריאייטיב...")}>
+            <Icon name="Sparkles" size={14} />הפק קריאייטיב
+          </Button>
+        </div>
+      </div>
+      {outputs.length === 0 ? (
+        <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין קריאייטיב עדיין — בחר נכס שיווק ולחץ ״הפק קריאייטיב״.</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {outputs.map((o) => <OutputCard key={o.id} o={o} et={et} eid={eid} wrap={wrap} onOpen={() => setOpen(o)} />)}
+        </div>
+      )}
+      {open && <OutputDrawer o={open} onClose={() => setOpen(null)} />}
+    </section>
+  );
+}
+
+function OutputCard({ o, et, eid, wrap, onOpen }: { o: Output; et: string; eid: string; wrap: Wrap; onOpen: () => void }) {
+  return (
+    <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
+      <button onClick={onOpen} className="block w-full text-right"><CreativePreview data={o.render_data} scale={0.85} /></button>
+      <div className="flex items-center justify-between gap-1 px-0.5">
+        <span className="text-muted text-[10px] font-bold">{OUTPUT_TYPE_LABELS[o.output_type] ?? o.output_type}</span>
+        <span className="text-success text-sm font-black">{o.overall_score}</span>
+      </div>
+      <div className="border-line flex flex-wrap gap-1.5 border-t pt-2 text-[10px]">
+        <button onClick={() => wrap(() => approveOutputAction({ outputId: o.id, entityType: et, entityId: eid }), `oa-${o.id}`)} className={`font-bold ${o.is_approved ? "text-success" : "text-muted"}`}><Icon name="UserCheck" size={12} /> אשר</button>
+        <button onClick={() => wrap(() => rejectOutputAction({ outputId: o.id, entityType: et, entityId: eid }), `or-${o.id}`)} className="text-danger font-bold">דחה</button>
+        <button onClick={() => wrap(() => favoriteOutputAction({ outputId: o.id, value: !o.is_favorite, entityType: et, entityId: eid }), `of-${o.id}`)} className={`font-bold ${o.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={12} /></button>
+        <button onClick={() => wrap(() => duplicateOutputAction({ outputId: o.id, entityType: et, entityId: eid }), `od-${o.id}`)} className="text-muted font-bold"><Icon name="Plus" size={12} /></button>
+        <button onClick={() => wrap(() => regenerateOutputAction({ outputId: o.id, entityType: et, entityId: eid }), `og-${o.id}`)} className="text-muted font-bold"><Icon name="Sparkles" size={12} /></button>
+      </div>
+    </div>
+  );
+}
+
+function OutputDrawer({ o, onClose }: { o: Output; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{OUTPUT_TYPE_LABELS[o.output_type] ?? o.output_type}</span>
+          <button onClick={onClose} className="text-muted"><Icon name="Minus" size={18} /></button>
+        </div>
+        <div className="mx-auto max-w-[260px]"><CreativePreview data={o.render_data} /></div>
+        <p className="text-ink mt-3 text-sm font-black">{o.title}</p>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Mini label="מותג" value={o.brand_match_score} />
+          <Mini label="שיווק" value={o.marketing_match_score} />
+          <Mini label="קריאוּת" value={o.readability_score} />
+          <Mini label="היררכיה" value={o.hierarchy_score} />
+          <Mini label="המרה" value={o.conversion_score} />
+          <Mini label="כללי" value={o.overall_score} />
+        </div>
+        <p className="text-muted mt-3 text-[12px]">קריאייטיב ערוך מובנה — נשמר כאובייקט render ולא כתמונה. בשלב הוויזואלי הבא ZONO יזריק תמונות אמיתיות למקומות המסומנים.</p>
       </div>
     </div>
   );
