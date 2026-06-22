@@ -19,6 +19,9 @@ import { FinancingDashboardSection } from "@/components/dashboard/sections/Finan
 import { ReputationDashboardSection } from "@/components/dashboard/sections/ReputationDashboardSection";
 import { AIOfficeDashboardSection } from "@/components/dashboard/sections/AIOfficeDashboardSection";
 import { CommunitiesDashboardSection } from "@/components/dashboard/sections/CommunitiesDashboardSection";
+import { WhatsappDashboardSection } from "@/components/dashboard/sections/WhatsappDashboardSection";
+import { CommIntelDashboardSection } from "@/components/dashboard/sections/CommIntelDashboardSection";
+import { JourneysDashboardSection } from "@/components/dashboard/sections/JourneysDashboardSection";
 import { OperatingAreasSection } from "@/components/dashboard/sections/OperatingAreasSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
@@ -50,6 +53,9 @@ export default function Home() {
       <Suspense fallback={null}><FinancingDashboardSection /></Suspense>
       <Suspense fallback={null}><ReputationDashboardSection /></Suspense>
       <Suspense fallback={null}><CommunitiesDashboardSection /></Suspense>
+      <Suspense fallback={null}><WhatsappDashboardSection /></Suspense>
+      <Suspense fallback={null}><CommIntelDashboardSection /></Suspense>
+      <Suspense fallback={null}><JourneysDashboardSection /></Suspense>
       <Suspense fallback={null}>
         <ForecastDashboardSection />
       </Suspense>

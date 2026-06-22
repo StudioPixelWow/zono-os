@@ -106,7 +106,7 @@ export async function connectWhatsapp(): Promise<{ status: string }> {
 // ── inbound capture (manual) + qualification + action extraction ──────────────
 export async function recordInbound(input: { text: string; contactName?: string; conversationId?: string }): Promise<{ conversationId: string; intent: string }> {
   const { orgId, userId, supabase } = await ctx();
-  const { intent, score } = detectIntent(input.text);
+  const { intent } = detectIntent(input.text);
   let convId = input.conversationId ?? null;
   if (!convId) {
     const { data } = await supabase.from("whatsapp_conversations").insert({ organization_id: orgId, contact_name: input.contactName ?? null, assigned_agent_id: userId, intent, state: "requires_reply" }).select("id").single();

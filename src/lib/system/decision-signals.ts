@@ -398,3 +398,125 @@ export async function buildCommunityAttentionRows(orgId: string): Promise<Attent
   } catch { /* community signals are additive — never block the Decision Brain */ }
   return rows;
 }
+
+export async function buildWhatsappAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    // Hot WhatsApp leads — high lead score, still open
+    const { count: hot } = await supabase.from("whatsapp_conversations")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).gte("lead_score", 75).neq("state", "closed");
+    if ((hot ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "whatsapp", entity_id: orgId,
+        attention_score: 82, urgency_score: 86, impact_score: 64, confidence_score: 85, revenue_impact_score: 62, relationship_impact_score: 34, churn_impact_score: 18,
+        title: `${hot} לידים חמים בוואטסאפ`, reason: "שיחות וואטסאפ עם ציון ליד גבוה הממתינות למענה", recommended_action: "צור קשר היום במרכז הוואטסאפ", expected_outcome: "המרת לידים חמים לפגישות", status: "open" });
+    }
+    // Drafts pending approval (sensitive content)
+    const { count: appr } = await supabase.from("whatsapp_drafts")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("approval_status", "pending");
+    if ((appr ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "whatsapp", entity_id: orgId,
+        attention_score: 74, urgency_score: 78, impact_score: 50, confidence_score: 90, revenue_impact_score: 40, relationship_impact_score: 28, churn_impact_score: 22,
+        title: `${appr} הודעות וואטסאפ ממתינות לאישור`, reason: "טיוטות בנושאים רגישים (מחיר/משפטי/מו״מ) הדורשות אישור לפני שליחה", recommended_action: "אשר או דחה במרכז האישורים", expected_outcome: "המשך תקשורת תואמת מדיניות", status: "open" });
+    }
+    // Missed calls awaiting recovery
+    const { count: missed } = await supabase.from("whatsapp_call_events")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("event_type", "missed").neq("recovery_status", "recovered");
+    if ((missed ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "whatsapp", entity_id: orgId,
+        attention_score: 70, urgency_score: 80, impact_score: 48, confidence_score: 82, revenue_impact_score: 38, relationship_impact_score: 36, churn_impact_score: 40,
+        title: `${missed} שיחות שלא נענו לשחזור`, reason: "שיחות נכנסות שלא נענו — חלון שחזור מהיר קריטי", recommended_action: "שלח טיוטת שחזור ידנית במרכז הוואטסאפ", expected_outcome: "מניעת אובדן לידים משיחות שלא נענו", status: "open" });
+    }
+    // Silent / stale conversations — reactivation
+    const cutoff = new Date(Date.now() - 5 * DAY).toISOString();
+    const { count: silent } = await supabase.from("whatsapp_conversations")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId).neq("state", "closed").lt("last_message_at", cutoff);
+    if ((silent ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "whatsapp", entity_id: orgId,
+        attention_score: clamp(56 + Math.min(20, (silent ?? 0))), urgency_score: 46, impact_score: 44, confidence_score: 78, revenue_impact_score: 36, relationship_impact_score: 40, churn_impact_score: 52,
+        title: `${silent} שיחות וואטסאפ שקטות`, reason: "שיחות ללא פעילות מעל 5 ימים — סיכון נטישה", recommended_action: "הפעל מסע החייאה מבוקר", expected_outcome: "החזרת לידים שקטים למעורבות", status: "open" });
+    }
+  } catch { /* whatsapp signals are additive — never block the Decision Brain */ }
+  return rows;
+}
+
+export async function buildCommIntelAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    // communication risks (highest-scoring open)
+    const { data: risks } = await supabase.from("communication_risks")
+      .select("entity_type,entity_id,risk_type,score,reason,recommended_action").eq("org_id", orgId).eq("status", "open").gte("score", 50).order("score", { ascending: false }).limit(5);
+    for (const r of (risks ?? []) as { entity_type: string; entity_id: string; risk_type: string; score: number; reason: string | null; recommended_action: string | null }[]) {
+      rows.push({ org_id: orgId, entity_type: r.entity_type, entity_id: r.entity_id,
+        attention_score: clamp(r.score), urgency_score: clamp(r.score + 6), impact_score: 56, confidence_score: 80, revenue_impact_score: 48, relationship_impact_score: 44, churn_impact_score: clamp(r.score),
+        title: `סיכון תקשורת — ${r.risk_type}`, reason: r.reason ?? "סיכון בתקשורת עם הלקוח", recommended_action: r.recommended_action ?? "טפל בקשר", expected_outcome: "מניעת אובדן לקוח/עסקה", status: "open" });
+    }
+    // communication opportunities
+    const { data: opps } = await supabase.from("communication_opportunities")
+      .select("entity_type,entity_id,opportunity_type,score,reason,recommended_action").eq("org_id", orgId).eq("status", "open").gte("score", 60).order("score", { ascending: false }).limit(5);
+    for (const o of (opps ?? []) as { entity_type: string; entity_id: string; opportunity_type: string; score: number; reason: string | null; recommended_action: string | null }[]) {
+      rows.push({ org_id: orgId, entity_type: o.entity_type, entity_id: o.entity_id,
+        attention_score: clamp(o.score), urgency_score: clamp(o.score - 4), impact_score: 62, confidence_score: 82, revenue_impact_score: clamp(o.score), relationship_impact_score: 30, churn_impact_score: 0,
+        title: `הזדמנות תקשורת — ${o.opportunity_type}`, reason: o.reason ?? "סימני מוכנות בתקשורת", recommended_action: o.recommended_action ?? "פעל על ההזדמנות", expected_outcome: "קידום עסקה/הפניה", status: "open" });
+    }
+    // broken commitments
+    const { count: broken } = await supabase.from("communication_commitments")
+      .select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "broken");
+    if ((broken ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "communication", entity_id: orgId,
+        attention_score: 72, urgency_score: 78, impact_score: 52, confidence_score: 88, revenue_impact_score: 40, relationship_impact_score: 56, churn_impact_score: 50,
+        title: `${broken} התחייבויות שנשברו`, reason: "הבטחות שניתנו ללקוחות ולא קוימו — פגיעה באמון", recommended_action: "השלם והחזר אמון במרכז התקשורת", expected_outcome: "שיקום אמון ומומנטום", status: "open" });
+    }
+    // new unresolved objections
+    const cutoff = new Date(Date.now() - 7 * DAY).toISOString();
+    const { count: objs } = await supabase.from("communication_objections")
+      .select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("resolved", false).gte("detected_at", cutoff);
+    if ((objs ?? 0) > 0) {
+      rows.push({ org_id: orgId, entity_type: "communication", entity_id: orgId,
+        attention_score: 66, urgency_score: 60, impact_score: 50, confidence_score: 80, revenue_impact_score: 44, relationship_impact_score: 38, churn_impact_score: 36,
+        title: `${objs} התנגדויות חדשות שטרם טופלו`, reason: "התנגדויות שזוהו בתקשורת ועדיין פתוחות", recommended_action: "טפל בהתנגדויות לפי חומרה", expected_outcome: "הסרת חסמים לסגירה", status: "open" });
+    }
+  } catch { /* comm-intel signals are additive — never block the Decision Brain */ }
+  return rows;
+}
+
+export async function buildJourneyAttentionRows(orgId: string): Promise<AttentionInsert[]> {
+  const supabase = await createClient();
+  const rows: AttentionInsert[] = [];
+  try {
+    // Ready buyers/sellers (high conversion, low risk)
+    const { data: ready } = await supabase.from("journeys")
+      .select("journey_type,entity_type,entity_id,conversion_score,risk_score,current_stage").eq("org_id", orgId).eq("status", "active").gte("conversion_score", 70).lt("risk_score", 45).order("conversion_score", { ascending: false }).limit(8);
+    for (const j of (ready ?? []) as { journey_type: string; entity_type: string; entity_id: string; conversion_score: number }[]) {
+      rows.push({ org_id: orgId, entity_type: j.entity_type, entity_id: j.entity_id,
+        attention_score: clamp(j.conversion_score), urgency_score: clamp(j.conversion_score - 4), impact_score: 70, confidence_score: 84, revenue_impact_score: clamp(j.conversion_score), relationship_impact_score: 28, churn_impact_score: 0,
+        title: j.journey_type === "buyer" ? "קונה בשל לסגירה" : "מוכר בשל לסגירה", reason: "מסע עם ציון המרה גבוה וסיכון נמוך", recommended_action: j.journey_type === "buyer" ? "הצע צעד סגירה היום" : "קדם לחתימה/סגירה", expected_outcome: "סגירת עסקה", status: "open" });
+    }
+    // Stuck journeys
+    const { data: stuck } = await supabase.from("journeys")
+      .select("journey_type,entity_type,entity_id,current_stage,velocity_state,risk_score").eq("org_id", orgId).eq("status", "active").in("velocity_state", ["stuck", "regression"]).limit(8);
+    for (const j of (stuck ?? []) as { journey_type: string; entity_type: string; entity_id: string; velocity_state: string; risk_score: number }[]) {
+      rows.push({ org_id: orgId, entity_type: j.entity_type, entity_id: j.entity_id,
+        attention_score: clamp(60 + j.risk_score * 0.3), urgency_score: 72, impact_score: 56, confidence_score: 80, revenue_impact_score: 46, relationship_impact_score: 40, churn_impact_score: clamp(j.risk_score),
+        title: j.journey_type === "buyer" ? "מסע קונה תקוע" : "מסע מוכר תקוע", reason: j.velocity_state === "regression" ? "המסע נסוג לשלב קודם" : "אין התקדמות בשלב הנוכחי", recommended_action: "צור קשר יזום והסר חסמים", expected_outcome: "החזרת מומנטום למסע", status: "open" });
+    }
+    // Journey risks (open, high)
+    const { data: risks } = await supabase.from("journey_risks")
+      .select("entity_type,entity_id,risk_type,score,reason,recommended_action").eq("org_id", orgId).eq("status", "open").gte("score", 55).order("score", { ascending: false }).limit(6);
+    for (const r of (risks ?? []) as { entity_type: string; entity_id: string; risk_type: string; score: number; reason: string | null; recommended_action: string | null }[]) {
+      rows.push({ org_id: orgId, entity_type: r.entity_type, entity_id: r.entity_id,
+        attention_score: clamp(r.score), urgency_score: clamp(r.score), impact_score: 54, confidence_score: 80, revenue_impact_score: 44, relationship_impact_score: 38, churn_impact_score: clamp(r.score),
+        title: `סיכון מסע — ${r.risk_type}`, reason: r.reason ?? "סיכון במסע הלקוח", recommended_action: r.recommended_action ?? "התערב במסע", expected_outcome: "מניעת נשירה", status: "open" });
+    }
+    // Journey opportunities (open, high)
+    const { data: opps } = await supabase.from("journey_opportunities")
+      .select("entity_type,entity_id,opportunity_type,score,reason,recommended_action").eq("org_id", orgId).eq("status", "open").gte("score", 65).order("score", { ascending: false }).limit(6);
+    for (const o of (opps ?? []) as { entity_type: string; entity_id: string; opportunity_type: string; score: number; reason: string | null; recommended_action: string | null }[]) {
+      rows.push({ org_id: orgId, entity_type: o.entity_type, entity_id: o.entity_id,
+        attention_score: clamp(o.score), urgency_score: clamp(o.score - 6), impact_score: 64, confidence_score: 82, revenue_impact_score: clamp(o.score), relationship_impact_score: 26, churn_impact_score: 0,
+        title: `הזדמנות מסע — ${o.opportunity_type}`, reason: o.reason ?? "הזדמנות במסע הלקוח", recommended_action: o.recommended_action ?? "פעל על ההזדמנות", expected_outcome: "האצת המרה", status: "open" });
+    }
+  } catch { /* journey signals are additive — never block the Decision Brain */ }
+  return rows;
+}

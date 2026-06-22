@@ -1,0 +1,285 @@
+-- ============================================================================
+-- ZONO — Buyer & Seller Journey Intelligence OS
+-- ----------------------------------------------------------------------------
+-- A living journey for every buyer/seller/lead — sitting ABOVE the CRM,
+-- Communication Intelligence, Deals, Recommendations, Forecast, Revenue,
+-- Automation and Decision Brain (does not rebuild them). Distinct from the
+-- property-level property_journeys + journey_stage enum: this models the
+-- PERSON's progression with TEXT stages. Deterministic, org-scoped RLS.
+-- ============================================================================
+
+-- 1) journeys — one living journey per entity ---------------------------------
+create table public.journeys (
+  id                 uuid primary key default gen_random_uuid(),
+  org_id             uuid not null references public.organizations(id) on delete cascade,
+  journey_type       text not null,
+  entity_type        text not null,
+  entity_id          uuid not null,
+  current_stage      text not null default 'new',
+  stage_entered_at   timestamptz not null default now(),
+  last_activity_at   timestamptz not null default now(),
+  progress           smallint not null default 0,
+  health_score       smallint not null default 50,
+  engagement_score   smallint not null default 50,
+  conversion_score   smallint not null default 0,
+  risk_score         smallint not null default 0,
+  velocity_score     smallint not null default 50,
+  velocity_state     text not null default 'normal',
+  status             text not null default 'active',
+  next_best_action   text,
+  ai_summary         text,
+  stage_history      jsonb not null default '[]'::jsonb,
+  started_at         timestamptz not null default now(),
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  constraint journeys_uniq unique (org_id, entity_type, entity_id)
+);
+create index journeys_org_idx     on public.journeys(org_id);
+create index journeys_entity_idx  on public.journeys(entity_type, entity_id);
+create index journeys_type_idx    on public.journeys(journey_type);
+create index journeys_stage_idx   on public.journeys(current_stage);
+create index journeys_status_idx  on public.journeys(status);
+
+-- 2) journey_stages — system reference catalog (org_id null = system) ----------
+create table public.journey_stages (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid references public.organizations(id) on delete cascade,
+  journey_type  text not null,
+  stage_key     text not null,
+  label         text not null,
+  position      smallint not null default 0,
+  is_terminal   boolean not null default false,
+  is_won        boolean not null default false,
+  created_at    timestamptz not null default now()
+);
+create index journey_stages_type_idx on public.journey_stages(journey_type, position);
+
+-- 3) journey_events -----------------------------------------------------------
+create table public.journey_events (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid not null references public.organizations(id) on delete cascade,
+  journey_id    uuid references public.journeys(id) on delete cascade,
+  entity_type   text not null,
+  entity_id     uuid not null,
+  event_type    text not null,
+  from_stage    text,
+  to_stage      text,
+  title         text,
+  detail        text,
+  occurred_at   timestamptz not null default now(),
+  metadata      jsonb not null default '{}'::jsonb,
+  created_at    timestamptz not null default now()
+);
+create index journey_events_org_idx     on public.journey_events(org_id);
+create index journey_events_journey_idx on public.journey_events(journey_id);
+create index journey_events_occurred_idx on public.journey_events(occurred_at);
+
+-- 4) journey_milestones -------------------------------------------------------
+create table public.journey_milestones (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid not null references public.organizations(id) on delete cascade,
+  journey_id    uuid references public.journeys(id) on delete cascade,
+  entity_type   text not null,
+  entity_id     uuid not null,
+  milestone_key text not null,
+  label         text not null,
+  reached       boolean not null default false,
+  reached_at    timestamptz,
+  expected_by   timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index journey_milestones_org_idx     on public.journey_milestones(org_id);
+create index journey_milestones_journey_idx on public.journey_milestones(journey_id);
+
+-- 5) journey_risks ------------------------------------------------------------
+create table public.journey_risks (
+  id                 uuid primary key default gen_random_uuid(),
+  org_id             uuid not null references public.organizations(id) on delete cascade,
+  journey_id         uuid references public.journeys(id) on delete cascade,
+  entity_type        text not null,
+  entity_id          uuid not null,
+  risk_type          text not null,
+  severity           text not null default 'medium',
+  score              smallint not null default 0,
+  reason             text,
+  recommended_action text,
+  status             text not null default 'open',
+  detected_at        timestamptz not null default now(),
+  resolved_at        timestamptz,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+create index journey_risks_org_idx     on public.journey_risks(org_id);
+create index journey_risks_journey_idx on public.journey_risks(journey_id);
+create index journey_risks_status_idx  on public.journey_risks(status);
+
+-- 6) journey_opportunities ----------------------------------------------------
+create table public.journey_opportunities (
+  id                 uuid primary key default gen_random_uuid(),
+  org_id             uuid not null references public.organizations(id) on delete cascade,
+  journey_id         uuid references public.journeys(id) on delete cascade,
+  entity_type        text not null,
+  entity_id          uuid not null,
+  opportunity_type   text not null,
+  score              smallint not null default 0,
+  reason             text,
+  recommended_action text,
+  status             text not null default 'open',
+  detected_at        timestamptz not null default now(),
+  acted_at           timestamptz,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+create index journey_opps_org_idx     on public.journey_opportunities(org_id);
+create index journey_opps_journey_idx on public.journey_opportunities(journey_id);
+create index journey_opps_status_idx  on public.journey_opportunities(status);
+
+-- 7) journey_scores — historical score snapshots ------------------------------
+create table public.journey_scores (
+  id                uuid primary key default gen_random_uuid(),
+  org_id            uuid not null references public.organizations(id) on delete cascade,
+  journey_id        uuid references public.journeys(id) on delete cascade,
+  health_score      smallint not null default 0,
+  engagement_score  smallint not null default 0,
+  conversion_score  smallint not null default 0,
+  risk_score        smallint not null default 0,
+  velocity_score    smallint not null default 0,
+  captured_at       timestamptz not null default now()
+);
+create index journey_scores_journey_idx on public.journey_scores(journey_id, captured_at);
+
+-- 8) journey_predictions ------------------------------------------------------
+create table public.journey_predictions (
+  id                        uuid primary key default gen_random_uuid(),
+  org_id                    uuid not null references public.organizations(id) on delete cascade,
+  journey_id                uuid references public.journeys(id) on delete cascade,
+  entity_type               text not null,
+  entity_id                 uuid not null,
+  probability_convert       smallint not null default 0,
+  probability_drop          smallint not null default 0,
+  expected_days_to_convert  integer,
+  expected_deal_value       numeric,
+  expected_commission       numeric,
+  computed_at               timestamptz not null default now()
+);
+create index journey_predictions_journey_idx on public.journey_predictions(journey_id);
+
+-- 9) journey_blockers ---------------------------------------------------------
+create table public.journey_blockers (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid not null references public.organizations(id) on delete cascade,
+  journey_id    uuid references public.journeys(id) on delete cascade,
+  entity_type   text not null,
+  entity_id     uuid not null,
+  blocker_type  text not null,
+  severity      text not null default 'medium',
+  detail        text,
+  resolved      boolean not null default false,
+  resolved_at   timestamptz,
+  detected_at   timestamptz not null default now(),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index journey_blockers_org_idx     on public.journey_blockers(org_id);
+create index journey_blockers_journey_idx on public.journey_blockers(journey_id);
+create index journey_blockers_resolved_idx on public.journey_blockers(resolved);
+
+-- 10) journey_velocity --------------------------------------------------------
+create table public.journey_velocity (
+  id                 uuid primary key default gen_random_uuid(),
+  org_id             uuid not null references public.organizations(id) on delete cascade,
+  journey_id         uuid references public.journeys(id) on delete cascade,
+  entity_type        text not null,
+  entity_id          uuid not null,
+  velocity_state     text not null default 'normal',
+  days_in_stage      integer not null default 0,
+  avg_days_per_stage numeric,
+  stage_changes_30d  integer not null default 0,
+  computed_at        timestamptz not null default now()
+);
+create index journey_velocity_journey_idx on public.journey_velocity(journey_id);
+
+-- updated_at triggers ---------------------------------------------------------
+create trigger trg_journeys_updated before update on public.journeys for each row execute function public.set_updated_at();
+create trigger trg_journey_milestones_updated before update on public.journey_milestones for each row execute function public.set_updated_at();
+create trigger trg_journey_risks_updated before update on public.journey_risks for each row execute function public.set_updated_at();
+create trigger trg_journey_opps_updated before update on public.journey_opportunities for each row execute function public.set_updated_at();
+create trigger trg_journey_blockers_updated before update on public.journey_blockers for each row execute function public.set_updated_at();
+
+-- stage catalog seed (system rows; org_id null) -------------------------------
+insert into public.journey_stages (org_id, journey_type, stage_key, label, position, is_terminal, is_won) values
+  (null,'buyer','new','קונה חדש',1,false,false),
+  (null,'buyer','discovery','גילוי',2,false,false),
+  (null,'buyer','qualification','הסמכה',3,false,false),
+  (null,'buyer','budget_validation','אימות תקציב',4,false,false),
+  (null,'buyer','financing','מימון',5,false,false),
+  (null,'buyer','recommendations','המלצות',6,false,false),
+  (null,'buyer','property_exploration','חקירת נכסים',7,false,false),
+  (null,'buyer','property_comparison','השוואת נכסים',8,false,false),
+  (null,'buyer','property_visits','ביקורי נכסים',9,false,false),
+  (null,'buyer','shortlist','רשימה קצרה',10,false,false),
+  (null,'buyer','negotiation','משא ומתן',11,false,false),
+  (null,'buyer','offer','הצעה',12,false,false),
+  (null,'buyer','deal','עסקה',13,false,false),
+  (null,'buyer','closing','סגירה',14,false,false),
+  (null,'buyer','completed','הושלם',15,true,true),
+  (null,'buyer','dropped','נשר',16,true,false),
+  (null,'seller','potential','מוכר פוטנציאלי',1,false,false),
+  (null,'seller','valuation','הערכת שווי',2,false,false),
+  (null,'seller','meeting','פגישה',3,false,false),
+  (null,'seller','proposal','הצעה',4,false,false),
+  (null,'seller','exclusive_discussion','דיון בלעדיות',5,false,false),
+  (null,'seller','signed','חתום',6,false,false),
+  (null,'seller','marketing','שיווק',7,false,false),
+  (null,'seller','lead_generation','יצירת לידים',8,false,false),
+  (null,'seller','viewings','צפיות',9,false,false),
+  (null,'seller','offers','הצעות',10,false,false),
+  (null,'seller','negotiation','משא ומתן',11,false,false),
+  (null,'seller','deal','עסקה',12,false,false),
+  (null,'seller','closing','סגירה',13,false,false),
+  (null,'seller','completed','הושלם',14,true,true),
+  (null,'seller','lost','אבד',15,true,false);
+
+-- RLS — org-scoped (journey_stages also allows system rows) -------------------
+alter table public.journey_stages enable row level security;
+create policy "journey_stages_select" on public.journey_stages for select to authenticated using (org_id is null or org_id = public.current_org_id());
+create policy "journey_stages_insert" on public.journey_stages for insert to authenticated with check (org_id = public.current_org_id() and public.has_min_role('manager'));
+create policy "journey_stages_update" on public.journey_stages for update to authenticated using (org_id = public.current_org_id() and public.has_min_role('manager')) with check (org_id = public.current_org_id());
+create policy "journey_stages_delete" on public.journey_stages for delete to authenticated using (org_id = public.current_org_id() and public.has_min_role('manager'));
+
+do $$
+declare t text;
+  tbls text[] := array[
+    'journeys','journey_events','journey_milestones','journey_risks','journey_opportunities',
+    'journey_scores','journey_predictions','journey_blockers','journey_velocity'
+  ];
+begin
+  foreach t in array tbls loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format(
+      'create policy "%1$s_select" on public.%1$I for select to authenticated '
+      || 'using (org_id = public.current_org_id());', t);
+    execute format(
+      'create policy "%1$s_insert" on public.%1$I for insert to authenticated '
+      || 'with check (org_id = public.current_org_id() and public.has_min_role(''agent''));', t);
+    execute format(
+      'create policy "%1$s_update" on public.%1$I for update to authenticated '
+      || 'using (org_id = public.current_org_id() and public.has_min_role(''agent'')) '
+      || 'with check (org_id = public.current_org_id());', t);
+    execute format(
+      'create policy "%1$s_delete" on public.%1$I for delete to authenticated '
+      || 'using (org_id = public.current_org_id() and public.has_min_role(''manager''));', t);
+  end loop;
+end $$;
+
+grant select, insert, update, delete on
+  public.journeys, public.journey_stages, public.journey_events, public.journey_milestones,
+  public.journey_risks, public.journey_opportunities, public.journey_scores, public.journey_predictions,
+  public.journey_blockers, public.journey_velocity
+  to authenticated;
+grant all privileges on
+  public.journeys, public.journey_stages, public.journey_events, public.journey_milestones,
+  public.journey_risks, public.journey_opportunities, public.journey_scores, public.journey_predictions,
+  public.journey_blockers, public.journey_velocity
+  to service_role;

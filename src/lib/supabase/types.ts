@@ -4051,6 +4051,95 @@ type WhatsappAuditLogsRow = {
   id: string; organization_id: string; actor_user_id: string | null; event: string; detail: string | null; risk_level: string | null; conversation_id: string | null; created_at: string;
 };
 
+// ── Communication Intelligence OS (org_id convention) ───────────────────────
+type CommunicationEventsRow = {
+  id: string; org_id: string; thread_id: string | null; actor_user_id: string | null; source: string; channel: string | null; direction: string | null;
+  entity_type: string; entity_id: string; related_entity_type: string | null; related_entity_id: string | null;
+  title: string | null; body: string | null; transcript: string | null; is_voice_note: boolean; intent: string | null; sentiment: string | null;
+  occurred_at: string; metadata: Json; created_at: string;
+};
+type CommunicationSummariesRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; thread_id: string | null; scope: string;
+  summary_text: string | null; what_client_wants: string | null; what_changed: string | null; blocking_progress: string | null; next_step: string | null;
+  key_points: Json; period_start: string | null; period_end: string | null; generated_at: string; created_at: string;
+};
+type CommunicationEntitiesRow = {
+  id: string; org_id: string; event_id: string | null; entity_type: string; entity_id: string; extracted_kind: string;
+  raw_value: string | null; normalized_value: string | null; confidence_score: number; created_at: string;
+};
+type CommunicationObjectionsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; related_entity_type: string | null; related_entity_id: string | null; event_id: string | null;
+  objection_type: string; severity: string; detail: string | null; resolved: boolean; resolution_method: string | null;
+  detected_at: string; resolved_at: string | null; created_at: string; updated_at: string;
+};
+type CommunicationSentimentRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; event_id: string | null; sentiment: string; score: number; detected_at: string; created_at: string;
+};
+type CommunicationIntentsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; event_id: string | null; intent: string; score: number; detected_at: string; created_at: string;
+};
+type CommunicationRisksRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; related_entity_type: string | null; related_entity_id: string | null;
+  risk_type: string; severity: string; score: number; reason: string | null; recommended_action: string | null; status: string;
+  detected_at: string; resolved_at: string | null; created_at: string; updated_at: string;
+};
+type CommunicationOpportunitiesRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; related_entity_type: string | null; related_entity_id: string | null;
+  opportunity_type: string; score: number; reason: string | null; recommended_action: string | null; status: string;
+  detected_at: string; acted_at: string | null; created_at: string; updated_at: string;
+};
+type ClientMemoryRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; communication_style: string | null; timeline: string | null;
+  trust_score: number; engagement_score: number; preferences: Json; family: Json; budget: Json; budget_evolution: Json; motivations: Json; risks: Json;
+  property_interests: Json; desired_cities: Json; desired_neighborhoods: Json; property_types: Json; viewing_history: Json; rejected_properties: Json; favorite_properties: Json; deal_history: Json;
+  seller_motivation: string | null; seller_urgency: string | null; price_flexibility: string | null; created_at: string; updated_at: string;
+};
+type ConversationMemoryRow = {
+  id: string; org_id: string; thread_id: string | null; entity_type: string; entity_id: string; last_summary: string | null; last_intent: string | null; last_sentiment: string | null;
+  open_loops: Json; established_facts: Json; message_count: number; last_event_at: string | null; created_at: string; updated_at: string;
+};
+
+// ── Buyer & Seller Journey Intelligence OS (org_id convention) ──────────────
+type JourneysRow = {
+  id: string; org_id: string; journey_type: string; entity_type: string; entity_id: string; current_stage: string;
+  stage_entered_at: string; last_activity_at: string; progress: number; health_score: number; engagement_score: number;
+  conversion_score: number; risk_score: number; velocity_score: number; velocity_state: string; status: string;
+  next_best_action: string | null; ai_summary: string | null; stage_history: Json; started_at: string; created_at: string; updated_at: string;
+};
+type JourneyStagesRow = {
+  id: string; org_id: string | null; journey_type: string; stage_key: string; label: string; position: number; is_terminal: boolean; is_won: boolean; created_at: string;
+};
+type JourneyEventsRow = {
+  id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; event_type: string;
+  from_stage: string | null; to_stage: string | null; title: string | null; detail: string | null; occurred_at: string; metadata: Json; created_at: string;
+};
+type JourneyMilestonesRow = {
+  id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; milestone_key: string; label: string;
+  reached: boolean; reached_at: string | null; expected_by: string | null; created_at: string; updated_at: string;
+};
+type JourneyRisksRow = {
+  id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; risk_type: string; severity: string; score: number;
+  reason: string | null; recommended_action: string | null; status: string; detected_at: string; resolved_at: string | null; created_at: string; updated_at: string;
+};
+type JourneyOpportunitiesRow = {
+  id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; opportunity_type: string; score: number;
+  reason: string | null; recommended_action: string | null; status: string; detected_at: string; acted_at: string | null; created_at: string; updated_at: string;
+};
+type JourneyScoresRow = {
+  id: string; org_id: string; journey_id: string | null; health_score: number; engagement_score: number; conversion_score: number; risk_score: number; velocity_score: number; captured_at: string;
+};
+type JourneyPredictionsRow = {
+  id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; probability_convert: number; probability_drop: number;
+  expected_days_to_convert: number | null; expected_deal_value: number | null; expected_commission: number | null; computed_at: string;
+};
+type JourneyBlockersRow = {
+  id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; blocker_type: string; severity: string; detail: string | null;
+  resolved: boolean; resolved_at: string | null; detected_at: string; created_at: string; updated_at: string;
+};
+type JourneyVelocityRow = {
+  id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; velocity_state: string; days_in_stage: number; avg_days_per_stage: number | null; stage_changes_30d: number; computed_at: string;
+};
+
 /**
  * Insert/Update helpers: columns with database defaults (id, timestamps,
  * status/flag defaults) and nullable columns are optional on insert; every
@@ -4530,6 +4619,26 @@ export interface Database {
       whatsapp_ai_actions: TableShape<WhatsappAiActionsRow, "organization_id" | "action_type" | "title">;
       whatsapp_daily_missions: TableShape<WhatsappDailyMissionsRow, "organization_id" | "title">;
       whatsapp_audit_logs: TableShape<WhatsappAuditLogsRow, "organization_id" | "event">;
+      communication_events: TableShape<CommunicationEventsRow, "org_id" | "entity_type" | "entity_id">;
+      communication_summaries: TableShape<CommunicationSummariesRow, "org_id" | "entity_type" | "entity_id">;
+      communication_entities: TableShape<CommunicationEntitiesRow, "org_id" | "entity_type" | "entity_id" | "extracted_kind">;
+      communication_objections: TableShape<CommunicationObjectionsRow, "org_id" | "entity_type" | "entity_id" | "objection_type">;
+      communication_sentiment: TableShape<CommunicationSentimentRow, "org_id" | "entity_type" | "entity_id" | "sentiment">;
+      communication_intents: TableShape<CommunicationIntentsRow, "org_id" | "entity_type" | "entity_id" | "intent">;
+      communication_risks: TableShape<CommunicationRisksRow, "org_id" | "entity_type" | "entity_id" | "risk_type">;
+      communication_opportunities: TableShape<CommunicationOpportunitiesRow, "org_id" | "entity_type" | "entity_id" | "opportunity_type">;
+      client_memory: TableShape<ClientMemoryRow, "org_id" | "entity_type" | "entity_id">;
+      conversation_memory: TableShape<ConversationMemoryRow, "org_id" | "entity_type" | "entity_id">;
+      journeys: TableShape<JourneysRow, "org_id" | "journey_type" | "entity_type" | "entity_id">;
+      journey_stages: TableShape<JourneyStagesRow, "journey_type" | "stage_key" | "label">;
+      journey_events: TableShape<JourneyEventsRow, "org_id" | "entity_type" | "entity_id" | "event_type">;
+      journey_milestones: TableShape<JourneyMilestonesRow, "org_id" | "entity_type" | "entity_id" | "milestone_key" | "label">;
+      journey_risks: TableShape<JourneyRisksRow, "org_id" | "entity_type" | "entity_id" | "risk_type">;
+      journey_opportunities: TableShape<JourneyOpportunitiesRow, "org_id" | "entity_type" | "entity_id" | "opportunity_type">;
+      journey_scores: TableShape<JourneyScoresRow, "org_id">;
+      journey_predictions: TableShape<JourneyPredictionsRow, "org_id" | "entity_type" | "entity_id">;
+      journey_blockers: TableShape<JourneyBlockersRow, "org_id" | "entity_type" | "entity_id" | "blocker_type">;
+      journey_velocity: TableShape<JourneyVelocityRow, "org_id" | "entity_type" | "entity_id">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
       community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
