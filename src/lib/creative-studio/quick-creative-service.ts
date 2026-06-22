@@ -13,6 +13,7 @@ import type { Json } from "@/lib/supabase/types";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
 import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
+import { generateNanoBananaImage } from "./visual-providers";
 import { validateCreative } from "./creative-director/validation";
 import { getEffectiveBrand } from "@/lib/brand-identity/service";
 
@@ -223,6 +224,49 @@ async function generateQuickCreativeFromRequest(supabase: DB, orgId: string, rq:
   }));
   await supabase.from("zono_quick_creative_outputs").insert(rows as never);
   return { created: rows.length };
+}
+
+const VISUAL_BUCKET = "generated-zono-visuals";
+/**
+ * Generate the FINAL ad image for a quick-creative output via Gemini Nano Banana
+ * — using the variation's master prompt + the property photo as reference.
+ * Uploads the real image to storage and stores it on the output (#P3 final image).
+ */
+export async function generateQuickCreativeImage(outputId: string): Promise<{ imageUrl: string; provider: string }> {
+  const { orgId, supabase } = await ctx();
+  const { data: o } = await supabase
+    .from("zono_quick_creative_outputs")
+    .select("id,internal_prompt,render_data,request_id")
+    .eq("org_id", orgId).eq("id", outputId).maybeSingle();
+  const out = o as { id: string; internal_prompt: string | null; render_data: unknown; request_id: string | null } | null;
+  if (!out) throw new Error("התוצר לא נמצא");
+  const prompt = out.internal_prompt || "Premium Hebrew RTL real-estate social ad.";
+
+  // Reference photo: the property image from the originating request, if any.
+  let refUrl: string | null = null;
+  if (out.request_id) {
+    const { data: req } = await supabase.from("zono_quick_creative_requests").select("input_data").eq("org_id", orgId).eq("id", out.request_id).maybeSingle();
+    const input = (req as { input_data?: { propertyImage?: string } } | null)?.input_data;
+    if (input?.propertyImage) refUrl = input.propertyImage;
+  }
+
+  const img = await generateNanoBananaImage(prompt, refUrl);
+  const bytes = Buffer.from(img.b64, "base64");
+  const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
+  const path = `${orgId}/quick/${outputId}-${Date.now()}.${ext}`;
+  const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, bytes, { contentType: img.mime, upsert: true });
+  if (upErr) throw new Error(`העלאת התמונה נכשלה: ${upErr.message}`);
+  const { data: pub } = supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path);
+  const imageUrl = pub.publicUrl;
+
+  // Persist on the output + inject into the render image placeholder.
+  let nextRd = out.render_data as unknown;
+  try {
+    const rd = out.render_data as { blocks?: Record<string, unknown>[] } | null;
+    if (rd?.blocks) nextRd = { ...rd, blocks: rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl } : b)) };
+  } catch { /* keep original */ }
+  await supabase.from("zono_quick_creative_outputs").update({ image_url: imageUrl, image_provider: img.provider, render_data: nextRd as never }).eq("org_id", orgId).eq("id", outputId);
+  return { imageUrl, provider: img.provider };
 }
 
 async function learn(supabase: DB, orgId: string, row: { output_type: string; variant_name: string; agent_id: string | null; property_id: string | null }, feedbackType: string, userId: string) {

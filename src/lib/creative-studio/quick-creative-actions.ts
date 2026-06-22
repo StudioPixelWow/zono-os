@@ -2,10 +2,21 @@
 import { revalidatePath } from "next/cache";
 import {
   generateQuickCreative, listQuickOutputs, resolveBrandSnapshot, setQuickFavorite, approveQuickOutput, rejectQuickOutput,
-  duplicateQuickOutput, editQuickText, replaceQuickImage, regenerateQuickRequest, type GenerateQuickInput,
+  duplicateQuickOutput, editQuickText, replaceQuickImage, regenerateQuickRequest, generateQuickCreativeImage, type GenerateQuickInput,
 } from "./quick-creative-service";
 
 export interface QcActionState { ok?: boolean; error?: string; message?: string; warnings?: string[] }
+
+/** Generate the final ad image (Gemini Nano Banana) for one output. */
+export async function generateQuickImageAction(input: { outputId: string; entityType: string; entityId: string }): Promise<QcActionState> {
+  try {
+    const r = await generateQuickCreativeImage(input.outputId);
+    revalidate(input.entityType, input.entityId);
+    return { ok: true, message: `התמונה נוצרה · ${r.provider}` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "יצירת התמונה נכשלה" };
+  }
+}
 function revalidate(entityType?: string, entityId?: string) {
   try { if (entityType && entityId) revalidatePath(`/creative-studio/${entityType}/${entityId}`); } catch { /* noop */ }
 }

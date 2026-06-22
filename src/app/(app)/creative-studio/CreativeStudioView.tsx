@@ -38,7 +38,7 @@ import {
 } from "@/lib/creative-studio/visual-actions";
 import { VISUAL_TYPE_LABELS, VARIATION_MODES } from "@/lib/creative-studio/visual-dna";
 import {
-  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction,
+  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction, generateQuickImageAction,
 } from "@/lib/creative-studio/quick-creative-actions";
 import { QUICK_TYPE_LABELS } from "@/lib/creative-studio/quick-creative-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
@@ -47,6 +47,7 @@ type QuickOutput = Record<string, unknown> & {
   id: string; request_id: string; output_type: string; variant_name: string; format: string; title: string | null; render_data: RenderData;
   headline: string | null; cta_text: string | null; overall_score: number; brand_match_score: number; readability_score: number; seller_lead_score: number; buyer_lead_score: number; is_approved: boolean; is_favorite: boolean; status: string;
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
+  image_url: string | null;
 };
 
 type Visual = Record<string, unknown> & {
@@ -920,7 +921,16 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   const [copied, setCopied] = useState(false);
   return (
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
-      <CreativePreview data={o.render_data} scale={0.8} />
+      {o.image_url
+        ? <img src={o.image_url} alt={o.variant_name} className="aspect-[4/5] w-full rounded-xl object-cover" />
+        : <CreativePreview data={o.render_data} scale={0.8} />}
+      <button
+        type="button"
+        onClick={() => wrap(() => generateQuickImageAction({ outputId: o.id, entityType: et, entityId: eid }), `qi-${o.id}`, "מייצר תמונה ב-Nano Banana…")}
+        className="bg-ink text-card inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-bold"
+      >
+        <Icon name="Sparkles" size={12} />{o.image_url ? "צור תמונה מחדש · Nano Banana" : "צור תמונה · Nano Banana"}
+      </button>
       <div className="flex items-center justify-between gap-1 px-0.5">
         <span className="text-muted text-[10px] font-bold">{o.variant_name}</span>
         <span className="text-success text-sm font-black">{o.overall_score}</span>

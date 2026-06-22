@@ -83,3 +83,51 @@ export async function generateVisual(i: VisualGenInput): Promise<VisualGenResult
     return mockVisual(i);
   }
 }
+
+// ── Nano Banana (Gemini 2.5 Flash Image) — text+image → final composed image ──
+export interface NanoBananaResult { b64: string; mime: string; provider: string }
+export function nanoBananaConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY);
+}
+
+/** Fetch an image URL server-side and return inline base64 (for reference photo). */
+async function fetchImageInline(url: string): Promise<{ mimeType: string; data: string } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const mimeType = res.headers.get("content-type") || "image/jpeg";
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { mimeType, data: buf.toString("base64") };
+  } catch { return null; }
+}
+
+/**
+ * Generate a REAL finished ad image via Gemini Nano Banana
+ * (gemini-2.5-flash-image-preview). The master prompt drives the design and the
+ * property photo (when present) is passed as a visual reference/anchor. Throws
+ * when no key — caller surfaces a clear "connect provider" message (no fake image).
+ */
+export async function generateNanoBananaImage(prompt: string, referenceImageUrl?: string | null): Promise<NanoBananaResult> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY חסר — חבר ספק תמונות כדי לייצר תמונה סופית");
+  const model = process.env.ZONO_NANO_BANANA_MODEL || "gemini-2.5-flash-image-preview";
+
+  const parts: Record<string, unknown>[] = [{ text: prompt }];
+  if (referenceImageUrl) {
+    const ref = await fetchImageInline(referenceImageUrl);
+    if (ref) parts.push({ inlineData: ref });
+  }
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ contents: [{ role: "user", parts }] }),
+  });
+  if (!res.ok) throw new Error(`Nano Banana failed (${res.status})`);
+  const json = await res.json();
+  const outParts = json?.candidates?.[0]?.content?.parts ?? [];
+  const img = outParts.find((p: Record<string, unknown>) => (p.inlineData as { data?: string } | undefined)?.data);
+  const b64 = (img?.inlineData as { data?: string } | undefined)?.data;
+  const mime = (img?.inlineData as { mimeType?: string } | undefined)?.mimeType || "image/png";
+  if (!b64) throw new Error("Nano Banana לא החזיר תמונה");
+  return { b64, mime, provider: "nano-banana" };
+}
