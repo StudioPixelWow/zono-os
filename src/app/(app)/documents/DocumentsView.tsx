@@ -1,20 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import {
-  createDocumentFromTemplateAction, createSignatureRequestAction, recordSignatureAction,
+  createDocumentFromTemplateAction, createDocumentManualAction, createSignatureRequestAction, recordSignatureAction,
   cancelDocumentAction, getDocumentDetailAction,
 } from "@/lib/documents/actions";
 import {
-  signatureStatusLabel, STATUS_TONE, AUDIT_EVENT_LABELS, docCategoryLabel,
+  signatureStatusLabel, STATUS_TONE, AUDIT_EVENT_LABELS, docCategoryLabel, DOC_CATEGORY_LABELS,
 } from "@/lib/documents/engine";
+import { uploadDocumentFile } from "@/lib/documents/upload";
+import { useCurrentOrganization } from "@/components/dashboard/DashboardDataProvider";
 import type { DocCommandCenter, DocumentSummary, DocumentDetail } from "@/lib/documents/service";
 
-type Tab = "all" | "pending" | "expiring" | "templates";
+type Tab = "all" | "pending" | "expiring" | "new" | "templates";
 
 export function DocumentsView({ cc }: { cc: DocCommandCenter }) {
   const [tab, setTab] = useState<Tab>("all");
@@ -24,6 +26,7 @@ export function DocumentsView({ cc }: { cc: DocCommandCenter }) {
     { id: "all", label: "כל המסמכים", icon: "Presentation" },
     { id: "pending", label: "ממתינים לחתימה", icon: "Clock" },
     { id: "expiring", label: "פגי תוקף בקרוב", icon: "AlertTriangle" },
+    { id: "new", label: "מסמך חדש", icon: "FilePlus2" },
     { id: "templates", label: "תבניות", icon: "Plus" },
   ];
 
@@ -55,9 +58,9 @@ export function DocumentsView({ cc }: { cc: DocCommandCenter }) {
         ))}
       </nav>
 
-      {tab === "templates" ? <TemplatesTab cc={cc} r={r} /> : (
-        <DocList docs={tab === "pending" ? cc.pending : tab === "expiring" ? cc.expiring : cc.documents} r={r} />
-      )}
+      {tab === "templates" ? <TemplatesTab cc={cc} r={r} />
+        : tab === "new" ? <NewDocumentForm r={r} />
+        : <DocList docs={tab === "pending" ? cc.pending : tab === "expiring" ? cc.expiring : cc.documents} r={r} />}
     </main>
   );
 }
@@ -89,6 +92,79 @@ function TemplatesTab({ cc, r }: { cc: DocCommandCenter; r: Runner }) {
           </Button>
         </div>
       ))}
+    </div>
+  );
+}
+
+const field = "bg-surface border-line text-ink focus:border-brand-light h-10 w-full rounded-xl border px-3 text-sm outline-none";
+const lbl = "text-muted text-[11px] font-bold";
+
+function NewDocumentForm({ r }: { r: Runner }) {
+  const org = useCurrentOrganization();
+  const [title, setTitle] = useState("");
+  const [docCategory, setDocCategory] = useState("custom");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [isChecklist, setIsChecklist] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+
+  const submit = () =>
+    r.run(async () => {
+      setUploadErr(null);
+      let fileUrl: string | undefined;
+      let storagePath: string | undefined;
+      if (file) {
+        if (!org) throw new Error("לא ניתן לזהות ארגון להעלאה");
+        const up = await uploadDocumentFile(file, org.id);
+        fileUrl = up.url;
+        storagePath = up.path;
+      }
+      const res = await createDocumentManualAction({
+        title, docCategory, expiresAt: expiresAt || null, notes: notes || null,
+        fileUrl, storagePath, isChecklistItem: isChecklist,
+      });
+      if (res.error) throw new Error(res.error);
+      setTitle(""); setNotes(""); setExpiresAt(""); setFile(null); setIsChecklist(false);
+      return res;
+    }, { id: "new-doc", pendingMessage: file ? "מעלה ויוצר..." : "יוצר מסמך...", success: () => "המסמך נוצר ✓" });
+
+  return (
+    <div className="bg-card border-line flex flex-col gap-4 rounded-2xl border p-5 shadow-sm">
+      <h2 className="text-ink text-base font-extrabold">צור מסמך חדש</h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className={lbl}>כותרת</span>
+          <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="לדוגמה: הסכם בלעדיות — דירה ברחוב..." />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={lbl}>סוג מסמך</span>
+          <select className={field} value={docCategory} onChange={(e) => setDocCategory(e.target.value)}>
+            {Object.entries(DOC_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={lbl}>תאריך תפוגה (אופציונלי)</span>
+          <input type="date" className={field} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={lbl}>קובץ (PDF / תמונה / Word)</span>
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" className="text-muted text-xs" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+      </div>
+      <label className="flex flex-col gap-1">
+        <span className={lbl}>הערות</span>
+        <input className={field} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </label>
+      <label className="flex items-center gap-2 text-sm font-semibold">
+        <input type="checkbox" checked={isChecklist} onChange={(e) => setIsChecklist(e.target.checked)} />
+        פריט נדרש ברשימת בדיקה (גם ללא קובץ)
+      </label>
+      <Button className="w-fit" loading={r.busyId === "new-doc"} onClick={submit}>
+        <Icon name="FilePlus2" size={15} />צור מסמך
+      </Button>
+      {uploadErr && <p className="text-danger text-xs font-semibold">{uploadErr}</p>}
+      <p className="text-muted text-[11px]">אפשר ליצור מסמך עם או בלי קובץ. לאחר היצירה ניתן להכין בקשת חתימה ולסמן כנחתם.</p>
     </div>
   );
 }
@@ -125,6 +201,11 @@ function DocCard({ d, r }: { d: DocumentSummary; r: Runner }) {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
+        {d.file_url && (
+          <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="bg-surface text-ink hover:border-brand-light border-line inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-bold">
+            <Icon name="Download" size={14} />צפה / הורד
+          </a>
+        )}
         {(d.signature_status === "draft") && (
           <Button size="sm" loading={r.busyId === `req-${d.id}`}
             onClick={() => wrap(() => createSignatureRequestAction(d.id, "manual"), `req-${d.id}`, "מכין בקשה...")}>

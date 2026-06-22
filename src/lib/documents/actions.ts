@@ -1,14 +1,20 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import {
-  createDocumentFromTemplate, addDocumentVersion, addParticipant, createSignatureRequest,
+  createDocumentFromTemplate, createDocumentManual, addDocumentVersion, addParticipant, createSignatureRequest,
   recordSignature, rejectDocument, cancelDocument, computeDealChecklist, getDocumentDetail,
-  type EntityRefs, type DocumentDetail,
+  type EntityRefs, type DocumentDetail, type ManualDocInput,
 } from "./service";
 
 export interface DocActionState { ok?: boolean; error?: string; message?: string; id?: string }
 
 function revalidate() { try { revalidatePath("/documents"); revalidatePath("/"); } catch { /* noop */ } }
+
+export async function createDocumentManualAction(input: ManualDocInput): Promise<DocActionState> {
+  if (!input.title?.trim() && !input.docCategory) return { error: "נא להזין כותרת וסוג מסמך" };
+  try { const r = await createDocumentManual(input); revalidate(); return { ok: true, id: r.id, message: "המסמך נוצר" }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "יצירת המסמך נכשלה" }; }
+}
 
 export async function createDocumentFromTemplateAction(templateKey: string, refs: EntityRefs): Promise<DocActionState> {
   try { const r = await createDocumentFromTemplate(templateKey, refs); revalidate(); return { ok: true, id: r.id, message: "המסמך נוצר — הוסף משתתפים והכן לחתימה" }; }

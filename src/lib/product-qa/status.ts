@@ -20,7 +20,7 @@ export const QA_ITEMS: QaItem[] = [
   { id: 2, title: "ערכת שיווק AI", status: "pass", notes: "מחולל ערכת שיווק מלאה (13+ פורמטים, נקודות מכירה, מענה להתנגדויות, SEO) עם בורר טון/אורך/ערוץ, דטרמיניסטי + AI אופציונלי, ללא המצאת מאפיינים.", lastChecked: TODAY },
   { id: 3, title: "בורר קהל יעד מובנה", status: "pass", notes: "רב-בחירה מקובץ + המלצות דטרמיניסטיות + 'קהל נוסף' חופשי, נשמר ב-properties.marketing_audiences (jsonb).", lastChecked: TODAY },
   { id: 4, title: "קישור מוכר באשף הנכס", status: "pass", notes: "צעד 'בעלים/מוכרים': חיפוש/קישור/יצירה inline, סימון מקבל החלטות/מורשה חתימה/ראשי, באנר מוכנות, CTA 'הוסף מוכר עכשיו' לפני פרסום.", lastChecked: TODAY },
-  { id: 5, title: "מסמכים וחתימות", status: "partial", notes: "מודול המסמכים קיים. שדרוג ה-MVP לשימושיות (העלאה/יצירה/קישור/סטטוסים מהמסך) ממתין.", lastChecked: TODAY },
+  { id: 5, title: "מסמכים וחתימות", status: "pass", notes: "טאב 'מסמך חדש': יצירה ידנית + העלאת קובץ (bucket documents) + סוג/תפוגה/הערות + פריט נדרש ללא קובץ; צפייה/הורדה, הכנת בקשת חתימה, סימון כנחתם, ביטול/ארכוב.", lastChecked: TODAY },
   { id: 6, title: "מחשבוני משכנתא ומימון", status: "pass", notes: "מחשבון החזר חודשי, כושר קנייה, פער הון עצמי, תשואת השקעה + מס רכישה (placeholder), עם disclaimer.", lastChecked: TODAY },
   { id: 7, title: "דשבורד בית — דאטה אמיתית", status: "partial", notes: "רוב הווידג'טים כבר נשענים על מודיעין אמיתי; ביקורת מלאה לכל ווידג'ט + תג demo בפיתוח ממתינה.", lastChecked: TODAY },
   { id: 8, title: "ניקוי תפריט צד", status: "partial", notes: "ארגון מחדש לקטגוריות מתקפלות + הסתרת placeholders + חיפוש תפריט ממתין.", lastChecked: TODAY },

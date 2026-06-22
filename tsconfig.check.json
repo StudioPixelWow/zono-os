@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "noEmit": true },
   "include": [
-    "src/app/(app)/admin/product-qa/page.tsx",
-    "src/lib/product-qa/status.ts"
+    "src/app/(app)/documents/DocumentsView.tsx",
+    "src/lib/documents/service.ts",
+    "src/lib/documents/actions.ts",
+    "src/lib/documents/upload.ts"
   ]
 }

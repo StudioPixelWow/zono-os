@@ -33,6 +33,7 @@ export interface DocumentSummary {
   id: string; title: string; doc_category: string | null; categoryLabel: string; signature_status: string;
   deal_id: string | null; buyer_id: string | null; seller_id: string | null; lead_id: string | null;
   property_id: string | null; expires_at: string | null; current_version: number; is_required: boolean; updated_at: string;
+  file_url: string | null;
 }
 export interface DocCommandCenter {
   pendingSignatures: number; blockedDeals: number; missingDocuments: number; expiringSoon: number;
@@ -49,6 +50,7 @@ function mapDoc(d: Record<string, unknown>): DocumentSummary {
     lead_id: (d.lead_id as string) ?? null, property_id: (d.property_id as string) ?? null,
     expires_at: (d.expires_at as string) ?? null, current_version: (d.current_version as number) ?? 1,
     is_required: Boolean(d.is_required), updated_at: d.updated_at as string,
+    file_url: (d.file_url as string) ?? null,
   };
 }
 
@@ -123,6 +125,36 @@ export async function createDocumentFromTemplate(templateKey: string, refs: Enti
   const id = (doc as { id: string }).id;
   await supabase.from("document_versions").insert({ organization_id: orgId, document_id: id, version: 1, created_by: userId, change_note: "גרסה ראשונית" });
   await audit(supabase, orgId, id, userId, "created", `נוצר מתבנית ${t.name_he as string}`);
+  return { id };
+}
+
+export interface ManualDocInput extends EntityRefs {
+  title: string;
+  docCategory: string;
+  expiresAt?: string | null;
+  notes?: string | null;
+  fileUrl?: string | null;
+  storagePath?: string | null;
+  isChecklistItem?: boolean; // a tracked requirement without a file yet
+}
+/** Create a document manually (no template) — upload, classify, link, track. */
+export async function createDocumentManual(input: ManualDocInput): Promise<{ id: string }> {
+  const { orgId, userId, supabase } = await ctx();
+  const title = input.title?.trim() || docCategoryLabel(input.docCategory);
+  const { data: doc, error } = await supabase.from("documents").insert({
+    org_id: orgId, owner_id: userId, title, doc_category: input.docCategory,
+    signature_status: "draft", current_version: 1, source: "manual",
+    file_url: input.fileUrl ?? null, storage_path: input.storagePath ?? null,
+    expires_at: input.expiresAt ?? null,
+    is_required: input.isChecklistItem ?? false,
+    deal_id: input.deal_id ?? null, buyer_id: input.buyer_id ?? null, seller_id: input.seller_id ?? null,
+    lead_id: input.lead_id ?? null, property_id: input.property_id ?? null, project_id: input.project_id ?? null, match_id: input.match_id ?? null,
+    metadata: (input.notes ? { notes: input.notes } : {}) as unknown as Json,
+  }).select("id").single();
+  if (error || !doc) throw new Error(error?.message ?? "יצירת המסמך נכשלה");
+  const id = (doc as { id: string }).id;
+  await supabase.from("document_versions").insert({ organization_id: orgId, document_id: id, version: 1, file_url: input.fileUrl ?? null, created_by: userId, change_note: input.fileUrl ? "קובץ הועלה" : "נוצר ידנית" });
+  await audit(supabase, orgId, id, userId, "created", input.fileUrl ? "מסמך נוצר עם קובץ" : "מסמך נוצר ידנית");
   return { id };
 }
 
