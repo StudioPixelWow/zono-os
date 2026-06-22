@@ -28,6 +28,15 @@ export const QA_ITEMS: QaItem[] = [
   { id: 10, title: "ייבוא מודעות חיצוניות בקנה מידה", status: "pass", notes: "מצבי סנכרון מדורגים בבורר: מהיר 50/עיר, רגיל 250, מלא 500, מתקדם 1000 (מנהל) — מחליף את התקרה הקבועה של 100. כל מצב חוסם גם מס' מודעות לעיר וגם מס' ערים, לוג מצב, וכשל בעיר אחת לא מפיל את כל הסנכרון. נוסף cursor/resumable: סנכרון מתקדם שנקטע ממשיך מהערים שטרם הושלמו (checkpoint ב-import_jobs.params).", lastChecked: TODAY },
   { id: 11, title: "אזורי פעילות מניעים ייבוא ומודיעין", status: "pass", notes: "הסנכרון נשען על organization_operating_localities (activeLocalities) — הוספת עיר מזינה אוטומטית את הייבוא; market/transactions/recommendations/territories כבר צורכים את אותם אזורים.", lastChecked: TODAY },
   { id: 12, title: "עמוד דוח QA", status: "pass", notes: "עמוד זה — מצב כל נושא במבט אחד.", lastChecked: TODAY },
+  // ── QA Pack #2 ──
+  { id: 13, title: "P2 · תמונות נכס אחרי פרסום", status: "pass", notes: "שורש: cleanupAbandonedDrafts מחק טיוטות עם מדיה (cascade) — תוקן לדלג על טיוטות עם תמונות. פרסום ממלא תמונה ראשית מהגלריה אם חסרה. + SQL לדלי property-media ציבורי.", lastChecked: TODAY },
+  { id: 14, title: "P2 · מוכר חדש מתקשר אוטומטית", status: "pass", notes: "יצירה inline באשף מקשרת ובוחרת את המוכר אוטומטית ללא חיפוש מחדש.", lastChecked: TODAY },
+  { id: 15, title: "P2 · חיפוש מוכר (autocomplete)", status: "pass", notes: "חיפוש debounced תוך כדי הקלדה (≥2 תווים) לפי שם/טלפון/אימייל.", lastChecked: TODAY },
+  { id: 16, title: "P2 · שם ZONO קריאייטיב", status: "pass", notes: "שונה גלובלית מ'סטודיו שיווק' ל-'ZONO קריאייטיב' (תפריט/כותרות/ניווט) + /creative כניסה ישירה.", lastChecked: TODAY },
+  { id: 17, title: "P2 · כניסה ישירה לקריאייטיב (ללא UUID)", status: "pass", notes: "המשגר עבר לבורר ישויות אמיתי (כל אופציה נושאת UUID); אין יותר הקלדת מזהה גולמי.", lastChecked: TODAY },
+  { id: 18, title: "P2 · העלאת מדיה ביצירה (ללא URL)", status: "pass", notes: "שדה תמונת הדירה ביצירה המהירה הוחלף בהעלאה מהמחשב (storage) שמייצר URL פנימית.", lastChecked: TODAY },
+  { id: 19, title: "P2 · סנכרון פרופיל מותג (אין אזהרות שווא)", status: "pass", notes: "אזהרות 'חסר' מחושבות מהערכים הסופיים אחרי Brand Identity (master) — לא נדלקות כשהמידע קיים בהגדרות.", lastChecked: TODAY },
+  { id: 20, title: "P2 · שגיאת UUID בוריאציות", status: "pass", notes: "isUuid() חוסם שם/slug מקודד מלהגיע לעמודות uuid; שאילתות מדלגות על מזהה לא-תקין; עמוד הסטודיו מציג הודעה ידידותית.", lastChecked: TODAY },
 ];
 
 export const QA_SUMMARY = {

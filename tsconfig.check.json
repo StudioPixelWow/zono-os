@@ -1,2 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/app/(app)/creative-studio/CreativeStudioView.tsx", "src/app/(app)/properties/new/WizardSellerStep.tsx"] }
+  "include": ["src/lib/product-qa/status.ts", "src/app/(app)/admin/product-qa/page.tsx"] }
