@@ -73,6 +73,18 @@ export function WizardSellerStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propertyId]);
 
+  // Debounced autocomplete: results appear as you type (≥2 chars), name/phone/email.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResults([]);
+      return;
+    }
+    const t = setTimeout(() => { void searchSellersAction(q).then(setResults); }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
   const sellers = state?.sellers ?? [];
   const readiness = state?.readiness;
 

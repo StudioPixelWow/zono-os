@@ -155,7 +155,7 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
       <ActionFeedback runner={r} />
 
       {/* QUICK CREATIVE TEMPLATES — יצירה מהירה */}
-      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} canViewPrompt={isManager} />
+      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} canViewPrompt={isManager} orgId={orgId} userId={userId} />
 
       {/* SECTION 2 — ASSETS LIBRARY */}
       <section className="flex flex-col gap-3">
@@ -888,7 +888,7 @@ const QUICK_CARDS: { type: string; title: string; desc: string; cta: string }[] 
   { type: "property_ad_post", title: "פוסט פרסום דירה", desc: "צרו מודעת נכס ממותגת עם תמונה, פרטים וקריאה לפעולה.", cta: "צור פוסט פרסום דירה" },
 ];
 
-function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
+function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, userId }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean; orgId: string; userId: string }) {
   const [wizardType, setWizardType] = useState<string | null>(null);
   return (
     <section className="flex flex-col gap-3">
@@ -910,7 +910,7 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt }: { outpu
           </div>
         </div>
       )}
-      {wizardType && <QuickCreativeWizard type={wizardType} et={et} eid={eid} onClose={() => setWizardType(null)} />}
+      {wizardType && <QuickCreativeWizard type={wizardType} et={et} eid={eid} orgId={orgId} userId={userId} onClose={() => setWizardType(null)} />}
     </section>
   );
 }
@@ -951,7 +951,34 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   );
 }
 
-function QuickCreativeWizard({ type, et, eid, onClose }: { type: string; et: string; eid: string; onClose: () => void }) {
+/** Upload an image from the computer (no URL pasting) — uploads to storage and
+ *  returns the public URL via onChange (#P2-6). Also accepts a pasted URL. */
+function ImageUploadField({ label, value, orgId, userId, et, eid, onChange }: { label: string; value: string; orgId: string; userId: string; et: string; eid: string; onChange: (url: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const upload = async (file: File | null) => {
+    if (!file) return;
+    setBusy(true); setErr(null);
+    try {
+      const row = await uploadMarketingAsset(file, { orgId, entityType: et, entityId: eid, uploadedBy: userId, assetType: "property_photo", title: file.name, flags: { is_property_photo: true } });
+      onChange((row as { file_url: string }).file_url);
+    } catch (e) { setErr(e instanceof Error ? e.message : "ההעלאה נכשלה"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted text-[11px] font-bold">{label}</span>
+      <div className="flex items-center gap-2">
+        <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(e) => upload(e.target.files?.[0] ?? null)} className="text-muted text-xs" />
+        {busy && <Icon name="Loader" size={14} className="text-brand animate-spin" />}
+        {value && !busy && <img src={value} alt="" className="border-line h-9 w-9 rounded-lg border object-cover" />}
+      </div>
+      {err && <span className="text-danger text-[11px]">{err}</span>}
+    </div>
+  );
+}
+
+function QuickCreativeWizard({ type, et, eid, orgId, userId, onClose }: { type: string; et: string; eid: string; orgId: string; userId: string; onClose: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [format, setFormat] = useState("feed_4_5");
@@ -991,6 +1018,9 @@ function QuickCreativeWizard({ type, et, eid, onClose }: { type: string; et: str
   const Area = (k: string, label: string, ph?: string) => (
     <label key={k} className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">{label}</span>
       <textarea defaultValue={str(k)} onChange={(e) => set(k, e.target.value)} placeholder={ph} rows={3} className="border-line bg-surface text-ink rounded-lg border px-3 py-2 text-sm" /></label>
+  );
+  const ImageField = (k: string, label: string) => (
+    <ImageUploadField key={k} label={label} value={str(k)} orgId={orgId} userId={userId} et={et} eid={eid} onChange={(url) => set(k, url)} />
   );
   const Check = (k: string, label: string) => (
     <label key={k} className="text-ink flex items-center gap-1.5 text-[12px]"><input type="checkbox" checked={!!f[k]} onChange={(e) => set(k, e.target.checked)} />{label}</label>
@@ -1041,7 +1071,7 @@ function QuickCreativeWizard({ type, et, eid, onClose }: { type: string; et: str
               <div className="grid grid-cols-2 gap-2">{Field("parking", "חניות")}{Field("neighborhood", "שכונה")}</div>
               <div className="flex flex-wrap gap-3">{Check("storage", "מחסן")}{Check("balcony", "מרפסת")}{Check("elevator", "מעלית")}</div>
             </>)}
-            {Field("propertyImage", "תמונת דירה (קישור URL, אופציונלי)")}
+            {ImageField("propertyImage", "תמונת דירה (העלאה מהמחשב, אופציונלי)")}
             {Field("customCta", "CTA מותאם (אופציונלי)")}
             {!requiredOk && <p className="text-warning text-[12px]">יש למלא את שדות החובה המסומנים ב-*</p>}
             <div className="flex gap-2"><Button size="sm" disabled={!requiredOk} onClick={goStep3}>המשך</Button><Button size="sm" variant="ghost" onClick={() => setStep(1)}>חזרה</Button></div>
