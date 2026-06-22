@@ -58,13 +58,11 @@ export async function resolveBrandSnapshot(opts: { entityType?: string; entityId
   const agentId = opts.entityType === "agent" && safeEntityId ? safeEntityId : (opts.agentId ?? userId);
   let agentName: string | null = null; let agentPhoto: string | null = null; let agentWhatsapp: string | null = null;
   try { const { data } = await supabase.from("users").select("full_name,avatar_url,phone").eq("org_id", orgId).eq("id", agentId as string).maybeSingle(); const u = data as { full_name?: string; avatar_url?: string; phone?: string } | null; agentName = u?.full_name ?? null; agentPhoto = u?.avatar_url ?? null; agentWhatsapp = u?.phone ?? null; } catch { /* ignore */ }
-  if (!agentPhoto) warnings.push("חסרה תמונת סוכן");
 
   let officeName: string | null = null; let officeLogo: string | null = null;
   try { const { data } = await supabase.from("organizations").select("name,logo_url").eq("id", orgId).maybeSingle(); const o = data as { name?: string; logo_url?: string } | null; officeName = o?.name ?? null; officeLogo = o?.logo_url ?? null; } catch { /* ignore */ }
-  if (!officeLogo) warnings.push("חסר לוגו משרד");
 
-  let colors: string[] = []; let luxury = 50; let modern = 50; let dnaActive = false;
+  let colors: string[] = []; let luxury = 50; let modern = 50; let dnaActive = false; let brandIdentityActive = false;
   try {
     const et = opts.entityType ?? "agent"; const eid = safeEntityId ?? (agentId as string);
     const { data } = await supabase.from("zono_marketing_dna_profiles").select("primary_colors,accent_colors,luxury_score,modern_score").eq("entity_type", et).eq("entity_id", eid).maybeSingle();
@@ -74,16 +72,22 @@ export async function resolveBrandSnapshot(opts: { entityType?: string; entityId
   // Brand Identity OS is the master source — override with it when present.
   try {
     const eb = await getEffectiveBrand(orgId, agentId);
-    if (eb.primary) { colors = [eb.primary, eb.secondary, eb.accent].filter((c): c is string => Boolean(c)); warnings = warnings.filter((w) => w !== "חסרים צבעי מותג"); }
-    if (eb.logo) { officeLogo = eb.logo; warnings = warnings.filter((w) => w !== "חסר לוגו משרד"); }
-    if (eb.profileImage && !agentPhoto) { agentPhoto = eb.profileImage; warnings = warnings.filter((w) => w !== "חסרה תמונת סוכן"); }
+    brandIdentityActive = eb.source !== "none";
+    if (eb.primary) colors = [eb.primary, eb.secondary, eb.accent].filter((c): c is string => Boolean(c));
+    if (eb.logo) officeLogo = eb.logo;
+    if (eb.profileImage && !agentPhoto) agentPhoto = eb.profileImage;
     if (eb.agentName) agentName = eb.agentName;
     if (eb.whatsapp) agentWhatsapp = eb.whatsapp;
     if (eb.officeName) officeName = eb.officeName;
   } catch { /* brand identity optional */ }
 
+  // Compute warnings ONCE from the FINAL resolved values — no false positives
+  // when the data exists in Settings → Brand & Identity (#P2-7).
+  warnings = [];
+  if (!agentPhoto) warnings.push("חסרה תמונת סוכן");
+  if (!officeLogo) warnings.push("חסר לוגו משרד");
   if (!colors.length) warnings.push("חסרים צבעי מותג");
-  if (!dnaActive) warnings.push("אין Marketing DNA פעיל");
+  if (!dnaActive && !brandIdentityActive) warnings.push("אין Marketing DNA פעיל");
 
   return { snapshot: { agentName, agentPhoto, agentWhatsapp, officeName, officeLogo, colors, luxury, modern }, warnings, agentId: agentId ?? null, officeId: orgId };
 }

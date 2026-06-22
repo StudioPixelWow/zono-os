@@ -1,10 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": [
-    "src/lib/utils.ts",
-    "src/lib/creative-studio/service.ts",
-    "src/lib/creative-studio/quick-creative-service.ts",
-    "src/app/(app)/creative-studio/StudioLauncher.tsx",
-    "src/app/(app)/creative-studio/page.tsx",
-    "src/app/(app)/creative-studio/[entityType]/[entityId]/page.tsx",
-    "src/app/(app)/creative/page.tsx"
-  ] }
+  "include": ["src/lib/creative-studio/quick-creative-service.ts"] }
