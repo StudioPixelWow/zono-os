@@ -21,7 +21,18 @@ import {
   generateCampaignAction, duplicateCampaignAction, archiveCampaignAction, deleteCampaignAction, approveCampaignAction,
 } from "@/lib/creative-studio/campaign-actions";
 import { CAMPAIGN_TYPE_LABELS, campaignTypesFor } from "@/lib/creative-studio/campaign-engine";
+import {
+  generateAssetsAction, favoriteAssetAction, approveAssetAction, rejectAssetAction, duplicateAssetAction, approveAllAssetsAction,
+} from "@/lib/creative-studio/asset-actions";
+import { CREATIVE_ASSET_TYPE_LABELS, OBJECTIVE_LABELS } from "@/lib/creative-studio/asset-generator";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
+
+type CreativeAsset = Record<string, unknown> & {
+  id: string; campaign_id: string; asset_type: string; title: string; objective: string | null; audience: string | null; marketing_angle: string | null; emotional_trigger: string | null;
+  visual_hook: string | null; copy_hook: string | null; cta_style: string | null; recommended_layout: string | null; priority: number; reasoning: string | null;
+  asset_score: number; campaign_match_score: number; audience_match_score: number; conversion_potential_score: number; marketing_strength_score: number; asset_status: string; is_favorite: boolean; is_approved: boolean;
+};
+const ASSET_STATUS_HE: Record<string, string> = { draft: "טיוטה", approved: "מאושר", rejected: "נדחה", archived: "ארכיון", produced: "הופק" };
 
 type Campaign = Record<string, unknown> & {
   id: string; title: string; campaign_type: string; status: string; updated_at: string; assetCount: number; completion: number;
@@ -44,10 +55,11 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; orgId: string; userId: string }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
+  const creativeAssets = (creativeAssetsRaw ?? []) as unknown as CreativeAsset[];
   const router = useRouter();
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
@@ -142,6 +154,9 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
 
       {/* CAMPAIGN FACTORY — Phase 4 */}
       <CampaignsSection campaigns={campaigns} assets={campaignAssets} et={et} eid={eid} r={r} wrap={wrap} />
+
+      {/* CREATIVE ASSET GENERATOR — Phase 5 */}
+      <CreativeAssetsSection assets={creativeAssets} campaigns={campaigns} et={et} eid={eid} r={r} wrap={wrap} />
 
       {/* SECTION 7 — GENERATOR PLACEHOLDER */}
       <section className="bg-brand-soft/30 border-line rounded-2xl border border-dashed p-6 text-center">
@@ -476,6 +491,98 @@ function CampaignDrawer({ c, assets, onClose }: { c: Campaign; assets: CampaignA
       </div>
     </div>
   );
+}
+
+function CreativeAssetsSection({ assets, campaigns, et, eid, r, wrap }: { assets: CreativeAsset[]; campaigns: Campaign[]; et: string; eid: string; r: Runner; wrap: Wrap }) {
+  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [open, setOpen] = useState<CreativeAsset | null>(null);
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">נכסי שיווק</h2>
+          <p className="text-muted text-[12px]">לכל קמפיין מאושר ZONO בונה את כל נכסי השיווק הנדרשים — פוסטים, סטוריז, קרוסלות, כריכות ריל וגרסאות מוכר/קונה — מתוכננים ומדורגים.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className="border-line bg-surface text-ink h-9 max-w-[200px] rounded-lg border px-2 text-sm">
+            <option value="">בחר קמפיין</option>
+            {campaigns.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+          <Button size="sm" loading={r.busyId === "gen-assets"} disabled={!campaignId} onClick={() => wrap(() => generateAssetsAction({ campaignId, entityType: et, entityId: eid }), "gen-assets", "ZONO בונה נכסי שיווק...")}>
+            <Icon name="Sparkles" size={14} />צור נכסים
+          </Button>
+          {campaignId && <Button size="sm" variant="ghost" loading={r.busyId === "approve-all"} onClick={() => wrap(() => approveAllAssetsAction({ campaignId, entityType: et, entityId: eid }), "approve-all")}><Icon name="UserCheck" size={14} />אשר הכל</Button>}
+        </div>
+      </div>
+      {assets.length === 0 ? (
+        <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין נכסי שיווק עדיין — בחר קמפיין ולחץ ״צור נכסים״.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {assets.map((a) => <CreativeAssetCard key={a.id} a={a} et={et} eid={eid} wrap={wrap} onOpen={() => setOpen(a)} />)}
+        </div>
+      )}
+      {open && <CreativeAssetDrawer a={open} campaigns={campaigns} onClose={() => setOpen(null)} />}
+    </section>
+  );
+}
+
+function CreativeAssetCard({ a, et, eid, wrap, onOpen }: { a: CreativeAsset; et: string; eid: string; wrap: Wrap; onOpen: () => void }) {
+  return (
+    <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-4 shadow-sm ${a.is_approved ? "ring-1 ring-success" : a.asset_status === "rejected" ? "opacity-60" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[10px] font-bold">{CREATIVE_ASSET_TYPE_LABELS[a.asset_type] ?? a.asset_type}</span>
+        <span className="text-success text-sm font-black">{a.asset_score}</span>
+      </div>
+      <p className="text-ink text-[15px] font-black leading-tight">{a.title}</p>
+      <div className="flex flex-wrap gap-1.5 text-[10px]">
+        {a.objective && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 font-bold">{OBJECTIVE_LABELS[a.objective] ?? a.objective}</span>}
+        {a.audience && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 font-bold">{a.audience}</span>}
+        <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 font-bold">עדיפות {a.priority}</span>
+        <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 font-bold">{ASSET_STATUS_HE[a.asset_status] ?? a.asset_status}</span>
+      </div>
+      <div className="border-line mt-1 flex flex-wrap gap-1.5 border-t pt-2 text-[11px]">
+        <button onClick={onOpen} className="text-brand-strong font-bold"><Icon name="Eye" size={13} /> פרטים</button>
+        <button onClick={() => wrap(() => approveAssetAction({ assetId: a.id, entityType: et, entityId: eid }), `aa-${a.id}`)} className={`font-bold ${a.is_approved ? "text-success" : "text-muted"}`}><Icon name="UserCheck" size={13} /> אשר</button>
+        <button onClick={() => wrap(() => rejectAssetAction({ assetId: a.id, entityType: et, entityId: eid }), `ar-${a.id}`)} className="text-danger font-bold">דחה</button>
+        <button onClick={() => wrap(() => favoriteAssetAction({ assetId: a.id, value: !a.is_favorite, entityType: et, entityId: eid }), `af-${a.id}`)} className={`font-bold ${a.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={13} /> מועדף</button>
+        <button onClick={() => wrap(() => duplicateAssetAction({ assetId: a.id, entityType: et, entityId: eid }), `ad-${a.id}`)} className="text-muted font-bold"><Icon name="Plus" size={13} /> שכפל</button>
+      </div>
+    </div>
+  );
+}
+
+function CreativeAssetDrawer({ a, campaigns, onClose }: { a: CreativeAsset; campaigns: Campaign[]; onClose: () => void }) {
+  const camp = campaigns.find((c) => c.id === a.campaign_id);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2"><span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{CREATIVE_ASSET_TYPE_LABELS[a.asset_type] ?? a.asset_type}</span><span className="text-success text-sm font-black">{a.asset_score}</span></div>
+          <button onClick={onClose} className="text-muted"><Icon name="Minus" size={18} /></button>
+        </div>
+        <h3 className="text-ink text-xl font-black">{a.title}</h3>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Mini label="התאמת קמפיין" value={a.campaign_match_score} />
+          <Mini label="התאמת קהל" value={a.audience_match_score} />
+          <Mini label="פוטנציאל המרה" value={a.conversion_potential_score} />
+          <Mini label="חוזק שיווקי" value={a.marketing_strength_score} />
+        </div>
+        <div className="mt-3 flex flex-col gap-2.5">
+          <DrawerRow label="מטרה שיווקית" value={a.objective ? (OBJECTIVE_LABELS[a.objective] ?? a.objective) : null} />
+          <DrawerRow label="קהל יעד" value={a.audience} />
+          <DrawerRow label="כיוון ויזואלי" value={a.visual_hook} />
+          <DrawerRow label="כיוון קופי" value={a.copy_hook} />
+          <DrawerRow label="כיוון CTA" value={a.cta_style} />
+          <DrawerRow label="פריסה מומלצת" value={a.recommended_layout} />
+          <DrawerRow label="קשר לקמפיין" value={camp ? camp.title : null} />
+        </div>
+        {a.reasoning && <div className="bg-brand-soft/30 mt-4 rounded-xl p-3"><span className="text-brand-strong text-[11px] font-bold">למה ZONO ייצר את הנכס הזה</span><p className="text-ink mt-0.5 text-[13px]">{a.reasoning}</p></div>}
+      </div>
+    </div>
+  );
+}
+function Mini({ label, value }: { label: string; value: number }) {
+  return <div className="bg-surface rounded-xl p-2 text-center"><div className="text-brand-strong text-sm font-black">{value}</div><div className="text-muted text-[10px] font-bold">{label}</div></div>;
 }
 
 function UploadModal({ onClose, onDone, orgId, userId, et, eid }: { onClose: () => void; onDone: () => void; orgId: string; userId: string; et: string; eid: string }) {
