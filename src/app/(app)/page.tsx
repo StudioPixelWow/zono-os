@@ -22,6 +22,7 @@ import { CommunitiesDashboardSection } from "@/components/dashboard/sections/Com
 import { WhatsappDashboardSection } from "@/components/dashboard/sections/WhatsappDashboardSection";
 import { CommIntelDashboardSection } from "@/components/dashboard/sections/CommIntelDashboardSection";
 import { JourneysDashboardSection } from "@/components/dashboard/sections/JourneysDashboardSection";
+import { BrandCompletionDashboardSection } from "@/components/dashboard/sections/BrandCompletionDashboardSection";
 import { OperatingAreasSection } from "@/components/dashboard/sections/OperatingAreasSection";
 import {
   DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
@@ -56,6 +57,7 @@ export default function Home() {
       <Suspense fallback={null}><WhatsappDashboardSection /></Suspense>
       <Suspense fallback={null}><CommIntelDashboardSection /></Suspense>
       <Suspense fallback={null}><JourneysDashboardSection /></Suspense>
+      <Suspense fallback={null}><BrandCompletionDashboardSection /></Suspense>
       <Suspense fallback={null}>
         <ForecastDashboardSection />
       </Suspense>

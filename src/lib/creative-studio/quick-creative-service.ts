@@ -12,6 +12,7 @@ import type { Json } from "@/lib/supabase/types";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
 import { validateCreative } from "./creative-director/validation";
+import { getEffectiveBrand } from "@/lib/brand-identity/service";
 
 type QuickVar = ReturnType<typeof buildQuickVariations>[number];
 function providedFeatures(i: QuickInput): string[] {
@@ -49,7 +50,7 @@ export interface BrandResolved { snapshot: BrandSnapshot; warnings: string[]; ag
 
 export async function resolveBrandSnapshot(opts: { entityType?: string; entityId?: string; agentId?: string | null }): Promise<BrandResolved> {
   const { orgId, userId, supabase } = await ctx();
-  const warnings: string[] = [];
+  let warnings: string[] = [];
   // agent = explicit agent entity, else the current user
   const agentId = opts.entityType === "agent" ? (opts.entityId ?? null) : (opts.agentId ?? userId);
   let agentName: string | null = null; let agentPhoto: string | null = null; let agentWhatsapp: string | null = null;
@@ -67,6 +68,17 @@ export async function resolveBrandSnapshot(opts: { entityType?: string; entityId
     const d = data as Record<string, unknown> | null;
     if (d) { dnaActive = true; const arr = (v: unknown) => (Array.isArray(v) ? (v as unknown[]).filter((x) => typeof x === "string") as string[] : []); colors = [...arr(d.primary_colors), ...arr(d.accent_colors)].slice(0, 3); luxury = typeof d.luxury_score === "number" ? d.luxury_score as number : 50; modern = typeof d.modern_score === "number" ? d.modern_score as number : 50; }
   } catch { /* ignore */ }
+  // Brand Identity OS is the master source — override with it when present.
+  try {
+    const eb = await getEffectiveBrand(orgId, agentId);
+    if (eb.primary) { colors = [eb.primary, eb.secondary, eb.accent].filter((c): c is string => Boolean(c)); warnings = warnings.filter((w) => w !== "חסרים צבעי מותג"); }
+    if (eb.logo) { officeLogo = eb.logo; warnings = warnings.filter((w) => w !== "חסר לוגו משרד"); }
+    if (eb.profileImage && !agentPhoto) { agentPhoto = eb.profileImage; warnings = warnings.filter((w) => w !== "חסרה תמונת סוכן"); }
+    if (eb.agentName) agentName = eb.agentName;
+    if (eb.whatsapp) agentWhatsapp = eb.whatsapp;
+    if (eb.officeName) officeName = eb.officeName;
+  } catch { /* brand identity optional */ }
+
   if (!colors.length) warnings.push("חסרים צבעי מותג");
   if (!dnaActive) warnings.push("אין Marketing DNA פעיל");
 

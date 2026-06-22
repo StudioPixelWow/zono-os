@@ -4220,6 +4220,20 @@ type ZonoQuickCreativeOutputsRow = {
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; creative_director_metadata: Json;
   scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
 };
+type BrandIdentityProfilesRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string;
+  full_name: string | null; display_name: string | null; title: string | null; short_bio: string | null; phone: string | null; whatsapp: string | null; email: string | null; office_name: string | null; years_experience: number | null;
+  service_areas: Json; specialties: Json; languages: Json; profile_visibility: string;
+  profile_image_url: string | null; profile_image_thumb: string | null; profile_image_status: string;
+  logo_url: string | null; logo_dark_url: string | null; logo_light_url: string | null; logo_transparent_url: string | null; logo_type: string | null; logo_status: string;
+  brand_primary: string | null; brand_secondary: string | null; brand_accent: string | null; brand_palette: Json; color_confidence_score: number; colors_source: string;
+  brand_style: string | null; brand_tone: string | null;
+  writing_style: string | null; communication_tone: string | null; brand_personality: string | null; target_audience: string | null; preferred_cta_style: string | null; preferred_design_language: string | null; preferred_post_style: string | null;
+  ai_design_profile: Json; inherit_brand_settings: boolean; allow_agent_override: boolean; completion_score: number; created_at: string; updated_at: string;
+};
+type BrandAssetsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; asset_kind: string; url: string; storage_path: string | null; status: string; created_at: string; updated_at: string;
+};
 type ZonoMarketingBriefsRow = {
   id: string; org_id: string; entity_type: string; entity_id: string; title: string; objective: string | null; platform: string | null; format: string | null; campaign_type: string | null; target_audience: string | null; main_message: string | null;
   property_id: string | null; project_id: string | null; agent_id: string | null; office_id: string | null; full_copy: Json; required_assets: Json; marketing_constraints: Json; status: string; created_by: string | null; created_at: string; updated_at: string;
@@ -4738,6 +4752,8 @@ export interface Database {
       zono_visual_assets: TableShape<ZonoVisualAssetsRow, "org_id" | "entity_type" | "entity_id" | "visual_type">;
       zono_quick_creative_requests: TableShape<ZonoQuickCreativeRequestsRow, "org_id" | "request_type">;
       zono_quick_creative_outputs: TableShape<ZonoQuickCreativeOutputsRow, "org_id" | "request_id" | "output_type" | "variant_name" | "format">;
+      brand_identity_profiles: TableShape<BrandIdentityProfilesRow, "org_id" | "entity_type" | "entity_id">;
+      brand_assets: TableShape<BrandAssetsRow, "org_id" | "entity_type" | "entity_id" | "asset_kind" | "url">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
       community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;

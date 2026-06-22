@@ -5,6 +5,12 @@ export const dynamic = "force-dynamic";
 
 const GROUPS: { title: string; items: { label: string; href: string; icon: string; desc: string }[] }[] = [
   {
+    title: "מותג וזהות",
+    items: [
+      { label: "מותג וזהות", href: "/settings/brand", icon: "Presentation", desc: "פרופיל, לוגו, צבעי מותג וסגנון — מקור האמת לכל העיצובים" },
+    ],
+  },
+  {
     title: "אזור ופעילות",
     items: [
       { label: "אזורי פעילות", href: "/settings/operating-areas", icon: "MapPin", desc: "ניהול ערי ושכונות הפעילות שלך" },
