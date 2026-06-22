@@ -2,9 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "noEmit": true },
   "include": [
-    "src/app/(app)/documents/DocumentsView.tsx",
-    "src/lib/documents/service.ts",
-    "src/lib/documents/actions.ts",
-    "src/lib/documents/upload.ts"
+    "src/components/dashboard/DemoBadge.tsx",
+    "src/components/dashboard/sections/HeroSection.tsx"
   ]
 }

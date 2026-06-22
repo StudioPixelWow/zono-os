@@ -9,6 +9,7 @@ import {
 } from "@/lib/onboarding/options";
 import { Icon } from "../Icon";
 import { CityMap } from "../CityMap";
+import { DemoBadge } from "../DemoBadge";
 import { FloatingAssistant } from "../FloatingAssistant";
 import { motion } from "../motion";
 import { useCurrentUser, useDashboardData } from "../DashboardDataProvider";
@@ -133,8 +134,9 @@ export function HeroSection() {
         )}
       </div>
 
-      {/* Map — decorative (still mock) */}
+      {/* Map — decorative illustration (not live data; badged in dev) */}
       <div className="relative h-[340px] overflow-hidden rounded-[26px] border border-line bg-card shadow-[0_20px_50px_rgba(124,58,237,0.12)] sm:h-[420px]">
+        <DemoBadge label="מפה להמחשה" className="absolute start-3 top-3" />
         <CityMap pins={mapPins} />
         <FloatingAssistant
           message={heroAssistantMessage}

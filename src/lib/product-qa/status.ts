@@ -22,7 +22,7 @@ export const QA_ITEMS: QaItem[] = [
   { id: 4, title: "קישור מוכר באשף הנכס", status: "pass", notes: "צעד 'בעלים/מוכרים': חיפוש/קישור/יצירה inline, סימון מקבל החלטות/מורשה חתימה/ראשי, באנר מוכנות, CTA 'הוסף מוכר עכשיו' לפני פרסום.", lastChecked: TODAY },
   { id: 5, title: "מסמכים וחתימות", status: "pass", notes: "טאב 'מסמך חדש': יצירה ידנית + העלאת קובץ (bucket documents) + סוג/תפוגה/הערות + פריט נדרש ללא קובץ; צפייה/הורדה, הכנת בקשת חתימה, סימון כנחתם, ביטול/ארכוב.", lastChecked: TODAY },
   { id: 6, title: "מחשבוני משכנתא ומימון", status: "pass", notes: "מחשבון החזר חודשי, כושר קנייה, פער הון עצמי, תשואת השקעה + מס רכישה (placeholder), עם disclaimer.", lastChecked: TODAY },
-  { id: 7, title: "דשבורד בית — דאטה אמיתית", status: "partial", notes: "רוב הווידג'טים כבר נשענים על מודיעין אמיתי; ביקורת מלאה לכל ווידג'ט + תג demo בפיתוח ממתינה.", lastChecked: TODAY },
+  { id: 7, title: "דשבורד בית — דאטה אמיתית", status: "pass", notes: "כל ווידג'טי הבית נשענים על מודיעין אמיתי דרך containers עם empty-states; נוסף DemoBadge (פיתוח בלבד) על המפה הדקורטיבית כדי שאף הדמיה לא תיראה כנתון אמיתי בפרודקשן.", lastChecked: TODAY },
   { id: 8, title: "ניקוי תפריט צד", status: "partial", notes: "ארגון מחדש לקטגוריות מתקפלות + הסתרת placeholders + חיפוש תפריט ממתין.", lastChecked: TODAY },
   { id: 9, title: "ניהול סוכנים (בעל משרד)", status: "fail", notes: "מסך ניהול צוות + הזמנות (invite tokens / קישור להעתקה) טרם נבנה.", lastChecked: TODAY },
   { id: 10, title: "ייבוא מודעות חיצוניות בקנה מידה", status: "partial", notes: "סנכרון קיים. מצבי סנכרון (מהיר/רגיל/מלא/מתקדם) עם pagination/cursor/guardrails ממתינים.", lastChecked: TODAY },
