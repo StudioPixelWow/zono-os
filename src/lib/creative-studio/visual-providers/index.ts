@@ -120,6 +120,8 @@ async function callNanoBananaModel(model: string, key: string, parts: Record<str
     const body = await res.text().catch(() => "");
     // 404 / NOT_FOUND → this model id isn't available on the key; let caller try next.
     if (res.status === 404) return { notFound: true, status: res.status, body: body.slice(0, 200) };
+    // 429 → quota/billing, not transient: surface a clear, actionable message.
+    if (res.status === 429) throw new Error("מכסת ה-API של Gemini נוצלה. כדי לייצר תמונות יש להפעיל חיוב (billing) בחשבון Google AI — gemini-2.5-flash-image הוא מודל בתשלום ולא נכלל בתוכנית החינמית.");
     throw new Error(`Nano Banana failed (${res.status}) model=${model} ${body.slice(0, 300)}`);
   }
   const json = await res.json();
