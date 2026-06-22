@@ -11,16 +11,27 @@ import {
   saveDnaAction, lockDnaAction, updateAssetFlagsAction, deleteAssetAction, submitFeedbackAction, analyzeMarketingDnaAction,
 } from "@/lib/creative-studio/actions";
 import {
+  generateConceptsAction, favoriteConceptAction, approveConceptAction, deleteConceptAction,
+} from "@/lib/creative-studio/concept-actions";
+import {
   ENTITY_LABELS, ASSET_TYPE_LABELS, LIBRARY_FILTERS, assetBadges, DNA_SCORES, FEEDBACK_BUTTONS, type AssetLike,
 } from "@/lib/creative-studio/engine";
+import { CONCEPT_TYPE_LABELS } from "@/lib/creative-studio/concept-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
+
+type Concept = Record<string, unknown> & {
+  id: string; title: string; concept_type: string; description: string | null; marketing_angle: string | null; emotional_trigger: string | null;
+  visual_hook: string | null; copy_hook: string | null; recommended_layout: string | null; recommended_cta_style: string | null; recommended_audience: string | null;
+  reasoning: string | null; confidence_score: number; is_favorite: boolean; is_approved: boolean;
+};
 
 type Asset = Record<string, unknown> & AssetLike & { id: string; title: string | null; file_url: string; thumbnail_url: string | null; file_mime_type: string | null; created_at: string; tags: string[] };
 type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, orgId, userId }: { studio: CreativeStudio; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; orgId: string; userId: string }) {
+  const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const router = useRouter();
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
@@ -109,6 +120,9 @@ export function CreativeStudioView({ studio, orgId, userId }: { studio: Creative
           ))}
         </div>
       </section>
+
+      {/* CONCEPTS — Phase 3 */}
+      <ConceptsSection concepts={concepts ?? []} et={et} eid={eid} r={r} wrap={wrap} />
 
       {/* SECTION 7 — GENERATOR PLACEHOLDER */}
       <section className="bg-brand-soft/30 border-line rounded-2xl border border-dashed p-6 text-center">
@@ -269,6 +283,80 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
       <span className="text-muted text-[11px] font-bold">{label}</span>
       <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={2} className="border-line bg-surface text-ink rounded-lg border px-3 py-2 text-sm" />
     </label>
+  );
+}
+
+function ConceptsSection({ concepts, et, eid, r, wrap }: { concepts: Concept[]; et: string; eid: string; r: Runner; wrap: Wrap }) {
+  const [open, setOpen] = useState<Concept | null>(null);
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">קונספטים שיווקיים</h2>
+          <p className="text-muted text-[12px]">ZONO מייצר כיווני שיווק וקריאייטיב המבוססים על ה-DNA השיווקי, סוג הנכס, סוג הקהל והמאפיינים המקומיים.</p>
+        </div>
+        <Button size="sm" loading={r.busyId === "gen-concepts"} onClick={() => wrap(() => generateConceptsAction(et, eid), "gen-concepts", "ZONO חושב על כיווני שיווק...")}>
+          <Icon name="Sparkles" size={14} />{concepts.length ? "רענן קונספטים" : "צור קונספטים"}
+        </Button>
+      </div>
+      {concepts.length === 0 ? (
+        <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין קונספטים עדיין — לחץ ״צור קונספטים״ כדי ש-ZONO יבנה כיווני שיווק מתוך ה-DNA.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {concepts.map((c) => <ConceptCard key={c.id} c={c} et={et} eid={eid} wrap={wrap} onOpen={() => setOpen(c)} />)}
+        </div>
+      )}
+      {open && <ConceptDrawer c={open} onClose={() => setOpen(null)} />}
+    </section>
+  );
+}
+
+function ConceptCard({ c, et, eid, wrap, onOpen }: { c: Concept; et: string; eid: string; wrap: Wrap; onOpen: () => void }) {
+  return (
+    <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-4 shadow-sm ${c.is_approved ? "ring-1 ring-success" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[10px] font-bold">{CONCEPT_TYPE_LABELS[c.concept_type] ?? c.concept_type}</span>
+        <span className="text-success text-sm font-black">{c.confidence_score}</span>
+      </div>
+      <p className="text-ink text-base font-black leading-tight">{c.title}</p>
+      {c.marketing_angle && <p className="text-muted text-[12px]">זווית: {c.marketing_angle}</p>}
+      {c.recommended_audience && <p className="text-muted text-[12px]">קהל: {c.recommended_audience}</p>}
+      <div className="border-line mt-1 flex flex-wrap gap-1.5 border-t pt-2">
+        <button onClick={() => wrap(() => favoriteConceptAction({ conceptId: c.id, value: !c.is_favorite, entityType: et, entityId: eid }), `fav-${c.id}`)} className={`text-[11px] font-bold ${c.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={13} /> מועדף</button>
+        <button onClick={() => wrap(() => approveConceptAction({ conceptId: c.id, entityType: et, entityId: eid }), `ap-${c.id}`)} className={`text-[11px] font-bold ${c.is_approved ? "text-success" : "text-muted"}`}><Icon name="UserCheck" size={13} /> אשר</button>
+        <button onClick={onOpen} className="text-brand-strong text-[11px] font-bold"><Icon name="Eye" size={13} /> פרטים</button>
+        <button onClick={() => wrap(() => deleteConceptAction({ conceptId: c.id, entityType: et, entityId: eid }), `del-${c.id}`)} className="text-danger text-[11px] font-bold"><Icon name="Minus" size={13} /> מחק</button>
+      </div>
+    </div>
+  );
+}
+
+function DrawerRow({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return <div className="flex flex-col gap-0.5"><span className="text-muted text-[11px] font-bold">{label}</span><span className="text-ink text-[13px]">{value}</span></div>;
+}
+function ConceptDrawer({ c, onClose }: { c: Concept; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2"><span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{CONCEPT_TYPE_LABELS[c.concept_type] ?? c.concept_type}</span><span className="text-success text-sm font-black">{c.confidence_score}</span></div>
+          <button onClick={onClose} className="text-muted"><Icon name="Minus" size={18} /></button>
+        </div>
+        <h3 className="text-ink text-xl font-black">{c.title}</h3>
+        <div className="mt-3 flex flex-col gap-2.5">
+          <DrawerRow label="אסטרטגיה" value={c.description} />
+          <DrawerRow label="קהל יעד" value={c.recommended_audience} />
+          <DrawerRow label="זווית שיווק" value={c.marketing_angle} />
+          <DrawerRow label="טריגר רגשי" value={c.emotional_trigger} />
+          <DrawerRow label="וו ויזואלי" value={c.visual_hook} />
+          <DrawerRow label="וו קופי" value={c.copy_hook} />
+          <DrawerRow label="פריסה מומלצת" value={c.recommended_layout} />
+          <DrawerRow label="סגנון CTA מומלץ" value={c.recommended_cta_style} />
+          <div className="bg-brand-soft/30 rounded-xl p-3"><span className="text-brand-strong text-[11px] font-bold">למה ZONO חושב שזה מתאים</span><p className="text-ink mt-0.5 text-[13px]">{c.reasoning ?? "—"}</p></div>
+        </div>
+      </div>
+    </div>
   );
 }
 
