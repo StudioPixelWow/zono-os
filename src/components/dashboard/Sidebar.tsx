@@ -23,7 +23,7 @@ const HREFS: Record<string, string> = {
   "system-health": "/admin/system-health", "data-quality": "/admin/data-quality",
   permissions: "/admin/permissions", configuration: "/admin/configuration",
   "mock-registry": "/admin/mock-registry", "audit-log": "/admin/audit-log",
-  "product-qa": "/admin/product-qa", settings: "/settings",
+  "product-qa": "/admin/product-qa", agents: "/admin/agents", settings: "/settings",
 };
 
 interface NavLink { id: string; label: string; icon: string }
@@ -73,6 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "financing", label: "משכנתא", icon: "Calculator" },
   ]},
   { key: "office", label: "ניהול משרד", icon: "Briefcase", managerOnly: true, items: [
+    { id: "agents", label: "ניהול סוכנים", icon: "UserPlus" },
     { id: "team", label: "צוות וסוכנים", icon: "UserCheck" },
     { id: "routing", label: "ניתוב לידים", icon: "Route" },
     { id: "reputation", label: "מוניטין", icon: "Handshake" },

@@ -1,0 +1,48 @@
+-- ZONO QA Pack — Issue 9: office team management & agent invitations.
+-- An owner/manager creates an invitation (token + copyable link); the agent
+-- joins via the link. Org-scoped, manager+ only. No auth user is created here.
+create table if not exists public.org_invitations (
+  id           uuid primary key default gen_random_uuid(),
+  org_id       uuid not null references public.organizations(id) on delete cascade,
+  email        citext not null,
+  full_name    text,
+  role_key     text not null default 'agent',
+  token        text not null unique,
+  status       text not null default 'pending'
+               check (status in ('pending', 'accepted', 'expired', 'cancelled')),
+  invited_by   uuid references public.users(id) on delete set null,
+  accepted_by  uuid references public.users(id) on delete set null,
+  expires_at   timestamptz,
+  accepted_at  timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+create index if not exists org_invitations_org_idx on public.org_invitations(org_id, status);
+create index if not exists org_invitations_token_idx on public.org_invitations(token);
+
+create trigger trg_org_invitations_updated_at
+  before update on public.org_invitations
+  for each row execute function public.set_updated_at();
+
+alter table public.org_invitations enable row level security;
+
+create policy "org_invitations_select" on public.org_invitations
+  for select to authenticated
+  using (org_id = public.current_org_id());
+
+create policy "org_invitations_insert" on public.org_invitations
+  for insert to authenticated
+  with check (org_id = public.current_org_id() and public.has_min_role('manager'));
+
+create policy "org_invitations_update" on public.org_invitations
+  for update to authenticated
+  using (org_id = public.current_org_id() and public.has_min_role('manager'))
+  with check (org_id = public.current_org_id() and public.has_min_role('manager'));
+
+create policy "org_invitations_delete" on public.org_invitations
+  for delete to authenticated
+  using (org_id = public.current_org_id() and public.has_min_role('manager'));
+
+grant select, insert, update, delete on public.org_invitations to authenticated;
+grant all on public.org_invitations to service_role;

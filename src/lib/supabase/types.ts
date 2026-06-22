@@ -4245,6 +4245,12 @@ type ZonoMarketingBriefsRow = {
  * status/flag defaults) and nullable columns are optional on insert; every
  * column is optional on update.
  */
+type OrgInvitationsRow = {
+  id: string; org_id: string; email: string; full_name: string | null; role_key: string;
+  token: string; status: string; invited_by: string | null; accepted_by: string | null;
+  expires_at: string | null; accepted_at: string | null; created_at: string; updated_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -4267,6 +4273,7 @@ export interface Database {
       projects: TableShape<ProjectsRow, "org_id" | "name">;
       units: TableShape<UnitsRow, "org_id" | "project_id" | "unit_number">;
       properties: TableShape<PropertiesRow, "org_id" | "title" | "type" | "price">;
+      org_invitations: TableShape<OrgInvitationsRow, "org_id" | "email" | "token">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       property_journeys: TableShape<
         PropertyJourneysRow,
