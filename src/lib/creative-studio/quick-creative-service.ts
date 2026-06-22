@@ -13,7 +13,7 @@ import type { Json } from "@/lib/supabase/types";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
 import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
-import { generateNanoBananaImage, nanoBananaConfigured } from "./visual-providers";
+import { generateFinalImage, resolveImageProvider } from "./visual-providers";
 import { validateCreative } from "./creative-director/validation";
 import { getEffectiveBrand } from "@/lib/brand-identity/service";
 
@@ -140,10 +140,20 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   return { requestId, created: rows.length };
 }
 
-/** Generate the Nano Banana image for many outputs in parallel; never throws. */
+/** Generate the final AI image for many outputs in parallel; never throws. */
 async function generateImagesForOutputs(supabase: DB, orgId: string, outputIds: string[]): Promise<void> {
-  if (!outputIds.length || !nanoBananaConfigured()) return;
-  await Promise.allSettled(outputIds.map((id) => genImageForOutput(supabase, orgId, id)));
+  if (!outputIds.length) return;
+  const info = resolveImageProvider();
+  // No real provider — stamp a clear status so the UI shows the warning, and
+  // log loudly. We do NOT fabricate an image.
+  if (info.provider === "mock") {
+    console.warn(`[quick-creative][image] MOCK PROVIDER ACTIVE — no real image generated (${info.reason}). outputs=${outputIds.length}`);
+    await supabase.from("zono_quick_creative_outputs").update({ image_status: "no_provider" }).eq("org_id", orgId).in("id", outputIds);
+    return;
+  }
+  await Promise.allSettled(outputIds.map((id) => genImageForOutput(supabase, orgId, id).catch((e) => {
+    console.error(`[quick-creative][image] generation failed for ${id}:`, e instanceof Error ? e.message : e);
+  })));
 }
 
 export async function listQuickOutputs(opts: { entityType?: string; entityId?: string; propertyId?: string | null }): Promise<QuickOutputRow[]> {
@@ -251,8 +261,13 @@ export async function generateQuickCreativeImage(outputId: string): Promise<{ im
   return genImageForOutput(supabase, orgId, outputId);
 }
 
-/** Core: generate + upload + persist the Nano Banana image for one output. */
+/**
+ * Core: build prompt → call real image provider → upload to storage → save
+ * image_url. Emits a step-by-step debug block (mandatory debug check). Stamps
+ * image_status so the UI can distinguish generated / no_provider / failed.
+ */
 async function genImageForOutput(supabase: DB, orgId: string, outputId: string): Promise<{ imageUrl: string; provider: string }> {
+  const info = resolveImageProvider();
   const { data: o } = await supabase
     .from("zono_quick_creative_outputs")
     .select("id,internal_prompt,render_data,request_id")
@@ -269,23 +284,47 @@ async function genImageForOutput(supabase: DB, orgId: string, outputId: string):
     if (input?.propertyImage) refUrl = input.propertyImage;
   }
 
-  const img = await generateNanoBananaImage(prompt, refUrl);
-  const bytes = Buffer.from(img.b64, "base64");
-  const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
-  const path = `${orgId}/quick/${outputId}-${Date.now()}.${ext}`;
-  const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, bytes, { contentType: img.mime, upsert: true });
-  if (upErr) throw new Error(`העלאת התמונה נכשלה: ${upErr.message}`);
-  const { data: pub } = supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path);
-  const imageUrl = pub.publicUrl;
+  const log = (k: string, v: unknown) => console.log(`[quick-creative][image][${outputId}] ${k}:`, v);
+  log("selected provider", info.provider);
+  log("provider reason", info.reason);
+  log("has API key", info.hasKey);
+  log("prompt length", prompt.length);
+  if (info.provider === "mock") {
+    console.warn(`[quick-creative][image][${outputId}] MOCK PROVIDER ACTIVE — no real image generated`);
+    await supabase.from("zono_quick_creative_outputs").update({ image_status: "no_provider" }).eq("org_id", orgId).eq("id", outputId);
+    throw new Error(`MOCK_PROVIDER:${info.reason}`);
+  }
 
-  // Persist on the output + inject into the render image placeholder.
-  let nextRd = out.render_data as unknown;
   try {
-    const rd = out.render_data as { blocks?: Record<string, unknown>[] } | null;
-    if (rd?.blocks) nextRd = { ...rd, blocks: rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl } : b)) };
-  } catch { /* keep original */ }
-  await supabase.from("zono_quick_creative_outputs").update({ image_url: imageUrl, image_provider: img.provider, render_data: nextRd as never }).eq("org_id", orgId).eq("id", outputId);
-  return { imageUrl, provider: img.provider };
+    log("calling provider", true);
+    const img = await generateFinalImage(prompt, refUrl);
+    log("provider response received", true);
+    const bytes = Buffer.from(img.b64, "base64");
+    const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
+    const path = `${orgId}/quick/${outputId}-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, bytes, { contentType: img.mime, upsert: true });
+    if (upErr) { log("uploaded to storage", false); throw new Error(`העלאת התמונה נכשלה: ${upErr.message}`); }
+    log("uploaded to storage", true);
+    const { data: pub } = supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path);
+    const imageUrl = pub.publicUrl;
+    log("storage path", path);
+
+    // Persist image_url + inject into the render image placeholder.
+    let nextRd = out.render_data as unknown;
+    try {
+      const rd = out.render_data as { blocks?: Record<string, unknown>[] } | null;
+      if (rd?.blocks) nextRd = { ...rd, blocks: rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl } : b)) };
+    } catch { /* keep original */ }
+    await supabase.from("zono_quick_creative_outputs").update({ image_url: imageUrl, image_provider: img.provider, image_status: "generated", render_data: nextRd as never }).eq("org_id", orgId).eq("id", outputId);
+    log("generated_image_url saved", true);
+    log("generated_image_url", imageUrl);
+    return { imageUrl, provider: img.provider };
+  } catch (e) {
+    log("provider response received", false);
+    log("generated_image_url saved", false);
+    await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed" }).eq("org_id", orgId).eq("id", outputId);
+    throw e;
+  }
 }
 
 async function learn(supabase: DB, orgId: string, row: { output_type: string; variant_name: string; agent_id: string | null; property_id: string | null }, feedbackType: string, userId: string) {

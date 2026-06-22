@@ -8,4 +8,5 @@
 -- ============================================================================
 alter table public.zono_quick_creative_outputs
   add column if not exists image_url       text,
-  add column if not exists image_provider  text;
+  add column if not exists image_provider  text,
+  add column if not exists image_status    text;

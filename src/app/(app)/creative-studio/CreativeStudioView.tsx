@@ -47,7 +47,7 @@ type QuickOutput = Record<string, unknown> & {
   id: string; request_id: string; output_type: string; variant_name: string; format: string; title: string | null; render_data: RenderData;
   headline: string | null; cta_text: string | null; overall_score: number; brand_match_score: number; readability_score: number; seller_lead_score: number; buyer_lead_score: number; is_approved: boolean; is_favorite: boolean; status: string;
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
-  image_url: string | null;
+  image_url: string | null; image_status: string | null;
 };
 
 type Visual = Record<string, unknown> & {
@@ -921,9 +921,20 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   const [copied, setCopied] = useState(false);
   return (
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
-      {o.image_url
-        ? <img src={o.image_url} alt={o.variant_name} className="aspect-[4/5] w-full rounded-xl object-cover" />
-        : <div className="relative"><CreativePreview data={o.render_data} scale={0.8} /><span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">תצוגה · התמונה בהפקה</span></div>}
+      {o.image_url ? (
+        <div className="relative">
+          <img src={o.image_url} alt={o.variant_name} className="aspect-[4/5] w-full rounded-xl object-cover" />
+          <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">AI נוצר</span>
+        </div>
+      ) : (
+        <div className="relative">
+          <CreativePreview data={o.render_data} scale={0.8} />
+          <span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">{o.image_status === "failed" ? "יצירת התמונה נכשלה" : o.image_status === "no_provider" ? "תצוגת תבנית בלבד" : "התמונה בהפקה…"}</span>
+        </div>
+      )}
+      {o.image_status === "no_provider" && !o.image_url && (
+        <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">לא מוגדר ספק יצירת תמונות. כרגע מוצגת תצוגת תבנית בלבד.</p>
+      )}
       <div className="flex items-center justify-between gap-1 px-0.5">
         <span className="text-muted text-[10px] font-bold">{o.variant_name}</span>
         <span className="text-success text-sm font-black">{o.overall_score}</span>

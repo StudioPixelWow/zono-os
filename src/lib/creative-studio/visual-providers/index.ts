@@ -122,7 +122,10 @@ export async function generateNanoBananaImage(prompt: string, referenceImageUrl?
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ contents: [{ role: "user", parts }] }),
   });
-  if (!res.ok) throw new Error(`Nano Banana failed (${res.status})`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Nano Banana failed (${res.status}) ${body.slice(0, 300)}`);
+  }
   const json = await res.json();
   const outParts = json?.candidates?.[0]?.content?.parts ?? [];
   const img = outParts.find((p: Record<string, unknown>) => (p.inlineData as { data?: string } | undefined)?.data);
@@ -130,4 +133,50 @@ export async function generateNanoBananaImage(prompt: string, referenceImageUrl?
   const mime = (img?.inlineData as { mimeType?: string } | undefined)?.mimeType || "image/png";
   if (!b64) throw new Error("Nano Banana לא החזיר תמונה");
   return { b64, mime, provider: "nano-banana" };
+}
+
+// ── Provider resolution for the FINAL ad image ─────────────────────────────────
+// Honours ZONO_IMAGE_PROVIDER (gemini | openai | mock), then VISUAL_PROVIDER,
+// then whichever key is present. "mock" / no-key never produces a fake image.
+export interface ImageProviderInfo { provider: "gemini" | "openai" | "mock"; hasKey: boolean; reason: string }
+export function resolveImageProvider(): ImageProviderInfo {
+  const choice = (process.env.ZONO_IMAGE_PROVIDER || process.env.VISUAL_PROVIDER || "").toLowerCase();
+  const gemini = Boolean(process.env.GEMINI_API_KEY);
+  const openai = Boolean(process.env.OPENAI_API_KEY);
+  if (choice === "mock") return { provider: "mock", hasKey: false, reason: "ZONO_IMAGE_PROVIDER=mock" };
+  if (choice === "openai") return openai ? { provider: "openai", hasKey: true, reason: "ZONO_IMAGE_PROVIDER=openai" } : { provider: "mock", hasKey: false, reason: "ZONO_IMAGE_PROVIDER=openai but OPENAI_API_KEY missing" };
+  if (choice === "gemini") return gemini ? { provider: "gemini", hasKey: true, reason: "ZONO_IMAGE_PROVIDER=gemini" } : { provider: "mock", hasKey: false, reason: "ZONO_IMAGE_PROVIDER=gemini but GEMINI_API_KEY missing" };
+  if (gemini) return { provider: "gemini", hasKey: true, reason: "GEMINI_API_KEY present (default)" };
+  if (openai) return { provider: "openai", hasKey: true, reason: "OPENAI_API_KEY present (default)" };
+  return { provider: "mock", hasKey: false, reason: "no image provider key configured" };
+}
+
+/** OpenAI text-to-image, returning raw base64 bytes. */
+async function openaiImage(prompt: string): Promise<NanoBananaResult> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("OPENAI_API_KEY חסר");
+  const res = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: process.env.ZONO_OPENAI_IMAGE_MODEL || "gpt-image-1", prompt, size: "1024x1536", n: 1 }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`OpenAI image failed (${res.status}) ${body.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  const b64 = json?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("OpenAI returned no image");
+  return { b64, mime: "image/png", provider: "openai" };
+}
+
+/**
+ * Generate the FINAL ad image with the configured provider. Throws with a
+ * `MOCK_PROVIDER:` prefix when no real provider is configured so the caller can
+ * stamp a clear status — it never returns a fabricated image.
+ */
+export async function generateFinalImage(prompt: string, referenceImageUrl?: string | null): Promise<NanoBananaResult> {
+  const info = resolveImageProvider();
+  if (info.provider === "mock") throw new Error(`MOCK_PROVIDER:${info.reason}`);
+  if (info.provider === "openai") return openaiImage(prompt);
+  return generateNanoBananaImage(prompt, referenceImageUrl);
 }
