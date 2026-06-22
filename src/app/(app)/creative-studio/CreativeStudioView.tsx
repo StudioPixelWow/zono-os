@@ -917,6 +917,7 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, us
 
 function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
   const [showPrompt, setShowPrompt] = useState(false);
+  const [copied, setCopied] = useState(false);
   return (
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
       <CreativePreview data={o.render_data} scale={0.8} />
@@ -936,6 +937,15 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         <span className="text-muted/50 cursor-not-allowed" title="בקרוב">PNG</span>
       </div>
       {o.scroll_stop_reason && <p className="text-muted px-0.5 text-[10px]">⚡ {o.scroll_stop_reason}</p>}
+      {o.internal_prompt && (
+        <button
+          type="button"
+          onClick={() => { void navigator.clipboard?.writeText(o.internal_prompt ?? "").then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
+          className="bg-brand-soft text-brand-strong inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold"
+        >
+          <Icon name={copied ? "Check" : "Copy"} size={12} />{copied ? "הועתק" : "העתק Prompt ל-AI"}
+        </button>
+      )}
       {canViewPrompt && (
         <div className="border-line border-t pt-1.5">
           <button onClick={() => setShowPrompt(!showPrompt)} className="text-brand-strong text-[10px] font-bold">{showPrompt ? "הסתר" : "הצג"} פרומפט פנימי</button>

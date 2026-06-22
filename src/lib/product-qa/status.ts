@@ -43,7 +43,7 @@ export const QA_ITEMS: QaItem[] = [
   { id: 23, title: "P3 · 'צור פוסט פרסום' מעמוד הנכס", status: "pass", notes: "כפתור בעמוד הנכס → /creative/new?propertyId= → פותח את ZONO קריאייטיב טעון עם הנכס (מדיה+מותג). ללא UUID/URL ידני.", lastChecked: TODAY },
   { id: 24, title: "P3 · כפתור העלאה (dropzone)", status: "pass", notes: "שדה ההעלאה ביצירה הוא כעת dropzone אמיתי: אייקון, 'העלה תמונה מהמחשב', גרירה, תצוגה מקדימה, הסרה, מצב טעינה/שגיאה.", lastChecked: TODAY },
   { id: 25, title: "P3 · Prompt חזק ומותג (Nano-Banana)", status: "pass", notes: "מנוע master-prompt: 8 סגנונות, 12 חלקים (כותרת/קופי/צ'יפים/CTA/ויזואל/פריסה/מותג/טיפוגרפיה/שימוש בתמונה/negative + NB prompt), 4 וריאציות אסטרטגיות, RTL, ללא המצאת פרטים, נכס+מותג עמוק.", lastChecked: TODAY },
-  { id: 26, title: "P3 · אחסון קריאייטיב + שפת כרטיסים", status: "partial", notes: "תוצרי הקריאייטיב נשמרים (zono_quick_creative_outputs: render_data/brand_snapshot/master prompt/ציונים). כרטיס הנכס יושר לסגנון נדל\"ן (תמונה/סטטוס/מחיר/חדרים/מ\"ר/קומה). נותר: רכיב כרטיס משותף אחד (RealEstatePropertyCard) ושמירת final_image_url כשספק תמונות יחובר.", lastChecked: TODAY },
+  { id: 26, title: "P3 · אחסון קריאייטיב + שפת כרטיסים", status: "pass", notes: "תוצרי הקריאייטיב נשמרים (render_data/brand_snapshot/master prompt/ציונים) + כפתור 'העתק Prompt ל-AI' בכל תוצר. נבנה רכיב כרטיס נדל\"ן משותף RealEstatePropertyCard (פנימי/חיצוני/יחידות) ומוטמע ברשימת הנכסים. final_image_url יישמר כשיחובר ספק יצירת תמונות; עד אז הפלט הוא Prompt מוכן + render object.", lastChecked: TODAY },
 ];
 
 export const QA_SUMMARY = {

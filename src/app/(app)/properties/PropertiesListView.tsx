@@ -6,6 +6,7 @@ import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { RealEstatePropertyCard } from "@/components/property/RealEstatePropertyCard";
 import {
   PROPERTY_STATUS_LABELS,
   PROPERTY_STATUS_OPTIONS,
@@ -196,42 +197,23 @@ export function PropertiesListView({
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {properties.map((p) => (
-            <Link
+            <RealEstatePropertyCard
               key={p.id}
-              href={`/properties/${p.id}`}
-              className="bg-card border-line hover:shadow-[var(--shadow-lift)] flex flex-col gap-3 overflow-hidden rounded-[22px] border p-5 shadow-[var(--shadow-card)] transition-shadow"
-            >
-              <div className="bg-surface relative -mx-5 -mt-5 mb-1 aspect-[16/10] overflow-hidden">
-                {p.primary_image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.primary_image_url} alt={p.title} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="text-muted grid h-full place-items-center">
-                    <Icon name="Building2" size={32} />
-                  </div>
-                )}
-                <span className="absolute end-3 top-3"><Badge tone={PROPERTY_STATUS_TONES[p.status]} size="sm">{PROPERTY_STATUS_LABELS[p.status]}</Badge></span>
-              </div>
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-ink text-base font-extrabold leading-snug">
-                  {p.title}
-                </h3>
-              </div>
-              <p className="text-muted text-sm">
-                {PROPERTY_TYPE_LABELS[p.type]} · {propertyAddressLine(p)}
-              </p>
-              <InventoryBadges badges={inventoryBadges(p, currentUserId)} />
-              <p className="text-brand-strong text-lg font-black">
-                {formatShekels(p.price)}
-              </p>
-              <div className="text-muted flex items-center gap-3 text-xs font-medium">
-                <span>{p.rooms ?? "—"} חד׳</span>
-                <span className="bg-line h-3 w-px" />
-                <span>{p.size_sqm ?? "—"} מ״ר</span>
-                <span className="bg-line h-3 w-px" />
-                <span>קומה {p.floor ?? "—"}</span>
-              </div>
-            </Link>
+              d={{
+                href: `/properties/${p.id}`,
+                title: p.title,
+                imageUrl: p.primary_image_url,
+                statusLabel: PROPERTY_STATUS_LABELS[p.status],
+                statusTone: PROPERTY_STATUS_TONES[p.status],
+                dealLabel: p.listing_kind === "rent" ? "להשכרה" : "למכירה",
+                price: p.price,
+                addressLine: `${PROPERTY_TYPE_LABELS[p.type]} · ${propertyAddressLine(p)}`,
+                rooms: p.rooms,
+                sqm: p.size_sqm,
+                floor: p.floor,
+                parking: p.parking_count,
+              }}
+            />
           ))}
         </div>
       ) : (
