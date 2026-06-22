@@ -33,6 +33,19 @@ import {
 type DB = SupabaseClient<Database>;
 // Guardrail: never scrape the whole country in one run. Cap localities per sync.
 const MAX_CITIES_PER_SYNC = 20;
+
+/**
+ * Configurable import modes — replaces the fixed cap so a user can pull more
+ * than 50 per city safely. Each mode bounds BOTH the per-city listing count and
+ * the number of cities per run, keeping Apify cost/time predictable.
+ */
+export type SyncMode = "quick" | "standard" | "full" | "backfill";
+export const SYNC_MODE_LIMITS: Record<SyncMode, { perCity: number; maxCities: number; label: string }> = {
+  quick: { perCity: 50, maxCities: 10, label: "סנכרון מהיר" },
+  standard: { perCity: 250, maxCities: 20, label: "סנכרון רגיל" },
+  full: { perCity: 500, maxCities: 20, label: "סנכרון מלא לאזורי הפעילות" },
+  backfill: { perCity: 1000, maxCities: 30, label: "סנכרון מתקדם (מנהל)" },
+};
 const DAY = 86_400_000;
 const daysSince = (iso: string | null | undefined) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / DAY) : null);
 const clampScore = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -47,9 +60,10 @@ export interface SyncSummary {
   errors: string[];
 }
 
-interface SyncOptions {
+export interface SyncOptions {
   localityId?: string | null;
   sources?: string[];
+  mode?: SyncMode;
 }
 
 async function activeLocalities(db: DB, orgId: string, localityId?: string | null): Promise<{ id: string; name: string }[]> {
@@ -165,13 +179,19 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   const jobId = job?.id as string;
   const log = (message: string, level = "info") => db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level });
 
+  const mode = opts.mode ?? "quick";
+  const modeCfg = SYNC_MODE_LIMITS[mode] ?? SYNC_MODE_LIMITS.quick;
+  const perCityLimit = modeCfg.perCity;
+  const maxCities = Math.min(modeCfg.maxCities, MAX_CITIES_PER_SYNC === 20 ? modeCfg.maxCities : MAX_CITIES_PER_SYNC);
+
   const allLocalities = await activeLocalities(db, orgId, opts.localityId);
   // Guardrail: cap cities per sync run so we never scrape the whole country.
-  const localities = allLocalities.slice(0, MAX_CITIES_PER_SYNC);
+  const localities = allLocalities.slice(0, maxCities);
   const summary: SyncSummary = { success: true, organizationId: orgId, cities: localities.map((l) => l.name), sources, inserted: 0, updated: 0, errors: [] };
 
-  if (allLocalities.length > MAX_CITIES_PER_SYNC) {
-    await log(`הוגבל ל-${MAX_CITIES_PER_SYNC} אזורים מתוך ${allLocalities.length} (מגן ייצור)`, "warn");
+  await log(`מצב סנכרון: ${modeCfg.label} · עד ${perCityLimit} מודעות לעיר · עד ${maxCities} אזורים`);
+  if (allLocalities.length > maxCities) {
+    await log(`הוגבל ל-${maxCities} אזורים מתוך ${allLocalities.length} (מגן ייצור)`, "warn");
   }
 
   if (!localities.length) {
@@ -195,7 +215,7 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
       const t0 = Date.now();
       try {
         const provider = getProvider(source);
-        const raws = await provider.searchListings(loc.name);
+        const raws = await provider.searchListings(loc.name, perCityLimit);
         const ms = Date.now() - t0;
         const listings = raws.map((r) => provider.normalizeListing(r));
         // Debug: first 5 raw + mapped items + missing fields, for admin inspection.

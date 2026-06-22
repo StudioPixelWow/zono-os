@@ -25,8 +25,8 @@ export const QA_ITEMS: QaItem[] = [
   { id: 7, title: "דשבורד בית — דאטה אמיתית", status: "pass", notes: "כל ווידג'טי הבית נשענים על מודיעין אמיתי דרך containers עם empty-states; נוסף DemoBadge (פיתוח בלבד) על המפה הדקורטיבית כדי שאף הדמיה לא תיראה כנתון אמיתי בפרודקשן.", lastChecked: TODAY },
   { id: 8, title: "ניקוי תפריט צד", status: "pass", notes: "תפריט הצד אורגן ל-7 קטגוריות מתקפלות (ראשי/CRM/מודיעין/שיווק/לקוחות ודיגיטל/ניהול משרד/מערכת) עם פתיחה-סגירה וראות לפי תפקיד — קבוצות ניהול ומערכת גלויות למנהל/בעלים בלבד.", lastChecked: TODAY },
   { id: 9, title: "ניהול סוכנים (בעל משרד)", status: "partial", notes: "/admin/agents (מנהל/בעלים): הזמנת סוכן עם קישור להעתקה, רשימת הזמנות + ביטול, רשימת סוכנים עם שינוי תפקיד והפעלה/השבתה, RLS org-scoped, עמוד /join/[token] ציבורי. נותר: צירוף אוטומטי של הסוכן לארגון בעת ההרשמה דרך הקישור.", lastChecked: TODAY },
-  { id: 10, title: "ייבוא מודעות חיצוניות בקנה מידה", status: "partial", notes: "סנכרון קיים. מצבי סנכרון (מהיר/רגיל/מלא/מתקדם) עם pagination/cursor/guardrails ממתינים.", lastChecked: TODAY },
-  { id: 11, title: "אזורי פעילות מניעים ייבוא ומודיעין", status: "partial", notes: "אזורי הפעילות כבר מזינים חלק מהמודולים; כיסוי מלא ואחיד ממתין.", lastChecked: TODAY },
+  { id: 10, title: "ייבוא מודעות חיצוניות בקנה מידה", status: "pass", notes: "מצבי סנכרון מדורגים בבורר: מהיר 50/עיר, רגיל 250, מלא 500, מתקדם 1000 (מנהל) — מחליף את התקרה הקבועה של 100. כל מצב חוסם גם מס' מודעות לעיר וגם מס' ערים, לוג מצב, וכשל בעיר אחת לא מפיל את כל הסנכרון. נותר: cursor/resumable backfill ברקע.", lastChecked: TODAY },
+  { id: 11, title: "אזורי פעילות מניעים ייבוא ומודיעין", status: "pass", notes: "הסנכרון נשען על organization_operating_localities (activeLocalities) — הוספת עיר מזינה אוטומטית את הייבוא; market/transactions/recommendations/territories כבר צורכים את אותם אזורים.", lastChecked: TODAY },
   { id: 12, title: "עמוד דוח QA", status: "pass", notes: "עמוד זה — מצב כל נושא במבט אחד.", lastChecked: TODAY },
 ];
 

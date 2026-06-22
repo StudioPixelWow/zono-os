@@ -2,11 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "noEmit": true },
   "include": [
-    "src/lib/team-admin/service.ts",
-    "src/lib/team-admin/actions.ts",
-    "src/app/(app)/admin/agents/page.tsx",
-    "src/app/(app)/admin/agents/AgentsView.tsx",
-    "src/app/join/[token]/page.tsx",
-    "src/components/dashboard/Sidebar.tsx"
+    "src/lib/external-listings/service.ts",
+    "src/lib/external-listings/actions.ts",
+    "src/app/(app)/properties/ExternalListingsView.tsx"
   ]
 }

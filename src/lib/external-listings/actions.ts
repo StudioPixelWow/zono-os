@@ -2,14 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getListingPreview, promoteExternalListing, runImport, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncSummary } from "./service";
+import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getListingPreview, promoteExternalListing, runImport, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncSummary, type SyncMode } from "./service";
 
 export interface ExternalActionState {
   error?: string;
   summary?: SyncSummary;
 }
 
-async function doSync(opts: { sources?: string[]; localityId?: string | null }): Promise<ExternalActionState> {
+async function doSync(opts: { sources?: string[]; localityId?: string | null; mode?: SyncMode }): Promise<ExternalActionState> {
   try {
     const summary = await runImport(opts);
     revalidatePath("/properties");
@@ -33,8 +33,9 @@ export async function importAllAction(): Promise<ExternalActionState> {
 export async function syncNowAction(
   localityId?: string | null,
   source?: string | null,
+  mode?: SyncMode,
 ): Promise<ExternalActionState> {
-  return doSync({ localityId: localityId || null, sources: source ? [source] : undefined });
+  return doSync({ localityId: localityId || null, sources: source ? [source] : undefined, mode });
 }
 
 export async function promoteExternalListingAction(listingId: string): Promise<ExternalActionState> {

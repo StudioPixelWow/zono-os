@@ -22,13 +22,19 @@
 **Issue 12 — עמוד דוח QA.** `/admin/product-qa` — מצב כל 12 הנושאים (עובר/חלקי/ממתין + הערות + תאריך בדיקה).
 קבצים: `product-qa/status.ts`, `admin/product-qa/page.tsx`.
 
-## ממתין (לסבב המשך ממוקד)
+## הושלם — סבב המשך
 
-- **Issue 5** מסמכים/חתימות — שדרוג MVP שימושי מהמסך (המודול קיים).
-- **Issue 7** ביקורת דאטה אמיתית מלאה לכל ווידג'ט בבית + תג demo בפיתוח.
-- **Issue 8** ארגון תפריט הצד לקטגוריות מתקפלות + הסתרת placeholders + חיפוש.
-- **Issue 9** ניהול סוכנים + מערכת הזמנות (invite tokens / קישור להעתקה) — הנושא הכבד ביותר, נוגע ב-auth.
-- **Issue 10/11** מצבי סנכרון מדורגים (מהיר/רגיל/מלא/מתקדם) עם pagination/cursor/guardrails, ואחידות אזורי-פעילות בכל המודולים.
+**Issue 5 — מסמכים.** טאב "מסמך חדש": יצירה ידנית + העלאת קובץ (bucket `documents`) + סוג/תפוגה/הערות + פריט נדרש ללא קובץ; צפייה/הורדה, הכנת בקשת חתימה, סימון כנחתם, ביטול. שירות `createDocumentManual` + `upload.ts`.
 
-## הטמעה ב-Supabase
-הרץ: `supabase/manual-sql/property_marketing_audiences.txt`
+**Issue 7 — דשבורד.** רכיב `DemoBadge` (פיתוח בלבד) + תיוג המפה הדקורטיבית בבית; שאר הווידג'טים אמיתיים דרך containers עם empty-states.
+
+**Issue 8 — תפריט.** `Sidebar` אורגן ל-7 קטגוריות מתקפלות עם ראות לפי תפקיד (קבוצות ניהול/מערכת למנהל בלבד).
+
+**Issue 9 — ניהול סוכנים.** `/admin/agents` (מנהל): הזמנה עם קישור להעתקה, רשימת הזמנות + ביטול, רשימת סוכנים עם שינוי תפקיד והפעלה/השבתה, טבלת `org_invitations` + RLS, עמוד `/join/[token]`. נותר: צירוף אוטומטי בעת הרשמה.
+
+**Issue 10/11 — ייבוא + אזורים.** בורר מצבי סנכרון (מהיר/רגיל/מלא/מתקדם) עם תקרת מודעות-לעיר ומס' ערים לכל מצב — מחליף את ה-100 הקבוע; הסנכרון נשען על אזורי הפעילות. נותר: cursor/resumable backfill ברקע.
+
+## הטמעה ב-Supabase (הרץ לפי הסדר)
+1. `supabase/manual-sql/property_marketing_audiences.txt` (Issue 3)
+2. `supabase/manual-sql/documents_storage.txt` (Issue 5)
+3. `supabase/manual-sql/org_invitations.txt` (Issue 9)
