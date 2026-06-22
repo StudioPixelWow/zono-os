@@ -21,25 +21,30 @@ create table if not exists public.org_invitations (
 create index if not exists org_invitations_org_idx on public.org_invitations(org_id, status);
 create index if not exists org_invitations_token_idx on public.org_invitations(token);
 
+drop trigger if exists trg_org_invitations_updated_at on public.org_invitations;
 create trigger trg_org_invitations_updated_at
   before update on public.org_invitations
   for each row execute function public.set_updated_at();
 
 alter table public.org_invitations enable row level security;
 
+drop policy if exists "org_invitations_select" on public.org_invitations;
 create policy "org_invitations_select" on public.org_invitations
   for select to authenticated
   using (org_id = public.current_org_id());
 
+drop policy if exists "org_invitations_insert" on public.org_invitations;
 create policy "org_invitations_insert" on public.org_invitations
   for insert to authenticated
   with check (org_id = public.current_org_id() and public.has_min_role('manager'));
 
+drop policy if exists "org_invitations_update" on public.org_invitations;
 create policy "org_invitations_update" on public.org_invitations
   for update to authenticated
   using (org_id = public.current_org_id() and public.has_min_role('manager'))
   with check (org_id = public.current_org_id() and public.has_min_role('manager'));
 
+drop policy if exists "org_invitations_delete" on public.org_invitations;
 create policy "org_invitations_delete" on public.org_invitations
   for delete to authenticated
   using (org_id = public.current_org_id() and public.has_min_role('manager'));
