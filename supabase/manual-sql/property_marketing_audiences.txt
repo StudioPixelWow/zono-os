@@ -1,0 +1,5 @@
+alter table public.properties
+  add column if not exists marketing_audiences jsonb not null default '[]'::jsonb;
+
+comment on column public.properties.marketing_audiences is
+  'Structured target-audience keys (jsonb array). See lib/properties/audiences.ts.';

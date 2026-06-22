@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": [
+    "src/app/(app)/properties/new/MediaUploader.tsx",
+    "src/app/(app)/properties/new/PropertyWizard.tsx",
+    "src/app/(app)/properties/new/page.tsx",
+    "src/app/(app)/properties/new/AudienceSelector.tsx",
+    "src/app/(app)/properties/new/MarketingKitPanel.tsx",
+    "src/app/(app)/properties/new/WizardSellerStep.tsx",
+    "src/lib/properties/marketing-kit.ts",
+    "src/lib/properties/marketing-kit-actions.ts",
+    "src/lib/properties/audiences.ts",
+    "src/lib/properties/repository.ts",
+    "src/lib/properties/types.ts",
+    "src/lib/sellers/actions.ts"
+  ]
+}

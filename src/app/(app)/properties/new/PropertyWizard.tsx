@@ -25,6 +25,10 @@ import type { MediaRow } from "@/lib/properties/media";
 import { MediaUploader } from "./MediaUploader";
 import { LivePreview } from "./LivePreview";
 import { LocationMap } from "./LocationMap";
+import { AudienceSelector } from "./AudienceSelector";
+import { MarketingKitPanel } from "./MarketingKitPanel";
+import { WizardSellerStep } from "./WizardSellerStep";
+import { recommendAudiences } from "@/lib/properties/audiences";
 
 const field =
   "bg-surface border-line text-ink focus:border-brand-light h-11 w-full rounded-xl border px-3 text-sm outline-none transition";
@@ -35,9 +39,11 @@ const STEPS = [
   { id: 2, label: "מיקום", icon: "MapPin" },
   { id: 3, label: "מאפיינים", icon: "Building2" },
   { id: 4, label: "מדיה", icon: "Maximize2" },
-  { id: 5, label: "תיאור ו-AI", icon: "Sparkles" },
-  { id: 6, label: "פרסום", icon: "Send" },
+  { id: 5, label: "תיאור ושיווק", icon: "Sparkles" },
+  { id: 6, label: "בעלים / מוכרים", icon: "Users" },
+  { id: 7, label: "פרסום", icon: "Send" },
 ];
+const LAST_STEP = 7;
 
 const TAG_OPTIONS = [
   { value: "new", label: "חדש" },
@@ -148,6 +154,7 @@ export function PropertyWizard({
   const [aiOutput, setAiOutput] = useState<string>("");
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [sellerReady, setSellerReady] = useState(false);
   const firstRender = useRef(true);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -240,6 +247,48 @@ export function PropertyWizard({
         ? f.features.filter((k) => k !== key)
         : [...f.features, key],
     }));
+
+  const selectedAudiences = form.marketingAudiences ?? [];
+  const recommended = recommendAudiences(form);
+  const toggleAudience = (key: string) =>
+    setForm((f) => {
+      const cur = f.marketingAudiences ?? [];
+      return {
+        ...f,
+        marketingAudiences: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key],
+      };
+    });
+  const applyRecommended = () =>
+    setForm((f) => ({
+      ...f,
+      marketingAudiences: [...new Set([...(f.marketingAudiences ?? []), ...recommendAudiences(f)])],
+    }));
+
+  const featureLabelsList = [
+    ...BOOL_FEATURES.filter((f) => form[f.key]).map((f) => f.label),
+    ...form.features.map((k) => FEATURE_LABELS[k as keyof typeof FEATURE_LABELS] ?? k),
+  ];
+  const kitBase = {
+    title: form.title,
+    type: form.type,
+    city: form.city,
+    neighborhood: form.neighborhood,
+    street: form.address,
+    rooms: form.rooms,
+    sizeSqm: form.sizeSqm,
+    outdoorSqm: form.outdoorSqm,
+    floor: form.floor,
+    totalFloors: form.totalFloors,
+    parkingCount: form.parkingCount,
+    storageCount: form.storageCount,
+    balconyCount: form.balconyCount,
+    hasElevator: form.hasElevator,
+    hasSafeRoom: form.hasSafeRoom,
+    price: form.price,
+    features: featureLabelsList,
+    sellerNotes: form.internalNotes,
+    audiences: selectedAudiences,
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -484,24 +533,53 @@ export function PropertyWizard({
                   <p className="text-ink whitespace-pre-wrap text-sm">{aiOutput}</p>
                 </div>
               )}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className={lbl}>קהל יעד</span>
-                  <input className={`${field} mt-1`} value={form.targetAudience ?? ""} onChange={(e) => set("targetAudience", e.target.value)} />
-                </label>
-                <label className="block">
-                  <span className={lbl}>הערות פנימיות</span>
-                  <input className={`${field} mt-1`} value={form.internalNotes ?? ""} onChange={(e) => set("internalNotes", e.target.value)} />
-                </label>
+              <label className="block">
+                <span className={lbl}>הערות פנימיות</span>
+                <input className={`${field} mt-1`} value={form.internalNotes ?? ""} onChange={(e) => set("internalNotes", e.target.value)} />
+              </label>
+
+              <div className="border-line border-t pt-4">
+                <h3 className="text-ink mb-2 text-sm font-extrabold">קהל יעד</h3>
+                <AudienceSelector
+                  selected={selectedAudiences}
+                  recommended={recommended}
+                  onToggle={toggleAudience}
+                  onApplyRecommended={applyRecommended}
+                  otherText={form.targetAudience ?? ""}
+                  onOtherChange={(v) => set("targetAudience", v)}
+                />
               </div>
+
+              <div className="border-line border-t pt-4">
+                <h3 className="text-ink mb-2 text-sm font-extrabold">
+                  <Icon name="Sparkles" size={15} className="mb-0.5 inline" /> ערכת שיווק AI
+                </h3>
+                <p className="text-muted mb-3 text-xs">בלחיצה אחת — חבילת תוכן שלמה (תיאורים, פוסטים, SEO, נקודות מכירה, מענה להתנגדויות) על בסיס נתוני הנכס בלבד.</p>
+                <MarketingKitPanel base={kitBase} isManager />
+              </div>
+
               <QualityPanel checks={checks} score={score} />
             </div>
           )}
 
           {step === 6 && (
+            <WizardSellerStep propertyId={draftId} onReadinessChange={setSellerReady} />
+          )}
+
+          {step === 7 && (
             <div className="bg-card border-line flex flex-col gap-4 rounded-[20px] border p-5">
               <h2 className="text-ink text-base font-extrabold">סיכום ופרסום</h2>
               <QualityPanel checks={checks} score={score} />
+              {!sellerReady && (
+                <div className="bg-warning-soft flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5">
+                  <p className="text-warning text-xs font-semibold">
+                    כדי לפרסם נכס יש לקשר לפחות מוכר אחד, לקבוע מקבל החלטות/מורשה חתימה ולוודא אמצעי קשר.
+                  </p>
+                  <Button size="sm" variant="secondary" onClick={() => setStep(6)} leadingIcon={<Icon name="UserPlus" size={14} />}>
+                    הוסף מוכר עכשיו
+                  </Button>
+                </div>
+              )}
               {checks.some((c) => !c.ok) && (
                 <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-xs font-semibold">
                   שים/י לב: חלק מהמלצות האיכות עדיין חסרות. אפשר לפרסם, אך מומלץ להשלים.
@@ -533,7 +611,7 @@ export function PropertyWizard({
           {step > 1 && (
             <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>הקודם</Button>
           )}
-          {step < 6 ? (
+          {step < LAST_STEP ? (
             <Button onClick={() => setStep((s) => s + 1)}>הבא</Button>
           ) : (
             <Button onClick={publish} disabled={publishing}>

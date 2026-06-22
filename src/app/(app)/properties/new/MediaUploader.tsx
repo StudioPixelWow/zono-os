@@ -15,6 +15,14 @@ import {
 
 const ACCEPT = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGES = 40;
+
+type PendingUpload = {
+  key: string;
+  name: string;
+  status: "uploading" | "error";
+  file: File;
+};
 
 export function MediaUploader({
   orgId,
@@ -28,55 +36,113 @@ export function MediaUploader({
   onChange?: (media: MediaRow[]) => void;
 }) {
   const [media, setMedia] = useState<MediaRow[]>(initial);
-  const [uploading, setUploading] = useState(0);
+  const [pending, setPending] = useState<PendingUpload[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // A ref mirror of media so sequential uploads in one batch see the latest
+  // accumulated list (avoids the stale-closure bug that capped uploads at 1).
+  const mediaRef = useRef<MediaRow[]>(initial);
 
   const images = media.filter((m) => m.type === "image");
   const externals = media.filter((m) => m.type !== "image");
 
   const sync = (next: MediaRow[]) => {
+    mediaRef.current = next;
     setMedia(next);
     onChange?.(next);
+  };
+
+  /** Upload a single validated file, appending to the accumulated list. */
+  const uploadOne = async (file: File, pendingKey: string) => {
+    const current = mediaRef.current;
+    const imagesNow = current.filter((m) => m.type === "image");
+    // Only the very first image of the property becomes primary.
+    const isPrimary = imagesNow.length === 0 && !current.some((m) => m.is_primary);
+    const row = await uploadPropertyImage(file, {
+      orgId,
+      propertyId,
+      sortOrder: current.length,
+      isPrimary,
+    });
+    sync([...mediaRef.current, row]);
+    setPending((p) => p.filter((u) => u.key !== pendingKey));
+  };
+
+  const runUpload = async (file: File, pendingKey: string) => {
+    try {
+      await uploadOne(file, pendingKey);
+    } catch (e) {
+      console.error("[media] upload failed:", e);
+      setPending((p) =>
+        p.map((u) => (u.key === pendingKey ? { ...u, status: "error" } : u)),
+      );
+      setError("העלאת חלק מהקבצים נכשלה — אפשר לנסות שוב.");
+    }
   };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setError(null);
+    const accepted: File[] = [];
+    let remaining =
+      MAX_IMAGES - mediaRef.current.filter((m) => m.type === "image").length;
     for (const file of Array.from(files)) {
       if (!ACCEPT.includes(file.type)) {
-        setError("פורמט לא נתמך. אפשר JPG, PNG או WEBP.");
+        setError("פורמט לא נתמך. אפשר JPG, PNG או WEBP בלבד.");
         continue;
       }
       if (file.size > MAX_BYTES) {
-        setError("הקובץ גדול מ-20MB.");
+        setError(`הקובץ "${file.name}" גדול מ-20MB ולא הועלה.`);
         continue;
       }
-      setUploading((n) => n + 1);
-      try {
-        const isPrimary = images.length === 0;
-        const row = await uploadPropertyImage(file, {
-          orgId,
-          propertyId,
-          sortOrder: media.length,
-          isPrimary,
-        });
-        sync([...media, row]);
-      } catch (e) {
-        console.error(e);
-        setError("העלאת הקובץ נכשלה.");
-      } finally {
-        setUploading((n) => n - 1);
+      if (remaining <= 0) {
+        setError(`ניתן להעלות עד ${MAX_IMAGES} תמונות לנכס.`);
+        break;
       }
+      accepted.push(file);
+      remaining -= 1;
+    }
+    if (accepted.length === 0) return;
+
+    const queued: PendingUpload[] = accepted.map((file, i) => ({
+      key: `${Date.now()}-${i}-${file.name}`,
+      name: file.name,
+      status: "uploading",
+      file,
+    }));
+    setPending((p) => [...p, ...queued]);
+    // Sequential upload keeps sort_order stable and avoids primary races.
+    for (const q of queued) {
+      await runUpload(q.file, q.key);
     }
   };
+
+  const retry = async (u: PendingUpload) => {
+    setPending((p) =>
+      p.map((x) => (x.key === u.key ? { ...x, status: "uploading" } : x)),
+    );
+    await runUpload(u.file, u.key);
+  };
+
+  const dismissPending = (key: string) =>
+    setPending((p) => p.filter((u) => u.key !== key));
 
   const remove = async (row: MediaRow) => {
     if (!confirm("למחוק את הפריט?")) return;
     try {
       await deletePropertyMedia(row);
-      sync(media.filter((m) => m.id !== row.id));
+      const next = mediaRef.current.filter((m) => m.id !== row.id);
+      // If we removed the primary image, promote the first remaining image.
+      if (row.is_primary && row.type === "image") {
+        const firstImg = next.find((m) => m.type === "image");
+        if (firstImg) {
+          await setPrimaryMedia(propertyId, firstImg.id);
+          sync(next.map((m) => ({ ...m, is_primary: m.id === firstImg.id })));
+          return;
+        }
+      }
+      sync(next);
     } catch {
       setError("מחיקה נכשלה.");
     }
@@ -85,7 +151,7 @@ export function MediaUploader({
   const makePrimary = async (row: MediaRow) => {
     try {
       await setPrimaryMedia(propertyId, row.id);
-      sync(media.map((m) => ({ ...m, is_primary: m.id === row.id })));
+      sync(mediaRef.current.map((m) => ({ ...m, is_primary: m.id === row.id })));
     } catch {
       setError("עדכון תמונה ראשית נכשל.");
     }
@@ -114,13 +180,15 @@ export function MediaUploader({
         propertyId,
         type,
         externalUrl: url,
-        sortOrder: media.length,
+        sortOrder: mediaRef.current.length,
       });
-      sync([...media, row]);
+      sync([...mediaRef.current, row]);
     } catch {
       setError("הוספת הקישור נכשלה.");
     }
   };
+
+  const uploadingCount = pending.filter((u) => u.status === "uploading").length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -158,19 +226,24 @@ export function MediaUploader({
         >
           בחר קבצים מהמחשב
         </button>
-        <p className="text-muted text-xs">JPG, PNG, WEBP · עד 20MB לקובץ</p>
+        <p className="text-muted text-xs">
+          JPG, PNG, WEBP · עד 20MB לקובץ · אפשר לבחור כמה תמונות יחד
+        </p>
         <input
           ref={inputRef}
           type="file"
           accept={ACCEPT.join(",")}
           multiple
           hidden
-          onChange={(e) => void handleFiles(e.target.files)}
+          onChange={(e) => {
+            void handleFiles(e.target.files);
+            e.target.value = ""; // allow re-selecting the same file
+          }}
         />
       </div>
 
       {/* Thumbnails */}
-      {(images.length > 0 || uploading > 0) && (
+      {(images.length > 0 || pending.length > 0) && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {images.map((m, i) => (
             <div
@@ -185,30 +258,56 @@ export function MediaUploader({
                   ראשית
                 </span>
               )}
+              <span className="bg-ink/55 absolute end-2 top-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {i + 1}
+              </span>
               <div className="bg-card/95 flex items-center justify-between gap-1 px-2 py-1.5">
                 <div className="flex gap-1">
-                  <button type="button" onClick={() => move(i, -1)} className="text-muted hover:text-brand" title="הזז ימינה">
+                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-muted hover:text-brand disabled:opacity-30" title="הזז קדימה">
                     <Icon name="ChevronRight" size={15} />
                   </button>
-                  <button type="button" onClick={() => move(i, 1)} className="text-muted hover:text-brand" title="הזז שמאלה">
+                  <button type="button" onClick={() => move(i, 1)} disabled={i === images.length - 1} className="text-muted hover:text-brand disabled:opacity-30" title="הזז אחורה">
                     <Icon name="ChevronLeft" size={15} />
                   </button>
                 </div>
                 <div className="flex gap-1.5">
                   {!m.is_primary && (
-                    <button type="button" onClick={() => makePrimary(m)} className="text-muted hover:text-brand" title="הגדר כראשית">
-                      <Icon name="Sparkles" size={15} />
+                    <button type="button" onClick={() => makePrimary(m)} className="text-muted hover:text-brand" title="הגדר כתמונה ראשית">
+                      <Icon name="Star" size={15} />
                     </button>
                   )}
                   <button type="button" onClick={() => remove(m)} className="text-muted hover:text-danger" title="מחק">
-                    <Icon name="Minus" size={15} />
+                    <Icon name="Trash2" size={15} />
                   </button>
                 </div>
               </div>
             </div>
           ))}
-          {Array.from({ length: uploading }).map((_, i) => (
-            <div key={`up-${i}`} className="border-line bg-surface h-[152px] animate-pulse rounded-2xl border" />
+          {pending.map((u) => (
+            <div
+              key={u.key}
+              className={cn(
+                "border-line relative flex h-[152px] flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center",
+                u.status === "error" ? "bg-danger-soft" : "bg-surface animate-pulse",
+              )}
+            >
+              {u.status === "uploading" ? (
+                <>
+                  <Icon name="Loader" size={20} className="text-brand animate-spin" />
+                  <span className="text-muted truncate text-[11px] font-semibold" dir="ltr">{u.name}</span>
+                  <span className="text-muted text-[10px]">מעלה…</span>
+                </>
+              ) : (
+                <>
+                  <Icon name="AlertTriangle" size={20} className="text-danger" />
+                  <span className="text-danger truncate text-[11px] font-semibold" dir="ltr">{u.name}</span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => retry(u)} className="text-brand text-[11px] font-bold hover:underline">נסה שוב</button>
+                    <button type="button" onClick={() => dismissPending(u.key)} className="text-muted text-[11px] font-bold hover:underline">הסר</button>
+                  </div>
+                </>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -239,7 +338,9 @@ export function MediaUploader({
       )}
 
       <p className="text-muted text-xs">
-        מומלץ לפחות 6 תמונות. נבחרו {images.length} תמונות.
+        מומלץ לפחות 6 תמונות. נבחרו {images.length} תמונות
+        {uploadingCount > 0 ? ` · מעלה ${uploadingCount}…` : ""}.
+        {" "}גרור פינות כדי לסדר, ✨ קובע תמונה ראשית.
       </p>
     </div>
   );

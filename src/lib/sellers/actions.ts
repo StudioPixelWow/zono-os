@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/auth/session";
 import { createSeller, createSeller360, updateSeller360, searchSellers, type NewSellerInput } from "./repository";
-import { propertySellerRepository, type LinkSellerInput } from "./propertySellers";
+import { propertySellerRepository, type LinkSellerInput, validatePropertySellerReadiness, type SellerReadiness } from "./propertySellers";
+import { getPropertySellers, type PropertySellerView } from "./service360";
 import { initializeSellerIntelligence } from "@/lib/seller-intelligence/service";
 import { logActivityEvent } from "@/lib/activity/service";
 import type { Seller360Input } from "./types";
@@ -123,6 +124,72 @@ export async function setPropertySellerRoleAction(
   }
   revalidatePath(`/properties/${propertyId}`);
   return {};
+}
+
+// ── Wizard inline seller (no redirect — stays inside the property wizard) ─────
+export interface PropertySellerState {
+  sellers: PropertySellerView[];
+  readiness: SellerReadiness;
+}
+
+/** Load current sellers + readiness for a property (used by the wizard step). */
+export async function getPropertySellerStateAction(
+  propertyId: string,
+): Promise<PropertySellerState> {
+  try {
+    const [sellers, readiness] = await Promise.all([
+      getPropertySellers(propertyId),
+      validatePropertySellerReadiness(propertyId),
+    ]);
+    return { sellers, readiness };
+  } catch (e) {
+    console.error("[seller] wizard state failed:", e);
+    return {
+      sellers: [],
+      readiness: { ready: false, hasActiveSeller: false, hasDecisionMaker: false, hasSigner: false, hasContactMethod: false, reasons: ["שגיאה בטעינת מוכרים"] },
+    };
+  }
+}
+
+export interface WizardSellerInput extends Seller360Input {
+  relationshipType?: string;
+  ownershipPercentage?: number | null;
+  isPrimary?: boolean;
+  isDecisionMaker?: boolean;
+  canSign?: boolean;
+}
+
+/** Create a seller inline and link it to the property; returns refreshed state. */
+export async function createAndLinkSellerAction(
+  propertyId: string,
+  input: WizardSellerInput,
+): Promise<SellerCrudState & { state?: PropertySellerState }> {
+  if (!input.fullName?.trim()) return { error: "נא להזין שם מלא." };
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile) return { error: "לא מחובר/ת." };
+  try {
+    const seller = await createSeller360(input, profile.org_id, user.id);
+    await propertySellerRepository.link(profile.org_id, {
+      propertyId,
+      sellerId: seller.id,
+      relationshipType: input.relationshipType ?? "owner",
+      ownershipPercentage: input.ownershipPercentage ?? null,
+      isPrimary: input.isPrimary ?? true,
+      isDecisionMaker: input.isDecisionMaker ?? true,
+      canSign: input.canSign ?? true,
+    });
+    await logActivityEvent({ eventType: "seller.created", entityType: "seller", entityId: seller.id, title: "נוצר מוכר חדש מתוך אשף הנכס" });
+    await logActivityEvent({ eventType: "seller.linked_to_property", entityType: "property", entityId: propertyId, relatedEntityType: "seller", relatedEntityId: seller.id, title: "מוכר קושר לנכס" });
+    await initializeSellerIntelligence(seller.id).catch((e) => console.error("[seller] auto-init failed:", e));
+    const { recalculatePropertyIntelligence } = await import("@/lib/intelligence/service");
+    await recalculatePropertyIntelligence(propertyId).catch(() => {});
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
+    console.error("[seller] wizard create+link failed:", e);
+    return { error: `יצירת המוכר נכשלה: ${msg}` };
+  }
+  revalidatePath(`/properties/${propertyId}`);
+  return { state: await getPropertySellerStateAction(propertyId) };
 }
 
 export async function createSellerAction(input: NewSellerInput): Promise<SellerCrudState> {

@@ -374,6 +374,7 @@ type PropertiesRow = {
   ai_description: string | null;
   internal_notes: string | null;
   target_audience: string | null;
+  marketing_audiences: Json;
   quality_score: number | null;
   last_ai_generated_at: string | null;
   primary_image_url: string | null;

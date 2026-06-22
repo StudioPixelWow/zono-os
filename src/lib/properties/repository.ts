@@ -63,6 +63,7 @@ function toRecord(input: PropertyInput) {
     ai_description: input.aiDescription || null,
     internal_notes: input.internalNotes || null,
     target_audience: input.targetAudience || null,
+    marketing_audiences: (input.marketingAudiences ?? []) as unknown as Database["public"]["Tables"]["properties"]["Row"]["marketing_audiences"],
     primary_image_url: input.primaryImageUrl || null,
     has_exclusivity: input.hasExclusivity,
     exclusivity_ends_at: input.exclusivityEndsAt || null,

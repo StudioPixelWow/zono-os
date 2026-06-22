@@ -57,6 +57,8 @@ export interface PropertyInput {
   aiDescription?: string | null;
   internalNotes?: string | null;
   targetAudience?: string | null;
+  /** Structured target-audience keys (see lib/properties/audiences.ts). */
+  marketingAudiences?: string[];
   primaryImageUrl?: string | null;
   hasExclusivity: boolean;
   exclusivityEndsAt?: string | null;

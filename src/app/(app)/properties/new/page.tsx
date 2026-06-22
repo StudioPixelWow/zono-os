@@ -51,6 +51,9 @@ function rowToInput(p: PropertyRow): PropertyInput {
     aiDescription: p.ai_description,
     internalNotes: p.internal_notes,
     targetAudience: p.target_audience,
+    marketingAudiences: Array.isArray(p.marketing_audiences)
+      ? (p.marketing_audiences as string[])
+      : [],
     primaryImageUrl: p.primary_image_url,
     hasExclusivity: p.has_exclusivity,
     exclusivityEndsAt: p.exclusivity_ends_at
