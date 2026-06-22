@@ -17,6 +17,7 @@ export async function signUp(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("fullName") ?? "").trim();
+  const invite = String(formData.get("invite") ?? "").trim();
 
   if (!email || !password) return { error: "נא למלא אימייל וסיסמה." };
   if (password.length < 6) return { error: "הסיסמה חייבת להכיל לפחות 6 תווים." };
@@ -30,10 +31,11 @@ export async function signUp(
 
   if (error) return { error: error.message };
 
-  // If email confirmation is disabled, a session exists now → go onboard.
+  // If email confirmation is disabled, a session exists now. An invited agent
+  // goes to the join page to attach to the inviting org; everyone else onboards.
   if (data.session) {
     revalidatePath("/", "layout");
-    redirect("/onboarding");
+    redirect(invite ? `/join/${invite}` : "/onboarding");
   }
   return { message: "נשלח אליך אימייל לאישור החשבון. אנא אשר/י כדי להמשיך." };
 }

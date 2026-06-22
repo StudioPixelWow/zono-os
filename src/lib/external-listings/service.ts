@@ -184,9 +184,31 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   const perCityLimit = modeCfg.perCity;
   const maxCities = Math.min(modeCfg.maxCities, MAX_CITIES_PER_SYNC === 20 ? modeCfg.maxCities : MAX_CITIES_PER_SYNC);
 
-  const allLocalities = await activeLocalities(db, orgId, opts.localityId);
+  let allLocalities = await activeLocalities(db, orgId, opts.localityId);
+
+  // Resumable backfill: if a recent backfill stopped before covering every city,
+  // resume from the cities it had NOT yet completed (cursor checkpoint).
+  if (mode === "backfill" && !opts.localityId) {
+    try {
+      const since = new Date(Date.now() - 12 * 3_600_000).toISOString();
+      const { data: prior } = await db
+        .from("import_jobs").select("params,created_at")
+        .eq("org_id", orgId).gte("created_at", since)
+        .order("created_at", { ascending: false }).limit(8);
+      const cp = (prior ?? []).map((j) => (j.params ?? {}) as { mode?: string; cursorRemaining?: string[] })
+        .find((p) => p.mode === "backfill" && Array.isArray(p.cursorRemaining) && p.cursorRemaining.length > 0);
+      if (cp?.cursorRemaining?.length) {
+        const remain = new Set(cp.cursorRemaining);
+        allLocalities = [...allLocalities].sort((a, b) => (remain.has(b.name) ? 1 : 0) - (remain.has(a.name) ? 1 : 0));
+        await log(`המשך סנכרון מתקדם: מקדים ${cp.cursorRemaining.length} ערים שטרם הושלמו`);
+      }
+    } catch { /* checkpoint is best-effort */ }
+  }
+
   // Guardrail: cap cities per sync run so we never scrape the whole country.
   const localities = allLocalities.slice(0, maxCities);
+  const allCityNames = allLocalities.map((l) => l.name);
+  const completedCities: string[] = [];
   const summary: SyncSummary = { success: true, organizationId: orgId, cities: localities.map((l) => l.name), sources, inserted: 0, updated: 0, errors: [] };
 
   await log(`מצב סנכרון: ${modeCfg.label} · עד ${perCityLimit} מודעות לעיר · עד ${maxCities} אזורים`);
@@ -237,6 +259,13 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
       }
     }
     try { await detectDuplicates(db, orgId, loc.name); } catch { /* best-effort */ }
+    // Cursor checkpoint: record this city as done so an interrupted backfill can
+    // resume from the cities still remaining.
+    completedCities.push(loc.name);
+    const cursorRemaining = allCityNames.filter((c) => !completedCities.includes(c));
+    try {
+      await db.from("import_jobs").update({ params: { ...opts, mode, completedCities, cursorRemaining } as never }).eq("id", jobId);
+    } catch { /* checkpoint is best-effort */ }
   }
 
   // Broker detection on the freshly-synced listings — best-effort, never breaks

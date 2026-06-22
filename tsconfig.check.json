@@ -3,7 +3,10 @@
   "compilerOptions": { "noEmit": true },
   "include": [
     "src/lib/external-listings/service.ts",
-    "src/lib/external-listings/actions.ts",
-    "src/app/(app)/properties/ExternalListingsView.tsx"
+    "src/lib/team-admin/actions.ts",
+    "src/lib/auth/actions.ts",
+    "src/app/join/[token]/page.tsx",
+    "src/app/join/[token]/JoinAcceptButton.tsx",
+    "src/app/(auth)/signup/page.tsx"
   ]
 }

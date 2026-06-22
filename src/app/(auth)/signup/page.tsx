@@ -1,21 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signUp, type AuthFormState } from "@/lib/auth/actions";
 
 const inputClass =
   "bg-surface border-line text-ink focus:border-brand-light h-11 w-full rounded-xl border px-3 text-sm outline-none transition";
 
 export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(
     signUp,
     {},
   );
+  const invite = useSearchParams().get("invite") ?? "";
 
   return (
     <form action={action} className="flex flex-col gap-4">
       <h2 className="text-ink text-lg font-extrabold">יצירת חשבון</h2>
+      {invite && <input type="hidden" name="invite" value={invite} />}
+      {invite && (
+        <p className="bg-brand-soft text-brand-strong rounded-xl px-3 py-2 text-xs font-semibold">
+          הרשמה לפי הזמנה — לאחר ההרשמה תצורף/י אוטומטית למשרד שהזמין אותך.
+        </p>
+      )}
 
       {state.error && (
         <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-xs font-semibold">
