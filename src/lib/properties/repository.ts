@@ -164,13 +164,27 @@ export async function archiveProperty(id: string): Promise<void> {
 async function cleanupAbandonedDrafts(userId: string): Promise<void> {
   try {
     const supabase = createServiceRoleClient();
-    await supabase
+    // Candidate empty drafts (untitled, no price).
+    const { data: candidates } = await supabase
       .from("properties")
-      .delete()
+      .select("id")
       .eq("owner_id", userId)
       .eq("status", "draft")
       .eq("price", 0)
       .eq("title", "טיוטה ללא שם");
+    const ids = (candidates ?? []).map((r) => r.id as string);
+    if (!ids.length) return;
+    // NEVER delete a draft that already has uploaded media — that would wipe
+    // images the agent uploaded before filling title/price (data loss bug).
+    const { data: withMedia } = await supabase
+      .from("property_media")
+      .select("property_id")
+      .in("property_id", ids);
+    const protectedIds = new Set((withMedia ?? []).map((m) => m.property_id as string));
+    const deletable = ids.filter((id) => !protectedIds.has(id));
+    if (deletable.length) {
+      await supabase.from("properties").delete().in("id", deletable);
+    }
   } catch {
     /* best-effort cleanup */
   }
@@ -230,12 +244,29 @@ export async function markPublished(
   primaryImageUrl: string | null,
 ): Promise<void> {
   const supabase = await createClient();
+
+  // Fallback: if no primary image was passed, use the property's primary media
+  // row, or the first image in the gallery — so cards/details never show a
+  // broken/placeholder image when the gallery actually has photos.
+  let cover = primaryImageUrl;
+  if (!cover) {
+    const { data: imgs } = await supabase
+      .from("property_media")
+      .select("url,is_primary,sort_order")
+      .eq("property_id", id)
+      .eq("type", "image")
+      .order("is_primary", { ascending: false })
+      .order("sort_order", { ascending: true })
+      .limit(1);
+    cover = (imgs?.[0]?.url as string) ?? null;
+  }
+
   const { error } = await supabase
     .from("properties")
     .update({
       status: "published",
       published_at: new Date().toISOString(),
-      primary_image_url: primaryImageUrl,
+      primary_image_url: cover,
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
