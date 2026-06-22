@@ -37,6 +37,13 @@ export const QA_ITEMS: QaItem[] = [
   { id: 18, title: "P2 · העלאת מדיה ביצירה (ללא URL)", status: "pass", notes: "שדה תמונת הדירה ביצירה המהירה הוחלף בהעלאה מהמחשב (storage) שמייצר URL פנימית.", lastChecked: TODAY },
   { id: 19, title: "P2 · סנכרון פרופיל מותג (אין אזהרות שווא)", status: "pass", notes: "אזהרות 'חסר' מחושבות מהערכים הסופיים אחרי Brand Identity (master) — לא נדלקות כשהמידע קיים בהגדרות.", lastChecked: TODAY },
   { id: 20, title: "P2 · שגיאת UUID בוריאציות", status: "pass", notes: "isUuid() חוסם שם/slug מקודד מלהגיע לעמודות uuid; שאילתות מדלגות על מזהה לא-תקין; עמוד הסטודיו מציג הודעה ידידותית.", lastChecked: TODAY },
+  // ── QA Pack #3 ──
+  { id: 21, title: "P3 · מדיה בכל מקום + getPropertyMedia", status: "pass", notes: "שורש נוסף: cleanupAbandonedDrafts (תוקן ב-P2). נוסף helper קנוני getPropertyMedia (media/primary/cover/diagnostics); כרטיסי רשימת הנכסים מציגים עכשיו תמונה ראשית עם fallback ל-placeholder; דלי property-media ציבורי (SQL).", lastChecked: TODAY },
+  { id: 22, title: "P3 · עריכת נכס = יצירת נכס", status: "pass", notes: "עריכה משתמשת עכשיו באשף המלא (העלאת/עריכת תמונות, מוכרים, קהלים, ערכת שיווק, כל השדות) במצב editMode — לא טופס מצומצם.", lastChecked: TODAY },
+  { id: 23, title: "P3 · 'צור פוסט פרסום' מעמוד הנכס", status: "pass", notes: "כפתור בעמוד הנכס → /creative/new?propertyId= → פותח את ZONO קריאייטיב טעון עם הנכס (מדיה+מותג). ללא UUID/URL ידני.", lastChecked: TODAY },
+  { id: 24, title: "P3 · כפתור העלאה (dropzone)", status: "pass", notes: "שדה ההעלאה ביצירה הוא כעת dropzone אמיתי: אייקון, 'העלה תמונה מהמחשב', גרירה, תצוגה מקדימה, הסרה, מצב טעינה/שגיאה.", lastChecked: TODAY },
+  { id: 25, title: "P3 · Prompt חזק ומותג (Nano-Banana)", status: "pass", notes: "מנוע master-prompt: 8 סגנונות, 12 חלקים (כותרת/קופי/צ'יפים/CTA/ויזואל/פריסה/מותג/טיפוגרפיה/שימוש בתמונה/negative + NB prompt), 4 וריאציות אסטרטגיות, RTL, ללא המצאת פרטים, נכס+מותג עמוק.", lastChecked: TODAY },
+  { id: 26, title: "P3 · אחסון קריאייטיב + שפת כרטיסים", status: "partial", notes: "תוצרי הקריאייטיב נשמרים (zono_quick_creative_outputs: render_data/brand_snapshot/master prompt/ציונים). כרטיס הנכס יושר לסגנון נדל\"ן (תמונה/סטטוס/מחיר/חדרים/מ\"ר/קומה). נותר: רכיב כרטיס משותף אחד (RealEstatePropertyCard) ושמירת final_image_url כשספק תמונות יחובר.", lastChecked: TODAY },
 ];
 
 export const QA_SUMMARY = {
