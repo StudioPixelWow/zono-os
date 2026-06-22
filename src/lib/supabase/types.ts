@@ -4188,6 +4188,11 @@ type ZonoCreativeAssetsRow = {
   priority: number; reasoning: string | null; campaign_match_score: number; audience_match_score: number; conversion_potential_score: number; marketing_strength_score: number; asset_score: number;
   asset_status: string; is_favorite: boolean; is_approved: boolean; generation_metadata: Json; created_at: string; updated_at: string;
 };
+type ZonoCopyAssetsRow = {
+  id: string; org_id: string; creative_asset_id: string | null; campaign_id: string | null; entity_type: string; entity_id: string; copy_type: string;
+  title: string | null; headline: string | null; subheadline: string | null; body: string | null; cta: string | null; platform: string | null; language: string; tone: string | null; audience: string | null; reasoning: string | null;
+  status: string; confidence_score: number; metadata: Json; is_approved: boolean; is_favorite: boolean; created_at: string; updated_at: string;
+};
 type ZonoMarketingBriefsRow = {
   id: string; org_id: string; entity_type: string; entity_id: string; title: string; objective: string | null; platform: string | null; format: string | null; campaign_type: string | null; target_audience: string | null; main_message: string | null;
   property_id: string | null; project_id: string | null; agent_id: string | null; office_id: string | null; full_copy: Json; required_assets: Json; marketing_constraints: Json; status: string; created_by: string | null; created_at: string; updated_at: string;
@@ -4701,6 +4706,7 @@ export interface Database {
       zono_campaigns: TableShape<ZonoCampaignsRow, "org_id" | "entity_type" | "entity_id" | "title" | "campaign_type">;
       zono_campaign_assets: TableShape<ZonoCampaignAssetsRow, "org_id" | "campaign_id" | "asset_type">;
       zono_creative_assets: TableShape<ZonoCreativeAssetsRow, "org_id" | "campaign_id" | "asset_type" | "title">;
+      zono_copy_assets: TableShape<ZonoCopyAssetsRow, "org_id" | "entity_type" | "entity_id" | "copy_type">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
       community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;

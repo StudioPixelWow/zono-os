@@ -25,7 +25,16 @@ import {
   generateAssetsAction, favoriteAssetAction, approveAssetAction, rejectAssetAction, duplicateAssetAction, approveAllAssetsAction,
 } from "@/lib/creative-studio/asset-actions";
 import { CREATIVE_ASSET_TYPE_LABELS, OBJECTIVE_LABELS } from "@/lib/creative-studio/asset-generator";
+import {
+  generateCopyAction, favoriteCopyAction, approveCopyAction, rejectCopyAction, regenerateCopyAction,
+} from "@/lib/creative-studio/copy-actions";
+import { COPY_TYPE_LABELS } from "@/lib/creative-studio/copy-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
+
+type Copy = Record<string, unknown> & {
+  id: string; creative_asset_id: string | null; copy_type: string; title: string | null; headline: string | null; subheadline: string | null; body: string | null; cta: string | null;
+  platform: string | null; tone: string | null; audience: string | null; reasoning: string | null; status: string; confidence_score: number; is_approved: boolean; is_favorite: boolean;
+};
 
 type CreativeAsset = Record<string, unknown> & {
   id: string; campaign_id: string; asset_type: string; title: string; objective: string | null; audience: string | null; marketing_angle: string | null; emotional_trigger: string | null;
@@ -55,11 +64,12 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; orgId: string; userId: string }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
   const creativeAssets = (creativeAssetsRaw ?? []) as unknown as CreativeAsset[];
+  const copyAssets = (copyAssetsRaw ?? []) as unknown as Copy[];
   const router = useRouter();
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
@@ -157,6 +167,9 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
 
       {/* CREATIVE ASSET GENERATOR — Phase 5 */}
       <CreativeAssetsSection assets={creativeAssets} campaigns={campaigns} et={et} eid={eid} r={r} wrap={wrap} />
+
+      {/* COPY GENERATION ENGINE — Phase 6 */}
+      <CopySection copy={copyAssets} assets={creativeAssets} et={et} eid={eid} r={r} wrap={wrap} />
 
       {/* SECTION 7 — GENERATOR PLACEHOLDER */}
       <section className="bg-brand-soft/30 border-line rounded-2xl border border-dashed p-6 text-center">
@@ -583,6 +596,86 @@ function CreativeAssetDrawer({ a, campaigns, onClose }: { a: CreativeAsset; camp
 }
 function Mini({ label, value }: { label: string; value: number }) {
   return <div className="bg-surface rounded-xl p-2 text-center"><div className="text-brand-strong text-sm font-black">{value}</div><div className="text-muted text-[10px] font-bold">{label}</div></div>;
+}
+
+function CopySection({ copy, assets, et, eid, r, wrap }: { copy: Copy[]; assets: CreativeAsset[]; et: string; eid: string; r: Runner; wrap: Wrap }) {
+  const [assetId, setAssetId] = useState(assets[0]?.id ?? "");
+  const [open, setOpen] = useState<Copy | null>(null);
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">טקסטים שיווקיים</h2>
+          <p className="text-muted text-[12px]">לכל נכס שיווק מאושר ZONO כותב את כל הקופי — כותרות, גוף, CTA, סטוריז, קרוסלות, וואטסאפ ותסריטי גיוס — בעברית מותאמת מותג ומקום.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <select value={assetId} onChange={(e) => setAssetId(e.target.value)} className="border-line bg-surface text-ink h-9 max-w-[220px] rounded-lg border px-2 text-sm">
+            <option value="">בחר נכס שיווק</option>
+            {assets.map((a) => <option key={a.id} value={a.id}>{(CREATIVE_ASSET_TYPE_LABELS[a.asset_type] ?? a.asset_type)} · {a.title}</option>)}
+          </select>
+          <Button size="sm" loading={r.busyId === "gen-copy"} disabled={!assetId} onClick={() => wrap(() => generateCopyAction({ creativeAssetId: assetId, entityType: et, entityId: eid }), "gen-copy", "ZONO כותב קופי שיווקי...")}>
+            <Icon name="Sparkles" size={14} />צור טקסטים
+          </Button>
+        </div>
+      </div>
+      {copy.length === 0 ? (
+        <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין טקסטים עדיין — בחר נכס שיווק ולחץ ״צור טקסטים״.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {copy.map((c) => <CopyCard key={c.id} c={c} et={et} eid={eid} wrap={wrap} onOpen={() => setOpen(c)} />)}
+        </div>
+      )}
+      {open && <CopyDrawer c={open} onClose={() => setOpen(null)} />}
+    </section>
+  );
+}
+
+function CopyCard({ c, et, eid, wrap, onOpen }: { c: Copy; et: string; eid: string; wrap: Wrap; onOpen: () => void }) {
+  const preview = c.headline || c.body || c.cta || c.subheadline || "—";
+  return (
+    <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-4 shadow-sm ${c.is_approved ? "ring-1 ring-success" : c.status === "rejected" ? "opacity-60" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[10px] font-bold">{COPY_TYPE_LABELS[c.copy_type] ?? c.copy_type}</span>
+        <span className="text-success text-sm font-black">{c.confidence_score}</span>
+      </div>
+      <p className="text-ink text-[14px] font-bold leading-snug" dir="rtl">{preview}</p>
+      <div className="flex flex-wrap gap-1.5 text-[10px]">
+        {c.tone && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 font-bold">{c.tone}</span>}
+        {c.audience && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 font-bold">{c.audience}</span>}
+        {c.platform && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 font-bold">{c.platform}</span>}
+      </div>
+      <div className="border-line mt-1 flex flex-wrap gap-1.5 border-t pt-2 text-[11px]">
+        <button onClick={onOpen} className="text-brand-strong font-bold"><Icon name="Eye" size={13} /> פרטים</button>
+        <button onClick={() => wrap(() => approveCopyAction({ copyId: c.id, entityType: et, entityId: eid }), `pa-${c.id}`)} className={`font-bold ${c.is_approved ? "text-success" : "text-muted"}`}><Icon name="UserCheck" size={13} /> אשר</button>
+        <button onClick={() => wrap(() => rejectCopyAction({ copyId: c.id, entityType: et, entityId: eid }), `pr-${c.id}`)} className="text-danger font-bold">דחה</button>
+        <button onClick={() => wrap(() => favoriteCopyAction({ copyId: c.id, value: !c.is_favorite, entityType: et, entityId: eid }), `pf-${c.id}`)} className={`font-bold ${c.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={13} /> מועדף</button>
+        <button onClick={() => wrap(() => regenerateCopyAction({ copyId: c.id, entityType: et, entityId: eid }), `pg-${c.id}`)} className="text-muted font-bold"><Icon name="Sparkles" size={13} /> חדש</button>
+      </div>
+    </div>
+  );
+}
+
+function CopyDrawer({ c, onClose }: { c: Copy; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2"><span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{COPY_TYPE_LABELS[c.copy_type] ?? c.copy_type}</span><span className="text-success text-sm font-black">{c.confidence_score}</span></div>
+          <button onClick={onClose} className="text-muted"><Icon name="Minus" size={18} /></button>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          <DrawerRow label="כותרת" value={c.headline} />
+          <DrawerRow label="כותרת משנה" value={c.subheadline} />
+          {c.body && <div className="flex flex-col gap-0.5"><span className="text-muted text-[11px] font-bold">גוף הטקסט</span><span className="text-ink whitespace-pre-line text-[13px]">{c.body}</span></div>}
+          <DrawerRow label="קריאה לפעולה" value={c.cta} />
+          <DrawerRow label="קהל יעד" value={c.audience} />
+          <DrawerRow label="טון" value={c.tone} />
+          <DrawerRow label="פלטפורמה" value={c.platform} />
+        </div>
+        {c.reasoning && <div className="bg-brand-soft/30 mt-4 rounded-xl p-3"><span className="text-brand-strong text-[11px] font-bold">למה ZONO כתב כך</span><p className="text-ink mt-0.5 text-[13px]">{c.reasoning}</p></div>}
+      </div>
+    </div>
+  );
 }
 
 function UploadModal({ onClose, onDone, orgId, userId, et, eid }: { onClose: () => void; onDone: () => void; orgId: string; userId: string; et: string; eid: string }) {

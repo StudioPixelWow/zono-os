@@ -2,6 +2,7 @@ import { getCreativeStudio, type CreativeStudio } from "@/lib/creative-studio/se
 import { listConcepts, type ConceptRow } from "@/lib/creative-studio/concept-service";
 import { listCampaigns, listEntityCampaignAssets, type CampaignListItem, type CampaignAssetRow } from "@/lib/creative-studio/campaign-service";
 import { listEntityCreativeAssets, type CreativeAssetRow } from "@/lib/creative-studio/asset-service";
+import { listEntityCopy, type CopyRow } from "@/lib/creative-studio/copy-service";
 import { getSessionContext } from "@/lib/auth/session";
 import { CreativeStudioView } from "../../CreativeStudioView";
 
@@ -14,6 +15,7 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
   let campaigns: CampaignListItem[] = [];
   let campaignAssets: CampaignAssetRow[] = [];
   let creativeAssets: CreativeAssetRow[] = [];
+  let copyAssets: CopyRow[] = [];
   let orgId = ""; let userId = "";
   try {
     const { user, profile } = await getSessionContext();
@@ -23,6 +25,7 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
     campaigns = await listCampaigns(entityType, entityId);
     campaignAssets = await listEntityCampaignAssets(entityType, entityId);
     creativeAssets = await listEntityCreativeAssets(entityType, entityId);
+    copyAssets = await listEntityCopy(entityType, entityId);
   } catch (e) { console.error("[creative-studio] load failed:", e); }
 
   if (!studio) {
@@ -33,5 +36,5 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
       </main>
     );
   }
-  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} orgId={orgId} userId={userId} />;
+  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} orgId={orgId} userId={userId} />;
 }
