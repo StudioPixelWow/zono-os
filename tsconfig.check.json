@@ -2,8 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "noEmit": true },
   "include": [
-    "src/app/(app)/financing/FinancingView.tsx",
-    "src/app/(app)/financing/MortgageCalculators.tsx",
-    "src/lib/financing/calculators.ts"
+    "src/app/(app)/admin/product-qa/page.tsx",
+    "src/lib/product-qa/status.ts"
   ]
 }
