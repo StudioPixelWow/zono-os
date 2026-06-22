@@ -8,7 +8,7 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { uploadMarketingAsset } from "@/lib/creative-studio/assets";
 import {
-  saveDnaAction, lockDnaAction, updateAssetFlagsAction, deleteAssetAction, submitFeedbackAction, requestAnalysisAction,
+  saveDnaAction, lockDnaAction, updateAssetFlagsAction, deleteAssetAction, submitFeedbackAction, analyzeMarketingDnaAction,
 } from "@/lib/creative-studio/actions";
 import {
   ENTITY_LABELS, ASSET_TYPE_LABELS, LIBRARY_FILTERS, assetBadges, DNA_SCORES, FEEDBACK_BUTTONS, type AssetLike,
@@ -25,6 +25,7 @@ export function CreativeStudioView({ studio, orgId, userId }: { studio: Creative
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const wrap: Wrap = (fn, id, pending) =>
     r.run(async () => { const res = await fn(); if (res.error) throw new Error(res.error); return res; }, { id, pendingMessage: pending, success: (x) => x.message ?? null });
 
@@ -48,9 +49,16 @@ export function CreativeStudioView({ studio, orgId, userId }: { studio: Creative
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={() => setUploadOpen(true)}><Icon name="Plus" size={14} />העלאת חומרים</Button>
-          <Button size="sm" variant="secondary" loading={r.busyId === "analyze"} onClick={() => wrap(() => requestAnalysisAction(et, eid), "analyze", "יוצר משימת ניתוח...")}><Icon name="Sparkles" size={14} />נתח DNA שיווקי</Button>
+          <Button size="sm" variant="secondary" loading={r.busyId === "analyze"} onClick={() => { setAnalyzing(true); wrap(() => analyzeMarketingDnaAction(et, eid).finally(() => { setAnalyzing(false); router.refresh(); }), "analyze", "ZONO מנתח את הסגנון השיווקי והנדל״ני..."); }}><Icon name="Sparkles" size={14} />נתח DNA שיווקי</Button>
         </div>
       </header>
+
+      {analyzing && (
+        <div className="bg-brand-soft/40 text-brand-strong flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold">
+          <Icon name="Sparkles" size={15} />ZONO מנתח את הסגנון השיווקי והנדל״ני...
+        </div>
+      )}
+      <p className="text-muted text-[12px]">הניתוח מבוסס על חומרים שהועלו, רפרנסים שאושרו, רפרנסים שנפסלו, תמונות נכס, הדמיות, תוכניות והערות הצוות.</p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi label="חומרים" value={studio.stats.totalAssets} tone="text-ink" />
@@ -58,7 +66,7 @@ export function CreativeStudioView({ studio, orgId, userId }: { studio: Creative
         <Kpi label="רפרנסים שנפסלו" value={studio.stats.rejectedReferences} tone="text-danger" />
         <Kpi label="מתחרים" value={studio.stats.competitorReferences} tone="text-warning" />
         <Kpi label="סטטוס DNA" value={DNA_STATUS[studio.stats.dnaStatus] ?? "—"} tone="text-brand-strong" />
-        <Kpi label="משובים" value={studio.stats.feedbackCount} tone="text-ink" />
+        <Kpi label="ביטחון AI" value={dna ? `${(dna.ai_confidence_score as number) ?? 0}%` : "—"} tone="text-ink" />
       </div>
       {studio.stats.lastAnalyzedAt && <p className="text-muted text-[12px]">ניתוח אחרון: {new Date(studio.stats.lastAnalyzedAt).toLocaleString("he-IL")}</p>}
 
@@ -83,6 +91,9 @@ export function CreativeStudioView({ studio, orgId, userId }: { studio: Creative
 
       {/* SECTION 4 — DNA PANEL */}
       <DnaPanel dna={dna} defaultAvoid={studio.defaultAvoidRules} defaultPrefer={studio.defaultPreferRules} />
+
+      {/* WHAT ZONO LEARNED */}
+      <LearnedBlock dna={dna} />
 
       {/* SECTION 5 — EDITABLE DNA */}
       <DnaEditor dna={dna} et={et} eid={eid} r={r} wrap={wrap} />
@@ -194,6 +205,34 @@ function listOr(items: unknown[] | null | undefined) {
   return arr.length ? <ul className="text-muted flex flex-col gap-0.5 text-[12px]">{arr.slice(0, 8).map((t, i) => <li key={i}>• {t}</li>)}</ul> : <p className="text-muted text-[12px]">טרם הוגדר.</p>;
 }
 
+function LearnedBlock({ dna }: { dna: Dna | null }) {
+  const arr = (k: string): string[] => { const v = dna?.[k]; return Array.isArray(v) ? (v as unknown[]).map((x) => typeof x === "string" ? x : JSON.stringify(x)).filter(Boolean) : []; };
+  const works = [...arr("approved_patterns"), ...arr("preferred_campaign_angles")];
+  const avoid = [...arr("rejected_patterns"), ...arr("rejected_campaign_angles"), ...arr("avoid_rules")];
+  const insights = arr("target_audiences");
+  if (!works.length && !avoid.length) {
+    return (
+      <section className="bg-surface text-muted rounded-2xl px-4 py-6 text-center text-sm">מה ZONO למד? — הרץ ״נתח DNA שיווקי״ כדי ללמוד מה עובד וממה להימנע מתוך החומרים.</section>
+    );
+  }
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-ink text-lg font-black">מה ZONO למד?</h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="bg-success-soft/40 border-line rounded-2xl border p-4">
+          <p className="text-success mb-1.5 text-sm font-black">מה עובד כאן</p>
+          {works.length ? <ul className="text-ink flex flex-col gap-0.5 text-[13px]">{works.slice(0, 10).map((t, i) => <li key={i}>✓ {t}</li>)}</ul> : <p className="text-muted text-[12px]">טרם נלמד.</p>}
+        </div>
+        <div className="bg-danger-soft/40 border-line rounded-2xl border p-4">
+          <p className="text-danger mb-1.5 text-sm font-black">ממה להימנע</p>
+          {avoid.length ? <ul className="text-ink flex flex-col gap-0.5 text-[13px]">{avoid.slice(0, 10).map((t, i) => <li key={i}>✕ {t}</li>)}</ul> : <p className="text-muted text-[12px]">טרם נלמד.</p>}
+        </div>
+      </div>
+      {insights.length > 0 && <p className="text-muted text-[12px]">תובנות נדל״ן · קהלים: {insights.slice(0, 6).join(" · ")}</p>}
+    </section>
+  );
+}
+
 function DnaEditor({ dna, et, eid, r, wrap }: { dna: Dna | null; et: string; eid: string; r: Runner; wrap: Wrap }) {
   const [summary, setSummary] = useState((dna?.dna_summary as string) ?? "");
   const [visual, setVisual] = useState((dna?.visual_personality as string) ?? "");
@@ -218,7 +257,7 @@ function DnaEditor({ dna, et, eid, r, wrap }: { dna: Dna | null; et: string; eid
       </div>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" loading={r.busyId === "save-dna"} onClick={() => wrap(() => saveDnaAction({ entityType: et, entityId: eid, dna_summary: summary, visual_personality: visual, copywriting_tone: tone, real_estate_positioning: positioning, agent_notes: agentNotes, office_notes: officeNotes, seller_notes: sellerNotes, zono_notes: zonoNotes }), "save-dna", "שומר...")}><Icon name="UserCheck" size={14} />שמור פרופיל</Button>
-        <Button size="sm" variant="secondary" loading={r.busyId === "analyze2"} onClick={() => wrap(() => requestAnalysisAction(et, eid), "analyze2", "יוצר משימה...")}><Icon name="Sparkles" size={14} />רענן ניתוח AI</Button>
+        <Button size="sm" variant="secondary" loading={r.busyId === "analyze2"} onClick={() => wrap(() => analyzeMarketingDnaAction(et, eid), "analyze2", "ZONO מנתח...")}><Icon name="Sparkles" size={14} />רענן ניתוח AI</Button>
         <Button size="sm" variant="ghost" loading={r.busyId === "lock"} onClick={() => wrap(() => lockDnaAction(et, eid), "lock")}><Icon name="Shield" size={14} />נעל כקו שיווקי מאושר</Button>
       </div>
     </section>

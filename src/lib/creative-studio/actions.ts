@@ -1,9 +1,10 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import {
-  saveDna, lockDna, updateAssetFlags, addAssetNote, deleteAsset, submitFeedback, requestAnalysis, ensureDnaProfile,
+  saveDna, lockDna, updateAssetFlags, addAssetNote, deleteAsset, submitFeedback, ensureDnaProfile,
   type SaveDnaInput,
 } from "./service";
+import { runMarketingAnalysis } from "./marketing-analysis-service";
 
 export interface CsActionState { ok?: boolean; error?: string; message?: string }
 function revalidate(entityType?: string, entityId?: string) {
@@ -38,7 +39,11 @@ export async function submitFeedbackAction(input: { entityType: string; entityId
   try { await submitFeedback(input); revalidate(input.entityType, input.entityId); return { ok: true, message: "המשוב נשמר ונלמד" }; }
   catch (e) { return { error: e instanceof Error ? e.message : "שמירת המשוב נכשלה" }; }
 }
-export async function requestAnalysisAction(entityType: string, entityId: string): Promise<CsActionState> {
-  try { const r = await requestAnalysis(entityType, entityId); revalidate(entityType, entityId); return { ok: true, message: `משימת ניתוח DNA נוצרה (${r.jobId.slice(0, 8)}) — ניתוח AI יופעל בשלב הבא` }; }
-  catch (e) { return { error: e instanceof Error ? e.message : "יצירת משימת הניתוח נכשלה" }; }
+export async function analyzeMarketingDnaAction(entityType: string, entityId: string): Promise<CsActionState> {
+  try {
+    const r = await runMarketingAnalysis(entityType, entityId);
+    revalidate(entityType, entityId);
+    const providerLabel = r.provider === "mock" ? "מצב הדגמה" : r.provider === "gemini" ? "Gemini" : r.provider === "openai" ? "OpenAI" : r.provider;
+    return { ok: true, message: `Marketing DNA עודכן בהצלחה · ${providerLabel} · ביטחון ${r.confidence}%` };
+  } catch (e) { return { error: e instanceof Error ? e.message : "ניתוח ה-DNA נכשל" }; }
 }
