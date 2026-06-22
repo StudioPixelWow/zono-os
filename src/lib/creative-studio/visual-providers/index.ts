@@ -120,7 +120,9 @@ export async function generateNanoBananaImage(prompt: string, referenceImageUrl?
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ contents: [{ role: "user", parts }] }),
+    // IMAGE generation via generateContent REQUIRES responseModalities, else the
+    // model returns text only and no image is produced.
+    body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -131,7 +133,11 @@ export async function generateNanoBananaImage(prompt: string, referenceImageUrl?
   const img = outParts.find((p: Record<string, unknown>) => (p.inlineData as { data?: string } | undefined)?.data);
   const b64 = (img?.inlineData as { data?: string } | undefined)?.data;
   const mime = (img?.inlineData as { mimeType?: string } | undefined)?.mimeType || "image/png";
-  if (!b64) throw new Error("Nano Banana לא החזיר תמונה");
+  if (!b64) {
+    const finish = json?.candidates?.[0]?.finishReason ?? "";
+    const txt = outParts.map((p: Record<string, unknown>) => p.text).filter(Boolean).join(" ").slice(0, 200);
+    throw new Error(`Nano Banana לא החזיר תמונה (model=${model} finish=${finish}) ${txt}`);
+  }
   return { b64, mime, provider: "nano-banana" };
 }
 

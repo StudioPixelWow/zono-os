@@ -47,7 +47,7 @@ type QuickOutput = Record<string, unknown> & {
   id: string; request_id: string; output_type: string; variant_name: string; format: string; title: string | null; render_data: RenderData;
   headline: string | null; cta_text: string | null; overall_score: number; brand_match_score: number; readability_score: number; seller_lead_score: number; buyer_lead_score: number; is_approved: boolean; is_favorite: boolean; status: string;
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
-  image_url: string | null; image_status: string | null;
+  image_url: string | null; image_status: string | null; image_error: string | null;
 };
 
 type Visual = Record<string, unknown> & {
@@ -934,6 +934,9 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
       )}
       {o.image_status === "no_provider" && !o.image_url && (
         <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">לא מוגדר ספק יצירת תמונות. כרגע מוצגת תצוגת תבנית בלבד.</p>
+      )}
+      {o.image_status === "failed" && !o.image_url && o.image_error && (
+        <p className="bg-danger-soft text-danger rounded-lg px-2 py-1 text-[9px] font-bold break-words" dir="ltr">{o.image_error}</p>
       )}
       <div className="flex items-center justify-between gap-1 px-0.5">
         <span className="text-muted text-[10px] font-bold">{o.variant_name}</span>

@@ -4220,7 +4220,7 @@ type ZonoQuickCreativeOutputsRow = {
   is_favorite: boolean; is_approved: boolean; status: string; created_at: string; updated_at: string;
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; creative_director_metadata: Json;
   scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
-  image_url: string | null; image_provider: string | null; image_status: string | null;
+  image_url: string | null; image_provider: string | null; image_status: string | null; image_error: string | null;
 };
 type BrandIdentityProfilesRow = {
   id: string; org_id: string; entity_type: string; entity_id: string;

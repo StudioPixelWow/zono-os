@@ -315,14 +315,16 @@ async function genImageForOutput(supabase: DB, orgId: string, outputId: string):
       const rd = out.render_data as { blocks?: Record<string, unknown>[] } | null;
       if (rd?.blocks) nextRd = { ...rd, blocks: rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl } : b)) };
     } catch { /* keep original */ }
-    await supabase.from("zono_quick_creative_outputs").update({ image_url: imageUrl, image_provider: img.provider, image_status: "generated", render_data: nextRd as never }).eq("org_id", orgId).eq("id", outputId);
+    await supabase.from("zono_quick_creative_outputs").update({ image_url: imageUrl, image_provider: img.provider, image_status: "generated", image_error: null, render_data: nextRd as never }).eq("org_id", orgId).eq("id", outputId);
     log("generated_image_url saved", true);
     log("generated_image_url", imageUrl);
     return { imageUrl, provider: img.provider };
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     log("provider response received", false);
     log("generated_image_url saved", false);
-    await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed" }).eq("org_id", orgId).eq("id", outputId);
+    log("error", msg);
+    await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed", image_error: msg.slice(0, 500) }).eq("org_id", orgId).eq("id", outputId);
     throw e;
   }
 }
