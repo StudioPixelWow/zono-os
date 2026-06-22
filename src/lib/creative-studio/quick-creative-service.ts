@@ -10,6 +10,31 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Json } from "@/lib/supabase/types";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
+import { buildCreativeDirection } from "./creative-director/engine";
+import { validateCreative } from "./creative-director/validation";
+
+type QuickVar = ReturnType<typeof buildQuickVariations>[number];
+function providedFeatures(i: QuickInput): string[] {
+  const f: string[] = [];
+  if (i.rooms) f.push(`${i.rooms} חדרים`); if (i.sizeSqm) f.push(`${i.sizeSqm} מ״ר`); if (i.floor) f.push(`קומה ${i.floor}`);
+  if (i.parking) f.push("חניה"); if (i.storage) f.push("מחסן"); if (i.balcony) f.push("מרפסת"); if (i.elevator) f.push("מעלית");
+  return f;
+}
+/** Run every variation through the proven Creative Director framework + validation. */
+function directorFields(type: QuickType, input: QuickInput, brand: BrandSnapshot, v: QuickVar): Record<string, unknown> {
+  const dir = buildCreativeDirection({
+    companyName: brand.officeName || brand.agentName || "ZONO", primaryColor: brand.colors[0] || "#0F3D2E", textColor: brand.colors[1] || "#FFFFFF",
+    format: v.render.format, headline: v.headline, subheadline: v.subheadline, lines: (v.body || "").split(/\n+/).filter(Boolean).slice(0, 3), trust: input.address ?? undefined, cta: v.cta,
+    creativeType: type, hasPropertyImage: Boolean(input.propertyImage), luxury: brand.luxury, urgency: 50, agentName: brand.agentName,
+    city: input.city ?? null, neighborhood: input.neighborhood ?? null, providedFeatures: providedFeatures(input),
+  });
+  const val = validateCreative({ direction: dir, headline: v.headline, copy: v.body, cta: v.cta, providedFeatures: providedFeatures(input), hasPropertyImage: Boolean(input.propertyImage), brandColors: brand.colors });
+  return {
+    internal_prompt: dir.internalPrompt, creative_strategy: dir.strategy, visual_hook: dir.visualHook, scroll_stop_reason: dir.scrollStopReason,
+    creative_director_metadata: { layout: dir.layoutRecommendation, typography: dir.typographyRecommendation, blacklistHits: val.blacklistHits, fakeRealEstateHits: val.fakeRealEstateHits, passed: val.passed, notes: val.notes } as unknown,
+    scroll_stop_score: val.scrollStopScore, creative_director_score: val.creativeDirectorScore, anti_ai_score: val.antiAiScore, rtl_readability_score: val.rtlReadabilityScore,
+  };
+}
 
 async function ctx() {
   const { user, profile } = await getSessionContext();
@@ -75,6 +100,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     render_data: v.render as unknown as Json, headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
     brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
     seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
+    ...directorFields(g.requestType, g.input, brand.snapshot, v),
   }));
   await supabase.from("zono_quick_creative_outputs").insert(rows as never);
   return { requestId, created: rows.length };
@@ -166,6 +192,7 @@ async function generateQuickCreativeFromRequest(supabase: DB, orgId: string, rq:
     render_data: v.render as unknown as Json, headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
     brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
     seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
+    ...directorFields(rq.request_type as QuickType, input, brandSnap, v),
   }));
   await supabase.from("zono_quick_creative_outputs").insert(rows as never);
   return { created: rows.length };

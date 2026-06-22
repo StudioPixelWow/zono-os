@@ -7,6 +7,7 @@ import { listEntityOutputs, type OutputRow } from "@/lib/creative-studio/output-
 import { listEntityVisuals, type VisualRow } from "@/lib/creative-studio/visual-service";
 import { listQuickOutputs, type QuickOutputRow } from "@/lib/creative-studio/quick-creative-service";
 import { getSessionContext } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { CreativeStudioView } from "../../CreativeStudioView";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +23,11 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
   let creativeOutputs: OutputRow[] = [];
   let visuals: VisualRow[] = [];
   let quickOutputs: QuickOutputRow[] = [];
-  let orgId = ""; let userId = "";
+  let orgId = ""; let userId = ""; let isManager = false;
   try {
     const { user, profile } = await getSessionContext();
     orgId = profile?.org_id ?? ""; userId = user?.id ?? "";
+    try { const sb = await createClient(); const { data } = await sb.rpc("has_min_role", { p_min: "manager" }); isManager = data === true; } catch { /* default */ }
     studio = await getCreativeStudio(entityType, entityId);
     concepts = await listConcepts(entityType, entityId);
     campaigns = await listCampaigns(entityType, entityId);
@@ -45,5 +47,5 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
       </main>
     );
   }
-  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} orgId={orgId} userId={userId} />;
+  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} />;
 }

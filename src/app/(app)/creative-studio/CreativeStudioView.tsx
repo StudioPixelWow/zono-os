@@ -46,6 +46,7 @@ import type { CreativeStudio } from "@/lib/creative-studio/service";
 type QuickOutput = Record<string, unknown> & {
   id: string; request_id: string; output_type: string; variant_name: string; format: string; title: string | null; render_data: RenderData;
   headline: string | null; cta_text: string | null; overall_score: number; brand_match_score: number; readability_score: number; seller_lead_score: number; buyer_lead_score: number; is_approved: boolean; is_favorite: boolean; status: string;
+  internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
 };
 
 type Visual = Record<string, unknown> & {
@@ -93,7 +94,7 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, quickOutputs: quickOutputsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; quickOutputs?: Record<string, unknown>[]; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, quickOutputs: quickOutputsRaw, isManager = false, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; quickOutputs?: Record<string, unknown>[]; isManager?: boolean; orgId: string; userId: string }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
@@ -154,7 +155,7 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
       <ActionFeedback runner={r} />
 
       {/* QUICK CREATIVE TEMPLATES — יצירה מהירה */}
-      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} />
+      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} canViewPrompt={isManager} />
 
       {/* SECTION 2 — ASSETS LIBRARY */}
       <section className="flex flex-col gap-3">
@@ -887,7 +888,7 @@ const QUICK_CARDS: { type: string; title: string; desc: string; cta: string }[] 
   { type: "property_ad_post", title: "פוסט פרסום דירה", desc: "צרו מודעת נכס ממותגת עם תמונה, פרטים וקריאה לפעולה.", cta: "צור פוסט פרסום דירה" },
 ];
 
-function QuickCreativeSection({ outputs, et, eid, wrap }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap }) {
+function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
   const [wizardType, setWizardType] = useState<string | null>(null);
   return (
     <section className="flex flex-col gap-3">
@@ -905,7 +906,7 @@ function QuickCreativeSection({ outputs, et, eid, wrap }: { outputs: QuickOutput
         <div className="flex flex-col gap-2">
           <p className="text-ink text-sm font-black">תוצאות יצירה מהירה</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {outputs.map((o) => <QuickResultCard key={o.id} o={o} et={et} eid={eid} wrap={wrap} />)}
+            {outputs.map((o) => <QuickResultCard key={o.id} o={o} et={et} eid={eid} wrap={wrap} canViewPrompt={canViewPrompt} />)}
           </div>
         </div>
       )}
@@ -914,7 +915,8 @@ function QuickCreativeSection({ outputs, et, eid, wrap }: { outputs: QuickOutput
   );
 }
 
-function QuickResultCard({ o, et, eid, wrap }: { o: QuickOutput; et: string; eid: string; wrap: Wrap }) {
+function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
+  const [showPrompt, setShowPrompt] = useState(false);
   return (
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
       <CreativePreview data={o.render_data} scale={0.8} />
@@ -933,6 +935,18 @@ function QuickResultCard({ o, et, eid, wrap }: { o: QuickOutput; et: string; eid
         <button onClick={() => wrap(() => duplicateQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qd-${o.id}`)} className="text-muted font-bold"><Icon name="Plus" size={12} /></button>
         <span className="text-muted/50 cursor-not-allowed" title="בקרוב">PNG</span>
       </div>
+      {o.scroll_stop_reason && <p className="text-muted px-0.5 text-[10px]">⚡ {o.scroll_stop_reason}</p>}
+      {canViewPrompt && (
+        <div className="border-line border-t pt-1.5">
+          <button onClick={() => setShowPrompt(!showPrompt)} className="text-brand-strong text-[10px] font-bold">{showPrompt ? "הסתר" : "הצג"} פרומפט פנימי</button>
+          {showPrompt && (
+            <div className="bg-surface mt-1 rounded-lg p-2 text-[10px]" dir="ltr">
+              <p className="text-muted">[{o.creative_strategy}] · anti-AI {o.anti_ai_score} · scroll {o.scroll_stop_score} · RTL {o.rtl_readability_score}</p>
+              <p className="text-ink mt-1 whitespace-pre-wrap break-words">{o.internal_prompt}</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

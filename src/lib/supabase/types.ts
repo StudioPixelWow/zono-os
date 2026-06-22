@@ -4198,6 +4198,8 @@ type ZonoCreativeOutputsRow = {
   output_type: string; title: string | null; status: string; preview_url: string | null; thumbnail_url: string | null; render_data: Json; generation_metadata: Json;
   brand_match_score: number; marketing_match_score: number; readability_score: number; hierarchy_score: number; conversion_score: number; overall_score: number;
   is_approved: boolean; is_favorite: boolean; created_at: string; updated_at: string;
+  internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; creative_director_metadata: Json;
+  scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
 };
 type ZonoVisualAssetsRow = {
   id: string; org_id: string; entity_type: string; entity_id: string; campaign_id: string | null; creative_output_id: string | null;
@@ -4215,6 +4217,8 @@ type ZonoQuickCreativeOutputsRow = {
   headline: string | null; subheadline: string | null; body_text: string | null; cta_text: string | null;
   brand_match_score: number; readability_score: number; conversion_score: number; seller_lead_score: number; buyer_lead_score: number; overall_score: number;
   is_favorite: boolean; is_approved: boolean; status: string; created_at: string; updated_at: string;
+  internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; creative_director_metadata: Json;
+  scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
 };
 type ZonoMarketingBriefsRow = {
   id: string; org_id: string; entity_type: string; entity_id: string; title: string; objective: string | null; platform: string | null; format: string | null; campaign_type: string | null; target_audience: string | null; main_message: string | null;
