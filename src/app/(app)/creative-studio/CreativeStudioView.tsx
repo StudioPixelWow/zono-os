@@ -965,14 +965,41 @@ function ImageUploadField({ label, value, orgId, userId, et, eid, onChange }: { 
     } catch (e) { setErr(e instanceof Error ? e.message : "ההעלאה נכשלה"); }
     finally { setBusy(false); }
   };
+  const [drag, setDrag] = useState(false);
+  const inputId = `imgup-${label}`;
+  if (value && !busy) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-muted text-[11px] font-bold">{label}</span>
+        <div className="border-line bg-surface flex items-center gap-3 rounded-xl border p-2">
+          <img src={value} alt="" className="border-line h-14 w-14 rounded-lg border object-cover" />
+          <span className="text-success flex-1 text-[12px] font-bold">תמונה הועלתה ✓</span>
+          <button type="button" onClick={() => onChange("")} className="text-muted hover:text-danger text-[12px] font-bold"><Icon name="Trash2" size={14} /> הסר</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-1">
       <span className="text-muted text-[11px] font-bold">{label}</span>
-      <div className="flex items-center gap-2">
-        <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(e) => upload(e.target.files?.[0] ?? null)} className="text-muted text-xs" />
-        {busy && <Icon name="Loader" size={14} className="text-brand animate-spin" />}
-        {value && !busy && <img src={value} alt="" className="border-line h-9 w-9 rounded-lg border object-cover" />}
-      </div>
+      <label
+        htmlFor={inputId}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); void upload(e.dataTransfer.files?.[0] ?? null); }}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-5 text-center transition ${drag ? "border-brand bg-brand-soft" : "border-line bg-surface hover:border-brand-light"}`}
+      >
+        {busy ? (
+          <><Icon name="Loader" size={20} className="text-brand animate-spin" /><span className="text-muted text-xs">מעלה…</span></>
+        ) : (
+          <>
+            <span className="bg-brand-soft text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="Upload" size={18} /></span>
+            <span className="text-ink text-sm font-bold">העלה תמונה מהמחשב</span>
+            <span className="text-muted text-[11px]">או גרור קובץ לכאן · JPG / PNG / WEBP</span>
+          </>
+        )}
+        <input id={inputId} type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={busy} onChange={(e) => upload(e.target.files?.[0] ?? null)} />
+      </label>
       {err && <span className="text-danger text-[11px]">{err}</span>}
     </div>
   );

@@ -1,9 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": [
-    "src/lib/properties/repository.ts",
-    "src/app/(app)/properties/PropertiesListView.tsx",
-    "src/app/(app)/properties/[id]/edit/page.tsx",
-    "src/app/(app)/properties/[id]/PropertyDetailView.tsx",
-    "src/app/(app)/properties/new/PropertyWizard.tsx",
-    "src/app/(app)/creative/new/page.tsx"
-  ] }
+  "include": ["src/app/(app)/creative-studio/CreativeStudioView.tsx"] }
