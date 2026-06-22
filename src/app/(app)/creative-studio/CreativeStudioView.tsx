@@ -17,7 +17,21 @@ import {
   ENTITY_LABELS, ASSET_TYPE_LABELS, LIBRARY_FILTERS, assetBadges, DNA_SCORES, FEEDBACK_BUTTONS, type AssetLike,
 } from "@/lib/creative-studio/engine";
 import { CONCEPT_TYPE_LABELS } from "@/lib/creative-studio/concept-engine";
+import {
+  generateCampaignAction, duplicateCampaignAction, archiveCampaignAction, deleteCampaignAction, approveCampaignAction,
+} from "@/lib/creative-studio/campaign-actions";
+import { CAMPAIGN_TYPE_LABELS, campaignTypesFor } from "@/lib/creative-studio/campaign-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
+
+type Campaign = Record<string, unknown> & {
+  id: string; title: string; campaign_type: string; status: string; updated_at: string; assetCount: number; completion: number;
+  objective: string | null; target_audience: string | null; marketing_angle: string | null; campaign_summary: string | null; reasoning: string | null; generation_metadata: unknown;
+};
+type CampaignAsset = Record<string, unknown> & {
+  id: string; campaign_id: string; asset_type: string; title: string | null; purpose: string | null; recommended_message: string | null; recommended_cta: string | null; audience_variant: string | null; priority: number; status: string;
+};
+const ASSET_TYPE_HE: Record<string, string> = { feed_post: "פוסט פיד", story: "סטורי", carousel: "קרוסלה", reel_cover: "כריכת ריל" };
+const CAMPAIGN_STATUS_HE: Record<string, string> = { draft: "טיוטה", approved: "מאושר", archived: "ארכיון", active: "פעיל" };
 
 type Concept = Record<string, unknown> & {
   id: string; title: string; concept_type: string; description: string | null; marketing_angle: string | null; emotional_trigger: string | null;
@@ -30,8 +44,10 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; orgId: string; userId: string }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, orgId, userId }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; orgId: string; userId: string }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
+  const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
+  const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
   const router = useRouter();
   const r = useActionRunner();
   const [filter, setFilter] = useState("all");
@@ -123,6 +139,9 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, orgId, userI
 
       {/* CONCEPTS — Phase 3 */}
       <ConceptsSection concepts={concepts ?? []} et={et} eid={eid} r={r} wrap={wrap} />
+
+      {/* CAMPAIGN FACTORY — Phase 4 */}
+      <CampaignsSection campaigns={campaigns} assets={campaignAssets} et={et} eid={eid} r={r} wrap={wrap} />
 
       {/* SECTION 7 — GENERATOR PLACEHOLDER */}
       <section className="bg-brand-soft/30 border-line rounded-2xl border border-dashed p-6 text-center">
@@ -355,6 +374,105 @@ function ConceptDrawer({ c, onClose }: { c: Concept; onClose: () => void }) {
           <DrawerRow label="סגנון CTA מומלץ" value={c.recommended_cta_style} />
           <div className="bg-brand-soft/30 rounded-xl p-3"><span className="text-brand-strong text-[11px] font-bold">למה ZONO חושב שזה מתאים</span><p className="text-ink mt-0.5 text-[13px]">{c.reasoning ?? "—"}</p></div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CampaignsSection({ campaigns, assets, et, eid, r, wrap }: { campaigns: Campaign[]; assets: CampaignAsset[]; et: string; eid: string; r: Runner; wrap: Wrap }) {
+  const types = campaignTypesFor(et);
+  const [type, setType] = useState(types[0]);
+  const [open, setOpen] = useState<Campaign | null>(null);
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">מפעל קמפיינים</h2>
+          <p className="text-muted text-[12px]">ZONO מחליט מה לשווק, למי, באילו מסרים, אילו נכסים שיווקיים לייצר ובאיזה סדר — מבנה קמפיין שלם, לא מודעה בודדת.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <select value={type} onChange={(e) => setType(e.target.value)} className="border-line bg-surface text-ink h-9 rounded-lg border px-2 text-sm">
+            {types.map((t) => <option key={t} value={t}>{CAMPAIGN_TYPE_LABELS[t] ?? t}</option>)}
+          </select>
+          <Button size="sm" loading={r.busyId === "gen-campaign"} onClick={() => wrap(() => generateCampaignAction(et, eid, type), "gen-campaign", "ZONO בונה מבנה קמפיין...")}>
+            <Icon name="Sparkles" size={14} />צור קמפיין
+          </Button>
+        </div>
+      </div>
+      {campaigns.length === 0 ? (
+        <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין קמפיינים עדיין — בחר סוג קמפיין ולחץ ״צור קמפיין״.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {campaigns.map((c) => <CampaignCard key={c.id} c={c} et={et} eid={eid} wrap={wrap} onOpen={() => setOpen(c)} />)}
+        </div>
+      )}
+      {open && <CampaignDrawer c={open} assets={assets.filter((a) => a.campaign_id === open.id)} onClose={() => setOpen(null)} />}
+    </section>
+  );
+}
+
+function CampaignCard({ c, et, eid, wrap, onOpen }: { c: Campaign; et: string; eid: string; wrap: Wrap; onOpen: () => void }) {
+  return (
+    <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-4 shadow-sm ${c.status === "approved" ? "ring-1 ring-success" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-ink text-base font-black leading-tight">{c.title}</p>
+          <span className="bg-brand-soft text-brand-strong mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold">{CAMPAIGN_TYPE_LABELS[c.campaign_type] ?? c.campaign_type}</span>
+        </div>
+        <span className="bg-surface text-muted rounded-full px-2 py-0.5 text-[10px] font-bold">{CAMPAIGN_STATUS_HE[c.status] ?? c.status}</span>
+      </div>
+      <p className="text-muted text-[12px]">{c.assetCount} נכסים שיווקיים · עודכן {new Date(c.updated_at).toLocaleDateString("he-IL")}</p>
+      <div className="bg-surface h-1.5 w-full overflow-hidden rounded-full"><div className="bg-success h-full rounded-full" style={{ width: `${c.completion}%` }} /></div>
+      <div className="border-line mt-1 flex flex-wrap gap-1.5 border-t pt-2 text-[11px]">
+        <button onClick={onOpen} className="text-brand-strong font-bold"><Icon name="Eye" size={13} /> פרטים</button>
+        <button onClick={() => wrap(() => approveCampaignAction({ campaignId: c.id, entityType: et, entityId: eid }), `cap-${c.id}`)} className={`font-bold ${c.status === "approved" ? "text-success" : "text-muted"}`}><Icon name="UserCheck" size={13} /> אשר</button>
+        <button onClick={() => wrap(() => duplicateCampaignAction({ campaignId: c.id, entityType: et, entityId: eid }), `cdup-${c.id}`)} className="text-muted font-bold"><Icon name="Plus" size={13} /> שכפל</button>
+        <button onClick={() => wrap(() => archiveCampaignAction({ campaignId: c.id, entityType: et, entityId: eid }), `carc-${c.id}`)} className="text-muted font-bold">ארכיון</button>
+        <button onClick={() => wrap(() => deleteCampaignAction({ campaignId: c.id, entityType: et, entityId: eid }), `cdel-${c.id}`)} className="text-danger font-bold"><Icon name="Minus" size={13} /> מחק</button>
+      </div>
+    </div>
+  );
+}
+
+function CampaignDrawer({ c, assets, onClose }: { c: Campaign; assets: CampaignAsset[]; onClose: () => void }) {
+  const meta = (c.generation_metadata ?? {}) as { campaign_dna?: { contentMix?: { type: string; share: number }[]; postingFrequency?: string; ctaIntensity?: number } };
+  const mix = meta.campaign_dna?.contentMix ?? [];
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{CAMPAIGN_TYPE_LABELS[c.campaign_type] ?? c.campaign_type}</span>
+          <button onClick={onClose} className="text-muted"><Icon name="Minus" size={18} /></button>
+        </div>
+        <h3 className="text-ink text-xl font-black">{c.title}</h3>
+        <div className="mt-3 flex flex-col gap-2.5">
+          <DrawerRow label="מטרת הקמפיין" value={c.objective} />
+          <DrawerRow label="קהל יעד" value={c.target_audience} />
+          <DrawerRow label="זווית שיווק" value={c.marketing_angle} />
+          <DrawerRow label="תקציר" value={c.campaign_summary} />
+          {mix.length > 0 && <div className="flex flex-col gap-0.5"><span className="text-muted text-[11px] font-bold">תמהיל תוכן</span><span className="text-ink text-[13px]">{mix.map((m) => `${m.type} ${m.share}%`).join(" · ")}</span></div>}
+          {meta.campaign_dna?.postingFrequency && <DrawerRow label="תדירות פרסום" value={meta.campaign_dna.postingFrequency} />}
+        </div>
+        <div className="mt-4">
+          <p className="text-ink mb-1.5 text-sm font-black">תוכנית הנכסים השיווקיים ({assets.length})</p>
+          <div className="flex flex-col gap-1.5">
+            {assets.map((a) => (
+              <div key={a.id} className="bg-surface flex items-start justify-between gap-2 rounded-xl p-2.5">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-ink text-[13px] font-bold">{a.title}</span>
+                    <span className="bg-card text-muted rounded-full px-1.5 py-0.5 text-[9px] font-bold">{ASSET_TYPE_HE[a.asset_type] ?? a.asset_type}</span>
+                    {a.audience_variant && <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-bold">{a.audience_variant === "seller" ? "מוכר" : a.audience_variant === "buyer" ? "קונה" : a.audience_variant === "investor" ? "משקיע" : a.audience_variant}</span>}
+                  </div>
+                  {a.purpose && <p className="text-muted text-[11px]">{a.purpose}</p>}
+                  {a.recommended_message && <p className="text-ink text-[11px]">״{a.recommended_message}״</p>}
+                </div>
+                {a.recommended_cta && <span className="text-brand-strong shrink-0 text-[10px] font-bold">{a.recommended_cta}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+        {c.reasoning && <div className="bg-brand-soft/30 mt-4 rounded-xl p-3"><span className="text-brand-strong text-[11px] font-bold">למה ZONO בנה את הקמפיין הזה</span><p className="text-ink mt-0.5 text-[13px]">{c.reasoning}</p></div>}
       </div>
     </div>
   );

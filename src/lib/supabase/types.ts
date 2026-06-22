@@ -4173,6 +4173,15 @@ type ZonoCreativeConceptsRow = {
   visual_hook: string | null; copy_hook: string | null; recommended_layout: string | null; recommended_cta_style: string | null; recommended_audience: string | null;
   reasoning: string | null; confidence_score: number; is_favorite: boolean; is_approved: boolean; status: string; generation_metadata: Json; created_at: string; updated_at: string;
 };
+type ZonoCampaignsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string; title: string; campaign_type: string;
+  objective: string | null; target_audience: string | null; marketing_angle: string | null; campaign_summary: string | null; reasoning: string | null;
+  status: string; marketing_dna_profile_id: string | null; source_concept_id: string | null; generation_metadata: Json; created_by: string | null; created_at: string; updated_at: string;
+};
+type ZonoCampaignAssetsRow = {
+  id: string; org_id: string; campaign_id: string; asset_type: string; title: string | null; purpose: string | null;
+  recommended_message: string | null; recommended_cta: string | null; audience_variant: string | null; priority: number; status: string; created_at: string; updated_at: string;
+};
 type ZonoMarketingBriefsRow = {
   id: string; org_id: string; entity_type: string; entity_id: string; title: string; objective: string | null; platform: string | null; format: string | null; campaign_type: string | null; target_audience: string | null; main_message: string | null;
   property_id: string | null; project_id: string | null; agent_id: string | null; office_id: string | null; full_copy: Json; required_assets: Json; marketing_constraints: Json; status: string; created_by: string | null; created_at: string; updated_at: string;
@@ -4683,6 +4692,8 @@ export interface Database {
       zono_marketing_analysis_jobs: TableShape<ZonoMarketingAnalysisJobsRow, "org_id" | "entity_type" | "entity_id">;
       zono_marketing_briefs: TableShape<ZonoMarketingBriefsRow, "org_id" | "entity_type" | "entity_id" | "title">;
       zono_creative_concepts: TableShape<ZonoCreativeConceptsRow, "org_id" | "entity_type" | "entity_id" | "title" | "concept_type">;
+      zono_campaigns: TableShape<ZonoCampaignsRow, "org_id" | "entity_type" | "entity_id" | "title" | "campaign_type">;
+      zono_campaign_assets: TableShape<ZonoCampaignAssetsRow, "org_id" | "campaign_id" | "asset_type">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;
       community_deal_attribution: TableShape<CommunityDealAttributionRow, "organization_id">;
       notifications: TableShape<NotificationsRow, "org_id" | "user_id" | "title">;
