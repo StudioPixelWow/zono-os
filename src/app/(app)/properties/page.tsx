@@ -1,7 +1,4 @@
 import { listProperties, type PropertyRow } from "@/lib/properties/repository";
-import { listJourneyBoard, type JourneyBoard } from "@/lib/journey/repository";
-import { listIntelligenceBoard, type IntelligenceBoard } from "@/lib/intelligence/service";
-import { listActivityBoard, type ActivityBoard } from "@/lib/activity/service";
 import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
 import { enrichListingsBuyerMatches, type ListingMatchSummary } from "@/lib/external-listings/service";
 import { matchesInventoryTab, type InventoryTab } from "@/lib/properties/inventory";
@@ -9,9 +6,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { PropertyStatus, PropertyType } from "@/lib/supabase/types";
 import { PropertiesListView } from "./PropertiesListView";
-import { JourneyBoardWidgets } from "./JourneyBoardWidgets";
-import { IntelligenceWidgets } from "./IntelligenceWidgets";
-import { ActivityWidgets } from "./ActivityWidgets";
+import { PropertiesOSView } from "./PropertiesOSView";
 import { InventoryTabs } from "./InventoryTabs";
 import { ExternalListingsView } from "./ExternalListingsView";
 
@@ -47,8 +42,9 @@ export default async function PropertiesPage({
   };
 
   const tab = (str("inv") ?? "all") as InventoryTab;
-  const { user } = await getSessionContext();
+  const { user, profile } = await getSessionContext();
   const currentUserId = user?.id ?? null;
+  const agentName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "סוכן";
 
   let rows: PropertyRow[] = [];
   let error = false;
@@ -83,38 +79,16 @@ export default async function PropertiesPage({
     }
   }
 
-  let board: JourneyBoard | null = null;
-  try {
-    board = await listJourneyBoard();
-  } catch (e) {
-    console.error("[journey] board failed:", e);
-  }
-
-  let intel: IntelligenceBoard | null = null;
-  try {
-    intel = await listIntelligenceBoard();
-  } catch (e) {
-    console.error("[intelligence] board failed:", e);
-  }
-
-  let activity: ActivityBoard | null = null;
-  try {
-    activity = await listActivityBoard();
-  } catch (e) {
-    console.error("[activity] board failed:", e);
-  }
-
   return (
-    <div className="flex flex-col gap-6">
-      {board && <JourneyBoardWidgets board={board} />}
-      {intel && <IntelligenceWidgets board={intel} />}
-      {activity && <ActivityWidgets board={activity} />}
-      <InventoryTabs active={tab} />
-      {tab === "external" ? (
-        <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} isAdmin={externalIsAdmin} matches={externalMatches} />
-      ) : (
-        <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} />
-      )}
-    </div>
+    <PropertiesOSView properties={rows} agentName={agentName}>
+      <div className="flex flex-col gap-6">
+        <InventoryTabs active={tab} />
+        {tab === "external" ? (
+          <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} isAdmin={externalIsAdmin} matches={externalMatches} />
+        ) : (
+          <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} />
+        )}
+      </div>
+    </PropertiesOSView>
   );
 }
