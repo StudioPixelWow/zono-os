@@ -725,7 +725,10 @@ function CopyDrawer({ c, onClose }: { c: Copy; onClose: () => void }) {
 }
 
 // ── HTML/CSS render-object preview (editable structure, not an image) ──────────
-function CreativePreview({ data, scale = 1 }: { data: RenderData; scale?: number }) {
+// This is ZONO's text-locked renderer: Hebrew is drawn here with the system font
+// (true RTL, no AI spelling), real photo + brand assets only. An optional
+// text-free AI background sits BEHIND the content with a readability scrim.
+function CreativePreview({ data, scale = 1, backgroundImageUrl }: { data: RenderData; scale?: number; backgroundImageUrl?: string | null }) {
   const p = data.palette;
   const block = (b: RenderBlock, i: number) => {
     const key = `${b.component}-${i}`;
@@ -746,8 +749,17 @@ function CreativePreview({ data, scale = 1 }: { data: RenderData; scale?: number
     }
   };
   return (
-    <div dir="rtl" style={{ aspectRatio: `${data.width} / ${data.height}`, background: `linear-gradient(160deg, ${p.bg2}, ${p.bg})`, borderRadius: 12, padding: 16 * scale, display: "flex", flexDirection: "column", gap: 8 * scale, overflow: "hidden", width: "100%" }}>
-      {data.blocks.map(block)}
+    <div dir="rtl" style={{ position: "relative", aspectRatio: `${data.width} / ${data.height}`, background: `linear-gradient(160deg, ${p.bg2}, ${p.bg})`, borderRadius: 12, overflow: "hidden", width: "100%" }}>
+      {backgroundImageUrl && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={backgroundImageUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(160deg, ${p.bg2}cc, ${p.bg}e6)` }} />
+        </>
+      )}
+      <div style={{ position: "relative", height: "100%", padding: 16 * scale, display: "flex", flexDirection: "column", gap: 8 * scale }}>
+        {data.blocks.map(block)}
+      </div>
     </div>
   );
 }
@@ -956,21 +968,29 @@ function AdminCandidatesPanel({ et, eid }: { et: string; eid: string }) {
 function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The real property photo comes from the render's image_placeholder (no AI invention).
+  const blocks = (o.render_data?.blocks ?? []) as { component?: string; imageUrl?: string }[];
+  const hasPropertyImage = blocks.some((b) => b.component === "image_placeholder" && b.imageUrl);
   return (
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
-      {o.image_url ? (
-        <div className="relative">
-          <img src={o.image_url} alt={o.variant_name} className="aspect-[4/5] w-full rounded-xl object-cover" />
-          <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">AI נוצר</span>
-        </div>
-      ) : (
-        <div className="relative">
-          <CreativePreview data={o.render_data} scale={0.8} />
-          <span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">{o.image_status === "failed" ? "יצירת התמונה נכשלה" : o.image_status === "no_provider" ? "תצוגת תבנית בלבד" : "התמונה בהפקה…"}</span>
-        </div>
+      {/* Text-locked composite: ZONO renderer draws Hebrew (system font, RTL) +
+          real photo/assets on top of the AI's TEXT-FREE background. The AI never
+          writes Hebrew and never invents assets. */}
+      <div className="relative">
+        <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} />
+        <span className="bg-ink/75 text-card absolute bottom-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[8px] font-bold">טקסט מערכת · ללא AI</span>
+        {o.image_url && <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">רקע AI נוצר</span>}
+        {!o.image_url && (o.image_status === "pending" || !o.image_status) && <span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">הרקע בהפקה…</span>}
+      </div>
+      {/* Source-asset transparency (RULE 10) */}
+      <div className="flex flex-wrap gap-1 px-0.5">
+        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${hasPropertyImage ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>{hasPropertyImage ? "✓ תמונת נכס אמיתית" : "חסרה תמונת נכס"}</span>
+      </div>
+      {!hasPropertyImage && (
+        <p className="bg-danger-soft text-danger rounded-lg px-2 py-1 text-[10px] font-bold">יש להעלות תמונת נכס לפני יצירת מודעה.</p>
       )}
       {o.image_status === "no_provider" && !o.image_url && (
-        <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">לא מוגדר ספק יצירת תמונות. כרגע מוצגת תצוגת תבנית בלבד.</p>
+        <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">לא מוגדר ספק רקע AI. מוצגת מודעה עם רקע מותג נקי (הטקסט והנכס אמיתיים).</p>
       )}
       {o.image_status === "failed" && !o.image_url && o.image_error && (
         <p className="bg-danger-soft text-danger rounded-lg px-2 py-1 text-[9px] font-bold break-words" dir="ltr">{o.image_error}</p>
@@ -1098,6 +1118,8 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
     : (str("address") && str("importantText"));
 
   const submit = async () => {
+    // RULE 1/5: real property image required for a property ad — never invent one.
+    if (type === "property_ad_post" && !str("propertyImage")) { setErr("יש להעלות תמונת נכס לפני יצירת מודעה."); setStep(3); return; }
     setBusy(true); setErr(null);
     const input: Record<string, unknown> = {
       propertyImage: str("propertyImage") || null, neighborhood: str("neighborhood") || null, city: str("city") || null, address: str("address") || null, customCta: str("customCta") || null,

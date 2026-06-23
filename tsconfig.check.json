@@ -1,2 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/components/ui/Button.tsx", "src/components/dashboard/Sidebar.tsx", "src/components/dashboard-home/DashboardHomeView.tsx", "src/app/(app)/properties/PropertiesOSView.tsx"] }
+  "include": ["src/app/(app)/creative-studio/CreativeStudioView.tsx", "src/lib/creative-studio/master-prompt.ts", "src/lib/creative-studio/quick-creative-service.ts"] }

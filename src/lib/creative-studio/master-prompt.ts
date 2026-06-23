@@ -65,7 +65,6 @@ export function buildMasterCreativePrompt(i: MasterPromptInput): MasterPrompt {
   const s = STYLE_BY_KEY.get(i.style) ?? CREATIVE_STYLES[0];
   const ratio = i.format === "story_9_16" ? "1080x1920 (9:16 story)" : "1080x1350 (4:5 feed)";
   const colors = i.brand.colors.filter(Boolean);
-  const where = [i.neighborhood, i.city].filter(Boolean).join(", ");
 
   const missingBrandAssets: string[] = [];
   if (!i.brand.agentPhoto) missingBrandAssets.push("תמונת סוכן");
@@ -93,21 +92,25 @@ export function buildMasterCreativePrompt(i: MasterPromptInput): MasterPrompt {
     : "אין תמונת נכס — בנה רקע מותגי נקי; אל תמציא תמונת נכס/נוף/ים/פארק.";
   const negativePrompt = "להימנע: מראה של אפליקציה/דשבורד/כרטיס מערכת, כפתורי UI, פונטים מעוותים, טקסט לטיני ג'יבריש, חדרים/מחיר/מאפיינים שלא סופקו, נוף ים/פארק מומצא, סטוק גנרי, לוגואים מזויפים, אימוג'ים מוגזמים.";
 
+  // ── Text-locked, asset-locked BACKGROUND prompt ───────────────────────────
+  // CRITICAL: the AI image model must NOT write any text and must NOT invent any
+  // property/agent/logo/price. It only produces a premium, TEXT-FREE background
+  // composition; ZONO's renderer overlays the exact Hebrew + real brand assets
+  // afterwards (system font, true RTL). This eliminates AI Hebrew spelling
+  // mistakes and fake assets entirely.
+  const bgColors = colors.length ? colors.join(", ") : "deep premium purple/charcoal with subtle lavender";
   const nanoBananaPrompt = [
-    `Premium real-estate social media advertisement, ${ratio}, Hebrew RTL.`,
-    `STYLE: ${s.label} — ${s.angle}. ${s.visual}.`,
-    `HEADLINE (Hebrew): "${i.headline}".`,
-    i.subheadline ? `SUBHEADLINE: "${i.subheadline}".` : "",
-    featureChips.length ? `FEATURE CHIPS (only these real facts, do not add any): ${featureChips.join(" | ")}.` : "",
-    `CTA: "${cta}".`,
-    `LOCATION: ${where || "—"}.`,
-    `VISUAL: ${visualDirection}`,
-    `LAYOUT: ${layoutInstruction}`,
-    `BRAND: ${brandInstruction}`,
-    `TYPOGRAPHY: ${typographyInstruction}`,
-    `IMAGE: ${imageUsageInstruction}`,
-    `NEGATIVE / AVOID: ${negativePrompt}`,
-    `It must look like a real, finished advertising post — NOT an app screen or system card.`,
+    `Premium real-estate advertisement BACKGROUND ONLY, ${ratio}.`,
+    i.hasPropertyImage
+      ? "Use the SUPPLIED property photo as the single hero visual — keep it real and unaltered (only crop/resize/mask/blur edges/light color grading). Do NOT replace it, do NOT generate a different apartment, do NOT add rooms, balconies, sea/park views or any feature not in the photo."
+      : "No property photo supplied — build a clean abstract brand-color background. Do NOT depict any apartment/building/interior; do NOT invent a property.",
+    `Leave generous clean NEGATIVE SPACE (lower third + a corner) for text and a logo to be overlaid later.`,
+    `Color palette: ${bgColors}. Style mood: ${s.label} — ${s.visual}.`,
+    `ABSOLUTELY NO TEXT of any language in the image (no Hebrew, no English, no numbers, no captions, no watermark).`,
+    `NO people / no faces / no agent photo (the real agent photo is overlaid later).`,
+    `NO logo and NO brand mark drawn (the real logo file is overlaid later).`,
+    `NO UI / app / dashboard / card look, no buttons, no icons, no emojis.`,
+    `Output: a clean, modern, premium photographic background only — text and assets are added by the ZONO renderer.`,
   ].filter(Boolean).join("\n");
 
   return {

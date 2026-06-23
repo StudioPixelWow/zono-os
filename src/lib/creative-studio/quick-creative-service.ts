@@ -113,6 +113,11 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   const { orgId, userId, supabase } = await ctx();
   const missing = validateRequired(g.requestType, g.input);
   if (missing.length) throw new Error(`חסרים שדות חובה: ${missing.join(", ")}`);
+  // RULE 1/5/6 — asset gate: a property ad must use a REAL property image; never
+  // fabricate one. Block generation with a clear missing-asset message.
+  if (g.requestType === "property_ad_post" && !g.input.propertyImage) {
+    throw new Error("יש להעלות תמונת נכס לפני יצירת מודעה.");
+  }
 
   const brand = await resolveBrandSnapshot({ entityType: g.entityType, entityId: g.entityId });
   const propertyId = g.propertyId ?? (g.entityType === "property" && isUuid(g.entityId) ? g.entityId : null);
