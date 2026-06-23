@@ -10,7 +10,155 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import type { DashboardHomeData } from "@/lib/dashboard-home/types";
+import { whatsappNumber } from "@/components/listings/ContactButtons";
 import { type Translate, ilsC } from "./shared";
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SECTION 9 — EXCLUSIVE EXTERNAL DEALS  ("עסקאות שאסור לפספס")
+   Private-seller external listings, with call + smart-WhatsApp quick actions.
+   ──────────────────────────────────────────────────────────────────────── */
+export interface ExclusiveDeal {
+  id: string; title: string; city: string | null; neighborhood: string | null;
+  price: number | null; rooms: number | null; sqm: number | null;
+  image: string | null; listingUrl: string | null;
+  contactName: string | null; contactPhone: string | null;
+}
+
+function smartWhatsappText(d: ExclusiveDeal, agentName: string): string {
+  const who = d.contactName ? ` ${d.contactName}` : "";
+  const what = d.title ? ` – ${d.title}` : "";
+  const where = d.city ? ` ב${d.city}` : "";
+  return `שלום${who}, ראיתי את המודעה שלך${what}${where}. אני ${agentName}, יועץ/ת נדל״ן באזור עם קונים רלוונטיים כרגע. אשמח לעזור למכור במהירות ובמחיר הטוב ביותר — אפשר לתאם שיחה קצרה?`;
+}
+
+export function ExclusiveDealsSection({ deals, agentName }: { deals: ExclusiveDeal[]; agentName: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const by = (dir: 1 | -1) => ref.current?.scrollBy({ left: dir * Math.max(300, ref.current.clientWidth * 0.8), behavior: "smooth" });
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-ink text-xl font-black sm:text-2xl">עסקאות שאסור לפספס</h2>
+          <p className="text-muted text-xs font-medium">נכסים ממקורות חיצוניים — מוכר פרטי בלבד, מוכנים לפנייה</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {deals.length > 2 && (
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => by(1)} aria-label="הקודם" className="bg-card border-line text-muted hover:text-brand-strong grid h-9 w-9 place-items-center rounded-full border transition"><Icon name="ChevronRight" size={18} /></button>
+              <button type="button" onClick={() => by(-1)} aria-label="הבא" className="bg-card border-line text-muted hover:text-brand-strong grid h-9 w-9 place-items-center rounded-full border transition"><Icon name="ChevronLeft" size={18} /></button>
+            </div>
+          )}
+          <Link href="/acquisition" className="text-brand-strong text-sm font-bold">לכל ההזדמנויות</Link>
+        </div>
+      </div>
+
+      {deals.length === 0 ? (
+        <div className="bg-card border-line text-muted rounded-[24px] border p-10 text-center text-sm">אין כרגע עסקאות מוכר פרטי במקורות החיצוניים. הרץ סנכרון במודיעין גיוס נכסים כדי לאתר הזדמנויות.</div>
+      ) : (
+        <div ref={ref} className="no-scrollbar flex gap-4 overflow-x-auto pb-2">
+          {deals.map((d) => {
+            const wa = whatsappNumber(d.contactPhone);
+            return (
+              <div key={d.id} className="bg-card border-line flex min-w-[280px] max-w-[300px] shrink-0 flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
+                <div className="bg-surface relative aspect-[4/3] w-full overflow-hidden">
+                  {d.image
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={d.image} alt={d.title} className="absolute inset-0 h-full w-full object-cover" />
+                    : <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Building2" size={30} /></div>}
+                  <span className="bg-brand text-white absolute start-3 top-3 rounded-full px-2 py-0.5 text-[11px] font-black">מוכר פרטי</span>
+                </div>
+                <div className="flex flex-1 flex-col gap-1.5 p-4">
+                  <p className="text-brand-strong text-lg font-black">{d.price ? ilsC(d.price) : "ללא מחיר"}</p>
+                  <p className="text-ink truncate text-sm font-extrabold">{d.title}</p>
+                  <p className="text-muted text-xs">{[d.rooms ? `${d.rooms} חד׳` : "", d.sqm ? `${d.sqm} מ״ר` : "", [d.neighborhood, d.city].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "—"}</p>
+                  {(d.contactName || d.contactPhone) && (
+                    <div className="bg-surface/70 mt-1 flex items-center justify-between gap-2 rounded-xl px-2.5 py-2">
+                      <div className="min-w-0">
+                        {d.contactName && <p className="text-ink truncate text-[12px] font-bold">{d.contactName}</p>}
+                        {d.contactPhone && <p className="text-muted text-[11px] font-medium" dir="ltr">{d.contactPhone}</p>}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-auto flex items-center gap-1.5 pt-2">
+                    {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(smartWhatsappText(d, agentName))}`} target="_blank" rel="noopener noreferrer" className="bg-success/10 text-success hover:bg-success/20 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-bold transition"><Icon name="MessageCircle" size={15} /> וואטסאפ חכם</a>}
+                    {d.contactPhone && <a href={`tel:${d.contactPhone}`} className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 grid h-9 w-10 place-items-center rounded-xl transition" aria-label="התקשר"><Icon name="Phone" size={16} /></a>}
+                    {d.listingUrl && <a href={d.listingUrl} target="_blank" rel="noopener noreferrer" className="bg-surface text-muted hover:text-brand-strong grid h-9 w-10 place-items-center rounded-xl transition" aria-label="מקור"><Icon name="ExternalLink" size={16} /></a>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SECTION 10 — COMPETITOR THREATS  ("מי מאיים עליך כרגע?")
+   ──────────────────────────────────────────────────────────────────────── */
+export interface CompetitorThreat {
+  id: string; name: string; type: string; threat: number;
+  marketShare: number; growth: number; listings: number; localities: number;
+}
+const COMP_TYPE: Record<string, string> = { agency: "סוכנות", office: "משרד תיווך", independent_broker: "מתווך עצמאי", broker: "מתווך" };
+function threatChip(s: number): { label: string; cls: string; ring: string } {
+  if (s >= 70) return { label: "איום גבוה", cls: "bg-danger-soft text-danger", ring: "text-danger" };
+  if (s >= 45) return { label: "במעקב", cls: "bg-warning-soft text-warning", ring: "text-warning" };
+  return { label: "יציב", cls: "bg-success-soft text-success", ring: "text-success" };
+}
+
+export function CompetitorThreatsSection({ threats }: { threats: CompetitorThreat[] }) {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="bg-danger-soft text-danger grid h-9 w-9 place-items-center rounded-xl"><Icon name="Swords" size={17} /></span>
+          <div>
+            <h2 className="text-ink text-xl font-black sm:text-2xl">מי מאיים עליך כרגע?</h2>
+            <p className="text-muted text-xs font-medium">מתחרים שמגדילים פעילות או משתלטים על אזורים</p>
+          </div>
+        </div>
+        <Link href="/competitors" className="text-brand-strong text-sm font-bold">למודיעין המתחרים</Link>
+      </div>
+
+      {threats.length === 0 ? (
+        <div className="bg-card border-line text-muted rounded-[24px] border p-10 text-center text-sm">אין עדיין נתוני מתחרים. הרץ חישוב במודיעין מתחרים כדי לזהות איומים באזור שלך.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {threats.map((c) => {
+            const chip = threatChip(c.threat);
+            return (
+              <div key={c.id} className="bg-card border-line flex flex-col gap-3 rounded-[22px] border p-4 shadow-[var(--shadow-card)]">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="bg-ink/90 text-card grid h-10 w-10 place-items-center rounded-xl text-sm font-black">{c.name.trim().charAt(0) || "?"}</span>
+                    <div className="min-w-0">
+                      <p className="text-ink truncate text-sm font-extrabold">{c.name}</p>
+                      <p className="text-muted text-[11px]">{COMP_TYPE[c.type] ?? "מתחרה"}</p>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${chip.cls}`}>{chip.label}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative grid h-12 w-12 place-items-center">
+                    <svg viewBox="0 0 48 48" className="absolute inset-0 -rotate-90"><circle cx="24" cy="24" r="20" fill="none" stroke="var(--color-line)" strokeWidth="5" /><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" className={chip.ring} strokeWidth="5" strokeLinecap="round" strokeDasharray={2 * Math.PI * 20} strokeDashoffset={2 * Math.PI * 20 * (1 - c.threat / 100)} /></svg>
+                    <span className={`text-xs font-black tabular-nums ${chip.ring}`}>{c.threat}</span>
+                  </div>
+                  <div className="grid flex-1 grid-cols-3 gap-1 text-center">
+                    <div><p className="text-ink text-sm font-black tabular-nums">{c.listings}</p><p className="text-muted text-[10px] font-bold">נכסים</p></div>
+                    <div><p className="text-ink text-sm font-black tabular-nums">{c.localities}</p><p className="text-muted text-[10px] font-bold">אזורים</p></div>
+                    <div><p className="text-success text-sm font-black tabular-nums">+{c.growth}%</p><p className="text-muted text-[10px] font-bold">צמיחה</p></div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    SECTION 4 — OPPORTUNITY MAP  (full-width dark centerpiece, ~660px)

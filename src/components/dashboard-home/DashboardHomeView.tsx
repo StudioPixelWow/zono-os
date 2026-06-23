@@ -24,6 +24,10 @@ import {
   AICommandCenterSection,
   AIDealForecastSection,
   ZonoNeverSleepsSection,
+  ExclusiveDealsSection,
+  CompetitorThreatsSection,
+  type ExclusiveDeal,
+  type CompetitorThreat,
 } from "./components/ReferenceSections";
 
 const FAB_ACTIONS: { l: string; i: string; h: string }[] = [
@@ -36,7 +40,17 @@ const FAB_ACTIONS: { l: string; i: string; h: string }[] = [
   { l: "aiActions.openOpportunities", i: "Target", h: "/command" },
 ];
 
-export function DashboardHomeView({ dict, data }: { dict: DashboardDict; data: DashboardHomeData }) {
+export function DashboardHomeView({
+  dict,
+  data,
+  exclusiveDeals = [],
+  threats = [],
+}: {
+  dict: DashboardDict;
+  data: DashboardHomeData;
+  exclusiveDeals?: ExclusiveDeal[];
+  threats?: CompetitorThreat[];
+}) {
   const t = useMemo(() => (k: string) => tr(dict, k), [dict]);
   const [fabOpen, setFabOpen] = useState(false);
 
@@ -70,6 +84,12 @@ export function DashboardHomeView({ dict, data }: { dict: DashboardDict; data: D
 
       {/* 8 — ZONO Never Sleeps (cinematic live counters) */}
       <ZonoNeverSleepsSection t={t} data={data} />
+
+      {/* 9 — עסקאות שאסור לפספס · private-seller external deals */}
+      <ExclusiveDealsSection deals={exclusiveDeals} agentName={data.agentName} />
+
+      {/* 10 — מי מאיים עליך כרגע? · competitor threats */}
+      <CompetitorThreatsSection threats={threats} />
 
       {/* AI floating action button */}
       <div className="fixed bottom-24 start-5 z-30 lg:bottom-8">

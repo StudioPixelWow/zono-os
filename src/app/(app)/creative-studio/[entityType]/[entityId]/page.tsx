@@ -92,7 +92,13 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
   }
   // Server-side AI image-provider status → tells the user (in Creative Studio)
   // whether scenes are AI-produced or deterministic fallback. No secrets exposed.
-  const ai = aiProviderStatus();
-  const aiProvider = { provider: ai.provider, reason: ai.reason };
+  // Hardened: never let a provider-status read crash the whole route.
+  let aiProvider = { provider: "mock", reason: "" };
+  try {
+    const ai = aiProviderStatus();
+    aiProvider = { provider: ai.provider, reason: ai.reason };
+  } catch (e) {
+    console.error("[creative-studio] aiProviderStatus failed:", e);
+  }
   return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} quickPrefill={quickPrefill} aiProvider={aiProvider} />;
 }
