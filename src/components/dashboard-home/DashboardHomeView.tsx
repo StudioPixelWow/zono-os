@@ -109,20 +109,38 @@ function HeroCommandCenter({ t, data }: { t: (k: string) => string; data: Dashbo
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
         {data.featuredProperty && <FeaturedPropertyCard t={t} p={data.featuredProperty} />}
-        <div className="flex flex-1 flex-col justify-center gap-3">
+        <div className="flex flex-1 flex-col justify-center gap-4">
           <div>
             <p className="text-muted text-sm">{t("hero.greeting")}, {data.agentName} 👋</p>
             <h1 className="text-ink text-2xl font-black sm:text-3xl">{t("hero.title")}</h1>
             <p className="text-muted mt-0.5 text-sm">{t("hero.subtitle")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="bg-card border-line flex h-11 flex-1 items-center gap-2 rounded-xl border px-3 shadow-[var(--shadow-soft)]">
-              <Icon name="Search" size={16} className="text-muted" />
-              <input className="text-ink placeholder:text-muted w-full bg-transparent text-sm outline-none" placeholder={t("search.placeholder")} aria-label={t("search.placeholder")} />
-            </label>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("zono:open-search"))}
+              className="bg-card border-line text-muted hover:border-brand-light flex h-11 flex-1 items-center gap-2 rounded-xl border px-3 text-start shadow-[var(--shadow-soft)] transition-colors"
+            >
+              <Icon name="Search" size={16} />
+              <span className="text-sm truncate">{t("search.placeholder")}</span>
+              <kbd className="bg-surface text-muted ms-auto hidden rounded px-1.5 py-0.5 text-[10px] font-bold sm:inline">⌘K</kbd>
+            </button>
             <Link href="/properties/new" className="bg-brand text-white inline-flex h-11 items-center gap-1.5 rounded-xl px-4 text-sm font-bold">
               <Icon name="Plus" size={16} />{t("hero.quickAdd")}
             </Link>
+          </div>
+          {/* Fill the space beside the featured card with quick AI shortcuts. */}
+          <div className="flex flex-wrap gap-2">
+            {[
+              { l: "aiActions.findBuyers", i: "Users", h: "/buyers" },
+              { l: "aiActions.findSellers", i: "Home", h: "/sellers" },
+              { l: "aiActions.createPost", i: "Sparkles", h: "/creative" },
+              { l: "aiActions.openOpportunities", i: "Target", h: "/command" },
+            ].map((a) => (
+              <Link key={a.l} href={a.h} className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold transition-colors">
+                <Icon name={a.i} size={13} />{t(a.l)}
+              </Link>
+            ))}
           </div>
         </div>
       </div>

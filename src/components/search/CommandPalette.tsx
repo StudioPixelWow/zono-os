@@ -27,8 +27,11 @@ export function CommandPalette() {
       if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); setOpen((v) => !v); }
       else if (e.key === "Escape") setOpen(false);
     };
+    // Any element can open universal search by dispatching this event.
+    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("zono:open-search", onOpen);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("zono:open-search", onOpen); };
   }, []);
 
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
