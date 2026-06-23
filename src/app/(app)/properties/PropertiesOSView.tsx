@@ -10,7 +10,7 @@
 // the "כל הנכסים" section, so no functionality is lost.
 // ============================================================================
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
@@ -64,6 +64,33 @@ function ViewAll({ href = "#" }: { href?: string }) {
     <Link href={href} className="text-brand-strong inline-flex items-center gap-1 text-sm font-bold">
       הצג הכל <Icon name="ChevronLeft" size={15} />
     </Link>
+  );
+}
+
+/**
+ * Horizontal scroll row with always-visible prev/next arrows (RTL-aware). The
+ * arrows scroll by ~80% of the visible width; the row still scrolls by drag /
+ * trackpad / touch. Arrows hide on small screens where touch scrolling is natural.
+ */
+function Carousel({ children, className }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const by = (dir: 1 | -1) =>
+    ref.current?.scrollBy({ left: dir * Math.max(320, ref.current.clientWidth * 0.8), behavior: "smooth" });
+  const arrow =
+    "bg-card/95 border-line text-ink hover:text-brand-strong hover:border-brand-light absolute top-[44%] z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border shadow-[var(--shadow-lift)] backdrop-blur transition md:grid";
+  return (
+    <div className="relative">
+      <div ref={ref} className={cn("no-scrollbar flex overflow-x-auto pb-2", className)}>
+        {children}
+      </div>
+      {/* RTL: right chevron → earlier items, left chevron → later items */}
+      <button type="button" onClick={() => by(1)} aria-label="הקודם" className={cn(arrow, "end-0 sm:-end-2")}>
+        <Icon name="ChevronRight" size={20} />
+      </button>
+      <button type="button" onClick={() => by(-1)} aria-label="הבא" className={cn(arrow, "start-0 sm:-start-2")}>
+        <Icon name="ChevronLeft" size={20} />
+      </button>
+    </div>
   );
 }
 
@@ -172,7 +199,7 @@ function AttentionCenter({ items }: { items: AttentionItem[] }) {
     );
   }
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+    <Carousel className="gap-3">
       {items.map((a, i) => (
         <div key={i} className="bg-card border-line flex min-w-[240px] max-w-[260px] flex-col gap-2 rounded-2xl border p-4 shadow-[var(--shadow-soft)]">
           <div className="flex items-center gap-2">
@@ -184,7 +211,7 @@ function AttentionCenter({ items }: { items: AttentionItem[] }) {
           <Link href={a.href} className="bg-brand-soft text-brand-strong mt-1 rounded-lg px-3 py-2 text-center text-[13px] font-bold">{a.cta}</Link>
         </div>
       ))}
-    </div>
+    </Carousel>
   );
 }
 
@@ -281,9 +308,9 @@ function HotPropertiesCarousel({ properties, covers }: { properties: PropertyRow
     return <p className="text-muted bg-card border-line rounded-[22px] border p-6 text-center text-sm">אין נכסים חמים עדיין — הוסף נכס ראשון כדי לראות אותו כאן.</p>;
   }
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+    <Carousel className="gap-4">
       {properties.map((p) => <HotPropertyCard key={p.id} p={p} cover={coverFor(p, covers)} />)}
-    </div>
+    </Carousel>
   );
 }
 
@@ -350,7 +377,7 @@ const PIPELINE_COLS: { key: string; label: string; statuses: string[]; tone: str
 
 function PropertyPipeline({ properties, covers }: { properties: PropertyRow[]; covers: Record<string, string> }) {
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+    <Carousel className="gap-3">
       {PIPELINE_COLS.map((col) => {
         const items = properties.filter((p) => col.statuses.includes(p.status));
         return (
@@ -381,7 +408,7 @@ function PropertyPipeline({ properties, covers }: { properties: PropertyRow[]; c
           </div>
         );
       })}
-    </div>
+    </Carousel>
   );
 }
 
