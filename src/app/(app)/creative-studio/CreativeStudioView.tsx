@@ -1939,6 +1939,7 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
         .map((o) => ({
           imageUrl: ((o as { image_url?: string | null }).image_url) ?? null,
           label: ((o as { variant_name?: string }).variant_name) ?? "מודעה סופית",
+          failed: (o as { image_status?: string }).image_status === "failed" || (o as { quality_status?: string }).quality_status === "failed",
         }));
       setFinalAds(mine);
     } catch { /* non-critical */ }

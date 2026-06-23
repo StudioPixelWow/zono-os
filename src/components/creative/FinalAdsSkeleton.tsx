@@ -17,6 +17,7 @@ const WORK_STEPS = [
 export interface FinalAdPreview {
   imageUrl: string | null;
   label: string;
+  failed?: boolean;
 }
 
 function fmtElapsed(sec: number): string {
@@ -73,9 +74,20 @@ export function FinalAdsSkeleton({ complete, ads = [] }: { complete: boolean; ad
                   alt={ad.label}
                   className="absolute inset-0 h-full w-full object-cover"
                 />
+              ) : complete && ad?.failed ? (
+                // Generation failed for this ad — show an honest error, not a ✓.
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4, delay: i * 0.12 }}
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center"
+                >
+                  <span className="bg-danger-soft text-danger grid h-12 w-12 place-items-center rounded-full text-2xl">!</span>
+                  <span className="text-danger text-[12px] font-black">יצירת התמונה נכשלה</span>
+                  <span className="text-muted text-[10px] font-semibold">נסה/י שוב</span>
+                </motion.div>
               ) : complete ? (
-                // Completed, but this ad came from the deterministic renderer
-                // (no standalone image) — show a labeled "ready" tile, not a blank.
+                // Completed via the deterministic renderer (no standalone image).
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96 }}
                   animate={{ opacity: 1, scale: 1 }}

@@ -54,6 +54,9 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { c
   const rejected = selectPhase ? 10 : 0;
   const selectedCount = selectPhase ? 2 : 0;
   const finalAdsCount = final ? 2 : 0;
+  // Honest completion: count real successes; flag a full failure (no images).
+  const successCount = finalAds.filter((a) => a.imageUrl || !a.failed).length;
+  const allFailed = final && finalAds.length > 0 && finalAds.every((a) => a.failed && !a.imageUrl);
   const activeStep = final
     ? PIPELINE_STEPS.length
     : tt < 0.1
@@ -96,10 +99,21 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { c
             <div className="border-line/50 bg-surface/40 flex flex-col gap-3 rounded-2xl border p-3">
               {final ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 py-2 text-center">
-                  <motion.p initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-ink text-lg font-black">
-                    הגרסאות המנצחות מוכנות
-                  </motion.p>
-                  <p className="text-brand-strong text-2xl font-black">🏆 2 מודעות נבחרו</p>
+                  {allFailed ? (
+                    <>
+                      <motion.p initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-danger text-lg font-black">
+                        יצירת המודעות נכשלה
+                      </motion.p>
+                      <p className="text-muted text-sm font-bold">לא נוצרו תמונות. ודא/י שספק ה-AI מוגדר ונסה/י שוב.</p>
+                    </>
+                  ) : (
+                    <>
+                      <motion.p initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-ink text-lg font-black">
+                        הגרסאות המנצחות מוכנות
+                      </motion.p>
+                      <p className="text-brand-strong text-2xl font-black">🏆 {successCount || 2} מודעות נבחרו</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <CreativeStatusTicker message={TICKER_MESSAGES[tick]} />
@@ -109,7 +123,7 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { c
                   { value: generated, label: "רעיונות נוצרו", tone: "text-ink" },
                   { value: rejected, label: "נפסלו בבקרת איכות", tone: "text-danger" },
                   { value: selectedCount, label: "נבחרו להפקה", tone: "text-brand-strong" },
-                  { value: finalAdsCount, label: "מודעות סופיות נוצרות", tone: "text-success" },
+                  { value: final ? successCount : finalAdsCount, label: "מודעות סופיות נוצרו", tone: allFailed ? "text-danger" : "text-success" },
                 ]}
               />
             </div>
@@ -142,8 +156,8 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { c
           <AnimatePresence>
             {final && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-4 flex justify-center">
-                <button onClick={onView} className="bg-brand-strong text-card rounded-full px-7 py-2.5 text-sm font-black shadow-lg transition-transform hover:scale-[1.02]">
-                  צפה בתוצאות
+                <button onClick={onView} className={`rounded-full px-7 py-2.5 text-sm font-black shadow-lg transition-transform hover:scale-[1.02] ${allFailed ? "bg-danger text-white" : "bg-brand-strong text-card"}`}>
+                  {allFailed ? "סגור" : "צפה בתוצאות"}
                 </button>
               </motion.div>
             )}
