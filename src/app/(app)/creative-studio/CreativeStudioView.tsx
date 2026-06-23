@@ -1386,7 +1386,7 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, us
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
             <Icon name="TriangleAlert" size={14} />
             <b>ספק תמונות AI לא מוגדר</b>
-            <span>— הקריאייטיבים נוצרים במנוע הדטרמיניסטי (fallback). להפעלת סצנות AI יש להגדיר ZONO_IMAGE_PROVIDER=gemini ו-GEMINI_API_KEY.</span>
+            <span>— הקריאייטיבים נוצרים במנוע הדטרמיניסטי (fallback). להפעלת סצנות AI יש להגדיר ZONO_IMAGE_PROVIDER=openai עם OPENAI_API_KEY (או =gemini עם GEMINI_API_KEY).</span>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">

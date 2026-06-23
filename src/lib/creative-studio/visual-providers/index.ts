@@ -178,22 +178,31 @@ export function resolveImageProvider(): ImageProviderInfo {
   return { provider: "mock", hasKey: false, reason: "no image provider key configured" };
 }
 
-/** OpenAI text-to-image, returning raw base64 bytes. */
-async function openaiImage(prompt: string): Promise<NanoBananaResult> {
+/** Resolve the OpenAI image model: OPENAI_IMAGE_MODEL (canonical), then the
+ *  legacy ZONO_OPENAI_IMAGE_MODEL alias, then gpt-image-1. */
+function openaiImageModel(): string {
+  return process.env.OPENAI_IMAGE_MODEL || process.env.ZONO_OPENAI_IMAGE_MODEL || "gpt-image-1";
+}
+
+/** OpenAI text-to-image (gpt-image-1), returning raw base64 bytes. Generates the
+ *  cinematic ADVERTISING SCENE only — never any text/logo/face (the prompt's
+ *  negative rules enforce this); real assets + Hebrew stay deterministic overlays. */
+async function openaiImage(prompt: string, size = "1024x1536"): Promise<NanoBananaResult> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY חסר");
+  const model = openaiImageModel();
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: process.env.ZONO_OPENAI_IMAGE_MODEL || "gpt-image-1", prompt, size: "1024x1536", n: 1 }),
+    body: JSON.stringify({ model, prompt, size, n: 1 }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`OpenAI image failed (${res.status}) ${body.slice(0, 300)}`);
+    throw new Error(`OpenAI image failed (${res.status}) model=${model} ${body.slice(0, 300)}`);
   }
   const json = await res.json();
   const b64 = json?.data?.[0]?.b64_json;
   if (!b64) throw new Error("OpenAI returned no image");
-  return { b64, mime: "image/png", provider: "openai" };
+  return { b64, mime: "image/png", provider: `openai:${model}` };
 }
 
 /**
@@ -201,9 +210,11 @@ async function openaiImage(prompt: string): Promise<NanoBananaResult> {
  * `MOCK_PROVIDER:` prefix when no real provider is configured so the caller can
  * stamp a clear status — it never returns a fabricated image.
  */
-export async function generateFinalImage(prompt: string, referenceImageUrl?: string | null): Promise<NanoBananaResult> {
+export async function generateFinalImage(prompt: string, referenceImageUrl?: string | null, opts?: { size?: string }): Promise<NanoBananaResult> {
   const info = resolveImageProvider();
   if (info.provider === "mock") throw new Error(`MOCK_PROVIDER:${info.reason}`);
-  if (info.provider === "openai") return openaiImage(prompt);
+  // OpenAI gpt-image-1 is text-to-image: it generates the cinematic scene only
+  // (no reference photo), so the real property photo is composited on top later.
+  if (info.provider === "openai") return openaiImage(prompt, opts?.size);
   return generateNanoBananaImage(prompt, referenceImageUrl);
 }

@@ -73,7 +73,9 @@ export async function produceAdScene(ad: FinalAdData): Promise<AdSceneResult> {
   const heroIntegrated = info.provider === "gemini" && Boolean(ad.propertyImage);
   const prompt = buildAdScenePrompt(ad, heroIntegrated);
   try {
-    const img = await generateFinalImage(prompt, heroIntegrated ? ad.propertyImage : null);
+    // The ad canvas is 1:1 — request a square scene (OpenAI honours size; Gemini
+    // ignores it and uses the prompt's "1:1 square" instruction).
+    const img = await generateFinalImage(prompt, heroIntegrated ? ad.propertyImage : null, { size: "1024x1024" });
     return {
       status: heroIntegrated ? "ai_hero" : "ai_scene",
       mode: heroIntegrated ? "ai_hero_integrated" : "ai_scene_overlay",
