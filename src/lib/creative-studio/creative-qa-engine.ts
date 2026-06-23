@@ -19,7 +19,10 @@ import {
 } from "./creative-qa";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
-const MAX_ATTEMPTS = 5;
+// Cap retries at 3 (was 5). Combined with a per-image timeout and parallel
+// generation of the 2 final ads, this keeps worst-case wall-clock to a few
+// minutes instead of ~10. Override with ZONO_CREATIVE_MAX_ATTEMPTS if needed.
+const MAX_ATTEMPTS = Math.max(1, Number(process.env.ZONO_CREATIVE_MAX_ATTEMPTS) || 3);
 
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";

@@ -323,40 +323,44 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
       // the real assets. Per concept: generate → Vision-QA → retry → on failure
       // / no key, fall back to the deterministic renderer (flagged). No overlay.
       const assets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
-      const finalRows: Record<string, unknown>[] = [];
-      for (let i = 0; i < built.length; i++) {
-        const b = built[i]; const w = b.wow; const isTop = b === top;
-        const features = b.ad.features.map((ft) => (ft.value ? `${ft.value} ${ft.label}` : ft.label)).join(" · ");
-        const base: Record<string, unknown> = {
-          org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
-          output_type: g.requestType, variant_name: `${isTop ? "★ " : ""}קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
-          headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
-          brand_match_score: w.trust, readability_score: w.readability, conversion_score: w.attention, seller_lead_score: 0, buyer_lead_score: 0, overall_score: w.overall, status: "generated",
-          overall_quality_score: w.overall, wow_score: w.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
-          used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
-        };
-        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind: "property", template: b.designPlan.family, spec: adToSpec(b.ad, "property", g.input, brand.snapshot), assets, bucket: VISUAL_BUCKET });
-        if (outcome.status === "approved" && outcome.imageUrl) {
-          finalRows.push({ ...base,
-            render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
-            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
-            quality_status: "passed",
-            critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
-            creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
-          });
-          continue;
-        }
-        // Fallback: deterministic composition (accurate by construction). Either no
-        // OpenAI key (no_provider) or no AI ad passed QA after 5 attempts (manual_review).
-        const layoutOk = b.designPlan.layout?.approved !== false;
-        finalRows.push({ ...base,
-          render_data: b.render as unknown as Json,
-          image_status: outcome.status === "no_provider" ? "no_provider" : "manual_review", image_error: outcome.failReasons.join(" · ").slice(0, 500) || null,
-          quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
-          critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · ${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — אף גרסת AI לא עברה QA אחרי 5 ניסיונות (ממתין לבדיקה ידנית)"}.`,
-          creative_selection_metadata: { ...selMeta, mode: "fallback", family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, layout: b.designPlan.layout, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
-        });
-      }
+      // Generate the 2 final ads IN PARALLEL — each call independently runs
+      // generate → Vision-QA → retry. Promise.all preserves array order, so the
+      // saved rows keep their ranking. This roughly halves wall-clock time vs the
+      // previous sequential loop.
+      const finalRows: Record<string, unknown>[] = await Promise.all(
+        built.map(async (b) => {
+          const w = b.wow; const isTop = b === top;
+          const features = b.ad.features.map((ft) => (ft.value ? `${ft.value} ${ft.label}` : ft.label)).join(" · ");
+          const base: Record<string, unknown> = {
+            org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
+            output_type: g.requestType, variant_name: `${isTop ? "★ " : ""}קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
+            headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
+            brand_match_score: w.trust, readability_score: w.readability, conversion_score: w.attention, seller_lead_score: 0, buyer_lead_score: 0, overall_score: w.overall, status: "generated",
+            overall_quality_score: w.overall, wow_score: w.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
+            used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
+          };
+          const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind: "property", template: b.designPlan.family, spec: adToSpec(b.ad, "property", g.input, brand.snapshot), assets, bucket: VISUAL_BUCKET });
+          if (outcome.status === "approved" && outcome.imageUrl) {
+            return { ...base,
+              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
+              image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
+              quality_status: "passed",
+              critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
+              creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
+            };
+          }
+          // Fallback: deterministic composition (accurate by construction). Either no
+          // OpenAI key (no_provider) or no AI ad passed QA after the attempt cap.
+          const layoutOk = b.designPlan.layout?.approved !== false;
+          return { ...base,
+            render_data: b.render as unknown as Json,
+            image_status: outcome.status === "no_provider" ? "no_provider" : "manual_review", image_error: outcome.failReasons.join(" · ").slice(0, 500) || null,
+            quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
+            critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · ${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — אף גרסת AI לא עברה QA אחרי כל הניסיונות (ממתין לבדיקה ידנית)"}.`,
+            creative_selection_metadata: { ...selMeta, mode: "fallback", family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, layout: b.designPlan.layout, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+          };
+        }),
+      );
       const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
       if (insErr) { console.error("[quick-creative][property_ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
       const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);

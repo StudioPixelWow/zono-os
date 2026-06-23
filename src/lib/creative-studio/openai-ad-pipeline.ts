@@ -108,7 +108,12 @@ async function fetchBlob(url: string): Promise<{ blob: Blob; name: string } | nu
   } catch { return null; }
 }
 
-/** Raw gpt-image-1 multi-image edit → finished ad. Throws on no-key / API error. */
+/** Per-image generation timeout (ms). Prevents a hung OpenAI call from stalling
+ *  the whole flow — on timeout the request aborts and throws, so the attempt
+ *  loop retries or falls back to the deterministic renderer. */
+const IMAGE_TIMEOUT_MS = Math.max(20_000, Number(process.env.ZONO_CREATIVE_IMAGE_TIMEOUT_MS) || 75_000);
+
+/** Raw gpt-image-1 multi-image edit → finished ad. Throws on no-key / API error / timeout. */
 export async function generateAdImageRaw(prompt: string, refUrls: string[]): Promise<RawImage> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY חסר");
@@ -118,7 +123,17 @@ export async function generateAdImageRaw(prompt: string, refUrls: string[]): Pro
   let attached = 0;
   for (const url of refUrls) { const f = await fetchBlob(url); if (f) { form.append("image[]", f.blob, f.name); attached++; } }
   if (!attached) throw new Error("no reference images could be fetched");
-  const res = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { authorization: `Bearer ${key}` }, body: form });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), IMAGE_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { authorization: `Bearer ${key}` }, body: form, signal: ctrl.signal });
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new Error(`OpenAI edits timed out after ${Math.round(IMAGE_TIMEOUT_MS / 1000)}s`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) { const body = await res.text().catch(() => ""); throw new Error(`OpenAI edits failed (${res.status}) ${body.slice(0, 300)}`); }
   const json = await res.json();
   const b64 = json?.data?.[0]?.b64_json;
