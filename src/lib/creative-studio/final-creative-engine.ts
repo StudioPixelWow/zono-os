@@ -376,8 +376,29 @@ function triggerBadge(trigger: ConceptTrigger, brief: CreativeBrief): string | n
   return null;
 }
 
-/** The Concept Engine: 4 strategically distinct, art-directed, ready-to-post ads. */
-export function directConcepts(f: FinalAdFacts, brand: FinalAdBrandAssets): { brief: CreativeBrief; concepts: ConceptPlan[] } {
+/** A persisted, renderable concept. We NEVER collapse to a single winner — every
+ *  approved concept stays available so different channels (FB / IG feed / stories
+ *  / WhatsApp / website / landing / retargeting) can each render the concept that
+ *  fits. The renderer only executes these; it never invents a concept. */
+export interface ApprovedConcept {
+  concept: string; trigger: ConceptTrigger; headline: string; cta: string;
+  artDirection: ArtDirection; score: number; plan: ConceptPlan;
+}
+
+/** Approval gate: a concept is approved (renderable) when it has no hard blockers
+ *  (e.g. missing real property image). All approved concepts are kept, ranked by
+ *  readiness — none are destroyed. Falls back to all concepts if none clear. */
+export function approveConcepts(concepts: ConceptPlan[]): ApprovedConcept[] {
+  const passing = concepts.filter((c) => c.scores.blockers.length === 0);
+  const pool = passing.length ? passing : concepts;
+  return [...pool]
+    .sort((a, b) => b.scores.finalPostReadiness - a.scores.finalPostReadiness)
+    .map((c) => ({ concept: c.conceptName, trigger: c.trigger, headline: c.ad.headline, cta: c.ad.cta, artDirection: c.artDirection, score: c.scores.finalPostReadiness, plan: c }));
+}
+
+/** The Concept Engine: 4 strategically distinct, art-directed concepts. Returns
+ *  ALL approved concepts (renderable across channels) — not just a winner. */
+export function directConcepts(f: FinalAdFacts, brand: FinalAdBrandAssets): { brief: CreativeBrief; concepts: ConceptPlan[]; approvedConcepts: ApprovedConcept[] } {
   const brief = analyzeBrief(f, brand);
   const triggers = selectConcepts(brief);
   const concepts: ConceptPlan[] = triggers.map((trigger) => {
@@ -390,7 +411,7 @@ export function directConcepts(f: FinalAdFacts, brand: FinalAdBrandAssets): { br
       targetAudience: brief.targetAudience, keyBenefit: brief.keyBenefit,
     };
   });
-  return { brief, concepts };
+  return { brief, concepts, approvedConcepts: approveConcepts(concepts) };
 }
 
 function formatPrice(raw: string): string {

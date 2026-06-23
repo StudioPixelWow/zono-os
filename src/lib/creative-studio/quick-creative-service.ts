@@ -42,9 +42,13 @@ async function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variation
     agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null, agentPhoto: brand.agentPhoto ?? null,
     officeName: brand.officeName ?? null, officeLogo: brand.officeLogo ?? null, colors: brand.colors, luxury: brand.luxury,
   };
-  const { concepts } = await directConceptsAI(facts, brandAssets);
+  // ALL approved concepts are kept + rendered (never collapsed to one winner) —
+  // so any channel (FB / IG feed / stories / WhatsApp / website / landing /
+  // retargeting) can later render the concept that fits.
+  const { approvedConcepts } = await directConceptsAI(facts, brandAssets);
+  if (!approvedConcepts.length) return;
   variations.forEach((v, vi) => {
-    const c = concepts[vi % concepts.length];
+    const c = approvedConcepts[vi % approvedConcepts.length].plan;
     const r = v.render as unknown as Record<string, unknown>;
     r.ad = { ...c.ad, template: c.ad.composition, scores: c.scores };
     r.width = c.ad.width; r.height = c.ad.height; r.format = "feed_1_1";

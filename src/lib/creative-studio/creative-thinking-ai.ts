@@ -14,7 +14,7 @@
 // ============================================================================
 import "server-only";
 import { parseJsonLoose } from "./providers/types";
-import { directConcepts, CONCEPT_LABELS, type FinalAdFacts, type FinalAdBrandAssets, type ConceptPlan, type CreativeBrief } from "./final-creative-engine";
+import { directConcepts, approveConcepts, CONCEPT_LABELS, type FinalAdFacts, type FinalAdBrandAssets, type ConceptPlan, type CreativeBrief, type ApprovedConcept } from "./final-creative-engine";
 
 function activeMode(): { mode: "gemini" | "openai" | "mock"; key: string } {
   const choice = (process.env.ZONO_MARKETING_ANALYSIS_PROVIDER || "").toLowerCase();
@@ -77,8 +77,9 @@ const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? 
 const hasHebrew = (s: string) => /[֐-׿]/.test(s);
 const NEG = "no text, no hebrew, no people, no faces, no logo, no apartment, no building, no interior, no UI";
 
-/** Concept Engine + optional AI creative direction. Never throws; deterministic fallback. */
-export async function directConceptsAI(f: FinalAdFacts, brand: FinalAdBrandAssets): Promise<{ brief: CreativeBrief; concepts: ConceptPlan[]; provider: string }> {
+/** Concept Engine + optional AI creative direction. Never throws; deterministic fallback.
+ *  Returns ALL approved (renderable) concepts — never just a winner. */
+export async function directConceptsAI(f: FinalAdFacts, brand: FinalAdBrandAssets): Promise<{ brief: CreativeBrief; concepts: ConceptPlan[]; approvedConcepts: ApprovedConcept[]; provider: string }> {
   const base = directConcepts(f, brand);
   const { mode, key } = activeMode();
   if (mode === "mock") return { ...base, provider: "mock" };
@@ -109,7 +110,7 @@ export async function directConceptsAI(f: FinalAdFacts, brand: FinalAdBrandAsset
         whyConvert: whyConvert ?? c.whyConvert,
       };
     });
-    return { brief: base.brief, concepts, provider: mode };
+    return { brief: base.brief, concepts, approvedConcepts: approveConcepts(concepts), provider: mode };
   } catch {
     return { ...base, provider: "mock" };
   }
