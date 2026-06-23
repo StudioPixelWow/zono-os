@@ -9,6 +9,7 @@
 
 /** The approved text manifest — the ONLY text the ad may contain. */
 export interface SourceManifest {
+  saleLabel: string;               // large premium badge, e.g. "למכירה" / "נמכר"
   headline: string; subheadline: string | null;
   price: string | null;            // display form, e.g. "₪2,350,000"
   address: string | null; city: string | null; street: string | null;
@@ -30,6 +31,7 @@ export const QA_THRESHOLDS = {
 
 /** Critical visual failures (spec §8 overrides) — any true ⇒ reject. */
 export interface QaCritical {
+  saleLabelMissing: boolean; addressNotVisible: boolean;
   wrongPhone: boolean; wrongPrice: boolean; wrongAgentName: boolean; wrongCityStreet: boolean;
   inventedText: boolean; brokenHebrewHeadline: boolean; wrongLogo: boolean; wrongPerson: boolean;
   unreadableCta: boolean; croppedText: boolean; rtlFailure: boolean;
@@ -83,8 +85,10 @@ export function editDistance(a: string, b: string): number {
 /** The vision model's raw read-back of the image (what it SEES). */
 export interface QaVisionFindings {
   ocrText: string;
+  detectedSaleLabel: string | null;
   detectedHeadline: string | null; detectedPhone: string | null; detectedPrice: string | null;
   detectedAgentName: string | null; detectedCity: string | null; detectedStreet: string | null;
+  saleLabelLargeAndClear: boolean; addressHighlyVisible: boolean;
   brokenHebrew: boolean; rtlOk: boolean; ctaReadable: boolean; croppedText: boolean;
   logoPresentAndCorrect: boolean; agentPhotoOkOrAbsent: boolean; distortedFaceOrLogo: boolean;
   scores: QaScores;
@@ -95,7 +99,12 @@ export interface QaVisionFindings {
 export function deriveCritical(f: QaVisionFindings, m: SourceManifest): QaCritical {
   const ocrFolded = foldFinals(normalizeHebrew(f.ocrText));
   const inManifest = (val: string | null) => !val || ocrFolded.includes(foldFinals(normalizeHebrew(val)));
+  const saleLabelInOcr = inManifest(m.saleLabel);
   return {
+    // Mandatory large "למכירה" badge: must be both present in OCR AND read as large/clear.
+    saleLabelMissing: Boolean(m.saleLabel) && (!saleLabelInOcr || !f.saleLabelLargeAndClear),
+    // Address must be highly visible whenever an address exists.
+    addressNotVisible: Boolean(m.address) && (!inManifest(m.address) && !inManifest(m.city)) ? true : Boolean(m.address) && !f.addressHighlyVisible,
     wrongPhone: Boolean(m.phone) && !phoneEqual(f.detectedPhone, m.phone) && !phoneEqual(digitsOnly(f.ocrText), m.phone),
     wrongPrice: Boolean(m.price) && !priceEqual(f.detectedPrice, m.price),
     wrongAgentName: Boolean(m.agentName) && !textEqual(f.detectedAgentName, m.agentName, true) && !inManifest(m.agentName),
@@ -116,6 +125,7 @@ export interface QaDecision { passed: boolean; failReasons: string[]; criticalFa
 export function decideApproval(scores: QaScores, c: QaCritical): QaDecision {
   const failReasons: string[] = []; const criticalFailures: string[] = [];
   const crit: [keyof QaCritical, string][] = [
+    ["saleLabelMissing", "חסר שלט \"למכירה\" גדול וברור"], ["addressNotVisible", "כתובת הנכס לא בולטת"],
     ["wrongPhone", "מספר טלפון שגוי"], ["wrongPrice", "מחיר שגוי"], ["wrongAgentName", "שם סוכן שגוי"],
     ["wrongCityStreet", "עיר/רחוב שגויים"], ["inventedText", "טקסט מומצא"], ["brokenHebrewHeadline", "עברית שבורה בכותרת"],
     ["wrongLogo", "לוגו שגוי/חסר"], ["wrongPerson", "אדם שגוי / פנים מעוותות"], ["unreadableCta", "CTA לא קריא"],
@@ -195,8 +205,10 @@ export function buildCreativeCorrection(s: CreativeScores, hf: CreativeHardFails
 
 /** Build the precise correction prompt from a failed QA (spec §9). */
 export function buildCorrectionPrompt(decision: QaDecision, c: QaCritical, m: SourceManifest): string {
-  const fixes: string[] = ["Keep the SAME design, layout and composition — only correct the problems below.", "Preserve the supplied logo and agent photo exactly."];
-  if (c.brokenHebrewHeadline || c.inventedText) fixes.push(`Re-render ALL Hebrew text perfectly legible and spelled EXACTLY as: headline "${m.headline}"${m.subheadline ? `, sub "${m.subheadline}"` : ""}. Do not invent, translate or add any text.`);
+  const fixes: string[] = ["Keep the SAME design, layout and composition — only correct the problems below. Do all corrections inside this AI generation (no overlays, no edits outside the model).", "Preserve the supplied logo and agent photo exactly."];
+  if (c.saleLabelMissing) fixes.push(`Add the word "${m.saleLabel}" LARGE, clear and premium — a luxury campaign headline badge, the most prominent text element. Not a small sticker.`);
+  if (c.addressNotVisible && m.address) fixes.push(`Make the property address "${m.address}" highly visible and prominent — directly under the headline, never tiny footer or legal text.`);
+  if (c.brokenHebrewHeadline || c.inventedText) fixes.push(`Re-render ALL Hebrew text perfectly legible and spelled EXACTLY as: sale label "${m.saleLabel}", headline "${m.headline}"${m.subheadline ? `, sub "${m.subheadline}"` : ""}. Do not invent, translate or add any text.`);
   if (c.wrongPhone && m.phone) fixes.push(`Use the EXACT phone number "${m.phone}" (Latin digits, left-to-right).`);
   if (c.wrongPrice && m.price) fixes.push(`Use the EXACT price "${m.price}".`);
   if (c.wrongAgentName && m.agentName) fixes.push(`Agent name must read EXACTLY "${m.agentName}".`);

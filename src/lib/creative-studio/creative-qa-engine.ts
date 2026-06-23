@@ -28,19 +28,24 @@ export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
   generationId: string | null; imageUrl: string | null; provider: string;
   scores: QaScores | null; creativeWow: number | null; attempts: number; failReasons: string[];
+  /** Shown to the user when the best creative is returned without a clean QA pass. */
+  warning: string | null;
 }
+
+/** Warning surfaced when the retry budget is exhausted (spec §5). */
+const REVIEW_WARNING = "נדרש לעבור על פרטי המודעה לפני פרסום";
 
 /** When QA can't run (no vision response), treat everything as failed — we can
  *  never approve an image we couldn't verify. */
 function allCriticalFail(): QaCritical {
-  return { wrongPhone: true, wrongPrice: true, wrongAgentName: true, wrongCityStreet: true, inventedText: true, brokenHebrewHeadline: true, wrongLogo: true, wrongPerson: true, unreadableCta: true, croppedText: true, rtlFailure: true };
+  return { saleLabelMissing: true, addressNotVisible: true, wrongPhone: true, wrongPrice: true, wrongAgentName: true, wrongCityStreet: true, inventedText: true, brokenHebrewHeadline: true, wrongLogo: true, wrongPerson: true, unreadableCta: true, croppedText: true, rtlFailure: true };
 }
 
 /** Code-controlled scores: text/numeric are derived from the deterministic
  *  critical checks (so they gate hard); the rest use the vision sub-scores. */
 function assembleScores(findings: QaVisionFindings | null, c: QaCritical): QaScores {
   const base = findings?.scores ?? { textAccuracy: 0, numericAccuracy: 0, brand: 0, layout: 0, readability: 0, assetIntegrity: 0, realEstateRelevance: 0, overall: 0 };
-  const textAccuracy = c.brokenHebrewHeadline || c.inventedText || c.wrongAgentName || c.wrongCityStreet ? 0 : 100;
+  const textAccuracy = c.brokenHebrewHeadline || c.inventedText || c.wrongAgentName || c.wrongCityStreet || c.saleLabelMissing || c.addressNotVisible ? 0 : 100;
   const numericAccuracy = c.wrongPhone || c.wrongPrice ? 0 : 100;
   const assetIntegrity = c.wrongLogo || c.wrongPerson ? Math.min(base.assetIntegrity, 40) : base.assetIntegrity;
   const layout = c.croppedText || c.rtlFailure ? Math.min(base.layout, 40) : base.layout;
@@ -56,9 +61,9 @@ interface OrchestratorParams {
 
 export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Promise<AdGenOutcome> {
   // Full-ad generation + QA is an OpenAI capability; otherwise the caller falls back.
-  if (!providerIsOpenAI()) return { status: "no_provider", generationId: null, imageUrl: null, provider: "mock", scores: null, creativeWow: null, attempts: 0, failReasons: ["ספק AI לא מוגדר"] };
+  if (!providerIsOpenAI()) return { status: "no_provider", generationId: null, imageUrl: null, provider: "mock", scores: null, creativeWow: null, attempts: 0, failReasons: ["ספק AI לא מוגדר"], warning: null };
   const refUrls = refUrlsFor(p.assets);
-  if (!refUrls.length) return { status: "no_provider", generationId: null, imageUrl: null, provider: "openai", scores: null, creativeWow: null, attempts: 0, failReasons: ["אין נכסים לרפרנס"] };
+  if (!refUrls.length) return { status: "no_provider", generationId: null, imageUrl: null, provider: "openai", scores: null, creativeWow: null, attempts: 0, failReasons: ["אין נכסים לרפרנס"], warning: null };
 
   const manifest: SourceManifest = buildSourceManifest(p.spec);
   const { data: genRow } = await db.from("creative_generations").insert({
@@ -68,9 +73,13 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   const generationId = (genRow as { id: string } | null)?.id ?? null;
 
   let correction = ""; let attempts = 0; const allFail: string[] = [];
-  // SELF-CORRECTION pipeline: we always keep the LATEST generated image so that
-  // after MAX_ATTEMPTS we return it regardless of QA — never blocking the user.
-  let last: { scores: QaScores; creativeWow: number | null; imageUrl: string } | null = null;
+  // SELF-CORRECTION pipeline (AI-only — no canvas, no overlay, no local editing):
+  // we keep the BEST generated image (highest overall, creativeWow as tiebreak)
+  // so after MAX_ATTEMPTS we return the strongest candidate with a review warning
+  // — never blocking the user.
+  type BestCandidate = { scores: QaScores; creativeWow: number | null; imageUrl: string };
+  let best: BestCandidate | null = null;
+  const bestRank = (c: BestCandidate) => c.scores.overall + (c.creativeWow ?? 0) / 100;
   let prevImageUrl: string | null = null;
 
   for (let n = 1; n <= MAX_ATTEMPTS; n++) {
@@ -112,11 +121,14 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
 
     if (approved && imageUrl) {
       if (generationId) await db.from("creative_generations").update({ status: "approved", final_image_url: imageUrl, approved_attempt_id: attemptId, attempts_count: n, overall_score: creative?.scores.overallWow ?? scores.overall } as never).eq("id", generationId);
-      return { status: "approved", generationId, imageUrl, provider: "openai", scores, creativeWow: creative?.scores.overallWow ?? null, attempts: n, failReasons: [] };
+      return { status: "approved", generationId, imageUrl, provider: "openai", scores, creativeWow: creative?.scores.overallWow ?? null, attempts: n, failReasons: [], warning: null };
     }
-    // Keep the LATEST generated image (not the "best") — the spec returns the
-    // most recent self-correction result after the retry budget is exhausted.
-    if (imageUrl) last = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl };
+    // Keep the BEST generated image so the retry budget returns the strongest
+    // candidate (with a review warning), never blocking the user.
+    if (imageUrl) {
+      const cand: BestCandidate = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl };
+      if (!best || bestRank(cand) > bestRank(best)) best = cand;
+    }
     // Build the next correction: fix correctness first; if correct but not
     // desirable, send the creative-director's design feedback instead.
     if (!decision.passed) correction = buildCorrectionPrompt(decision, critical, manifest);
@@ -124,9 +136,10 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
     allFail.push(...combinedFail);
   }
 
-  // Retry budget (3) exhausted — RETURN THE LATEST generation regardless of QA.
-  if (generationId) await db.from("creative_generations").update({ status: "manual_review", attempts_count: attempts, final_image_url: last?.imageUrl ?? null, overall_score: last?.scores.overall ?? 0 } as never).eq("id", generationId);
-  return { status: "manual_review", generationId, imageUrl: last?.imageUrl ?? null, provider: "openai", scores: last?.scores ?? null, creativeWow: last?.creativeWow ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12) };
+  // Retry budget (initial + 2 corrections) exhausted — RETURN THE BEST generation
+  // with a review warning (spec §5). Never block the user; never edit outside AI.
+  if (generationId) await db.from("creative_generations").update({ status: "manual_review", attempts_count: attempts, final_image_url: best?.imageUrl ?? null, overall_score: best?.scores.overall ?? 0 } as never).eq("id", generationId);
+  return { status: "manual_review", generationId, imageUrl: best?.imageUrl ?? null, provider: "openai", scores: best?.scores ?? null, creativeWow: best?.creativeWow ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12), warning: best?.imageUrl ? REVIEW_WARNING : null };
 }
 
 interface AttemptRecord {

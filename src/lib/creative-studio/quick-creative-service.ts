@@ -354,14 +354,14 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             // STILL return the most recent AI image — never block — badged for review.
             const passed = outcome.status === "approved";
             return { ...base, status: passed ? "generated" : "needs_review",
-              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
+              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
               image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
-              image_error: passed ? null : (outcome.failReasons.join(" · ").slice(0, 500) || null),
+              image_error: passed ? null : ([outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null),
               quality_status: passed ? "passed" : "review",
               critic_summary: passed
                 ? `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`
-                : `${isTop ? "★ קונספט מוביל. " : ""}גרסה אחרונה לאחר ${outcome.attempts} ניסיונות תיקון עצמי של OpenAI · ממתין לאישור QA סופי (${b.triggerLabel}).`,
-              creative_selection_metadata: { ...selMeta, mode: passed ? "ai_full_ad" : "ai_self_correct", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+                : `${isTop ? "★ קונספט מוביל. " : ""}${outcome.warning ?? "ממתין לאישור QA סופי"} · הגרסה הטובה ביותר לאחר ${outcome.attempts} ניסיונות תיקון AI (${b.triggerLabel}).`,
+              creative_selection_metadata: { ...selMeta, mode: passed ? "ai_full_ad" : "ai_self_correct", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, warning: outcome.warning, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
             };
           }
           // No image at all (no provider, or generation threw). With strict mode ON
@@ -427,11 +427,25 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           });
           continue;
         }
+        // AI image exists but didn't fully pass QA → SHOW the best AI creative
+        // with a review warning (AI-only; never fall back to a deterministic render).
+        if (outcome.imageUrl) {
+          rows.push({ ...base, status: "needs_review",
+            render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
+            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
+            image_error: [outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null,
+            quality_status: "review",
+            critic_summary: `${outcome.warning ?? "ממתין לאישור QA סופי"} · הגרסה הטובה ביותר לאחר ${outcome.attempts} ניסיונות תיקון AI (${v.variantName}).`,
+            creative_selection_metadata: { mode: "ai_self_correct", kind, qa: outcome.scores, attempts: outcome.attempts, warning: outcome.warning, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+          });
+          continue;
+        }
+        // No AI image at all (no provider / generation threw) → deterministic render fallback.
         rows.push({ ...base,
           render_data: v.render as unknown as Json,
           image_status: outcome.status === "no_provider" ? "no_provider" : "manual_review", image_error: outcome.failReasons.join(" · ").slice(0, 500) || null,
           quality_status: "passed",
-          critic_summary: `${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — לא עבר QA אחרי 5 ניסיונות"}.`,
+          critic_summary: `${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — לא הופקה תמונת AI"}.`,
           creative_selection_metadata: { mode: "fallback", kind, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
         });
       }

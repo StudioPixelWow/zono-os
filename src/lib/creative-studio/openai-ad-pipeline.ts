@@ -19,6 +19,7 @@ export type AdKind = "property" | "sold" | "testimonial";
 /** Everything the image model needs to render a finished ad — kind-agnostic. */
 export interface AdSpec {
   kind: AdKind; conceptLabel: string;
+  saleLabel?: string | null;           // large premium badge — defaults to "למכירה" ("נמכר" for sold)
   headline: string; subheadline?: string | null;
   priceLabel?: string | null; price?: string | null;
   features: string[]; cta: string;
@@ -35,9 +36,17 @@ export interface AdGenAssets { propertyImages: string[]; logoUrl: string | null;
 
 export function providerIsOpenAI(): boolean { return resolveImageProvider().provider === "openai"; }
 
+/** The default large premium badge — "למכירה" for live listings, "נמכר" for sold. */
+export function resolveSaleLabel(spec: AdSpec): string {
+  const explicit = (spec.saleLabel ?? "").trim();
+  if (explicit) return explicit;
+  return spec.kind === "sold" ? "נמכר" : "למכירה";
+}
+
 /** Source-Data Lock: the manifest is the ONLY text the ad may contain. */
 export function buildSourceManifest(spec: AdSpec): SourceManifest {
   return {
+    saleLabel: resolveSaleLabel(spec),
     headline: spec.headline, subheadline: spec.subheadline ?? null,
     price: spec.price ?? null,
     address: [spec.street, spec.city].filter(Boolean).join(", ") || null,
@@ -54,16 +63,41 @@ export function refUrlsFor(assets: AdGenAssets): string[] {
   return [...assets.propertyImages.slice(0, 4), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
 }
 
+/** Map a Hebrew feature string → a premium architectural icon description, so the
+ *  model renders SPECS AS ICONS (not text rows). Returns null when no clean icon
+ *  fits — those features are simply dropped to protect Hebrew spelling quality. */
+function featureToIcon(feat: string): string | null {
+  const f = feat.trim();
+  const num = (f.match(/[\d.]+/) ?? [])[0] ?? "";
+  if (/חדר/.test(f)) return `a minimal architectural BED/ROOM icon with the number ${num || "X"}`;
+  if (/מ["״׳']?\s*ר|מטר|sqm|מ"ר/i.test(f)) return `a minimal floor-plan / ruler icon with the number ${num || "X"} (square meters)`;
+  if (/קומה/.test(f)) return `a minimal building-floors icon with the number ${num || "X"}`;
+  if (/חני/.test(f)) return "a minimal car / parking icon";
+  if (/מחסן/.test(f)) return "a minimal storage-box icon";
+  if (/מרפסת|טראס/.test(f)) return "a minimal terrace / balcony icon";
+  if (/מעלית/.test(f)) return "a minimal elevator icon";
+  if (/ממ["״׳']?ד|ממד|מקלט/.test(f)) return "a minimal shield (safe-room / mamad) icon";
+  if (/גינה|גן/.test(f)) return "a minimal leaf / garden icon";
+  if (/פנטהאוז|פנטהוז/.test(f)) return "a minimal skyline (penthouse) icon";
+  if (/נוף|ים|פתוח/.test(f)) return "a minimal horizon (open / sea view) icon";
+  return null;
+}
+
 /** Full art-direction brief — the ZONO PREMIUM REAL ESTATE CREATIVE ENGINE
  *  (locked by user mandate). The image model is the DESIGNER and renders a
- *  COMPLETE, finished premium campaign image. Only the dynamic values, the EXACT
- *  Hebrew copy, the supplied-asset map and the QA correction change per request;
- *  the creative doctrine below is constant for every generation. */
+ *  COMPLETE, finished premium campaign image. ALL corrections happen inside this
+ *  AI flow — no canvas, no HTML overlay, no deterministic renderer, no local
+ *  text editing. Only the dynamic values, the EXACT Hebrew copy, the supplied-
+ *  asset map and the QA correction change per request. */
 export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: string): string {
   const colors = [spec.palette.bg, spec.palette.bg2, spec.palette.accent].filter(Boolean).join(", ");
-  const feats = spec.features.filter(Boolean).join(" · ");
-  const location = [spec.street, spec.city].filter(Boolean).join(", ");
+  const saleLabel = resolveSaleLabel(spec);
+  const address = [spec.street, spec.city].filter(Boolean).join(", ");
   const priceLine = [spec.priceLabel, spec.price].filter(Boolean).join(" ").trim();
+
+  // Specs → premium ICONS (not text). Drop features without a clean icon so the
+  // image model renders less Hebrew (fewer text fields ⇒ fewer spelling errors).
+  const iconSpecs = spec.features.map(featureToIcon).filter(Boolean) as string[];
 
   // Supplied-asset map so the model knows which reference image is which.
   const refs: string[] = [];
@@ -72,18 +106,18 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
   if (assets.logoUrl) refs.push(`reference image ${refs.length + 1} = the OFFICIAL OFFICE LOGO — reproduce EXACTLY; never redraw, recolor, distort or invent`);
   if (assets.agentPhoto) refs.push(`reference image ${refs.length + 1} = the AGENT photo — use EXACTLY; never regenerate, stylize, alter or replace the face`);
 
-  // Creative brief assembled from the supplied property context.
+  // Creative brief assembled from the supplied property context (NO feature
+  // strings — those become icons, never text paragraphs).
   const brief = [
     spec.visualStory,
     spec.emotionalFeel,
     spec.propertyType ? `property character: ${spec.propertyType}` : "",
-    feats ? `key details: ${feats}` : "",
-    location ? `location: ${location}` : "",
+    address ? `location: ${address}` : "",
   ].filter(Boolean).join(" — ") || "premium residential property";
 
   const kindLine =
     spec.kind === "sold"
-      ? "Campaign type: a proud yet understated 'נמכר / JUST SOLD' announcement — celebratory and elegant; the נמכר treatment is tasteful, never a loud sticker."
+      ? `Campaign type: a proud yet understated '${saleLabel} / JUST SOLD' announcement — celebratory and elegant; the badge treatment is tasteful, never a loud sticker.`
       : spec.kind === "testimonial"
         ? "Campaign type: a warm client-testimonial campaign — trust-led, with the property still the hero behind an elegant quote."
         : "Campaign type: a lifestyle acquisition campaign for a property on the market.";
@@ -93,30 +127,47 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     kindLine,
     `Concept: ${spec.conceptLabel}. Property brief: ${brief}.`,
     refs.length ? `SUPPLIED ASSETS — ${refs.join("; ")}. Use ALL supplied assets; never invent or substitute any of them.` : "",
-    "PROPERTY HERO RULE: the property is the hero. Property photography occupies ~70–80% of the composition. Nothing may visually overpower or compete with the property — no oversized text, no giant logos, no aggressive overlays, no marketing gimmicks. Treat the property image like a luxury architectural-magazine cover.",
-    "VISUAL STORYTELLING: respect architecture, composition, interior design, lighting and depth. Do not cover important rooms or block architectural features. Do not place text over focal areas. Let the property breathe and create desire through atmosphere.",
-    // EXACT COPY LOCK — the only text allowed on the image.
-    "Render ONLY this EXACT Hebrew copy, crisp and perfectly legible right-to-left (RTL), spelled exactly as given — no gibberish, no invented/broken/duplicated letters, nothing added, translated or shortened:",
-    `• Headline: "${spec.headline}"`,
-    spec.subheadline ? `• Sub-headline: "${spec.subheadline}"` : "",
-    priceLine ? `• Price / offer (confident, premium, never shouty): "${priceLine}"` : "",
-    feats ? `• A few key details (quiet, secondary): "${feats}"` : "",
-    spec.cta ? `• CTA (refined, low-noise): "${spec.cta}"` : "",
-    spec.agentName ? `• Agent name: "${spec.agentName}"` : "",
-    spec.agentPhone ? `• Phone (Latin digits, keep LTR): "${spec.agentPhone}"` : "",
-    spec.logoText ? `• Office name: "${spec.logoText}"` : "",
-    location ? `• Location (subtle): "${location}"` : "",
+
+    // ── PROMPT PRIORITY (spec §7) ─────────────────────────────────────────────
+    "PROMPT PRIORITY (in order): (1) VISUAL QUALITY — a stunning, premium, scroll-stopping creative; (2) EXACT TEXT PRESERVATION — every Hebrew string spelled exactly as locked below; (3) BRAND CONSISTENCY. Never sacrifice visual quality for QA, and never turn this into a boring, generic, templated layout.",
+
+    "PROPERTY HERO RULE: the property is the hero. Property photography occupies ~70–80% of the composition. Nothing may visually overpower or compete with the property — no oversized logos, no aggressive overlays, no marketing gimmicks. Treat the property image like a luxury architectural-magazine cover.",
+    "VISUAL STORYTELLING: respect architecture, composition, interior design, lighting and depth. Do not cover important rooms or block architectural features. Let the property breathe and create desire through atmosphere.",
+
+    // ── TEXT-LOCK (spec §3) — EXACT strings, never altered ─────────────────────
+    "════ TEXT-LOCK — render ONLY these EXACT Hebrew strings, crisp and perfectly legible right-to-left (RTL). Reproduce each string letter-for-letter. NEVER rewrite, NEVER abbreviate, NEVER invent, NEVER autocorrect, NEVER replace letters, NEVER add similar words, NEVER translate, NEVER duplicate letters. No text may appear on the image that is not in this list: ════",
+    `• {{sale_label}} = "${saleLabel}"  ← LARGE, premium, highly visible — a luxury campaign HEADLINE BADGE (not a cheap sticker). This is the most prominent text element.`,
+    `• {{headline}} = "${spec.headline}"`,
+    spec.subheadline ? `• {{subheadline}} = "${spec.subheadline}"` : "",
+    address ? `• {{property_address}} = "${address}"  ← HIGHLY VISIBLE and prominent. NOT tiny footer text, NOT legal copy. This is mandatory, large and easy to read.` : "",
+    priceLine ? `• {{price}} = "${priceLine}"  (confident, premium, never shouty)` : "",
+    spec.agentName ? `• {{agent_name}} = "${spec.agentName}"` : "",
+    spec.agentPhone ? `• {{agent_phone}} = "${spec.agentPhone}"  (Latin digits, keep LTR, impossible to miss yet never promotional)` : "",
+    spec.logoText ? `• {{office_name}} = "${spec.logoText}"` : "",
+    spec.cta ? `• Optional short CTA = "${spec.cta}" — include ONLY if it does not harm Hebrew spelling accuracy; otherwise omit it.` : "",
+    "════ END TEXT-LOCK ════",
+
+    // ── TEXT HIERARCHY (spec §2) ──────────────────────────────────────────────
+    "TEXT HIERARCHY (top → bottom of importance and visual weight): {{sale_label}} → {{headline}} → {{property_address}} → {{price}} / CTA / agent. The sale label and the address must both be unmistakably visible.",
+
+    // ── TEXT REDUCTION (spec §4 + §11) ────────────────────────────────────────
+    "TEXT REDUCTION: keep total Hebrew text minimal — the fewer text fields the model renders, the higher the typography quality. Mandatory text only: the sale label, the headline, the property address, the price, the agent name and the phone. Do NOT render long feature paragraphs, crowded specification rows, or any text not locked above.",
+
+    // ── PROPERTY FEATURES AS ICONS (spec §10) ─────────────────────────────────
+    iconSpecs.length
+      ? `PROPERTY FEATURES VISUAL SYSTEM — communicate specifications with PREMIUM ARCHITECTURAL ICONS, not words. Render this small, elegant icon row (a single consistent icon family): ${iconSpecs.join("; ")}. Icons must feel premium, minimal, architectural, editorial, luxury-brochure quality — never cartoon, never emoji, never colorful, never playful. The viewer should understand the specs in under 2 seconds. Specs are SUPPORTING information; the property image stays the hero.`
+      : "PROPERTY FEATURES: if specs are shown at all, use minimal premium architectural icons (a single consistent family) — never text rows. Keep them tiny and secondary.",
+
     "BRAND INTEGRATION: use ONLY the supplied branding — never invent logos or colors, never replace branding. Branding must feel premium, understated and trustworthy; the logo is a trust signal, naturally integrated, never the hero.",
     "AGENT POSITIONING: present the agent as a trusted advisor / luxury consultant / private banker — elegant, trustworthy, never a salesperson and never dominant. The property remains the hero.",
-    "PHONE VISIBILITY: the phone number must be impossible to miss yet never promotional — premium visibility, high trust, low noise, quiet confidence. Avoid 'SALE', 'CALL NOW' and flashy CTAs.",
-    "HEBREW TYPOGRAPHY: perfect RTL, professional Hebrew typography resembling premium developer brochures, architectural publications and luxury magazines. No AI-looking, decorative, stretched or fake-luxury fonts.",
-    `BRAND COLOR SYSTEM: use ONLY these brand colors — ${colors}. Apply them elegantly through dividers, small accents, headline emphasis, the phone section and micro-details. Never overwhelm the property; never create visual noise.`,
+    "HEBREW TYPOGRAPHY: perfect RTL, professional Hebrew typography resembling premium developer brochures, architectural publications and luxury magazines. No AI-looking, decorative, stretched or fake-luxury fonts. Hebrew spelling errors are unacceptable.",
+    `BRAND COLOR SYSTEM: use ONLY these brand colors — ${colors}. Apply them elegantly through dividers, small accents, the sale-label badge, headline emphasis, the phone section and micro-details. Never overwhelm the property; never create visual noise.`,
     `ART DIRECTION: imagine a collaboration between Apple, Porsche, Architectural Digest and a luxury real-estate collection — the premium version of ${spec.logoText ?? "the supplied office brand"}. The final image must feel expensive, clean, architectural, editorial and aspirational. Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
     "FORBIDDEN — reject the design if it resembles a Canva template, a Wix template, a generic real-estate card, a cheap Facebook ad, an AI-generated poster, or franchise marketing.",
     "APPROVE ONLY IF the result resembles an architectural-magazine cover, a luxury developer campaign, a premium property brochure, or a high-end real-estate launch campaign.",
     "OUTPUT: a fully designed advertisement using all supplied assets, with exact branding, exact agent identity and exact contact details — suitable for Facebook, Instagram, LinkedIn and premium digital advertising. Vertical 4:5 format. Quality target 10/10, no compromises.",
-    "TECHNICAL LOCK (non-negotiable): do NOT alter the logo or the agent's face; numbers and phone digits must be exact; render nothing beyond the copy above.",
-    correction ? `CORRECTION (previous attempt failed QA — fix precisely):\n${correction}` : "",
+    "TECHNICAL LOCK (non-negotiable): do NOT alter the logo or the agent's face; numbers and phone digits must be exact; render nothing beyond the locked copy above.",
+    correction ? `CORRECTION (previous attempt failed QA — fix ONLY these issues inside this same AI generation, keeping the same visual direction):\n${correction}` : "",
   ];
   return lines.filter(Boolean).join("\n");
 }
@@ -174,11 +225,12 @@ export async function runCreativeQA(b64: string, m: SourceManifest, assets: AdGe
   if (!key) return null;
   const ask = `You are a strict QA reviewer for a Hebrew real-estate advertisement image. Extract what you SEE (do not assume) and answer ONLY with JSON:
 {"ocrText": "<all visible text, line by line>",
- "detectedHeadline": "", "detectedPhone": "", "detectedPrice": "", "detectedAgentName": "", "detectedCity": "", "detectedStreet": "",
+ "detectedSaleLabel": "", "detectedHeadline": "", "detectedPhone": "", "detectedPrice": "", "detectedAgentName": "", "detectedCity": "", "detectedStreet": "",
+ "saleLabelLargeAndClear": bool, "addressHighlyVisible": bool,
  "brokenHebrew": bool, "rtlOk": bool, "ctaReadable": bool, "croppedText": bool,
  "logoPresentAndCorrect": bool, "agentPhotoOkOrAbsent": bool, "distortedFaceOrLogo": bool,
  "scores": {"brand":0-100, "layout":0-100, "readability":0-100, "assetIntegrity":0-100, "realEstateRelevance":0-100}}
-Expected (the ONLY allowed text): headline="${m.headline}", phone="${m.phone ?? "—"}", price="${m.price ?? "—"}", agent="${m.agentName ?? "—"}", city="${m.city ?? "—"}", cta="${m.cta}". A logo is ${assets.logoUrl ? "expected" : "NOT expected (set logoPresentAndCorrect=true)"}; an agent photo is ${assets.agentPhoto ? "expected" : "NOT expected (set agentPhotoOkOrAbsent=true)"}. brokenHebrew=true if ANY Hebrew is fake/garbled/misspelled. Read carefully — digits and Hebrew spelling matter.`;
+Expected (the ONLY allowed text): sale_label="${m.saleLabel}", headline="${m.headline}", address="${m.address ?? "—"}", phone="${m.phone ?? "—"}", price="${m.price ?? "—"}", agent="${m.agentName ?? "—"}", city="${m.city ?? "—"}", cta="${m.cta}". saleLabelLargeAndClear=true ONLY if the word "${m.saleLabel}" appears LARGE, clear and prominent (a premium headline badge). addressHighlyVisible=true ONLY if the address ${m.address ? `"${m.address}"` : "(if present)"} appears clearly and prominently — set true when no address is expected. A logo is ${assets.logoUrl ? "expected" : "NOT expected (set logoPresentAndCorrect=true)"}; an agent photo is ${assets.agentPhoto ? "expected" : "NOT expected (set agentPhotoOkOrAbsent=true)"}. brokenHebrew=true if ANY Hebrew is fake/garbled/misspelled. Read carefully — digits and Hebrew spelling matter.`;
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
@@ -199,8 +251,10 @@ Expected (the ONLY allowed text): headline="${m.headline}", phone="${m.phone ?? 
     const str = (x: unknown) => (typeof x === "string" ? x : null);
     return {
       ocrText: String(v.ocrText ?? ""),
+      detectedSaleLabel: str(v.detectedSaleLabel),
       detectedHeadline: str(v.detectedHeadline), detectedPhone: str(v.detectedPhone), detectedPrice: str(v.detectedPrice),
       detectedAgentName: str(v.detectedAgentName), detectedCity: str(v.detectedCity), detectedStreet: str(v.detectedStreet),
+      saleLabelLargeAndClear: Boolean(v.saleLabelLargeAndClear), addressHighlyVisible: Boolean(v.addressHighlyVisible),
       brokenHebrew: Boolean(v.brokenHebrew), rtlOk: Boolean(v.rtlOk), ctaReadable: Boolean(v.ctaReadable), croppedText: Boolean(v.croppedText),
       logoPresentAndCorrect: Boolean(v.logoPresentAndCorrect), agentPhotoOkOrAbsent: Boolean(v.agentPhotoOkOrAbsent), distortedFaceOrLogo: Boolean(v.distortedFaceOrLogo),
       scores: { textAccuracy: 0, numericAccuracy: 0, brand: num(sc.brand), layout: num(sc.layout), readability: num(sc.readability), assetIntegrity: num(sc.assetIntegrity), realEstateRelevance: num(sc.realEstateRelevance), overall: 0 },
