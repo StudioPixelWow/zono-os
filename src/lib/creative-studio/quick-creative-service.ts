@@ -318,10 +318,10 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
         const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind: "property", template: b.designPlan.family, spec: adToSpec(b.ad, "property", g.input, brand.snapshot), assets, bucket: VISUAL_BUCKET });
         if (outcome.status === "approved" && outcome.imageUrl) {
           finalRows.push({ ...base,
-            render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: outcome.scores, generationId: outcome.generationId } as unknown as Json,
+            render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
             image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
             quality_status: "passed",
-            critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}עבר QA · ציון ${outcome.scores?.overall ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
+            critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
             creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
           });
           continue;
@@ -353,7 +353,6 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     const vars = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
     if (vars.length) {
       const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
-      const ts = Date.now();
       const rows: Record<string, unknown>[] = [];
       for (let i = 0; i < vars.length; i++) {
         const v = vars[i];
@@ -369,10 +368,10 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
         const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind, template: null, spec: variationToSpec(v, g.input, brand.snapshot, kind), assets, bucket: VISUAL_BUCKET });
         if (outcome.status === "approved" && outcome.imageUrl) {
           rows.push({ ...base,
-            render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: outcome.scores, generationId: outcome.generationId } as unknown as Json,
+            render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
             image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
             quality_status: "passed",
-            critic_summary: `עבר QA · ציון ${outcome.scores?.overall ?? "—"} · ${outcome.attempts} ניסיון/ות (${v.variantName}).`,
+            critic_summary: `עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${v.variantName}).`,
             creative_selection_metadata: { mode: "ai_full_ad", kind, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
           });
           continue;

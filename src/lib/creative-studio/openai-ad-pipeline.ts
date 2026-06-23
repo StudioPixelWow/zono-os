@@ -9,7 +9,7 @@
 // ============================================================================
 import "server-only";
 import { resolveImageProvider } from "./visual-providers";
-import type { SourceManifest, QaVisionFindings } from "./creative-qa";
+import type { SourceManifest, QaVisionFindings, CreativeScores, CreativeHardFails } from "./creative-qa";
 
 const IMAGE_MODEL = () => process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 const VISION_MODEL = () => process.env.OPENAI_VISION_MODEL || "gpt-4o";
@@ -155,6 +155,46 @@ Expected (the ONLY allowed text): headline="${m.headline}", phone="${m.phone ?? 
       brokenHebrew: Boolean(v.brokenHebrew), rtlOk: Boolean(v.rtlOk), ctaReadable: Boolean(v.ctaReadable), croppedText: Boolean(v.croppedText),
       logoPresentAndCorrect: Boolean(v.logoPresentAndCorrect), agentPhotoOkOrAbsent: Boolean(v.agentPhotoOkOrAbsent), distortedFaceOrLogo: Boolean(v.distortedFaceOrLogo),
       scores: { textAccuracy: 0, numericAccuracy: 0, brand: num(sc.brand), layout: num(sc.layout), readability: num(sc.readability), assetIntegrity: num(sc.assetIntegrity), realEstateRelevance: num(sc.realEstateRelevance), overall: 0 },
+    };
+  } catch { return null; }
+}
+
+export interface CreativeFindings { scores: CreativeScores; hardFails: CreativeHardFails; proudToPublish: boolean; notes: string }
+
+/** LAYER 2 — Creative Director evaluation (DESIRABILITY). Judges the image as a
+ *  top Israeli real-estate marketer / Meta ads strategist / premium branding
+ *  expert against the bar of leading brokers & developers. Never throws. */
+export async function runCreativeDirectorQA(b64: string): Promise<CreativeFindings | null> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return null;
+  const ask = `You are simultaneously a TOP Israeli real-estate marketing designer, a top Meta ads creative strategist, and a premium branding expert. Judge this real-estate ad image for DESIRABILITY (not correctness) against the bar of premium ads from leading Israeli brokers and developers. Reject generic / boring / weak / cluttered / AI-looking / Canva-looking / amateur / outdated / low-converting work. Answer ONLY with JSON:
+{"scores": {"visualImpact":0-100,"realEstateCredibility":0-100,"premiumFeeling":0-100,"brandConsistency":0-100,"conversionPotential":0-100,"typographyQuality":0-100,"layoutQuality":0-100,"imageComposition":0-100,"overallWow":0-100},
+ "hardFails": {"propertyImageTooSmall":bool,"textDominatesProperty":bool,"priceNotDominant":bool,"weakHierarchy":bool,"uglyCollage":bool,"excessiveEmptySpace":bool,"excessiveClutter":bool,"looksAiGenerated":bool,"notProfessionalAd":bool},
+ "proudToPublish": bool, "notes":"one-line: what holds it back"}
+proudToPublish = would a LEADING real-estate marketer proudly publish this tomorrow? Be strict — only true premium agency-grade work passes.`;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: VISION_MODEL(), temperature: 0, response_format: { type: "json_object" },
+        messages: [{ role: "user", content: [
+          { type: "text", text: ask },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } },
+        ] }],
+      }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const txt = json?.choices?.[0]?.message?.content; if (!txt) return null;
+    const v = JSON.parse(txt) as Record<string, unknown>;
+    const sc = (v.scores ?? {}) as Record<string, unknown>;
+    const hf = (v.hardFails ?? {}) as Record<string, unknown>;
+    const num = (x: unknown) => Math.max(0, Math.min(100, Number(x) || 0));
+    const b = (x: unknown) => Boolean(x);
+    return {
+      scores: { visualImpact: num(sc.visualImpact), realEstateCredibility: num(sc.realEstateCredibility), premiumFeeling: num(sc.premiumFeeling), brandConsistency: num(sc.brandConsistency), conversionPotential: num(sc.conversionPotential), typographyQuality: num(sc.typographyQuality), layoutQuality: num(sc.layoutQuality), imageComposition: num(sc.imageComposition), overallWow: num(sc.overallWow) },
+      hardFails: { propertyImageTooSmall: b(hf.propertyImageTooSmall), textDominatesProperty: b(hf.textDominatesProperty), priceNotDominant: b(hf.priceNotDominant), weakHierarchy: b(hf.weakHierarchy), uglyCollage: b(hf.uglyCollage), excessiveEmptySpace: b(hf.excessiveEmptySpace), excessiveClutter: b(hf.excessiveClutter), looksAiGenerated: b(hf.looksAiGenerated), notProfessionalAd: b(hf.notProfessionalAd) },
+      proudToPublish: b(v.proudToPublish), notes: String(v.notes ?? "").slice(0, 300),
     };
   } catch { return null; }
 }

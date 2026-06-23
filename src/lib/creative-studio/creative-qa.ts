@@ -134,6 +134,65 @@ export function decideApproval(scores: QaScores, c: QaCritical): QaDecision {
   return { passed, failReasons: [...criticalFailures, ...failReasons], criticalFailures };
 }
 
+// ── LAYER 2: Creative QA (DESIRABILITY) ──────────────────────────────────────
+// Correctness QA proves the ad is right. Creative QA proves it's good enough to
+// publish — judged as a top Israeli real-estate marketer / Meta ads strategist /
+// premium branding expert. Reference bar: premium ads from leading brokers and
+// developers. The gate question: "Would a leading real-estate marketer proudly
+// publish this tomorrow?" If no → regenerate.
+export interface CreativeScores {
+  visualImpact: number; realEstateCredibility: number; premiumFeeling: number; brandConsistency: number;
+  conversionPotential: number; typographyQuality: number; layoutQuality: number; imageComposition: number; overallWow: number;
+}
+export const CREATIVE_THRESHOLDS = { overallWow: 85, conversionPotential: 85, visualImpact: 85, realEstateCredibility: 90 } as const;
+
+/** Hard-fail design problems (any true ⇒ reject regardless of scores). */
+export interface CreativeHardFails {
+  propertyImageTooSmall: boolean; textDominatesProperty: boolean; priceNotDominant: boolean; weakHierarchy: boolean;
+  uglyCollage: boolean; excessiveEmptySpace: boolean; excessiveClutter: boolean; looksAiGenerated: boolean; notProfessionalAd: boolean;
+}
+export const NO_CREATIVE_HARD_FAILS: CreativeHardFails = {
+  propertyImageTooSmall: false, textDominatesProperty: false, priceNotDominant: false, weakHierarchy: false,
+  uglyCollage: false, excessiveEmptySpace: false, excessiveClutter: false, looksAiGenerated: false, notProfessionalAd: false,
+};
+
+export interface CreativeDecision { passed: boolean; reasons: string[]; hardFailures: string[] }
+
+/** The creative-director approval gate. */
+export function decideCreative(s: CreativeScores, hf: CreativeHardFails, proudToPublish: boolean): CreativeDecision {
+  const hardFailures: string[] = []; const reasons: string[] = [];
+  const hfLabels: [keyof CreativeHardFails, string][] = [
+    ["propertyImageTooSmall", "תמונת הנכס קטנה מדי"], ["textDominatesProperty", "הטקסט משתלט על הנכס"], ["priceNotDominant", "המחיר לא דומיננטי ויזואלית"],
+    ["weakHierarchy", "היררכיה חלשה"], ["uglyCollage", "קולאז' מכוער"], ["excessiveEmptySpace", "יותר מדי שטח ריק"],
+    ["excessiveClutter", "עומס ויזואלי"], ["looksAiGenerated", "נראה כמו AI"], ["notProfessionalAd", "לא נראה כמו מודעת נדל\"ן מקצועית"],
+  ];
+  for (const [k, label] of hfLabels) if (hf[k]) hardFailures.push(label);
+  const t = CREATIVE_THRESHOLDS;
+  const checks: [number, number, string][] = [
+    [s.overallWow, t.overallWow, "WOW כולל"], [s.conversionPotential, t.conversionPotential, "פוטנציאל המרה"],
+    [s.visualImpact, t.visualImpact, "אימפקט ויזואלי"], [s.realEstateCredibility, t.realEstateCredibility, "אמינות נדל\"ן"],
+  ];
+  for (const [val, min, label] of checks) if (val < min) reasons.push(`${label} ${val}<${min}`);
+  if (!proudToPublish) reasons.push("משווק מוביל לא יפרסם את זה בגאווה");
+  const passed = hardFailures.length === 0 && reasons.length === 0;
+  return { passed, reasons: [...hardFailures, ...reasons], hardFailures };
+}
+
+/** Design-level correction prompt (no text changes — only visual quality). */
+export function buildCreativeCorrection(s: CreativeScores, hf: CreativeHardFails): string {
+  const fixes: string[] = ["Keep the EXACT text, logo and agent — improve only the VISUAL design to a premium Israeli real-estate campaign standard (leading brokers/developers level)."];
+  if (hf.propertyImageTooSmall || s.visualImpact < 85) fixes.push("Make the property photo the dominant hero (~70% of the frame), cinematic and high-impact.");
+  if (hf.textDominatesProperty) fixes.push("Reduce the text footprint so it supports — never overpowers — the property.");
+  if (hf.priceNotDominant || s.conversionPotential < 85) fixes.push("Make the price visually dominant and the CTA punchy — optimize for conversion.");
+  if (hf.weakHierarchy || s.layoutQuality < 85) fixes.push("Establish a strong visual hierarchy: property → headline → price → CTA.");
+  if (hf.uglyCollage || hf.excessiveClutter) fixes.push("No collage and no clutter — one clean, confident composition.");
+  if (hf.excessiveEmptySpace) fixes.push("Remove dead empty space; use intentional, balanced negative space only.");
+  if (hf.looksAiGenerated || hf.notProfessionalAd) fixes.push("Eliminate any AI-generated / Canva / amateur look — refined premium typography, polished lighting, agency-grade finish.");
+  if (s.typographyQuality < 85) fixes.push("Upgrade typography: elegant, modern Hebrew type with confident sizing and spacing.");
+  if (s.premiumFeeling < 85 || s.brandConsistency < 85) fixes.push("Raise the premium feel and brand consistency — restrained palette, luxury tone.");
+  return fixes.join("\n");
+}
+
 /** Build the precise correction prompt from a failed QA (spec §9). */
 export function buildCorrectionPrompt(decision: QaDecision, c: QaCritical, m: SourceManifest): string {
   const fixes: string[] = ["Keep the SAME design, layout and composition — only correct the problems below.", "Preserve the supplied logo and agent photo exactly."];

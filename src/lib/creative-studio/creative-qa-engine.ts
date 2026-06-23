@@ -10,12 +10,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import {
-  providerIsOpenAI, buildSourceManifest, buildAdPrompt, generateAdImageRaw, runCreativeQA, refUrlsFor,
-  type AdSpec, type AdGenAssets, type AdKind,
+  providerIsOpenAI, buildSourceManifest, buildAdPrompt, generateAdImageRaw, runCreativeQA, runCreativeDirectorQA, refUrlsFor,
+  type AdSpec, type AdGenAssets, type AdKind, type CreativeFindings,
 } from "./openai-ad-pipeline";
 import {
-  deriveCritical, decideApproval, buildCorrectionPrompt,
-  type QaScores, type QaCritical, type QaVisionFindings, type SourceManifest,
+  deriveCritical, decideApproval, buildCorrectionPrompt, decideCreative, buildCreativeCorrection,
+  type QaScores, type QaCritical, type QaVisionFindings, type SourceManifest, type CreativeScores,
 } from "./creative-qa";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
@@ -24,7 +24,7 @@ const MAX_ATTEMPTS = 5;
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
   generationId: string | null; imageUrl: string | null; provider: string;
-  scores: QaScores | null; attempts: number; failReasons: string[];
+  scores: QaScores | null; creativeWow: number | null; attempts: number; failReasons: string[];
 }
 
 /** When QA can't run (no vision response), treat everything as failed — we can
@@ -53,9 +53,9 @@ interface OrchestratorParams {
 
 export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Promise<AdGenOutcome> {
   // Full-ad generation + QA is an OpenAI capability; otherwise the caller falls back.
-  if (!providerIsOpenAI()) return { status: "no_provider", generationId: null, imageUrl: null, provider: "mock", scores: null, attempts: 0, failReasons: ["ספק AI לא מוגדר"] };
+  if (!providerIsOpenAI()) return { status: "no_provider", generationId: null, imageUrl: null, provider: "mock", scores: null, creativeWow: null, attempts: 0, failReasons: ["ספק AI לא מוגדר"] };
   const refUrls = refUrlsFor(p.assets);
-  if (!refUrls.length) return { status: "no_provider", generationId: null, imageUrl: null, provider: "openai", scores: null, attempts: 0, failReasons: ["אין נכסים לרפרנס"] };
+  if (!refUrls.length) return { status: "no_provider", generationId: null, imageUrl: null, provider: "openai", scores: null, creativeWow: null, attempts: 0, failReasons: ["אין נכסים לרפרנס"] };
 
   const manifest: SourceManifest = buildSourceManifest(p.spec);
   const { data: genRow } = await db.from("creative_generations").insert({
@@ -65,43 +65,60 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   const generationId = (genRow as { id: string } | null)?.id ?? null;
 
   let correction = ""; let attempts = 0; const allFail: string[] = [];
-  let best: { scores: QaScores; imageUrl: string; attemptId: string } | null = null;
+  let best: { scores: QaScores; creativeWow: number | null; imageUrl: string; attemptId: string } | null = null;
 
   for (let n = 1; n <= MAX_ATTEMPTS; n++) {
     attempts = n;
     const prompt = buildAdPrompt(p.spec, p.assets, correction);
     let img: { b64: string; mime: string } | null = null;
     try { img = await generateAdImageRaw(prompt, refUrls); }
-    catch (e) { allFail.push(String(e).slice(0, 200)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail() }); continue; }
+    catch (e) { allFail.push(String(e).slice(0, 200)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail(), creative: null }); continue; }
 
     const path = `${p.orgId}/qa/${generationId ?? "x"}/${n}-${Date.now()}.png`;
     const { error: upErr } = await db.storage.from(p.bucket).upload(path, Buffer.from(img.b64, "base64"), { contentType: img.mime, upsert: true });
     const imageUrl = upErr ? null : db.storage.from(p.bucket).getPublicUrl(path).data.publicUrl;
 
+    // LAYER 1 — correctness QA (deterministic).
     const findings = await runCreativeQA(img.b64, manifest, p.assets);
     const critical = findings ? deriveCritical(findings, manifest) : allCriticalFail();
     const scores = assembleScores(findings, critical);
     const decision = decideApproval(scores, critical);
 
-    const attemptId = await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl, passed: decision.passed, scores, failReasons: decision.failReasons, findings, manifest, critical });
-
-    if (decision.passed && imageUrl) {
-      if (generationId) await db.from("creative_generations").update({ status: "approved", final_image_url: imageUrl, approved_attempt_id: attemptId, attempts_count: n, overall_score: scores.overall } as never).eq("id", generationId);
-      return { status: "approved", generationId, imageUrl, provider: "openai", scores, attempts: n, failReasons: [] };
+    // LAYER 2 — Creative QA (desirability). Only judged once correctness passes;
+    // BOTH layers must pass to approve. A correct-but-weak ad is regenerated.
+    let creative: CreativeFindings | null = null;
+    let creativeDecision = { passed: false, reasons: ["—"], hardFailures: [] as string[] };
+    if (decision.passed) {
+      creative = await runCreativeDirectorQA(img.b64);
+      creativeDecision = creative
+        ? decideCreative(creative.scores, creative.hardFails, creative.proudToPublish)
+        : { passed: false, reasons: ["Creative QA לא זמין"], hardFailures: [] };
     }
-    if (imageUrl && (!best || scores.overall > best.scores.overall)) best = { scores, imageUrl, attemptId: attemptId ?? "" };
-    correction = buildCorrectionPrompt(decision, critical, manifest);
-    allFail.push(...decision.failReasons);
+    const approved = decision.passed && creativeDecision.passed;
+    const combinedFail = [...decision.failReasons, ...(decision.passed ? creativeDecision.reasons : [])];
+
+    const attemptId = await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl, passed: approved, scores, failReasons: combinedFail, findings, manifest, critical, creative: creative?.scores ?? null });
+
+    if (approved && imageUrl) {
+      if (generationId) await db.from("creative_generations").update({ status: "approved", final_image_url: imageUrl, approved_attempt_id: attemptId, attempts_count: n, overall_score: creative?.scores.overallWow ?? scores.overall } as never).eq("id", generationId);
+      return { status: "approved", generationId, imageUrl, provider: "openai", scores, creativeWow: creative?.scores.overallWow ?? null, attempts: n, failReasons: [] };
+    }
+    if (imageUrl && (!best || scores.overall > best.scores.overall)) best = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl, attemptId: attemptId ?? "" };
+    // Build the next correction: fix correctness first; if correct but not
+    // desirable, send the creative-director's design feedback instead.
+    if (!decision.passed) correction = buildCorrectionPrompt(decision, critical, manifest);
+    else if (creative && !creativeDecision.passed) correction = buildCreativeCorrection(creative.scores, creative.hardFails);
+    allFail.push(...combinedFail);
   }
 
   if (generationId) await db.from("creative_generations").update({ status: "manual_review", attempts_count: attempts, overall_score: best?.scores.overall ?? 0 } as never).eq("id", generationId);
-  return { status: "manual_review", generationId, imageUrl: best?.imageUrl ?? null, provider: "openai", scores: best?.scores ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12) };
+  return { status: "manual_review", generationId, imageUrl: best?.imageUrl ?? null, provider: "openai", scores: best?.scores ?? null, creativeWow: best?.creativeWow ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12) };
 }
 
 interface AttemptRecord {
   generationId: string | null; orgId: string; n: number; prompt: string; correction: string;
   imageUrl: string | null; passed: boolean; scores: QaScores; failReasons: string[];
-  findings: QaVisionFindings | null; manifest: SourceManifest; critical: QaCritical;
+  findings: QaVisionFindings | null; manifest: SourceManifest; critical: QaCritical; creative: CreativeScores | null;
 }
 async function recordAttempt(db: DB, a: AttemptRecord): Promise<string | null> {
   if (!a.generationId) return null;
@@ -109,7 +126,7 @@ async function recordAttempt(db: DB, a: AttemptRecord): Promise<string | null> {
   const { data: att } = await db.from("creative_generation_attempts").insert({
     generation_id: a.generationId, org_id: a.orgId, attempt_number: a.n, prompt: a.prompt, correction_prompt: a.correction || null,
     image_url: a.imageUrl, qa_status: a.passed ? "passed" : "failed",
-    qa_report_json: { critical: a.critical, findings: a.findings ? { detectedPhone: a.findings.detectedPhone, detectedPrice: a.findings.detectedPrice, detectedAgentName: a.findings.detectedAgentName, detectedCity: a.findings.detectedCity } : null } as never,
+    qa_report_json: { critical: a.critical, creative: a.creative, findings: a.findings ? { detectedPhone: a.findings.detectedPhone, detectedPrice: a.findings.detectedPrice, detectedAgentName: a.findings.detectedAgentName, detectedCity: a.findings.detectedCity } : null } as never,
     text_accuracy_score: s.textAccuracy, numeric_accuracy_score: s.numericAccuracy, brand_score: s.brand, layout_score: s.layout,
     readability_score: s.readability, asset_integrity_score: s.assetIntegrity, real_estate_relevance_score: s.realEstateRelevance, overall_score: s.overall,
     fail_reasons: a.failReasons as never,
