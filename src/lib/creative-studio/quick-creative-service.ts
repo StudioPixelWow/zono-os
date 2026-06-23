@@ -344,26 +344,32 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
           };
           const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind: "property", template: b.designPlan.family, spec: adToSpec(b.ad, "property", g.input, brand.snapshot), assets, bucket: VISUAL_BUCKET });
-          if (outcome.status === "approved" && outcome.imageUrl) {
-            return { ...base,
+          // SHOW ANY REAL GENERATED IMAGE. If a full AI ad image was produced — even
+          // if the strict 2-layer QA didn't fully approve it (gpt-image-1 often trips
+          // the Hebrew-text gate) — we still surface it so the agent SEES the result,
+          // badged with its QA status. We only hide it when no image exists at all.
+          if (outcome.imageUrl) {
+            const passed = outcome.status === "approved";
+            return { ...base, status: passed ? "generated" : "needs_review",
               render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
-              image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
-              quality_status: "passed",
-              critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
-              creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
+              image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
+              image_error: passed ? null : (outcome.failReasons.join(" · ").slice(0, 500) || null),
+              quality_status: passed ? "passed" : "review",
+              critic_summary: passed
+                ? `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`
+                : `${isTop ? "★ קונספט מוביל. " : ""}מודעת AI נוצרה · ממתין לאישור QA סופי · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
+              creative_selection_metadata: { ...selMeta, mode: passed ? "ai_full_ad" : "ai_full_ad_review", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
             };
           }
-          // FINAL_AD_IMAGE_ONLY (default ON): a creative is ONLY a real AI-generated
-          // ad image. If generation/QA failed, we DO NOT fall back to the
-          // deterministic card renderer — we persist a FAILED row (no card) so the
-          // UI shows an explicit "image generation failed" state.
+          // No image at all (no provider, or generation threw). With strict mode ON
+          // (default) we surface an explicit error instead of a deterministic card.
           if (FINAL_AD_IMAGE_ONLY) {
             return { ...base, status: "failed",
               render_data: { failed: true, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel } } as unknown as Json,
               image_url: null, image_provider: outcome.provider, image_status: "failed",
               image_error: (outcome.status === "no_provider" ? "ספק AI לא מוגדר (OPENAI_API_KEY / ZONO_IMAGE_PROVIDER=openai)" : (outcome.failReasons.join(" · ") || "יצירת התמונה נכשלה")).slice(0, 500),
               quality_status: "failed",
-              critic_summary: `יצירת התמונה נכשלה — ${outcome.status === "no_provider" ? "ספק ה-AI אינו מוגדר" : "אף גרסה לא עברה QA"} (${b.triggerLabel}).`,
+              critic_summary: `יצירת התמונה נכשלה — ${outcome.status === "no_provider" ? "ספק ה-AI אינו מוגדר" : "לא הופקה תמונה"} (${b.triggerLabel}).`,
               is_hidden_due_to_quality: true,
               creative_selection_metadata: { ...selMeta, mode: "failed", trigger: b.trigger, isTopConcept: isTop, wow: w, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
             };
