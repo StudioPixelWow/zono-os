@@ -27,8 +27,18 @@ export async function searchEverything(query: string): Promise<SearchGroup[]> {
   const like = `%${q}%`;
   const groups: SearchGroup[] = [];
 
-  const [props, buyers, sellers, brokers, competitors, ext, agents] = await Promise.all([
-    supabase.from("properties").select("id,title,city,neighborhood,price,status,formatted_address,building_number,description,marketing_description,location").eq("org_id", orgId).neq("status", "archived").limit(400),
+  // Property text match across all common address/name fields, at the DB level so
+  // it scans the WHOLE table (not just a 400-row prefix that synced external
+  // inventory could otherwise fill, hiding manually-created listings).
+  const propOr = ["title", "city", "neighborhood", "formatted_address", "building_number", "description", "marketing_description"]
+    .map((c) => `${c}.ilike.${like}`).join(",");
+
+  const [propsDirect, propsManual, buyers, sellers, brokers, competitors, ext, agents] = await Promise.all([
+    // (a) Whole-table, punctuation-exact match.
+    supabase.from("properties").select("id,title,city,neighborhood,price,formatted_address,building_number").eq("org_id", orgId).neq("status", "archived").or(propOr).limit(30),
+    // (b) Manually-created listings only, newest first — kept separate so the
+    //     gershayim-tolerant JS filter below always sees the user's own properties.
+    supabase.from("properties").select("id,title,city,neighborhood,price,formatted_address,building_number,description,marketing_description,location").eq("org_id", orgId).eq("is_external_inventory", false).neq("status", "archived").order("created_at", { ascending: false }).limit(400),
     supabase.from("buyers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("sellers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("broker_profiles").select("id,display_name,agency_name").eq("org_id", orgId).or(`display_name.ilike.${like},agency_name.ilike.${like}`).limit(LIMIT),
@@ -41,18 +51,21 @@ export async function searchEverything(query: string): Promise<SearchGroup[]> {
 
   // Surface any properties-query failure (e.g. RLS / missing column) instead of
   // silently returning zero manual properties while external listings still work.
-  if (props.error) console.error("[search] properties query failed:", props.error.message);
+  if (propsDirect.error) console.error("[search] properties (direct) query failed:", propsDirect.error.message);
+  if (propsManual.error) console.error("[search] properties (manual) query failed:", propsManual.error.message);
 
-  // Tolerant, punctuation-insensitive match across the property's text fields.
-  // Includes the `location` JSON (older manual listings stored city/neighborhood
-  // only inside it) plus description/marketing copy, so manual properties are
-  // found wherever their address text actually lives.
+  // Gershayim-tolerant match over the user's own listings (so "קקל" matches
+  // "קק״ל" and the address text inside the `location` JSON is searched too).
   const qn = norm(q);
-  const matchedProps = (props.data ?? []).filter((p) => {
+  const jsMatched = (propsManual.data ?? []).filter((p) => {
     const locText = p.location ? JSON.stringify(p.location) : null;
     return [p.title, p.city, p.neighborhood, p.formatted_address, p.building_number, p.description, p.marketing_description, locText]
       .some((f) => norm(f as string | null).includes(qn));
-  }).slice(0, LIMIT);
+  });
+  // Merge whole-table exact matches + tolerant manual matches, dedup by id.
+  const propsById = new Map<string, { id: string; title: string | null; city: string | null; neighborhood: string | null; price: number | null }>();
+  for (const p of [...(propsDirect.data ?? []), ...jsMatched]) propsById.set(p.id, p);
+  const matchedProps = [...propsById.values()].slice(0, LIMIT);
   push("properties", "נכסים", "Building", matchedProps.map((p) => ({
     id: p.id, title: p.title || p.neighborhood || p.city || "נכס", subtitle: [p.neighborhood, p.city, p.price ? `₪${Number(p.price).toLocaleString("he-IL")}` : null].filter(Boolean).join(" · ") || null, href: `/properties/${p.id}`,
   })));
