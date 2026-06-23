@@ -771,7 +771,141 @@ const GOLD = "#C9A14A";
 // All Hebrew is system-font + RTL (no AI text). Follows the Creative DNA.
 const AD_FEATURE_ICON: Record<string, string> = { Sofa: "Sofa", Maximize: "Maximize", Sun: "Sun", Building2: "Building2", Car: "Car", ArrowUpDown: "ArrowUpDown", Package: "Package", MapPin: "MapPin" };
 
+// ── DEP-DRIVEN CANVAS — production only ───────────────────────────────────────
+// Executes the Design Execution Plan VERBATIM: every element is placed by the
+// DEP's zone rect (% of canvas), sized by the DEP type scale, shown/hidden by the
+// DEP flags. It invents NO layout, copy, hierarchy, concept, image, Hebrew or
+// logo — all strings/assets are the locked real values from `ad`. 1:1 square.
+function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: DesignExecutionPlan; scale?: number; refId?: string }) {
+  const pal = ad.palette; const T = dep.typography; const f = dep.flags;
+  const bp = 14 * scale; const fs = (m: number) => `${bp * m}px`;
+  const pct = (n: number) => `${n}%`;
+  const shadow = { textShadow: "0 2px 14px rgba(0,0,0,0.6)" } as React.CSSProperties;
+  const zoneBox = (zn: DesignExecutionPlan["zones"]["headline"], extra?: React.CSSProperties): React.CSSProperties => ({
+    position: "absolute", top: pct(zn.top), left: pct(zn.left), width: pct(zn.width), height: pct(zn.height),
+    display: "flex", flexDirection: "column", justifyContent: "center",
+    alignItems: zn.align === "center" ? "center" : zn.align === "end" ? "flex-end" : "flex-start",
+    textAlign: zn.align, ...extra,
+  });
+  const Z = dep.zones;
+  const initials = (ad.agentName || "").trim().slice(0, 1) || "ZO";
+
+  return (
+    <div id={refId} dir="rtl" style={{ position: "relative", aspectRatio: `${dep.canvas.width} / ${dep.canvas.height}`, width: "100%", overflow: "hidden", borderRadius: 14 * scale, background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.text, fontFamily: "inherit" }}>
+      {/* IMAGE ZONE — locked real property photo */}
+      {Z.image.shown && (
+        <div style={{ position: "absolute", top: pct(Z.image.top), left: pct(Z.image.left), width: pct(Z.image.width), height: pct(Z.image.height), overflow: "hidden", borderRadius: dep.family === "premium_clean" ? 16 * scale : 0 }}>
+          {ad.propertyImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ad.propertyImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.muted, fontSize: fs(0.8) }}>אין תמונת נכס</div>}
+          <div style={{ position: "absolute", inset: 0, background: f.propertyImageDominant ? "linear-gradient(180deg, rgba(0,0,0,0.45), transparent 35%, rgba(0,0,0,0.7))" : "linear-gradient(180deg, transparent 45%, rgba(0,0,0,0.55))" }} />
+        </div>
+      )}
+
+      {/* LOGO ZONE — real logo file only (never recreated as a mark) */}
+      {Z.logo.shown && (ad.logoUrl || ad.logoText) && (
+        <div style={zoneBox(Z.logo, { alignItems: Z.logo.align === "end" ? "flex-end" : "flex-start" })}>
+          {ad.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ad.logoUrl} alt="" style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
+          ) : <span style={{ fontSize: fs(0.95), fontWeight: 900, color: pal.text, opacity: 0.9 }}>{ad.logoText}</span>}
+        </div>
+      )}
+
+      {/* BADGE ZONE */}
+      {Z.badge.shown && ad.badge && (
+        <div style={zoneBox(Z.badge)}>
+          <span style={{ background: pal.accent, color: pal.onAccent, fontSize: fs(0.8), fontWeight: 900, padding: `${4 * scale}px ${10 * scale}px`, borderRadius: 999, whiteSpace: "nowrap" }}>{ad.badge}</span>
+        </div>
+      )}
+
+      {/* HEADLINE ZONE — exact Hebrew string, system font, RTL */}
+      {Z.headline.shown && (
+        <div style={zoneBox(Z.headline)}>
+          <div style={{ color: "#fff", fontSize: fs(T.headline), fontWeight: T.headlineWeight, lineHeight: 1.05, ...shadow }}>{ad.headline}</div>
+        </div>
+      )}
+      {/* SUBHEADLINE ZONE */}
+      {Z.subheadline.shown && ad.subheadline && (
+        <div style={zoneBox(Z.subheadline)}>
+          <div style={{ color: pal.accent, fontSize: fs(T.subheadline), fontWeight: 800, ...shadow }}>{ad.subheadline}</div>
+        </div>
+      )}
+
+      {/* PRICE ZONE — dominant block vs inline, per DEP flags */}
+      {Z.price.shown && ad.price && (
+        <div style={zoneBox(Z.price)}>
+          {f.priceDominant ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 * scale, background: pal.accent, color: pal.onAccent, borderRadius: 16 * scale, padding: `${10 * scale}px ${16 * scale}px`, width: "100%", height: "100%", boxShadow: `0 ${10 * scale}px ${26 * scale}px ${pal.accent}66` }}>
+              <span style={{ fontSize: fs(0.8), fontWeight: 800, opacity: 0.85 }}>{ad.priceLabel}</span>
+              <span style={{ fontSize: fs(T.price), fontWeight: 900, lineHeight: 1, letterSpacing: -0.5 }}>{ad.price}</span>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 * scale }}>
+              <span style={{ color: pal.muted, fontSize: fs(0.78), fontWeight: 700 }}>{ad.priceLabel}</span>
+              <span style={{ color: pal.accent, fontSize: fs(T.price), fontWeight: 900 }}>{ad.price}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* FEATURES ZONE — metric grid (editorial hero) vs glass chip row */}
+      {Z.features.shown && ad.features.length > 0 && (
+        <div style={zoneBox(Z.features, { justifyContent: "flex-start" })}>
+          {Z.features.emphasis === "hero" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 * scale, width: "100%" }}>
+              {ad.features.slice(0, 4).map((ft, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 * scale, padding: `${7 * scale}px ${9 * scale}px` }}>
+                  <span style={{ color: pal.text, fontSize: fs(T.featureValue), fontWeight: 900, lineHeight: 1 }}>{ft.value || "✓"}</span>
+                  <span style={{ display: "block", color: pal.muted, fontSize: fs(T.featureLabel), fontWeight: 700 }}>{ft.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 * scale, width: "100%", justifyContent: Z.features.align === "center" ? "center" : "flex-start" }}>
+              {ad.features.slice(0, 5).map((ft, i) => (
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4 * scale, background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 999, padding: `${4 * scale}px ${9 * scale}px`, color: "#fff", fontSize: fs(T.featureLabel), fontWeight: 700, backdropFilter: "blur(6px)" }}>
+                  <span style={{ color: pal.accent, display: "inline-flex" }}><Icon name={AD_FEATURE_ICON[ft.icon] ?? "Dot"} size={13 * scale} /></span>
+                  {ft.value ? `${ft.value} ${ft.label}` : ft.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CTA ZONE */}
+      {Z.cta.shown && ad.cta && (
+        <div style={zoneBox(Z.cta)}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6 * scale, background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: fs(T.cta), fontWeight: 900, padding: `${9 * scale}px ${16 * scale}px`, borderRadius: 999, whiteSpace: "nowrap", boxShadow: `0 ${8 * scale}px ${20 * scale}px ${pal.accent}55` }}>
+            <Icon name="MessageCircle" size={14 * scale} /> {ad.cta}
+          </div>
+        </div>
+      )}
+
+      {/* AGENT ZONE — only when DEP says showAgentImage; photo only if real */}
+      {Z.agent.shown && f.agentShown && (ad.agentName || ad.agentPhone || f.agentPhotoShown) && (
+        <div style={zoneBox(Z.agent, { flexDirection: "row", justifyContent: Z.agent.align === "end" ? "flex-end" : "flex-start", gap: 8 * scale })}>
+          {f.agentPhotoShown && ad.agentPhoto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ad.agentPhoto} alt="" style={{ width: 40 * scale, height: 40 * scale, borderRadius: 999, objectFit: "cover", border: `2px solid ${pal.accent}`, flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 36 * scale, height: 36 * scale, borderRadius: 999, display: "grid", placeItems: "center", background: pal.accent, color: pal.onAccent, fontSize: fs(1.1), fontWeight: 900, flexShrink: 0 }}>{initials}</div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            {ad.agentName && <span style={{ color: "#fff", fontSize: fs(T.agent), fontWeight: 900, whiteSpace: "nowrap", ...shadow }}>{ad.agentName}</span>}
+            {ad.agentPhone && <span style={{ color: pal.muted, fontSize: fs(T.agent * 0.92), fontWeight: 700, direction: "ltr" }}>{ad.agentPhone}</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FinalAdRenderer({ ad, scale = 1, refId }: { ad: FinalAdView; scale?: number; refId?: string }) {
+  // PRODUCTION ONLY: execute the approved Design Execution Plan verbatim.
+  if (ad.designPlan) return <DepCanvas ad={ad} dep={ad.designPlan} scale={scale} refId={refId} />;
   const pal = ad.palette;
   const s = (n: number) => n * scale;
   const initials = (ad.agentName || "").trim().slice(0, 1) || "ZO";
@@ -1458,6 +1592,7 @@ function CreativeDebugPanel({ ad, o }: { ad: FinalAdView; o: QuickOutput }) {
         <DebugKV k="type scale (H/price/cta)" v={`${ad.designPlan.typography.headline} / ${ad.designPlan.typography.price} / ${ad.designPlan.typography.cta}`} />
         <DebugKV k="background" v={`${ad.designPlan.backgroundTreatment.mode} · ${ad.designPlan.backgroundTreatment.scrim}`} />
         <DebugKV k="effects" v={ad.designPlan.effects.join(", ")} />
+        <DebugKV k="zones מבוצעים" v={Object.entries(ad.designPlan.zones).filter(([, z]) => (z as { shown: boolean }).shown).map(([n]) => n).join(", ")} />
         <DebugKV k="not-a-card" v={ad.designPlan.notCardProof.reasons.join(" · ")} />
       </>)}
       {section("Final Prompt (AI environment — text-free)", <p dir="ltr" className="text-muted whitespace-pre-wrap break-words">{t?.finalPrompt ?? adr?.aiEnvironment.imageModelPrompt ?? "—"}</p>)}
