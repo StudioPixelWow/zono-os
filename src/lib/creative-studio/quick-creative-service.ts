@@ -259,7 +259,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
           output_type: g.requestType, variant_name: `${isTop ? "★ " : ""}קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
           render_data: b.render as unknown as Json, headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
-          brand_match_score: w.trust, readability_score: w.readability, conversion_score: w.attention, seller_lead_score: null, buyer_lead_score: null, overall_score: w.overall, status: "generated",
+          brand_match_score: w.trust, readability_score: w.readability, conversion_score: w.attention, seller_lead_score: 0, buyer_lead_score: 0, overall_score: w.overall, status: "generated",
           quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
           overall_quality_score: w.overall, wow_score: w.overall,
           critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · WOW ${w.overall} (יוקרה ${w.luxury}/אמון ${w.trust}/קריאות ${w.readability}/תשומת-לב ${w.attention}/פרימיום ${w.premiumFeel}/אימפקט ${w.visualImpact}). ${w.critique.director}`,
@@ -269,10 +269,13 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           creative_selection_metadata: { ...selMeta, family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, finalPostReadiness: ready, warnings: b.scores.warnings, blockers: b.scores.blockers, layout: b.designPlan.layout } as unknown as Json,
         };
       });
-      const { data: insP } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
+      const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
+      if (insErr) { console.error("[quick-creative][property_ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
       const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
+      // Report the number ACTUALLY persisted, never the intended count.
+      if (!adIds.length) throw new Error("שמירת המודעות נכשלה — לא נוצרו פריטים.");
       await generateAdScenesForOutputs(supabase, orgId, adIds);
-      return { requestId, created: finalRows.length };
+      return { requestId, created: adIds.length };
     }
   }
 
