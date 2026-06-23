@@ -175,29 +175,6 @@ function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: Brand
     emotionalFeel: ad.artDirection?.emotionalFeel ?? null, visualStory: ad.artDirection?.visualStory ?? null,
   };
 }
-/** STAGE 7 — build the Canvas-Repair payload: the AI image becomes the HERO
- *  background and ZONO renders its own guaranteed-correct text on top. Every
- *  field is taken from the locked source data, so the rendered text is exact. */
-function buildCanvasRepair(b: FinalAdBuilt, brand: BrandSnapshot, input: QuickInput, hero: string) {
-  const ad = b.ad;
-  return {
-    hero,
-    headline: ad.headline,
-    subheadline: ad.subheadline ?? null,
-    priceLabel: ad.priceLabel ?? "מחיר",
-    price: ad.price ?? null,
-    cta: ad.cta,
-    agentName: ad.agentName ?? brand.agentName ?? null,
-    agentPhone: ad.agentPhone ?? brand.agentWhatsapp ?? null,
-    officeName: brand.officeName ?? null,
-    logoUrl: brand.officeLogo ?? null,
-    agentPhoto: brand.agentPhoto ?? null,
-    location: [input.address, input.city].filter(Boolean).join(", ") || null,
-    features: ad.features.slice(0, 3).map((f) => (f.value ? `${f.value} ${f.label}` : f.label)),
-    palette: { bg: ad.palette.bg, bg2: ad.palette.bg2, accent: ad.palette.accent },
-  };
-}
-
 /** Map a quick variation (sold / testimonial) → AdSpec. */
 function variationToSpec(v: QuickVar, input: QuickInput, brand: BrandSnapshot, kind: AdKind): AdSpec {
   const priceNum = Number(input.price);
@@ -372,28 +349,19 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           // the Hebrew-text gate) — we still surface it so the agent SEES the result,
           // badged with its QA status. We only hide it when no image exists at all.
           if (outcome.imageUrl) {
+            // OpenAI self-correction returns the latest generated image. If QA fully
+            // passed → ship as approved. Otherwise (after up to 3 generations) we
+            // STILL return the most recent AI image — never block — badged for review.
             const passed = outcome.status === "approved";
-            if (passed) {
-              // Pure AI ad: every text element verified by Vision-QA. Ship as-is.
-              return { ...base, status: "generated",
-                render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
-                image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
-                image_error: null, quality_status: "passed",
-                critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
-                creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
-              };
-            }
-            // STAGE 7 — CANVAS REPAIR. After the repair cycle the AI text still didn't
-            // fully pass QA. Rather than ship possibly-wrong AI text, keep the AI image
-            // as the HERO background and re-render ZONO's OWN guaranteed-correct text
-            // (headline / price / phone / agent / logo) on top → 100% text accuracy.
-            const repair = buildCanvasRepair(b, brand.snapshot, g.input, outcome.imageUrl);
-            return { ...base, status: "generated",
-              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: false, canvasRepair: repair, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
-              image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "canvas_repair",
-              image_error: null, quality_status: "passed",
-              critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}תיקון קנבס — תמונת AI כרקע + טקסט מאומת 100% (${b.triggerLabel}) · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות.`,
-              creative_selection_metadata: { ...selMeta, mode: "canvas_repair", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+            return { ...base, status: passed ? "generated" : "needs_review",
+              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
+              image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
+              image_error: passed ? null : (outcome.failReasons.join(" · ").slice(0, 500) || null),
+              quality_status: passed ? "passed" : "review",
+              critic_summary: passed
+                ? `${isTop ? "★ קונספט מוביל. " : ""}עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`
+                : `${isTop ? "★ קונספט מוביל. " : ""}גרסה אחרונה לאחר ${outcome.attempts} ניסיונות תיקון עצמי של OpenAI · ממתין לאישור QA סופי (${b.triggerLabel}).`,
+              creative_selection_metadata: { ...selMeta, mode: passed ? "ai_full_ad" : "ai_self_correct", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
             };
           }
           // No image at all (no provider, or generation threw). With strict mode ON

@@ -68,18 +68,26 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   const generationId = (genRow as { id: string } | null)?.id ?? null;
 
   let correction = ""; let attempts = 0; const allFail: string[] = [];
-  let best: { scores: QaScores; creativeWow: number | null; imageUrl: string; attemptId: string } | null = null;
+  // SELF-CORRECTION pipeline: we always keep the LATEST generated image so that
+  // after MAX_ATTEMPTS we return it regardless of QA — never blocking the user.
+  let last: { scores: QaScores; creativeWow: number | null; imageUrl: string } | null = null;
+  let prevImageUrl: string | null = null;
 
   for (let n = 1; n <= MAX_ATTEMPTS; n++) {
     attempts = n;
     const prompt = buildAdPrompt(p.spec, p.assets, correction);
+    // On a correction pass, ATTACH the previous generated image as the base to
+    // edit (first ref) so OpenAI fixes ONLY the flagged text and preserves the
+    // layout/composition/branding — it never redesigns or starts a new concept.
+    const callRefs = correction && prevImageUrl ? [prevImageUrl, ...refUrls].slice(0, 6) : refUrls;
     let img: { b64: string; mime: string } | null = null;
-    try { img = await generateAdImageRaw(prompt, refUrls); }
+    try { img = await generateAdImageRaw(prompt, callRefs); }
     catch (e) { allFail.push(String(e).slice(0, 200)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail(), creative: null }); continue; }
 
     const path = `${p.orgId}/qa/${generationId ?? "x"}/${n}-${Date.now()}.png`;
     const { error: upErr } = await db.storage.from(p.bucket).upload(path, Buffer.from(img.b64, "base64"), { contentType: img.mime, upsert: true });
     const imageUrl = upErr ? null : db.storage.from(p.bucket).getPublicUrl(path).data.publicUrl;
+    if (imageUrl) prevImageUrl = imageUrl;
 
     // LAYER 1 — correctness QA (deterministic).
     const findings = await runCreativeQA(img.b64, manifest, p.assets);
@@ -106,7 +114,9 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
       if (generationId) await db.from("creative_generations").update({ status: "approved", final_image_url: imageUrl, approved_attempt_id: attemptId, attempts_count: n, overall_score: creative?.scores.overallWow ?? scores.overall } as never).eq("id", generationId);
       return { status: "approved", generationId, imageUrl, provider: "openai", scores, creativeWow: creative?.scores.overallWow ?? null, attempts: n, failReasons: [] };
     }
-    if (imageUrl && (!best || scores.overall > best.scores.overall)) best = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl, attemptId: attemptId ?? "" };
+    // Keep the LATEST generated image (not the "best") — the spec returns the
+    // most recent self-correction result after the retry budget is exhausted.
+    if (imageUrl) last = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl };
     // Build the next correction: fix correctness first; if correct but not
     // desirable, send the creative-director's design feedback instead.
     if (!decision.passed) correction = buildCorrectionPrompt(decision, critical, manifest);
@@ -114,8 +124,9 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
     allFail.push(...combinedFail);
   }
 
-  if (generationId) await db.from("creative_generations").update({ status: "manual_review", attempts_count: attempts, overall_score: best?.scores.overall ?? 0 } as never).eq("id", generationId);
-  return { status: "manual_review", generationId, imageUrl: best?.imageUrl ?? null, provider: "openai", scores: best?.scores ?? null, creativeWow: best?.creativeWow ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12) };
+  // Retry budget (3) exhausted — RETURN THE LATEST generation regardless of QA.
+  if (generationId) await db.from("creative_generations").update({ status: "manual_review", attempts_count: attempts, final_image_url: last?.imageUrl ?? null, overall_score: last?.scores.overall ?? 0 } as never).eq("id", generationId);
+  return { status: "manual_review", generationId, imageUrl: last?.imageUrl ?? null, provider: "openai", scores: last?.scores ?? null, creativeWow: last?.creativeWow ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12) };
 }
 
 interface AttemptRecord {

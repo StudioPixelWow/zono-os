@@ -71,8 +71,7 @@ type Visual = Record<string, unknown> & {
 type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
 type WowView = { luxury: number; trust: number; readability: number; attention: number; premiumFeel: number; visualImpact: number; overall: number; approved: boolean; threshold: number; weakest?: { axis: string; score: number }; critique?: { director: string; artDirector: string; marketing: string; conversion: string } };
 type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance; designPlan?: DesignExecutionPlan; wow?: WowView; wowCandidates?: { template: string; familyLabel: string; overall: number; approved: boolean }[]; isTopConcept?: boolean };
-type CanvasRepair = { hero: string; headline: string; subheadline: string | null; priceLabel: string; price: string | null; cta: string; agentName: string | null; agentPhone: string | null; officeName: string | null; logoUrl: string | null; agentPhoto: string | null; location: string | null; features: string[]; palette: { bg: string; bg2: string; accent: string } };
-type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView; fullAd?: boolean; canvasRepair?: CanvasRepair | null; qa?: { overall?: number; score?: number; creativeWow?: number | null } | null };
+type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView; fullAd?: boolean; qa?: { overall?: number; score?: number; creativeWow?: number | null } | null };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
   brand_match_score: number; marketing_match_score: number; readability_score: number; hierarchy_score: number; conversion_score: number; is_approved: boolean; is_favorite: boolean;
@@ -1566,57 +1565,6 @@ function AdminCandidatesPanel({ et, eid }: { et: string; eid: string }) {
   );
 }
 
-/** STAGE 7 — Canvas-Repair renderer: the AI image is the HERO; ZONO draws its
- *  own guaranteed-correct Hebrew text (RTL) on top. 100% text accuracy. */
-function CanvasRepairAd({ r, large }: { r: CanvasRepair; large?: boolean }) {
-  const bg = r.palette?.bg || "#0F1B2D";
-  const accent = r.palette?.accent || "#C9A14A";
-  return (
-    <div dir="rtl" className="border-line relative w-full overflow-hidden rounded-xl border" style={{ aspectRatio: "4 / 5" }}>
-      {/* AI hero background */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={r.hero} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      <div className="absolute inset-0" style={{ background: `linear-gradient(to top, ${bg} 4%, ${bg}E6 26%, transparent 62%)` }} />
-      {/* Logo / office top-right */}
-      <div className="absolute right-3 top-3 flex items-center gap-2">
-        {r.logoUrl
-          // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={r.logoUrl} alt="" className="h-9 w-auto rounded bg-white/85 p-1 object-contain" />
-          : r.officeName ? <span className="rounded-md bg-white/85 px-2 py-1 text-[11px] font-black" style={{ color: bg }}>{r.officeName}</span> : null}
-      </div>
-      {/* Text panel */}
-      <div className={`absolute inset-x-0 bottom-0 flex flex-col gap-2 text-white ${large ? "p-6" : "p-4"}`}>
-        {r.price && (
-          <div className="flex items-baseline gap-2">
-            <span className={`font-black tabular-nums ${large ? "text-4xl" : "text-2xl"}`} style={{ color: accent }} dir="ltr">{r.price}</span>
-            <span className="text-xs font-bold text-white/70">{r.priceLabel}</span>
-          </div>
-        )}
-        <p className={`font-black leading-tight ${large ? "text-2xl" : "text-base"}`}>{r.headline}</p>
-        {r.subheadline && <p className={`font-medium text-white/85 ${large ? "text-base" : "text-xs"}`}>{r.subheadline}</p>}
-        {r.features.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {r.features.map((f, i) => <span key={i} className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold backdrop-blur">{f}</span>)}
-          </div>
-        )}
-        {r.location && <p className="text-[11px] font-semibold text-white/70">{r.location}</p>}
-        <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/20 pt-2">
-          <div className="flex items-center gap-2">
-            {r.agentPhoto
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={r.agentPhoto} alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-white/40" /> : null}
-            <div className="leading-tight">
-              {r.agentName && <p className="text-[12px] font-extrabold">{r.agentName}</p>}
-              {r.agentPhone && <p className="text-[12px] font-bold" style={{ color: accent }} dir="ltr">{r.agentPhone}</p>}
-            </div>
-          </div>
-          {r.cta && <span className="rounded-lg px-2.5 py-1 text-[11px] font-black" style={{ background: accent, color: bg }}>{r.cta}</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -1630,8 +1578,6 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   // FINAL_AD_IMAGE_ONLY: the thumbnail must BE the AI poster (or an error), never a card.
   const isFinalImage = Boolean(o.image_url) && (o.image_status === "ai_full_ad" || o.image_status === "generated" || Boolean(o.render_data?.fullAd));
   const isFailed = !o.image_url && (o.image_status === "failed" || o.quality_status === "failed");
-  // STAGE 7 — canvas-repair output: AI hero + ZONO's own verified text on top.
-  const repair = o.image_status === "canvas_repair" ? ((o.render_data?.canvasRepair as CanvasRepair | null | undefined) ?? undefined) : undefined;
   const adScores = ad?.scores ?? (o.creative_selection_metadata as unknown as Partial<FinalAdScores> | undefined);
   const adWarnings = adScores?.warnings ?? [];
   // The real property photo comes from the final ad or the render's image_placeholder.
@@ -1647,10 +1593,7 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           real photo/assets on top of the AI's TEXT-FREE background. The AI never
           writes Hebrew and never invents assets. */}
       <div className="relative">
-        {repair ? (
-          // STAGE 7 — AI hero background + ZONO's guaranteed-correct text overlay.
-          <CanvasRepairAd r={repair} />
-        ) : isFinalImage ? (
+        {isFinalImage ? (
           // FINAL_AD_IMAGE_ONLY: the thumbnail IS the full AI-generated poster — no
           // card renderer, no overlays. This is the finished social-media ad.
           // eslint-disable-next-line @next/next/no-img-element
@@ -1667,9 +1610,6 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         )}
         {isFinalImage && (
           <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">✓ עבר QA{o.render_data?.qa?.creativeWow ? ` · WOW ${o.render_data.qa.creativeWow}` : ""}</span>
-        )}
-        {repair && (
-          <span className="bg-brand-strong text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">✓ טקסט מאומת 100% · תיקון קנבס</span>
         )}
       </div>
       {fullAd && (
@@ -1730,9 +1670,7 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         <button onClick={() => wrap(() => favoriteQuickAction({ outputId: o.id, value: !o.is_favorite, entityType: et, entityId: eid }), `qf-${o.id}`)} className={`font-bold ${o.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={12} /></button>
         <button onClick={() => wrap(() => regenerateQuickAction({ requestId: o.request_id, entityType: et, entityId: eid }), `qg-${o.id}`)} className="text-muted font-bold"><Icon name="Sparkles" size={12} /></button>
         <button onClick={() => wrap(() => duplicateQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qd-${o.id}`)} className="text-muted font-bold"><Icon name="Plus" size={12} /></button>
-        {repair ? (
-          <button onClick={() => setAdOnly(true)} className="text-brand-strong font-bold"><Icon name="Maximize2" size={12} /> מודעה בלבד</button>
-        ) : fullAd && o.image_url ? (
+        {fullAd && o.image_url ? (
           <>
             <button onClick={() => setAdOnly(true)} className="text-brand-strong font-bold"><Icon name="Maximize2" size={12} /> מודעה בלבד</button>
             <a href={o.image_url} download={`zono-ad-${o.id}.png`} target="_blank" rel="noreferrer" className="text-brand-strong font-bold"><Icon name="Download" size={12} /> הורד תמונה</a>
@@ -1747,10 +1685,10 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         )}
       </div>
       {/* AD-ONLY JUDGING VIEW — the final creative alone, no card chrome. */}
-      {adOnly && (ad || fullAd || repair) && (
+      {adOnly && (ad || fullAd) && (
         <div onClick={() => setAdOnly(false)} className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black/80 p-4" role="dialog">
-          <div className="w-full max-w-[440px]" onClick={(e) => e.stopPropagation()}>
-            {repair ? <CanvasRepairAd r={repair} large /> : <CreativePreview data={o.render_data} scale={1.6} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />}
+          <div className="w-full max-w-[540px]" onClick={(e) => e.stopPropagation()}>
+            <CreativePreview data={o.render_data} scale={1.6} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
           </div>
           <div className="flex items-center gap-3">
             <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-white" dir="ltr">{fullAd ? "AI · " : ""}{ad?.trigger ?? "ad"} · {ad?.designPlan?.familyLabel ?? "OpenAI"}</span>
