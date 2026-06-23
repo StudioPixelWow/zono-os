@@ -110,7 +110,8 @@
     "highInterest": "Above-average interest in the area",
     "priceBelowMarket": "Below market price",
     "manyViews": "Many views in 7 days",
-    "matchesActiveBuyers": "Matches active buyers"
+    "matchesActiveBuyers": "Matches active buyers",
+    "privateOwner": "Private owner · no agent"
   },
   "competitors": {
     "title": "Competitor Intelligence",

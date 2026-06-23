@@ -78,6 +78,7 @@ function FeaturedPropertyCard({ t, p }: { t: (k: string) => string; p: PropertyC
       <div className="flex flex-col gap-1.5 p-4">
         <p className="text-ink text-sm font-extrabold">{p.title}</p>
         <p className="text-muted text-xs">{p.addressLine}</p>
+        {p.aiInsightKey && <span className="bg-success-soft text-success inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"><Icon name="BadgeCheck" size={11} />{t(p.aiInsightKey)}</span>}
         <p className="text-brand-strong text-lg font-black">{ils(p.price)}</p>
         <div className="flex items-center justify-between">
           {p.aiMatchScore != null && <span className="text-success text-xs font-black">{t("hero.matchScore")} {p.aiMatchScore}%</span>}

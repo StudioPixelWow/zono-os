@@ -8,6 +8,7 @@
 // ============================================================================
 import type { PropertyRow } from "@/lib/properties/labels";
 import { propertyAddressLine, propertyLocation } from "@/lib/properties/labels";
+import type { ExternalListingRow } from "@/lib/external-listings/repository";
 import type {
   ActivityEvent, BuyerIntelligenceItem, CompetitorInsight, DashboardHomeData,
   DashboardKpi, HeatMapZone, MarketTrend, MissionTask, OpportunitySignal,
@@ -36,6 +37,29 @@ function rowToCard(r: PropertyRow): PropertyCard {
     aiMatchScore: score,
     aiInsightKey: score >= 88 ? "aiInsight.highInterest" : "aiInsight.matchesActiveBuyers",
     href: `/properties/${r.id}`,
+  };
+}
+
+/** Private-owner external listing → featured "recommended acquisition" card. */
+function externalToCard(l: ExternalListingRow): PropertyCard {
+  const firstImage = Array.isArray(l.images) && l.images.length > 0 && typeof l.images[0] === "string" ? (l.images[0] as string) : null;
+  const addr = [l.street, l.street_number].filter(Boolean).join(" ") || l.address || l.neighborhood || l.city || l.title || "נכס בבעלות פרטית";
+  return {
+    id: l.id,
+    imageUrl: firstImage,
+    title: l.title || addr,
+    city: l.city ?? "",
+    neighborhood: l.neighborhood ?? "",
+    addressLine: addr,
+    price: l.price ?? 0,
+    rooms: l.rooms,
+    sizeSqm: l.sqm ?? l.area_sqm,
+    floor: l.floor,
+    statusKey: "status.active",
+    badgeKey: "badge.ai_pick",
+    aiMatchScore: Math.round(l.opportunity_score) || null,
+    aiInsightKey: "aiInsight.privateOwner",
+    href: `/external-listings/${l.id}`,
   };
 }
 
@@ -144,15 +168,18 @@ const COMPETITOR_INSIGHTS = [
 
 /** Build the homepage snapshot. Real property rows are woven into the property
  *  surfaces (featured/hot/journey); everything else is production-shaped mock. */
-export function buildDashboardHomeData(opts: { agentName: string; cityName?: string; realProperties?: PropertyRow[] }): DashboardHomeData {
+export function buildDashboardHomeData(opts: { agentName: string; cityName?: string; realProperties?: PropertyRow[]; featuredExternal?: ExternalListingRow | null }): DashboardHomeData {
   const realCards = (opts.realProperties ?? []).map(rowToCard);
   const cards = realCards.length >= 5 ? realCards : [...realCards, ...MOCK_PROPERTIES].slice(0, 6);
   const hot = [...cards].sort((a, b) => (b.aiMatchScore ?? 0) - (a.aiMatchScore ?? 0)).slice(0, 6);
+  // Featured = best private-owner acquisition opportunity (not a broker listing);
+  // fall back to the agent's hottest property only if there's no private lead.
+  const featuredProperty = opts.featuredExternal ? externalToCard(opts.featuredExternal) : hot[0] ?? null;
   return {
     agentName: opts.agentName,
     cityName: opts.cityName || "קרית ביאליק",
     kpis: KPIS,
-    featuredProperty: hot[0] ?? null,
+    featuredProperty,
     heatZones: HEAT_ZONES,
     cityTrendPct: 11,
     opportunities: OPPORTUNITIES,

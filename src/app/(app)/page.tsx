@@ -1,4 +1,5 @@
 import { listProperties, type PropertyRow } from "@/lib/properties/repository";
+import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
 import { getSessionContext } from "@/lib/auth/session";
 import { getDashboardDict } from "@/lib/dashboard-home/i18n";
 import { buildDashboardHomeData } from "@/lib/dashboard-home/data";
@@ -19,8 +20,16 @@ export default async function Home() {
     console.error("[home] properties failed:", e);
   }
 
+  // Recommended property = best private-owner external opportunity (no agent).
+  let featuredExternal: ExternalListingRow | null = null;
+  try {
+    featuredExternal = await externalListingRepository.topPrivateOpportunity();
+  } catch (e) {
+    console.error("[home] private opportunity failed:", e);
+  }
+
   const dict = getDashboardDict("he");
-  const data = buildDashboardHomeData({ agentName, cityName, realProperties: properties });
+  const data = buildDashboardHomeData({ agentName, cityName, realProperties: properties, featuredExternal });
 
   return <DashboardHomeView dict={dict} data={data} />;
 }

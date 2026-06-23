@@ -28,6 +28,21 @@ export const externalListingRepository = {
     ]);
     return { priceDrops: drops.count ?? 0, duplicateCandidates: dups.count ?? 0 };
   },
+  /** Best private-owner opportunity (no broker/agency) — the agent's "recommended
+   *  property to acquire today". has_agent = false → privately owned. */
+  async topPrivateOpportunity(): Promise<ExternalListingRow | null> {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("external_listings")
+      .select("*")
+      .neq("status", "removed")
+      .eq("has_agent", false)
+      .order("opportunity_score", { ascending: false })
+      .order("imported_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data ?? null;
+  },
   async getById(id: string): Promise<ExternalListingRow | null> {
     const supabase = await createClient();
     const { data } = await supabase.from("external_listings").select("*").eq("id", id).maybeSingle();

@@ -1,2 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/components/dashboard-home/DashboardHomeView.tsx", "src/components/search/CommandPalette.tsx"] }
+  "include": ["src/app/(app)/page.tsx", "src/lib/dashboard-home/data.ts", "src/lib/external-listings/repository.ts", "src/components/dashboard-home/DashboardHomeView.tsx"] }
