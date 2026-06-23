@@ -12,6 +12,10 @@ export interface SearchGroup { type: string; label: string; icon: string; hits: 
 
 const LIMIT = 6;
 const esc = (s: string) => s.replace(/[%,()]/g, " ").trim();
+/** Normalize Hebrew for tolerant matching: drop gershayim/quotes, collapse
+ *  spaces, lowercase — so "קקל" matches "קק״ל" and "קק''ל". */
+const norm = (s: string | null | undefined) =>
+  (s ?? "").replace(/[׳״'"`׳״]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 
 export async function searchEverything(query: string): Promise<SearchGroup[]> {
   const { user, profile } = await getSessionContext();
@@ -24,7 +28,7 @@ export async function searchEverything(query: string): Promise<SearchGroup[]> {
   const groups: SearchGroup[] = [];
 
   const [props, buyers, sellers, brokers, competitors, ext, agents] = await Promise.all([
-    supabase.from("properties").select("id,title,city,neighborhood,price,status,formatted_address").eq("org_id", orgId).or(`title.ilike.${like},city.ilike.${like},neighborhood.ilike.${like},formatted_address.ilike.${like}`).limit(LIMIT),
+    supabase.from("properties").select("id,title,city,neighborhood,price,status,formatted_address,building_number").eq("org_id", orgId).neq("status", "archived").limit(400),
     supabase.from("buyers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("sellers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("broker_profiles").select("id,display_name,agency_name").eq("org_id", orgId).or(`display_name.ilike.${like},agency_name.ilike.${like}`).limit(LIMIT),
@@ -35,7 +39,12 @@ export async function searchEverything(query: string): Promise<SearchGroup[]> {
 
   const push = (type: string, label: string, icon: string, hits: SearchHit[]) => { if (hits.length) groups.push({ type, label, icon, hits }); };
 
-  push("properties", "נכסים", "Building", (props.data ?? []).map((p) => ({
+  // Tolerant, punctuation-insensitive match across the property's text fields.
+  const qn = norm(q);
+  const matchedProps = (props.data ?? []).filter((p) =>
+    [p.title, p.city, p.neighborhood, p.formatted_address, p.building_number].some((f) => norm(f as string | null).includes(qn)),
+  ).slice(0, LIMIT);
+  push("properties", "נכסים", "Building", matchedProps.map((p) => ({
     id: p.id, title: p.title || p.neighborhood || p.city || "נכס", subtitle: [p.neighborhood, p.city, p.price ? `₪${Number(p.price).toLocaleString("he-IL")}` : null].filter(Boolean).join(" · ") || null, href: `/properties/${p.id}`,
   })));
   push("buyers", "קונים", "Users", (buyers.data ?? []).map((b) => ({ id: b.id, title: b.full_name, subtitle: b.phone, href: `/buyers/${b.id}` })));

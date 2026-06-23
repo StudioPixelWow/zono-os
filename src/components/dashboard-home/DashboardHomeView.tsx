@@ -109,7 +109,6 @@ function HeroCommandCenter({ t, data }: { t: (k: string) => string; data: Dashbo
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-        {data.featuredProperty && <FeaturedPropertyCard t={t} p={data.featuredProperty} />}
         <div className="flex flex-1 flex-col justify-center gap-4">
           <div>
             <p className="text-muted text-sm">{t("hero.greeting")}, {data.agentName} 👋</p>
@@ -126,7 +125,7 @@ function HeroCommandCenter({ t, data }: { t: (k: string) => string; data: Dashbo
               <span className="text-sm truncate">{t("search.placeholder")}</span>
               <kbd className="bg-surface text-muted ms-auto hidden rounded px-1.5 py-0.5 text-[10px] font-bold sm:inline">⌘K</kbd>
             </button>
-            <Link href="/properties/new" className="bg-brand text-white inline-flex h-11 items-center gap-1.5 rounded-xl px-4 text-sm font-bold">
+            <Link href="/properties/new" className="btn-zono-primary inline-flex h-11 items-center gap-1.5 px-4 text-sm">
               <Icon name="Plus" size={16} />{t("hero.quickAdd")}
             </Link>
           </div>
@@ -144,6 +143,7 @@ function HeroCommandCenter({ t, data }: { t: (k: string) => string; data: Dashbo
             ))}
           </div>
         </div>
+        {data.featuredProperty && <FeaturedPropertyCard t={t} p={data.featuredProperty} />}
       </div>
       <RevealGroup className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {data.kpis.map((k) => <KpiCard key={k.id} t={t} k={k} />)}
@@ -315,32 +315,31 @@ function CompetitorCard({ c }: { c: CompetitorInsight }) {
 function JourneyCard({ t, item }: { t: (k: string) => string; item: PropertyJourneyItem }) {
   const p = item.property;
   return (
-    <div className="bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-[var(--shadow-soft)]">
-      <div className="bg-surface relative aspect-[16/9] overflow-hidden rounded-xl">
+    <div className="bg-card border-line flex h-full flex-col gap-2 rounded-2xl border p-2.5 shadow-[var(--shadow-soft)]">
+      <div className="bg-surface relative aspect-square w-full overflow-hidden rounded-xl">
         {p.imageUrl
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={p.imageUrl} alt={p.title} className="h-full w-full object-cover" />
-          : <div className="text-muted grid h-full place-items-center"><Icon name="Image" size={20} /></div>}
+          ? <img src={p.imageUrl} alt={p.title} className="absolute inset-0 h-full w-full object-cover object-center" />
+          : <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Image" size={20} /></div>}
         {item.alertKey && item.alertTone && <span className={cn("absolute end-2 top-2 rounded-full px-1.5 py-0.5 text-[9px] font-bold", TONE_SOFT[item.alertTone])}>{t(item.alertKey)}</span>}
       </div>
       <p className="text-ink truncate text-xs font-bold">{p.title}</p>
       <p className="text-brand-strong text-[12px] font-black">{ilsC(p.price)}</p>
       <div className="bg-surface rounded-lg px-2 py-1.5">
         <p className="text-muted text-[9px] font-bold">{t("journey.nextAction")}</p>
-        <p className="text-ink text-[11px] font-bold">{t(item.nextActionKey)}</p>
+        <p className="text-ink truncate text-[11px] font-bold">{t(item.nextActionKey)}</p>
       </div>
-      {item.interestedBuyers.length > 0 && (
-        <div className="flex -space-x-2 space-x-reverse">
-          {item.interestedBuyers.map((b) => (
-            <span key={b.id} className="border-card bg-brand-soft text-brand-strong grid h-6 w-6 place-items-center overflow-hidden rounded-full border-2 text-[9px] font-black">
-              {b.avatarUrl
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={b.avatarUrl} alt={b.name} className="h-full w-full object-cover" />
-                : b.name}
-            </span>
-          ))}
-        </div>
-      )}
+      {/* Always-present avatars row keeps every card the same height. */}
+      <div className="mt-auto flex h-6 -space-x-2 space-x-reverse">
+        {item.interestedBuyers.map((b) => (
+          <span key={b.id} className="border-card bg-brand-soft text-brand-strong grid h-6 w-6 place-items-center overflow-hidden rounded-full border-2 text-[9px] font-black">
+            {b.avatarUrl
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={b.avatarUrl} alt={b.name} className="h-full w-full object-cover" />
+              : b.name}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
