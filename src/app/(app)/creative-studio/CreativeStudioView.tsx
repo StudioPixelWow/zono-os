@@ -19,7 +19,7 @@ import {
 import { CONCEPT_TYPE_LABELS } from "@/lib/creative-studio/concept-engine";
 import type { FinalAdData, FinalAdScores } from "@/lib/creative-studio/final-creative-engine";
 import type { BrandDNA, BrandGuidance } from "@/lib/creative-studio/brand-dna-engine";
-import type { DesignExecutionPlan } from "@/lib/creative-studio/design-system-engine";
+import type { DesignExecutionPlan, DesignFamily } from "@/lib/creative-studio/design-system-engine";
 import { BUILD_SIGNATURE } from "@/lib/creative-studio/build-signature";
 
 // Read-only AI image-provider status (computed server-side), used only to tell the
@@ -782,8 +782,50 @@ const AD_FEATURE_ICON: Record<string, string> = { Sofa: "Sofa", Maximize: "Maxim
 // DEP's zone rect (% of canvas), sized by the DEP type scale, shown/hidden by the
 // DEP flags. It invents NO layout, copy, hierarchy, concept, image, Hebrew or
 // logo — all strings/assets are the locked real values from `ad`. 1:1 square.
+// ── Per-template VISUAL LANGUAGE ─────────────────────────────────────────────
+// The DEP controls geometry; this controls the actual treatment of each element
+// so the 10 master templates look like DIFFERENT advertisements, not one card
+// with moved boxes. image frame · scrim · headline case · CTA style · price style
+// · feature style · badge style · editorial dividers / corner marks.
+type TplStyle = {
+  image: "full" | "rounded" | "framed" | "band";
+  scrim: string;
+  headlineUpper: boolean; headlineTracking: number; headlineColor: "white" | "accent"; headlineWeightDelta: number;
+  divider: boolean; cornerMarks: boolean;
+  badge: "pill" | "bar" | "hairline" | "none";
+  price: "block" | "tag" | "bare" | "underline";
+  cta: "pill" | "bar" | "outline" | "link";
+  features: "chips" | "grid" | "inline" | "none";
+};
+const SCRIM_SOFT = "linear-gradient(180deg, rgba(0,0,0,0.28), transparent 26%, transparent 60%, rgba(0,0,0,0.6))";
+const SCRIM_CINE = "linear-gradient(180deg, rgba(0,0,0,0.45), transparent 30%, transparent 48%, rgba(0,0,0,0.82))";
+const SCRIM_EDIT = "linear-gradient(180deg, rgba(0,0,0,0.15), transparent 22%, transparent 50%, rgba(0,0,0,0.74))";
+const SCRIM_BAND = "linear-gradient(180deg, rgba(0,0,0,0.35), transparent 45%, rgba(0,0,0,0.5))";
+const TPL_STYLE: Record<DesignFamily, TplStyle> = {
+  // Almost no overlays — the photo IS the ad.
+  premium_clean:        { image: "rounded", scrim: SCRIM_SOFT, headlineUpper: false, headlineTracking: 0, headlineColor: "white", headlineWeightDelta: 0, divider: false, cornerMarks: false, badge: "none",     price: "bare",      cta: "link",    features: "inline" },
+  // Cinematic prestige.
+  luxury_dark:          { image: "full",    scrim: SCRIM_CINE, headlineUpper: true,  headlineTracking: 2, headlineColor: "white", headlineWeightDelta: -100, divider: true, cornerMarks: false, badge: "hairline", price: "bare",      cta: "outline", features: "none" },
+  penthouse_collection: { image: "full",    scrim: SCRIM_CINE, headlineUpper: true,  headlineTracking: 3, headlineColor: "white", headlineWeightDelta: -100, divider: true, cornerMarks: false, badge: "hairline", price: "bare",      cta: "outline", features: "none" },
+  // Magazine editorial.
+  luxury_editorial:     { image: "full",    scrim: SCRIM_EDIT, headlineUpper: true,  headlineTracking: 1, headlineColor: "white", headlineWeightDelta: -50, divider: true, cornerMarks: false, badge: "none",     price: "underline", cta: "link",    features: "inline" },
+  // Architecture-led, thin type, corner ticks.
+  architectural_showcase:{ image: "framed", scrim: SCRIM_EDIT, headlineUpper: true,  headlineTracking: 4, headlineColor: "white", headlineWeightDelta: -150, divider: false, cornerMarks: true, badge: "none",     price: "bare",      cta: "link",    features: "none" },
+  // Warm boutique.
+  boutique_residence:   { image: "rounded", scrim: SCRIM_SOFT, headlineUpper: false, headlineTracking: 0, headlineColor: "white", headlineWeightDelta: 0, divider: true, cornerMarks: false, badge: "hairline", price: "tag",       cta: "outline", features: "inline" },
+  // Data-led investment.
+  editorial_real_estate:{ image: "band",    scrim: SCRIM_BAND, headlineUpper: false, headlineTracking: 0, headlineColor: "white", headlineWeightDelta: 0, divider: false, cornerMarks: false, badge: "bar",      price: "tag",       cta: "bar",     features: "grid" },
+  // Price-driven conversion.
+  high_conversion_sales:{ image: "band",    scrim: SCRIM_BAND, headlineUpper: false, headlineTracking: 0, headlineColor: "white", headlineWeightDelta: 0, divider: false, cornerMarks: false, badge: "pill",     price: "block",     cta: "bar",     features: "chips" },
+  // Corporate project launch.
+  developer_launch:     { image: "band",    scrim: SCRIM_BAND, headlineUpper: true,  headlineTracking: 1, headlineColor: "white", headlineWeightDelta: 0, divider: false, cornerMarks: false, badge: "bar",      price: "tag",       cta: "bar",     features: "grid" },
+  // City luxury.
+  urban_prestige:       { image: "full",    scrim: SCRIM_CINE, headlineUpper: true,  headlineTracking: 1, headlineColor: "white", headlineWeightDelta: 0, divider: false, cornerMarks: false, badge: "pill",     price: "block",     cta: "pill",    features: "inline" },
+};
+
 function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: DesignExecutionPlan; scale?: number; refId?: string }) {
   const pal = ad.palette; const T = dep.typography; const f = dep.flags;
+  const st = TPL_STYLE[dep.family] ?? TPL_STYLE.premium_clean;
   const bp = 14 * scale; const fs = (m: number) => `${bp * m}px`;
   const pct = (n: number) => `${n}%`;
   const shadow = { textShadow: "0 2px 14px rgba(0,0,0,0.6)" } as React.CSSProperties;
@@ -823,14 +865,18 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.35), transparent 30%, transparent 55%, rgba(0,0,0,0.72))" }} />
         </div>
       )}
-      {/* IMAGE ZONE — locked real property photo (skipped when AI scene is the hero) */}
+      {/* IMAGE ZONE — locked real property photo, framed per template language */}
       {showPhotoZone && (
-        <div style={{ position: "absolute", top: pct(Z.image.top), left: pct(Z.image.left), width: pct(Z.image.width), height: pct(Z.image.height), overflow: "hidden", borderRadius: dep.family === "premium_clean" ? 16 * scale : 0 }}>
+        <div style={{ position: "absolute", top: pct(Z.image.top), left: pct(Z.image.left), width: pct(Z.image.width), height: pct(Z.image.height), overflow: "hidden", borderRadius: st.image === "rounded" ? 20 * scale : 0, border: st.image === "framed" ? `${2 * scale}px solid rgba(255,255,255,0.85)` : undefined, boxShadow: st.image === "rounded" ? `0 ${10 * scale}px ${30 * scale}px rgba(0,0,0,0.3)` : undefined }}>
           {ad.propertyImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={ad.propertyImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           ) : <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.muted, fontSize: fs(0.8) }}>אין תמונת נכס</div>}
-          <div style={{ position: "absolute", inset: 0, background: f.propertyImageDominant ? "linear-gradient(180deg, rgba(0,0,0,0.45), transparent 35%, rgba(0,0,0,0.7))" : "linear-gradient(180deg, transparent 45%, rgba(0,0,0,0.55))" }} />
+          <div style={{ position: "absolute", inset: 0, background: st.scrim }} />
+          {/* Architectural corner ticks */}
+          {st.cornerMarks && [["top","left"],["top","right"],["bottom","left"],["bottom","right"]].map(([v,h],i)=>(
+            <div key={i} style={{ position:"absolute",[v]:8*scale,[h]:8*scale,width:18*scale,height:18*scale,[`border${v[0].toUpperCase()+v.slice(1)}`]:`${2*scale}px solid rgba(255,255,255,0.9)`,[`border${h[0].toUpperCase()+h.slice(1)}`]:`${2*scale}px solid rgba(255,255,255,0.9)` } as React.CSSProperties} />
+          ))}
         </div>
       )}
 
@@ -844,17 +890,20 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
         </div>
       )}
 
-      {/* BADGE ZONE */}
-      {Z.badge.shown && ad.badge && (
-        <div style={zoneBox(Z.badge)}>
-          <span style={{ background: pal.accent, color: pal.onAccent, fontSize: fs(0.8), fontWeight: 900, padding: `${4 * scale}px ${10 * scale}px`, borderRadius: 999, whiteSpace: "nowrap" }}>{ad.badge}</span>
+      {/* BADGE ZONE — treatment varies per template */}
+      {Z.badge.shown && ad.badge && st.badge !== "none" && (
+        <div style={zoneBox(Z.badge, { alignItems: Z.badge.align === "end" ? "flex-end" : "flex-start" })}>
+          {st.badge === "pill" && <span style={{ background: pal.accent, color: pal.onAccent, fontSize: fs(0.8), fontWeight: 900, padding: `${4 * scale}px ${10 * scale}px`, borderRadius: 999, whiteSpace: "nowrap" }}>{ad.badge}</span>}
+          {st.badge === "bar" && <span style={{ background: pal.accent, color: pal.onAccent, fontSize: fs(0.78), fontWeight: 900, padding: `${4 * scale}px ${12 * scale}px`, borderRadius: 0, letterSpacing: 1, whiteSpace: "nowrap" }}>{ad.badge}</span>}
+          {st.badge === "hairline" && <span style={{ color: "#fff", fontSize: fs(0.72), fontWeight: 700, letterSpacing: 3, textTransform: "uppercase", borderTop: `${1.5 * scale}px solid ${pal.accent}`, paddingTop: 4 * scale, whiteSpace: "nowrap", ...shadow }}>{ad.badge}</span>}
         </div>
       )}
 
-      {/* HEADLINE ZONE — exact Hebrew string, system font, RTL, auto-fit (≤2 lines) */}
+      {/* HEADLINE ZONE — exact Hebrew string, RTL, auto-fit; styled per template */}
       {Z.headline.shown && (
         <div style={zoneBox(Z.headline)}>
-          <div style={{ color: "#fff", fontSize: fs(fitScale(ad.headline, Z.headline.width, T.headline, 2)), fontWeight: T.headlineWeight, lineHeight: 1.08, ...shadow, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ad.headline}</div>
+          <div style={{ color: st.headlineColor === "accent" ? pal.accent : "#fff", fontSize: fs(fitScale(ad.headline, Z.headline.width, T.headline, 2)), fontWeight: Math.max(300, T.headlineWeight + st.headlineWeightDelta), lineHeight: st.headlineUpper ? 1.12 : 1.06, letterSpacing: st.headlineTracking * scale, textTransform: st.headlineUpper ? "uppercase" : "none", ...shadow, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ad.headline}</div>
+          {st.divider && <div style={{ marginTop: 6 * scale, width: 44 * scale, height: 2 * scale, background: pal.accent, alignSelf: Z.headline.align === "center" ? "center" : Z.headline.align === "end" ? "flex-end" : "flex-start" }} />}
         </div>
       )}
       {/* SUBHEADLINE ZONE */}
@@ -864,33 +913,54 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
         </div>
       )}
 
-      {/* PRICE ZONE — dominant block vs inline, per DEP flags */}
+      {/* PRICE ZONE — treatment varies per template (block / tag / bare / underline) */}
       {Z.price.shown && ad.price && (
         <div style={zoneBox(Z.price)}>
-          {f.priceDominant ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 * scale, background: pal.accent, color: pal.onAccent, borderRadius: 16 * scale, padding: `${8 * scale}px ${14 * scale}px`, width: "100%", height: "100%", boxShadow: `0 ${10 * scale}px ${26 * scale}px ${pal.accent}66`, overflow: "hidden" }}>
-              <span style={{ fontSize: fs(0.8), fontWeight: 800, opacity: 0.85, whiteSpace: "nowrap" }}>{ad.priceLabel}</span>
+          {st.price === "block" && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 * scale, background: pal.accent, color: pal.onAccent, borderRadius: 14 * scale, padding: `${8 * scale}px ${14 * scale}px`, width: "100%", height: "100%", boxShadow: `0 ${10 * scale}px ${26 * scale}px ${pal.accent}66`, overflow: "hidden" }}>
+              <span style={{ fontSize: fs(0.78), fontWeight: 800, opacity: 0.85, whiteSpace: "nowrap" }}>{ad.priceLabel}</span>
               <span style={{ fontSize: fs(fitScale(ad.price, Z.price.width - 6, T.price, 1)), fontWeight: 900, lineHeight: 1, letterSpacing: -0.5, whiteSpace: "nowrap" }}>{ad.price}</span>
             </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 * scale, maxWidth: "100%", overflow: "hidden" }}>
-              <span style={{ color: pal.muted, fontSize: fs(0.78), fontWeight: 700, whiteSpace: "nowrap" }}>{ad.priceLabel}</span>
-              <span style={{ color: pal.accent, fontSize: fs(fitScale(`${ad.priceLabel} ${ad.price}`, Z.price.width, T.price, 1)), fontWeight: 900, whiteSpace: "nowrap" }}>{ad.price}</span>
+          )}
+          {st.price === "tag" && (
+            <div style={{ display: "inline-flex", alignItems: "baseline", gap: 6 * scale, border: `${1.5 * scale}px solid ${pal.accent}`, borderRadius: 8 * scale, padding: `${5 * scale}px ${12 * scale}px`, maxWidth: "100%", overflow: "hidden" }}>
+              <span style={{ color: pal.accent, fontSize: fs(0.74), fontWeight: 700, whiteSpace: "nowrap" }}>{ad.priceLabel}</span>
+              <span style={{ color: "#fff", fontSize: fs(fitScale(ad.price, Z.price.width - 6, T.price, 1)), fontWeight: 900, whiteSpace: "nowrap", ...shadow }}>{ad.price}</span>
+            </div>
+          )}
+          {st.price === "bare" && (
+            <div style={{ display: "flex", flexDirection: "column", maxWidth: "100%", overflow: "hidden" }}>
+              <span style={{ color: "#fff", opacity: 0.7, fontSize: fs(0.66), fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", whiteSpace: "nowrap", ...shadow }}>{ad.priceLabel}</span>
+              <span style={{ color: "#fff", fontSize: fs(fitScale(ad.price, Z.price.width, T.price * 1.15, 1)), fontWeight: 800, lineHeight: 1, whiteSpace: "nowrap", ...shadow }}>{ad.price}</span>
+            </div>
+          )}
+          {st.price === "underline" && (
+            <div style={{ display: "inline-flex", flexDirection: "column", maxWidth: "100%", overflow: "hidden", borderBottom: `${2 * scale}px solid ${pal.accent}`, paddingBottom: 3 * scale }}>
+              <span style={{ color: "#fff", fontSize: fs(fitScale(`${ad.priceLabel} ${ad.price}`, Z.price.width, T.price, 1)), fontWeight: 800, whiteSpace: "nowrap", ...shadow }}>{ad.price}</span>
             </div>
           )}
         </div>
       )}
 
-      {/* FEATURES ZONE — metric grid (editorial hero) vs glass chip row */}
-      {Z.features.shown && ad.features.length > 0 && (
+      {/* FEATURES ZONE — grid (data) / chips (sales) / inline text (editorial) / none (luxury) */}
+      {Z.features.shown && st.features !== "none" && ad.features.length > 0 && (
         <div style={zoneBox(Z.features, { justifyContent: "flex-start" })}>
-          {Z.features.emphasis === "hero" ? (
+          {st.features === "grid" ? (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 * scale, width: "100%" }}>
               {ad.features.slice(0, 4).map((ft, i) => (
                 <div key={i} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 * scale, padding: `${7 * scale}px ${9 * scale}px` }}>
                   <span style={{ color: pal.text, fontSize: fs(T.featureValue), fontWeight: 900, lineHeight: 1 }}>{ft.value || "✓"}</span>
                   <span style={{ display: "block", color: pal.muted, fontSize: fs(T.featureLabel), fontWeight: 700 }}>{ft.label}</span>
                 </div>
+              ))}
+            </div>
+          ) : st.features === "inline" ? (
+            <div style={{ display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 6 * scale, width: "100%", overflow: "hidden", justifyContent: Z.features.align === "center" ? "center" : "flex-start" }}>
+              {ad.features.slice(0, 4).map((ft, i) => (
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6 * scale, color: "#fff", fontSize: fs(T.featureLabel), fontWeight: 600, whiteSpace: "nowrap", ...shadow }}>
+                  {i > 0 && <span style={{ color: pal.accent, opacity: 0.8 }}>·</span>}
+                  {ft.value ? `${ft.value} ${ft.label}` : ft.label}
+                </span>
               ))}
             </div>
           ) : (
@@ -906,14 +976,34 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
         </div>
       )}
 
-      {/* CTA ZONE — auto-fit so the pill never overflows its half of the strip */}
-      {Z.cta.shown && ad.cta && (
+      {/* CTA ZONE — treatment varies per template (pill / bar / outline / link) */}
+      {Z.cta.shown && ad.cta && (() => {
+        const ctaFs = fs(fitScale(ad.cta, Z.cta.width - 6, T.cta, 1));
+        return (
         <div style={zoneBox(Z.cta)}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 5 * scale, maxWidth: "100%", background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: fs(fitScale(ad.cta, Z.cta.width - 6, T.cta, 1)), fontWeight: 900, padding: `${8 * scale}px ${14 * scale}px`, borderRadius: 999, whiteSpace: "nowrap", overflow: "hidden", boxShadow: `0 ${8 * scale}px ${20 * scale}px ${pal.accent}55` }}>
-            <Icon name="MessageCircle" size={13 * scale} /> {ad.cta}
-          </div>
+          {st.cta === "pill" && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 5 * scale, maxWidth: "100%", background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: ctaFs, fontWeight: 900, padding: `${8 * scale}px ${14 * scale}px`, borderRadius: 999, whiteSpace: "nowrap", overflow: "hidden", boxShadow: `0 ${8 * scale}px ${20 * scale}px ${pal.accent}55` }}>
+              <Icon name="MessageCircle" size={13 * scale} /> {ad.cta}
+            </div>
+          )}
+          {st.cta === "bar" && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 * scale, width: "100%", height: "100%", background: pal.accent, color: pal.onAccent, fontSize: ctaFs, fontWeight: 900, borderRadius: 4 * scale, whiteSpace: "nowrap", overflow: "hidden" }}>
+              {ad.cta} <Icon name="ArrowLeft" size={14 * scale} />
+            </div>
+          )}
+          {st.cta === "outline" && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 * scale, maxWidth: "100%", border: `${1.5 * scale}px solid #fff`, color: "#fff", fontSize: ctaFs, fontWeight: 700, padding: `${7 * scale}px ${16 * scale}px`, borderRadius: 4 * scale, letterSpacing: 1, whiteSpace: "nowrap", overflow: "hidden", ...shadow }}>
+              {ad.cta} <Icon name="ArrowLeft" size={13 * scale} />
+            </div>
+          )}
+          {st.cta === "link" && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 * scale, maxWidth: "100%", color: "#fff", fontSize: ctaFs, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", borderBottom: `${2 * scale}px solid ${pal.accent}`, paddingBottom: 3 * scale, ...shadow }}>
+              {ad.cta} <Icon name="ArrowLeft" size={13 * scale} />
+            </div>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {/* AGENT ZONE — only when DEP says showAgentImage; photo only if real */}
       {Z.agent.shown && f.agentShown && (ad.agentName || ad.agentPhone || f.agentPhotoShown) && (
