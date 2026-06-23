@@ -1,2 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/app/(app)/properties/page.tsx", "src/app/(app)/properties/PropertiesOSView.tsx", "src/app/(app)/properties/PropertiesListView.tsx", "src/lib/properties/repository.ts"] }
+  "include": ["src/app/(app)/properties/PropertiesOSView.tsx"] }

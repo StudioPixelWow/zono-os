@@ -113,8 +113,8 @@ function PropertyKpiCards({ kpis }: { kpis: Kpi[] }) {
 /* ── 3. AI actions bar ───────────────────────────────────────────────────── */
 
 const AI_ACTIONS = [
-  { label: "מצא נכסים חמים", href: "?sort=hot" },
-  { label: "נכסים ללא לידים", href: "?filter=no-leads" },
+  { label: "מצא נכסים חמים", href: "#hot-properties" },
+  { label: "נכסים ללא לידים", href: "#attention" },
   { label: "צור פוסטים לנכסים חדשים", href: "/creative" },
   { label: "מצא קונים מתאימים", href: "/buyers" },
   { label: "דוח שוק", href: "/market" },
@@ -126,7 +126,7 @@ function AIActionsBar() {
       <p className="text-ink mb-3 text-sm font-extrabold">מה תרצה לעשות היום?</p>
       <div className="flex flex-wrap items-center gap-2">
         {AI_ACTIONS.map((a) => (
-          <Link key={a.label} href={a.href} className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors">
+          <Link key={a.label} href={a.href} scroll className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors">
             {a.label}
           </Link>
         ))}
@@ -567,7 +567,7 @@ export function PropertiesOSView({
           <SmartOpportunities />
         </section>
 
-        <section className="flex flex-col gap-3">
+        <section id="hot-properties" className="flex flex-col gap-3 scroll-mt-6">
           <SectionTitle title="הנכסים החמים שלך" action={<ViewAll />} />
           <HotPropertiesCarousel properties={hot} covers={covers} />
         </section>
