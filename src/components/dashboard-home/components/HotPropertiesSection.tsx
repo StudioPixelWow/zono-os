@@ -1,10 +1,26 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import type { PropertyCard } from "@/lib/dashboard-home/types";
 import { SectionHead, ils, type Translate } from "./shared";
+
+/** Prev/next arrows that scroll a horizontal carousel container (RTL-aware). */
+function CarouselArrows({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
+  const by = (dir: 1 | -1) => scrollRef.current?.scrollBy({ left: dir * Math.max(320, scrollRef.current.clientWidth * 0.8), behavior: "smooth" });
+  return (
+    <div className="flex items-center gap-1.5">
+      <button type="button" onClick={() => by(1)} aria-label="הקודם" className="bg-card border-line text-muted hover:text-brand-strong hover:border-brand-light grid h-9 w-9 place-items-center rounded-full border shadow-[var(--shadow-soft)] transition">
+        <Icon name="ChevronRight" size={18} />
+      </button>
+      <button type="button" onClick={() => by(-1)} aria-label="הבא" className="bg-card border-line text-muted hover:text-brand-strong hover:border-brand-light grid h-9 w-9 place-items-center rounded-full border shadow-[var(--shadow-soft)] transition">
+        <Icon name="ChevronLeft" size={18} />
+      </button>
+    </div>
+  );
+}
 
 export function HotPropertyCard({ t, p }: { t: Translate; p: PropertyCard }) {
   const badgeTone: BadgeTone =
@@ -42,11 +58,24 @@ export function HotPropertyCard({ t, p }: { t: Translate; p: PropertyCard }) {
 }
 
 export function HotPropertiesSection({ t, properties }: { t: Translate; properties: PropertyCard[] }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   return (
     <section className="flex flex-col gap-3">
-      <SectionHead title={t("hotProperties.title")} action={<Link href="/properties" className="text-brand-strong text-sm font-bold">{t("hotProperties.viewAll")}</Link>} />
-      <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">
-        {properties.map((p) => <HotPropertyCard key={p.id} t={t} p={p} />)}
+      <SectionHead
+        title={t("hotProperties.title")}
+        action={
+          <div className="flex items-center gap-3">
+            {properties.length > 2 && <CarouselArrows scrollRef={scrollRef} />}
+            <Link href="/properties" className="text-brand-strong text-sm font-bold">{t("hotProperties.viewAll")}</Link>
+          </div>
+        }
+      />
+      <div ref={scrollRef} className="no-scrollbar flex scroll-px-1 snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
+        {properties.map((p) => (
+          <div key={p.id} className="snap-start">
+            <HotPropertyCard t={t} p={p} />
+          </div>
+        ))}
       </div>
     </section>
   );
