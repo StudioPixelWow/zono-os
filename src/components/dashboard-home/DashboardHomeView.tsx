@@ -1,13 +1,12 @@
 "use client";
 
 // ============================================================================
-// ZONO — Home (Command Center) view. Premium, RTL, light-theme command center.
-// Composed from the named dashboard-home components; all UI labels resolve via
-// the i18n dictionary and all data comes from the server-built DashboardHomeData
-// (real properties woven into featured/hot/journey; the rest production-shaped).
-// Reference layout order: hero → KPIs → today-attention → intelligence row →
-// activity trend → hot properties → bottom intelligence grid → (preserved:
-// journey + seller/buyer intel + competitor insights) → last activity. + AI FAB.
+// ZONO — Home (Real Estate Operating System). Structural redesign to the
+// approved reference: 8 sections, RTL, ZONO purple system, luxury rhythm.
+//   1 Hero (locked)         2 Daily Attention      3 Hot Properties
+//   4 Opportunity Map       5 Activity + AI Radar   6 AI Command Center
+//   7 AI Deal Forecast      8 ZONO Never Sleeps     + AI FAB
+// All data comes from the server-built DashboardHomeData.
 // ============================================================================
 
 import { useMemo, useState } from "react";
@@ -18,12 +17,14 @@ import { tr, type DashboardDict } from "@/lib/dashboard-home/i18n";
 import type { DashboardHomeData } from "@/lib/dashboard-home/types";
 import { DashboardHero, DashboardKpiStrip } from "./components/DashboardHero";
 import { TodayAttentionSection } from "./components/TodayAttentionSection";
-import { DashboardIntelligenceRow } from "./components/IntelligenceRow";
-import { ActivityTrendStrip } from "./components/ActivityTrendStrip";
 import { HotPropertiesSection } from "./components/HotPropertiesSection";
-import { DashboardIntelligenceGrid } from "./components/DashboardIntelligenceGrid";
-import { LastActivityTimeline } from "./components/LastActivityTimeline";
-import { PropertyJourneySection, SellerBuyerIntelligence, CompetitorInsightsCard } from "./components/ExtraSections";
+import {
+  OpportunityMapSection,
+  ActivityRadarSection,
+  AICommandCenterSection,
+  AIDealForecastSection,
+  ZonoNeverSleepsSection,
+} from "./components/ReferenceSections";
 
 const FAB_ACTIONS: { l: string; i: string; h: string }[] = [
   { l: "aiActions.findSellers", i: "Home", h: "/sellers" },
@@ -41,7 +42,7 @@ export function DashboardHomeView({ dict, data }: { dict: DashboardDict; data: D
 
   return (
     <div dir="rtl" className="relative flex flex-col gap-12 sm:gap-14">
-      {/* 1 — Hero + KPI strip */}
+      {/* 1 — Hero + KPI strip (locked) */}
       <Reveal>
         <div className="flex flex-col gap-5">
           <DashboardHero t={t} data={data} />
@@ -49,32 +50,26 @@ export function DashboardHomeView({ dict, data }: { dict: DashboardDict; data: D
         </div>
       </Reveal>
 
-      {/* 2 — מה דורש טיפול היום? */}
+      {/* 2 — Daily Attention Center · מה דורש טיפול היום? */}
       <TodayAttentionSection t={t} items={data.attention} />
 
-      {/* 3 — Intelligence row: Radar · Heatmap · Urgent actions */}
-      <DashboardIntelligenceRow t={t} data={data} />
-
-      {/* 4 — Activity trend strip */}
-      <ActivityTrendStrip t={t} data={data} />
-
-      {/* 5 — נכסים חמים בשוק */}
+      {/* 3 — Hot Properties carousel · נכסים חמים בשוק */}
       <HotPropertiesSection t={t} properties={data.hotProperties} />
 
-      {/* 6 — Bottom intelligence grid: opportunities · ranking · mission control */}
-      <DashboardIntelligenceGrid t={t} sellers={data.sellers} agents={data.competitors} missions={data.missions} dealProbabilityPct={data.dealProbabilityPct} />
+      {/* 4 — Opportunity Map (full-width dark centerpiece) */}
+      <OpportunityMapSection t={t} data={data} />
 
-      {/* 7 — Preserved: property journey kanban */}
-      <PropertyJourneySection t={t} journey={data.journey} />
+      {/* 5 — Activity Timeline + AI Opportunity Radar */}
+      <ActivityRadarSection t={t} data={data} />
 
-      {/* 8 — Preserved: seller + buyer intelligence */}
-      <SellerBuyerIntelligence t={t} data={data} />
+      {/* 6 — AI Command Center (mission control) */}
+      <AICommandCenterSection t={t} data={data} />
 
-      {/* 9 — Preserved: competitor AI insights */}
-      <CompetitorInsightsCard t={t} insightKeys={data.competitorInsightKeys} />
+      {/* 7 — AI Deal Forecast (funnel · opportunities · market pulse) */}
+      <AIDealForecastSection t={t} data={data} />
 
-      {/* 10 — פעילות אחרונה */}
-      <LastActivityTimeline t={t} activity={data.activity} />
+      {/* 8 — ZONO Never Sleeps (cinematic live counters) */}
+      <ZonoNeverSleepsSection t={t} data={data} />
 
       {/* AI floating action button */}
       <div className="fixed bottom-24 start-5 z-30 lg:bottom-8">
