@@ -27,7 +27,7 @@ import { buildDesignExecutionPlan, type DesignExecutionPlan, type DesignFamily }
 import { produceAdScene } from "./creative-production-engine";
 import { finalLayoutQA } from "./layout-integrity";
 import { scoreWow, type WowScore } from "./wow-score";
-import { generateFinalAdImage } from "./openai-ad-pipeline";
+import { generateFinalAdImage, type AdSpec, type AdKind, type AdGenAssets } from "./openai-ad-pipeline";
 import type { FinalAdData, ConceptTrigger } from "./final-creative-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
@@ -134,6 +134,34 @@ async function collectPropertyImages(supabase: DB, propertyId: string | null, co
 }
 
 type QuickVar = ReturnType<typeof buildQuickVariations>[number];
+
+/** Map a property concept (FinalAdData) → the kind-agnostic AdSpec the OpenAI
+ *  generator consumes. */
+function adToSpec(ad: FinalAdData, kind: AdKind): AdSpec {
+  return {
+    kind, conceptLabel: ad.triggerLabel ?? ad.angleLabel ?? "קונספט",
+    headline: ad.headline, subheadline: ad.subheadline ?? null,
+    priceLabel: ad.priceLabel ?? "מחיר", price: ad.price ?? null,
+    features: ad.features.map((f) => (f.value ? `${f.value} ${f.label}` : f.label)),
+    cta: ad.cta, agentName: ad.agentName ?? null, agentPhone: ad.agentPhone ?? null,
+    palette: { bg: ad.palette.bg, bg2: ad.palette.bg2, accent: ad.palette.accent },
+    emotionalFeel: ad.artDirection?.emotionalFeel ?? null, visualStory: ad.artDirection?.visualStory ?? null,
+  };
+}
+/** Map a quick variation (sold / testimonial) → AdSpec. */
+function variationToSpec(v: QuickVar, input: QuickInput, brand: BrandSnapshot, kind: AdKind): AdSpec {
+  const priceNum = Number(input.price);
+  const price = kind !== "testimonial" && input.price && Number.isFinite(priceNum) ? `₪${priceNum.toLocaleString("he-IL")}` : null;
+  return {
+    kind, conceptLabel: v.variantName,
+    headline: v.headline, subheadline: v.subheadline ?? null,
+    priceLabel: "מחיר", price,
+    features: providedFeatures(input), cta: v.cta,
+    agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null,
+    palette: { bg: brand.colors[0] || "#0F3D2E", bg2: brand.colors[1] || "#0A2A20", accent: brand.colors[2] || brand.colors[1] || "#C9A14A" },
+    emotionalFeel: kind === "sold" ? "proud and celebratory" : "warm and trustworthy", visualStory: null,
+  };
+}
 function providedFeatures(i: QuickInput): string[] {
   const f: string[] = [];
   if (i.rooms) f.push(`${i.rooms} חדרים`); if (i.sizeSqm) f.push(`${i.sizeSqm} מ״ר`); if (i.floor) f.push(`קומה ${i.floor}`);
@@ -281,7 +309,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           overall_quality_score: w.overall, wow_score: w.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
           used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
         };
-        const gen = await generateFinalAdImage(b.ad, assets);
+        const gen = await generateFinalAdImage(adToSpec(b.ad, "property"), assets);
         if (gen.status === "ai_full_ad" && gen.b64) {
           const path = `${orgId}/full-ad/${requestId}-${i}-${ts}.png`;
           const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, Buffer.from(gen.b64, "base64"), { contentType: gen.mime ?? "image/png", upsert: true });
@@ -309,6 +337,59 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
       }
       const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
       if (insErr) { console.error("[quick-creative][property_ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
+      const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
+      if (!adIds.length) throw new Error("שמירת המודעות נכשלה — לא נוצרו פריטים.");
+      return { requestId, created: adIds.length };
+    }
+  }
+
+  // ── SOLD / TESTIMONIAL: same OpenAI full-ad generation, driven by the
+  // variation copy. Image-only on success; deterministic variation render on
+  // fallback. Bypasses the legacy candidate matrix below. ──
+  if (g.requestType === "sold_post" || g.requestType === "testimonial_post") {
+    const kind: AdKind = g.requestType === "sold_post" ? "sold" : "testimonial";
+    const vars = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
+    if (vars.length) {
+      const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
+      const ts = Date.now();
+      const rows: Record<string, unknown>[] = [];
+      for (let i = 0; i < vars.length; i++) {
+        const v = vars[i];
+        const base: Record<string, unknown> = {
+          org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
+          output_type: g.requestType, variant_name: v.variantName, format: g.format, title: `${v.variantName} · ${v.headline}`,
+          headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
+          brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
+          seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
+          overall_quality_score: v.scores.overall, wow_score: v.scores.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
+          used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
+        };
+        const gen = await generateFinalAdImage(variationToSpec(v, g.input, brand.snapshot, kind), assets);
+        if (gen.status === "ai_full_ad" && gen.b64) {
+          const path = `${orgId}/full-ad/${requestId}-${i}-${ts}.png`;
+          const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, Buffer.from(gen.b64, "base64"), { contentType: gen.mime ?? "image/png", upsert: true });
+          const url = upErr ? null : supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path).data.publicUrl;
+          if (url) {
+            rows.push({ ...base,
+              render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: gen.qa } as unknown as Json,
+              image_url: url, image_provider: gen.provider, image_status: "ai_full_ad", image_error: null,
+              quality_status: (gen.qa?.score ?? 0) >= 90 ? "passed" : "below_threshold",
+              critic_summary: `מודעה שנוצרה ב-AI (${v.variantName}) · QA ${gen.qa?.score ?? "—"} · ${gen.attempts} ניסיון/ות.`,
+              creative_selection_metadata: { mode: "ai_full_ad", kind, qa: gen.qa, attempts: gen.attempts } as unknown as Json,
+            });
+            continue;
+          }
+        }
+        rows.push({ ...base,
+          render_data: v.render as unknown as Json,
+          image_status: gen.status === "no_provider" ? "no_provider" : "failed", image_error: gen.error ? gen.error.slice(0, 500) : null,
+          quality_status: "passed",
+          critic_summary: `רנדרר fallback (${gen.status === "no_provider" ? "ספק AI לא מוגדר" : "לא עבר QA חזותי"}).`,
+          creative_selection_metadata: { mode: "fallback", kind, genStatus: gen.status, genError: gen.error, genQa: gen.qa } as unknown as Json,
+        });
+      }
+      const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
+      if (insErr) { console.error("[quick-creative][full-ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
       const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
       if (!adIds.length) throw new Error("שמירת המודעות נכשלה — לא נוצרו פריטים.");
       return { requestId, created: adIds.length };
