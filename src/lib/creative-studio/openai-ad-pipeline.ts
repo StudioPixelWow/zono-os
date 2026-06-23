@@ -74,28 +74,30 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
   if (assets.logoUrl) refs.push(`reference image ${refs.length + 1} = the agency LOGO — reproduce EXACTLY (no redraw/recolor/distort)`);
   if (assets.agentPhoto) refs.push(`reference image ${refs.length + 1} = the AGENT headshot — keep the face unaltered`);
 
-  const collage = nImg > 1
-    ? `Compose a polished MULTI-PHOTO COLLAGE: one large hero property photo plus ${nImg - 1} smaller supporting photo(s) arranged in a clean asymmetric grid with thin elegant dividers/rounded frames — like a high-end agency listing poster.`
-    : `Feature the single property photo large and cinematic as the hero of the poster.`;
+  const heroComposition = nImg > 1
+    ? `ONE cinematic HERO image dominates ~70% of the frame — the single most beautiful supplied property photo, full-bleed, dramatic. Weave at most ${Math.min(nImg - 1, 2)} secondary photo(s) in SUBTLY (a torn-edge inset, a soft overlapping corner, a faded layer) — NEVER as equal tiles, NEVER a grid of boxes.`
+    : `ONE cinematic HERO image dominates the frame — the supplied property photo full-bleed, edge-to-edge, dramatic and emotional.`;
 
   const lines = [
-    `Design a COMPLETE, finished, ready-to-publish ${KIND_BRIEF[spec.kind]} as a FULL SOCIAL-MEDIA POSTER — vertical 4:5 (1024×1536), Instagram/Facebook real-estate ad quality. This is a fully designed marketing creative, NOT a card, NOT a template preview, NOT a photo with small overlays. Concept: ${spec.conceptLabel}.`,
+    `Act as a SENIOR CREATIVE DIRECTOR designing a luxury real-estate Instagram CAMPAIGN AD — vertical 4:5 (1024×1536). This is an emotional, dramatic, scroll-stopping campaign creative, NOT a property card, NOT a listing layout, NOT a brochure, NOT a real-estate-portal card, NOT a Canva template, NOT property-management software UI. Concept: ${spec.conceptLabel}.`,
     refs.length ? `Reference images: ${refs.join("; ")}.` : "",
-    collage,
-    "POSTER LAYOUT (top → bottom): (1) dramatic header band with the big bold Hebrew headline + small agency logo in a corner; (2) the property photo collage as the visual centerpiece; (3) a horizontal FEATURE-ICONS ROW (one elegant minimal icon per feature with its short label); (4) a large, dominant PRICE BLOCK; (5) a footer strip with the agent photo, agent name and a WhatsApp/phone contact line + CTA.",
-    "Render this EXACT Hebrew copy as crisp, perfectly legible right-to-left (RTL) typography — no gibberish, no invented/broken/duplicated letters, spelled exactly as given:",
-    `• Headline (big, bold, top): "${spec.headline}"`,
-    spec.subheadline ? `• Sub-headline: "${spec.subheadline}"` : "",
-    spec.price ? `• Price block (large, dominant): "${spec.priceLabel ?? "מחיר"} ${spec.price}"` : "",
-    feats ? `• Feature-icons row (icon + label each): "${feats}"` : "",
-    spec.cta ? `• CTA: "${spec.cta}"` : "",
-    spec.agentName ? `• Agent name (footer): "${spec.agentName}"` : "",
-    spec.agentPhone ? `• Phone (Latin digits, keep LTR): "${spec.agentPhone}"` : "",
-    spec.city || spec.street ? `• Location: "${[spec.street, spec.city].filter(Boolean).join(", ")}"` : "",
-    // BRAND-ADAPTIVE: premium poster STYLE locked, colours adapt to the brand.
-    `Style: premium, high-contrast, sales-oriented luxury real-estate POSTER — dramatic deep background, cinematic lighting, rich premium accent highlights for the headline/price, elegant dividers, generous structured spacing. Brand-adaptive palette as primary/secondary/accent: ${colors} (the brand colours drive the whole creative; if dark, use a dramatic dark luxury background with glowing accent highlights). Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
-    `Quality bar: looks designed by a top Israeli performance-marketing studio — finished, commercial, trustworthy. NOT a generic AI poster, NOT a Canva template, NOT a minimal empty layout, NOT a UI card.`,
-    `Typography: premium Israeli commercial type, confident hierarchy (headline → price → features → contact). Icons: one consistent elegant minimal premium family.`,
+    heroComposition,
+    // STRICT attention order — hero/drama/emotion first, facts last.
+    "ATTENTION HIERARCHY (what the eye must hit, in this exact order): 1) the HERO visual (full-bleed, cinematic, emotional); 2) the PRICE / OFFER (one bold confident moment); 3) the HEADLINE (short, emotional, art-directed — not a description); 4) the AGENT (small, trustworthy, integrated — logo near it); 5) property DETAILS (smallest, quiet, secondary). Facts and specs are the LAST thing noticed, never the first.",
+    "COMPOSITION: edit like a magazine cover / luxury campaign — generous negative space, a single dramatic focal point, deep cinematic gradient over the photo so text floats with contrast. Overlap and layer elements with intent. ABSOLUTELY NO grid layout, NO equal-sized sections, NO boxed feature-icon row, NO divider-separated info bands, NO footer strip of equal blocks.",
+    "Render this EXACT Hebrew copy as crisp, perfectly legible right-to-left (RTL) typography — no gibberish, no invented/broken/duplicated letters, spelled exactly as given. Use only what's needed; do NOT cram every spec:",
+    `• Headline (large, emotional, art-directed): "${spec.headline}"`,
+    spec.subheadline ? `• Sub-headline (smaller, supporting): "${spec.subheadline}"` : "",
+    spec.price ? `• Price / offer (bold, confident, a hero moment of its own): "${spec.priceLabel ?? "מחיר"} ${spec.price}"` : "",
+    feats ? `• A FEW key details (quiet, small, secondary — woven elegantly, NOT as an icon grid): "${feats}"` : "",
+    spec.cta ? `• CTA (small, refined): "${spec.cta}"` : "",
+    spec.agentName ? `• Agent name (small, integrated near the logo): "${spec.agentName}"` : "",
+    spec.agentPhone ? `• Phone (Latin digits, keep LTR, subtle): "${spec.agentPhone}"` : "",
+    spec.city || spec.street ? `• Location (subtle): "${[spec.street, spec.city].filter(Boolean).join(", ")}"` : "",
+    // BRAND-ADAPTIVE: cinematic luxury STYLE locked, colours adapt to the brand.
+    `Style: a high-end luxury real-estate CAMPAIGN — cinematic lighting, dramatic depth, rich shadows, one glowing premium accent for the price/headline, editorial confidence. Emotionally aspirational, not informational. Brand-adaptive palette as primary/secondary/accent: ${colors} (the brand colours drive the mood; lean into a dramatic, moody, premium treatment). Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
+    `Quality bar: indistinguishable from an ad crafted by a top luxury real-estate agency's creative director. If it looks like a tidy property card, a listing portal, a brochure, or software UI — it has FAILED. It must feel like a campaign.`,
+    `Typography: bold editorial Israeli display type for the headline + price; everything else quiet and minimal. One refined type family. No icon rows.`,
     `Real-estate authenticity: match the property's real character${spec.propertyType ? ` (${spec.propertyType})` : ""}. Do NOT invent scenery (no ocean/mountains/skyline/views) unless a supplied photo shows it. Keep every property photo photorealistic — never redesign the building.`,
     `Art direction: ${spec.emotionalFeel ?? "confident, aspirational, luxurious"}.`,
     "Absolute rules: do NOT invent, translate, shorten or add any text beyond the copy above; do NOT alter the logo or agent face; numbers must be exact. The result MUST be a fully composed advertisement poster that an agency would publish today.",
