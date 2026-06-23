@@ -27,6 +27,8 @@ export interface AdSpec {
   rooms?: string | null; sqm?: string | null; floor?: string | null;
   logoText?: string | null; disclaimer?: string | null;
   palette: { bg: string; bg2: string; accent: string };
+  brandPersonality?: string | null;   // e.g. "quiet luxury", "modern premium", "energetic commercial"
+  propertyType?: string | null;        // for authenticity (boutique / luxury / family / urban feel)
   emotionalFeel?: string | null; visualStory?: string | null;
 }
 export interface AdGenAssets { propertyImages: string[]; logoUrl: string | null; agentPhoto: string | null }
@@ -81,8 +83,14 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     spec.agentName ? `• Agent name: "${spec.agentName}"` : "",
     spec.agentPhone ? `• Phone (Latin digits, LTR): "${spec.agentPhone}"` : "",
     spec.city || spec.street ? `• Location: "${[spec.street, spec.city].filter(Boolean).join(", ")}"` : "",
-    `Brand colour palette: ${colors}. Art direction: premium, cinematic, ${spec.emotionalFeel ?? "confident"}.`,
-    "Absolute rules: do NOT invent, translate, shorten or add any text beyond the copy above; do NOT alter the logo or agent face; numbers must be exact.",
+    // BRAND-ADAPTIVE: lock the premium layout STYLE, adapt only the colours.
+    `Brand-adaptive design system — use the brand palette as primary/secondary/accent: ${colors}. Do NOT default to fixed colours; this organisation's palette drives the whole creative. Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
+    `Look & feel: a premium, high-converting Israeli real-estate advertisement designed by a top performance-marketing studio — real, commercial, trustworthy, cinematic lighting, strong contrast, structured information blocks, elegant dividers, generous professional spacing. NOT a generic AI poster, startup graphic, Canva template, or minimal empty layout.`,
+    `Typography: premium Israeli commercial type, confident hierarchy (headline → price → features → support). Not futuristic, gaming, or AI-looking. Icons: one consistent elegant minimal premium family.`,
+    `Price as a premium CONVERSION block — attention-grabbing, highly readable, integrated with the brand; never cheap-looking.`,
+    `Real-estate authenticity: match the property's real character${spec.propertyType ? ` (${spec.propertyType})` : ""} — boutique → boutique feel, luxury → luxury, family → warm, urban → urban. Do NOT invent scenery: no ocean, mountains, skyline or views unless the supplied photo actually shows them. Keep the property photorealistic — do not redesign the building.`,
+    `Art direction: ${spec.emotionalFeel ?? "confident, aspirational"}.`,
+    "Absolute rules: do NOT invent, translate, shorten or add any text beyond the copy above; do NOT alter the logo or agent face; numbers must be exact. The goal is an ad that SELLS — premium agency-grade, not merely 'looks nice'.",
     correction ? `CORRECTION (previous attempt failed QA):\n${correction}` : "",
   ];
   return lines.filter(Boolean).join("\n");

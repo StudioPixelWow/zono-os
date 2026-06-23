@@ -136,6 +136,13 @@ async function collectPropertyImages(supabase: DB, propertyId: string | null, co
 
 type QuickVar = ReturnType<typeof buildQuickVariations>[number];
 
+/** Brand-adaptive personality string for the prompt (style locked, colours adapt). */
+function brandPersonalityOf(brand: BrandSnapshot): string {
+  if ((brand.luxury ?? 0) >= 65) return "quiet luxury — premium, restrained, elegant (often dark + gold/metallic)";
+  if ((brand.modern ?? 0) >= 65) return "modern premium — clean, contemporary, confident";
+  return "professional commercial — credible, trustworthy, high-converting";
+}
+
 /** Map a property concept (FinalAdData) → the kind-agnostic AdSpec the OpenAI
  *  generator consumes. */
 function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: BrandSnapshot): AdSpec {
@@ -149,6 +156,7 @@ function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: Brand
     rooms: input.rooms ?? null, sqm: input.sizeSqm ?? null, floor: input.floor ?? null,
     logoText: brand.officeName ?? null,
     palette: { bg: ad.palette.bg, bg2: ad.palette.bg2, accent: ad.palette.accent },
+    brandPersonality: brandPersonalityOf(brand), propertyType: input.propertyType ?? null,
     emotionalFeel: ad.artDirection?.emotionalFeel ?? null, visualStory: ad.artDirection?.visualStory ?? null,
   };
 }
@@ -166,6 +174,7 @@ function variationToSpec(v: QuickVar, input: QuickInput, brand: BrandSnapshot, k
     rooms: input.rooms ?? null, sqm: input.sizeSqm ?? null, floor: input.floor ?? null,
     logoText: brand.officeName ?? null,
     palette: { bg: brand.colors[0] || "#0F3D2E", bg2: brand.colors[1] || "#0A2A20", accent: brand.colors[2] || brand.colors[1] || "#C9A14A" },
+    brandPersonality: brandPersonalityOf(brand), propertyType: input.propertyType ?? null,
     emotionalFeel: kind === "sold" ? "proud and celebratory" : "warm and trustworthy", visualStory: null,
   };
 }
