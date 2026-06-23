@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { CreativeGenerationModal } from "@/components/creative/CreativeGenerationModal";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { uploadMarketingAsset } from "@/lib/creative-studio/assets";
@@ -1891,6 +1892,7 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
   const [f, setF] = useState<Record<string, string | boolean | number>>(() => ({ ...(prefill ?? {}) }));
   const [brand, setBrand] = useState<{ warnings?: string[]; agentName?: string | null; officeName?: string | null; colors?: string[]; agentPhoto?: string | null; officeLogo?: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: string, v: string | boolean | number) => setF((p) => ({ ...p, [k]: v }));
   const str = (k: string) => (typeof f[k] === "string" ? (f[k] as string) : "");
@@ -1915,7 +1917,10 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
     };
     const res = await generateQuickCreativeAction({ requestType: type as never, input: input as never, format, entityType: et, entityId: eid });
     if (res.error) { setErr(res.error); setBusy(false); return; }
-    onClose(); router.refresh();
+    // Keep the premium ZONO Creative Engine modal open and switch it to its final
+    // "ready" state; the user clicks צפה בתוצאות to close + refresh. We NEVER fake
+    // completion — `done` only flips after the real backend response resolves.
+    setBusy(false); setDone(true);
   };
 
   const Field = (k: string, label: string, ph?: string) => (
@@ -1932,6 +1937,13 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
   const Check = (k: string, label: string) => (
     <label key={k} className="text-ink flex items-center gap-1.5 text-[12px]"><input type="checkbox" checked={!!f[k]} onChange={(e) => set(k, e.target.checked)} />{label}</label>
   );
+
+  // While generating (and until the user clicks "view results"), show the premium
+  // ZONO Creative Engine waiting experience instead of the form. Generation logic
+  // is untouched — `busy` = running, `done` = real backend response received.
+  if (busy || done) {
+    return <CreativeGenerationModal complete={done} onView={() => { onClose(); router.refresh(); }} />;
+  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
