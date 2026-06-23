@@ -13,7 +13,7 @@ type Board = Awaited<ReturnType<typeof getCompetitorBoard>>;
 const TYPE_LABEL: Record<string, string> = { agency: "משרד", office: "משרד", independent_broker: "מתווך", team: "צוות", unknown: "לא ידוע" };
 const scoreTone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
-export function CompetitorsView({ board }: { board: Board }) {
+export function CompetitorsView({ board, embedded = false }: { board: Board; embedded?: boolean }) {
   const router = useRouter();
   const { cc, competitors, localities, signals } = board;
   const [error, setError] = useState<string | null>(null);
@@ -21,28 +21,43 @@ export function CompetitorsView({ board }: { board: Board }) {
   const [pending, start] = useTransition();
   const recalc = () => { setError(null); setMsg(null); start(async () => { const r = await recomputeCompetitorsAction(); if (r.error) setError(r.error); else { setMsg(r.message ?? "חושב"); router.refresh(); } }); };
 
+  // When embedded under the premium dashboard, the dashboard owns the hero +
+  // empty state + command center; this view becomes the full management table.
+  if (embedded && competitors.length === 0) return null;
+
   return (
     <div className="flex flex-col gap-5">
-      <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
-        <div>
-          <p className="text-brand text-xs font-bold">ZONO Competitor Intelligence</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">מודיעין מתחרים</h1>
-          <p className="text-muted mt-1 text-sm">מי שולט בכל אזור, מי מתחזק, מי נחלש, ואיפה כדאי למקד מאמצי גיוס.</p>
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-ink text-lg font-black">רשימת מתחרים מלאה</h2>
+            <p className="text-muted text-xs">דירוג מלא, שליטה לפי אזור ואיתותים.</p>
+          </div>
         </div>
-        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין מתחרים"}</Button>
-      </div>
+      ) : (
+        <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
+          <div>
+            <p className="text-brand text-xs font-bold">ZONO Competitor Intelligence</p>
+            <h1 className="text-ink mt-1 text-2xl font-black">מודיעין מתחרים</h1>
+            <p className="text-muted mt-1 text-sm">מי שולט בכל אזור, מי מתחזק, מי נחלש, ואיפה כדאי למקד מאמצי גיוס.</p>
+          </div>
+          <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין מתחרים"}</Button>
+        </div>
+      )}
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
 
-      {/* Command center */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="מתחרים" value={cc.total} icon="Users" />
-        <Stat label="שולטים" value={cc.dominant} icon="Flame" tone="text-danger" />
-        <Stat label="מתחזקים" value={cc.growing} icon="TrendingUp" tone="text-success" />
-        <Stat label="נחלשים" value={cc.declining} icon="TrendingDown" tone="text-warning" />
-        <Stat label="הזדמנויות גיוס" value={cc.opportunities} icon="Building" tone="text-success" />
-        <Stat label="ריכוזיות ממוצעת" value={cc.avgConcentration} icon="BarChart3" suffix="%" />
-      </div>
+      {/* Command center (hidden when embedded — dashboard shows the KPI strip) */}
+      {!embedded && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="מתחרים" value={cc.total} icon="Users" />
+          <Stat label="שולטים" value={cc.dominant} icon="Flame" tone="text-danger" />
+          <Stat label="מתחזקים" value={cc.growing} icon="TrendingUp" tone="text-success" />
+          <Stat label="נחלשים" value={cc.declining} icon="TrendingDown" tone="text-warning" />
+          <Stat label="הזדמנויות גיוס" value={cc.opportunities} icon="Building" tone="text-success" />
+          <Stat label="ריכוזיות ממוצעת" value={cc.avgConcentration} icon="BarChart3" suffix="%" />
+        </div>
+      )}
 
       {competitors.length === 0 ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
