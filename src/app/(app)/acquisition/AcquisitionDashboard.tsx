@@ -160,20 +160,20 @@ export function AcquisitionDashboard({ cards, cc }: { cards: AcquisitionCard[]; 
 /* ── sections ────────────────────────────────────────────────────────────── */
 function Hero({ pending, onRecompute }: { pending: boolean; onRecompute: () => void }) {
   return (
-    <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-l from-brand-soft via-surface to-surface-soft p-6 sm:p-8">
-      <div className="absolute -left-10 top-1/2 hidden -translate-y-1/2 opacity-90 sm:block" aria-hidden>
-        <div className="zono-gradient grid h-28 w-28 rotate-12 place-items-center rounded-[40%] text-white shadow-[var(--shadow-lift)]">
-          <Icon name="Magnet" size={56} />
-        </div>
-      </div>
-      <div className="relative flex flex-wrap items-start justify-between gap-3 text-right">
-        <div className="ms-auto">
+    <div className="border-line relative isolate overflow-hidden rounded-[28px] border bg-card p-6 shadow-[var(--shadow-card)] sm:p-8">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10"
+        style={{ background: "radial-gradient(120% 130% at 85% 0%, rgba(124,58,237,0.12) 0%, rgba(168,139,250,0.07) 40%, rgba(255,255,255,0) 72%)" }} />
+      <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-right">
+        <div className="min-w-0">
           <p className="text-brand text-xs font-bold tracking-wide">ZONO Inventory Acquisition</p>
-          <h1 className="text-ink text-2xl font-black sm:text-3xl">מודיעין גיוס נכסים</h1>
-          <p className="text-muted mt-1 max-w-md text-sm">מערכת AI מתקדמת לזיהוי בעלי נכסים פוטנציאליים וגיוס בלעדיות</p>
-          <div className="mt-4">
+          <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מודיעין גיוס נכסים</h1>
+          <p className="text-muted mt-1.5 max-w-lg text-sm">מערכת AI מתקדמת לזיהוי בעלי נכסים פוטנציאליים וגיוס בלעדיות</p>
+          <div className="mt-4 flex justify-center sm:justify-start">
             <Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב הזדמנויות גיוס</Button>
           </div>
+        </div>
+        <div className="zono-gradient grid h-24 w-24 shrink-0 place-items-center rounded-[28px] text-white shadow-[var(--shadow-lift)] sm:h-28 sm:w-28" aria-hidden>
+          <Icon name="Magnet" size={52} />
         </div>
       </div>
     </div>

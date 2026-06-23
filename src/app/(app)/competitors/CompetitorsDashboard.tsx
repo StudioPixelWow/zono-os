@@ -123,15 +123,19 @@ export function CompetitorsDashboard({ board }: { board: Board }) {
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
 function Hero({ pending, onRecompute }: { pending: boolean; onRecompute: () => void }) {
   return (
-    <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-l from-brand-soft via-surface to-surface-soft p-6 sm:p-8">
-      <div className="absolute -left-8 top-1/2 hidden -translate-y-1/2 opacity-90 sm:block" aria-hidden>
-        <div className="zono-gradient grid h-28 w-28 place-items-center rounded-[36%] text-white shadow-[var(--shadow-lift)]"><Icon name="Target" size={54} /></div>
-      </div>
-      <div className="relative text-right">
-        <p className="text-brand text-xs font-bold tracking-wide">ZONO Competitor Intelligence</p>
-        <h1 className="text-ink text-2xl font-black sm:text-3xl">מודיעין מתחרים</h1>
-        <p className="text-muted mt-1 max-w-xl text-sm">מערכת מתקדמת למעקב בזמן אמת אחר פעילות המתחרים וההזדמנויות בשוק</p>
-        <div className="mt-4"><Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב מודיעין מתחרים</Button></div>
+    <div className="border-line relative isolate overflow-hidden rounded-[28px] border bg-card p-6 shadow-[var(--shadow-card)] sm:p-8">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10"
+        style={{ background: "radial-gradient(120% 130% at 85% 0%, rgba(124,58,237,0.12) 0%, rgba(168,139,250,0.07) 40%, rgba(255,255,255,0) 72%)" }} />
+      <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-right">
+        <div className="min-w-0">
+          <p className="text-brand text-xs font-bold tracking-wide">ZONO Competitor Intelligence</p>
+          <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מודיעין מתחרים</h1>
+          <p className="text-muted mt-1.5 max-w-xl text-sm">מערכת מתקדמת למעקב בזמן אמת אחר פעילות המתחרים וההזדמנויות בשוק</p>
+          <div className="mt-4 flex justify-center sm:justify-start"><Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב מודיעין מתחרים</Button></div>
+        </div>
+        <div className="zono-gradient grid h-24 w-24 shrink-0 place-items-center rounded-[28px] text-white shadow-[var(--shadow-lift)] sm:h-28 sm:w-28" aria-hidden>
+          <Icon name="Target" size={52} />
+        </div>
       </div>
     </div>
   );
