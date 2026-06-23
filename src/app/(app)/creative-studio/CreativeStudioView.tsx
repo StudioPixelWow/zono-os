@@ -790,8 +790,19 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
     position: "absolute", top: pct(zn.top), left: pct(zn.left), width: pct(zn.width), height: pct(zn.height),
     display: "flex", flexDirection: "column", justifyContent: "center",
     alignItems: zn.align === "center" ? "center" : zn.align === "end" ? "flex-end" : "flex-start",
-    textAlign: zn.align, ...extra,
+    textAlign: zn.align, overflow: "hidden", minWidth: 0, ...extra,
   });
+  // Deterministic, scale-invariant text auto-fit: the canvas is always 1:1, so a
+  // full-width line holds ~140 chars at 1em (1.4 chars per 1% width). Estimate the
+  // chars this zone can hold and shrink the font (down to 55%) so text never crops
+  // or overflows — preventing the overlapping/cut-off text the QA gate rejects.
+  const CHARS_PER_PCT_AT_1EM = 1.4;
+  const fitScale = (text: string | null | undefined, zoneWidthPct: number, baseEm: number, lines = 1): number => {
+    if (!text) return baseEm;
+    const maxChars = Math.max(1, (zoneWidthPct * CHARS_PER_PCT_AT_1EM * lines) / baseEm);
+    const ratio = maxChars / text.length;
+    return ratio >= 1 ? baseEm : Math.max(baseEm * 0.55, baseEm * ratio);
+  };
   const Z = dep.zones;
   const initials = (ad.agentName || "").trim().slice(0, 1) || "ZO";
   // Creative Production Engine: AI advertising scene behind the locked composite.
@@ -839,16 +850,16 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
         </div>
       )}
 
-      {/* HEADLINE ZONE — exact Hebrew string, system font, RTL */}
+      {/* HEADLINE ZONE — exact Hebrew string, system font, RTL, auto-fit (≤2 lines) */}
       {Z.headline.shown && (
         <div style={zoneBox(Z.headline)}>
-          <div style={{ color: "#fff", fontSize: fs(T.headline), fontWeight: T.headlineWeight, lineHeight: 1.05, ...shadow }}>{ad.headline}</div>
+          <div style={{ color: "#fff", fontSize: fs(fitScale(ad.headline, Z.headline.width, T.headline, 2)), fontWeight: T.headlineWeight, lineHeight: 1.08, ...shadow, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ad.headline}</div>
         </div>
       )}
       {/* SUBHEADLINE ZONE */}
       {Z.subheadline.shown && ad.subheadline && (
         <div style={zoneBox(Z.subheadline)}>
-          <div style={{ color: pal.accent, fontSize: fs(T.subheadline), fontWeight: 800, ...shadow }}>{ad.subheadline}</div>
+          <div style={{ color: pal.accent, fontSize: fs(fitScale(ad.subheadline, Z.subheadline.width, T.subheadline, 1)), fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", ...shadow }}>{ad.subheadline}</div>
         </div>
       )}
 
@@ -856,14 +867,14 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
       {Z.price.shown && ad.price && (
         <div style={zoneBox(Z.price)}>
           {f.priceDominant ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 * scale, background: pal.accent, color: pal.onAccent, borderRadius: 16 * scale, padding: `${10 * scale}px ${16 * scale}px`, width: "100%", height: "100%", boxShadow: `0 ${10 * scale}px ${26 * scale}px ${pal.accent}66` }}>
-              <span style={{ fontSize: fs(0.8), fontWeight: 800, opacity: 0.85 }}>{ad.priceLabel}</span>
-              <span style={{ fontSize: fs(T.price), fontWeight: 900, lineHeight: 1, letterSpacing: -0.5 }}>{ad.price}</span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 * scale, background: pal.accent, color: pal.onAccent, borderRadius: 16 * scale, padding: `${8 * scale}px ${14 * scale}px`, width: "100%", height: "100%", boxShadow: `0 ${10 * scale}px ${26 * scale}px ${pal.accent}66`, overflow: "hidden" }}>
+              <span style={{ fontSize: fs(0.8), fontWeight: 800, opacity: 0.85, whiteSpace: "nowrap" }}>{ad.priceLabel}</span>
+              <span style={{ fontSize: fs(fitScale(ad.price, Z.price.width - 6, T.price, 1)), fontWeight: 900, lineHeight: 1, letterSpacing: -0.5, whiteSpace: "nowrap" }}>{ad.price}</span>
             </div>
           ) : (
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 * scale }}>
-              <span style={{ color: pal.muted, fontSize: fs(0.78), fontWeight: 700 }}>{ad.priceLabel}</span>
-              <span style={{ color: pal.accent, fontSize: fs(T.price), fontWeight: 900 }}>{ad.price}</span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 * scale, maxWidth: "100%", overflow: "hidden" }}>
+              <span style={{ color: pal.muted, fontSize: fs(0.78), fontWeight: 700, whiteSpace: "nowrap" }}>{ad.priceLabel}</span>
+              <span style={{ color: pal.accent, fontSize: fs(fitScale(`${ad.priceLabel} ${ad.price}`, Z.price.width, T.price, 1)), fontWeight: 900, whiteSpace: "nowrap" }}>{ad.price}</span>
             </div>
           )}
         </div>
@@ -894,11 +905,11 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
         </div>
       )}
 
-      {/* CTA ZONE */}
+      {/* CTA ZONE — auto-fit so the pill never overflows its half of the strip */}
       {Z.cta.shown && ad.cta && (
         <div style={zoneBox(Z.cta)}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6 * scale, background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: fs(T.cta), fontWeight: 900, padding: `${9 * scale}px ${16 * scale}px`, borderRadius: 999, whiteSpace: "nowrap", boxShadow: `0 ${8 * scale}px ${20 * scale}px ${pal.accent}55` }}>
-            <Icon name="MessageCircle" size={14 * scale} /> {ad.cta}
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5 * scale, maxWidth: "100%", background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: fs(fitScale(ad.cta, Z.cta.width - 6, T.cta, 1)), fontWeight: 900, padding: `${8 * scale}px ${14 * scale}px`, borderRadius: 999, whiteSpace: "nowrap", overflow: "hidden", boxShadow: `0 ${8 * scale}px ${20 * scale}px ${pal.accent}55` }}>
+            <Icon name="MessageCircle" size={13 * scale} /> {ad.cta}
           </div>
         </div>
       )}
@@ -1457,6 +1468,7 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   const [showDebug, setShowDebug] = useState(false);
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [adOnly, setAdOnly] = useState(false);
   // FINAL AD mode: the complete ready-to-post creative carries an `ad` spec.
   const ad = o.render_data?.ad as FinalAdView | undefined;
   const adScores = ad?.scores ?? (o.creative_selection_metadata as unknown as Partial<FinalAdScores> | undefined);
@@ -1535,11 +1547,26 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         <button onClick={() => wrap(() => regenerateQuickAction({ requestId: o.request_id, entityType: et, entityId: eid }), `qg-${o.id}`)} className="text-muted font-bold"><Icon name="Sparkles" size={12} /></button>
         <button onClick={() => wrap(() => duplicateQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qd-${o.id}`)} className="text-muted font-bold"><Icon name="Plus" size={12} /></button>
         {ad ? (
-          <button onClick={() => void doExport()} disabled={exporting} className="text-brand-strong font-bold disabled:opacity-50"><Icon name="Download" size={12} /> {exporting ? "מייצא…" : "הורד PNG"}</button>
+          <>
+            <button onClick={() => setAdOnly(true)} className="text-brand-strong font-bold"><Icon name="Maximize2" size={12} /> מודעה בלבד</button>
+            <button onClick={() => void doExport()} disabled={exporting} className="text-brand-strong font-bold disabled:opacity-50"><Icon name="Download" size={12} /> {exporting ? "מייצא…" : "הורד PNG"}</button>
+          </>
         ) : (
           <span className="text-muted/50 cursor-not-allowed" title="זמין במודעות סופיות">PNG</span>
         )}
       </div>
+      {/* AD-ONLY JUDGING VIEW — the final creative alone, no card chrome. */}
+      {adOnly && ad && (
+        <div onClick={() => setAdOnly(false)} className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black/80 p-4" role="dialog">
+          <div className="w-full max-w-[540px]" onClick={(e) => e.stopPropagation()}>
+            <CreativePreview data={o.render_data} scale={1.6} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-white" dir="ltr">{ad.trigger} · {ad.designPlan?.familyLabel}</span>
+            <button onClick={() => setAdOnly(false)} className="rounded-full bg-white px-4 py-1.5 text-[12px] font-black text-black">סגור</button>
+          </div>
+        </div>
+      )}
       {o.scroll_stop_reason && <p className="text-muted px-0.5 text-[10px]">⚡ {o.scroll_stop_reason}</p>}
       {o.internal_prompt && (
         <button
@@ -1643,6 +1670,11 @@ function CreativeDebugPanel({ ad, o }: { ad: FinalAdView; o: QuickOutput }) {
         <DebugKV k="effects" v={ad.designPlan.effects.join(", ")} />
         <DebugKV k="zones מבוצעים" v={Object.entries(ad.designPlan.zones).filter(([, z]) => (z as { shown: boolean }).shown).map(([n]) => n).join(", ")} />
         <DebugKV k="not-a-card" v={ad.designPlan.notCardProof.reasons.join(" · ")} />
+      </>)}
+      {ad.designPlan?.layout && section("Layout Integrity (QA gate)", <>
+        <DebugKV k="status" v={ad.designPlan.layout.approved ? "✓ עבר — ללא חפיפות, בתוך השוליים, מחיר לא חתוך" : "✗ נכשל"} />
+        {ad.designPlan.layout.violations.length > 0 && <DebugKV k="הפרות" v={ad.designPlan.layout.violations.map((v) => v.detail).join(" · ")} />}
+        {ad.designPlan.layout.fixes.length > 0 && <DebugKV k="תיקונים אוטומטיים" v={ad.designPlan.layout.fixes.join(" · ")} />}
       </>)}
       {section("Final Prompt (AI environment — text-free)", <p dir="ltr" className="text-muted whitespace-pre-wrap break-words">{t?.finalPrompt ?? adr?.aiEnvironment.imageModelPrompt ?? "—"}</p>)}
       {section("Creative Production Engine (AI scene)", <>

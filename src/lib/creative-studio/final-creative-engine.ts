@@ -333,17 +333,25 @@ function colorSystemFor(trigger: ConceptTrigger, brandColors: string[]): AdPalet
 }
 
 /** Pick the 4 most relevant — yet strategically distinct — concepts for this property. */
+/** The 4 REQUIRED, strategically distinct concepts for every property ad.
+ *  Locked by product decision — exactly these four, never duplicated, never
+ *  "urgency" (which collapses onto the same high-conversion family as
+ *  price_advantage and produced look-alike creatives). */
+export const REQUIRED_CONCEPTS: ConceptTrigger[] = ["family", "investment", "luxury", "price_advantage"];
+
+/** Returns the 4 required concepts, ordered by relevance to THIS property so the
+ *  strongest leads — but the SET is always the same four, guaranteeing four
+ *  distinct concepts (and, via familyFor, four distinct design families). */
 export function selectConcepts(brief: CreativeBrief): ConceptTrigger[] {
   const score: Record<ConceptTrigger, number> = {
     luxury: 40 + (brief.isLuxury ? 45 : 0) + (brief.sizeSqm && brief.sizeSqm >= 130 ? 10 : 0),
-    urgency: 38 + (brief.urgent ? 45 : 0) + (brief.isExclusive ? 12 : 0),
+    urgency: 0,
     family: 40 + (brief.rooms != null && brief.rooms >= 4 ? 40 : 0) + (brief.hasBalcony ? 6 : 0),
     investment: 38 + (brief.priceAttractive ? 28 : 0) + (brief.rooms != null && brief.rooms <= 3 ? 16 : 0),
     price_advantage: 40 + (brief.priceAttractive ? 45 : 0) + (brief.price ? 8 : 0),
   };
-  const order: ConceptTrigger[] = ["luxury", "urgency", "family", "investment", "price_advantage"];
-  const ranked = [...order].sort((a, b) => score[b] - score[a]);
-  return ranked.slice(0, 4);
+  // Always the full required set; sort only decides which leads visually.
+  return [...REQUIRED_CONCEPTS].sort((a, b) => score[b] - score[a]);
 }
 
 export interface ConceptPlan {

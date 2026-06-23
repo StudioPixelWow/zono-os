@@ -12,6 +12,7 @@
 // ============================================================================
 import type { ConceptTrigger, ConceptPlan, ArtDirection } from "./final-creative-engine";
 import type { BrandDNA, BrandGuidance } from "./brand-dna-engine";
+import { normalizeDep } from "./layout-integrity";
 
 export type DesignFamily = "premium_clean" | "luxury_dark" | "editorial_real_estate" | "high_conversion_sales" | "developer_launch";
 export const DESIGN_FAMILY_LABEL: Record<DesignFamily, string> = {
@@ -36,17 +37,23 @@ export interface DesignExecutionPlan {
   effects: string[];
   flags: { agentShown: boolean; agentPhotoShown: boolean; priceDominant: boolean; propertyImageDominant: boolean; logoShown: boolean };
   notCardProof: { isDashboardCard: false; reasons: string[] };
+  // Layout-integrity verdict after normalization (collision-free, in-margin,
+  // price not cropped). Populated by buildDesignExecutionPlan.
+  layout?: import("./layout-integrity").LayoutQA;
 }
 
 export interface DesignAssets { hasPropertyImage: boolean; hasLogo: boolean; hasAgentPhoto: boolean; hasPhone: boolean }
 
-/** Trigger → base family. BrandDNA can override (developer agency → Developer Launch). */
-function familyFor(trigger: ConceptTrigger, dna: BrandDNA): DesignFamily {
-  if (dna.personality === "developer") return "developer_launch";
+/** Trigger → base family. Each of the 4 required triggers maps to a DISTINCT
+ *  family so a single generation always yields four different layouts. A
+ *  developer agency swaps ONLY the investment concept to Developer Launch
+ *  (instead of a blanket override that previously collapsed all four). */
+export function familyFor(trigger: ConceptTrigger, dna: BrandDNA): DesignFamily {
   const map: Record<ConceptTrigger, DesignFamily> = {
     luxury: "luxury_dark", family: "premium_clean", investment: "editorial_real_estate",
     price_advantage: "high_conversion_sales", urgency: "high_conversion_sales",
   };
+  if (dna.personality === "developer" && trigger === "investment") return "developer_launch";
   return map[trigger];
 }
 
@@ -58,17 +65,17 @@ function planForFamily(family: DesignFamily, a: DesignAssets, agentShown: boolea
   switch (family) {
     case "high_conversion_sales": // price leads, image supports, dense, high contrast
       return {
-        layoutStructure: "image-band-top → giant-price-center → cta-bottom → agent-compact",
+        layoutStructure: "image-band-top → giant-price-center → features → cta + agent strip",
         zones: {
-          image: z(a.hasPropertyImage, 0, 0, 100, 38, "center", "med"),
-          logo: z(a.hasLogo, 3, 70, 27, 9, "end", "med"),
-          badge: z(true, 4, 4, 28, 8, "start", "high"),
-          headline: z(true, 27, 5, 90, 10, "start", "high"),
-          price: z(true, 40, 6, 88, 26, "center", "hero"),
-          features: z(true, 67, 6, 88, 9, "center", "med"),
-          subheadline: z(true, 78, 6, 88, 6, "center", "low"),
-          cta: z(true, 86, 6, 60, 9, "center", "high"),
-          agent: z(agentShown, 86, 68, 28, 12, "end", "low"),
+          image: z(a.hasPropertyImage, 0, 0, 100, 34, "center", "med"),
+          logo: z(a.hasLogo, 3, 70, 26, 7, "end", "med"),
+          badge: z(true, 5, 5, 28, 7, "start", "high"),
+          headline: z(true, 37, 5, 90, 9, "start", "high"),
+          price: z(true, 47, 6, 88, 19, "center", "hero"),
+          features: z(true, 68, 6, 88, 8, "center", "med"),
+          subheadline: z(true, 77, 6, 88, 5, "center", "low"),
+          cta: z(true, 85, 6, 52, 9, "center", "high"),
+          agent: z(agentShown, 85, 60, 36, 9, "end", "low"),
         },
         typography: { headline: 1.9, subheadline: 1.0, price: 3.4, featureValue: 1.2, featureLabel: 0.78, cta: 1.1, agent: 0.85, headlineWeight: 900, family: "sans" },
         spacing: { unit: 8, gap: 8, sectionGap: 14 }, backgroundTreatment: { mode: "photo_scrim", aiEnvironmentPrompt: env, scrim: "rich dark gradient + single bright focal pool" },
@@ -77,17 +84,17 @@ function planForFamily(family: DesignFamily, a: DesignAssets, agentShown: boolea
       };
     case "premium_clean": // warm, image-hero, trust (agent prominent)
       return {
-        layoutStructure: "image-hero-top(rounded) → headline → feature-pills → price → agent-prominent + cta",
+        layoutStructure: "image-hero-top(rounded) → headline → feature-pills → price → cta + agent strip",
         zones: {
-          image: z(a.hasPropertyImage, 4, 4, 92, 52, "center", "hero"),
-          logo: z(a.hasLogo, 8, 74, 20, 8, "end", "low"),
-          badge: z(true, 8, 8, 24, 8, "start", "med"),
-          headline: z(true, 60, 6, 88, 9, "start", "high"),
-          subheadline: z(true, 70, 6, 88, 5, "start", "med"),
-          features: z(true, 76, 6, 88, 9, "start", "med"),
-          price: z(true, 86, 6, 40, 8, "start", "med"),
-          agent: z(agentShown, 88, 6, 50, 10, "start", "high"),
-          cta: z(true, 88, 60, 34, 9, "center", "high"),
+          image: z(a.hasPropertyImage, 4, 4, 92, 46, "center", "hero"),
+          logo: z(a.hasLogo, 7, 74, 20, 7, "end", "low"),
+          badge: z(true, 7, 7, 24, 7, "start", "med"),
+          headline: z(true, 53, 6, 88, 9, "start", "high"),
+          subheadline: z(true, 63, 6, 88, 4, "start", "med"),
+          features: z(true, 68, 6, 88, 8, "start", "med"),
+          price: z(true, 77, 6, 50, 7, "start", "med"),
+          cta: z(true, 86, 6, 52, 9, "center", "high"),
+          agent: z(agentShown, 86, 60, 36, 9, "end", "high"),
         },
         typography: { headline: 2.0, subheadline: 1.05, price: 1.9, featureValue: 1.2, featureLabel: 0.8, cta: 1.05, agent: 1.0, headlineWeight: 800, family: "sans" },
         spacing: { unit: 10, gap: 10, sectionGap: 16 }, backgroundTreatment: { mode: "brand_gradient", aiEnvironmentPrompt: env, scrim: "soft warm vignette" },
@@ -96,17 +103,17 @@ function planForFamily(family: DesignFamily, a: DesignAssets, agentShown: boolea
       };
     case "editorial_real_estate": // structured, data-led, metrics grid
       return {
-        layoutStructure: "image-top(40%) → headline-overlay → metrics-grid(2x2) → cta + agent-compact",
+        layoutStructure: "image-top(36%) → headline → metrics-grid → price → cta + agent strip",
         zones: {
-          image: z(a.hasPropertyImage, 0, 0, 100, 40, "center", "med"),
-          logo: z(a.hasLogo, 3, 73, 24, 8, "end", "low"),
-          badge: z(true, 3, 4, 22, 7, "start", "med"),
-          headline: z(true, 30, 5, 90, 9, "start", "high"),
-          subheadline: z(true, 42, 6, 88, 5, "start", "low"),
-          features: z(true, 50, 6, 88, 30, "start", "hero"),
-          price: z(true, 50, 6, 42, 14, "start", "high"),
-          cta: z(true, 87, 6, 50, 9, "center", "med"),
-          agent: z(agentShown, 87, 64, 30, 11, "end", "low"),
+          image: z(a.hasPropertyImage, 0, 0, 100, 36, "center", "med"),
+          logo: z(a.hasLogo, 3, 73, 24, 7, "end", "low"),
+          badge: z(true, 5, 5, 22, 7, "start", "med"),
+          headline: z(true, 38, 5, 90, 8, "start", "high"),
+          subheadline: z(true, 47, 6, 88, 4, "start", "low"),
+          features: z(true, 52, 6, 88, 24, "start", "hero"),
+          price: z(true, 77, 6, 50, 7, "start", "high"),
+          cta: z(true, 86, 6, 52, 9, "center", "med"),
+          agent: z(agentShown, 86, 60, 36, 9, "end", "low"),
         },
         typography: { headline: 1.7, subheadline: 0.95, price: 1.7, featureValue: 1.6, featureLabel: 0.78, cta: 1.0, agent: 0.85, headlineWeight: 800, family: "sans" },
         spacing: { unit: 9, gap: 7, sectionGap: 12 }, backgroundTreatment: { mode: "brand_gradient", aiEnvironmentPrompt: env, scrim: "navy gradient + subtle grid depth" },
@@ -115,16 +122,16 @@ function planForFamily(family: DesignFamily, a: DesignAssets, agentShown: boolea
       };
     case "developer_launch": // project-led, agent suppressed, project name banner
       return {
-        layoutStructure: "project-banner-top → image-band → feature-grid → cta (agent suppressed)",
+        layoutStructure: "project-banner-top → image-band → feature-grid → price + cta (agent suppressed)",
         zones: {
-          image: z(a.hasPropertyImage, 22, 0, 100, 46, "center", "high"),
-          logo: z(a.hasLogo, 3, 70, 27, 9, "end", "med"),
-          badge: z(true, 4, 5, 30, 9, "start", "high"),
-          headline: z(true, 5, 5, 90, 13, "start", "high"),
-          subheadline: z(true, 16, 6, 88, 5, "start", "low"),
-          features: z(true, 70, 6, 88, 14, "center", "high"),
-          price: z(true, 86, 6, 44, 9, "start", "med"),
-          cta: z(true, 86, 60, 34, 9, "center", "high"),
+          image: z(a.hasPropertyImage, 30, 0, 100, 40, "center", "high"),
+          logo: z(a.hasLogo, 4, 70, 26, 7, "end", "med"),
+          badge: z(true, 4, 5, 30, 7, "start", "high"),
+          headline: z(true, 13, 5, 88, 11, "start", "high"),
+          subheadline: z(true, 24, 6, 80, 4, "start", "low"),
+          features: z(true, 71, 6, 88, 11, "center", "high"),
+          price: z(true, 85, 6, 44, 8, "start", "med"),
+          cta: z(true, 85, 56, 40, 8, "center", "high"),
           agent: z(false, 0, 0, 0, 0, "end", "low"),
         },
         typography: { headline: 2.0, subheadline: 1.0, price: 1.7, featureValue: 1.25, featureLabel: 0.8, cta: 1.05, agent: 0.85, headlineWeight: 900, family: "sans" },
@@ -135,17 +142,17 @@ function planForFamily(family: DesignFamily, a: DesignAssets, agentShown: boolea
     case "luxury_dark": // cinematic full-bleed, lots of air, minimal
     default:
       return {
-        layoutStructure: "full-bleed-photo → centered-editorial-headline → price-corner(small) → agent-minimal",
+        layoutStructure: "full-bleed-photo → centered-editorial-headline → price band → cta + agent strip",
         zones: {
           image: z(a.hasPropertyImage, 0, 0, 100, 100, "center", "hero"),
-          logo: z(a.hasLogo, 5, 72, 23, 8, "end", "low"),
-          badge: z(true, 5, 5, 22, 7, "start", "low"),
-          headline: z(true, 30, 10, 80, 14, "center", "hero"),
-          subheadline: z(true, 46, 12, 76, 6, "center", "low"),
-          price: z(true, 78, 6, 32, 8, "start", "low"),
+          logo: z(a.hasLogo, 5, 72, 23, 7, "end", "low"),
+          badge: z(true, 5, 5, 22, 6, "start", "low"),
+          headline: z(true, 58, 8, 84, 12, "center", "hero"),
+          subheadline: z(true, 71, 10, 80, 5, "center", "low"),
+          price: z(true, 77, 6, 40, 7, "start", "low"),
           features: z(false, 0, 0, 0, 0, "center", "low"),
-          cta: z(true, 88, 60, 34, 9, "center", "med"),
-          agent: z(agentShown, 88, 6, 48, 10, "start", "low"),
+          cta: z(true, 86, 6, 52, 8, "center", "med"),
+          agent: z(agentShown, 86, 60, 36, 8, "end", "low"),
         },
         typography: { headline: 2.3, subheadline: 1.0, price: 1.5, featureValue: 1.1, featureLabel: 0.78, cta: 1.0, agent: 0.85, headlineWeight: 800, family: "sans" },
         spacing: { unit: 12, gap: 12, sectionGap: 20 }, backgroundTreatment: { mode: "ai_environment", aiEnvironmentPrompt: env, scrim: "cinematic dark scrim, gold spill" },
@@ -168,7 +175,7 @@ export function buildDesignExecutionPlan(plan: ConceptPlan, dna: BrandDNA, guida
     "no rounded white container, no list rows, no dashboard chrome",
     `${p.overlaySystem.length} overlay layers + effects [${p.effects.join(", ")}] create depth`,
   ];
-  return {
+  const raw: DesignExecutionPlan = {
     depId: `dep_${plan.trigger}_${family}`,
     family, familyLabel: DESIGN_FAMILY_LABEL[family],
     canvas: { width: 1080, height: 1080, safeMargin: 48 },
@@ -180,6 +187,10 @@ export function buildDesignExecutionPlan(plan: ConceptPlan, dna: BrandDNA, guida
     },
     notCardProof: { isDashboardCard: false, reasons },
   };
+  // Layout-integrity pass: guarantee collision-free, in-margin, price-safe zones.
+  const { dep: fixed, qa } = normalizeDep(raw);
+  fixed.layout = qa;
+  return fixed;
 }
 
 export interface DesignReviewGate { approved: boolean; distinctFamilies: number; totalPlans: number; anyDashboardCard: boolean; issues: string[] }

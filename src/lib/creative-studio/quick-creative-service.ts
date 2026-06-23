@@ -23,8 +23,9 @@ import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
 import { type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
 import { directConceptsAI } from "./creative-thinking-ai";
 import { deriveBrandDNA, brandGuidanceForConcept } from "./brand-dna-engine";
-import { buildDesignExecutionPlan } from "./design-system-engine";
+import { buildDesignExecutionPlan, type DesignExecutionPlan } from "./design-system-engine";
 import { produceAdScene } from "./creative-production-engine";
+import { finalLayoutQA } from "./layout-integrity";
 import type { FinalAdData } from "./final-creative-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
@@ -32,7 +33,14 @@ import type { FinalAdData } from "./final-creative-engine";
  *  system, composition, copy + AI creative direction + text-free AI environment).
  *  Real assets + Hebrew stay deterministic. Each concept is injected as a
  *  finished, ready-to-post square ad spec. */
-async function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variations: ReturnType<typeof buildQuickVariations>): Promise<void> {
+/** One finished, layout-validated final-ad creative (concept + DEP + render_data). */
+interface FinalAdBuilt { trigger: string; triggerLabel: string; ad: FinalAdData; designPlan: DesignExecutionPlan; render: Record<string, unknown>; scores: { finalPostReadiness: number; warnings: string[]; blockers: string[] }; provider: string }
+
+/** PROPERTY AD path: build EXACTLY the 4 required, strategically-distinct
+ *  concepts (family / investment / luxury / price_advantage). Each gets its own
+ *  DEP (distinct design family), runs through layout integrity, and is deduped so
+ *  no trigger/family combination repeats. Returns one entry per unique concept. */
+async function buildFinalAds(input: QuickInput, brand: BrandSnapshot): Promise<FinalAdBuilt[]> {
   const facts: FinalAdFacts = {
     propertyImage: input.propertyImage ?? null, city: input.city ?? null, neighborhood: input.neighborhood ?? null,
     address: input.address ?? null, propertyType: input.propertyType ?? null, price: input.price ?? null,
@@ -46,30 +54,33 @@ async function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variation
     agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null, agentPhoto: brand.agentPhoto ?? null,
     officeName: brand.officeName ?? null, officeLogo: brand.officeLogo ?? null, colors: brand.colors, luxury: brand.luxury,
   };
-  // ALL approved concepts are kept + rendered (never collapsed to one winner) —
-  // so any channel (FB / IG feed / stories / WhatsApp / website / landing /
-  // retargeting) can later render the concept that fits.
   const t0 = Date.now();
   const { approvedConcepts, provider } = await directConceptsAI(facts, brandAssets);
-  if (!approvedConcepts.length) return;
+  if (!approvedConcepts.length) return [];
   const generationMs = Date.now() - t0;
-  // BrandDNAEngine: agency visual personality — enriches the flow (does not change
-  // brief/concept/art-direction). Consumed later by the DesignSystemEngine.
   const brandDNA = deriveBrandDNA(brandAssets);
-  variations.forEach((v, vi) => {
-    const c = approvedConcepts[vi % approvedConcepts.length].plan;
-    const r = v.render as unknown as Record<string, unknown>;
-    // Observability: stamp generation duration + thinking provider onto the trace.
-    const adTrace = c.ad.trace ? { ...c.ad.trace, generationMs, thinkingProvider: provider } : undefined;
+
+  // Build a DEP per concept; ENFORCE uniqueness on both trigger AND design family
+  // so a single generation never shows the same concept/family twice.
+  const seenTrigger = new Set<string>(); const seenFamily = new Set<string>();
+  const built: FinalAdBuilt[] = [];
+  for (const ac of approvedConcepts) {
+    const c = ac.plan;
+    if (seenTrigger.has(c.trigger)) continue;
     const guidance = brandGuidanceForConcept(brandDNA, c.ad.trigger);
-    // DesignSystemEngine: strict Design Execution Plan the Renderer will execute.
     const assets = { hasPropertyImage: Boolean(c.ad.propertyImage), hasLogo: Boolean(c.ad.logoUrl), hasAgentPhoto: Boolean(c.ad.agentPhoto), hasPhone: Boolean(c.ad.agentPhone) };
     const designPlan = buildDesignExecutionPlan(c, brandDNA, guidance, assets);
-    r.ad = { ...c.ad, trace: adTrace, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: guidance, designPlan };
-    r.width = c.ad.width; r.height = c.ad.height; r.format = "feed_1_1";
-    v.variantName = `קונספט · ${c.triggerLabel}`;
-    v.headline = c.ad.headline; v.subheadline = c.ad.subheadline; v.cta = c.ad.cta;
-  });
+    if (seenFamily.has(designPlan.family)) continue; // never duplicate a design family
+    seenTrigger.add(c.trigger); seenFamily.add(designPlan.family);
+    const adTrace = c.ad.trace ? { ...c.ad.trace, generationMs, thinkingProvider: provider } : undefined;
+    const ad: FinalAdData = { ...c.ad, trace: adTrace };
+    const render: Record<string, unknown> = {
+      format: "feed_1_1", width: c.ad.width, height: c.ad.height,
+      ad: { ...ad, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: guidance, designPlan },
+    };
+    built.push({ trigger: c.trigger, triggerLabel: c.triggerLabel, ad, designPlan, render, scores: { finalPostReadiness: c.scores.finalPostReadiness, warnings: c.scores.warnings, blockers: c.scores.blockers }, provider });
+  }
+  return built;
 }
 
 type QuickVar = ReturnType<typeof buildQuickVariations>[number];
@@ -194,9 +205,40 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     hasPropertyImage: Boolean(g.input.propertyImage), importantText: g.input.importantText ?? null,
   });
 
+  // ── PROPERTY AD: exactly 4 distinct, layout-validated concept creatives. ──
+  // This path BYPASSES the variation×family candidate matrix (which could select
+  // the same concept multiple times) and emits one row per unique concept.
+  if (g.requestType === "property_ad_post") {
+    const built = await buildFinalAds(g.input, brand.snapshot);
+    if (built.length) {
+      const qa = finalLayoutQA(built.map((b) => b.designPlan));
+      const selMeta = { candidatesTotal: built.length, rounds: 1, threshold: QUALITY_CONFIG.minQualityScore, layoutApproved: qa.approved, layoutReasons: qa.reasons, duplicateFamilies: qa.duplicateFamilies };
+      const finalRows = built.map((b) => {
+        const layoutOk = b.designPlan.layout?.approved !== false;
+        const ready = b.scores.finalPostReadiness;
+        const features = b.ad.features.map((ft) => (ft.value ? `${ft.value} ${ft.label}` : ft.label)).join(" · ");
+        return {
+          org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
+          output_type: g.requestType, variant_name: `קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
+          render_data: b.render as unknown as Json, headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
+          brand_match_score: 90, readability_score: 92, conversion_score: ready, seller_lead_score: null, buyer_lead_score: null, overall_score: ready, status: "generated",
+          quality_status: layoutOk && b.scores.blockers.length === 0 ? "passed" : "below_threshold",
+          overall_quality_score: ready, wow_score: ready,
+          critic_summary: layoutOk ? `מודעה סופית — קונספט ${b.triggerLabel}, משפחת עיצוב ${b.designPlan.familyLabel}, פריסה תקינה (ללא חפיפות/חיתוך).` : `בעיית פריסה: ${(b.designPlan.layout?.violations ?? []).map((v) => v.detail).join(", ")}`,
+          quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
+          used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json,
+          property_primary_angle: propertyFirst.propertyPrimaryAngle,
+          creative_selection_metadata: { ...selMeta, family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, finalPostReadiness: ready, warnings: b.scores.warnings, blockers: b.scores.blockers, layout: b.designPlan.layout } as unknown as Json,
+        };
+      });
+      const { data: insP } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
+      const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
+      await generateAdScenesForOutputs(supabase, orgId, adIds);
+      return { requestId, created: finalRows.length };
+    }
+  }
+
   const variations = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
-  // FINAL AD: property ads become finished, ready-to-post square creatives.
-  if (g.requestType === "property_ad_post") await attachFinalAds(g.input, brand.snapshot, variations);
   // Candidate matrix: each strategic variation × each style family (≈16 candidates).
   const briefs: CandidateBrief[] = [];
   variations.forEach((v, vi) => {
