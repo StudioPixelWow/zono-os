@@ -4201,6 +4201,26 @@ type ZonoCreativeOutputsRow = {
   is_approved: boolean; is_favorite: boolean; created_at: string; updated_at: string;
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; creative_director_metadata: Json;
   scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
+  quality_status: string | null; overall_quality_score: number; wow_score: number; critic_summary: string | null;
+  quality_review_id: string | null; generation_round: number; is_hidden_due_to_quality: boolean;
+  used_inspiration_assets: Json; property_primary_angle: string | null; creative_selection_metadata: Json;
+};
+type ZonoCreativeCandidatesRow = {
+  id: string; org_id: string; request_id: string; entity_type: string | null; entity_id: string | null;
+  candidate_family: string | null; generation_round: number; generated_image_url: string | null; final_composited_image_url: string | null;
+  render_data: Json; internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; property_primary_angle: string | null;
+  quality_score: number; wow_score: number; status: string; is_selected: boolean; is_rejected: boolean;
+  rejection_reason: string | null; quality_review_id: string | null; metadata: Json; created_at: string;
+};
+type ZonoCreativeQualityReviewsRow = {
+  id: string; org_id: string; request_id: string | null; output_id: string | null; candidate_id: string | null;
+  entity_type: string | null; entity_id: string | null; review_round: number;
+  premium_score: number; modern_score: number; clean_score: number; scroll_stop_score: number; brand_match_score: number;
+  real_estate_relevance_score: number; hebrew_readability_score: number; rtl_score: number; composition_score: number;
+  trust_score: number; conversion_score: number; wow_score: number; property_truth_score: number;
+  agent_authenticity_score: number; logo_authenticity_score: number; overall_quality_score: number;
+  is_approved_for_display: boolean; is_rejected: boolean; critic_summary: string | null; critic_problems: Json;
+  improvement_instructions: Json; reject_reason: string | null; approval_reason: string | null; created_at: string;
 };
 type ZonoVisualAssetsRow = {
   id: string; org_id: string; entity_type: string; entity_id: string; campaign_id: string | null; creative_output_id: string | null;
@@ -4221,6 +4241,9 @@ type ZonoQuickCreativeOutputsRow = {
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; creative_director_metadata: Json;
   scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
   image_url: string | null; image_provider: string | null; image_status: string | null; image_error: string | null;
+  quality_status: string | null; overall_quality_score: number; wow_score: number; critic_summary: string | null;
+  quality_review_id: string | null; generation_round: number; is_hidden_due_to_quality: boolean;
+  used_inspiration_assets: Json; property_primary_angle: string | null; creative_selection_metadata: Json;
 };
 type BrandIdentityProfilesRow = {
   id: string; org_id: string; entity_type: string; entity_id: string;
@@ -4761,6 +4784,8 @@ export interface Database {
       zono_visual_assets: TableShape<ZonoVisualAssetsRow, "org_id" | "entity_type" | "entity_id" | "visual_type">;
       zono_quick_creative_requests: TableShape<ZonoQuickCreativeRequestsRow, "org_id" | "request_type">;
       zono_quick_creative_outputs: TableShape<ZonoQuickCreativeOutputsRow, "org_id" | "request_id" | "output_type" | "variant_name" | "format">;
+      zono_creative_candidates: TableShape<ZonoCreativeCandidatesRow, "org_id" | "request_id">;
+      zono_creative_quality_reviews: TableShape<ZonoCreativeQualityReviewsRow, "org_id">;
       brand_identity_profiles: TableShape<BrandIdentityProfilesRow, "org_id" | "entity_type" | "entity_id">;
       brand_assets: TableShape<BrandAssetsRow, "org_id" | "entity_type" | "entity_id" | "asset_kind" | "url">;
       social_accounts: TableShape<SocialAccountsRow, "organization_id" | "provider">;

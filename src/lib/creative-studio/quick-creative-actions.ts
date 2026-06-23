@@ -1,11 +1,16 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import {
-  generateQuickCreative, listQuickOutputs, resolveBrandSnapshot, setQuickFavorite, approveQuickOutput, rejectQuickOutput,
+  generateQuickCreative, listQuickOutputs, listCreativeCandidates, resolveBrandSnapshot, setQuickFavorite, approveQuickOutput, rejectQuickOutput,
   duplicateQuickOutput, editQuickText, replaceQuickImage, regenerateQuickRequest, generateQuickCreativeImage, type GenerateQuickInput,
 } from "./quick-creative-service";
 
 export interface QcActionState { ok?: boolean; error?: string; message?: string; warnings?: string[] }
+
+/** Admin/debug: list all generated candidates (selected + rejected) for an entity. */
+export async function listCreativeCandidatesAction(input: { entityType?: string; entityId?: string }): Promise<{ candidates: Record<string, unknown>[] }> {
+  try { return { candidates: await listCreativeCandidates(input) }; } catch { return { candidates: [] }; }
+}
 
 /** Generate the final ad image (Gemini Nano Banana) for one output. */
 export async function generateQuickImageAction(input: { outputId: string; entityType: string; entityId: string }): Promise<QcActionState> {

@@ -16,6 +16,10 @@ import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
 import { generateFinalImage, resolveImageProvider } from "./visual-providers";
 import { validateCreative } from "./creative-director/validation";
 import { getEffectiveBrand } from "@/lib/brand-identity/service";
+import { detectPropertyAngle } from "./quality/zonoPropertyFirstEngine";
+import { pullInspiration } from "./quality/zonoCreativeInspirationEngine";
+import { runQualityPipeline, QUALITY_CONFIG } from "./quality/orchestrator";
+import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
 
 type QuickVar = ReturnType<typeof buildQuickVariations>[number];
 function providedFeatures(i: QuickInput): string[] {
@@ -121,24 +125,73 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   if (reqErr || !reqRow) throw new Error(reqErr?.message ?? "יצירת הבקשה נכשלה");
   const requestId = (reqRow as { id: string }).id;
 
+  // ── ZONO Creative Quality Engine ────────────────────────────────────────
+  // Never show raw first-generation AI. Build MANY internal candidates, judge
+  // them harshly, regenerate the weak, and surface only the strongest 4.
+  const feats = providedFeatures(g.input);
+  const inspiration = await pullInspiration(supabase, { orgId, agentId: brand.agentId, requestType: g.requestType, propertyType: g.input.propertyType ?? null });
+  const numOr = (v: string | null | undefined): number | null => { const n = Number(v); return Number.isFinite(n) && v != null && v !== "" ? n : null; };
+  const propertyFirst = detectPropertyAngle({
+    requestType: g.requestType, propertyType: g.input.propertyType ?? null, city: g.input.city, neighborhood: g.input.neighborhood,
+    price: numOr(g.input.price), rooms: numOr(g.input.rooms), sizeSqm: numOr(g.input.sizeSqm), floor: numOr(g.input.floor),
+    balcony: Boolean(g.input.balcony), parking: Boolean(g.input.parking), storage: Boolean(g.input.storage), elevator: Boolean(g.input.elevator),
+    hasPropertyImage: Boolean(g.input.propertyImage), importantText: g.input.importantText ?? null,
+  });
+
   const variations = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
-  const rows = variations.map((v) => ({
-    org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
-    output_type: g.requestType, variant_name: v.variantName, format: g.format, title: `${v.variantName} · ${v.headline}`,
-    render_data: v.render as unknown as Json, headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
-    brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
-    seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
-    ...directorFields(g.requestType, g.input, brand.snapshot, v),
+  // Candidate matrix: each strategic variation × each style family (≈16 candidates).
+  const briefs: CandidateBrief[] = [];
+  variations.forEach((v, vi) => {
+    QUALITY_FAMILIES.forEach((family, fi) => {
+      const df = directorFields(g.requestType, g.input, brand.snapshot, v, fi);
+      const blocks = ((v.render as { blocks?: { component?: string; align?: string; emphasis?: string }[] } | null)?.blocks) ?? [];
+      const outputDraft: Record<string, unknown> = {
+        org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
+        output_type: g.requestType, variant_name: v.variantName, format: g.format, title: `${v.variantName} · ${v.headline}`,
+        render_data: v.render as unknown as Json, headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
+        brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
+        seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
+        ...df,
+      };
+      briefs.push({
+        candidateId: `c-${vi}-${fi}`, family, style: family,
+        headline: v.headline, subheadline: v.subheadline, body: v.body, cta: v.cta,
+        featureChips: feats, providedFeatures: feats, propertyType: g.input.propertyType ?? null,
+        hasPrice: Boolean(g.input.price), hasPropertyImage: Boolean(g.input.propertyImage),
+        hasAgentPhoto: Boolean(brand.snapshot.agentPhoto), hasOfficeLogo: Boolean(brand.snapshot.officeLogo),
+        brandColorCount: brand.snapshot.colors.filter(Boolean).length, propertyStrengthScore: propertyFirst.propertyStrengthScore,
+        blocks, base: { scrollStop: df.scroll_stop_score as number, antiAi: df.anti_ai_score as number, creativeDirector: df.creative_director_score as number, rtlReadability: df.rtl_readability_score as number },
+        internalPrompt: df.internal_prompt as string, creativeStrategy: df.creative_strategy as string, visualHook: df.visual_hook as string,
+        propertyPrimaryAngle: propertyFirst.propertyPrimaryAngle, renderData: v.render, outputDraft,
+      });
+    });
+  });
+
+  const quality = await runQualityPipeline({ db: supabase, orgId, requestId, entityType: g.entityType ?? null, entityId: isUuid(g.entityId) ? g.entityId : null, briefs, inspiration });
+  // Show the selected candidates (fallback: top scored if everything was blocked).
+  const winners = quality.selected.length ? quality.selected
+    : [...quality.rejected].sort((a, b) => b.scores.overall_quality_score - a.scores.overall_quality_score).slice(0, QUALITY_CONFIG.finalCount);
+
+  const selectionMeta = { candidatesTotal: quality.candidatesTotal, rounds: quality.rounds, threshold: QUALITY_CONFIG.minQualityScore };
+  const rows = winners.map((c) => ({
+    ...(c.brief.outputDraft as Record<string, unknown>),
+    quality_status: c.scores.overall_quality_score >= QUALITY_CONFIG.minQualityScore && !c.scores.hard_blocked ? "passed" : "below_threshold",
+    overall_quality_score: c.scores.overall_quality_score, wow_score: c.scores.wow_score,
+    critic_summary: c.critic.critic_summary, quality_review_id: quality.reviewIdByCandidate[c.brief.candidateId] ?? null,
+    generation_round: c.generationRound, is_hidden_due_to_quality: false,
+    used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json,
+    property_primary_angle: c.brief.propertyPrimaryAngle,
+    creative_selection_metadata: { ...selectionMeta, family: c.brief.family, wow: c.scores.wow_score } as unknown as Json,
   }));
   const { data: inserted } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
   const ids = ((inserted ?? []) as { id: string }[]).map((r) => r.id);
-  // Auto-generate the FINAL image (Gemini Nano Banana) for every variation —
-  // no manual button. Best-effort: if a provider key is missing or a call
-  // fails, the variation is still created (its render shows until an image
-  // exists). We never fabricate a placeholder image.
+  // Auto-generate the FINAL image (Gemini Nano Banana) only for the selected
+  // winners. Best-effort: never fabricate a placeholder image.
   await generateImagesForOutputs(supabase, orgId, ids);
   return { requestId, created: rows.length };
 }
+
+const QUALITY_FAMILIES = VARIATION_STYLES;
 
 /** Generate the final AI image for many outputs in parallel; never throws. */
 async function generateImagesForOutputs(supabase: DB, orgId: string, outputIds: string[]): Promise<void> {
@@ -159,11 +212,22 @@ async function generateImagesForOutputs(supabase: DB, orgId: string, outputIds: 
 export async function listQuickOutputs(opts: { entityType?: string; entityId?: string; propertyId?: string | null }): Promise<QuickOutputRow[]> {
   const { orgId, supabase } = await ctx();
   let q = supabase.from("zono_quick_creative_outputs").select("*").eq("org_id", orgId).neq("status", "deleted");
+  // Normal users never see quality-hidden outputs.
+  q = q.not("is_hidden_due_to_quality", "is", true);
   // scope to this entity's creatives where possible
   if (opts.entityType === "property" && isUuid(opts.entityId)) q = q.eq("property_id", opts.entityId);
   else if (opts.entityType === "agent" && isUuid(opts.entityId)) q = q.eq("agent_id", opts.entityId);
   const { data } = await q.order("is_favorite", { ascending: false }).order("created_at", { ascending: false }).limit(60);
   return (data ?? []) as QuickOutputRow[];
+}
+
+/** Admin/debug: every candidate (selected + rejected) with scores + critic. */
+export async function listCreativeCandidates(opts: { entityType?: string; entityId?: string }): Promise<Record<string, unknown>[]> {
+  const { orgId, supabase } = await ctx();
+  let q = supabase.from("zono_creative_candidates").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(80);
+  if (opts.entityType && isUuid(opts.entityId)) q = q.eq("entity_type", opts.entityType).eq("entity_id", opts.entityId);
+  const { data } = await q;
+  return (data ?? []) as Record<string, unknown>[];
 }
 
 export async function setQuickFavorite(outputId: string, value: boolean): Promise<void> {

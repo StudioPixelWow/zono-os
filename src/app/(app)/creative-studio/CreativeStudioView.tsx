@@ -38,7 +38,7 @@ import {
 } from "@/lib/creative-studio/visual-actions";
 import { VISUAL_TYPE_LABELS, VARIATION_MODES } from "@/lib/creative-studio/visual-dna";
 import {
-  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction,
+  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction, listCreativeCandidatesAction,
 } from "@/lib/creative-studio/quick-creative-actions";
 import { QUICK_TYPE_LABELS } from "@/lib/creative-studio/quick-creative-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
@@ -48,6 +48,9 @@ type QuickOutput = Record<string, unknown> & {
   headline: string | null; cta_text: string | null; overall_score: number; brand_match_score: number; readability_score: number; seller_lead_score: number; buyer_lead_score: number; is_approved: boolean; is_favorite: boolean; status: string;
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
   image_url: string | null; image_status: string | null; image_error: string | null;
+  overall_quality_score: number; wow_score: number; quality_status: string | null;
+  property_primary_angle: string | null; critic_summary: string | null;
+  creative_selection_metadata: { candidatesTotal?: number; rounds?: number } | null;
 };
 
 type Visual = Record<string, unknown> & {
@@ -911,8 +914,42 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, us
           </div>
         </div>
       )}
+      {canViewPrompt && <AdminCandidatesPanel et={et} eid={eid} />}
       {wizardType && <QuickCreativeWizard type={wizardType} et={et} eid={eid} orgId={orgId} userId={userId} prefill={prefill} onClose={() => setWizardType(null)} />}
     </section>
+  );
+}
+
+/** Admin/debug: every generated candidate (selected + rejected) with scores + critic. */
+function AdminCandidatesPanel({ et, eid }: { et: string; eid: string }) {
+  const [open, setOpen] = useState(false);
+  const [cands, setCands] = useState<Record<string, unknown>[] | null>(null);
+  const load = async () => { const r = await listCreativeCandidatesAction({ entityType: et, entityId: eid }); setCands(r.candidates); };
+  return (
+    <div className="border-line bg-surface/50 rounded-2xl border p-3">
+      <button onClick={() => { setOpen(!open); if (!cands) void load(); }} className="text-brand-strong inline-flex items-center gap-1 text-[12px] font-bold">
+        <Icon name="Shield" size={13} /> מנוע איכות — מועמדים שנוצרו (אדמין)
+      </button>
+      {open && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {cands == null ? <p className="text-muted text-[11px]">טוען…</p>
+            : cands.length === 0 ? <p className="text-muted text-[11px]">אין מועמדים שמורים עדיין — צור קריאייטיב חדש.</p>
+            : cands.slice(0, 40).map((c) => {
+              const sel = Boolean(c.is_selected);
+              return (
+                <div key={String(c.id)} className={`bg-card border-line flex items-center gap-2 rounded-lg border p-2 text-[11px] ${sel ? "ring-1 ring-success" : "opacity-80"}`}>
+                  <span className={`rounded px-1.5 py-0.5 font-black ${sel ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>{sel ? "נבחר" : "נדחה"}</span>
+                  <span className="text-muted">{String(c.candidate_family ?? "")}</span>
+                  <span className="text-ink font-bold">ציון {String(c.quality_score ?? 0)}</span>
+                  <span className="text-brand-strong font-bold">WOW {String(c.wow_score ?? 0)}</span>
+                  <span className="text-muted truncate flex-1">{String(c.rejection_reason ?? c.property_primary_angle ?? "")}</span>
+                  <span className="text-muted/60">סבב {String(c.generation_round ?? 1)}</span>
+                </div>
+              );
+            })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -938,6 +975,14 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
       {o.image_status === "failed" && !o.image_url && o.image_error && (
         <p className="bg-danger-soft text-danger rounded-lg px-2 py-1 text-[9px] font-bold break-words" dir="ltr">{o.image_error}</p>
       )}
+      {/* ZONO Creative Quality badges */}
+      <div className="flex flex-wrap gap-1 px-0.5">
+        {o.overall_quality_score > 0 && <span className="bg-ink text-card rounded-full px-1.5 py-0.5 text-[9px] font-black">ציון {o.overall_quality_score}</span>}
+        {o.wow_score > 0 && <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-black">WOW {o.wow_score}</span>}
+        {o.quality_status === "passed" && <span className="bg-success-soft text-success rounded-full px-1.5 py-0.5 text-[9px] font-bold">✓ עבר בקרת איכות</span>}
+        {o.creative_selection_metadata?.candidatesTotal ? <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 text-[9px] font-bold">נבחר מתוך {o.creative_selection_metadata.candidatesTotal} גרסאות</span> : null}
+        {o.property_primary_angle && <span className="bg-warning-soft text-warning rounded-full px-1.5 py-0.5 text-[9px] font-bold">זווית: {o.property_primary_angle}</span>}
+      </div>
       <div className="flex items-center justify-between gap-1 px-0.5">
         <span className="text-muted text-[10px] font-bold">{o.variant_name}</span>
         <span className="text-success text-sm font-black">{o.overall_score}</span>
@@ -1150,10 +1195,19 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
 
         {step === 4 && (
           <div className="flex flex-col gap-3">
-            <p className="text-ink text-sm">ZONO ייצר 4 וריאציות ממותגות: Premium Clean · Modern Sales · Trust/Authority · Bold Social.</p>
+            <p className="text-ink text-sm">ZONO ייצר מנוע איכות מלא ויציג רק את 4 הגרסאות החזקות ביותר.</p>
+            {busy ? (
+              <div className="bg-surface flex flex-col gap-1.5 rounded-xl p-3">
+                {["מנתח את הנכס…", "מושך השראות מהמערכת…", "מייצר מועמדים…", "בודק איכות…", "משפר תוצאות…", "מציג את 4 הגרסאות הטובות ביותר"].map((s, i) => (
+                  <div key={s} className="flex items-center gap-2 text-[12px] font-bold text-ink">
+                    <span className="bg-brand-soft text-brand-strong grid h-5 w-5 place-items-center rounded-full text-[10px] font-black">{i + 1}</span>{s}
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {err && <p className="text-danger text-[12px]">{err}</p>}
-            <div className="flex gap-2"><Button size="sm" loading={busy} onClick={submit}><Icon name="Sparkles" size={14} />צור 4 וריאציות</Button><Button size="sm" variant="ghost" onClick={() => setStep(3)}>חזרה</Button></div>
-            <p className="text-muted text-[11px]">לאחר היצירה הוריאציות יופיעו ב״תוצאות יצירה מהירה״ לאישור ועריכה.</p>
+            <div className="flex gap-2"><Button size="sm" loading={busy} onClick={submit}><Icon name="Sparkles" size={14} />צור עם בקרת איכות</Button><Button size="sm" variant="ghost" onClick={() => setStep(3)}>חזרה</Button></div>
+            <p className="text-muted text-[11px]">המערכת מייצרת 16 מועמדים פנימיים, מדרגת אותם בקפדנות ומציגה רק את הטובים ביותר.</p>
           </div>
         )}
       </div>
