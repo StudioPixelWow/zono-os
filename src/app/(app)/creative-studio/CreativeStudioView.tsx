@@ -20,6 +20,7 @@ import { CONCEPT_TYPE_LABELS } from "@/lib/creative-studio/concept-engine";
 import type { FinalAdData, FinalAdScores } from "@/lib/creative-studio/final-creative-engine";
 import type { BrandDNA, BrandGuidance } from "@/lib/creative-studio/brand-dna-engine";
 import type { DesignExecutionPlan } from "@/lib/creative-studio/design-system-engine";
+import { BUILD_SIGNATURE } from "@/lib/creative-studio/build-signature";
 import {
   generateCampaignAction, duplicateCampaignAction, archiveCampaignAction, deleteCampaignAction, approveCampaignAction,
 } from "@/lib/creative-studio/campaign-actions";
@@ -1351,6 +1352,16 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, us
   return (
     <section className="flex flex-col gap-3">
       <div><h2 className="text-ink text-lg font-black">יצירה מהירה</h2><p className="text-muted text-[12px]">לחצו, מלאו טופס קצר וקבלו 4 וריאציות עיצוב ממותגות ומוכנות לפרסום.</p></div>
+      {/* BUILD SIGNATURE — proves which build is running (diagnostic only) */}
+      <div dir="ltr" className="bg-surface border-line text-muted flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 font-mono text-[10px]">
+        <span className="text-brand-strong font-bold">ZONO Build Signature</span>
+        <span>commit: <b className="text-ink">{BUILD_SIGNATURE.commit}</b></span>
+        <span>branch: {BUILD_SIGNATURE.branch}</span>
+        <span>signed: {BUILD_SIGNATURE.signedAt}</span>
+        <span>renderer: <b className="text-ink">{BUILD_SIGNATURE.rendererVersion}</b></span>
+        <span>concept-engine: <b className="text-ink">{BUILD_SIGNATURE.conceptEngineVersion}</b></span>
+        <span>design-system: <b className="text-ink">{BUILD_SIGNATURE.designSystemVersion}</b></span>
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {QUICK_CARDS.map((c) => (
           <div key={c.type} className="bg-card border-line flex flex-col gap-2 rounded-2xl border p-4 shadow-sm">
@@ -1447,6 +1458,10 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-bold">קונספט: {ad.triggerLabel ?? ad.angleLabel}</span>
           {ad.artDirection?.emotionalTrigger && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 text-[9px] font-bold">{ad.artDirection.emotionalTrigger}</span>}
         </div>
+      )}
+      {/* Per-creative identity — proves the new engine produced this output */}
+      {ad && (
+        <p dir="ltr" className="text-muted px-0.5 font-mono text-[9px]">{ad.trigger} · {ad.designPlan?.family ?? "no-DEP"} · {ad.designPlan?.depId ?? "—"}</p>
       )}
       {ad && adWarnings.length > 0 && (
         <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">{adWarnings.join(" · ")}</p>

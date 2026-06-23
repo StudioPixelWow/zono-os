@@ -24,6 +24,7 @@ export interface Zone { shown: boolean; top: number; left: number; width: number
 export interface TypeScale { headline: number; subheadline: number; price: number; featureValue: number; featureLabel: number; cta: number; agent: number; headlineWeight: number; family: "sans" }
 
 export interface DesignExecutionPlan {
+  depId: string;
   family: DesignFamily; familyLabel: string;
   canvas: { width: number; height: number; safeMargin: number };
   layoutStructure: string;
@@ -52,7 +53,7 @@ function familyFor(trigger: ConceptTrigger, dna: BrandDNA): DesignFamily {
 const z = (shown: boolean, top: number, left: number, width: number, height: number, align: Zone["align"], emphasis: Zone["emphasis"]): Zone => ({ shown, top, left, width, height, align, emphasis });
 
 /** Per-family zone maps, type scales, treatments, flags — strategically distinct. */
-function planForFamily(family: DesignFamily, a: DesignAssets, agentShown: boolean, adr: ArtDirection): Omit<DesignExecutionPlan, "family" | "familyLabel" | "canvas" | "flags" | "notCardProof"> & { flagsPartial: { priceDominant: boolean; propertyImageDominant: boolean } } {
+function planForFamily(family: DesignFamily, a: DesignAssets, agentShown: boolean, adr: ArtDirection): Omit<DesignExecutionPlan, "depId" | "family" | "familyLabel" | "canvas" | "flags" | "notCardProof"> & { flagsPartial: { priceDominant: boolean; propertyImageDominant: boolean } } {
   const env = adr.aiEnvironment.imageModelPrompt;
   switch (family) {
     case "high_conversion_sales": // price leads, image supports, dense, high contrast
@@ -168,6 +169,7 @@ export function buildDesignExecutionPlan(plan: ConceptPlan, dna: BrandDNA, guida
     `${p.overlaySystem.length} overlay layers + effects [${p.effects.join(", ")}] create depth`,
   ];
   return {
+    depId: `dep_${plan.trigger}_${family}`,
     family, familyLabel: DESIGN_FAMILY_LABEL[family],
     canvas: { width: 1080, height: 1080, safeMargin: 48 },
     layoutStructure: p.layoutStructure, zones: p.zones, typography: p.typography, spacing: p.spacing,
