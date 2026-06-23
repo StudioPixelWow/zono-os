@@ -1,0 +1,258 @@
+{
+  "hero": {
+    "greeting": "Good morning",
+    "title": "Your Command Center",
+    "subtitle": "All your data, opportunities and actions in one place",
+    "searchPlaceholder": "Search properties, clients, neighborhoods or ask ZONO…",
+    "quickAdd": "Add property",
+    "featuredTag": "Recommended for today",
+    "matchScore": "Match",
+    "featuredCta": "Open property"
+  },
+  "kpi": {
+    "activeDeals": { "label": "Active deals", "hint": "Deals in active progress" },
+    "expectedRevenue": { "label": "Expected revenue", "hint": "Projected pipeline commission" },
+    "activeProperties": { "label": "Active properties", "hint": "Properties in marketing" },
+    "activeBuyers": { "label": "Active buyers", "hint": "Buyers in active search" },
+    "activeSellers": { "label": "Active sellers", "hint": "Owners in process" },
+    "newLeadsWeek": { "label": "New leads this week", "hint": "New inquiries in 7 days" }
+  },
+  "heatMap": {
+    "title": "Heat Map – City Trends",
+    "selectCity": "Select city",
+    "radius": "Radius",
+    "filtersTitle": "Choose a metric",
+    "metric": {
+      "price_per_sqm": "Price per sqm change",
+      "buyer_demand": "Buyer demand",
+      "rental_demand": "Rental demand",
+      "new_listings": "New listings",
+      "recent_transactions": "Recent transactions",
+      "price_drops": "Price drops"
+    },
+    "cityTrend": "Overall city trend",
+    "last30": "vs previous 30 days",
+    "legend": {
+      "strengthening": "Strengthening area",
+      "weakening": "Weakening area",
+      "opportunity": "Opportunity area",
+      "agent": "Your activity"
+    },
+    "drawer": {
+      "avgPrice": "Average price",
+      "pricePerSqm": "Price per sqm",
+      "trend30": "30-day trend",
+      "activeProperties": "Active properties",
+      "recentTransactions": "Recent transactions",
+      "topCompetitors": "Top competing agents",
+      "aiInsight": "AI insight",
+      "recommendedAction": "Recommended action",
+      "close": "Close"
+    }
+  },
+  "opportunity": {
+    "title": "AI Opportunity Radar",
+    "subtitle": "The opportunities ZONO found for you today",
+    "view": "View",
+    "openAll": "Open all opportunities",
+    "confidence": "Confidence",
+    "kind": {
+      "hot_buyers": "Hot buyers",
+      "potential_sellers": "Potential sellers",
+      "likely_listings": "Likely to list soon",
+      "deals_at_risk": "Deals at risk"
+    },
+    "reason": {
+      "buyersReturned": "Buyers who returned to similar properties",
+      "sellersMatchDemand": "Owners matching active demand",
+      "areaLikelyListings": "Area properties likely to list",
+      "dealsLowEngagement": "Deals with dropping engagement"
+    }
+  },
+  "cityNow": {
+    "title": "Your City – Today",
+    "newListings": "New listings",
+    "priceDrops": "Price drops",
+    "hotNeighborhood": "Hottest neighborhood",
+    "topTransaction": "Top transaction this week",
+    "avgPricePerSqm": "Average price per sqm",
+    "demandTrend": "Demand trend"
+  },
+  "hotProperties": {
+    "title": "Hot properties in the market",
+    "viewAll": "View all properties",
+    "prev": "Previous",
+    "next": "Next"
+  },
+  "property": {
+    "rooms": "rooms",
+    "sqm": "sqm",
+    "floor": "Floor",
+    "matchScore": "AI match",
+    "details": "Details"
+  },
+  "status": {
+    "active": "Active",
+    "published": "Published",
+    "under_offer": "Under offer",
+    "in_contract": "In contract",
+    "ready": "Ready",
+    "sold": "Sold"
+  },
+  "badge": {
+    "new": "New",
+    "hot": "Hot",
+    "exclusive": "Exclusive",
+    "price_drop": "Price drop",
+    "ai_pick": "AI pick"
+  },
+  "aiInsight": {
+    "highInterest": "Above-average interest in the area",
+    "priceBelowMarket": "Below market price",
+    "manyViews": "Many views in 7 days",
+    "matchesActiveBuyers": "Matches active buyers"
+  },
+  "competitors": {
+    "title": "Competitor Intelligence",
+    "viewAll": "All competitors",
+    "subtitle": "Active competing agents this week",
+    "col": {
+      "agent": "Agent",
+      "newListings": "New listings",
+      "avgPrice": "Avg price",
+      "exclusive": "Exclusives",
+      "priceDrops": "Price drops",
+      "movement": "Market movement"
+    },
+    "insightsTitle": "Insights for you",
+    "viewInsights": "All competitor insights",
+    "insight": {
+      "competitorGainedListings": "A competitor gained 3 new listings this week",
+      "competitorDroppedPrices": "A competitor dropped prices on 2 listings",
+      "similarListingsAdded": "8 similar listings were added in your area",
+      "competitionRising": "Rising competition in Neot Afek"
+    }
+  },
+  "journey": {
+    "title": "Your active property journey",
+    "viewAll": "All properties",
+    "nextAction": "Next action",
+    "interestedBuyers": "Interested buyers",
+    "stage": {
+      "draft": "Draft",
+      "photography": "Photography",
+      "published": "Published",
+      "leads": "Leads",
+      "tours": "Tours",
+      "negotiation": "Negotiation",
+      "contract": "Contract",
+      "sold": "Sold"
+    },
+    "action": {
+      "orderPhotos": "Order professional photos",
+      "publishNow": "Publish now",
+      "callLeads": "Call back leads",
+      "scheduleTour": "Schedule a tour",
+      "sendOffer": "Send an offer",
+      "prepareContract": "Prepare contract"
+    },
+    "alert": {
+      "noPhotos": "No professional photos",
+      "staleLead": "Lead without reply",
+      "highDemand": "High demand property"
+    }
+  },
+  "marketTrends": { "title": "Market trends" },
+  "trend": {
+    "price_per_sqm": "Price per sqm change",
+    "deal_pace": "Deal pace",
+    "days_on_market": "Avg days on market",
+    "inventory": "Inventory",
+    "demand_supply": "Demand vs supply"
+  },
+  "sellerIntel": {
+    "title": "Seller Intelligence",
+    "relationship": "Relationship",
+    "trust": "Trust",
+    "urgency": "Urgency",
+    "bucket": {
+      "hot": "Hot sellers",
+      "at_risk": "Sellers at risk",
+      "follow_up": "Need follow-up",
+      "unresponsive": "Recently unresponsive"
+    },
+    "action": {
+      "callNow": "Call now",
+      "sendUpdate": "Send update",
+      "scheduleMeeting": "Schedule meeting",
+      "reEngage": "Re-engage"
+    }
+  },
+  "buyerIntel": {
+    "title": "Buyer Intelligence",
+    "budget": "Budget",
+    "area": "Preferred area",
+    "matches": "Matches",
+    "view": "View",
+    "bucket": {
+      "hot": "Hot buyers",
+      "dormant": "Dormant buyers",
+      "new_match": "New property match",
+      "returning": "Returning viewers"
+    },
+    "activity": {
+      "viewedToday": "Viewed today",
+      "noActivity": "No activity for 2 weeks",
+      "newMatch": "New matching property",
+      "returnedViews": "Returned to view properties"
+    }
+  },
+  "missionControl": {
+    "title": "AI Mission Control – Today's missions",
+    "progress": "Daily progress",
+    "prediction": "If you finish everything today, deal-close probability this month",
+    "openTasks": "Open today's tasks",
+    "mission": {
+      "callHotLeads": "Call 4 hot leads",
+      "sendOffers": "Send 2 property offers",
+      "updatePrice": "Update price for a deal at risk",
+      "scheduleTour": "Schedule a tour with a hot buyer",
+      "uploadPhotos": "Upload photos for a property missing media"
+    }
+  },
+  "recentActivity": {
+    "title": "Recent activity",
+    "detail": {
+      "callMade": "Call with a lead in Kiryat Bialik",
+      "whatsappReply": "WhatsApp message from the Cohen family",
+      "meetingScheduled": "Meeting scheduled with a seller",
+      "propertyUpdated": "Property price updated",
+      "buyerViewed": "A buyer viewed a property three times",
+      "sellerSigned": "A seller signed an exclusivity agreement",
+      "aiSuggested": "ZONO identified a new opportunity"
+    }
+  },
+  "search": {
+    "placeholder": "Search properties, buyers, sellers, leads, deals, neighborhoods and cities…"
+  },
+  "aiActions": {
+    "label": "AI actions",
+    "findSellers": "Find sellers",
+    "findBuyers": "Find buyers",
+    "analyzeNeighborhood": "Analyze neighborhood",
+    "analyzeProperty": "Analyze property",
+    "createCampaign": "Create campaign",
+    "createPost": "Create post",
+    "openOpportunities": "Open opportunities"
+  },
+  "empty": {
+    "noImageTitle": "This property has no photos yet",
+    "noImageBody": "Properties with photos get up to 3x more inquiries.",
+    "noImageCta": "Upload photos"
+  },
+  "common": {
+    "vsLastMonth": "vs last month",
+    "vsLast30": "vs 30 days",
+    "viewAll": "View all"
+  }
+}

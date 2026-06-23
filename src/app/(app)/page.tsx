@@ -1,88 +1,26 @@
-import { Suspense } from "react";
-import { HeroSection } from "@/components/dashboard/sections/HeroSection";
-import { PropertiesSectionContainer } from "@/components/dashboard/sections/PropertiesSectionContainer";
-import { PropertiesSkeleton } from "@/components/dashboard/sections/PropertiesSkeleton";
-import { CommandSection } from "@/components/dashboard/sections/CommandSection";
-import { CommunicationDashboardSection } from "@/components/dashboard/sections/CommunicationDashboardSection";
-import { CompetitorDashboardSection } from "@/components/dashboard/sections/CompetitorDashboardSection";
-import { ForecastDashboardSection } from "@/components/dashboard/sections/ForecastDashboardSection";
-import { TeamDashboardSection } from "@/components/dashboard/sections/TeamDashboardSection";
-import { RevenueDashboardSection } from "@/components/dashboard/sections/RevenueDashboardSection";
-import { MarketingDashboardSection } from "@/components/dashboard/sections/MarketingDashboardSection";
-import { DistributionDashboardSection } from "@/components/dashboard/sections/DistributionDashboardSection";
-import { SocialLeadsDashboardSection } from "@/components/dashboard/sections/SocialLeadsDashboardSection";
-import { TransactionsDashboardSection } from "@/components/dashboard/sections/TransactionsDashboardSection";
-import { TerritoryDashboardSection } from "@/components/dashboard/sections/TerritoryDashboardSection";
-import { AutomationDashboardSection } from "@/components/dashboard/sections/AutomationDashboardSection";
-import { DocumentsDashboardSection } from "@/components/dashboard/sections/DocumentsDashboardSection";
-import { FinancingDashboardSection } from "@/components/dashboard/sections/FinancingDashboardSection";
-import { ReputationDashboardSection } from "@/components/dashboard/sections/ReputationDashboardSection";
-import { AIOfficeDashboardSection } from "@/components/dashboard/sections/AIOfficeDashboardSection";
-import { CommunitiesDashboardSection } from "@/components/dashboard/sections/CommunitiesDashboardSection";
-import { WhatsappDashboardSection } from "@/components/dashboard/sections/WhatsappDashboardSection";
-import { CommIntelDashboardSection } from "@/components/dashboard/sections/CommIntelDashboardSection";
-import { JourneysDashboardSection } from "@/components/dashboard/sections/JourneysDashboardSection";
-import { BrandCompletionDashboardSection } from "@/components/dashboard/sections/BrandCompletionDashboardSection";
-import { OperatingAreasSection } from "@/components/dashboard/sections/OperatingAreasSection";
-import {
-  DealsSectionContainer, HeatmapSectionContainer, JourneysSectionContainer, MarketSectionContainer,
-  MatchingSectionContainer, OpportunitiesSectionContainer,
-} from "@/components/dashboard/sections/RealContainers";
+import { listProperties, type PropertyRow } from "@/lib/properties/repository";
+import { getSessionContext } from "@/lib/auth/session";
+import { getDashboardDict } from "@/lib/dashboard-home/i18n";
+import { buildDashboardHomeData } from "@/lib/dashboard-home/data";
+import { DashboardHomeView } from "@/components/dashboard-home/DashboardHomeView";
 
-// Reads live data on the server (Properties strip), so render per-request.
+// Reads live data on the server (properties woven into the command center).
 export const dynamic = "force-dynamic";
 
-export default function Home() {
-  return (
-    <>
-      <HeroSection />
-      <Suspense fallback={null}><AIOfficeDashboardSection /></Suspense>
-      <Suspense fallback={null}><OperatingAreasSection /></Suspense>
-      <Suspense fallback={null}><OpportunitiesSectionContainer /></Suspense>
-      <Suspense fallback={<PropertiesSkeleton />}>
-        <PropertiesSectionContainer />
-      </Suspense>
-      <Suspense fallback={null}><HeatmapSectionContainer /></Suspense>
-      <Suspense fallback={null}><JourneysSectionContainer /></Suspense>
-      <Suspense fallback={null}><MatchingSectionContainer /></Suspense>
-      <Suspense fallback={null}><DealsSectionContainer /></Suspense>
-      <Suspense fallback={null}><MarketSectionContainer /></Suspense>
-      <Suspense fallback={null}><TransactionsDashboardSection /></Suspense>
-      <Suspense fallback={null}><TerritoryDashboardSection /></Suspense>
-      <Suspense fallback={null}><AutomationDashboardSection /></Suspense>
-      <Suspense fallback={null}><DocumentsDashboardSection /></Suspense>
-      <Suspense fallback={null}><FinancingDashboardSection /></Suspense>
-      <Suspense fallback={null}><ReputationDashboardSection /></Suspense>
-      <Suspense fallback={null}><CommunitiesDashboardSection /></Suspense>
-      <Suspense fallback={null}><WhatsappDashboardSection /></Suspense>
-      <Suspense fallback={null}><CommIntelDashboardSection /></Suspense>
-      <Suspense fallback={null}><JourneysDashboardSection /></Suspense>
-      <Suspense fallback={null}><BrandCompletionDashboardSection /></Suspense>
-      <Suspense fallback={null}>
-        <ForecastDashboardSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <RevenueDashboardSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <TeamDashboardSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <SocialLeadsDashboardSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <DistributionDashboardSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <MarketingDashboardSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <CommunicationDashboardSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <CompetitorDashboardSection />
-      </Suspense>
-      <CommandSection />
-    </>
-  );
+export default async function Home() {
+  const { profile } = await getSessionContext();
+  const agentName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "סוכן";
+  const cityName = profile?.primary_city ?? undefined;
+
+  let properties: PropertyRow[] = [];
+  try {
+    properties = await listProperties({});
+  } catch (e) {
+    console.error("[home] properties failed:", e);
+  }
+
+  const dict = getDashboardDict("he");
+  const data = buildDashboardHomeData({ agentName, cityName, realProperties: properties });
+
+  return <DashboardHomeView dict={dict} data={data} />;
 }

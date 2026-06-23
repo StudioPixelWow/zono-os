@@ -1,0 +1,260 @@
+{
+  "hero": {
+    "greeting": "בוקר טוב",
+    "title": "מרכז הפיקוד שלך",
+    "subtitle": "כל הנתונים, ההזדמנויות והפעולות שלך במקום אחד",
+    "searchPlaceholder": "חיפוש נכסים, לקוחות, שכונות או שאל את ZONO…",
+    "quickAdd": "הוספת נכס",
+    "featuredTag": "הנכס המומלץ להיום",
+    "matchScore": "התאמה",
+    "featuredCta": "פתח נכס"
+  },
+  "kpi": {
+    "activeDeals": { "label": "עסקאות פעילות", "hint": "עסקאות בתהליך פעיל" },
+    "expectedRevenue": { "label": "הכנסות צפויות", "hint": "עמלות צפויות מהצנרת" },
+    "activeProperties": { "label": "נכסים פעילים", "hint": "נכסים בשיווק כעת" },
+    "activeBuyers": { "label": "קונים פעילים", "hint": "קונים בחיפוש פעיל" },
+    "activeSellers": { "label": "מוכרים פעילים", "hint": "בעלי נכסים בתהליך" },
+    "newLeadsWeek": { "label": "לידים חדשים השבוע", "hint": "פניות חדשות ב-7 ימים" }
+  },
+  "heatMap": {
+    "title": "מפת חום – מגמות בעיר",
+    "selectCity": "בחר עיר",
+    "radius": "רדיוס",
+    "filtersTitle": "בחר מדד להצגה",
+    "metric": {
+      "price_per_sqm": "שינוי במחיר למ״ר",
+      "buyer_demand": "ביקוש קונים",
+      "rental_demand": "ביקוש שוכרים",
+      "new_listings": "נכסים חדשים",
+      "recent_transactions": "עסקאות אחרונות",
+      "price_drops": "הורדות מחיר"
+    },
+    "cityTrend": "מגמה כללית בעיר",
+    "last30": "לעומת 30 יום קודמים",
+    "legend": {
+      "strengthening": "אזור מתחזק",
+      "weakening": "אזור נחלש",
+      "opportunity": "אזור הזדמנות",
+      "agent": "פעילות שלך"
+    },
+    "drawer": {
+      "avgPrice": "מחיר ממוצע",
+      "pricePerSqm": "מחיר למ״ר",
+      "trend30": "מגמת 30 יום",
+      "activeProperties": "נכסים פעילים",
+      "recentTransactions": "עסקאות אחרונות",
+      "topCompetitors": "מתחרים מובילים באזור",
+      "aiInsight": "תובנת AI",
+      "recommendedAction": "פעולה מומלצת",
+      "close": "סגור"
+    }
+  },
+  "opportunity": {
+    "title": "AI Opportunity Radar",
+    "subtitle": "ההזדמנויות שהמערכת מצאה עבורך היום",
+    "view": "לצפייה",
+    "openAll": "פתח את כל ההזדמנויות",
+    "confidence": "רמת ודאות",
+    "kind": {
+      "hot_buyers": "קונים חמים",
+      "potential_sellers": "מוכרים פוטנציאליים",
+      "likely_listings": "נכסים שעשויים להתפרסם בקרוב",
+      "deals_at_risk": "עסקאות בסיכון"
+    },
+    "reason": {
+      "buyersReturned": "קונים שחזרו לצפות בנכסים דומים",
+      "sellersMatchDemand": "בעלי נכסים שמתאימים לביקוש פעיל",
+      "areaLikelyListings": "נכסים באזור עם סבירות גבוהה לפרסום",
+      "dealsLowEngagement": "עסקאות עם ירידה במעורבות"
+    }
+  },
+  "cityNow": {
+    "title": "העיר שלך – היום",
+    "newListings": "נכסים חדשים",
+    "priceDrops": "הורדות מחיר",
+    "hotNeighborhood": "מנה בשכונה החמה",
+    "topTransaction": "עסקת הבכורה השבוע",
+    "avgPricePerSqm": "מחיר ממוצע למ״ר",
+    "demandTrend": "מגמת ביקוש"
+  },
+  "hotProperties": {
+    "title": "נכסים חמים בשוק",
+    "viewAll": "צפה בכל הנכסים",
+    "prev": "הקודם",
+    "next": "הבא"
+  },
+  "property": {
+    "rooms": "חדרים",
+    "sqm": "מ״ר",
+    "floor": "קומה",
+    "matchScore": "התאמת AI",
+    "details": "לפרטים"
+  },
+  "status": {
+    "active": "פעיל",
+    "published": "פורסם",
+    "under_offer": "בהצעה",
+    "in_contract": "בחוזה",
+    "ready": "מוכן לפרסום",
+    "sold": "נמכר"
+  },
+  "badge": {
+    "new": "חדש",
+    "hot": "חם",
+    "exclusive": "בלעדי",
+    "price_drop": "ירידת מחיר",
+    "ai_pick": "מומלץ AI"
+  },
+  "aiInsight": {
+    "highInterest": "עניין גבוה מהממוצע באזור",
+    "priceBelowMarket": "מתחת למחיר השוק",
+    "manyViews": "צפיות רבות ב-7 ימים",
+    "matchesActiveBuyers": "מתאים לקונים פעילים"
+  },
+  "competitors": {
+    "title": "מודיעין מתחרים",
+    "viewAll": "כל המתחרים",
+    "subtitle": "המתחרים הפעילים באזור השבוע",
+    "col": {
+      "agent": "סוכן",
+      "newListings": "נכסים חדשים",
+      "avgPrice": "מחיר ממוצע",
+      "exclusive": "בלעדיים",
+      "priceDrops": "הורדות מחיר",
+      "movement": "תנועת שוק"
+    },
+    "insightsTitle": "תובנות עבורך",
+    "viewInsights": "לכל תובנות המתחרים",
+    "insight": {
+      "competitorGainedListings": "מתחרה גייס 3 נכסים חדשים השבוע",
+      "competitorDroppedPrices": "מתחרה הוריד מחיר ב-2 נכסים",
+      "similarListingsAdded": "באזור שלך נוספו 8 נכסים דומים",
+      "competitionRising": "עלייה בתחרות בשכונת נאות אפק"
+    }
+  },
+  "journey": {
+    "title": "מסע הנכסים הפעילים שלך",
+    "viewAll": "לכל הנכסים",
+    "nextAction": "הפעולה הבאה",
+    "interestedBuyers": "קונים מתעניינים",
+    "stage": {
+      "draft": "טיוטה",
+      "photography": "צילום",
+      "published": "פורסם",
+      "leads": "לידים",
+      "tours": "סיורים",
+      "negotiation": "מו״מ",
+      "contract": "חוזה",
+      "sold": "נמכר"
+    },
+    "action": {
+      "orderPhotos": "הזמן צילום מקצועי",
+      "publishNow": "פרסם עכשיו",
+      "callLeads": "חזור ללידים",
+      "scheduleTour": "קבע סיור",
+      "sendOffer": "שלח הצעה",
+      "prepareContract": "הכן חוזה"
+    },
+    "alert": {
+      "noPhotos": "אין תמונות מקצועיות",
+      "staleLead": "ליד ללא מענה",
+      "highDemand": "ביקוש גבוה לנכס"
+    }
+  },
+  "marketTrends": {
+    "title": "מגמות שוק"
+  },
+  "trend": {
+    "price_per_sqm": "שינוי מחיר למ״ר",
+    "deal_pace": "קצב עסקאות",
+    "days_on_market": "זמן מדף ממוצע",
+    "inventory": "מלאי נכסים",
+    "demand_supply": "ביקוש מול היצע"
+  },
+  "sellerIntel": {
+    "title": "מודיעין מוכרים",
+    "relationship": "מערכת יחסים",
+    "trust": "אמון",
+    "urgency": "דחיפות",
+    "bucket": {
+      "hot": "מוכרים חמים",
+      "at_risk": "מוכרים בסיכון",
+      "follow_up": "דורשים מעקב",
+      "unresponsive": "לא ענו לאחרונה"
+    },
+    "action": {
+      "callNow": "התקשר עכשיו",
+      "sendUpdate": "שלח עדכון",
+      "scheduleMeeting": "קבע פגישה",
+      "reEngage": "חדש קשר"
+    }
+  },
+  "buyerIntel": {
+    "title": "מודיעין קונים",
+    "budget": "תקציב",
+    "area": "אזור מועדף",
+    "matches": "התאמות",
+    "view": "צפייה",
+    "bucket": {
+      "hot": "קונים חמים",
+      "dormant": "קונים רדומים",
+      "new_match": "התאמה לנכס חדש",
+      "returning": "קונים שחזרו לצפות"
+    },
+    "activity": {
+      "viewedToday": "צפה היום",
+      "noActivity": "ללא פעילות שבועיים",
+      "newMatch": "נכס חדש תואם",
+      "returnedViews": "חזר לצפות בנכסים"
+    }
+  },
+  "missionControl": {
+    "title": "AI Mission Control – המשימות להיום",
+    "progress": "התקדמות יומית",
+    "prediction": "אם תשלים הכל היום, הסתברות לסגירת עסקה החודש",
+    "openTasks": "פתח את משימות היום",
+    "mission": {
+      "callHotLeads": "להתקשר ל-4 לידים חמים",
+      "sendOffers": "לשלוח 2 הצעות נכסים",
+      "updatePrice": "לעדכן מחיר לנכס בסיכון",
+      "scheduleTour": "לקבוע סיור עם קונה חם",
+      "uploadPhotos": "להעלות תמונות לנכס חסר מדיה"
+    }
+  },
+  "recentActivity": {
+    "title": "פעילות אחרונה",
+    "detail": {
+      "callMade": "שיחה עם ליד בקרית ביאליק",
+      "whatsappReply": "הודעת וואטסאפ ממשפחת כהן",
+      "meetingScheduled": "פגישה נקבעה עם מוכר",
+      "propertyUpdated": "מחיר נכס עודכן",
+      "buyerViewed": "קונה צפה בנכס שלוש פעמים",
+      "sellerSigned": "מוכר חתם על הסכם בלעדיות",
+      "aiSuggested": "ZONO זיהה הזדמנות חדשה"
+    }
+  },
+  "search": {
+    "placeholder": "חיפוש נכסים, קונים, מוכרים, לידים, עסקאות, שכונות וערים…"
+  },
+  "aiActions": {
+    "label": "פעולות AI",
+    "findSellers": "מצא מוכרים",
+    "findBuyers": "מצא קונים",
+    "analyzeNeighborhood": "נתח שכונה",
+    "analyzeProperty": "נתח נכס",
+    "createCampaign": "צור קמפיין",
+    "createPost": "צור פוסט",
+    "openOpportunities": "פתח הזדמנויות"
+  },
+  "empty": {
+    "noImageTitle": "אין עדיין תמונות לנכס הזה",
+    "noImageBody": "נכסים עם תמונות מקבלים עד פי 3 יותר פניות.",
+    "noImageCta": "העלאת תמונות"
+  },
+  "common": {
+    "vsLastMonth": "מהחודש שעבר",
+    "vsLast30": "לעומת 30 יום",
+    "viewAll": "הצג הכל"
+  }
+}
