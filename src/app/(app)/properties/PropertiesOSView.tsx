@@ -89,7 +89,7 @@ function PropertyKpiCards({ kpis }: { kpis: Kpi[] }) {
         <RevealItem key={k.label}>
           <div className={cn(
             "flex h-full flex-col gap-2 rounded-[22px] border p-4 shadow-[var(--shadow-card)]",
-            k.highlight ? "bg-gradient-to-br from-brand to-brand-strong border-transparent text-white" : "bg-card border-line",
+            k.highlight ? "zono-gradient-glow border-transparent text-white" : "bg-card border-line",
           )}>
             <div className="flex items-center justify-between">
               <span className={cn("text-xs font-bold", k.highlight ? "text-white/80" : "text-muted")}>{k.label}</span>
@@ -461,7 +461,7 @@ function StickyAICopilotPanel({ atRisk, needMarketing }: { atRisk: number; needM
   return (
     <aside className="hidden w-[300px] shrink-0 xl:block">
       <div className="sticky top-6 flex flex-col gap-4">
-        <div className="bg-gradient-to-br from-brand to-brand-strong rounded-[22px] p-5 text-white shadow-[var(--shadow-lift)]">
+        <div className="zono-ai-gradient rounded-[22px] p-5 text-white shadow-[var(--shadow-lift)]">
           <div className="flex items-center gap-2">
             <Icon name="Sparkles" size={18} />
             <p className="text-base font-black">AI Copilot</p>

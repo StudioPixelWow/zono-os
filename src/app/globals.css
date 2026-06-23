@@ -102,3 +102,80 @@ body {
 .zono-glow {
   animation: zono-glow 2.2s ease-in-out infinite;
 }
+
+/* ============================================================================
+   ZONO Gradient System — premium futuristic purple language. Reusable classes
+   applied at the design-system level (buttons, active nav, AI elements, FABs,
+   badges, progress, empty-state CTAs). Subtle but noticeable; gradients guide
+   the eye to ACTION. Regular cards stay white / soft lavender. RTL-safe.
+   ========================================================================== */
+:root {
+  --zono-purple: #6d28d9;
+  --zono-violet: #8b5cf6;
+  --zono-lavender: #c4b5fd;
+  --zono-bg: #f8f7ff;
+  --zono-border: #e9e5ff;
+  --zono-gradient: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 55%, #a78bfa 100%);
+  --zono-ai-gradient: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%);
+  --zono-glow-shadow: 0 12px 32px rgba(109, 40, 217, 0.28);
+  --zono-glow-shadow-strong: 0 16px 40px rgba(109, 40, 217, 0.4);
+}
+
+/* Plain gradient fill (no glow) — use on emphasis surfaces. */
+.zono-gradient { background-image: var(--zono-gradient); color: #fff; }
+
+/* Gradient + soft glow — reserve for IMPORTANT actions only. */
+.zono-gradient-glow {
+  background-image: var(--zono-gradient);
+  color: #fff;
+  box-shadow: var(--zono-glow-shadow);
+}
+
+/* Magical AI treatment — AI Copilot / generate / magic actions. */
+.zono-ai-gradient {
+  background-image: var(--zono-ai-gradient);
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(124, 58, 237, 0.3);
+}
+
+/* Primary button — gradient, glow, lift on hover. */
+.btn-zono-primary {
+  background-image: var(--zono-gradient);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 14px;
+  box-shadow: var(--zono-glow-shadow);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+.btn-zono-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--zono-glow-shadow-strong);
+  filter: saturate(1.06);
+}
+.btn-zono-primary:active:not(:disabled) { transform: translateY(0); }
+
+/* Secondary button — soft lavender, purple text, hairline border. */
+.btn-zono-secondary {
+  background-color: var(--zono-bg);
+  color: var(--zono-purple);
+  border: 1px solid var(--zono-border);
+  border-radius: 14px;
+  font-weight: 600;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.btn-zono-secondary:hover:not(:disabled) { background-color: #f1ecff; border-color: var(--zono-lavender); }
+
+/* Active sidebar item — soft lavender field + purple text. */
+.zono-active-nav { background-color: var(--zono-bg); color: var(--zono-purple); }
+/* Gradient icon container inside the active nav item. */
+.zono-active-nav-icon {
+  background-image: var(--zono-gradient);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(109, 40, 217, 0.3);
+}
+
+/* Premium focus ring for keyboard accessibility. */
+.zono-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(139, 92, 246, 0.55);
+}

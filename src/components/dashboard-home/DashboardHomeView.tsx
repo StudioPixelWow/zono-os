@@ -547,7 +547,7 @@ export function DashboardHomeView({ dict, data }: { dict: DashboardDict; data: D
               </button>
             ))}
           </div>
-          <div className="bg-gradient-to-br from-brand to-brand-strong flex flex-col justify-center gap-2 rounded-2xl p-4 text-center text-white">
+          <div className="zono-ai-gradient flex flex-col justify-center gap-2 rounded-2xl p-4 text-center text-white">
             <p className="text-white/85 text-xs font-bold">{t("missionControl.prediction")}</p>
             <p className="text-4xl font-black">{data.dealProbabilityPct}%</p>
             <Link href="/tasks" className="bg-white text-brand-strong mt-1 rounded-xl px-3 py-2 text-sm font-black">{t("missionControl.openTasks")}</Link>
@@ -595,7 +595,7 @@ export function DashboardHomeView({ dict, data }: { dict: DashboardDict; data: D
             ))}
           </div>
         )}
-        <button onClick={() => setFabOpen((v) => !v)} className="bg-brand text-white grid h-14 w-14 place-items-center rounded-full shadow-[var(--shadow-lift)]" aria-label={t("aiActions.label")} aria-expanded={fabOpen}>
+        <button onClick={() => setFabOpen((v) => !v)} className="zono-ai-gradient zono-focus-ring grid h-14 w-14 place-items-center rounded-full" aria-label={t("aiActions.label")} aria-expanded={fabOpen}>
           <Icon name={fabOpen ? "X" : "Sparkles"} size={24} />
         </button>
       </div>

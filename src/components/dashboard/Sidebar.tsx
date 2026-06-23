@@ -111,7 +111,7 @@ export function Sidebar() {
 
   return (
     <aside className="bg-card/80 border-line sticky top-0 hidden h-screen w-[92px] shrink-0 flex-col items-center border-s py-6 backdrop-blur-xl lg:flex">
-      <Link href="/" className="bg-brand text-white mb-6 grid h-11 w-11 place-items-center rounded-2xl text-lg font-black shadow-[0_8px_20px_rgba(124,58,237,0.35)]">
+      <Link href="/" className="zono-gradient-glow mb-6 grid h-11 w-11 place-items-center rounded-2xl text-lg font-black">
         Z
       </Link>
 
@@ -140,12 +140,14 @@ export function Sidebar() {
                     const active = isActive(href);
                     const className = cn(
                       "group relative flex w-[68px] flex-col items-center gap-1 rounded-2xl px-2 py-2 transition-all",
-                      active ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-surface hover:text-ink",
+                      active ? "zono-active-nav" : "text-muted hover:bg-surface hover:text-ink",
                     );
                     const inner = (
                       <>
-                        {active && <span className="bg-brand absolute -end-[8px] top-1/2 h-6 w-1 -translate-y-1/2 rounded-full" />}
-                        <Icon name={item.icon} size={20} strokeWidth={active ? 2.1 : 1.75} />
+                        {active && <span className="zono-gradient absolute -end-[8px] top-1/2 h-6 w-1 -translate-y-1/2 rounded-full" />}
+                        <span className={cn("grid h-8 w-8 place-items-center rounded-xl transition-all", active && "zono-active-nav-icon")}>
+                          <Icon name={item.icon} size={18} strokeWidth={active ? 2.1 : 1.75} />
+                        </span>
                         <span className="text-center text-[10px] font-semibold leading-tight">{item.label}</span>
                       </>
                     );

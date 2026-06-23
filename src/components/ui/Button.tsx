@@ -32,8 +32,9 @@ export function Spinner({ size = 15 }: { size?: number }) {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
+  // ZONO gradient system — primary CTAs carry the premium purple gradient + glow.
   primary:
-    "bg-brand text-white hover:bg-brand-strong focus-visible:ring-brand/40",
+    "btn-zono-primary zono-focus-ring",
   secondary:
     "bg-brand-soft text-brand-strong hover:bg-brand-soft/70 focus-visible:ring-brand/30",
   ghost:
