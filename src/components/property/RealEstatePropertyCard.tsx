@@ -36,12 +36,12 @@ export function RealEstatePropertyCard({ d }: { d: RealEstateCardData }) {
       href={d.href}
       className="bg-card border-line hover:shadow-[var(--shadow-lift)] flex flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)] transition-shadow"
     >
-      <div className="bg-surface relative aspect-[16/10] overflow-hidden">
+      <div className="bg-surface relative aspect-square w-full overflow-hidden">
         {d.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={d.imageUrl} alt={d.title} className="h-full w-full object-cover" />
+          <img src={d.imageUrl} alt={d.title} className="absolute inset-0 h-full w-full object-cover object-center" />
         ) : (
-          <div className="text-muted grid h-full place-items-center"><Icon name="Building2" size={32} /></div>
+          <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Building2" size={32} /></div>
         )}
         <div className="absolute end-3 top-3 flex flex-wrap gap-1.5">
           {d.dealLabel && <Badge tone="brand" size="sm">{d.dealLabel}</Badge>}

@@ -238,12 +238,12 @@ function HotPropertyCard({ p }: { p: PropertyRow }) {
   const statusTone = (PROPERTY_STATUS_TONES[p.status] ?? "neutral") as BadgeTone;
   return (
     <div className="bg-card border-line flex min-w-[300px] max-w-[320px] flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
-      <div className="bg-surface relative aspect-[16/10]">
+      <div className="bg-surface relative aspect-square w-full overflow-hidden">
         {p.primary_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.primary_image_url} alt={p.title} className="h-full w-full object-cover" />
+          <img src={p.primary_image_url} alt={p.title} className="absolute inset-0 h-full w-full object-cover object-center" />
         ) : (
-          <div className="text-muted grid h-full place-items-center"><Icon name="Building2" size={34} /></div>
+          <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Building2" size={34} /></div>
         )}
         <span className="absolute start-3 top-3"><Badge tone={statusTone} size="sm">{PROPERTY_STATUS_LABELS[p.status]}</Badge></span>
         <span className={cn("bg-card absolute end-3 top-3 grid h-11 w-11 place-items-center rounded-full text-sm font-black ring-2", tone.ring, tone.text)}>{score}</span>

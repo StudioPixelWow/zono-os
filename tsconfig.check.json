@@ -1,2 +1,2 @@
 { "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/app/(app)/page.tsx", "src/components/dashboard-home/DashboardHomeView.tsx", "src/lib/dashboard-home/types.ts", "src/lib/dashboard-home/data.ts", "src/lib/dashboard-home/i18n.ts"] }
+  "include": ["src/app/(app)/properties/PropertiesOSView.tsx", "src/components/property/RealEstatePropertyCard.tsx"] }
