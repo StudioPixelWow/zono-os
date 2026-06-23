@@ -18,6 +18,7 @@ import {
 } from "@/lib/creative-studio/engine";
 import { CONCEPT_TYPE_LABELS } from "@/lib/creative-studio/concept-engine";
 import type { FinalAdData, FinalAdScores } from "@/lib/creative-studio/final-creative-engine";
+import type { BrandDNA, BrandGuidance } from "@/lib/creative-studio/brand-dna-engine";
 import {
   generateCampaignAction, duplicateCampaignAction, archiveCampaignAction, deleteCampaignAction, approveCampaignAction,
 } from "@/lib/creative-studio/campaign-actions";
@@ -60,7 +61,7 @@ type Visual = Record<string, unknown> & {
 };
 
 type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
-type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores };
+type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance };
 type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
@@ -1416,6 +1417,17 @@ function CreativeDebugPanel({ ad, o }: { ad: FinalAdView; o: QuickOutput }) {
         <DebugKV k="לוגו / תמונת סוכן" v={`${yn(t?.brand.hasLogo)} לוגו · ${yn(t?.brand.hasAgentPhoto)} תמונה`} />
         <DebugKV k="צבעי מותג" v={(t?.brand.colors ?? []).join(", ") || "ברירת מחדל"} />
         <DebugKV k="luxury" v={t?.brand.luxury} />
+      </>)}
+      {ad.brandDNA && section("Brand DNA", <>
+        <DebugKV k="אישיות מותג" v={`${ad.brandDNA.personalityLabel} (${ad.brandDNA.personality})`} />
+        <DebugKV k="פלטה" v={`${ad.brandDNA.palette.primary} · ${ad.brandDNA.palette.accent} · ${ad.brandDNA.palette.mode} · ${ad.brandDNA.palette.source}`} />
+        <DebugKV k="לוגו" v={ad.brandDNA.logoUsage.show ? `${ad.brandDNA.logoUsage.placement} · ${ad.brandDNA.logoUsage.size}` : "אין לוגו"} />
+        <DebugKV k="תמונת סוכן" v={`${ad.brandDNA.agentImageUsage.show}${ad.brandGuidance ? ` · בקונספט זה: ${ad.brandGuidance.showAgentImage ? "מוצג" : "לא מוצג"}` : ""}`} />
+        <DebugKV k="טיפוגרפיה" v={ad.brandDNA.typographyDirection} />
+        <DebugKV k="צפיפות / יוקרה / CTA" v={`${ad.brandDNA.visualDensity} · ${ad.brandDNA.luxuryLevel} · ${ad.brandDNA.ctaTone}`} />
+        <DebugKV k="אפקטים מותרים (קונספט)" v={(ad.brandGuidance?.allowedEffects ?? []).join(", ")} />
+        <DebugKV k="מגבלות עיצוב" v={ad.brandDNA.designRestrictions.join(" · ")} />
+        {ad.brandDNA.missingAssets.length ? <DebugKV k="נכסים חסרים" v={ad.brandDNA.missingAssets.join(" · ")} /> : <DebugKV k="נכסים" v="כל נכסי המותג קיימים ✓" />}
       </>)}
       {section("Creative Brief", <>
         <DebugKV k="קהל יעד" v={t?.brief.targetAudience} />

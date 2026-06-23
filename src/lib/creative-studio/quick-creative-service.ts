@@ -22,6 +22,7 @@ import { runQualityPipeline, QUALITY_CONFIG } from "./quality/orchestrator";
 import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
 import { type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
 import { directConceptsAI } from "./creative-thinking-ai";
+import { deriveBrandDNA, brandGuidanceForConcept } from "./brand-dna-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
  *  DIFFERENT advertising concepts (distinct psychological trigger → angle, color
@@ -49,12 +50,15 @@ async function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variation
   const { approvedConcepts, provider } = await directConceptsAI(facts, brandAssets);
   if (!approvedConcepts.length) return;
   const generationMs = Date.now() - t0;
+  // BrandDNAEngine: agency visual personality — enriches the flow (does not change
+  // brief/concept/art-direction). Consumed later by the DesignSystemEngine.
+  const brandDNA = deriveBrandDNA(brandAssets);
   variations.forEach((v, vi) => {
     const c = approvedConcepts[vi % approvedConcepts.length].plan;
     const r = v.render as unknown as Record<string, unknown>;
     // Observability: stamp generation duration + thinking provider onto the trace.
     const adTrace = c.ad.trace ? { ...c.ad.trace, generationMs, thinkingProvider: provider } : undefined;
-    r.ad = { ...c.ad, trace: adTrace, template: c.ad.composition, scores: c.scores };
+    r.ad = { ...c.ad, trace: adTrace, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: brandGuidanceForConcept(brandDNA, c.ad.trigger) };
     r.width = c.ad.width; r.height = c.ad.height; r.format = "feed_1_1";
     v.variantName = `קונספט · ${c.triggerLabel}`;
     v.headline = c.ad.headline; v.subheadline = c.ad.subheadline; v.cta = c.ad.cta;
