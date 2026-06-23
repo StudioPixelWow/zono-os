@@ -20,13 +20,15 @@ import { detectPropertyAngle } from "./quality/zonoPropertyFirstEngine";
 import { pullInspiration } from "./quality/zonoCreativeInspirationEngine";
 import { runQualityPipeline, QUALITY_CONFIG } from "./quality/orchestrator";
 import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
-import { directConcepts, type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
+import { type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
+import { directConceptsAI } from "./creative-thinking-ai";
 
-/** ART DIRECTION + CONCEPT ENGINE: turn one property into 4 strategically
- *  DIFFERENT advertising concepts (distinct psychological trigger → distinct
- *  angle, color system, composition, copy) — not 4 cosmetic variations. Each
- *  concept is injected as a finished, ready-to-post square ad spec. */
-function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variations: ReturnType<typeof buildQuickVariations>): void {
+/** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
+ *  DIFFERENT advertising concepts (distinct psychological trigger → angle, color
+ *  system, composition, copy + AI creative direction + text-free AI environment).
+ *  Real assets + Hebrew stay deterministic. Each concept is injected as a
+ *  finished, ready-to-post square ad spec. */
+async function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variations: ReturnType<typeof buildQuickVariations>): Promise<void> {
   const facts: FinalAdFacts = {
     propertyImage: input.propertyImage ?? null, city: input.city ?? null, neighborhood: input.neighborhood ?? null,
     address: input.address ?? null, propertyType: input.propertyType ?? null, price: input.price ?? null,
@@ -40,7 +42,7 @@ function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variations: Ret
     agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null, agentPhoto: brand.agentPhoto ?? null,
     officeName: brand.officeName ?? null, officeLogo: brand.officeLogo ?? null, colors: brand.colors, luxury: brand.luxury,
   };
-  const { concepts } = directConcepts(facts, brandAssets);
+  const { concepts } = await directConceptsAI(facts, brandAssets);
   variations.forEach((v, vi) => {
     const c = concepts[vi % concepts.length];
     const r = v.render as unknown as Record<string, unknown>;
@@ -175,7 +177,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
 
   const variations = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
   // FINAL AD: property ads become finished, ready-to-post square creatives.
-  if (g.requestType === "property_ad_post") attachFinalAds(g.input, brand.snapshot, variations);
+  if (g.requestType === "property_ad_post") await attachFinalAds(g.input, brand.snapshot, variations);
   // Candidate matrix: each strategic variation × each style family (≈16 candidates).
   const briefs: CandidateBrief[] = [];
   variations.forEach((v, vi) => {

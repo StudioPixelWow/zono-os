@@ -37,6 +37,23 @@ export interface CreativeBrief {
   hasParking: boolean; hasStorage: boolean; hasBalcony: boolean; hasElevator: boolean;
   city: string | null; neighborhood: string | null; address: string | null; propertyType: string | null;
   strengths: string[];
+  // CreativeBriefEngine: what to say (decided here, not in design).
+  targetAudience: string; keyBenefit: string;
+}
+
+function deriveAudience(b: { rooms: number | null; isLuxury: boolean; priceAttractive: boolean; sizeSqm: number | null }): string {
+  if (b.isLuxury) return "קונים בפלח יוקרה — איכות ומיצוב";
+  if (b.priceAttractive) return "קונים מחפשי ערך והזדמנות";
+  if (b.rooms != null && b.rooms >= 4) return "משפחות מחפשות בית גדל";
+  if (b.rooms != null && b.rooms <= 2.5) return "זוגות צעירים / משקיעים";
+  return "קונים רציניים באזור";
+}
+function deriveKeyBenefit(b: { isLuxury: boolean; priceAttractive: boolean; rooms: number | null; sizeSqm: number | null; neighborhood: string | null; hasBalcony: boolean }): string {
+  if (b.isLuxury) return "סטנדרט מגורים גבוה ומיקום יוקרתי";
+  if (b.priceAttractive) return "ערך נדל״ני מצוין ביחס למחיר";
+  if (b.rooms != null && b.rooms >= 4) return "מרחב מחיה גדול למשפחה";
+  if (b.hasBalcony) return "אוויר, אור ומרפסת";
+  return b.neighborhood ? `מיקום מבוקש ב${b.neighborhood}` : "נכס איכותי במיקום טוב";
 }
 
 export function analyzeBrief(f: FinalAdFacts, brand: FinalAdBrandAssets): CreativeBrief {
@@ -57,6 +74,8 @@ export function analyzeBrief(f: FinalAdFacts, brand: FinalAdBrandAssets): Creati
     rooms, sizeSqm, floor: num(f.floor), price,
     hasParking: Boolean(f.parking), hasStorage: Boolean(f.storage), hasBalcony: Boolean(f.balcony), hasElevator: Boolean(f.elevator),
     city: f.city ?? null, neighborhood: f.neighborhood ?? null, address: f.address ?? null, propertyType: f.propertyType ?? null, strengths,
+    targetAudience: deriveAudience({ rooms, isLuxury, priceAttractive, sizeSqm }),
+    keyBenefit: deriveKeyBenefit({ isLuxury, priceAttractive, rooms, sizeSqm, neighborhood: f.neighborhood ?? null, hasBalcony: Boolean(f.balcony) }),
   };
 }
 
@@ -184,47 +203,88 @@ const COMPOSITION_BY_TRIGGER: Record<ConceptTrigger, string> = {
   luxury: "editorial", urgency: "urgency_banner", family: "lifestyle", investment: "data_panel", price_advantage: "price_hero",
 };
 
+/** HYBRID: spec for the AI-generated visual ENVIRONMENT only — atmosphere behind
+ *  the locked real assets. The AI NEVER draws the property, agent, logo, people,
+ *  or any text. imageModelPrompt is a text-free, asset-free background prompt. */
+export interface AiEnvironmentSpec {
+  atmosphere: string; lighting: string; backgroundTreatment: string; textures: string;
+  depthLayers: boolean; framing: string; premiumEffects: string;
+  imageModelPrompt: string; negativePrompt: string;
+}
+
 export interface ArtDirection {
   trigger: ConceptTrigger; marketingAngle: string; emotionalTrigger: string; visualStory: string;
-  heroElement: string; typographyHierarchy: string; visualHierarchy: string; ctaStrategy: string;
-  composition: string; luxuryLevel: "high" | "mid" | "accessible"; colorSystem: string; rationale: string;
+  heroElement: string; focalPoint: string; composition: string; hierarchy: string[];
+  imageCrop: "wide" | "tight" | "top" | "editorial"; typographyHierarchy: string; visualHierarchy: string;
+  ctaStrategy: string; ctaPlacement: string; pricePlacement: string; logoPlacement: string; agentPlacement: string;
+  luxuryLevel: "high" | "mid" | "accessible"; colorSystem: string; emotionalFeel: string; rationale: string;
+  aiEnvironment: AiEnvironmentSpec;
+}
+
+const NEGATIVE_ENV = "no text, no hebrew, no english, no numbers, no captions, no watermark, no people, no faces, no agent, no logo, no apartment, no building, no interior, no real-estate property, no UI, no app, no card, no icons, no emojis";
+
+function aiEnvironmentFor(trigger: ConceptTrigger): AiEnvironmentSpec {
+  const base = (atmosphere: string, lighting: string, bg: string, textures: string, framing: string, fx: string): AiEnvironmentSpec => ({
+    atmosphere, lighting, backgroundTreatment: bg, textures, depthLayers: true, framing, premiumEffects: fx,
+    imageModelPrompt: `Premium abstract advertising BACKGROUND ENVIRONMENT only, 1:1 square. ${atmosphere}. Lighting: ${lighting}. ${bg}. Texture: ${textures}. Framing: ${framing}. Effects: ${fx}. Leave generous clean negative space in the lower third and one corner for real assets and text to be overlaid later. Cinematic, premium, modern, high-end advertising mood. ${NEGATIVE_ENV}.`,
+    negativePrompt: NEGATIVE_ENV,
+  });
+  const map: Record<ConceptTrigger, AiEnvironmentSpec> = {
+    luxury: base("Quiet opulent ambiance, dark editorial elegance", "soft cinematic rim light, gentle gold spill", "deep charcoal gradient with subtle bokeh depth", "fine marble / brushed metal hints", "wide breathing margins, museum-like calm", "soft gold glow, delicate film grain, glass reflections"),
+    urgency: base("High-energy bold environment, dynamic motion", "high-contrast dramatic spotlight", "deep black-to-ember gradient with diagonal light streaks", "sharp angular light shards", "tight punchy frame, strong diagonal", "vivid accent glow, motion-blur streaks, high contrast"),
+    family: base("Warm welcoming home ambiance", "soft golden-hour warmth", "warm cream-to-teal gradient with gentle vignette", "soft fabric / warm wood hints", "cozy balanced frame", "soft warm glow, gentle haze, rounded soft light"),
+    investment: base("Confident structured ambiance, data-led calm", "clean even studio light", "deep navy gradient with subtle grid depth", "matte glass / precise geometric hints", "structured grid frame", "subtle neon-green accent glow, clean reflections"),
+    price_advantage: base("Direct confident value ambiance", "clear bright key light", "rich dark gradient with a single bright focal pool", "clean smooth surfaces", "centered focal frame", "bright accent burst, crisp clean glow"),
+  };
+  return map[trigger];
 }
 
 function artDirectionFor(trigger: ConceptTrigger, brief: CreativeBrief): ArtDirection {
   const loc = brief.neighborhood || brief.city || "האזור";
-  const map: Record<ConceptTrigger, ArtDirection> = {
+  const env = aiEnvironmentFor(trigger);
+  const map: Record<ConceptTrigger, Omit<ArtDirection, "aiEnvironment">> = {
     luxury: {
       trigger, marketingAngle: "מיצוב פרימיום — בית שמגדיר סטטוס", emotionalTrigger: "שאיפה ויוקרה", visualStory: "רגע קולנועי, שקט, מכובד",
-      heroElement: "תמונת הנכס במלוא הבמה עם הרבה אוויר שלילי", typographyHierarchy: "כותרת דקה ומאופקת, מרווח גדול, אקסנט זהב",
-      visualHierarchy: "תמונה → כותרת → מחיר עדין → סוכן מינימלי", ctaStrategy: "הזמנה לסיור פרטי (אקסקלוסיבי)", composition: "editorial",
-      luxuryLevel: "high", colorSystem: "פחם + זהב", rationale: "כשהנכס יוקרתי, מיצוב פרימיום מצדיק מחיר ומושך קהל איכותי.",
+      heroElement: "תמונת הנכס במלוא הבמה עם הרבה אוויר שלילי", focalPoint: "הכותרת והנכס במרכז קולנועי", composition: "editorial",
+      hierarchy: ["תמונה", "כותרת", "מחיר עדין", "סוכן מינימלי"], imageCrop: "editorial",
+      typographyHierarchy: "כותרת דקה ומאופקת, מרווח גדול, אקסנט זהב", visualHierarchy: "תמונה → כותרת → מחיר עדין → סוכן מינימלי",
+      ctaStrategy: "הזמנה לסיור פרטי (אקסקלוסיבי)", ctaPlacement: "תחתון-מרכזי עדין", pricePlacement: "פינה עליונה מאופקת", logoPlacement: "פינה עליונה", agentPlacement: "תחתון מינימלי",
+      luxuryLevel: "high", colorSystem: "פחם + זהב", emotionalFeel: "יוקרה שקטה ובטוחה", rationale: "כשהנכס יוקרתי, מיצוב פרימיום מצדיק מחיר ומושך קהל איכותי.",
     },
     urgency: {
       trigger, marketingAngle: "מחסור וזמן — לפני שייעלם", emotionalTrigger: "פחד מהחמצה (FOMO)", visualStory: "מתח, תנועה, אנרגיה גבוהה",
-      heroElement: "באנר עליון נועז + תמונה עם קונטרסט גבוה", typographyHierarchy: "כותרת ענקית ובועטת, ניגודיות מקסימלית",
-      visualHierarchy: "באנר דחיפות → מחיר בולט → CTA מיידי", ctaStrategy: "פעולה מיידית עכשיו", composition: "urgency_banner",
-      luxuryLevel: "accessible", colorSystem: "שחור + כתום/אדום", rationale: "דחיפות מפעילה פעולה מיידית כשיש בסיס אמיתי למחסור.",
+      heroElement: "באנר עליון נועז + תמונה עם קונטרסט גבוה", focalPoint: "כותרת הדחיפות + המחיר", composition: "urgency_banner",
+      hierarchy: ["באנר דחיפות", "מחיר בולט", "CTA מיידי", "תמונה"], imageCrop: "tight",
+      typographyHierarchy: "כותרת ענקית ובועטת, ניגודיות מקסימלית", visualHierarchy: "באנר דחיפות → מחיר בולט → CTA מיידי",
+      ctaStrategy: "פעולה מיידית עכשיו", ctaPlacement: "תחתון מלא ובולט", pricePlacement: "מרכזי דומיננטי", logoPlacement: "באנר עליון", agentPlacement: "תחתון לצד CTA",
+      luxuryLevel: "accessible", colorSystem: "שחור + כתום/אדום", emotionalFeel: "דחיפות חדה ואנרגטית", rationale: "דחיפות מפעילה פעולה מיידית כשיש בסיס אמיתי למחסור.",
     },
     family: {
       trigger, marketingAngle: "הבית שבו המשפחה גדלה", emotionalTrigger: "חום, שייכות, ביטחון", visualStory: "אווירה ביתית וחמה",
-      heroElement: "תמונת הנכס עם שכבה רכה וחמה", typographyHierarchy: "כותרת ידידותית ועגולה, צ'יפים רכים",
-      visualHierarchy: "תמונה → סיפור → מאפיינים → סוכן בולט (אמון)", ctaStrategy: "הזמנה חמה לביקור", composition: "lifestyle",
-      luxuryLevel: "mid", colorSystem: "קרם חם + טורקיז", rationale: `${brief.rooms ?? "מרווח"} חדרים ב${loc} — מתאים בול למשפחות.`,
+      heroElement: "תמונת הנכס עם שכבה רכה וחמה", focalPoint: "התמונה החמה + הכותרת", composition: "lifestyle",
+      hierarchy: ["תמונה", "סיפור", "מאפיינים", "סוכן בולט"], imageCrop: "wide",
+      typographyHierarchy: "כותרת ידידותית ועגולה, צ'יפים רכים", visualHierarchy: "תמונה → סיפור → מאפיינים → סוכן בולט (אמון)",
+      ctaStrategy: "הזמנה חמה לביקור", ctaPlacement: "תחתון רך", pricePlacement: "אחרי המאפיינים", logoPlacement: "פינה על התמונה", agentPlacement: "תחתון בולט (אמון)",
+      luxuryLevel: "mid", colorSystem: "קרם חם + טורקיז", emotionalFeel: "חום ביתי ומזמין", rationale: `${brief.rooms ?? "מרווח"} חדרים ב${loc} — מתאים בול למשפחות.`,
     },
     investment: {
       trigger, marketingAngle: "השקעה חכמה עם פוטנציאל", emotionalTrigger: "ביטחון כלכלי והיגיון", visualStory: "נתונים, סדר, ביטחון",
-      heroElement: "תמונה + פאנל נתונים מובנה (מ״ר/חדרים/מחיר)", typographyHierarchy: "סאנס נקי, מספרים דומיננטיים, גריד",
-      visualHierarchy: "מחיר/מ״ר → נתונים → תמונה → CTA אנליטי", ctaStrategy: "הזמנה לניתוח השקעה", composition: "data_panel",
-      luxuryLevel: "mid", colorSystem: "נייבי + ירוק", rationale: "מסגור תשואה/ערך מדבר אל קונים רציונליים ומשקיעים.",
+      heroElement: "תמונה + פאנל נתונים מובנה (מ״ר/חדרים/מחיר)", focalPoint: "פאנל הנתונים והמחיר", composition: "data_panel",
+      hierarchy: ["מחיר/מ״ר", "נתונים", "תמונה", "CTA אנליטי"], imageCrop: "top",
+      typographyHierarchy: "סאנס נקי, מספרים דומיננטיים, גריד", visualHierarchy: "מחיר/מ״ר → נתונים → תמונה → CTA אנליטי",
+      ctaStrategy: "הזמנה לניתוח השקעה", ctaPlacement: "תחתון לצד הסוכן", pricePlacement: "כרטיס נתון ראשי", logoPlacement: "פינה על התמונה", agentPlacement: "תחתון קומפקטי",
+      luxuryLevel: "mid", colorSystem: "נייבי + ירוק", emotionalFeel: "ביטחון רציונלי ומסודר", rationale: "מסגור תשואה/ערך מדבר אל קונים רציונליים ומשקיעים.",
     },
     price_advantage: {
       trigger, marketingAngle: "ערך מיידי — המחיר מדבר", emotionalTrigger: "תחושת מציאה", visualStory: "ישיר, ברור, משכנע",
-      heroElement: "המחיר ככוכב הראשי, התמונה תומכת", typographyHierarchy: "מחיר ענק דומיננטי, כותרת קצרה",
-      visualHierarchy: "מחיר → הזדמנות → תמונה → CTA", ctaStrategy: "פרטים מהירים עכשיו", composition: "price_hero",
-      luxuryLevel: "accessible", colorSystem: "כהה + ירוק/זהב", rationale: "מחיר אטרקטיבי הוא הטריגר הממיר ביותר.",
+      heroElement: "המחיר ככוכב הראשי, התמונה תומכת", focalPoint: "המחיר הענק", composition: "price_hero",
+      hierarchy: ["מחיר", "הזדמנות", "תמונה", "CTA"], imageCrop: "top",
+      typographyHierarchy: "מחיר ענק דומיננטי, כותרת קצרה", visualHierarchy: "מחיר → הזדמנות → תמונה → CTA",
+      ctaStrategy: "פרטים מהירים עכשיו", ctaPlacement: "תחתון בולט", pricePlacement: "מרכז-במה ענק", logoPlacement: "פינה על התמונה", agentPlacement: "תחתון קומפקטי",
+      luxuryLevel: "accessible", colorSystem: "כהה + ירוק/זהב", emotionalFeel: "ערך ישיר ומשכנע", rationale: "מחיר אטרקטיבי הוא הטריגר הממיר ביותר.",
     },
   };
-  return map[trigger];
+  return { ...map[trigger], aiEnvironment: env };
 }
 
 function conceptCopy(trigger: ConceptTrigger, brief: CreativeBrief): FinalCopy {
@@ -269,7 +329,24 @@ export function selectConcepts(brief: CreativeBrief): ConceptTrigger[] {
   return ranked.slice(0, 4);
 }
 
-export interface ConceptPlan { trigger: ConceptTrigger; triggerLabel: string; artDirection: ArtDirection; ad: FinalAdData; scores: FinalAdScores }
+export interface ConceptPlan {
+  trigger: ConceptTrigger; triggerLabel: string; artDirection: ArtDirection; ad: FinalAdData; scores: FinalAdScores;
+  // MarketingConceptEngine contract: strategy, not cosmetics.
+  conceptName: string; psychologicalTrigger: string; mainPromise: string; visualDirection: string; whyConvert: string;
+  targetAudience: string; keyBenefit: string;
+}
+
+const MAIN_PROMISE: Record<ConceptTrigger, string> = {
+  luxury: "בית שמשדר סטטוס ואיכות חיים גבוהה", urgency: "ההזדמנות הזו לא תחזור — פועלים עכשיו",
+  family: "המרחב הבטוח שבו המשפחה גדלה", investment: "נכס שמייצר ערך לאורך זמן", price_advantage: "ערך נדל״ני יוצא דופן ביחס למחיר",
+};
+const WHY_CONVERT: Record<ConceptTrigger, string> = {
+  luxury: "קהל היוקרה מגיב למיצוב ולאיפוק; הוא קונה תחושת בלעדיות.",
+  urgency: "מחסור + זמן מייצרים פעולה מיידית כשהבסיס אמיתי.",
+  family: "רגש של בית ושייכות מניע משפחות להגיע לביקור.",
+  investment: "מסגור תשואה/ערך משכנע קונים רציונליים ומשקיעים.",
+  price_advantage: "מחיר אטרקטיבי הוא הטריגר עם שיעור ההמרה הגבוה ביותר.",
+};
 
 function buildConceptAd(f: FinalAdFacts, brand: FinalAdBrandAssets, brief: CreativeBrief, trigger: ConceptTrigger): FinalAdData {
   const copy = conceptCopy(trigger, brief);
@@ -303,9 +380,15 @@ function triggerBadge(trigger: ConceptTrigger, brief: CreativeBrief): string | n
 export function directConcepts(f: FinalAdFacts, brand: FinalAdBrandAssets): { brief: CreativeBrief; concepts: ConceptPlan[] } {
   const brief = analyzeBrief(f, brand);
   const triggers = selectConcepts(brief);
-  const concepts = triggers.map((trigger) => {
+  const concepts: ConceptPlan[] = triggers.map((trigger) => {
     const ad = buildConceptAd(f, brand, brief, trigger);
-    return { trigger, triggerLabel: CONCEPT_LABELS[trigger], artDirection: ad.artDirection!, ad, scores: validateFinalAd(ad) };
+    const adr = ad.artDirection!;
+    return {
+      trigger, triggerLabel: CONCEPT_LABELS[trigger], artDirection: adr, ad, scores: validateFinalAd(ad),
+      conceptName: CONCEPT_LABELS[trigger], psychologicalTrigger: adr.emotionalTrigger, mainPromise: MAIN_PROMISE[trigger],
+      visualDirection: `${adr.visualStory} · ${adr.aiEnvironment.atmosphere}`, whyConvert: WHY_CONVERT[trigger],
+      targetAudience: brief.targetAudience, keyBenefit: brief.keyBenefit,
+    };
   });
   return { brief, concepts };
 }
