@@ -17,6 +17,7 @@ import {
   ENTITY_LABELS, ASSET_TYPE_LABELS, LIBRARY_FILTERS, assetBadges, DNA_SCORES, FEEDBACK_BUTTONS, type AssetLike,
 } from "@/lib/creative-studio/engine";
 import { CONCEPT_TYPE_LABELS } from "@/lib/creative-studio/concept-engine";
+import type { FinalAdData, FinalAdScores } from "@/lib/creative-studio/final-creative-engine";
 import {
   generateCampaignAction, duplicateCampaignAction, archiveCampaignAction, deleteCampaignAction, approveCampaignAction,
 } from "@/lib/creative-studio/campaign-actions";
@@ -59,7 +60,8 @@ type Visual = Record<string, unknown> & {
 };
 
 type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
-type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[] };
+type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores };
+type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
   brand_match_score: number; marketing_match_score: number; readability_score: number; hierarchy_score: number; conversion_score: number; is_approved: boolean; is_favorite: boolean;
@@ -760,7 +762,111 @@ function conceptFor(data: RenderData, strategy?: string | null): AdConcept {
 
 const GOLD = "#C9A14A";
 
+// ── ZONO Final Ad Renderer ────────────────────────────────────────────────────
+// Renders a COMPLETE, ready-to-post square real-estate ad from the deterministic
+// final-ad spec: real agency logo, real property photo (hero), strong headline,
+// location, feature icon row, big price block, agent photo + name + phone, CTA.
+// All Hebrew is system-font + RTL (no AI text). Follows the Creative DNA.
+const AD_FEATURE_ICON: Record<string, string> = { Sofa: "Sofa", Maximize: "Maximize", Sun: "Sun", Building2: "Building2", Car: "Car", ArrowUpDown: "ArrowUpDown", Package: "Package", MapPin: "MapPin" };
+
+function FinalAdRenderer({ ad, scale = 1, refId }: { ad: FinalAdView; scale?: number; refId?: string }) {
+  const pal = ad.palette;
+  const s = (n: number) => n * scale;
+  const initials = (ad.agentName || "").trim().slice(0, 1) || "ZO";
+  return (
+    <div id={refId} dir="rtl" style={{ position: "relative", aspectRatio: "1 / 1", width: "100%", overflow: "hidden", borderRadius: s(16), background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.text, fontFamily: "inherit" }}>
+      {/* Hero property photo — the real image, dominant, cinematic */}
+      <div style={{ position: "absolute", insetInline: s(14), top: s(74), height: "44%", borderRadius: s(14), overflow: "hidden", boxShadow: `0 ${s(18)}px ${s(40)}px rgba(0,0,0,0.45)` }}>
+        {ad.propertyImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={ad.propertyImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.muted, fontSize: s(12), fontWeight: 700 }}>אין תמונת נכס</div>
+        )}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.05), transparent 30%, rgba(0,0,0,0.35))" }} />
+      </div>
+
+      {/* Top band: logo + badge + headline + subheadline */}
+      <div style={{ position: "absolute", insetInline: 0, top: 0, padding: `${s(14)}px ${s(16)}px`, display: "flex", flexDirection: "column", gap: s(4) }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8) }}>
+          {ad.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ad.logoUrl} alt="" style={{ height: s(30), maxWidth: s(120), objectFit: "contain" }} />
+          ) : <span style={{ fontSize: s(13), fontWeight: 900, color: pal.text, opacity: 0.9 }}>{ad.logoText || ""}</span>}
+          {ad.badge && <span style={{ background: pal.accent, color: pal.onAccent, fontSize: s(11), fontWeight: 900, padding: `${s(3)}px ${s(10)}px`, borderRadius: 999 }}>{ad.badge}</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: s(8), marginTop: s(2) }}>
+          <div style={{ width: s(5), height: s(22), background: pal.accent, borderRadius: 2 }} />
+          <div style={{ color: pal.text, fontSize: s(24), fontWeight: 900, lineHeight: 1.02, textShadow: "0 1px 10px rgba(0,0,0,0.5)" }}>{ad.headline}</div>
+        </div>
+        {ad.subheadline && <div style={{ color: pal.accent, fontSize: s(12.5), fontWeight: 800, paddingInlineStart: s(13) }}>{ad.subheadline}</div>}
+      </div>
+
+      {/* Feature icon row */}
+      {ad.features.length > 0 && (
+        <div style={{ position: "absolute", insetInline: s(14), top: "calc(44% + 92px)", display: "flex", justifyContent: "space-around", gap: s(6), padding: `${s(8)}px ${s(6)}px`, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: s(12) }}>
+          {ad.features.map((f, i) => (
+            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: s(2), flex: 1, minWidth: 0 }}>
+              <span style={{ color: pal.accent, display: "inline-flex" }}><Icon name={AD_FEATURE_ICON[f.icon] ?? "Dot"} size={s(18)} /></span>
+              {f.value && <span style={{ color: pal.text, fontSize: s(14), fontWeight: 900, lineHeight: 1 }}>{f.value}</span>}
+              <span style={{ color: pal.muted, fontSize: s(9.5), fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{f.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Price block */}
+      {ad.price && (
+        <div style={{ position: "absolute", insetInline: s(14), bottom: s(76), display: "flex", alignItems: "center", justifyContent: "center", gap: s(8), padding: `${s(8)}px ${s(14)}px`, background: pal.accent, color: pal.onAccent, borderRadius: s(12), boxShadow: `0 ${s(10)}px ${s(24)}px ${pal.accent}55` }}>
+          <span style={{ fontSize: s(11), fontWeight: 800, opacity: 0.85 }}>{ad.priceLabel}</span>
+          <span style={{ fontSize: s(26), fontWeight: 900, letterSpacing: -0.5 }}>{ad.price}</span>
+        </div>
+      )}
+
+      {/* Agent strip: photo + name + phone + CTA */}
+      <div style={{ position: "absolute", insetInline: 0, bottom: 0, padding: `${s(10)}px ${s(14)}px`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8), background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.55))" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: s(8), minWidth: 0 }}>
+          {ad.agentPhoto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ad.agentPhoto} alt="" style={{ width: s(40), height: s(40), borderRadius: 999, objectFit: "cover", border: `2px solid ${pal.accent}` }} />
+          ) : (
+            <div style={{ width: s(40), height: s(40), borderRadius: 999, display: "grid", placeItems: "center", background: pal.accent, color: pal.onAccent, fontSize: s(15), fontWeight: 900, border: `2px solid ${pal.accent}` }}>{initials}</div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            {ad.agentName && <span style={{ color: pal.text, fontSize: s(13), fontWeight: 900, whiteSpace: "nowrap" }}>{ad.agentName}</span>}
+            {ad.agentPhone && <span style={{ color: pal.muted, fontSize: s(11), fontWeight: 700, direction: "ltr", textAlign: "right" }}>{ad.agentPhone}</span>}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: s(6), background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: s(11.5), fontWeight: 900, padding: `${s(8)}px ${s(14)}px`, borderRadius: 999, whiteSpace: "nowrap" }}>
+          <Icon name="MessageCircle" size={s(14)} /> {ad.cta}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Render the final ad offscreen at full resolution and download a square PNG
+ *  (ready-to-post). Best-effort: real assets are inlined when CORS allows. */
+async function exportFinalAdPng(ad: FinalAdView, filename: string): Promise<void> {
+  const [{ toPng }, { createRoot }, React] = await Promise.all([
+    import("html-to-image"), import("react-dom/client"), import("react"),
+  ]);
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-99999px;top:0;width:360px;height:360px;z-index:-1;";
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await new Promise<void>((res) => { root.render(React.createElement(FinalAdRenderer, { ad, scale: 1 })); setTimeout(res, 80); });
+  // Give real images a moment to load before capture.
+  await Promise.all(Array.from(host.querySelectorAll("img")).map((img) => img.complete ? Promise.resolve() : new Promise((r) => { img.onload = img.onerror = () => r(null); })));
+  try {
+    const url = await toPng(host.firstElementChild as HTMLElement, { pixelRatio: 3, cacheBust: true, width: 360, height: 360 });
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  } finally { root.unmount(); host.remove(); }
+}
+
 function CreativePreview({ data, scale = 1, backgroundImageUrl, concept }: { data: RenderData; scale?: number; backgroundImageUrl?: string | null; concept?: AdConcept }) {
+  // FINAL AD mode: render the complete designer-grade square ad.
+  if (data.ad) return <FinalAdRenderer ad={data.ad} scale={scale} />;
   const p = data.palette;
   const ad = extractAd(data);
   const c = concept ?? conceptFor(data);
@@ -1087,9 +1193,19 @@ function AdminCandidatesPanel({ et, eid }: { et: string; eid: string }) {
 function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [copied, setCopied] = useState(false);
-  // The real property photo comes from the render's image_placeholder (no AI invention).
+  const [exporting, setExporting] = useState(false);
+  // FINAL AD mode: the complete ready-to-post creative carries an `ad` spec.
+  const ad = o.render_data?.ad as FinalAdView | undefined;
+  const adScores = ad?.scores ?? (o.creative_selection_metadata as unknown as Partial<FinalAdScores> | undefined);
+  const readiness = adScores?.finalPostReadiness ?? null;
+  const adWarnings = adScores?.warnings ?? [];
+  // The real property photo comes from the final ad or the render's image_placeholder.
   const blocks = (o.render_data?.blocks ?? []) as { component?: string; imageUrl?: string }[];
-  const hasPropertyImage = blocks.some((b) => b.component === "image_placeholder" && b.imageUrl);
+  const hasPropertyImage = ad ? Boolean(ad.propertyImage) : blocks.some((b) => b.component === "image_placeholder" && b.imageUrl);
+  const doExport = async () => {
+    if (!ad) return; setExporting(true);
+    try { await exportFinalAdPng(ad, `zono-ad-${o.id}.png`); } catch { /* best-effort */ } finally { setExporting(false); }
+  };
   return (
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
       {/* Text-locked composite: ZONO renderer draws Hebrew (system font, RTL) +
@@ -1097,10 +1213,25 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           writes Hebrew and never invents assets. */}
       <div className="relative">
         <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
-        <span className="bg-ink/75 text-card absolute bottom-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[8px] font-bold">טקסט מערכת · ללא AI</span>
-        {o.image_url && <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">רקע AI נוצר</span>}
-        {!o.image_url && (o.image_status === "pending" || !o.image_status) && <span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">הרקע בהפקה…</span>}
+        {ad ? (
+          <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">מודעה סופית · מוכן לפרסום</span>
+        ) : (
+          <>
+            <span className="bg-ink/75 text-card absolute bottom-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[8px] font-bold">טקסט מערכת · ללא AI</span>
+            {o.image_url && <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">רקע AI נוצר</span>}
+            {!o.image_url && (o.image_status === "pending" || !o.image_status) && <span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">הרקע בהפקה…</span>}
+          </>
+        )}
       </div>
+      {ad && readiness != null && (
+        <div className="flex flex-wrap items-center gap-1 px-0.5">
+          <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${readiness >= 90 ? "bg-success text-card" : "bg-warning-soft text-warning"}`}>מוכנות לפרסום {readiness}</span>
+          <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-bold">זווית: {ad.angleLabel}</span>
+        </div>
+      )}
+      {ad && adWarnings.length > 0 && (
+        <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">{adWarnings.join(" · ")}</p>
+      )}
       {/* Source-asset transparency (RULE 10) */}
       <div className="flex flex-wrap gap-1 px-0.5">
         <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${hasPropertyImage ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>{hasPropertyImage ? "✓ תמונת נכס אמיתית" : "חסרה תמונת נכס"}</span>
@@ -1135,7 +1266,11 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         <button onClick={() => wrap(() => favoriteQuickAction({ outputId: o.id, value: !o.is_favorite, entityType: et, entityId: eid }), `qf-${o.id}`)} className={`font-bold ${o.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={12} /></button>
         <button onClick={() => wrap(() => regenerateQuickAction({ requestId: o.request_id, entityType: et, entityId: eid }), `qg-${o.id}`)} className="text-muted font-bold"><Icon name="Sparkles" size={12} /></button>
         <button onClick={() => wrap(() => duplicateQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qd-${o.id}`)} className="text-muted font-bold"><Icon name="Plus" size={12} /></button>
-        <span className="text-muted/50 cursor-not-allowed" title="בקרוב">PNG</span>
+        {ad ? (
+          <button onClick={() => void doExport()} disabled={exporting} className="text-brand-strong font-bold disabled:opacity-50"><Icon name="Download" size={12} /> {exporting ? "מייצא…" : "הורד PNG"}</button>
+        ) : (
+          <span className="text-muted/50 cursor-not-allowed" title="זמין במודעות סופיות">PNG</span>
+        )}
       </div>
       {o.scroll_stop_reason && <p className="text-muted px-0.5 text-[10px]">⚡ {o.scroll_stop_reason}</p>}
       {o.internal_prompt && (

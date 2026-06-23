@@ -20,6 +20,38 @@ import { detectPropertyAngle } from "./quality/zonoPropertyFirstEngine";
 import { pullInspiration } from "./quality/zonoCreativeInspirationEngine";
 import { runQualityPipeline, QUALITY_CONFIG } from "./quality/orchestrator";
 import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
+import { analyzeBrief, selectMarketingAngle, generateCopy, buildFinalAd, validateFinalAd, type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
+
+/** Build the complete FINAL-AD spec (angle → copy → assets → scores) and inject
+ *  it into each property-ad variation's render, so the renderer produces a
+ *  finished, ready-to-post square ad instead of a background + text. */
+function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variations: ReturnType<typeof buildQuickVariations>): void {
+  const facts: FinalAdFacts = {
+    propertyImage: input.propertyImage ?? null, city: input.city ?? null, neighborhood: input.neighborhood ?? null,
+    address: input.address ?? null, propertyType: input.propertyType ?? null, price: input.price ?? null,
+    rooms: input.rooms ?? null, sizeSqm: input.sizeSqm ?? null, floor: input.floor ?? null, parking: input.parking ?? null,
+    storage: Boolean(input.storage), balcony: Boolean(input.balcony), elevator: Boolean(input.elevator), exclusive: Boolean(input.exclusive),
+    isNew: /חדש|חדשה|קבלן|בנייה חדשה|מחיר שיווק/.test(input.importantText ?? ""),
+    urgent: /אחרון|אחרונה|דחוף|מהר|לא ת?חזור|נעלמ/.test(input.importantText ?? ""),
+    importantText: input.importantText ?? null, customCta: input.customCta ?? null,
+  };
+  const brandAssets: FinalAdBrandAssets = {
+    agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null, agentPhoto: brand.agentPhoto ?? null,
+    officeName: brand.officeName ?? null, officeLogo: brand.officeLogo ?? null, colors: brand.colors, luxury: brand.luxury,
+  };
+  const brief = analyzeBrief(facts, brandAssets);
+  const { candidates } = selectMarketingAngle(brief);
+  variations.forEach((v, vi) => {
+    const angle = candidates[vi % candidates.length];
+    const copy = generateCopy(brief, angle);
+    const ad = buildFinalAd(facts, brandAssets, brief, angle, copy);
+    const scores = validateFinalAd(ad);
+    const r = v.render as unknown as Record<string, unknown>;
+    r.ad = { ...ad, template: v.variantKey, scores };
+    r.width = ad.width; r.height = ad.height; r.format = "feed_1_1";
+    v.headline = ad.headline; v.subheadline = ad.subheadline; v.cta = ad.cta;
+  });
+}
 
 type QuickVar = ReturnType<typeof buildQuickVariations>[number];
 function providedFeatures(i: QuickInput): string[] {
@@ -144,6 +176,8 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   });
 
   const variations = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
+  // FINAL AD: property ads become finished, ready-to-post square creatives.
+  if (g.requestType === "property_ad_post") attachFinalAds(g.input, brand.snapshot, variations);
   // Candidate matrix: each strategic variation × each style family (≈16 candidates).
   const briefs: CandidateBrief[] = [];
   variations.forEach((v, vi) => {
@@ -178,21 +212,31 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     : [...quality.rejected].sort((a, b) => b.scores.overall_quality_score - a.scores.overall_quality_score).slice(0, QUALITY_CONFIG.finalCount);
 
   const selectionMeta = { candidatesTotal: quality.candidatesTotal, rounds: quality.rounds, threshold: QUALITY_CONFIG.minQualityScore };
-  const rows = winners.map((c) => ({
-    ...(c.brief.outputDraft as Record<string, unknown>),
-    quality_status: c.scores.overall_quality_score >= QUALITY_CONFIG.minQualityScore && !c.scores.hard_blocked ? "passed" : "below_threshold",
-    overall_quality_score: c.scores.overall_quality_score, wow_score: c.scores.wow_score,
-    critic_summary: c.critic.critic_summary, quality_review_id: quality.reviewIdByCandidate[c.brief.candidateId] ?? null,
-    generation_round: c.generationRound, is_hidden_due_to_quality: false,
-    used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json,
-    property_primary_angle: c.brief.propertyPrimaryAngle,
-    creative_selection_metadata: { ...selectionMeta, family: c.brief.family, wow: c.scores.wow_score } as unknown as Json,
-  }));
+  const adScoresOf = (c: typeof winners[number]) => {
+    const rd = (c.brief.outputDraft as { render_data?: { ad?: { scores?: { finalPostReadiness?: number; warnings?: string[]; blockers?: string[] }; angleLabel?: string } } }).render_data;
+    return rd?.ad?.scores ? { finalPostReadiness: rd.ad.scores.finalPostReadiness ?? null, warnings: rd.ad.scores.warnings ?? [], blockers: rd.ad.scores.blockers ?? [], angleLabel: rd.ad.angleLabel ?? null } : null;
+  };
+  const rows = winners.map((c) => {
+    const adScores = adScoresOf(c);
+    return {
+      ...(c.brief.outputDraft as Record<string, unknown>),
+      quality_status: c.scores.overall_quality_score >= QUALITY_CONFIG.minQualityScore && !c.scores.hard_blocked ? "passed" : "below_threshold",
+      overall_quality_score: c.scores.overall_quality_score, wow_score: c.scores.wow_score,
+      critic_summary: c.critic.critic_summary, quality_review_id: quality.reviewIdByCandidate[c.brief.candidateId] ?? null,
+      generation_round: c.generationRound, is_hidden_due_to_quality: false,
+      used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json,
+      property_primary_angle: c.brief.propertyPrimaryAngle,
+      creative_selection_metadata: { ...selectionMeta, family: c.brief.family, wow: c.scores.wow_score, ...(adScores ?? {}) } as unknown as Json,
+      // Final-ad mode renders deterministically from the real photo — no AI bg.
+      ...(adScores ? { image_status: "final_render" } : {}),
+    };
+  });
   const { data: inserted } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
   const ids = ((inserted ?? []) as { id: string }[]).map((r) => r.id);
   // Auto-generate the FINAL image (Gemini Nano Banana) only for the selected
-  // winners. Best-effort: never fabricate a placeholder image.
-  await generateImagesForOutputs(supabase, orgId, ids);
+  // winners. Best-effort: never fabricate a placeholder image. Property ads are
+  // rendered deterministically from the real photo, so they need no AI image.
+  if (g.requestType !== "property_ad_post") await generateImagesForOutputs(supabase, orgId, ids);
   return { requestId, created: rows.length };
 }
 
