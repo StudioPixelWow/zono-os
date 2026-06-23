@@ -17,7 +17,7 @@ const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-3 text-sm outline-none transition";
 const scoreTone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
-export function AcquisitionView({ cards, cc }: { cards: AcquisitionCard[]; cc: AcquisitionCommandCenter }) {
+export function AcquisitionView({ cards, cc, embedded = false }: { cards: AcquisitionCard[]; cc: AcquisitionCommandCenter; embedded?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -49,14 +49,24 @@ export function AcquisitionView({ cards, cc }: { cards: AcquisitionCard[]; cc: A
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
-        <div>
-          <p className="text-brand text-xs font-bold">ZONO Inventory Acquisition</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">מודיעין גיוס נכסים</h1>
-          <p className="text-muted mt-1 text-sm">הפיכת מודעות חיצוניות להזדמנויות גיוס — בעלים פרטיים, ביקוש קונים, ועסקאות דו״צ.</p>
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-ink text-lg font-black">לוח ניהול גיוס מלא</h2>
+            <p className="text-muted text-xs">ניהול מלא של הזדמנויות הגיוס — סינון, שלבי פייפליין ופעולות.</p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => run(recomputeAcquisitionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={14} />}>{pending ? "מחשב…" : "חשב מחדש"}</Button>
         </div>
-        <Button onClick={() => run(recomputeAcquisitionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב הזדמנויות גיוס"}</Button>
-      </div>
+      ) : (
+        <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
+          <div>
+            <p className="text-brand text-xs font-bold">ZONO Inventory Acquisition</p>
+            <h1 className="text-ink mt-1 text-2xl font-black">מודיעין גיוס נכסים</h1>
+            <p className="text-muted mt-1 text-sm">הפיכת מודעות חיצוניות להזדמנויות גיוס — בעלים פרטיים, ביקוש קונים, ועסקאות דו״צ.</p>
+          </div>
+          <Button onClick={() => run(recomputeAcquisitionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב הזדמנויות גיוס"}</Button>
+        </div>
+      )}
 
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}

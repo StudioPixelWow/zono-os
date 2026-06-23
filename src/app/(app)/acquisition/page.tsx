@@ -1,4 +1,5 @@
 import { getAcquisitionBoard, getAcquisitionCommandCenter, type AcquisitionCard, type AcquisitionCommandCenter } from "@/lib/acquisition/service";
+import { AcquisitionDashboard } from "./AcquisitionDashboard";
 import { AcquisitionView } from "./AcquisitionView";
 
 export const dynamic = "force-dynamic";
@@ -11,5 +12,10 @@ export default async function AcquisitionPage() {
   } catch (e) {
     console.error("[acquisition] load failed:", e);
   }
-  return <AcquisitionView cards={cards} cc={cc} />;
+  return (
+    <div className="flex flex-col gap-8">
+      <AcquisitionDashboard cards={cards} cc={cc} />
+      <AcquisitionView cards={cards} cc={cc} embedded />
+    </div>
+  );
 }
