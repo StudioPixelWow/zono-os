@@ -1,2 +1,0 @@
-{ "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true },
-  "include": ["src/lib/search/service.ts", "src/components/dashboard-home/DashboardHomeView.tsx"] }

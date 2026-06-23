@@ -724,41 +724,160 @@ function CopyDrawer({ c, onClose }: { c: Copy; onClose: () => void }) {
   );
 }
 
-// ── HTML/CSS render-object preview (editable structure, not an image) ──────────
-// This is ZONO's text-locked renderer: Hebrew is drawn here with the system font
-// (true RTL, no AI spelling), real photo + brand assets only. An optional
-// text-free AI background sits BEHIND the content with a readability scrim.
-function CreativePreview({ data, scale = 1, backgroundImageUrl }: { data: RenderData; scale?: number; backgroundImageUrl?: string | null }) {
-  const p = data.palette;
-  const block = (b: RenderBlock, i: number) => {
-    const key = `${b.component}-${i}`;
-    switch (b.component) {
-      case "eyebrow": return <div key={key} style={{ color: p.accent, fontSize: 11 * scale, fontWeight: 800, letterSpacing: 1 }}>{b.text}</div>;
-      case "headline": return <div key={key} style={{ color: p.text, fontSize: 26 * scale, fontWeight: 900, lineHeight: 1.05 }}>{b.text}</div>;
-      case "subheadline": return <div key={key} style={{ color: p.muted, fontSize: 14 * scale, fontWeight: 600 }}>{b.text}</div>;
-      case "cta_button": case "whatsapp_cta": return <div key={key} style={{ alignSelf: "center", background: p.accent, color: p.onAccent, fontSize: 13 * scale, fontWeight: 800, padding: `${8 * scale}px ${16 * scale}px`, borderRadius: 999, marginTop: "auto" }}>{b.component === "whatsapp_cta" ? "💬 " : ""}{b.text}</div>;
-      case "price_badge": return <div key={key} style={{ alignSelf: "flex-start", background: p.text, color: p.bg, fontSize: 14 * scale, fontWeight: 900, padding: `${4 * scale}px ${10 * scale}px`, borderRadius: 8 }}>{b.text}</div>;
-      case "location_badge": return <div key={key} style={{ color: p.muted, fontSize: 12 * scale, fontWeight: 700 }}>📍 {b.text}</div>;
-      case "property_features": case "project_details": case "investment_block": return <div key={key} style={{ display: "flex", flexWrap: "wrap", gap: 4 * scale }}>{(b.items ?? []).map((it, j) => <span key={j} style={{ background: "rgba(255,255,255,0.12)", color: p.text, fontSize: 11 * scale, fontWeight: 700, padding: `${3 * scale}px ${8 * scale}px`, borderRadius: 6 }}>{it}</span>)}</div>;
-      case "agent_card": case "developer_block": case "testimonial_block": return <div key={key} style={{ color: p.text, fontSize: 12 * scale, fontWeight: 700, opacity: 0.9 }}>{b.text}</div>;
-      case "logo_slot": return <div key={key} style={{ color: p.text, fontSize: 13 * scale, fontWeight: 900, opacity: 0.85 }}>{b.text}</div>;
-      case "image_placeholder": return b.imageUrl
-        ? <img key={key} src={b.imageUrl} alt="" style={{ width: "100%", borderRadius: 10 * scale, objectFit: "cover", maxHeight: 180 * scale }} />
-        : <div key={key} style={{ background: "rgba(255,255,255,0.08)", border: `1px dashed ${p.muted}`, borderRadius: 10 * scale, color: p.muted, fontSize: 10 * scale, display: "grid", placeItems: "center", minHeight: 60 * scale, flex: "0 0 auto" }}>🖼 {b.text}</div>;
-      default: return null;
-    }
+// ── ZONO Premium Ad Renderer (HYBRID) ─────────────────────────────────────────
+// Real assets stay real (real property photo as cinematic hero, real brand text,
+// locked Hebrew with the system font — no AI text), but the DESIGN around them is
+// premium and dynamic: full-bleed photo, gradient depth, glass layers, strong
+// hierarchy, luxury spacing. One real photo, multiple distinct concept layouts.
+type AdConcept = "premium_clean" | "luxury_editorial" | "modern_sales" | "bold_broker" | "minimal";
+
+function extractAd(data: RenderData) {
+  const find = (...names: string[]) => data.blocks.find((b) => names.includes(b.component));
+  const chipsBlock = find("property_features", "project_details", "investment_block");
+  return {
+    headline: find("headline")?.text ?? "",
+    subheadline: find("subheadline")?.text ?? "",
+    price: find("price_badge")?.text ?? "",
+    location: find("location_badge")?.text ?? "",
+    cta: find("cta_button", "whatsapp_cta")?.text ?? "",
+    isWhatsapp: Boolean(find("whatsapp_cta")),
+    agent: find("agent_card", "developer_block", "testimonial_block")?.text ?? "",
+    logo: find("logo_slot")?.text ?? "",
+    chips: (chipsBlock?.items ?? []).slice(0, 5),
+    image: find("image_placeholder")?.imageUrl ?? null,
   };
+}
+
+const CONCEPT_BY_STRATEGY: Record<string, AdConcept> = {
+  "Premium Clean": "premium_clean", "Trust / Authority": "luxury_editorial",
+  "Modern Sales": "modern_sales", "Bold Social": "bold_broker",
+};
+function conceptFor(data: RenderData, strategy?: string | null): AdConcept {
+  if (strategy && CONCEPT_BY_STRATEGY[strategy]) return CONCEPT_BY_STRATEGY[strategy];
+  if (data.layoutLabel && CONCEPT_BY_STRATEGY[data.layoutLabel]) return CONCEPT_BY_STRATEGY[data.layoutLabel];
+  return "premium_clean";
+}
+
+const GOLD = "#C9A14A";
+
+function CreativePreview({ data, scale = 1, backgroundImageUrl, concept }: { data: RenderData; scale?: number; backgroundImageUrl?: string | null; concept?: AdConcept }) {
+  const p = data.palette;
+  const ad = extractAd(data);
+  const c = concept ?? conceptFor(data);
+  const photo = ad.image ?? backgroundImageUrl ?? null;
+  const s = (n: number) => n * scale;
+
+  // Cinematic crop position per concept for visual variety from ONE real photo.
+  const objectPos = c === "luxury_editorial" ? "center 30%" : c === "modern_sales" ? "center 60%" : "center";
+  // Render helpers (plain functions returning JSX — NOT components, so they keep
+  // no state and satisfy react-hooks/static-components).
+  const renderPhoto = () => photo ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={photo} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: objectPos }} />
+  ) : (
+    <div style={{ position: "absolute", inset: 0, background: `radial-gradient(120% 120% at 80% 10%, ${p.accent}33, transparent), linear-gradient(160deg, ${p.bg2}, ${p.bg})` }} />
+  );
+  const renderChips = (light = true) => ad.chips.length ? (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: s(5), justifyContent: "flex-start" }}>
+      {ad.chips.map((it, j) => (
+        <span key={j} style={{ background: light ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.28)", color: "#fff", fontSize: s(10.5), fontWeight: 700, padding: `${s(4)}px ${s(9)}px`, borderRadius: 999, border: "1px solid rgba(255,255,255,0.28)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>{it}</span>
+      ))}
+    </div>
+  ) : null;
+  const renderCta = (block = false) => ad.cta ? (
+    <div style={{ alignSelf: block ? "stretch" : "flex-start", textAlign: "center", background: `linear-gradient(135deg, ${p.accent}, ${p.accent}cc)`, color: p.onAccent, fontSize: s(13), fontWeight: 900, padding: `${s(9)}px ${s(18)}px`, borderRadius: 999, boxShadow: `0 ${s(8)}px ${s(20)}px ${p.accent}66` }}>{ad.isWhatsapp ? "💬 " : ""}{ad.cta}</div>
+  ) : null;
+  const renderFooter = () => (ad.agent || ad.logo) ? (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8), color: "#fff" }}>
+      {ad.agent && <span style={{ fontSize: s(10.5), fontWeight: 700, opacity: 0.95 }}>{ad.agent}</span>}
+      {ad.logo && <span style={{ fontSize: s(11), fontWeight: 900, letterSpacing: 0.5, opacity: 0.95 }}>{ad.logo}</span>}
+    </div>
+  ) : null;
+  const shadow = { textShadow: "0 1px 12px rgba(0,0,0,0.55)" } as React.CSSProperties;
+
+  const frame: React.CSSProperties = { position: "relative", aspectRatio: `${data.width} / ${data.height}`, borderRadius: s(14), overflow: "hidden", width: "100%", background: `linear-gradient(160deg, ${p.bg2}, ${p.bg})` };
+
+  // ── Concept: Premium Clean — photo hero + bottom gradient + glass content ────
+  if (c === "premium_clean") {
+    return (
+      <div dir="rtl" style={frame}>
+        {renderPhoto()}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, transparent 28%, transparent 42%, rgba(0,0,0,0.82) 100%)" }} />
+        {ad.location && <div style={{ position: "absolute", top: s(14), insetInlineEnd: s(14), ...shadow, color: "#fff", fontSize: s(11), fontWeight: 700 }}>📍 {ad.location}</div>}
+        <div style={{ position: "absolute", insetInline: 0, bottom: 0, padding: s(16), display: "flex", flexDirection: "column", gap: s(8) }}>
+          <div style={{ width: s(34), height: s(3), background: p.accent, borderRadius: 2 }} />
+          <div style={{ color: "#fff", fontSize: s(25), fontWeight: 900, lineHeight: 1.05, ...shadow }}>{ad.headline}</div>
+          {ad.price && <div style={{ color: "#fff", fontSize: s(20), fontWeight: 900, ...shadow }}>{ad.price}</div>}
+          {renderChips()}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8), marginTop: s(2) }}>{renderCta()}{renderFooter()}</div>
+        </div>
+      </div>
+    );
+  }
+  // ── Concept: Luxury Editorial — dark cinematic, centered, gold accent ────────
+  if (c === "luxury_editorial") {
+    return (
+      <div dir="rtl" style={frame}>
+        {renderPhoto()}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.35) 45%, rgba(0,0,0,0.85))" }} />
+        {ad.price && <div style={{ position: "absolute", top: s(14), insetInlineStart: s(14), background: "rgba(0,0,0,0.4)", border: `1px solid ${GOLD}`, color: GOLD, fontSize: s(12), fontWeight: 900, padding: `${s(4)}px ${s(10)}px`, borderRadius: 6, backdropFilter: "blur(6px)" }}>{ad.price}</div>}
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: s(20), gap: s(8) }}>
+          <span style={{ color: GOLD, fontSize: s(10), fontWeight: 800, letterSpacing: 3 }}>ZONO · אקסקלוסיבי</span>
+          <div style={{ color: "#fff", fontSize: s(26), fontWeight: 900, lineHeight: 1.1, ...shadow }}>{ad.headline}</div>
+          <div style={{ width: s(48), height: s(2), background: GOLD }} />
+          {ad.subheadline && <div style={{ color: "#fff", fontSize: s(13), fontWeight: 600, opacity: 0.9, ...shadow }}>{ad.subheadline}</div>}
+        </div>
+        <div style={{ position: "absolute", insetInline: 0, bottom: 0, padding: s(14), display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8) }}>{renderCta()}{renderFooter()}</div>
+      </div>
+    );
+  }
+  // ── Concept: Modern Sales — photo top + frosted glass content card ───────────
+  if (c === "modern_sales") {
+    return (
+      <div dir="rtl" style={frame}>
+        {renderPhoto()}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.1), rgba(0,0,0,0.45))" }} />
+        {ad.price && <div style={{ position: "absolute", top: s(14), insetInlineStart: s(14), background: p.accent, color: p.onAccent, fontSize: s(15), fontWeight: 900, padding: `${s(5)}px ${s(12)}px`, borderRadius: 10, boxShadow: `0 ${s(8)}px ${s(18)}px ${p.accent}66` }}>{ad.price}</div>}
+        <div style={{ position: "absolute", insetInline: s(12), bottom: s(12), padding: s(14), borderRadius: s(16), background: "rgba(20,16,40,0.55)", border: "1px solid rgba(255,255,255,0.18)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex", flexDirection: "column", gap: s(8) }}>
+          <div style={{ color: "#fff", fontSize: s(22), fontWeight: 900, lineHeight: 1.08 }}>{ad.headline}</div>
+          {renderChips()}
+          {renderCta(true)}
+          {renderFooter()}
+        </div>
+      </div>
+    );
+  }
+  // ── Concept: Bold Broker — accent header block + photo + agent strip ─────────
+  if (c === "bold_broker") {
+    return (
+      <div dir="rtl" style={frame}>
+        <div style={{ position: "absolute", insetInline: 0, top: 0, height: "34%", background: `linear-gradient(135deg, ${p.accent}, ${p.bg2})`, padding: s(16), display: "flex", flexDirection: "column", justifyContent: "center", gap: s(6) }}>
+          <div style={{ color: "#fff", fontSize: s(24), fontWeight: 900, lineHeight: 1.05, ...shadow }}>{ad.headline}</div>
+          {ad.price && <div style={{ color: "#fff", fontSize: s(18), fontWeight: 900 }}>{ad.price}</div>}
+        </div>
+        <div style={{ position: "absolute", insetInline: 0, top: "34%", bottom: "16%", overflow: "hidden" }}>{renderPhoto()}<div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, transparent 55%, rgba(0,0,0,0.5))" }} /><div style={{ position: "absolute", insetInline: s(14), bottom: s(8) }}>{renderChips()}</div></div>
+        <div style={{ position: "absolute", insetInline: 0, bottom: 0, height: "16%", background: p.text, padding: `0 ${s(14)}px`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8) }}>
+          <span style={{ color: p.bg, fontSize: s(11), fontWeight: 800 }}>{ad.agent || ad.location}</span>
+          <span style={{ color: p.accent, fontSize: s(12), fontWeight: 900 }}>{ad.logo || ad.cta}</span>
+        </div>
+      </div>
+    );
+  }
+  // ── Concept: Minimal High-End — framed photo, refined type, lots of space ────
   return (
-    <div dir="rtl" style={{ position: "relative", aspectRatio: `${data.width} / ${data.height}`, background: `linear-gradient(160deg, ${p.bg2}, ${p.bg})`, borderRadius: 12, overflow: "hidden", width: "100%" }}>
-      {backgroundImageUrl && (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={backgroundImageUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(160deg, ${p.bg2}cc, ${p.bg}e6)` }} />
-        </>
-      )}
-      <div style={{ position: "relative", height: "100%", padding: 16 * scale, display: "flex", flexDirection: "column", gap: 8 * scale }}>
-        {data.blocks.map(block)}
+    <div dir="rtl" style={{ ...frame, background: "#0e0c16", padding: s(12) }}>
+      <div style={{ position: "absolute", inset: s(12), borderRadius: s(10), overflow: "hidden" }}>
+        {renderPhoto()}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.15), transparent 40%, rgba(0,0,0,0.7))" }} />
+        <div style={{ position: "absolute", top: s(12), insetInlineEnd: s(12), color: "#fff", fontSize: s(11), fontWeight: 700, letterSpacing: 1, ...shadow }}>{ad.location}</div>
+        <div style={{ position: "absolute", insetInline: s(14), bottom: s(12), display: "flex", flexDirection: "column", gap: s(6) }}>
+          <div style={{ color: "#fff", fontSize: s(22), fontWeight: 800, lineHeight: 1.1, ...shadow }}>{ad.headline}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8) }}>
+            {ad.price && <span style={{ color: "#fff", fontSize: s(16), fontWeight: 900, ...shadow }}>{ad.price}</span>}
+            {renderFooter()}
+          </div>
+          {renderCta()}
+        </div>
       </div>
     </div>
   );
@@ -977,7 +1096,7 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           real photo/assets on top of the AI's TEXT-FREE background. The AI never
           writes Hebrew and never invents assets. */}
       <div className="relative">
-        <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} />
+        <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
         <span className="bg-ink/75 text-card absolute bottom-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[8px] font-bold">טקסט מערכת · ללא AI</span>
         {o.image_url && <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">רקע AI נוצר</span>}
         {!o.image_url && (o.image_status === "pending" || !o.image_status) && <span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">הרקע בהפקה…</span>}
