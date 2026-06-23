@@ -51,6 +51,10 @@ const TEMPLATE_OPTIONS: Record<ConceptTrigger, DesignFamily[]> = {
 };
 const DARK_TEMPLATES: DesignFamily[] = ["penthouse_collection", "luxury_dark", "urban_prestige"];
 const FINAL_ADS = 2; // expensive image generations per run (down from 4)
+// FINAL_AD_IMAGE_ONLY: a creative is ONLY a real AI-generated ad image — never a
+// deterministic card render. On failure we surface an error instead of a card.
+// Default ON; set ZONO_FINAL_AD_IMAGE_ONLY="false" to re-enable the legacy fallback.
+const FINAL_AD_IMAGE_ONLY = process.env.ZONO_FINAL_AD_IMAGE_ONLY !== "false";
 
 /** PROPERTY AD path: build EXACTLY the 4 required, strategically-distinct
  *  concepts (family / investment / luxury / price_advantage). Each gets its own
@@ -349,8 +353,22 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
               creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
             };
           }
-          // Fallback: deterministic composition (accurate by construction). Either no
-          // OpenAI key (no_provider) or no AI ad passed QA after the attempt cap.
+          // FINAL_AD_IMAGE_ONLY (default ON): a creative is ONLY a real AI-generated
+          // ad image. If generation/QA failed, we DO NOT fall back to the
+          // deterministic card renderer — we persist a FAILED row (no card) so the
+          // UI shows an explicit "image generation failed" state.
+          if (FINAL_AD_IMAGE_ONLY) {
+            return { ...base, status: "failed",
+              render_data: { failed: true, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel } } as unknown as Json,
+              image_url: null, image_provider: outcome.provider, image_status: "failed",
+              image_error: (outcome.status === "no_provider" ? "ספק AI לא מוגדר (OPENAI_API_KEY / ZONO_IMAGE_PROVIDER=openai)" : (outcome.failReasons.join(" · ") || "יצירת התמונה נכשלה")).slice(0, 500),
+              quality_status: "failed",
+              critic_summary: `יצירת התמונה נכשלה — ${outcome.status === "no_provider" ? "ספק ה-AI אינו מוגדר" : "אף גרסה לא עברה QA"} (${b.triggerLabel}).`,
+              is_hidden_due_to_quality: true,
+              creative_selection_metadata: { ...selMeta, mode: "failed", trigger: b.trigger, isTopConcept: isTop, wow: w, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+            };
+          }
+          // Legacy fallback (only when strict mode is explicitly disabled): deterministic render.
           const layoutOk = b.designPlan.layout?.approved !== false;
           return { ...base,
             render_data: b.render as unknown as Json,

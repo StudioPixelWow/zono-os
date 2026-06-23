@@ -56,41 +56,49 @@ const KIND_BRIEF: Record<AdKind, string> = {
 };
 
 export function refUrlsFor(assets: AdGenAssets): string[] {
-  return [...assets.propertyImages.slice(0, 3), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
+  // Up to 4 property photos so the model can build a real COLLAGE, plus logo + agent.
+  return [...assets.propertyImages.slice(0, 4), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
 }
 
-/** Full art-direction brief. The model renders EVERYTHING; we describe placement
- *  + the EXACT Hebrew copy + colours + concept. */
+/** Full art-direction brief. The model is the DESIGNER and renders a COMPLETE,
+ *  finished social-media advertisement POSTER (never a card with overlays). We
+ *  describe a full multi-photo poster composition + the EXACT Hebrew copy +
+ *  brand colours + concept. */
 export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: string): string {
   const colors = [spec.palette.bg, spec.palette.bg2, spec.palette.accent].filter(Boolean).join(", ");
   const feats = spec.features.filter(Boolean).join(" · ");
   const refs: string[] = [];
-  const nImg = Math.min(assets.propertyImages.length, 3);
-  const heroNote = spec.kind === "testimonial" ? "supporting/background photo" : "the HERO of the ad, keep it real and unaltered";
-  for (let i = 0; i < nImg; i++) refs.push(`reference image ${refs.length + 1} = the REAL property photo${nImg > 1 ? ` (${i + 1}/${nImg})` : ""} — ${heroNote}`);
-  if (assets.logoUrl) refs.push(`reference image ${refs.length + 1} = the agency LOGO — reproduce EXACTLY (no redraw/recolor/distort), small in a top corner`);
-  if (assets.agentPhoto) refs.push(`reference image ${refs.length + 1} = the AGENT headshot — keep the face unaltered, ${spec.kind === "testimonial" ? "prominent trusted face" : "SMALL bottom corner"}`);
+  const nImg = Math.min(assets.propertyImages.length, 4);
+  const heroNote = spec.kind === "testimonial" ? "supporting/background photo" : "real property photo, unaltered & photorealistic";
+  for (let i = 0; i < nImg; i++) refs.push(`reference image ${refs.length + 1} = REAL property photo ${i + 1}/${nImg} — ${heroNote}`);
+  if (assets.logoUrl) refs.push(`reference image ${refs.length + 1} = the agency LOGO — reproduce EXACTLY (no redraw/recolor/distort)`);
+  if (assets.agentPhoto) refs.push(`reference image ${refs.length + 1} = the AGENT headshot — keep the face unaltered`);
+
+  const collage = nImg > 1
+    ? `Compose a polished MULTI-PHOTO COLLAGE: one large hero property photo plus ${nImg - 1} smaller supporting photo(s) arranged in a clean asymmetric grid with thin elegant dividers/rounded frames — like a high-end agency listing poster.`
+    : `Feature the single property photo large and cinematic as the hero of the poster.`;
+
   const lines = [
-    `Design a COMPLETE, finished ${KIND_BRIEF[spec.kind]} — 1:1 square (1024×1024), magazine / premium-agency quality. Concept: ${spec.conceptLabel}.`,
+    `Design a COMPLETE, finished, ready-to-publish ${KIND_BRIEF[spec.kind]} as a FULL SOCIAL-MEDIA POSTER — vertical 4:5 (1024×1536), Instagram/Facebook real-estate ad quality. This is a fully designed marketing creative, NOT a card, NOT a template preview, NOT a photo with small overlays. Concept: ${spec.conceptLabel}.`,
     refs.length ? `Reference images: ${refs.join("; ")}.` : "",
-    spec.kind === "testimonial" ? "Hierarchy: quote + agent → headline → CTA → logo." : "The property photo dominates (~70%). Hierarchy: property → headline → price → CTA → features → agent (small) → logo.",
-    "Render this EXACT Hebrew copy as crisp, perfectly legible right-to-left (RTL) typography — no gibberish, no invented/broken letters, spelled exactly as given:",
-    `• Headline: "${spec.headline}"`,
+    collage,
+    "POSTER LAYOUT (top → bottom): (1) dramatic header band with the big bold Hebrew headline + small agency logo in a corner; (2) the property photo collage as the visual centerpiece; (3) a horizontal FEATURE-ICONS ROW (one elegant minimal icon per feature with its short label); (4) a large, dominant PRICE BLOCK; (5) a footer strip with the agent photo, agent name and a WhatsApp/phone contact line + CTA.",
+    "Render this EXACT Hebrew copy as crisp, perfectly legible right-to-left (RTL) typography — no gibberish, no invented/broken/duplicated letters, spelled exactly as given:",
+    `• Headline (big, bold, top): "${spec.headline}"`,
     spec.subheadline ? `• Sub-headline: "${spec.subheadline}"` : "",
-    spec.price ? `• Price: "${spec.priceLabel ?? "מחיר"} ${spec.price}"` : "",
-    feats ? `• Features: "${feats}"` : "",
-    spec.cta ? `• CTA button: "${spec.cta}"` : "",
-    spec.agentName ? `• Agent name: "${spec.agentName}"` : "",
-    spec.agentPhone ? `• Phone (Latin digits, LTR): "${spec.agentPhone}"` : "",
+    spec.price ? `• Price block (large, dominant): "${spec.priceLabel ?? "מחיר"} ${spec.price}"` : "",
+    feats ? `• Feature-icons row (icon + label each): "${feats}"` : "",
+    spec.cta ? `• CTA: "${spec.cta}"` : "",
+    spec.agentName ? `• Agent name (footer): "${spec.agentName}"` : "",
+    spec.agentPhone ? `• Phone (Latin digits, keep LTR): "${spec.agentPhone}"` : "",
     spec.city || spec.street ? `• Location: "${[spec.street, spec.city].filter(Boolean).join(", ")}"` : "",
-    // BRAND-ADAPTIVE: lock the premium layout STYLE, adapt only the colours.
-    `Brand-adaptive design system — use the brand palette as primary/secondary/accent: ${colors}. Do NOT default to fixed colours; this organisation's palette drives the whole creative. Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
-    `Look & feel: a premium, high-converting Israeli real-estate advertisement designed by a top performance-marketing studio — real, commercial, trustworthy, cinematic lighting, strong contrast, structured information blocks, elegant dividers, generous professional spacing. NOT a generic AI poster, startup graphic, Canva template, or minimal empty layout.`,
-    `Typography: premium Israeli commercial type, confident hierarchy (headline → price → features → support). Not futuristic, gaming, or AI-looking. Icons: one consistent elegant minimal premium family.`,
-    `Price as a premium CONVERSION block — attention-grabbing, highly readable, integrated with the brand; never cheap-looking.`,
-    `Real-estate authenticity: match the property's real character${spec.propertyType ? ` (${spec.propertyType})` : ""} — boutique → boutique feel, luxury → luxury, family → warm, urban → urban. Do NOT invent scenery: no ocean, mountains, skyline or views unless the supplied photo actually shows them. Keep the property photorealistic — do not redesign the building.`,
-    `Art direction: ${spec.emotionalFeel ?? "confident, aspirational"}.`,
-    "Absolute rules: do NOT invent, translate, shorten or add any text beyond the copy above; do NOT alter the logo or agent face; numbers must be exact. The goal is an ad that SELLS — premium agency-grade, not merely 'looks nice'.",
+    // BRAND-ADAPTIVE: premium poster STYLE locked, colours adapt to the brand.
+    `Style: premium, high-contrast, sales-oriented luxury real-estate POSTER — dramatic deep background, cinematic lighting, rich premium accent highlights for the headline/price, elegant dividers, generous structured spacing. Brand-adaptive palette as primary/secondary/accent: ${colors} (the brand colours drive the whole creative; if dark, use a dramatic dark luxury background with glowing accent highlights). Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
+    `Quality bar: looks designed by a top Israeli performance-marketing studio — finished, commercial, trustworthy. NOT a generic AI poster, NOT a Canva template, NOT a minimal empty layout, NOT a UI card.`,
+    `Typography: premium Israeli commercial type, confident hierarchy (headline → price → features → contact). Icons: one consistent elegant minimal premium family.`,
+    `Real-estate authenticity: match the property's real character${spec.propertyType ? ` (${spec.propertyType})` : ""}. Do NOT invent scenery (no ocean/mountains/skyline/views) unless a supplied photo shows it. Keep every property photo photorealistic — never redesign the building.`,
+    `Art direction: ${spec.emotionalFeel ?? "confident, aspirational, luxurious"}.`,
+    "Absolute rules: do NOT invent, translate, shorten or add any text beyond the copy above; do NOT alter the logo or agent face; numbers must be exact. The result MUST be a fully composed advertisement poster that an agency would publish today.",
     correction ? `CORRECTION (previous attempt failed QA):\n${correction}` : "",
   ];
   return lines.filter(Boolean).join("\n");
@@ -119,7 +127,8 @@ export async function generateAdImageRaw(prompt: string, refUrls: string[]): Pro
   if (!key) throw new Error("OPENAI_API_KEY חסר");
   const form = new FormData();
   form.append("model", IMAGE_MODEL()); form.append("prompt", prompt);
-  form.append("size", "1024x1024"); form.append("quality", "high"); form.append("n", "1");
+  // Vertical 4:5 social poster (closest gpt-image-1 portrait size to 1080×1350).
+  form.append("size", process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536"); form.append("quality", "high"); form.append("n", "1");
   let attached = 0;
   for (const url of refUrls) { const f = await fetchBlob(url); if (f) { form.append("image[]", f.blob, f.name); attached++; } }
   if (!attached) throw new Error("no reference images could be fetched");

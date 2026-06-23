@@ -1575,6 +1575,9 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   const ad = o.render_data?.ad as FinalAdView | undefined;
   // FULL-AD mode: the image model designed the whole ad; we just show o.image_url.
   const fullAd = Boolean(o.render_data?.fullAd) && Boolean(o.image_url);
+  // FINAL_AD_IMAGE_ONLY: the thumbnail must BE the AI poster (or an error), never a card.
+  const isFinalImage = Boolean(o.image_url) && (o.image_status === "ai_full_ad" || o.image_status === "generated" || Boolean(o.render_data?.fullAd));
+  const isFailed = !o.image_url && (o.image_status === "failed" || o.quality_status === "failed");
   const adScores = ad?.scores ?? (o.creative_selection_metadata as unknown as Partial<FinalAdScores> | undefined);
   const adWarnings = adScores?.warnings ?? [];
   // The real property photo comes from the final ad or the render's image_placeholder.
@@ -1590,17 +1593,23 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           real photo/assets on top of the AI's TEXT-FREE background. The AI never
           writes Hebrew and never invents assets. */}
       <div className="relative">
-        <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
-        {fullAd ? (
-          <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">✓ עבר QA{o.render_data?.qa?.creativeWow ? ` · WOW ${o.render_data.qa.creativeWow}` : (o.render_data?.qa?.overall ?? o.render_data?.qa?.score) ? ` · ${o.render_data?.qa?.overall ?? o.render_data?.qa?.score}` : ""}</span>
-        ) : ad ? (
-          <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">מודעה סופית · מוכן לפרסום</span>
+        {isFinalImage ? (
+          // FINAL_AD_IMAGE_ONLY: the thumbnail IS the full AI-generated poster — no
+          // card renderer, no overlays. This is the finished social-media ad.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={o.image_url as string} alt={o.variant_name ?? "מודעה סופית"} className="border-line w-full rounded-xl border object-contain" />
+        ) : isFailed ? (
+          // Generation failed — show an explicit error, NEVER a card fallback.
+          <div className="border-danger/40 bg-danger-soft/40 flex aspect-[4/5] w-full flex-col items-center justify-center gap-2 rounded-xl border p-4 text-center">
+            <span className="bg-danger-soft text-danger grid h-12 w-12 place-items-center rounded-full"><Icon name="AlertTriangle" size={22} /></span>
+            <p className="text-danger text-sm font-black">יצירת התמונה נכשלה</p>
+            <p className="text-muted text-[11px]">נסה/י שוב — לחצ/י על כפתור היצירה מחדש למטה.</p>
+          </div>
         ) : (
-          <>
-            <span className="bg-ink/75 text-card absolute bottom-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[8px] font-bold">טקסט מערכת · ללא AI</span>
-            {o.image_url && <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">רקע AI נוצר</span>}
-            {!o.image_url && (o.image_status === "pending" || !o.image_status) && <span className="bg-ink/70 text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold">הרקע בהפקה…</span>}
-          </>
+          <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
+        )}
+        {isFinalImage && (
+          <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">✓ עבר QA{o.render_data?.qa?.creativeWow ? ` · WOW ${o.render_data.qa.creativeWow}` : ""}</span>
         )}
       </div>
       {fullAd && (
