@@ -75,6 +75,7 @@ type RenderData = { format: string; width: number; height: number; layoutLabel?:
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
   brand_match_score: number; marketing_match_score: number; readability_score: number; hierarchy_score: number; conversion_score: number; is_approved: boolean; is_favorite: boolean;
+  image_url: string | null; creative_strategy: string | null;
 };
 
 type Copy = Record<string, unknown> & {
@@ -1226,7 +1227,9 @@ function CreativePreview({ data, scale = 1, backgroundImageUrl, concept }: { dat
           // eslint-disable-next-line @next/next/no-img-element
           <img src={backgroundImageUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
         ) : (
-          <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#9aa0aa", fontSize: 13 * scale, fontWeight: 700, textAlign: "center", padding: 16 }}>התמונה בהפקה…</div>
+          <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#9aa0aa", fontSize: 13 * scale, fontWeight: 700, textAlign: "center", padding: 16 }}>
+            {(data as { failed?: boolean }).failed ? "יצירת התמונה נכשלה" : "התמונה בהפקה…"}
+          </div>
         )}
       </div>
     );
@@ -1390,7 +1393,7 @@ function OutputsSection({ outputs, assets, et, eid, r, wrap }: { outputs: Output
 function OutputCard({ o, et, eid, wrap, onOpen }: { o: Output; et: string; eid: string; wrap: Wrap; onOpen: () => void }) {
   return (
     <div className={`bg-card border-line flex flex-col gap-2 rounded-2xl border p-2.5 shadow-sm ${o.is_approved ? "ring-1 ring-success" : o.status === "rejected" ? "opacity-60" : ""}`}>
-      <button onClick={onOpen} className="block w-full text-right"><CreativePreview data={o.render_data} scale={0.85} /></button>
+      <button onClick={onOpen} className="block w-full text-right"><CreativePreview data={o.render_data} scale={0.85} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} /></button>
       <div className="flex items-center justify-between gap-1 px-0.5">
         <span className="text-muted text-[10px] font-bold">{OUTPUT_TYPE_LABELS[o.output_type] ?? o.output_type}</span>
         <span className="text-success text-sm font-black">{o.overall_score}</span>
@@ -1414,7 +1417,7 @@ function OutputDrawer({ o, onClose }: { o: Output; onClose: () => void }) {
           <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{OUTPUT_TYPE_LABELS[o.output_type] ?? o.output_type}</span>
           <button onClick={onClose} className="text-muted"><Icon name="Minus" size={18} /></button>
         </div>
-        <div className="mx-auto max-w-[260px]"><CreativePreview data={o.render_data} /></div>
+        <div className="mx-auto max-w-[260px]"><CreativePreview data={o.render_data} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} /></div>
         <p className="text-ink mt-3 text-sm font-black">{o.title}</p>
         <div className="mt-3 grid grid-cols-3 gap-2">
           <Mini label="מותג" value={o.brand_match_score} />
