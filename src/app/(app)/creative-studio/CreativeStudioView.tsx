@@ -747,7 +747,10 @@ function CopyDrawer({ c, onClose }: { c: Copy; onClose: () => void }) {
 type AdConcept = "premium_clean" | "luxury_editorial" | "modern_sales" | "bold_broker" | "minimal";
 
 function extractAd(data: RenderData) {
-  const find = (...names: string[]) => data.blocks.find((b) => names.includes(b.component));
+  // render_data for full-AI ads / failed / legacy rows has no `blocks` array —
+  // never let a missing blocks list crash the whole studio (reading 'find').
+  const blocks = data.blocks ?? [];
+  const find = (...names: string[]) => blocks.find((b) => names.includes(b.component));
   const chipsBlock = find("property_features", "project_details", "investment_block");
   return {
     headline: find("headline")?.text ?? "",

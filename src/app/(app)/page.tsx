@@ -23,10 +23,11 @@ export default async function Home() {
     console.error("[home] properties failed:", e);
   }
 
-  // Recommended property = best private-owner external opportunity (no agent).
+  // Recommended property = a ROTATING private-owner external opportunity (no
+  // agent). force-dynamic + random pick → a different one on each visit.
   let featuredExternal: ExternalListingRow | null = null;
   try {
-    featuredExternal = await externalListingRepository.topPrivateOpportunity();
+    featuredExternal = await externalListingRepository.randomPrivateOpportunity();
   } catch (e) {
     console.error("[home] private opportunity failed:", e);
   }

@@ -129,7 +129,7 @@ export function CompetitorThreatsSection({ threats }: { threats: CompetitorThrea
           {threats.map((c) => {
             const chip = threatChip(c.threat);
             return (
-              <div key={c.id} className="bg-card border-line flex flex-col gap-3 rounded-[22px] border p-4 shadow-[var(--shadow-card)]">
+              <Link key={c.id} href={`/competitors/${c.id}`} className="bg-card border-line hover:border-brand-light flex flex-col gap-3 rounded-[22px] border p-4 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)]">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <span className="bg-ink/90 text-card grid h-10 w-10 place-items-center rounded-xl text-sm font-black">{c.name.trim().charAt(0) || "?"}</span>
@@ -151,7 +151,7 @@ export function CompetitorThreatsSection({ threats }: { threats: CompetitorThrea
                     <div><p className="text-success text-sm font-black tabular-nums">+{c.growth}%</p><p className="text-muted text-[10px] font-bold">צמיחה</p></div>
                   </div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

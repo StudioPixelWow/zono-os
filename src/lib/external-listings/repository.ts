@@ -43,6 +43,26 @@ export const externalListingRepository = {
       .maybeSingle();
     return data ?? null;
   },
+  /** A ROTATING private-owner opportunity — picks a random listing from the top
+   *  private pool (prefers ones with a photo) so the home "recommended property"
+   *  differs on each visit. Falls back to the single best when the pool is thin. */
+  async randomPrivateOpportunity(poolSize = 24): Promise<ExternalListingRow | null> {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("external_listings")
+      .select("*")
+      .neq("status", "removed")
+      .eq("has_agent", false)
+      .order("opportunity_score", { ascending: false })
+      .order("imported_at", { ascending: false })
+      .limit(poolSize);
+    const pool = data ?? [];
+    if (pool.length === 0) return null;
+    // Prefer listings that have at least one image; otherwise use the whole pool.
+    const withImage = pool.filter((l) => Array.isArray(l.images) && (l.images as unknown[]).length > 0);
+    const candidates = withImage.length ? withImage : pool;
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+  },
   async getById(id: string): Promise<ExternalListingRow | null> {
     const supabase = await createClient();
     const { data } = await supabase.from("external_listings").select("*").eq("id", id).maybeSingle();
