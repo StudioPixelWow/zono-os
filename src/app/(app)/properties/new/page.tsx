@@ -1,5 +1,5 @@
 import {
-  createDraftProperty,
+  getOrCreateDraftProperty,
   listPropertyMedia,
   type PropertyRow,
 } from "@/lib/properties/repository";
@@ -63,7 +63,9 @@ function rowToInput(p: PropertyRow): PropertyInput {
 }
 
 export default async function NewPropertyPage() {
-  const draft = await createDraftProperty();
+  // Resume an existing in-progress draft instead of inserting a new row every
+  // visit — prevents the "saved twice (one with images, one without)" bug.
+  const draft = await getOrCreateDraftProperty();
   const media = await listPropertyMedia(draft.id);
 
   return (

@@ -85,6 +85,9 @@ export async function listProperties(
     .order("created_at", { ascending: false });
 
   if (!filters.includeArchived) q = q.neq("status", "archived");
+  // Drafts are wizard-internal (in-progress) and must never appear as a saved
+  // property in inventory — only show them when explicitly queried.
+  if (filters.status !== "draft") q = q.neq("status", "draft");
   if (filters.city) q = q.ilike("city", `%${filters.city}%`);
   if (filters.type) q = q.eq("type", filters.type);
   if (filters.status) q = q.eq("status", filters.status);
@@ -226,6 +229,34 @@ export async function createDraftProperty(): Promise<PropertyRow> {
     .single();
   if (error) throw new Error(error.message);
   return data;
+}
+
+/** Resume the caller's in-progress draft if one exists, otherwise create a fresh
+ *  one. This prevents the "saved twice" bug: previously every visit to
+ *  /properties/new inserted a NEW draft row, so if a draft already held uploaded
+ *  images, the next visit stranded them on that orphan draft while the published
+ *  property had none. We deterministically reuse a single draft per session and
+ *  PREFER a draft that already has media so images + publish stay on one row. */
+export async function getOrCreateDraftProperty(): Promise<PropertyRow> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile) throw new Error("not authenticated");
+  await cleanupAbandonedDrafts(user.id); // drop truly-empty, media-less drafts
+  const supabase = await createClient();
+  const { data: drafts } = await supabase
+    .from("properties")
+    .select("*")
+    .eq("owner_id", user.id)
+    .eq("status", "draft")
+    .order("updated_at", { ascending: false });
+  const rows = (drafts ?? []) as PropertyRow[];
+  if (rows.length) {
+    // Prefer a draft that already has uploaded media (never strand images).
+    const ids = rows.map((r) => r.id);
+    const { data: media } = await supabase.from("property_media").select("property_id").in("property_id", ids);
+    const withMedia = new Set((media ?? []).map((m) => m.property_id as string));
+    return rows.find((r) => withMedia.has(r.id)) ?? rows[0];
+  }
+  return createDraftProperty();
 }
 
 /** Autosave the full form into an existing draft/property. */
