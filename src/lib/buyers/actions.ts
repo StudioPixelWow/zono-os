@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { TaskStatus } from "@/lib/supabase/types";
-import { createBuyer, updateBuyer } from "./repository";
+import { createBuyer, updateBuyer, markBuyerContacted } from "./repository";
 import type { BuyerInput } from "./types";
 
 export interface BuyerActionState {
@@ -66,6 +66,34 @@ export async function updateBuyerAction(
   revalidatePath(`/buyers/${id}`);
   revalidatePath("/buyers");
   redirect(`/buyers/${id}`);
+}
+
+/** Stamp the buyer as contacted now — used by the "סמן כטופל" quick action. */
+export async function markBuyerContactedAction(
+  id: string,
+): Promise<BuyerActionState> {
+  try {
+    await markBuyerContacted(id);
+    // Best-effort activity log so the timeline reflects the touch.
+    try {
+      const { logActivityEvent } = await import("@/lib/activity/service");
+      await logActivityEvent({
+        eventType: "buyer.contacted",
+        entityType: "buyer",
+        entityId: id,
+        title: "סומן כטופל",
+      });
+    } catch {
+      /* activity logging is non-critical */
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
+    console.error("[buyers] mark contacted failed:", e);
+    return { error: `עדכון נכשל: ${msg}` };
+  }
+  revalidatePath("/buyers");
+  revalidatePath(`/buyers/${id}`);
+  return {};
 }
 
 // ── Buyer tasks (for the Tasks tab) ──────────────────────────────────────────

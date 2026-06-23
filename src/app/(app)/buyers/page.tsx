@@ -1,71 +1,46 @@
-import { listBuyers, listBuyerBoard, type BuyerRow } from "@/lib/buyers/repository";
-import type { BuyerBoard } from "@/lib/buyers/repository";
-import type { BuyerFilters } from "@/lib/buyers/types";
-import type { BuyerTemperature, LeadSource, PropertyType } from "@/lib/supabase/types";
-import { listBuyerIntelBoard, type BuyerIntelBoard } from "@/lib/buyer-intelligence/service";
-import { BuyersListView } from "./BuyersListView";
-import { BuyerBoardWidgets } from "./BuyerBoardWidgets";
-import { BuyerIntelWidgets } from "./BuyerIntelWidgets";
+import { listBuyers, type BuyerRow } from "@/lib/buyers/repository";
+import { listBuyerMatchCounts, type BuyerMatchCounts } from "@/lib/buyers/matches";
+import { listBuyerIntelBoard } from "@/lib/buyer-intelligence/service";
+import { BuyersWorkspace, type IntelMembership } from "./components/BuyersWorkspace";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Record<string, string | string[] | undefined>;
-
-function num(v: string | undefined): number | undefined {
-  if (!v) return undefined;
-  const n = Number(v);
-  return Number.isNaN(n) ? undefined : n;
-}
-
-export default async function BuyersPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>;
-}) {
-  const sp = await searchParams;
-  const str = (k: string): string | undefined => {
-    const v = sp[k];
-    return typeof v === "string" && v.trim() ? v.trim() : undefined;
-  };
-
-  const filters: BuyerFilters = {
-    locality: str("locality"),
-    type: str("type") as PropertyType | undefined,
-    status: str("status") as BuyerTemperature | undefined,
-    source: str("source") as LeadSource | undefined,
-    minBudget: num(str("minBudget")),
-    maxBudget: num(str("maxBudget")),
-    roomsMin: num(str("roomsMin")),
-  };
-
+/**
+ * Buyers command center. All filtering/search/sorting happens client-side in
+ * BuyersWorkspace for instant UX, so the server just loads the org's buyers
+ * (RLS-scoped), the intelligence-board membership (when the digital twin exists),
+ * and per-buyer match counts. Each fetch fails soft so the page always renders.
+ */
+export default async function BuyersPage() {
   let rows: BuyerRow[] = [];
   let error = false;
   try {
-    rows = await listBuyers(filters);
+    rows = await listBuyers({});
   } catch (e) {
     console.error("[buyers] list failed:", e);
     error = true;
   }
 
-  let board: BuyerBoard | null = null;
+  let intel: IntelMembership | null = null;
   try {
-    board = await listBuyerBoard();
-  } catch (e) {
-    console.error("[buyers] board failed:", e);
-  }
-
-  let intel: BuyerIntelBoard | null = null;
-  try {
-    intel = await listBuyerIntelBoard();
+    const board = await listBuyerIntelBoard();
+    intel = {
+      needingAttention: board.needingAttention.map((i) => i.buyerId),
+      closeToPurchase: board.closeToPurchase.map((i) => i.buyerId),
+      financingRisks: board.financingRisks.map((i) => i.buyerId),
+      highEngagement: board.highEngagement.map((i) => i.buyerId),
+      noActivity: board.noActivity.map((i) => i.buyerId),
+    };
   } catch (e) {
     console.error("[buyers] intel board failed:", e);
   }
 
-  return (
-    <div className="flex flex-col gap-6">
-      {board && <BuyerBoardWidgets board={board} />}
-      {intel && <BuyerIntelWidgets board={intel} />}
-      <BuyersListView buyers={rows} filters={filters} error={error} />
-    </div>
-  );
+  let matchCounts: BuyerMatchCounts = {};
+  try {
+    matchCounts = await listBuyerMatchCounts();
+  } catch (e) {
+    console.error("[buyers] match counts failed:", e);
+  }
+
+  return <BuyersWorkspace buyers={rows} intel={intel} matchCounts={matchCounts} error={error} />;
 }
