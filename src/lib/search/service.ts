@@ -34,12 +34,14 @@ export async function searchEverything(query: string): Promise<SearchGroup[]> {
     .map((c) => `${c}.ilike.${like}`).join(",");
 
   const [propsDirect, propsManual, buyers, sellers, brokers, competitors, ext, agents] = await Promise.all([
-    // (a) Whole-table, punctuation-exact match.
-    supabase.from("properties").select("id,title,city,neighborhood,price,formatted_address,building_number").eq("org_id", orgId).neq("status", "archived").or(propOr).limit(30),
+    // (a) Whole-table, punctuation-exact match. NO explicit org filter — rely on
+    //     RLS (current_org_id) exactly like the Properties list that works, so any
+    //     divergence between profile.org_id and current_org_id() can't hide rows.
+    supabase.from("properties").select("id,title,city,neighborhood,price,formatted_address,building_number").neq("status", "archived").or(propOr).limit(30),
     // (b) Recent listings (manual AND external-origin), newest first — fed to the
-    //     gershayim/token-tolerant JS filter below. NOT limited to manual inventory,
-    //     so externally-sourced properties the agent owns are searchable too.
-    supabase.from("properties").select("id,title,city,neighborhood,price,formatted_address,building_number,description,marketing_description,location").eq("org_id", orgId).neq("status", "archived").order("created_at", { ascending: false }).limit(1000),
+    //     gershayim/token-tolerant JS filter below. RLS-scoped (no explicit org_id),
+    //     matching the working list query, so manual uploads are always included.
+    supabase.from("properties").select("id,title,city,neighborhood,price,formatted_address,building_number,description,marketing_description,location").neq("status", "archived").order("created_at", { ascending: false }).limit(1000),
     supabase.from("buyers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("sellers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("broker_profiles").select("id,display_name,agency_name").eq("org_id", orgId).or(`display_name.ilike.${like},agency_name.ilike.${like}`).limit(LIMIT),
