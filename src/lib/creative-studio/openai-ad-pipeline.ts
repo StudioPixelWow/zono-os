@@ -49,59 +49,74 @@ export function buildSourceManifest(spec: AdSpec): SourceManifest {
   };
 }
 
-const KIND_BRIEF: Record<AdKind, string> = {
-  property: "a premium real-estate property ADVERTISEMENT",
-  sold: "a celebratory 'JUST SOLD / נמכר' real-estate announcement (proud, congratulatory, clear נמכר/SOLD treatment over the property)",
-  testimonial: "a client TESTIMONIAL / review ad (warm, trust-building; agent + quote lead, property photo secondary)",
-};
-
 export function refUrlsFor(assets: AdGenAssets): string[] {
   // Up to 4 property photos so the model can build a real COLLAGE, plus logo + agent.
   return [...assets.propertyImages.slice(0, 4), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
 }
 
-/** Full art-direction brief. The model is the DESIGNER and renders a COMPLETE,
- *  finished social-media advertisement POSTER (never a card with overlays). We
- *  describe a full multi-photo poster composition + the EXACT Hebrew copy +
- *  brand colours + concept. */
+/** Full art-direction brief — the ZONO PREMIUM REAL ESTATE CREATIVE ENGINE
+ *  (locked by user mandate). The image model is the DESIGNER and renders a
+ *  COMPLETE, finished premium campaign image. Only the dynamic values, the EXACT
+ *  Hebrew copy, the supplied-asset map and the QA correction change per request;
+ *  the creative doctrine below is constant for every generation. */
 export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: string): string {
   const colors = [spec.palette.bg, spec.palette.bg2, spec.palette.accent].filter(Boolean).join(", ");
   const feats = spec.features.filter(Boolean).join(" · ");
+  const location = [spec.street, spec.city].filter(Boolean).join(", ");
+  const priceLine = [spec.priceLabel, spec.price].filter(Boolean).join(" ").trim();
+
+  // Supplied-asset map so the model knows which reference image is which.
   const refs: string[] = [];
   const nImg = Math.min(assets.propertyImages.length, 4);
-  const heroNote = spec.kind === "testimonial" ? "supporting/background photo" : "real property photo, unaltered & photorealistic";
-  for (let i = 0; i < nImg; i++) refs.push(`reference image ${refs.length + 1} = REAL property photo ${i + 1}/${nImg} — ${heroNote}`);
-  if (assets.logoUrl) refs.push(`reference image ${refs.length + 1} = the agency LOGO — reproduce EXACTLY (no redraw/recolor/distort)`);
-  if (assets.agentPhoto) refs.push(`reference image ${refs.length + 1} = the AGENT headshot — keep the face unaltered`);
+  for (let i = 0; i < nImg; i++) refs.push(`reference image ${refs.length + 1} = REAL property photo ${i + 1}/${nImg} — keep photorealistic & unaltered, never redesign the building`);
+  if (assets.logoUrl) refs.push(`reference image ${refs.length + 1} = the OFFICIAL OFFICE LOGO — reproduce EXACTLY; never redraw, recolor, distort or invent`);
+  if (assets.agentPhoto) refs.push(`reference image ${refs.length + 1} = the AGENT photo — use EXACTLY; never regenerate, stylize, alter or replace the face`);
 
-  const heroComposition = nImg > 1
-    ? `ONE cinematic HERO image dominates ~70% of the frame — the single most beautiful supplied property photo, full-bleed, dramatic. Weave at most ${Math.min(nImg - 1, 2)} secondary photo(s) in SUBTLY (a torn-edge inset, a soft overlapping corner, a faded layer) — NEVER as equal tiles, NEVER a grid of boxes.`
-    : `ONE cinematic HERO image dominates the frame — the supplied property photo full-bleed, edge-to-edge, dramatic and emotional.`;
+  // Creative brief assembled from the supplied property context.
+  const brief = [
+    spec.visualStory,
+    spec.emotionalFeel,
+    spec.propertyType ? `property character: ${spec.propertyType}` : "",
+    feats ? `key details: ${feats}` : "",
+    location ? `location: ${location}` : "",
+  ].filter(Boolean).join(" — ") || "premium residential property";
+
+  const kindLine =
+    spec.kind === "sold"
+      ? "Campaign type: a proud yet understated 'נמכר / JUST SOLD' announcement — celebratory and elegant; the נמכר treatment is tasteful, never a loud sticker."
+      : spec.kind === "testimonial"
+        ? "Campaign type: a warm client-testimonial campaign — trust-led, with the property still the hero behind an elegant quote."
+        : "Campaign type: a lifestyle acquisition campaign for a property on the market.";
 
   const lines = [
-    `Act as a SENIOR CREATIVE DIRECTOR designing a luxury real-estate Instagram CAMPAIGN AD — vertical 4:5 (1024×1536). This is an emotional, dramatic, scroll-stopping campaign creative, NOT a property card, NOT a listing layout, NOT a brochure, NOT a real-estate-portal card, NOT a Canva template, NOT property-management software UI. Concept: ${spec.conceptLabel}.`,
-    refs.length ? `Reference images: ${refs.join("; ")}.` : "",
-    heroComposition,
-    // STRICT attention order — hero/drama/emotion first, facts last.
-    "ATTENTION HIERARCHY (what the eye must hit, in this exact order): 1) the HERO visual (full-bleed, cinematic, emotional); 2) the PRICE / OFFER (one bold confident moment); 3) the HEADLINE (short, emotional, art-directed — not a description); 4) the AGENT (small, trustworthy, integrated — logo near it); 5) property DETAILS (smallest, quiet, secondary). Facts and specs are the LAST thing noticed, never the first.",
-    "COMPOSITION: edit like a magazine cover / luxury campaign — generous negative space, a single dramatic focal point, deep cinematic gradient over the photo so text floats with contrast. Overlap and layer elements with intent. ABSOLUTELY NO grid layout, NO equal-sized sections, NO boxed feature-icon row, NO divider-separated info bands, NO footer strip of equal blocks.",
-    "Render this EXACT Hebrew copy as crisp, perfectly legible right-to-left (RTL) typography — no gibberish, no invented/broken/duplicated letters, spelled exactly as given. Use only what's needed; do NOT cram every spec:",
-    `• Headline (large, emotional, art-directed): "${spec.headline}"`,
-    spec.subheadline ? `• Sub-headline (smaller, supporting): "${spec.subheadline}"` : "",
-    spec.price ? `• Price / offer (bold, confident, a hero moment of its own): "${spec.priceLabel ?? "מחיר"} ${spec.price}"` : "",
-    feats ? `• A FEW key details (quiet, small, secondary — woven elegantly, NOT as an icon grid): "${feats}"` : "",
-    spec.cta ? `• CTA (small, refined): "${spec.cta}"` : "",
-    spec.agentName ? `• Agent name (small, integrated near the logo): "${spec.agentName}"` : "",
-    spec.agentPhone ? `• Phone (Latin digits, keep LTR, subtle): "${spec.agentPhone}"` : "",
-    spec.city || spec.street ? `• Location (subtle): "${[spec.street, spec.city].filter(Boolean).join(", ")}"` : "",
-    // BRAND-ADAPTIVE: cinematic luxury STYLE locked, colours adapt to the brand.
-    `Style: a high-end luxury real-estate CAMPAIGN — cinematic lighting, dramatic depth, rich shadows, one glowing premium accent for the price/headline, editorial confidence. Emotionally aspirational, not informational. Brand-adaptive palette as primary/secondary/accent: ${colors} (the brand colours drive the mood; lean into a dramatic, moody, premium treatment). Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
-    `Quality bar: indistinguishable from an ad crafted by a top luxury real-estate agency's creative director. If it looks like a tidy property card, a listing portal, a brochure, or software UI — it has FAILED. It must feel like a campaign.`,
-    `Typography: bold editorial Israeli display type for the headline + price; everything else quiet and minimal. One refined type family. No icon rows.`,
-    `Real-estate authenticity: match the property's real character${spec.propertyType ? ` (${spec.propertyType})` : ""}. Do NOT invent scenery (no ocean/mountains/skyline/views) unless a supplied photo shows it. Keep every property photo photorealistic — never redesign the building.`,
-    `Art direction: ${spec.emotionalFeel ?? "confident, aspirational, luxurious"}.`,
-    "Absolute rules: do NOT invent, translate, shorten or add any text beyond the copy above; do NOT alter the logo or agent face; numbers must be exact. The result MUST be a fully composed advertisement poster that an agency would publish today.",
-    correction ? `CORRECTION (previous attempt failed QA):\n${correction}` : "",
+    'ZONO PREMIUM REAL ESTATE CREATIVE ENGINE — create a premium real-estate ADVERTISING CAMPAIGN image. This is NOT a property listing, NOT a sales flyer, NOT a Facebook card. Create a LIFESTYLE ACQUISITION CAMPAIGN. The viewer must feel "I want to live there" BEFORE they think "this property is for sale". Sell emotion before information, atmosphere before specifications, ownership before features.',
+    kindLine,
+    `Concept: ${spec.conceptLabel}. Property brief: ${brief}.`,
+    refs.length ? `SUPPLIED ASSETS — ${refs.join("; ")}. Use ALL supplied assets; never invent or substitute any of them.` : "",
+    "PROPERTY HERO RULE: the property is the hero. Property photography occupies ~70–80% of the composition. Nothing may visually overpower or compete with the property — no oversized text, no giant logos, no aggressive overlays, no marketing gimmicks. Treat the property image like a luxury architectural-magazine cover.",
+    "VISUAL STORYTELLING: respect architecture, composition, interior design, lighting and depth. Do not cover important rooms or block architectural features. Do not place text over focal areas. Let the property breathe and create desire through atmosphere.",
+    // EXACT COPY LOCK — the only text allowed on the image.
+    "Render ONLY this EXACT Hebrew copy, crisp and perfectly legible right-to-left (RTL), spelled exactly as given — no gibberish, no invented/broken/duplicated letters, nothing added, translated or shortened:",
+    `• Headline: "${spec.headline}"`,
+    spec.subheadline ? `• Sub-headline: "${spec.subheadline}"` : "",
+    priceLine ? `• Price / offer (confident, premium, never shouty): "${priceLine}"` : "",
+    feats ? `• A few key details (quiet, secondary): "${feats}"` : "",
+    spec.cta ? `• CTA (refined, low-noise): "${spec.cta}"` : "",
+    spec.agentName ? `• Agent name: "${spec.agentName}"` : "",
+    spec.agentPhone ? `• Phone (Latin digits, keep LTR): "${spec.agentPhone}"` : "",
+    spec.logoText ? `• Office name: "${spec.logoText}"` : "",
+    location ? `• Location (subtle): "${location}"` : "",
+    "BRAND INTEGRATION: use ONLY the supplied branding — never invent logos or colors, never replace branding. Branding must feel premium, understated and trustworthy; the logo is a trust signal, naturally integrated, never the hero.",
+    "AGENT POSITIONING: present the agent as a trusted advisor / luxury consultant / private banker — elegant, trustworthy, never a salesperson and never dominant. The property remains the hero.",
+    "PHONE VISIBILITY: the phone number must be impossible to miss yet never promotional — premium visibility, high trust, low noise, quiet confidence. Avoid 'SALE', 'CALL NOW' and flashy CTAs.",
+    "HEBREW TYPOGRAPHY: perfect RTL, professional Hebrew typography resembling premium developer brochures, architectural publications and luxury magazines. No AI-looking, decorative, stretched or fake-luxury fonts.",
+    `BRAND COLOR SYSTEM: use ONLY these brand colors — ${colors}. Apply them elegantly through dividers, small accents, headline emphasis, the phone section and micro-details. Never overwhelm the property; never create visual noise.`,
+    `ART DIRECTION: imagine a collaboration between Apple, Porsche, Architectural Digest and a luxury real-estate collection — the premium version of ${spec.logoText ?? "the supplied office brand"}. The final image must feel expensive, clean, architectural, editorial and aspirational. Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
+    "FORBIDDEN — reject the design if it resembles a Canva template, a Wix template, a generic real-estate card, a cheap Facebook ad, an AI-generated poster, or franchise marketing.",
+    "APPROVE ONLY IF the result resembles an architectural-magazine cover, a luxury developer campaign, a premium property brochure, or a high-end real-estate launch campaign.",
+    "OUTPUT: a fully designed advertisement using all supplied assets, with exact branding, exact agent identity and exact contact details — suitable for Facebook, Instagram, LinkedIn and premium digital advertising. Vertical 4:5 format. Quality target 10/10, no compromises.",
+    "TECHNICAL LOCK (non-negotiable): do NOT alter the logo or the agent's face; numbers and phone digits must be exact; render nothing beyond the copy above.",
+    correction ? `CORRECTION (previous attempt failed QA — fix precisely):\n${correction}` : "",
   ];
   return lines.filter(Boolean).join("\n");
 }
