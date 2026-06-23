@@ -24,7 +24,7 @@ export async function searchEverything(query: string): Promise<SearchGroup[]> {
   const groups: SearchGroup[] = [];
 
   const [props, buyers, sellers, brokers, competitors, ext, agents] = await Promise.all([
-    supabase.from("properties").select("id,city,neighborhood,price,status").eq("org_id", orgId).or(`city.ilike.${like},neighborhood.ilike.${like}`).limit(LIMIT),
+    supabase.from("properties").select("id,title,city,neighborhood,price,status,formatted_address").eq("org_id", orgId).or(`title.ilike.${like},city.ilike.${like},neighborhood.ilike.${like},formatted_address.ilike.${like}`).limit(LIMIT),
     supabase.from("buyers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("sellers").select("id,full_name,phone").eq("org_id", orgId).or(`full_name.ilike.${like},phone.ilike.${like}`).limit(LIMIT),
     supabase.from("broker_profiles").select("id,display_name,agency_name").eq("org_id", orgId).or(`display_name.ilike.${like},agency_name.ilike.${like}`).limit(LIMIT),
@@ -36,7 +36,7 @@ export async function searchEverything(query: string): Promise<SearchGroup[]> {
   const push = (type: string, label: string, icon: string, hits: SearchHit[]) => { if (hits.length) groups.push({ type, label, icon, hits }); };
 
   push("properties", "נכסים", "Building", (props.data ?? []).map((p) => ({
-    id: p.id, title: p.neighborhood ?? p.city ?? "נכס", subtitle: [p.city, p.price ? `₪${Number(p.price).toLocaleString("he-IL")}` : null].filter(Boolean).join(" · ") || null, href: `/properties/${p.id}`,
+    id: p.id, title: p.title || p.neighborhood || p.city || "נכס", subtitle: [p.neighborhood, p.city, p.price ? `₪${Number(p.price).toLocaleString("he-IL")}` : null].filter(Boolean).join(" · ") || null, href: `/properties/${p.id}`,
   })));
   push("buyers", "קונים", "Users", (buyers.data ?? []).map((b) => ({ id: b.id, title: b.full_name, subtitle: b.phone, href: `/buyers/${b.id}` })));
   push("sellers", "מוכרים", "Handshake", (sellers.data ?? []).map((s) => ({ id: s.id, title: s.full_name, subtitle: s.phone, href: `/sellers/${s.id}` })));

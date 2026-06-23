@@ -258,12 +258,12 @@ function PremiumPropertyCard({ t, p }: { t: (k: string) => string; p: PropertyCa
   const badgeTone: BadgeTone = p.badgeKey === "badge.price_drop" ? "danger" : p.badgeKey === "badge.exclusive" ? "brand" : p.badgeKey === "badge.hot" ? "warning" : "success";
   return (
     <div className="bg-card border-line flex min-w-[260px] max-w-[280px] flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
-      <div className="bg-surface relative aspect-[16/11]">
+      <div className="bg-surface relative aspect-square w-full overflow-hidden">
         {p.imageUrl
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={p.imageUrl} alt={p.title} className="h-full w-full object-cover" />
+          ? <img src={p.imageUrl} alt={p.title} className="absolute inset-0 h-full w-full object-cover object-center" />
           : (
-            <div className="grid h-full place-items-center p-3 text-center">
+            <div className="absolute inset-0 grid place-items-center p-3 text-center">
               <div>
                 <Icon name="Image" size={26} className="text-muted mx-auto" />
                 <p className="text-ink mt-1 text-[11px] font-bold">{t("empty.noImageTitle")}</p>
