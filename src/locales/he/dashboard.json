@@ -5,9 +5,61 @@
     "subtitle": "כל הנתונים, ההזדמנויות והפעולות שלך במקום אחד",
     "searchPlaceholder": "חיפוש נכסים, לקוחות, שכונות או שאל את ZONO…",
     "quickAdd": "הוספת נכס",
-    "featuredTag": "הנכס המומלץ להיום",
+    "featuredTag": "נכס מומלץ היום",
     "matchScore": "התאמה",
     "featuredCta": "פתח נכס"
+  },
+  "todayAttention": {
+    "title": "מה דורש טיפול היום?",
+    "subtitle": "הלקוחות והנכסים שדורשים את תשומת הלב שלך עכשיו",
+    "daysAgo": "ימים ללא טיפול",
+    "kind": {
+      "churnRisk": "סיכון נטישה גבוה",
+      "noLeads": "נכס ללא לידים",
+      "readyForMeeting": "מוכן לפגישה",
+      "noMarketingUpdate": "ללא עדכון שיווק",
+      "priceDrop": "ירידת מחירים"
+    },
+    "reason": {
+      "noContact": "לא נוצר קשר תקופה ארוכה",
+      "noLeads": "אין לידים חדשים לנכס",
+      "highIntent": "מעורבות גבוהה — בשל לפגישה",
+      "staleMarketing": "השיווק לא עודכן לאחרונה",
+      "priceAboveMarket": "המחיר גבוה ממחיר השוק"
+    },
+    "cta": {
+      "callNow": "התקשר עכשיו",
+      "sendUpdate": "שלח עדכון",
+      "scheduleMeeting": "קבע פגישה",
+      "suggestPrice": "הצע שינוי מחיר"
+    }
+  },
+  "urgentActions": {
+    "title": "פעולות דחופות",
+    "viewAll": "צפייה בכל המשימות"
+  },
+  "opportunitiesHot": {
+    "title": "הזדמנויות חמות",
+    "chip": {
+      "hot": "חם מאוד",
+      "warm": "חם",
+      "watch": "למעקב",
+      "track": "מעקב"
+    }
+  },
+  "agentRanking": {
+    "title": "דירוג סוכנים",
+    "viewAll": "כל הצוות",
+    "thisMonth": "החודש"
+  },
+  "activityTrend": {
+    "title": "מגמת פעילות",
+    "avgPrice": "מחיר ממוצע",
+    "dealVolume": "מחזור עסקאות",
+    "inMarketing": "נכסים בשיווק",
+    "activeDeals": "עסקאות פעילות",
+    "newLeads": "לידים חדשים",
+    "trend": "מגמת פעילות"
   },
   "kpi": {
     "activeDeals": { "label": "עסקאות פעילות", "hint": "עסקאות בתהליך פעיל" },
@@ -246,7 +298,8 @@
     "analyzeProperty": "נתח נכס",
     "createCampaign": "צור קמפיין",
     "createPost": "צור פוסט",
-    "openOpportunities": "פתח הזדמנויות"
+    "openOpportunities": "פתח הזדמנויות",
+    "createTask": "צור משימה"
   },
   "empty": {
     "noImageTitle": "אין עדיין תמונות לנכס הזה",

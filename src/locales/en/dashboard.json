@@ -5,7 +5,7 @@
     "subtitle": "All your data, opportunities and actions in one place",
     "searchPlaceholder": "Search properties, clients, neighborhoods or ask ZONO…",
     "quickAdd": "Add property",
-    "featuredTag": "Recommended for today",
+    "featuredTag": "Recommended property today",
     "matchScore": "Match",
     "featuredCta": "Open property"
   },
@@ -244,7 +244,55 @@
     "analyzeProperty": "Analyze property",
     "createCampaign": "Create campaign",
     "createPost": "Create post",
-    "openOpportunities": "Open opportunities"
+    "openOpportunities": "Open opportunities",
+    "createTask": "Create task"
+  },
+  "todayAttention": {
+    "title": "What needs attention today?",
+    "subtitle": "The clients and properties that need you now",
+    "daysAgo": "days without action",
+    "kind": {
+      "churnRisk": "High churn risk",
+      "noLeads": "Property with no leads",
+      "readyForMeeting": "Ready for a meeting",
+      "noMarketingUpdate": "No marketing update",
+      "priceDrop": "Price drop needed"
+    },
+    "reason": {
+      "noContact": "No contact for a long time",
+      "noLeads": "No new leads for this property",
+      "highIntent": "High intent — ready to meet",
+      "staleMarketing": "Marketing wasn't updated recently",
+      "priceAboveMarket": "Price is above market"
+    },
+    "cta": {
+      "callNow": "Call now",
+      "sendUpdate": "Send update",
+      "scheduleMeeting": "Schedule meeting",
+      "suggestPrice": "Suggest price change"
+    }
+  },
+  "urgentActions": {
+    "title": "Urgent actions",
+    "viewAll": "View all tasks"
+  },
+  "opportunitiesHot": {
+    "title": "Hot opportunities",
+    "chip": { "hot": "Very hot", "warm": "Hot", "watch": "To watch", "track": "Tracking" }
+  },
+  "agentRanking": {
+    "title": "Agent ranking",
+    "viewAll": "Whole team",
+    "thisMonth": "This month"
+  },
+  "activityTrend": {
+    "title": "Activity trend",
+    "avgPrice": "Avg. price",
+    "dealVolume": "Deal volume",
+    "inMarketing": "In marketing",
+    "activeDeals": "Active deals",
+    "newLeads": "New leads",
+    "trend": "Activity trend"
   },
   "empty": {
     "noImageTitle": "This property has no photos yet",

@@ -139,6 +139,24 @@ export interface BuyerIntelligenceItem {
   href: string;
 }
 
+export type AttentionTone = "danger" | "warning" | "success" | "brand";
+
+/** A "needs action today" card surfaced in the Today-Attention section. */
+export interface AttentionItem {
+  id: string;
+  /** i18n key for the situation title, e.g. "todayAttention.kind.churnRisk". */
+  titleKey: string;
+  tone: AttentionTone;
+  name: string;            // person (content)
+  phone: string | null;    // content
+  propertyContext: string; // e.g. "דירה 4 חד׳, קרית ביאליק" (content)
+  reasonKey: string;       // i18n key
+  daysSince: number;
+  ctaKey: string;          // i18n key for the CTA label
+  ctaIcon: string;
+  href: string;
+}
+
 /** A recommended action in AI Mission Control. */
 export interface MissionTask {
   id: string;
@@ -175,6 +193,7 @@ export interface DashboardHomeData {
     newListings: number; priceDrops: number; hotNeighborhood: string;
     topTransaction: number; avgPricePerSqm: number; demandTrendPct: number;
   };
+  attention: AttentionItem[];
   hotProperties: PropertyCard[];
   competitors: CompetitorInsight[];
   competitorInsightKeys: string[];

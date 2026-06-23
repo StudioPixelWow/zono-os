@@ -10,7 +10,7 @@ import type { PropertyRow } from "@/lib/properties/labels";
 import { propertyAddressLine, propertyLocation } from "@/lib/properties/labels";
 import type { ExternalListingRow } from "@/lib/external-listings/repository";
 import type {
-  ActivityEvent, BuyerIntelligenceItem, CompetitorInsight, DashboardHomeData,
+  ActivityEvent, AttentionItem, BuyerIntelligenceItem, CompetitorInsight, DashboardHomeData,
   DashboardKpi, HeatMapZone, MarketTrend, MissionTask, OpportunitySignal,
   PropertyCard, PropertyJourneyItem, SellerIntelligenceItem,
 } from "./types";
@@ -118,6 +118,18 @@ const BUYERS: BuyerIntelligenceItem[] = [
   { id: "b4", name: "דנה ופז", avatarUrl: avatar("24"), bucket: "dormant", budget: 2200000, preferredArea: "גנים", matchCount: 2, lastActivityKey: "buyerIntel.activity.noActivity", href: "/buyers" },
 ];
 
+// TODO(intel): derive `attention` from the real seller/buyer intelligence boards
+// (listSellerIntelBoard / listBuyerIntelBoard "needs attention" buckets) once the
+// home page is wired to them. Production-shaped mock until then — mirrors the
+// reference "מה דורש טיפול היום?" row 1:1.
+const ATTENTION: AttentionItem[] = [
+  { id: "at1", titleKey: "todayAttention.kind.churnRisk", tone: "danger", name: "יוסי לוי", phone: "050-1234567", propertyContext: "דירה 4 חד׳, קרית ביאליק", reasonKey: "todayAttention.reason.noContact", daysSince: 18, ctaKey: "todayAttention.cta.callNow", ctaIcon: "Phone", href: "/sellers" },
+  { id: "at2", titleKey: "todayAttention.kind.noLeads", tone: "warning", name: "גלית אבן", phone: "054-9876543", propertyContext: "דירה 3 חד׳, ראשון לציון", reasonKey: "todayAttention.reason.noLeads", daysSince: 28, ctaKey: "todayAttention.cta.sendUpdate", ctaIcon: "Send", href: "/properties" },
+  { id: "at3", titleKey: "todayAttention.kind.readyForMeeting", tone: "success", name: "רועי מזרחי", phone: "052-6543210", propertyContext: "דירה 5 חד׳, קרית ביאליק", reasonKey: "todayAttention.reason.highIntent", daysSince: 2, ctaKey: "todayAttention.cta.scheduleMeeting", ctaIcon: "Calendar", href: "/buyers" },
+  { id: "at4", titleKey: "todayAttention.kind.noMarketingUpdate", tone: "warning", name: "אמיר רוזן", phone: "053-3216549", propertyContext: "דירה 4 חד׳, חיפה", reasonKey: "todayAttention.reason.staleMarketing", daysSince: 21, ctaKey: "todayAttention.cta.sendUpdate", ctaIcon: "Send", href: "/properties" },
+  { id: "at5", titleKey: "todayAttention.kind.priceDrop", tone: "danger", name: "דנה כהן", phone: "050-9876543", propertyContext: "דירה 3 חד׳, חיפה", reasonKey: "todayAttention.reason.priceAboveMarket", daysSince: 3, ctaKey: "todayAttention.cta.suggestPrice", ctaIcon: "Tag", href: "/properties" },
+];
+
 const MISSIONS: MissionTask[] = [
   { id: "mt1", labelKey: "missionControl.mission.callHotLeads", icon: "Phone", done: false, time: "10:00" },
   { id: "mt2", labelKey: "missionControl.mission.uploadPhotos", icon: "Image", done: true, time: "11:30" },
@@ -184,6 +196,7 @@ export function buildDashboardHomeData(opts: { agentName: string; cityName?: str
     cityTrendPct: 11,
     opportunities: OPPORTUNITIES,
     cityNow: { newListings: 17, priceDrops: 3, hotNeighborhood: "נאות אפק", topTransaction: 3450000, avgPricePerSqm: 18420, demandTrendPct: 12 },
+    attention: ATTENTION,
     hotProperties: hot,
     competitors: COMPETITORS,
     competitorInsightKeys: COMPETITOR_INSIGHTS,
