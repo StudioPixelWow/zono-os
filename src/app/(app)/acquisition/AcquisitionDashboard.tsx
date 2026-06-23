@@ -415,17 +415,30 @@ function TasksCard({ tasks, onTask, pending }: { tasks: { profileId: string; tit
 }
 
 function HighPotentialProperties({ properties }: { properties: AcquisitionCard[] }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const by = (dir: 1 | -1) => ref.current?.scrollBy({ left: dir * Math.max(320, ref.current.clientWidth * 0.8), behavior: "smooth" });
   return (
     <section className="flex flex-col gap-3">
-      <SectionHead title="נכסים עם פוטנציאל גיוס גבוה" action={<Link href="/external-listings" className="text-brand-strong text-sm font-bold">הצג הכל</Link>} />
+      <SectionHead title="נכסים עם פוטנציאל גיוס גבוה" action={
+        <div className="flex items-center gap-3">
+          {properties.length > 2 && (
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => by(1)} aria-label="הקודם" className="bg-card border-line text-muted hover:text-brand-strong hover:border-brand-light grid h-9 w-9 place-items-center rounded-full border shadow-[var(--shadow-soft)] transition"><Icon name="ChevronRight" size={18} /></button>
+              <button type="button" onClick={() => by(-1)} aria-label="הבא" className="bg-card border-line text-muted hover:text-brand-strong hover:border-brand-light grid h-9 w-9 place-items-center rounded-full border shadow-[var(--shadow-soft)] transition"><Icon name="ChevronLeft" size={18} /></button>
+            </div>
+          )}
+          <Link href="/external-listings" className="text-brand-strong text-sm font-bold">הצג הכל</Link>
+        </div>
+      } />
       {properties.length === 0 ? <Empty label="אין נכסים עם פוטנציאל גבוה" /> : (
-        <div className="no-scrollbar -mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
+        <div ref={ref} className="no-scrollbar -mx-1 flex snap-x items-stretch gap-4 overflow-x-auto px-1 pb-2">
           {properties.map((c) => (
-            <div key={c.profileId} className="bg-card border-line flex min-w-[230px] max-w-[240px] shrink-0 flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
-              <div className="bg-surface relative aspect-[4/3]">
+            <div key={c.profileId} className="bg-card border-line flex w-[240px] shrink-0 snap-start flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
+              {/* fixed image height → uniform across all cards */}
+              <div className="bg-surface relative h-40 shrink-0">
                 {c.images?.[0]
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={c.images[0]} alt={c.title ?? ""} className="h-full w-full object-cover" />
+                  ? <img src={c.images[0]} alt={c.title ?? ""} className="absolute inset-0 h-full w-full object-cover" />
                   : <div className="text-muted grid h-full place-items-center"><Icon name="Image" size={26} /></div>}
                 <span className="bg-card/90 text-success absolute start-2 top-2 rounded-full px-2 py-0.5 text-xs font-black backdrop-blur">{c.acquisitionScore}%</span>
               </div>

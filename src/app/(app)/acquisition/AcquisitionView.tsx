@@ -28,7 +28,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
   const [city, setCity] = useState("");
   const [source, setSource] = useState("");
   const [privateOnly, setPrivateOnly] = useState(false);
-  const [excludeBrokers, setExcludeBrokers] = useState(false);
+  const [excludeBrokers, setExcludeBrokers] = useState(true); // default: hide brokers — focus on private owners
   const [minScore, setMinScore] = useState("");
   const [buyerDemand, setBuyerDemand] = useState(false);
 
