@@ -127,8 +127,11 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
   const wrap: Wrap = (fn, id, pending) =>
     r.run(async () => { const res = await fn(); if (res.error) throw new Error(res.error); return res; }, { id, pendingMessage: pending, success: (x) => x.message ?? null });
 
-  const assets = studio.assets as Asset[];
-  const dna = studio.dna as Dna | null;
+  // Defensive: never assume the server DTO carries every field — a missing
+  // assets/stats array must not crash the whole studio for the property.
+  const assets = (studio.assets ?? []) as Asset[];
+  const dna = (studio.dna ?? null) as Dna | null;
+  const stats = (studio.stats ?? {}) as Partial<CreativeStudio["stats"]>;
   const et = studio.entityType, eid = studio.entityId;
   const activeFilter = LIBRARY_FILTERS.find((f) => f.key === filter) ?? LIBRARY_FILTERS[0];
   const filtered = assets.filter((a) => activeFilter.match(a));
@@ -159,14 +162,14 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
       <p className="text-muted text-[12px]">הניתוח מבוסס על חומרים שהועלו, רפרנסים שאושרו, רפרנסים שנפסלו, תמונות נכס, הדמיות, תוכניות והערות הצוות.</p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Kpi label="חומרים" value={studio.stats.totalAssets} tone="text-ink" />
-        <Kpi label="רפרנסים מאושרים" value={studio.stats.approvedReferences} tone="text-success" />
-        <Kpi label="רפרנסים שנפסלו" value={studio.stats.rejectedReferences} tone="text-danger" />
-        <Kpi label="מתחרים" value={studio.stats.competitorReferences} tone="text-warning" />
-        <Kpi label="סטטוס DNA" value={DNA_STATUS[studio.stats.dnaStatus] ?? "—"} tone="text-brand-strong" />
+        <Kpi label="חומרים" value={stats.totalAssets ?? 0} tone="text-ink" />
+        <Kpi label="רפרנסים מאושרים" value={stats.approvedReferences ?? 0} tone="text-success" />
+        <Kpi label="רפרנסים שנפסלו" value={stats.rejectedReferences ?? 0} tone="text-danger" />
+        <Kpi label="מתחרים" value={stats.competitorReferences ?? 0} tone="text-warning" />
+        <Kpi label="סטטוס DNA" value={(stats.dnaStatus && DNA_STATUS[stats.dnaStatus]) ?? "—"} tone="text-brand-strong" />
         <Kpi label="ביטחון AI" value={dna ? `${(dna.ai_confidence_score as number) ?? 0}%` : "—"} tone="text-ink" />
       </div>
-      {studio.stats.lastAnalyzedAt && <p className="text-muted text-[12px]">ניתוח אחרון: {new Date(studio.stats.lastAnalyzedAt).toLocaleString("he-IL")}</p>}
+      {stats.lastAnalyzedAt && <p className="text-muted text-[12px]">ניתוח אחרון: {new Date(stats.lastAnalyzedAt).toLocaleString("he-IL")}</p>}
 
       <ActionFeedback runner={r} />
 

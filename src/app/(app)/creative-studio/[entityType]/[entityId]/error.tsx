@@ -22,7 +22,11 @@ export default function CreativeStudioError({ error, reset }: { error: Error & {
       <p className="text-muted max-w-md text-sm">
         אירעה שגיאה בטעינת הסטודיו לנכס הזה. נסה/י שוב — אם זה חוזר, פתח/י את הקריאייטיב מתוך עמוד הנכס.
       </p>
-      {error?.digest && <p className="text-muted/70 font-mono text-[11px]" dir="ltr">ref: {error.digest}</p>}
+      {(error?.message || error?.digest) && (
+        <pre dir="ltr" className="bg-surface border-line text-danger max-w-xl overflow-x-auto rounded-xl border p-3 text-left font-mono text-[11px] leading-relaxed">
+          {error?.message || "(no message)"}{error?.digest ? `\n\nref: ${error.digest}` : ""}
+        </pre>
+      )}
       <div className="mt-2 flex items-center gap-2">
         <Button onClick={() => reset()} leadingIcon={<Icon name="RefreshCw" size={16} />}>נסה שוב</Button>
         <Link href="/properties" className="contents">
