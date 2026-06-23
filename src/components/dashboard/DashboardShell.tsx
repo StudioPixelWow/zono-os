@@ -3,6 +3,7 @@ import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
 import { CommandPalette } from "@/components/search/CommandPalette";
+import { ZonoCommandCenter } from "@/components/navigation/zono-command-center";
 
 /**
  * App frame: RTL slim sidebar (right/start side) + header + scrolling main +
@@ -22,6 +23,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </div>
       <MobileNav />
       <CommandPalette />
+      <ZonoCommandCenter />
     </div>
   );
 }

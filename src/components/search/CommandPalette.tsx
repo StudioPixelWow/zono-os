@@ -24,8 +24,9 @@ export function CommandPalette() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); setOpen((v) => !v); }
-      else if (e.key === "Escape") setOpen(false);
+      // ⌘K / Ctrl+K is owned by the ZONO Command Center now. This universal
+      // search opens via its own trigger button / the `zono:open-search` event.
+      if (e.key === "Escape") setOpen(false);
     };
     // Any element can open universal search by dispatching this event.
     const onOpen = () => setOpen(true);

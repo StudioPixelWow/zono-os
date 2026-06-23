@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { useCurrentUser } from "./DashboardDataProvider";
+import { ZonoCommandButton } from "@/components/navigation/zono-command-center";
 
 /** Routes wired so far. Items without a route stay visual-only for now. */
 const HREFS: Record<string, string> = {
@@ -111,9 +112,13 @@ export function Sidebar() {
 
   return (
     <aside className="bg-card/80 border-line sticky top-0 hidden h-screen w-[92px] shrink-0 flex-col items-center border-s py-6 backdrop-blur-xl lg:flex">
-      <Link href="/" className="zono-gradient-glow mb-6 grid h-11 w-11 place-items-center rounded-2xl text-lg font-black">
+      <Link href="/" className="zono-gradient-glow mb-3 grid h-11 w-11 place-items-center rounded-2xl text-lg font-black">
         Z
       </Link>
+
+      {/* ZONO Command — full-screen navigation operating system (⌘K) */}
+      <ZonoCommandButton />
+      <span className="text-muted mb-3 text-[8px] font-extrabold tracking-wide">COMMAND</span>
 
       <nav className="flex min-h-0 flex-1 flex-col items-stretch gap-1 overflow-y-auto px-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => {
