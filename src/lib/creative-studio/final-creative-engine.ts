@@ -144,6 +144,20 @@ export interface FinalAdData {
   width: number; height: number;
   // Art-direction / concept layer (added by the Concept Engine).
   composition: string; trigger: ConceptTrigger; triggerLabel: string; artDirection?: ArtDirection;
+  // Observability: a full per-creative trace so a wrong creative reveals which
+  // layer failed (no black-box generation). Duration is stamped by the service.
+  trace?: CreativeTrace;
+}
+
+/** Layer-by-layer snapshot persisted on every creative for the inspection panel. */
+export interface CreativeTrace {
+  property: { propertyType: string | null; city: string | null; neighborhood: string | null; address: string | null; price: string | null; rooms: string | null; sizeSqm: string | null; floor: string | null; mediaUrl: string | null };
+  brand: { agentName: string | null; agentPhone: string | null; hasAgentPhoto: boolean; officeName: string | null; hasLogo: boolean; colors: string[]; luxury: number };
+  brief: { targetAudience: string; keyBenefit: string; marketingAngle: string; emotionalTrigger: string };
+  concept: { name: string; trigger: ConceptTrigger; mainPromise: string; whyConvert: string };
+  selectedAssets: { propertyImage: string | null; logoUrl: string | null; agentPhoto: string | null; agentPhone: string | null };
+  finalPrompt: string;
+  generationMs?: number; thinkingProvider?: string;
 }
 
 function buildFeatures(brief: CreativeBrief, f: FinalAdFacts): AdFeature[] {
@@ -350,6 +364,15 @@ const WHY_CONVERT: Record<ConceptTrigger, string> = {
 
 function buildConceptAd(f: FinalAdFacts, brand: FinalAdBrandAssets, brief: CreativeBrief, trigger: ConceptTrigger): FinalAdData {
   const copy = conceptCopy(trigger, brief);
+  const artDirection = artDirectionFor(trigger, brief);
+  const trace: CreativeTrace = {
+    property: { propertyType: f.propertyType ?? null, city: f.city ?? null, neighborhood: f.neighborhood ?? null, address: f.address ?? null, price: f.price ?? null, rooms: f.rooms ?? null, sizeSqm: f.sizeSqm ?? null, floor: f.floor ?? null, mediaUrl: f.propertyImage ?? null },
+    brand: { agentName: brand.agentName ?? null, agentPhone: brand.agentPhone ?? null, hasAgentPhoto: Boolean(brand.agentPhoto), officeName: brand.officeName ?? null, hasLogo: Boolean(brand.officeLogo), colors: brand.colors.filter(Boolean), luxury: brand.luxury },
+    brief: { targetAudience: brief.targetAudience, keyBenefit: brief.keyBenefit, marketingAngle: artDirection.marketingAngle, emotionalTrigger: artDirection.emotionalTrigger },
+    concept: { name: CONCEPT_LABELS[trigger], trigger, mainPromise: MAIN_PROMISE[trigger], whyConvert: WHY_CONVERT[trigger] },
+    selectedAssets: { propertyImage: f.propertyImage ?? null, logoUrl: brand.officeLogo ?? null, agentPhoto: brand.agentPhoto ?? null, agentPhone: brand.agentPhone ?? null },
+    finalPrompt: artDirection.aiEnvironment.imageModelPrompt,
+  };
   const ad: FinalAdData = {
     kind: "final_ad", angleKey: "new_to_market", angleLabel: CONCEPT_LABELS[trigger],
     headline: copy.headline, subheadline: copy.subheadline, location: copy.location, cta: f.customCta || copy.cta,
@@ -362,7 +385,7 @@ function buildConceptAd(f: FinalAdFacts, brand: FinalAdBrandAssets, brief: Creat
     palette: colorSystemFor(trigger, brand.colors),
     width: CREATIVE_DNA.format.width, height: CREATIVE_DNA.format.height,
     composition: COMPOSITION_BY_TRIGGER[trigger], trigger, triggerLabel: CONCEPT_LABELS[trigger],
-    artDirection: artDirectionFor(trigger, brief),
+    artDirection, trace,
   };
   return ad;
 }

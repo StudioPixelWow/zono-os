@@ -45,12 +45,16 @@ async function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variation
   // ALL approved concepts are kept + rendered (never collapsed to one winner) —
   // so any channel (FB / IG feed / stories / WhatsApp / website / landing /
   // retargeting) can later render the concept that fits.
-  const { approvedConcepts } = await directConceptsAI(facts, brandAssets);
+  const t0 = Date.now();
+  const { approvedConcepts, provider } = await directConceptsAI(facts, brandAssets);
   if (!approvedConcepts.length) return;
+  const generationMs = Date.now() - t0;
   variations.forEach((v, vi) => {
     const c = approvedConcepts[vi % approvedConcepts.length].plan;
     const r = v.render as unknown as Record<string, unknown>;
-    r.ad = { ...c.ad, template: c.ad.composition, scores: c.scores };
+    // Observability: stamp generation duration + thinking provider onto the trace.
+    const adTrace = c.ad.trace ? { ...c.ad.trace, generationMs, thinkingProvider: provider } : undefined;
+    r.ad = { ...c.ad, trace: adTrace, template: c.ad.composition, scores: c.scores };
     r.width = c.ad.width; r.height = c.ad.height; r.format = "feed_1_1";
     v.variantName = `קונספט · ${c.triggerLabel}`;
     v.headline = c.ad.headline; v.subheadline = c.ad.subheadline; v.cta = c.ad.cta;

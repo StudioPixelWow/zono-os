@@ -1273,6 +1273,7 @@ function AdminCandidatesPanel({ et, eid }: { et: string; eid: string }) {
 
 function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
   const [showPrompt, setShowPrompt] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   // FINAL AD mode: the complete ready-to-post creative carries an `ad` spec.
@@ -1364,6 +1365,12 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           <Icon name={copied ? "Check" : "Copy"} size={12} />{copied ? "הועתק" : "העתק Prompt ל-AI"}
         </button>
       )}
+      {ad && (
+        <div className="border-line border-t pt-1.5">
+          <button onClick={() => setShowDebug(!showDebug)} className="text-brand-strong inline-flex items-center gap-1 text-[10px] font-bold"><Icon name="Search" size={11} />{showDebug ? "הסתר בדיקת שכבות" : "🔍 בדיקת שכבות (Debug)"}</button>
+          {showDebug && <CreativeDebugPanel ad={ad} o={o} />}
+        </div>
+      )}
       {canViewPrompt && (
         <div className="border-line border-t pt-1.5">
           <button onClick={() => setShowPrompt(!showPrompt)} className="text-brand-strong text-[10px] font-bold">{showPrompt ? "הסתר" : "הצג"} פרומפט פנימי</button>
@@ -1375,6 +1382,72 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── ISSUE 12: Creative generation observability — layer-by-layer inspector ────
+// When a creative looks wrong, this shows exactly which layer produced what, so
+// the failing layer is obvious. No black-box generation.
+function DebugKV({ k, v }: { k: string; v: React.ReactNode }) {
+  return <div className="flex justify-between gap-2 py-0.5"><span className="text-muted shrink-0">{k}</span><span className="text-ink min-w-0 break-words text-left font-bold" dir="auto">{v === null || v === undefined || v === "" ? "—" : v}</span></div>;
+}
+function CreativeDebugPanel({ ad, o }: { ad: FinalAdView; o: QuickOutput }) {
+  const t = ad.trace; const adr = ad.artDirection; const sc = ad.scores;
+  const yn = (b?: boolean) => (b ? "✓" : "✗");
+  const section = (title: string, body: React.ReactNode) => (
+    <div className="bg-surface rounded-lg p-2">
+      <p className="text-brand-strong mb-1 text-[10px] font-black">{title}</p>
+      <div className="text-[10px]">{body}</div>
+    </div>
+  );
+  return (
+    <div dir="rtl" className="mt-1.5 flex flex-col gap-1.5">
+      {section("Property Snapshot", <>
+        <DebugKV k="property_id" v={<span dir="ltr">{(o.property_id as string) ?? "—"}</span>} />
+        <DebugKV k="סוג / עיר / שכונה" v={[t?.property.propertyType, t?.property.city, t?.property.neighborhood].filter(Boolean).join(" · ")} />
+        <DebugKV k="כתובת" v={t?.property.address} />
+        <DebugKV k="מחיר / חדרים / מ״ר / קומה" v={[t?.property.price, t?.property.rooms, t?.property.sizeSqm, t?.property.floor].filter((x) => x != null && x !== "").join(" · ")} />
+        <DebugKV k="מדיה נבחרת" v={t?.property.mediaUrl ? <a href={t.property.mediaUrl} target="_blank" rel="noreferrer" className="text-brand-strong underline" dir="ltr">תמונה</a> : "—"} />
+      </>)}
+      {section("Brand Snapshot", <>
+        <DebugKV k="סוכן / טלפון" v={[t?.brand.agentName, t?.brand.agentPhone].filter(Boolean).join(" · ")} />
+        <DebugKV k="משרד" v={t?.brand.officeName} />
+        <DebugKV k="לוגו / תמונת סוכן" v={`${yn(t?.brand.hasLogo)} לוגו · ${yn(t?.brand.hasAgentPhoto)} תמונה`} />
+        <DebugKV k="צבעי מותג" v={(t?.brand.colors ?? []).join(", ") || "ברירת מחדל"} />
+        <DebugKV k="luxury" v={t?.brand.luxury} />
+      </>)}
+      {section("Creative Brief", <>
+        <DebugKV k="קהל יעד" v={t?.brief.targetAudience} />
+        <DebugKV k="ערך מרכזי" v={t?.brief.keyBenefit} />
+        <DebugKV k="זווית שיווקית" v={t?.brief.marketingAngle} />
+        <DebugKV k="טריגר רגשי" v={t?.brief.emotionalTrigger} />
+        <DebugKV k="כותרת" v={ad.headline} />
+        <DebugKV k="CTA" v={ad.cta} />
+      </>)}
+      {section("Marketing Concept", <>
+        <DebugKV k="קונספט" v={`${t?.concept.name} (${t?.concept.trigger})`} />
+        <DebugKV k="הבטחה מרכזית" v={t?.concept.mainPromise} />
+        <DebugKV k="למה ממיר" v={t?.concept.whyConvert} />
+      </>)}
+      {section("Art Direction", <>
+        <DebugKV k="composition / crop" v={`${adr?.composition} · ${adr?.imageCrop}`} />
+        <DebugKV k="focal / hierarchy" v={`${adr?.focalPoint} · ${(adr?.hierarchy ?? []).join(" → ")}`} />
+        <DebugKV k="מיקומים (מחיר/CTA/לוגו/סוכן)" v={[adr?.pricePlacement, adr?.ctaPlacement, adr?.logoPlacement, adr?.agentPlacement].filter(Boolean).join(" · ")} />
+        <DebugKV k="color system / feel" v={`${adr?.colorSystem} · ${adr?.emotionalFeel}`} />
+        <DebugKV k="AI סביבה" v={adr ? `${adr.aiEnvironment.atmosphere} · ${adr.aiEnvironment.lighting}` : "—"} />
+      </>)}
+      {section("Final Prompt (AI environment — text-free)", <p dir="ltr" className="text-muted whitespace-pre-wrap break-words">{t?.finalPrompt ?? adr?.aiEnvironment.imageModelPrompt ?? "—"}</p>)}
+      {section("Validation & Run", <>
+        <DebugKV k="readiness" v={sc?.finalPostReadiness} />
+        <DebugKV k="asset / hebrew / rtl" v={sc ? `${sc.assetAuthenticity} · ${sc.hebrewAccuracy} · ${sc.rtlCorrectness}` : "—"} />
+        <DebugKV k="hierarchy / conversion / brand" v={sc ? `${sc.visualHierarchy} · ${sc.conversionStrength} · ${sc.brandConsistency}` : "—"} />
+        {sc?.warnings?.length ? <DebugKV k="אזהרות" v={sc.warnings.join(" · ")} /> : null}
+        {sc?.blockers?.length ? <DebugKV k="חוסמים" v={sc.blockers.join(" · ")} /> : null}
+        <DebugKV k="זמן הפקה" v={t?.generationMs != null ? `${t.generationMs}ms` : "—"} />
+        <DebugKV k="ספק חשיבה (AI)" v={t?.thinkingProvider ?? "—"} />
+        <DebugKV k="נכסים בשימוש" v={`${yn(Boolean(t?.selectedAssets.propertyImage))} תמונה · ${yn(Boolean(t?.selectedAssets.logoUrl))} לוגו · ${yn(Boolean(t?.selectedAssets.agentPhoto))} סוכן · ${yn(Boolean(t?.selectedAssets.agentPhone))} טלפון`} />
+      </>)}
     </div>
   );
 }
