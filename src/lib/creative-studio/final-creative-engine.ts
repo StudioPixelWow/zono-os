@@ -123,6 +123,8 @@ export interface FinalAdData {
   propertyImage: string | null;
   palette: AdPalette;
   width: number; height: number;
+  // Art-direction / concept layer (added by the Concept Engine).
+  composition: string; trigger: ConceptTrigger; triggerLabel: string; artDirection?: ArtDirection;
 }
 
 function buildFeatures(brief: CreativeBrief, f: FinalAdFacts): AdFeature[] {
@@ -158,7 +160,154 @@ export function buildFinalAd(f: FinalAdFacts, brand: FinalAdBrandAssets, brief: 
     propertyImage: f.propertyImage ?? null,
     palette: resolveAdPalette(brand.colors),
     width: CREATIVE_DNA.format.width, height: CREATIVE_DNA.format.height,
+    composition: "editorial", trigger: "luxury", triggerLabel: CONCEPT_LABELS.luxury,
   };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ART DIRECTION + CONCEPT ENGINE
+// ----------------------------------------------------------------------------
+// A senior-creative-director layer. Instead of 4 cosmetic design variations, we
+// generate 4 strategically DIFFERENT advertising concepts, each driven by a
+// distinct psychological trigger. Each concept runs a full art-direction pass
+// (angle, emotion, visual story, hero, hierarchy, CTA strategy, composition,
+// luxury level, color system) BEFORE any pixels — so the difference is the
+// marketing idea, not the palette. Each concept maps to its own composition
+// archetype in the renderer, so concepts look like different campaigns.
+// ════════════════════════════════════════════════════════════════════════════
+export type ConceptTrigger = "luxury" | "urgency" | "family" | "investment" | "price_advantage";
+export const CONCEPT_LABELS: Record<ConceptTrigger, string> = {
+  luxury: "יוקרה", urgency: "דחיפות", family: "אורח חיים משפחתי", investment: "השקעה חכמה", price_advantage: "יתרון מחיר",
+};
+/** Each concept owns a distinct composition archetype (the renderer branches on it). */
+const COMPOSITION_BY_TRIGGER: Record<ConceptTrigger, string> = {
+  luxury: "editorial", urgency: "urgency_banner", family: "lifestyle", investment: "data_panel", price_advantage: "price_hero",
+};
+
+export interface ArtDirection {
+  trigger: ConceptTrigger; marketingAngle: string; emotionalTrigger: string; visualStory: string;
+  heroElement: string; typographyHierarchy: string; visualHierarchy: string; ctaStrategy: string;
+  composition: string; luxuryLevel: "high" | "mid" | "accessible"; colorSystem: string; rationale: string;
+}
+
+function artDirectionFor(trigger: ConceptTrigger, brief: CreativeBrief): ArtDirection {
+  const loc = brief.neighborhood || brief.city || "האזור";
+  const map: Record<ConceptTrigger, ArtDirection> = {
+    luxury: {
+      trigger, marketingAngle: "מיצוב פרימיום — בית שמגדיר סטטוס", emotionalTrigger: "שאיפה ויוקרה", visualStory: "רגע קולנועי, שקט, מכובד",
+      heroElement: "תמונת הנכס במלוא הבמה עם הרבה אוויר שלילי", typographyHierarchy: "כותרת דקה ומאופקת, מרווח גדול, אקסנט זהב",
+      visualHierarchy: "תמונה → כותרת → מחיר עדין → סוכן מינימלי", ctaStrategy: "הזמנה לסיור פרטי (אקסקלוסיבי)", composition: "editorial",
+      luxuryLevel: "high", colorSystem: "פחם + זהב", rationale: "כשהנכס יוקרתי, מיצוב פרימיום מצדיק מחיר ומושך קהל איכותי.",
+    },
+    urgency: {
+      trigger, marketingAngle: "מחסור וזמן — לפני שייעלם", emotionalTrigger: "פחד מהחמצה (FOMO)", visualStory: "מתח, תנועה, אנרגיה גבוהה",
+      heroElement: "באנר עליון נועז + תמונה עם קונטרסט גבוה", typographyHierarchy: "כותרת ענקית ובועטת, ניגודיות מקסימלית",
+      visualHierarchy: "באנר דחיפות → מחיר בולט → CTA מיידי", ctaStrategy: "פעולה מיידית עכשיו", composition: "urgency_banner",
+      luxuryLevel: "accessible", colorSystem: "שחור + כתום/אדום", rationale: "דחיפות מפעילה פעולה מיידית כשיש בסיס אמיתי למחסור.",
+    },
+    family: {
+      trigger, marketingAngle: "הבית שבו המשפחה גדלה", emotionalTrigger: "חום, שייכות, ביטחון", visualStory: "אווירה ביתית וחמה",
+      heroElement: "תמונת הנכס עם שכבה רכה וחמה", typographyHierarchy: "כותרת ידידותית ועגולה, צ'יפים רכים",
+      visualHierarchy: "תמונה → סיפור → מאפיינים → סוכן בולט (אמון)", ctaStrategy: "הזמנה חמה לביקור", composition: "lifestyle",
+      luxuryLevel: "mid", colorSystem: "קרם חם + טורקיז", rationale: `${brief.rooms ?? "מרווח"} חדרים ב${loc} — מתאים בול למשפחות.`,
+    },
+    investment: {
+      trigger, marketingAngle: "השקעה חכמה עם פוטנציאל", emotionalTrigger: "ביטחון כלכלי והיגיון", visualStory: "נתונים, סדר, ביטחון",
+      heroElement: "תמונה + פאנל נתונים מובנה (מ״ר/חדרים/מחיר)", typographyHierarchy: "סאנס נקי, מספרים דומיננטיים, גריד",
+      visualHierarchy: "מחיר/מ״ר → נתונים → תמונה → CTA אנליטי", ctaStrategy: "הזמנה לניתוח השקעה", composition: "data_panel",
+      luxuryLevel: "mid", colorSystem: "נייבי + ירוק", rationale: "מסגור תשואה/ערך מדבר אל קונים רציונליים ומשקיעים.",
+    },
+    price_advantage: {
+      trigger, marketingAngle: "ערך מיידי — המחיר מדבר", emotionalTrigger: "תחושת מציאה", visualStory: "ישיר, ברור, משכנע",
+      heroElement: "המחיר ככוכב הראשי, התמונה תומכת", typographyHierarchy: "מחיר ענק דומיננטי, כותרת קצרה",
+      visualHierarchy: "מחיר → הזדמנות → תמונה → CTA", ctaStrategy: "פרטים מהירים עכשיו", composition: "price_hero",
+      luxuryLevel: "accessible", colorSystem: "כהה + ירוק/זהב", rationale: "מחיר אטרקטיבי הוא הטריגר הממיר ביותר.",
+    },
+  };
+  return map[trigger];
+}
+
+function conceptCopy(trigger: ConceptTrigger, brief: CreativeBrief): FinalCopy {
+  const loc = brief.neighborhood || brief.city || "";
+  const inLoc = loc ? ` ב${loc}` : "";
+  const location = brief.address || loc;
+  const byTrigger: Record<ConceptTrigger, { headline: string; sub: string; cta: string }> = {
+    luxury: { headline: loc ? `הבית שמגדיר סטנדרט${inLoc}` : "נכס פרימיום ברמה אחרת", sub: loc ? `נדל״ן יוקרה · ${loc}` : "נדל״ן יוקרה", cta: "לתיאום סיור פרטי" },
+    urgency: { headline: "הזדמנות אחרונה — לפני שתיעלם", sub: "מי שמהסס מפספס", cta: "תפסו עכשיו בוואטסאפ" },
+    family: { headline: "הבית שבו המשפחה גדלה", sub: loc ? `${brief.rooms ?? ""} חדרים · ${loc}`.trim() : "מרחב לכל המשפחה", cta: "בואו לראות את הבית" },
+    investment: { headline: "השקעה חכמה שמחזירה את עצמה", sub: loc ? `תשואה · מיקום · פוטנציאל ב${loc}` : "תשואה · מיקום · פוטנציאל", cta: "לקבלת ניתוח השקעה" },
+    price_advantage: { headline: "המחיר שמדבר בעד עצמו", sub: loc ? `הזדמנות אמיתית ב${loc}` : "הזדמנות אמיתית", cta: "לפרטים מהירים בוואטסאפ" },
+  };
+  const c = byTrigger[trigger];
+  return { headline: c.headline, subheadline: c.sub, location, cta: c.cta };
+}
+
+function colorSystemFor(trigger: ConceptTrigger, brandColors: string[]): AdPalette {
+  const brand = resolveAdPalette(brandColors);
+  const brandAccent = brandColors.filter(Boolean).length >= 2 ? brand.accent : null;
+  const sys: Record<ConceptTrigger, AdPalette> = {
+    luxury: { bg: "#0C0A10", bg2: "#1C1726", accent: brandAccent ?? "#D9A441", accent2: "#F0CE84", text: "#FFFFFF", muted: "#C9C2D4", onAccent: "#1A1206" },
+    urgency: { bg: "#160808", bg2: "#2C0E0E", accent: "#FF5A36", accent2: "#FF8A5B", text: "#FFFFFF", muted: "#F2CFC8", onAccent: "#1A0A06" },
+    family: { bg: "#16242B", bg2: "#1F3A3A", accent: "#39B6A6", accent2: "#8AD9CD", text: "#FFFFFF", muted: "#CDE3E2", onAccent: "#06231F" },
+    investment: { bg: "#08172B", bg2: "#0E2440", accent: "#2FC777", accent2: "#7FE3AC", text: "#F2F7FF", muted: "#AEC4DD", onAccent: "#04210F" },
+    price_advantage: { bg: "#0E0C12", bg2: "#1A1620", accent: brandAccent ?? "#2FC777", accent2: "#8BE0AE", text: "#FFFFFF", muted: "#C9C4D2", onAccent: "#04210F" },
+  };
+  return sys[trigger];
+}
+
+/** Pick the 4 most relevant — yet strategically distinct — concepts for this property. */
+export function selectConcepts(brief: CreativeBrief): ConceptTrigger[] {
+  const score: Record<ConceptTrigger, number> = {
+    luxury: 40 + (brief.isLuxury ? 45 : 0) + (brief.sizeSqm && brief.sizeSqm >= 130 ? 10 : 0),
+    urgency: 38 + (brief.urgent ? 45 : 0) + (brief.isExclusive ? 12 : 0),
+    family: 40 + (brief.rooms != null && brief.rooms >= 4 ? 40 : 0) + (brief.hasBalcony ? 6 : 0),
+    investment: 38 + (brief.priceAttractive ? 28 : 0) + (brief.rooms != null && brief.rooms <= 3 ? 16 : 0),
+    price_advantage: 40 + (brief.priceAttractive ? 45 : 0) + (brief.price ? 8 : 0),
+  };
+  const order: ConceptTrigger[] = ["luxury", "urgency", "family", "investment", "price_advantage"];
+  const ranked = [...order].sort((a, b) => score[b] - score[a]);
+  return ranked.slice(0, 4);
+}
+
+export interface ConceptPlan { trigger: ConceptTrigger; triggerLabel: string; artDirection: ArtDirection; ad: FinalAdData; scores: FinalAdScores }
+
+function buildConceptAd(f: FinalAdFacts, brand: FinalAdBrandAssets, brief: CreativeBrief, trigger: ConceptTrigger): FinalAdData {
+  const copy = conceptCopy(trigger, brief);
+  const ad: FinalAdData = {
+    kind: "final_ad", angleKey: "new_to_market", angleLabel: CONCEPT_LABELS[trigger],
+    headline: copy.headline, subheadline: copy.subheadline, location: copy.location, cta: f.customCta || copy.cta,
+    badge: triggerBadge(trigger, brief),
+    price: f.price ? formatPrice(f.price) : null, priceLabel: "מחיר",
+    features: buildFeatures(brief, f),
+    agentName: brand.agentName ?? null, agentPhone: brand.agentPhone ?? null, agentPhoto: brand.agentPhoto ?? null,
+    logoUrl: brand.officeLogo ?? null, logoText: brand.officeName ?? null,
+    propertyImage: f.propertyImage ?? null,
+    palette: colorSystemFor(trigger, brand.colors),
+    width: CREATIVE_DNA.format.width, height: CREATIVE_DNA.format.height,
+    composition: COMPOSITION_BY_TRIGGER[trigger], trigger, triggerLabel: CONCEPT_LABELS[trigger],
+    artDirection: artDirectionFor(trigger, brief),
+  };
+  return ad;
+}
+
+function triggerBadge(trigger: ConceptTrigger, brief: CreativeBrief): string | null {
+  if (trigger === "urgency") return "הזדמנות אחרונה";
+  if (trigger === "luxury") return "פרימיום";
+  if (trigger === "price_advantage") return "מחיר אטרקטיבי";
+  if (trigger === "family") return brief.rooms ? `${brief.rooms} חדרים` : "למשפחה";
+  if (trigger === "investment") return "השקעה";
+  return null;
+}
+
+/** The Concept Engine: 4 strategically distinct, art-directed, ready-to-post ads. */
+export function directConcepts(f: FinalAdFacts, brand: FinalAdBrandAssets): { brief: CreativeBrief; concepts: ConceptPlan[] } {
+  const brief = analyzeBrief(f, brand);
+  const triggers = selectConcepts(brief);
+  const concepts = triggers.map((trigger) => {
+    const ad = buildConceptAd(f, brand, brief, trigger);
+    return { trigger, triggerLabel: CONCEPT_LABELS[trigger], artDirection: ad.artDirection!, ad, scores: validateFinalAd(ad) };
+  });
+  return { brief, concepts };
 }
 
 function formatPrice(raw: string): string {

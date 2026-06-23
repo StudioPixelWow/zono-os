@@ -773,74 +773,155 @@ function FinalAdRenderer({ ad, scale = 1, refId }: { ad: FinalAdView; scale?: nu
   const pal = ad.palette;
   const s = (n: number) => n * scale;
   const initials = (ad.agentName || "").trim().slice(0, 1) || "ZO";
-  return (
-    <div id={refId} dir="rtl" style={{ position: "relative", aspectRatio: "1 / 1", width: "100%", overflow: "hidden", borderRadius: s(16), background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.text, fontFamily: "inherit" }}>
-      {/* Hero property photo — the real image, dominant, cinematic */}
-      <div style={{ position: "absolute", insetInline: s(14), top: s(74), height: "44%", borderRadius: s(14), overflow: "hidden", boxShadow: `0 ${s(18)}px ${s(40)}px rgba(0,0,0,0.45)` }}>
-        {ad.propertyImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={ad.propertyImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : (
-          <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.muted, fontSize: s(12), fontWeight: 700 }}>אין תמונת נכס</div>
-        )}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.05), transparent 30%, rgba(0,0,0,0.35))" }} />
-      </div>
+  const shadow = { textShadow: "0 2px 14px rgba(0,0,0,0.6)" } as React.CSSProperties;
 
-      {/* Top band: logo + badge + headline + subheadline */}
-      <div style={{ position: "absolute", insetInline: 0, top: 0, padding: `${s(14)}px ${s(16)}px`, display: "flex", flexDirection: "column", gap: s(4) }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8) }}>
-          {ad.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={ad.logoUrl} alt="" style={{ height: s(30), maxWidth: s(120), objectFit: "contain" }} />
-          ) : <span style={{ fontSize: s(13), fontWeight: 900, color: pal.text, opacity: 0.9 }}>{ad.logoText || ""}</span>}
-          {ad.badge && <span style={{ background: pal.accent, color: pal.onAccent, fontSize: s(11), fontWeight: 900, padding: `${s(3)}px ${s(10)}px`, borderRadius: 999 }}>{ad.badge}</span>}
-        </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: s(8), marginTop: s(2) }}>
-          <div style={{ width: s(5), height: s(22), background: pal.accent, borderRadius: 2 }} />
-          <div style={{ color: pal.text, fontSize: s(24), fontWeight: 900, lineHeight: 1.02, textShadow: "0 1px 10px rgba(0,0,0,0.5)" }}>{ad.headline}</div>
-        </div>
-        {ad.subheadline && <div style={{ color: pal.accent, fontSize: s(12.5), fontWeight: 800, paddingInlineStart: s(13) }}>{ad.subheadline}</div>}
-      </div>
-
-      {/* Feature icon row */}
-      {ad.features.length > 0 && (
-        <div style={{ position: "absolute", insetInline: s(14), top: "calc(44% + 92px)", display: "flex", justifyContent: "space-around", gap: s(6), padding: `${s(8)}px ${s(6)}px`, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: s(12) }}>
-          {ad.features.map((f, i) => (
-            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: s(2), flex: 1, minWidth: 0 }}>
-              <span style={{ color: pal.accent, display: "inline-flex" }}><Icon name={AD_FEATURE_ICON[f.icon] ?? "Dot"} size={s(18)} /></span>
-              {f.value && <span style={{ color: pal.text, fontSize: s(14), fontWeight: 900, lineHeight: 1 }}>{f.value}</span>}
-              <span style={{ color: pal.muted, fontSize: s(9.5), fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{f.label}</span>
-            </div>
-          ))}
-        </div>
+  // ── Shared atoms (plain render fns → satisfy react-hooks/static-components) ──
+  const heroFill = (overlay?: string) => (
+    <>
+      {ad.propertyImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={ad.propertyImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.muted, fontSize: s(12), fontWeight: 700 }}>אין תמונת נכס</div>
       )}
-
-      {/* Price block */}
-      {ad.price && (
-        <div style={{ position: "absolute", insetInline: s(14), bottom: s(76), display: "flex", alignItems: "center", justifyContent: "center", gap: s(8), padding: `${s(8)}px ${s(14)}px`, background: pal.accent, color: pal.onAccent, borderRadius: s(12), boxShadow: `0 ${s(10)}px ${s(24)}px ${pal.accent}55` }}>
-          <span style={{ fontSize: s(11), fontWeight: 800, opacity: 0.85 }}>{ad.priceLabel}</span>
-          <span style={{ fontSize: s(26), fontWeight: 900, letterSpacing: -0.5 }}>{ad.price}</span>
+      {overlay && <div style={{ position: "absolute", inset: 0, background: overlay }} />}
+    </>
+  );
+  const logo = (dark = false) => ad.logoUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={ad.logoUrl} alt="" style={{ height: s(30), maxWidth: s(124), objectFit: "contain" }} />
+  ) : <span style={{ fontSize: s(13), fontWeight: 900, color: dark ? pal.onAccent : pal.text, opacity: 0.95 }}>{ad.logoText || ""}</span>;
+  const badge = () => ad.badge ? <span style={{ background: pal.accent, color: pal.onAccent, fontSize: s(11), fontWeight: 900, padding: `${s(3)}px ${s(10)}px`, borderRadius: 999, whiteSpace: "nowrap" }}>{ad.badge}</span> : null;
+  const featureRow = (light = true) => ad.features.length ? (
+    <div style={{ display: "flex", justifyContent: "space-around", gap: s(6), padding: `${s(8)}px ${s(6)}px`, background: light ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: s(12), backdropFilter: "blur(6px)" }}>
+      {ad.features.map((f, i) => (
+        <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: s(2), flex: 1, minWidth: 0 }}>
+          <span style={{ color: pal.accent, display: "inline-flex" }}><Icon name={AD_FEATURE_ICON[f.icon] ?? "Dot"} size={s(17)} /></span>
+          {f.value && <span style={{ color: pal.text, fontSize: s(13.5), fontWeight: 900, lineHeight: 1 }}>{f.value}</span>}
+          <span style={{ color: pal.muted, fontSize: s(9), fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{f.label}</span>
         </div>
+      ))}
+    </div>
+  ) : null;
+  const ctaPill = (full = false) => (
+    <div style={{ display: "inline-flex", alignSelf: full ? "stretch" : "flex-start", justifyContent: "center", alignItems: "center", gap: s(6), background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: s(12), fontWeight: 900, padding: `${s(9)}px ${s(16)}px`, borderRadius: 999, boxShadow: `0 ${s(8)}px ${s(20)}px ${pal.accent}55`, whiteSpace: "nowrap" }}>
+      <Icon name="MessageCircle" size={s(14)} /> {ad.cta}
+    </div>
+  );
+  const agentStrip = (big = false) => (ad.agentName || ad.agentPhone || ad.agentPhoto) ? (
+    <div style={{ display: "flex", alignItems: "center", gap: s(8), minWidth: 0 }}>
+      {ad.agentPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={ad.agentPhoto} alt="" style={{ width: s(big ? 48 : 38), height: s(big ? 48 : 38), borderRadius: 999, objectFit: "cover", border: `2px solid ${pal.accent}` }} />
+      ) : (
+        <div style={{ width: s(big ? 48 : 38), height: s(big ? 48 : 38), borderRadius: 999, display: "grid", placeItems: "center", background: pal.accent, color: pal.onAccent, fontSize: s(15), fontWeight: 900 }}>{initials}</div>
       )}
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {ad.agentName && <span style={{ color: pal.text, fontSize: s(12.5), fontWeight: 900, whiteSpace: "nowrap" }}>{ad.agentName}</span>}
+        {ad.agentPhone && <span style={{ color: pal.muted, fontSize: s(11), fontWeight: 700, direction: "ltr", textAlign: "right" }}>{ad.agentPhone}</span>}
+      </div>
+    </div>
+  ) : null;
 
-      {/* Agent strip: photo + name + phone + CTA */}
-      <div style={{ position: "absolute", insetInline: 0, bottom: 0, padding: `${s(10)}px ${s(14)}px`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8), background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.55))" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: s(8), minWidth: 0 }}>
-          {ad.agentPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={ad.agentPhoto} alt="" style={{ width: s(40), height: s(40), borderRadius: 999, objectFit: "cover", border: `2px solid ${pal.accent}` }} />
-          ) : (
-            <div style={{ width: s(40), height: s(40), borderRadius: 999, display: "grid", placeItems: "center", background: pal.accent, color: pal.onAccent, fontSize: s(15), fontWeight: 900, border: `2px solid ${pal.accent}` }}>{initials}</div>
-          )}
-          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            {ad.agentName && <span style={{ color: pal.text, fontSize: s(13), fontWeight: 900, whiteSpace: "nowrap" }}>{ad.agentName}</span>}
-            {ad.agentPhone && <span style={{ color: pal.muted, fontSize: s(11), fontWeight: 700, direction: "ltr", textAlign: "right" }}>{ad.agentPhone}</span>}
+  const frame: React.CSSProperties = { position: "relative", aspectRatio: "1 / 1", width: "100%", overflow: "hidden", borderRadius: s(16), background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.text, fontFamily: "inherit" };
+
+  // ── Composition: URGENCY — bold top banner, big price, action-now ────────────
+  if (ad.composition === "urgency_banner") {
+    return (
+      <div id={refId} dir="rtl" style={frame}>
+        <div style={{ position: "absolute", insetInline: 0, top: 0, height: "26%", background: `linear-gradient(120deg, ${pal.accent}, ${pal.bg2})`, padding: s(14), display: "flex", flexDirection: "column", justifyContent: "center", gap: s(4) }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>{logo()}{badge()}</div>
+          <div style={{ color: "#fff", fontSize: s(25), fontWeight: 900, lineHeight: 1.0, ...shadow }}>{ad.headline}</div>
+        </div>
+        <div style={{ position: "absolute", insetInline: 0, top: "26%", bottom: "30%", overflow: "hidden" }}>{heroFill("linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.55))")}
+          {ad.subheadline && <div style={{ position: "absolute", insetInline: s(14), bottom: s(8), color: "#fff", fontSize: s(13), fontWeight: 800, ...shadow }}>{ad.subheadline}</div>}
+        </div>
+        <div style={{ position: "absolute", insetInline: 0, bottom: 0, height: "30%", padding: s(12), display: "flex", flexDirection: "column", justifyContent: "center", gap: s(8) }}>
+          {ad.price && <div style={{ alignSelf: "center", display: "flex", alignItems: "baseline", gap: s(6), background: pal.accent, color: pal.onAccent, padding: `${s(6)}px ${s(16)}px`, borderRadius: s(12), boxShadow: `0 ${s(10)}px ${s(24)}px ${pal.accent}66` }}><span style={{ fontSize: s(28), fontWeight: 900 }}>{ad.price}</span><span style={{ fontSize: s(12), fontWeight: 800 }}>בלבד!</span></div>}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8) }}>{agentStrip()}{ctaPill()}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Composition: LIFESTYLE (family) — warm, photo-forward, trust ─────────────
+  if (ad.composition === "lifestyle") {
+    return (
+      <div id={refId} dir="rtl" style={frame}>
+        <div style={{ position: "absolute", insetInline: s(12), top: s(12), height: "50%", borderRadius: s(16), overflow: "hidden", boxShadow: `0 ${s(16)}px ${s(36)}px rgba(0,0,0,0.4)` }}>
+          {heroFill(`linear-gradient(180deg, rgba(0,0,0,0.05), transparent 40%, ${pal.bg}22)`)}
+          <div style={{ position: "absolute", top: s(10), insetInlineEnd: s(10) }}>{logo()}</div>
+          {ad.badge && <div style={{ position: "absolute", top: s(10), insetInlineStart: s(10) }}>{badge()}</div>}
+        </div>
+        <div style={{ position: "absolute", insetInline: s(14), top: "calc(50% + 22px)", bottom: s(12), display: "flex", flexDirection: "column", gap: s(8) }}>
+          <div style={{ color: pal.text, fontSize: s(23), fontWeight: 900, lineHeight: 1.05 }}>{ad.headline}</div>
+          {ad.subheadline && <div style={{ color: pal.accent, fontSize: s(12.5), fontWeight: 800 }}>{ad.subheadline}</div>}
+          {featureRow()}
+          {ad.price && <div style={{ color: pal.text, fontSize: s(20), fontWeight: 900 }}>{ad.price}</div>}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8), marginTop: "auto" }}>{agentStrip(true)}{ctaPill()}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Composition: INVESTMENT — structured data panel, rational ────────────────
+  if (ad.composition === "data_panel") {
+    const metrics = [ad.price ? { v: ad.price, l: "מחיר" } : null, ...ad.features.slice(0, 3).map((f) => ({ v: f.value || "✓", l: f.label }))].filter(Boolean).slice(0, 4) as { v: string; l: string }[];
+    return (
+      <div id={refId} dir="rtl" style={frame}>
+        <div style={{ position: "absolute", insetInline: 0, top: 0, height: "40%", overflow: "hidden" }}>{heroFill("linear-gradient(180deg, rgba(0,0,0,0.25), transparent 40%, rgba(0,0,0,0.55))")}
+          <div style={{ position: "absolute", top: s(12), insetInlineEnd: s(14) }}>{logo()}</div>
+          {ad.badge && <div style={{ position: "absolute", top: s(12), insetInlineStart: s(14) }}>{badge()}</div>}
+          <div style={{ position: "absolute", insetInline: s(14), bottom: s(10), color: "#fff", fontSize: s(22), fontWeight: 900, ...shadow }}>{ad.headline}</div>
+        </div>
+        <div style={{ position: "absolute", insetInline: s(14), top: "calc(40% + 12px)", bottom: s(12), display: "flex", flexDirection: "column", gap: s(8) }}>
+          {ad.subheadline && <div style={{ color: pal.accent, fontSize: s(12), fontWeight: 800 }}>{ad.subheadline}</div>}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: s(7) }}>
+            {metrics.map((m, i) => (
+              <div key={i} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: s(10), padding: `${s(8)}px ${s(10)}px`, display: "flex", flexDirection: "column", gap: s(1) }}>
+                <span style={{ color: pal.text, fontSize: s(16), fontWeight: 900, lineHeight: 1 }}>{m.v}</span>
+                <span style={{ color: pal.muted, fontSize: s(9.5), fontWeight: 700 }}>{m.l}</span>
+              </div>
+            ))}
           </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: s(6), background: `linear-gradient(135deg, ${pal.accent}, ${pal.accent2})`, color: pal.onAccent, fontSize: s(11.5), fontWeight: 900, padding: `${s(8)}px ${s(14)}px`, borderRadius: 999, whiteSpace: "nowrap" }}>
-          <Icon name="MessageCircle" size={s(14)} /> {ad.cta}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8), marginTop: "auto" }}>{agentStrip()}{ctaPill()}</div>
         </div>
       </div>
+    );
+  }
+
+  // ── Composition: PRICE HERO — the price dominates ────────────────────────────
+  if (ad.composition === "price_hero") {
+    return (
+      <div id={refId} dir="rtl" style={frame}>
+        <div style={{ position: "absolute", insetInline: 0, top: 0, height: "40%", overflow: "hidden" }}>{heroFill("linear-gradient(180deg, rgba(0,0,0,0.3), transparent 35%, rgba(0,0,0,0.6))")}
+          <div style={{ position: "absolute", top: s(12), insetInlineEnd: s(14) }}>{logo()}</div>
+          {ad.badge && <div style={{ position: "absolute", top: s(12), insetInlineStart: s(14) }}>{badge()}</div>}
+          <div style={{ position: "absolute", insetInline: s(14), bottom: s(8), color: "#fff", fontSize: s(18), fontWeight: 900, ...shadow }}>{ad.headline}</div>
+        </div>
+        <div style={{ position: "absolute", insetInline: 0, top: "40%", bottom: "20%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: s(2) }}>
+          <span style={{ color: pal.muted, fontSize: s(12), fontWeight: 800, letterSpacing: 2 }}>{ad.priceLabel}</span>
+          {ad.price && <span style={{ color: pal.accent, fontSize: s(44), fontWeight: 900, lineHeight: 1, letterSpacing: -1 }}>{ad.price}</span>}
+          {ad.subheadline && <span style={{ color: pal.text, fontSize: s(12.5), fontWeight: 700, marginTop: s(4) }}>{ad.subheadline}</span>}
+        </div>
+        <div style={{ position: "absolute", insetInline: 0, bottom: 0, height: "20%", padding: s(12), display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8), background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.4))" }}>{agentStrip()}{ctaPill()}</div>
+      </div>
+    );
+  }
+
+  // ── Composition: EDITORIAL (luxury) — cinematic full-bleed, lots of air ──────
+  return (
+    <div id={refId} dir="rtl" style={frame}>
+      {heroFill("linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.2) 38%, rgba(0,0,0,0.82))")}
+      <div style={{ position: "absolute", top: s(14), insetInline: s(16), display: "flex", alignItems: "center", justifyContent: "space-between" }}>{logo()}{badge()}</div>
+      <div style={{ position: "absolute", insetInline: 0, top: "30%", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: `0 ${s(22)}px`, gap: s(8) }}>
+        <span style={{ color: pal.accent, fontSize: s(10), fontWeight: 800, letterSpacing: 3 }}>{ad.triggerLabel} · ZONO</span>
+        <div style={{ color: "#fff", fontSize: s(26), fontWeight: 900, lineHeight: 1.08, ...shadow }}>{ad.headline}</div>
+        <div style={{ width: s(46), height: s(2), background: pal.accent }} />
+        {ad.subheadline && <div style={{ color: "#fff", fontSize: s(12.5), fontWeight: 600, opacity: 0.92, ...shadow }}>{ad.subheadline}</div>}
+      </div>
+      {ad.price && <div style={{ position: "absolute", insetInlineStart: s(16), bottom: s(70), background: "rgba(0,0,0,0.4)", border: `1px solid ${pal.accent}`, color: pal.accent, fontSize: s(15), fontWeight: 900, padding: `${s(5)}px ${s(12)}px`, borderRadius: s(8), backdropFilter: "blur(6px)" }}>{ad.price}</div>}
+      <div style={{ position: "absolute", insetInline: 0, bottom: 0, padding: `${s(10)}px ${s(16)}px`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: s(8) }}>{agentStrip()}{ctaPill()}</div>
     </div>
   );
 }
@@ -1226,7 +1307,8 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
       {ad && readiness != null && (
         <div className="flex flex-wrap items-center gap-1 px-0.5">
           <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${readiness >= 90 ? "bg-success text-card" : "bg-warning-soft text-warning"}`}>מוכנות לפרסום {readiness}</span>
-          <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-bold">זווית: {ad.angleLabel}</span>
+          <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-bold">קונספט: {ad.triggerLabel ?? ad.angleLabel}</span>
+          {ad.artDirection?.emotionalTrigger && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 text-[9px] font-bold">{ad.artDirection.emotionalTrigger}</span>}
         </div>
       )}
       {ad && adWarnings.length > 0 && (

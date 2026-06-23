@@ -20,11 +20,12 @@ import { detectPropertyAngle } from "./quality/zonoPropertyFirstEngine";
 import { pullInspiration } from "./quality/zonoCreativeInspirationEngine";
 import { runQualityPipeline, QUALITY_CONFIG } from "./quality/orchestrator";
 import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
-import { analyzeBrief, selectMarketingAngle, generateCopy, buildFinalAd, validateFinalAd, type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
+import { directConcepts, type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
 
-/** Build the complete FINAL-AD spec (angle → copy → assets → scores) and inject
- *  it into each property-ad variation's render, so the renderer produces a
- *  finished, ready-to-post square ad instead of a background + text. */
+/** ART DIRECTION + CONCEPT ENGINE: turn one property into 4 strategically
+ *  DIFFERENT advertising concepts (distinct psychological trigger → distinct
+ *  angle, color system, composition, copy) — not 4 cosmetic variations. Each
+ *  concept is injected as a finished, ready-to-post square ad spec. */
 function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variations: ReturnType<typeof buildQuickVariations>): void {
   const facts: FinalAdFacts = {
     propertyImage: input.propertyImage ?? null, city: input.city ?? null, neighborhood: input.neighborhood ?? null,
@@ -39,17 +40,14 @@ function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variations: Ret
     agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null, agentPhoto: brand.agentPhoto ?? null,
     officeName: brand.officeName ?? null, officeLogo: brand.officeLogo ?? null, colors: brand.colors, luxury: brand.luxury,
   };
-  const brief = analyzeBrief(facts, brandAssets);
-  const { candidates } = selectMarketingAngle(brief);
+  const { concepts } = directConcepts(facts, brandAssets);
   variations.forEach((v, vi) => {
-    const angle = candidates[vi % candidates.length];
-    const copy = generateCopy(brief, angle);
-    const ad = buildFinalAd(facts, brandAssets, brief, angle, copy);
-    const scores = validateFinalAd(ad);
+    const c = concepts[vi % concepts.length];
     const r = v.render as unknown as Record<string, unknown>;
-    r.ad = { ...ad, template: v.variantKey, scores };
-    r.width = ad.width; r.height = ad.height; r.format = "feed_1_1";
-    v.headline = ad.headline; v.subheadline = ad.subheadline; v.cta = ad.cta;
+    r.ad = { ...c.ad, template: c.ad.composition, scores: c.scores };
+    r.width = c.ad.width; r.height = c.ad.height; r.format = "feed_1_1";
+    v.variantName = `קונספט · ${c.triggerLabel}`;
+    v.headline = c.ad.headline; v.subheadline = c.ad.subheadline; v.cta = c.ad.cta;
   });
 }
 
