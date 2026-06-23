@@ -15,39 +15,38 @@ const QUICK_ACTIONS: { l: string; i: string; h: string }[] = [
   { l: "aiActions.createTask", i: "ListChecks", h: "/tasks" },
 ];
 
-/** Left-side recommended property card (RTL: appears on the left of the hero). */
+/** Featured property card — the visual centerpiece of the hero. Image-dominant
+ *  (~72% height), premium hover (elevation + image zoom + bottom gradient). */
 export function RecommendedPropertyCard({ t, p }: { t: Translate; p: PropertyCard }) {
   return (
     <Link
       href={p.href}
-      className="bg-card border-line hover:shadow-[var(--shadow-lift)] flex w-full flex-col overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)] transition-shadow lg:w-80"
+      className="group bg-card border-line flex w-full flex-col overflow-hidden rounded-[26px] border shadow-[var(--shadow-card)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)] lg:min-h-[440px]"
     >
-      <div className="bg-surface relative aspect-[16/11]">
+      {/* Image dominates the card (~72% height). */}
+      <div className="bg-surface relative h-56 flex-1 overflow-hidden lg:h-auto">
         {p.imageUrl
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={p.imageUrl} alt={p.title} className="h-full w-full object-cover" />
-          : <div className="text-muted grid h-full place-items-center"><Icon name="Building2" size={32} /></div>}
-        <span className="zono-gradient absolute end-3 top-3 rounded-full px-3 py-1 text-[11px] font-bold text-white">{t("hero.featuredTag")}</span>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3">
-          <p className="text-sm font-extrabold text-white">{p.title}</p>
-          <p className="text-[11px] text-white/85">{p.addressLine}</p>
+          ? <img src={p.imageUrl} alt={p.title} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          : <div className="text-muted grid h-full place-items-center"><Icon name="Building2" size={40} /></div>}
+        <span className="zono-gradient absolute end-4 top-4 rounded-full px-3.5 py-1.5 text-[12px] font-bold text-white shadow-lg">{t("hero.featuredTag")}</span>
+        {/* bottom gradient overlay carries title + address over the image */}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent p-4 pt-10">
+          <p className="text-base font-black text-white sm:text-lg">{p.title}</p>
+          <p className="text-xs text-white/85">{p.addressLine}</p>
         </div>
       </div>
-      <div className="flex flex-col gap-2 p-4">
-        <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium">
-          <span>{p.rooms ?? "—"} {t("property.rooms")}</span><span className="bg-line h-3 w-px" />
-          <span>{p.sizeSqm ?? "—"} {t("property.sqm")}</span><span className="bg-line h-3 w-px" />
-          <span>{t("property.floor")} {p.floor ?? "—"}</span>
+      {/* Compact info strip — minimal white space. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 p-4">
+        <div className="flex flex-col gap-1.5">
+          <p className="text-brand-strong text-2xl font-black leading-none">{ils(p.price)}</p>
+          <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium">
+            <span>{p.rooms ?? "—"} {t("property.rooms")}</span><span className="bg-line h-3 w-px" />
+            <span>{p.sizeSqm ?? "—"} {t("property.sqm")}</span><span className="bg-line h-3 w-px" />
+            <span>{t("property.floor")} {p.floor ?? "—"}</span>
+          </div>
         </div>
-        {p.aiInsightKey && (
-          <span className="bg-success-soft text-success inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold">
-            <Icon name="BadgeCheck" size={11} />{t(p.aiInsightKey)}
-          </span>
-        )}
-        <div className="flex items-center justify-between">
-          <p className="text-brand-strong text-xl font-black">{ils(p.price)}</p>
-          <span className="bg-brand-soft text-brand-strong rounded-lg px-3 py-1.5 text-[12px] font-bold">{t("hero.featuredCta")}</span>
-        </div>
+        <span className="btn-zono-primary inline-flex h-10 items-center gap-1.5 rounded-xl px-4 text-sm">{t("hero.featuredCta")}</span>
       </div>
     </Link>
   );
@@ -83,40 +82,51 @@ export function DashboardKpiStrip({ t, kpis }: { t: Translate; kpis: DashboardKp
   );
 }
 
-/** Hero command center: welcome + search + quick-action pills (right) and the
- *  recommended property card (left). RTL — first child renders on the right. */
+/** Hero command center — ONE unified module: command center (55%, right in RTL)
+ *  + featured property card (45%, left). A soft radial purple glow sits behind
+ *  both columns so they read as a single premium surface. */
 export function DashboardHero({ t, data }: { t: Translate; data: DashboardHomeData }) {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-      <div className="flex flex-1 flex-col justify-center gap-4">
-        <div>
-          <p className="text-muted text-sm">{t("hero.greeting")}, {data.agentName} 👋</p>
-          <h1 className="text-ink text-2xl font-black sm:text-3xl">{t("hero.title")}</h1>
-          <p className="text-muted mt-0.5 text-sm">{t("hero.subtitle")}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent("zono:open-search"))}
-            className="bg-card border-line text-muted hover:border-brand-light flex h-11 flex-1 items-center gap-2 rounded-xl border px-3 text-start shadow-[var(--shadow-soft)] transition-colors"
-          >
-            <Icon name="Search" size={16} />
-            <span className="truncate text-sm">{t("search.placeholder")}</span>
-            <kbd className="bg-surface text-muted ms-auto hidden rounded px-1.5 py-0.5 text-[10px] font-bold sm:inline">⌘K</kbd>
-          </button>
-          <Link href="/properties/new" className="btn-zono-primary inline-flex h-11 items-center gap-1.5 px-4 text-sm">
-            <Icon name="Plus" size={16} />{t("hero.quickAdd")}
-          </Link>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {QUICK_ACTIONS.map((a) => (
-            <Link key={a.l} href={a.h} className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold transition-colors">
-              <Icon name={a.i} size={13} />{t(a.l)}
+    <div className="relative isolate overflow-hidden rounded-[28px]">
+      {/* Unifying radial purple glow behind both columns. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{ background: "radial-gradient(110% 120% at 75% 0%, rgba(124,58,237,0.14) 0%, rgba(168,139,250,0.08) 38%, rgba(248,247,255,0) 70%)" }}
+      />
+      <div className="grid grid-cols-1 items-center gap-6 p-1 lg:grid-cols-[1.2fr_1fr] lg:gap-10 lg:p-2">
+        {/* Command center (right in RTL) — denser, moved up, stronger hierarchy. */}
+        <div className="flex flex-col justify-center gap-5 lg:py-2">
+          <div className="flex flex-col gap-1">
+            <p className="text-muted text-base font-semibold">{t("hero.greeting")}, {data.agentName} 👋</p>
+            <h1 className="text-ink text-4xl font-black leading-[1.05] sm:text-5xl lg:text-6xl">{t("hero.title")}</h1>
+            <p className="text-muted mt-1 text-lg font-medium sm:text-2xl">{t("hero.subtitle")}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("zono:open-search"))}
+              className="bg-card border-line text-muted hover:border-brand-light flex h-16 flex-1 items-center gap-3 rounded-2xl border px-5 text-start shadow-[var(--shadow-card)] transition-colors sm:h-[72px]"
+            >
+              <Icon name="Search" size={20} />
+              <span className="truncate text-base">{t("search.placeholder")}</span>
+              <kbd className="bg-surface text-muted ms-auto hidden rounded-lg px-2 py-1 text-xs font-bold sm:inline">⌘K</kbd>
+            </button>
+            <Link href="/properties/new" className="btn-zono-primary inline-flex h-16 items-center gap-1.5 rounded-2xl px-5 text-sm sm:h-[72px]">
+              <Icon name="Plus" size={18} />{t("hero.quickAdd")}
             </Link>
-          ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {QUICK_ACTIONS.map((a) => (
+              <Link key={a.l} href={a.h} className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors">
+                <Icon name={a.i} size={14} />{t(a.l)}
+              </Link>
+            ))}
+          </div>
         </div>
+        {/* Featured property (left in RTL) — the visual centerpiece. */}
+        {data.featuredProperty && <RecommendedPropertyCard t={t} p={data.featuredProperty} />}
       </div>
-      {data.featuredProperty && <RecommendedPropertyCard t={t} p={data.featuredProperty} />}
     </div>
   );
 }
