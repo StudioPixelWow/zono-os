@@ -1,4 +1,4 @@
-import { listProperties, type PropertyRow } from "@/lib/properties/repository";
+import { listProperties, listPropertyCovers, type PropertyRow } from "@/lib/properties/repository";
 import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
 import { enrichListingsBuyerMatches, type ListingMatchSummary } from "@/lib/external-listings/service";
 import { matchesInventoryTab, type InventoryTab } from "@/lib/properties/inventory";
@@ -79,14 +79,17 @@ export default async function PropertiesPage({
     }
   }
 
+  let covers: Record<string, string> = {};
+  try { covers = await listPropertyCovers(rows.map((r) => r.id)); } catch (e) { console.error("[properties] covers failed:", e); }
+
   return (
-    <PropertiesOSView properties={rows} agentName={agentName}>
+    <PropertiesOSView properties={rows} agentName={agentName} covers={covers}>
       <div className="flex flex-col gap-6">
         <InventoryTabs active={tab} />
         {tab === "external" ? (
           <ExternalListingsView listings={externalListings} marketStats={externalMarketStats} isAdmin={externalIsAdmin} matches={externalMatches} />
         ) : (
-          <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} />
+          <PropertiesListView properties={rows} filters={filters} error={error} currentUserId={currentUserId} covers={covers} />
         )}
       </div>
     </PropertiesOSView>

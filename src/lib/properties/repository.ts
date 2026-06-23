@@ -311,6 +311,30 @@ export async function getPropertyMedia(propertyId: string): Promise<PropertyMedi
   };
 }
 
+/**
+ * Batch cover resolver — ONE query for many properties. Returns property_id →
+ * best cover url (primary image → first image). Lets list/pipeline/cards show a
+ * property's real image consistently instead of relying on the denormalized
+ * primary_image_url column (which may be null even when media exists).
+ */
+export async function listPropertyCovers(propertyIds: string[]): Promise<Record<string, string>> {
+  const ids = [...new Set(propertyIds)].filter(Boolean);
+  if (!ids.length) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("property_media")
+    .select("property_id,url,type,is_primary,sort_order")
+    .in("property_id", ids)
+    .eq("type", "image")
+    .order("is_primary", { ascending: false })
+    .order("sort_order", { ascending: true });
+  const out: Record<string, string> = {};
+  for (const m of (data ?? []) as { property_id: string; url: string }[]) {
+    if (!out[m.property_id] && m.url) out[m.property_id] = m.url; // first row per property = best cover
+  }
+  return out;
+}
+
 // ── Related records for the details page (read-only this phase) ──────────────
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];

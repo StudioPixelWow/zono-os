@@ -56,11 +56,13 @@ export function PropertiesListView({
   filters,
   error,
   currentUserId = null,
+  covers = {},
 }: {
   properties: PropertyRow[];
   filters: Filters;
   error?: boolean;
   currentUserId?: string | null;
+  covers?: Record<string, string>;
 }) {
   const [view, setView] = useState<"cards" | "table">("cards");
 
@@ -202,7 +204,7 @@ export function PropertiesListView({
               d={{
                 href: `/properties/${p.id}`,
                 title: p.title,
-                imageUrl: p.primary_image_url,
+                imageUrl: covers[p.id] ?? p.primary_image_url,
                 statusLabel: PROPERTY_STATUS_LABELS[p.status],
                 statusTone: PROPERTY_STATUS_TONES[p.status],
                 dealLabel: p.listing_kind === "rent" ? "להשכרה" : "למכירה",

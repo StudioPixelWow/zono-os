@@ -32,6 +32,10 @@ function ilsCompact(n: number): string {
   return ils(n);
 }
 const TERMINAL = new Set(["sold", "rented", "withdrawn", "archived", "draft"]);
+/** Resolved cover: media cover → denormalized primary_image_url → none. */
+function coverFor(p: PropertyRow, covers: Record<string, string>): string | null {
+  return covers[p.id] ?? p.primary_image_url ?? null;
+}
 function scoreOf(p: PropertyRow): number {
   return p.zono_score ?? p.quality_score ?? 70;
 }
@@ -138,13 +142,13 @@ function AIActionsBar() {
 
 interface AttentionItem { tone: BadgeTone; status: string; title: string; text: string; cta: string; href: string }
 
-function buildAttention(properties: PropertyRow[]): AttentionItem[] {
+function buildAttention(properties: PropertyRow[], covers: Record<string, string>): AttentionItem[] {
   const out: AttentionItem[] = [];
   for (const p of properties) {
     if (TERMINAL.has(p.status)) continue;
     const addr = propertyAddressLine(p);
     const stale = daysSince(p.updated_at);
-    if (!p.primary_image_url) {
+    if (!coverFor(p, covers)) {
       out.push({ tone: "warning", status: "שיווק", title: addr, text: "אין תמונות מקצועיות", cta: "הזמן צילום", href: `/properties/${p.id}` });
     } else if (stale >= 14) {
       out.push({ tone: "danger", status: "בסיכון", title: addr, text: `לא עודכן ${stale} ימים`, cta: "טפל עכשיו", href: `/properties/${p.id}` });
@@ -232,16 +236,16 @@ const STUDIO_LINKS = (id: string) => [
   { label: "AI", icon: "Sparkles", href: `/creative-studio/property/${id}` },
 ];
 
-function HotPropertyCard({ p }: { p: PropertyRow }) {
+function HotPropertyCard({ p, cover }: { p: PropertyRow; cover: string | null }) {
   const score = scoreOf(p);
   const tone = scoreTone(score);
   const statusTone = (PROPERTY_STATUS_TONES[p.status] ?? "neutral") as BadgeTone;
   return (
     <div className="bg-card border-line flex min-w-[300px] max-w-[320px] flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
       <div className="bg-surface relative aspect-square w-full overflow-hidden">
-        {p.primary_image_url ? (
+        {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.primary_image_url} alt={p.title} className="absolute inset-0 h-full w-full object-cover object-center" />
+          <img src={cover} alt={p.title} className="absolute inset-0 h-full w-full object-cover object-center" />
         ) : (
           <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Building2" size={34} /></div>
         )}
@@ -272,13 +276,13 @@ function HotPropertyCard({ p }: { p: PropertyRow }) {
   );
 }
 
-function HotPropertiesCarousel({ properties }: { properties: PropertyRow[] }) {
+function HotPropertiesCarousel({ properties, covers }: { properties: PropertyRow[]; covers: Record<string, string> }) {
   if (properties.length === 0) {
     return <p className="text-muted bg-card border-line rounded-[22px] border p-6 text-center text-sm">אין נכסים חמים עדיין — הוסף נכס ראשון כדי לראות אותו כאן.</p>;
   }
   return (
     <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
-      {properties.map((p) => <HotPropertyCard key={p.id} p={p} />)}
+      {properties.map((p) => <HotPropertyCard key={p.id} p={p} cover={coverFor(p, covers)} />)}
     </div>
   );
 }
@@ -344,7 +348,7 @@ const PIPELINE_COLS: { key: string; label: string; statuses: string[]; tone: str
   { key: "sold", label: "נמכר", statuses: ["sold", "rented"], tone: "text-danger" },
 ];
 
-function PropertyPipeline({ properties }: { properties: PropertyRow[] }) {
+function PropertyPipeline({ properties, covers }: { properties: PropertyRow[]; covers: Record<string, string> }) {
   return (
     <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
       {PIPELINE_COLS.map((col) => {
@@ -355,12 +359,14 @@ function PropertyPipeline({ properties }: { properties: PropertyRow[] }) {
               <span className={cn("text-sm font-extrabold", col.tone)}>{col.label}</span>
               <span className="bg-card text-muted rounded-full px-2 py-0.5 text-[11px] font-bold">{items.length}</span>
             </div>
-            {items.slice(0, 4).map((p) => (
+            {items.slice(0, 4).map((p) => {
+              const cover = coverFor(p, covers);
+              return (
               <Link key={p.id} href={`/properties/${p.id}`} className="bg-card border-line flex items-center gap-2 rounded-xl border p-2 shadow-[var(--shadow-soft)]">
                 <span className="bg-surface text-muted grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg">
-                  {p.primary_image_url
+                  {cover
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={p.primary_image_url} alt="" className="h-full w-full object-cover" />
+                    ? <img src={cover} alt="" className="h-full w-full object-cover" />
                     : <Icon name="Building2" size={15} />}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -369,7 +375,8 @@ function PropertyPipeline({ properties }: { properties: PropertyRow[] }) {
                 </div>
                 <span className="text-success text-[11px] font-black">{scoreOf(p)}</span>
               </Link>
-            ))}
+              );
+            })}
             <Link href="/properties/new" className="text-muted hover:text-brand-strong rounded-lg py-1.5 text-center text-[11px] font-bold">+ הוסף נכס</Link>
           </div>
         );
@@ -519,17 +526,21 @@ function StickyAICopilotPanel({ atRisk, needMarketing }: { atRisk: number; needM
 export function PropertiesOSView({
   properties,
   agentName,
+  covers = {},
   children,
 }: {
   properties: PropertyRow[];
   agentName: string;
+  /** property_id → resolved cover image (from property_media), so a property's
+   *  real image always shows even when primary_image_url is null. */
+  covers?: Record<string, string>;
   /** The existing inventory tabs + list/external section (preserves filters). */
   children: ReactNode;
 }) {
   const activeProps = useMemo(() => properties.filter((p) => !TERMINAL.has(p.status)), [properties]);
   const hot = useMemo(() => [...properties].sort((a, b) => scoreOf(b) - scoreOf(a)).slice(0, 8), [properties]);
-  const attention = useMemo(() => buildAttention(properties), [properties]);
-  const needMarketing = useMemo(() => properties.filter((p) => !TERMINAL.has(p.status) && !p.primary_image_url).length, [properties]);
+  const attention = useMemo(() => buildAttention(properties, covers), [properties, covers]);
+  const needMarketing = useMemo(() => properties.filter((p) => !TERMINAL.has(p.status) && !coverFor(p, covers)).length, [properties, covers]);
   const potentialCommission = useMemo(() => activeProps.reduce((s, p) => s + (p.price ?? 0) * 0.02, 0), [activeProps]);
 
   const kpis: Kpi[] = [
@@ -558,7 +569,7 @@ export function PropertiesOSView({
 
         <section className="flex flex-col gap-3">
           <SectionTitle title="הנכסים החמים שלך" action={<ViewAll />} />
-          <HotPropertiesCarousel properties={hot} />
+          <HotPropertiesCarousel properties={hot} covers={covers} />
         </section>
 
         <section className="flex flex-col gap-3">
@@ -568,7 +579,7 @@ export function PropertiesOSView({
 
         <section className="flex flex-col gap-3">
           <SectionTitle title="צינור העסקאות" action={<ViewAll />} />
-          <PropertyPipeline properties={properties} />
+          <PropertyPipeline properties={properties} covers={covers} />
         </section>
 
         <section className="flex flex-col gap-3">
