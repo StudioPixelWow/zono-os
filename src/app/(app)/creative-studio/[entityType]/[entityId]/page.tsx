@@ -10,6 +10,7 @@ import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/utils";
+import { aiProviderStatus } from "@/lib/creative-studio/creative-production-engine";
 import { CreativeStudioView } from "../../CreativeStudioView";
 
 export const dynamic = "force-dynamic";
@@ -89,5 +90,9 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
       </main>
     );
   }
-  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} quickPrefill={quickPrefill} />;
+  // Server-side AI image-provider status → tells the user (in Creative Studio)
+  // whether scenes are AI-produced or deterministic fallback. No secrets exposed.
+  const ai = aiProviderStatus();
+  const aiProvider = { provider: ai.provider, reason: ai.reason };
+  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} quickPrefill={quickPrefill} aiProvider={aiProvider} />;
 }

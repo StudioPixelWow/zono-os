@@ -21,6 +21,10 @@ import type { FinalAdData, FinalAdScores } from "@/lib/creative-studio/final-cre
 import type { BrandDNA, BrandGuidance } from "@/lib/creative-studio/brand-dna-engine";
 import type { DesignExecutionPlan } from "@/lib/creative-studio/design-system-engine";
 import { BUILD_SIGNATURE } from "@/lib/creative-studio/build-signature";
+
+// Read-only AI image-provider status (computed server-side), used only to tell the
+// user whether creatives are AI-produced or deterministic-fallback. No secrets here.
+export type AiProviderStatus = { provider: string; reason?: string };
 import {
   generateCampaignAction, duplicateCampaignAction, archiveCampaignAction, deleteCampaignAction, approveCampaignAction,
 } from "@/lib/creative-studio/campaign-actions";
@@ -103,7 +107,7 @@ type Dna = Record<string, unknown>;
 type Runner = ReturnType<typeof useActionRunner>;
 type Wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) => void;
 
-export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, quickOutputs: quickOutputsRaw, isManager = false, orgId, userId, quickPrefill }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; quickOutputs?: Record<string, unknown>[]; isManager?: boolean; orgId: string; userId: string; quickPrefill?: Record<string, string | boolean | number> }) {
+export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: campaignsRaw, campaignAssets: campaignAssetsRaw, creativeAssets: creativeAssetsRaw, copyAssets: copyAssetsRaw, creativeOutputs: creativeOutputsRaw, visuals: visualsRaw, quickOutputs: quickOutputsRaw, isManager = false, orgId, userId, quickPrefill, aiProvider }: { studio: CreativeStudio; concepts?: Record<string, unknown>[]; campaigns?: Record<string, unknown>[]; campaignAssets?: Record<string, unknown>[]; creativeAssets?: Record<string, unknown>[]; copyAssets?: Record<string, unknown>[]; creativeOutputs?: Record<string, unknown>[]; visuals?: Record<string, unknown>[]; quickOutputs?: Record<string, unknown>[]; isManager?: boolean; orgId: string; userId: string; quickPrefill?: Record<string, string | boolean | number>; aiProvider?: AiProviderStatus }) {
   const concepts = (conceptsRaw ?? []) as unknown as Concept[];
   const campaigns = (campaignsRaw ?? []) as unknown as Campaign[];
   const campaignAssets = (campaignAssetsRaw ?? []) as unknown as CampaignAsset[];
@@ -164,7 +168,7 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
       <ActionFeedback runner={r} />
 
       {/* QUICK CREATIVE TEMPLATES — יצירה מהירה */}
-      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} canViewPrompt={isManager} orgId={orgId} userId={userId} prefill={quickPrefill} />
+      <QuickCreativeSection outputs={quickOutputs} et={et} eid={eid} wrap={wrap} canViewPrompt={isManager} orgId={orgId} userId={userId} prefill={quickPrefill} aiProvider={aiProvider} />
 
       {/* SECTION 2 — ASSETS LIBRARY */}
       <section className="flex flex-col gap-3">
@@ -790,11 +794,25 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
   });
   const Z = dep.zones;
   const initials = (ad.agentName || "").trim().slice(0, 1) || "ZO";
+  // Creative Production Engine: AI advertising scene behind the locked composite.
+  // ai_hero → the scene IS the property hero (skip the separate photo zone);
+  // ai_scene → scene is atmosphere only, real photo stays locked in its zone.
+  const sceneUrl = ad.sceneUrl ?? null;
+  const heroScene = sceneUrl != null && ad.sceneStatus === "ai_hero";
+  const showPhotoZone = Z.image.shown && !heroScene;
 
   return (
     <div id={refId} dir="rtl" style={{ position: "relative", aspectRatio: `${dep.canvas.width} / ${dep.canvas.height}`, width: "100%", overflow: "hidden", borderRadius: 14 * scale, background: `linear-gradient(160deg, ${pal.bg2}, ${pal.bg})`, color: pal.text, fontFamily: "inherit" }}>
-      {/* IMAGE ZONE — locked real property photo */}
-      {Z.image.shown && (
+      {/* BASE: AI advertising scene (full-bleed) + readability scrim */}
+      {sceneUrl && (
+        <div style={{ position: "absolute", inset: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={sceneUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.35), transparent 30%, transparent 55%, rgba(0,0,0,0.72))" }} />
+        </div>
+      )}
+      {/* IMAGE ZONE — locked real property photo (skipped when AI scene is the hero) */}
+      {showPhotoZone && (
         <div style={{ position: "absolute", top: pct(Z.image.top), left: pct(Z.image.left), width: pct(Z.image.width), height: pct(Z.image.height), overflow: "hidden", borderRadius: dep.family === "premium_clean" ? 16 * scale : 0 }}>
           {ad.propertyImage ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -1347,7 +1365,7 @@ const QUICK_CARDS: { type: string; title: string; desc: string; cta: string }[] 
   { type: "property_ad_post", title: "פוסט פרסום דירה", desc: "צרו מודעת נכס ממותגת עם תמונה, פרטים וקריאה לפעולה.", cta: "צור פוסט פרסום דירה" },
 ];
 
-function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, userId, prefill }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean; orgId: string; userId: string; prefill?: Record<string, string | boolean | number> }) {
+function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, userId, prefill, aiProvider }: { outputs: QuickOutput[]; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean; orgId: string; userId: string; prefill?: Record<string, string | boolean | number>; aiProvider?: AiProviderStatus }) {
   const [wizardType, setWizardType] = useState<string | null>(null);
   return (
     <section className="flex flex-col gap-3">
@@ -1362,6 +1380,22 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, us
         <span>concept-engine: <b className="text-ink">{BUILD_SIGNATURE.conceptEngineVersion}</b></span>
         <span>design-system: <b className="text-ink">{BUILD_SIGNATURE.designSystemVersion}</b></span>
       </div>
+      {/* AI PROVIDER STATUS — explains whether creatives are AI-produced or deterministic fallback */}
+      {aiProvider && (
+        aiProvider.provider === "mock" ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+            <Icon name="TriangleAlert" size={14} />
+            <b>ספק תמונות AI לא מוגדר</b>
+            <span>— הקריאייטיבים נוצרים במנוע הדטרמיניסטי (fallback). להפעלת סצנות AI יש להגדיר ZONO_IMAGE_PROVIDER=gemini ו-GEMINI_API_KEY.</span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
+            <Icon name="Sparkles" size={14} />
+            <b>ספק תמונות AI פעיל: {aiProvider.provider}</b>
+            <span>— כל קונספט מקבל סצנת פרסום קולנועית; הנכס, הלוגו, הסוכן והטקסט בעברית נשארים נעולים.</span>
+          </div>
+        )
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {QUICK_CARDS.map((c) => (
           <div key={c.type} className="bg-card border-line flex flex-col gap-2 rounded-2xl border p-4 shadow-sm">
@@ -1611,6 +1645,12 @@ function CreativeDebugPanel({ ad, o }: { ad: FinalAdView; o: QuickOutput }) {
         <DebugKV k="not-a-card" v={ad.designPlan.notCardProof.reasons.join(" · ")} />
       </>)}
       {section("Final Prompt (AI environment — text-free)", <p dir="ltr" className="text-muted whitespace-pre-wrap break-words">{t?.finalPrompt ?? adr?.aiEnvironment.imageModelPrompt ?? "—"}</p>)}
+      {section("Creative Production Engine (AI scene)", <>
+        <DebugKV k="scene status" v={ad.sceneStatus ?? "— (deterministic / no provider)"} />
+        <DebugKV k="scene mode" v={ad.sceneMode ?? "—"} />
+        <DebugKV k="scene URL" v={ad.sceneUrl ? <a dir="ltr" href={ad.sceneUrl} target="_blank" rel="noreferrer" className="text-brand-strong break-all underline">{ad.sceneUrl}</a> : "—"} />
+        <DebugKV k="composite" v={ad.sceneStatus === "ai_hero" ? "AI scene = hero · locked logo/agent/Hebrew overlaid" : ad.sceneUrl ? "AI scene background · locked photo + logo/agent/Hebrew overlaid" : "deterministic renderer (no AI scene)"} />
+      </>)}
       {section("Validation & Run", <>
         <DebugKV k="readiness" v={sc?.finalPostReadiness} />
         <DebugKV k="asset / hebrew / rtl" v={sc ? `${sc.assetAuthenticity} · ${sc.hebrewAccuracy} · ${sc.rtlCorrectness}` : "—"} />

@@ -147,6 +147,9 @@ export interface FinalAdData {
   // Observability: a full per-creative trace so a wrong creative reveals which
   // layer failed (no black-box generation). Duration is stamped by the service.
   trace?: CreativeTrace;
+  // Creative Production Engine: the AI advertising scene (stamped by the service).
+  // sceneUrl = uploaded AI scene; sceneStatus tells the renderer/UI how it was made.
+  sceneUrl?: string | null; sceneStatus?: "ai_hero" | "ai_scene" | "no_provider" | "failed" | null; sceneMode?: string | null;
 }
 
 /** Layer-by-layer snapshot persisted on every creative for the inspection panel. */

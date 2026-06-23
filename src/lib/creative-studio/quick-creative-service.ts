@@ -24,6 +24,8 @@ import { type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-eng
 import { directConceptsAI } from "./creative-thinking-ai";
 import { deriveBrandDNA, brandGuidanceForConcept } from "./brand-dna-engine";
 import { buildDesignExecutionPlan } from "./design-system-engine";
+import { produceAdScene } from "./creative-production-engine";
+import type { FinalAdData } from "./final-creative-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
  *  DIFFERENT advertising concepts (distinct psychological trigger → angle, color
@@ -244,20 +246,58 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
       used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json,
       property_primary_angle: c.brief.propertyPrimaryAngle,
       creative_selection_metadata: { ...selectionMeta, family: c.brief.family, wow: c.scores.wow_score, ...(adScores ?? {}) } as unknown as Json,
-      // Final-ad mode renders deterministically from the real photo — no AI bg.
-      ...(adScores ? { image_status: "final_render" } : {}),
     };
   });
   const { data: inserted } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
   const ids = ((inserted ?? []) as { id: string }[]).map((r) => r.id);
-  // Auto-generate the FINAL image (Gemini Nano Banana) only for the selected
-  // winners. Best-effort: never fabricate a placeholder image. Property ads are
-  // rendered deterministically from the real photo, so they need no AI image.
-  if (g.requestType !== "property_ad_post") await generateImagesForOutputs(supabase, orgId, ids);
+  // CREATIVE PRODUCTION ENGINE: property ads get an AI advertising SCENE (Gemini
+  // hero-integrated) composited under the locked real assets + Hebrew. Other types
+  // keep the existing final-image path. Both best-effort; never fabricate.
+  if (g.requestType === "property_ad_post") await generateAdScenesForOutputs(supabase, orgId, ids);
+  else await generateImagesForOutputs(supabase, orgId, ids);
   return { requestId, created: rows.length };
 }
 
 const QUALITY_FAMILIES = VARIATION_STYLES;
+
+/** CREATIVE PRODUCTION ENGINE: for each property-ad output, produce the AI
+ *  advertising SCENE (Gemini hero-integrated) and stamp it on the output, so the
+ *  renderer composites locked assets + Hebrew on top. Best-effort; never throws;
+ *  never fabricates — no provider/failure leaves the deterministic renderer. */
+async function generateAdScenesForOutputs(supabase: DB, orgId: string, outputIds: string[]): Promise<void> {
+  if (!outputIds.length) return;
+  await Promise.allSettled(outputIds.map(async (id) => {
+    try {
+      const { data } = await supabase.from("zono_quick_creative_outputs").select("render_data").eq("org_id", orgId).eq("id", id).maybeSingle();
+      const rd = (data as { render_data?: { ad?: FinalAdData } } | null)?.render_data;
+      const ad = rd?.ad;
+      if (!rd || !ad) return;
+      const scene = await produceAdScene(ad);
+      if (scene.status === "no_provider") {
+        await supabase.from("zono_quick_creative_outputs").update({ image_status: "no_provider" }).eq("org_id", orgId).eq("id", id);
+        return;
+      }
+      if (scene.status === "failed" || !scene.b64) {
+        await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed", image_error: (scene.error ?? "scene failed").slice(0, 500) }).eq("org_id", orgId).eq("id", id);
+        return;
+      }
+      const ext = scene.mime?.includes("png") ? "png" : scene.mime?.includes("webp") ? "webp" : "jpg";
+      const path = `${orgId}/scene/${id}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, Buffer.from(scene.b64, "base64"), { contentType: scene.mime ?? "image/png", upsert: true });
+      if (upErr) { await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed", image_error: `upload: ${upErr.message}`.slice(0, 500) }).eq("org_id", orgId).eq("id", id); return; }
+      const { data: pub } = supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path);
+      const sceneUrl = pub.publicUrl;
+      const nextAd = { ...ad, sceneUrl, sceneStatus: scene.status, sceneMode: scene.mode };
+      await supabase.from("zono_quick_creative_outputs").update({
+        image_url: sceneUrl, image_provider: scene.provider, image_status: scene.status, image_error: null,
+        render_data: { ...rd, ad: nextAd } as never,
+      }).eq("org_id", orgId).eq("id", id);
+    } catch (e) {
+      console.error(`[cpe][scene] failed for ${id}:`, e instanceof Error ? e.message : e);
+      try { await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed", image_error: String(e).slice(0, 500) }).eq("org_id", orgId).eq("id", id); } catch { /* ignore */ }
+    }
+  }));
+}
 
 /** Generate the final AI image for many outputs in parallel; never throws. */
 async function generateImagesForOutputs(supabase: DB, orgId: string, outputIds: string[]): Promise<void> {
