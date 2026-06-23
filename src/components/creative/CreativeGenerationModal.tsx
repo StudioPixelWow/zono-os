@@ -6,7 +6,7 @@ import { CreativePipeline, PIPELINE_STEPS } from "./CreativePipeline";
 import { CreativeStatusTicker, TICKER_MESSAGES } from "./CreativeStatusTicker";
 import { QualityCounters } from "./QualityCounters";
 import { CreativeConceptGrid, CONCEPTS } from "./CreativeConceptGrid";
-import { FinalAdsSkeleton } from "./FinalAdsSkeleton";
+import { FinalAdsSkeleton, type FinalAdPreview } from "./FinalAdsSkeleton";
 
 /**
  * Premium "ZONO Creative Engine" waiting experience.
@@ -19,7 +19,7 @@ import { FinalAdsSkeleton } from "./FinalAdsSkeleton";
  * the 2 skeleton cards keep pulsing until `complete` (the real image-generation
  * response) is true. We never fake final completion.
  */
-export function CreativeGenerationModal({ complete, onView }: { complete: boolean; onView: () => void }) {
+export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { complete: boolean; onView: () => void; finalAds?: FinalAdPreview[] }) {
   const [t, setT] = useState(0); // simulated concept progress 0..1 (held ≤0.92 until complete)
   const [tick, setTick] = useState(0); // rotating ticker index
   const startedComplete = useRef(false);
@@ -130,7 +130,7 @@ export function CreativeGenerationModal({ complete, onView }: { complete: boolea
           {/* final ads area — 2 large skeletons, gated on the REAL backend response */}
           {selectPhase && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="border-line/50 mt-4 rounded-2xl border border-dashed p-3.5">
-              <FinalAdsSkeleton complete={final} />
+              <FinalAdsSkeleton complete={final} ads={finalAds} />
             </motion.div>
           )}
 

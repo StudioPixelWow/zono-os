@@ -47,8 +47,9 @@ import {
 } from "@/lib/creative-studio/visual-actions";
 import { VISUAL_TYPE_LABELS, VARIATION_MODES } from "@/lib/creative-studio/visual-dna";
 import {
-  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction, listCreativeCandidatesAction,
+  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction, listCreativeCandidatesAction, listQuickOutputsAction,
 } from "@/lib/creative-studio/quick-creative-actions";
+import type { FinalAdPreview } from "@/components/creative/FinalAdsSkeleton";
 import { QUICK_TYPE_LABELS } from "@/lib/creative-studio/quick-creative-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
 
@@ -1893,6 +1894,7 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
   const [brand, setBrand] = useState<{ warnings?: string[]; agentName?: string | null; officeName?: string | null; colors?: string[]; agentPhoto?: string | null; officeLogo?: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [finalAds, setFinalAds] = useState<FinalAdPreview[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: string, v: string | boolean | number) => setF((p) => ({ ...p, [k]: v }));
   const str = (k: string) => (typeof f[k] === "string" ? (f[k] as string) : "");
@@ -1917,9 +1919,21 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
     };
     const res = await generateQuickCreativeAction({ requestType: type as never, input: input as never, format, entityType: et, entityId: eid });
     if (res.error) { setErr(res.error); setBusy(false); return; }
-    // Keep the premium ZONO Creative Engine modal open and switch it to its final
-    // "ready" state; the user clicks צפה בתוצאות to close + refresh. We NEVER fake
-    // completion — `done` only flips after the real backend response resolves.
+    // Pull the just-generated outputs so the modal's final cards show the REAL
+    // produced ads (image when available; labeled "ready" tile otherwise) instead
+    // of empty boxes. Best-effort — never blocks completion.
+    try {
+      const { outputs } = await listQuickOutputsAction({ entityType: et, entityId: eid });
+      const mine = outputs
+        .filter((o) => (o as { output_type?: string }).output_type === type)
+        .slice(0, 2)
+        .map((o) => ({
+          imageUrl: ((o as { image_url?: string | null }).image_url) ?? null,
+          label: ((o as { variant_name?: string }).variant_name) ?? "מודעה סופית",
+        }));
+      setFinalAds(mine);
+    } catch { /* non-critical */ }
+    // We NEVER fake completion — `done` only flips after the real backend response.
     setBusy(false); setDone(true);
   };
 
@@ -1942,7 +1956,7 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
   // ZONO Creative Engine waiting experience instead of the form. Generation logic
   // is untouched — `busy` = running, `done` = real backend response received.
   if (busy || done) {
-    return <CreativeGenerationModal complete={done} onView={() => { onClose(); router.refresh(); }} />;
+    return <CreativeGenerationModal complete={done} finalAds={finalAds} onView={() => { onClose(); router.refresh(); }} />;
   }
 
   return (
