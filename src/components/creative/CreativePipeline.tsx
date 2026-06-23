@@ -4,11 +4,11 @@ import { motion } from "framer-motion";
 /** The 6-stage ZONO Creative Engine pipeline (exact Hebrew labels, RTL). */
 export const PIPELINE_STEPS = [
   "ניתוח הנכס",
-  "בחירת סגנון",
-  "יצירת 16 גרסאות",
+  "יצירת 12 רעיונות",
   "דירוג Wow Score",
   "QA עברית",
-  "בחירת 4 מנצחות",
+  "בחירת 2 מנצחות",
+  "יצירת 2 מודעות סופיות",
 ] as const;
 
 /** activeStep is 0-based; steps below it are complete, the one at it is active,

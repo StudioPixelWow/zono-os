@@ -3,14 +3,13 @@ import { AnimatePresence, motion } from "framer-motion";
 
 /** Rotating "what's happening now" messages (exact Hebrew, RTL). */
 export const TICKER_MESSAGES = [
-  "מנתחת את תמונות הנכס",
+  "מנתחת את נתוני הנכס",
   "מזהה את נקודות המכירה החזקות ביותר",
-  "בוחרת שפה עיצובית מתאימה",
-  "יוצרת 16 קומפוזיציות שונות",
-  "מבצעת QA לטקסטים בעברית",
-  "בודקת RTL וקריאות במובייל",
-  "מדרגת לפי Wow Score",
-  "בוחרת את 4 המודעות החזקות ביותר",
+  "יוצרת 12 כיווני קריאייטיב שונים",
+  "מדרגת רעיונות לפי Wow Score",
+  "בודקת סיכוני שפה בעברית",
+  "בוחרת את 2 הרעיונות החזקים ביותר",
+  "יוצרת 2 מודעות סופיות באיכות מלאה",
 ] as const;
 
 export function CreativeStatusTicker({ message }: { message: string }) {

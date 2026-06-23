@@ -22,14 +22,14 @@ import { runQualityPipeline, QUALITY_CONFIG } from "./quality/orchestrator";
 import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
 import { type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
 import { directConceptsAI } from "./creative-thinking-ai";
-import { deriveBrandDNA, brandGuidanceForConcept } from "./brand-dna-engine";
-import { buildDesignExecutionPlan, type DesignExecutionPlan, type DesignFamily } from "./design-system-engine";
+import { deriveBrandDNA, brandGuidanceForConcept, type BrandGuidance } from "./brand-dna-engine";
+import { buildDesignExecutionPlan, type DesignExecutionPlan, type DesignFamily, type DesignAssets } from "./design-system-engine";
 import { produceAdScene } from "./creative-production-engine";
 import { finalLayoutQA } from "./layout-integrity";
 import { scoreWow, type WowScore } from "./wow-score";
 import { type AdSpec, type AdKind, type AdGenAssets } from "./openai-ad-pipeline";
 import { generateCreativeWithQA } from "./creative-qa-engine";
-import type { FinalAdData, ConceptTrigger } from "./final-creative-engine";
+import type { FinalAdData, ConceptTrigger, ConceptPlan } from "./final-creative-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
  *  DIFFERENT advertising concepts (distinct psychological trigger → angle, color
@@ -39,16 +39,18 @@ import type { FinalAdData, ConceptTrigger } from "./final-creative-engine";
 /** One finished, layout-validated final-ad creative (concept + DEP + render_data). */
 interface FinalAdBuilt { trigger: string; triggerLabel: string; ad: FinalAdData; designPlan: DesignExecutionPlan; render: Record<string, unknown>; scores: { finalPostReadiness: number; warnings: string[]; blockers: string[] }; wow: WowScore; provider: string }
 
-// Each concept explores TWO premium master templates; the WOW engine picks the
-// stronger one (the "redesign / try again" loop). Templates are property-first.
+// Each concept explores THREE premium master templates → 4 concepts × 3 = 12
+// text-level creative candidates. The WOW engine ranks all 12; we then commit
+// expensive image generation to only the TOP 2. Templates are property-first.
 const TEMPLATE_OPTIONS: Record<ConceptTrigger, DesignFamily[]> = {
-  luxury: ["penthouse_collection", "luxury_editorial"],
-  family: ["boutique_residence", "premium_clean"],
-  investment: ["architectural_showcase", "editorial_real_estate"],
-  price_advantage: ["urban_prestige", "high_conversion_sales"],
-  urgency: ["urban_prestige", "high_conversion_sales"],
+  luxury: ["penthouse_collection", "luxury_editorial", "luxury_dark"],
+  family: ["boutique_residence", "premium_clean", "urban_prestige"],
+  investment: ["architectural_showcase", "editorial_real_estate", "developer_launch"],
+  price_advantage: ["urban_prestige", "high_conversion_sales", "premium_clean"],
+  urgency: ["urban_prestige", "high_conversion_sales", "developer_launch"],
 };
 const DARK_TEMPLATES: DesignFamily[] = ["penthouse_collection", "luxury_dark", "urban_prestige"];
+const FINAL_ADS = 2; // expensive image generations per run (down from 4)
 
 /** PROPERTY AD path: build EXACTLY the 4 required, strategically-distinct
  *  concepts (family / investment / luxury / price_advantage). Each gets its own
@@ -75,20 +77,18 @@ async function buildFinalAds(input: QuickInput, brand: BrandSnapshot): Promise<F
   const brandDNA = deriveBrandDNA(brandAssets);
   const aiSceneLikely = resolveImageProvider().provider !== "mock";
 
-  // CREATIVE-DIRECTOR PIPELINE: for each concept, EXPLORE its candidate master
-  // templates, WOW-score each (6 axes), and keep the strongest layout — the
-  // "score → redesign → try again" loop. Then enforce uniqueness on trigger AND
-  // design family so no concept/template repeats in one generation.
-  const seenTrigger = new Set<string>(); const seenFamily = new Set<string>();
-  const built: FinalAdBuilt[] = [];
+  // 12→2 CREATIVE-CONCEPT PIPELINE: build up to 12 TEXT-LEVEL concept candidates
+  // (each concept × 3 master templates), WOW-score + Hebrew-QA-risk every one —
+  // all cheap, no image. Then commit expensive image generation to ONLY the top
+  // 2 (distinct trigger AND design family). The caller image-generates just these.
+  interface Candidate { c: ConceptPlan; trigger: ConceptTrigger; triggerLabel: string; guidance: BrandGuidance; assets: DesignAssets; dep: DesignExecutionPlan; wow: WowScore; qaRisk: "low" | "medium" | "high" }
+  const candidates: Candidate[] = [];
   for (const ac of approvedConcepts) {
     const c = ac.plan;
-    if (seenTrigger.has(c.trigger)) continue;
     const guidance = brandGuidanceForConcept(brandDNA, c.ad.trigger);
     const assets = { hasPropertyImage: Boolean(c.ad.propertyImage), hasLogo: Boolean(c.ad.logoUrl), hasAgentPhoto: Boolean(c.ad.agentPhoto), hasPhone: Boolean(c.ad.agentPhone) };
-    const options = TEMPLATE_OPTIONS[c.trigger] ?? ["luxury_editorial", "premium_clean"];
-    // Score every candidate template for this concept; rank best-first.
-    const scored = options.map((tpl) => {
+    const options = TEMPLATE_OPTIONS[c.trigger] ?? ["luxury_editorial", "premium_clean", "boutique_residence"];
+    for (const tpl of options) {
       const dep = buildDesignExecutionPlan(c, brandDNA, guidance, assets, tpl);
       const wow = scoreWow({
         template: dep.family, hasPropertyImage: assets.hasPropertyImage, propertyDominant: dep.flags.propertyImageDominant,
@@ -97,22 +97,33 @@ async function buildFinalAds(input: QuickInput, brand: BrandSnapshot): Promise<F
         luxuryLevel: brand.luxury ?? 50, paletteDark: DARK_TEMPLATES.includes(dep.family),
         layoutApproved: dep.layout?.approved !== false, effectsCount: dep.effects.length,
       });
-      return { dep, wow };
-    }).sort((a, b) => b.wow.overall - a.wow.overall);
-    // Pick the best template whose family isn't already used (keeps 4 distinct).
-    const pick = scored.find((s) => !seenFamily.has(s.dep.family)) ?? scored[0];
-    seenTrigger.add(c.trigger); seenFamily.add(pick.dep.family);
-    const designPlan = pick.dep;
+      // Hebrew QA risk (text-level estimate): long/complex headline + many features ⇒ higher risk of mis-rendered Hebrew.
+      const hl = (c.ad.headline ?? "").length; const fc = c.ad.features.length;
+      const qaRisk: Candidate["qaRisk"] = hl > 40 || fc > 5 ? "high" : hl > 28 || fc > 3 ? "medium" : "low";
+      candidates.push({ c, trigger: c.trigger, triggerLabel: c.triggerLabel, guidance, assets, dep, wow, qaRisk });
+    }
+  }
+  // Rank all candidates; commit only the top FINAL_ADS, distinct trigger + family.
+  candidates.sort((a, b) => b.wow.overall - a.wow.overall);
+  const seenTrigger = new Set<string>(); const seenFamily = new Set<string>();
+  const picks: Candidate[] = [];
+  for (const cand of candidates) {
+    if (picks.length >= FINAL_ADS) break;
+    if (seenTrigger.has(cand.trigger) || seenFamily.has(cand.dep.family)) continue;
+    seenTrigger.add(cand.trigger); seenFamily.add(cand.dep.family); picks.push(cand);
+  }
+  while (picks.length < FINAL_ADS && candidates.length) { const c = candidates.find((x) => !picks.includes(x)); if (!c) break; picks.push(c); }
+
+  const built: FinalAdBuilt[] = picks.map((pick) => {
+    const c = pick.c;
     const adTrace = c.ad.trace ? { ...c.ad.trace, generationMs, thinkingProvider: provider } : undefined;
     const ad: FinalAdData = { ...c.ad, trace: adTrace };
-    const wowCandidates = scored.map((s) => ({ template: s.dep.family, familyLabel: s.dep.familyLabel, overall: s.wow.overall, approved: s.wow.approved }));
     const render: Record<string, unknown> = {
       format: "feed_1_1", width: c.ad.width, height: c.ad.height,
-      ad: { ...ad, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: guidance, designPlan, wow: pick.wow, wowCandidates },
+      ad: { ...ad, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: pick.guidance, designPlan: pick.dep, wow: pick.wow, qaRisk: pick.qaRisk, conceptsExplored: candidates.length },
     };
-    built.push({ trigger: c.trigger, triggerLabel: c.triggerLabel, ad, designPlan, render, scores: { finalPostReadiness: c.scores.finalPostReadiness, warnings: c.scores.warnings, blockers: c.scores.blockers }, wow: pick.wow, provider });
-  }
-  // Badge the single strongest concept (the chosen "winner") — observability.
+    return { trigger: c.trigger, triggerLabel: c.triggerLabel, ad, designPlan: pick.dep, render, scores: { finalPostReadiness: c.scores.finalPostReadiness, warnings: c.scores.warnings, blockers: c.scores.blockers }, wow: pick.wow, provider };
+  });
   if (built.length) {
     const top = built.reduce((a, b) => (b.wow.overall > a.wow.overall ? b : a));
     for (const b of built) (b.render.ad as Record<string, unknown>).isTopConcept = b === top;
