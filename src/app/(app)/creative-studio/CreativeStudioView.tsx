@@ -831,8 +831,13 @@ const TPL_STYLE: Record<DesignFamily, TplStyle> = {
   urban_prestige:       { image: "full",    scrim: SCRIM_CINE, headlineUpper: true,  headlineTracking: 1, headlineColor: "white", headlineWeightDelta: 0, divider: false, cornerMarks: false, badge: "pill",     price: "block",     cta: "pill",    features: "inline" },
 };
 
+// Safe fallback palette — used whenever a stored render_data row has no palette
+// (e.g. full-AI ad rows, failed rows, or legacy shapes). Prevents the studio grid
+// from crashing on `palette.bg2` of undefined.
+const DEFAULT_PALETTE = { bg: "#0F1115", bg2: "#1A1F2B", text: "#FFFFFF", muted: "#C9CDD6", accent: "#7c3aed", onAccent: "#FFFFFF" };
+
 function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: DesignExecutionPlan; scale?: number; refId?: string }) {
-  const pal = ad.palette; const T = dep.typography; const f = dep.flags;
+  const pal = ad.palette ?? DEFAULT_PALETTE; const T = dep.typography; const f = dep.flags;
   const st = TPL_STYLE[dep.family] ?? TPL_STYLE.premium_clean;
   const bp = 14 * scale; const fs = (m: number) => `${bp * m}px`;
   const pct = (n: number) => `${n}%`;
@@ -1035,7 +1040,7 @@ function DepCanvas({ ad, dep, scale = 1, refId }: { ad: FinalAdView; dep: Design
 function FinalAdRenderer({ ad, scale = 1, refId }: { ad: FinalAdView; scale?: number; refId?: string }) {
   // PRODUCTION ONLY: execute the approved Design Execution Plan verbatim.
   if (ad.designPlan) return <DepCanvas ad={ad} dep={ad.designPlan} scale={scale} refId={refId} />;
-  const pal = ad.palette;
+  const pal = ad.palette ?? DEFAULT_PALETTE;
   const s = (n: number) => n * scale;
   const initials = (ad.agentName || "").trim().slice(0, 1) || "ZO";
   const shadow = { textShadow: "0 2px 14px rgba(0,0,0,0.6)" } as React.CSSProperties;
@@ -1212,17 +1217,23 @@ async function exportFinalAdPng(ad: FinalAdView, filename: string): Promise<void
 
 function CreativePreview({ data, scale = 1, backgroundImageUrl, concept }: { data: RenderData; scale?: number; backgroundImageUrl?: string | null; concept?: AdConcept }) {
   // FULL-AD mode: the image model already designed the complete ad — just show it.
-  if ((data as { fullAd?: boolean }).fullAd && backgroundImageUrl) {
+  // If the image is still missing, show a placeholder rather than falling through
+  // to the palette-based renderer (full-ad render_data has no palette/blocks).
+  if ((data as { fullAd?: boolean }).fullAd) {
     return (
       <div style={{ position: "relative", aspectRatio: `${data.width || 1080} / ${data.height || 1080}`, width: "100%", overflow: "hidden", borderRadius: 14 * scale, background: "#0b0b0b" }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={backgroundImageUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        {backgroundImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={backgroundImageUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#9aa0aa", fontSize: 13 * scale, fontWeight: 700, textAlign: "center", padding: 16 }}>התמונה בהפקה…</div>
+        )}
       </div>
     );
   }
   // FINAL AD mode: render the complete designer-grade square ad.
   if (data.ad) return <FinalAdRenderer ad={data.ad} scale={scale} />;
-  const p = data.palette;
+  const p = data.palette ?? DEFAULT_PALETTE;
   const ad = extractAd(data);
   const c = concept ?? conceptFor(data);
   const photo = ad.image ?? backgroundImageUrl ?? null;
