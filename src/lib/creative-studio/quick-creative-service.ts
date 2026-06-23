@@ -27,6 +27,7 @@ import { buildDesignExecutionPlan, type DesignExecutionPlan, type DesignFamily }
 import { produceAdScene } from "./creative-production-engine";
 import { finalLayoutQA } from "./layout-integrity";
 import { scoreWow, type WowScore } from "./wow-score";
+import { generateFinalAdImage } from "./openai-ad-pipeline";
 import type { FinalAdData, ConceptTrigger } from "./final-creative-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
@@ -116,6 +117,20 @@ async function buildFinalAds(input: QuickInput, brand: BrandSnapshot): Promise<F
     for (const b of built) (b.render.ad as Record<string, unknown>).isTopConcept = b === top;
   }
   return built;
+}
+
+/** Gather up to 3 real property photos (cover first) to send as reference images
+ *  to the OpenAI full-ad generator. Falls back to the wizard cover URL. */
+async function collectPropertyImages(supabase: DB, propertyId: string | null, coverUrl: string | null): Promise<string[]> {
+  const urls: string[] = [];
+  if (propertyId) {
+    try {
+      const { data } = await supabase.from("property_media").select("url,is_primary,type").eq("property_id", propertyId).eq("type", "image").order("is_primary", { ascending: false }).limit(3);
+      for (const m of (data ?? []) as { url?: string }[]) if (m.url) urls.push(m.url);
+    } catch { /* best-effort */ }
+  }
+  if (coverUrl && !urls.includes(coverUrl)) urls.unshift(coverUrl);
+  return urls.slice(0, 3);
 }
 
 type QuickVar = ReturnType<typeof buildQuickVariations>[number];
@@ -246,35 +261,56 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   if (g.requestType === "property_ad_post") {
     const built = await buildFinalAds(g.input, brand.snapshot);
     if (built.length) {
-      const qa = finalLayoutQA(built.map((b) => b.designPlan));
+      const layoutQa = finalLayoutQA(built.map((b) => b.designPlan));
       const top = built.reduce((a, b) => (b.wow.overall > a.wow.overall ? b : a));
-      const selMeta = { candidatesTotal: built.length, rounds: 1, threshold: QUALITY_CONFIG.minQualityScore, layoutApproved: qa.approved, layoutReasons: qa.reasons, duplicateFamilies: qa.duplicateFamilies, topConcept: top.trigger, topWow: top.wow.overall };
-      const finalRows = built.map((b) => {
-        const layoutOk = b.designPlan.layout?.approved !== false;
-        const ready = b.scores.finalPostReadiness;
-        const w = b.wow;
+      const selMeta = { candidatesTotal: built.length, rounds: 1, threshold: QUALITY_CONFIG.minQualityScore, layoutApproved: layoutQa.approved, duplicateFamilies: layoutQa.duplicateFamilies, topConcept: top.trigger, topWow: top.wow.overall };
+      // OPENAI CREATIVE GENERATION: the image model designs the FINISHED ad from
+      // the real assets. Per concept: generate → Vision-QA → retry → on failure
+      // / no key, fall back to the deterministic renderer (flagged). No overlay.
+      const assets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
+      const ts = Date.now();
+      const finalRows: Record<string, unknown>[] = [];
+      for (let i = 0; i < built.length; i++) {
+        const b = built[i]; const w = b.wow; const isTop = b === top;
         const features = b.ad.features.map((ft) => (ft.value ? `${ft.value} ${ft.label}` : ft.label)).join(" · ");
-        const isTop = b === top;
-        return {
+        const base: Record<string, unknown> = {
           org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
           output_type: g.requestType, variant_name: `${isTop ? "★ " : ""}קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
-          render_data: b.render as unknown as Json, headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
+          headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
           brand_match_score: w.trust, readability_score: w.readability, conversion_score: w.attention, seller_lead_score: 0, buyer_lead_score: 0, overall_score: w.overall, status: "generated",
-          quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
-          overall_quality_score: w.overall, wow_score: w.overall,
-          critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · WOW ${w.overall} (יוקרה ${w.luxury}/אמון ${w.trust}/קריאות ${w.readability}/תשומת-לב ${w.attention}/פרימיום ${w.premiumFeel}/אימפקט ${w.visualImpact}). ${w.critique.director}`,
-          quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
-          used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json,
-          property_primary_angle: propertyFirst.propertyPrimaryAngle,
-          creative_selection_metadata: { ...selMeta, family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, finalPostReadiness: ready, warnings: b.scores.warnings, blockers: b.scores.blockers, layout: b.designPlan.layout } as unknown as Json,
+          overall_quality_score: w.overall, wow_score: w.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
+          used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
         };
-      });
+        const gen = await generateFinalAdImage(b.ad, assets);
+        if (gen.status === "ai_full_ad" && gen.b64) {
+          const path = `${orgId}/full-ad/${requestId}-${i}-${ts}.png`;
+          const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, Buffer.from(gen.b64, "base64"), { contentType: gen.mime ?? "image/png", upsert: true });
+          const url = upErr ? null : supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path).data.publicUrl;
+          if (url) {
+            finalRows.push({ ...base,
+              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, wow: w, qa: gen.qa } as unknown as Json,
+              image_url: url, image_provider: gen.provider, image_status: "ai_full_ad", image_error: null,
+              quality_status: (gen.qa?.score ?? 0) >= 90 ? "passed" : "below_threshold",
+              critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}מודעה שנוצרה ב-AI (${b.triggerLabel}) · QA ${gen.qa?.score ?? "—"} · ${gen.attempts} ניסיון/ות.`,
+              creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: gen.qa, attempts: gen.attempts } as unknown as Json,
+            });
+            continue;
+          }
+        }
+        // Fallback: deterministic composition (flagged). No OpenAI key, or QA failed.
+        const layoutOk = b.designPlan.layout?.approved !== false;
+        finalRows.push({ ...base,
+          render_data: b.render as unknown as Json,
+          image_status: gen.status === "no_provider" ? "no_provider" : "failed", image_error: gen.error ? gen.error.slice(0, 500) : null,
+          quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
+          critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · רנדרר fallback (${gen.status === "no_provider" ? "ספק AI לא מוגדר" : "לא עבר QA חזותי"}).`,
+          creative_selection_metadata: { ...selMeta, mode: "fallback", family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, layout: b.designPlan.layout, genStatus: gen.status, genError: gen.error, genQa: gen.qa } as unknown as Json,
+        });
+      }
       const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
       if (insErr) { console.error("[quick-creative][property_ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
       const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
-      // Report the number ACTUALLY persisted, never the intended count.
       if (!adIds.length) throw new Error("שמירת המודעות נכשלה — לא נוצרו פריטים.");
-      await generateAdScenesForOutputs(supabase, orgId, adIds);
       return { requestId, created: adIds.length };
     }
   }

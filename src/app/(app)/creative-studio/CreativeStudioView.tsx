@@ -69,7 +69,7 @@ type Visual = Record<string, unknown> & {
 type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
 type WowView = { luxury: number; trust: number; readability: number; attention: number; premiumFeel: number; visualImpact: number; overall: number; approved: boolean; threshold: number; weakest?: { axis: string; score: number }; critique?: { director: string; artDirector: string; marketing: string; conversion: string } };
 type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance; designPlan?: DesignExecutionPlan; wow?: WowView; wowCandidates?: { template: string; familyLabel: string; overall: number; approved: boolean }[]; isTopConcept?: boolean };
-type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView };
+type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView; fullAd?: boolean; qa?: { score?: number } };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
   brand_match_score: number; marketing_match_score: number; readability_score: number; hierarchy_score: number; conversion_score: number; is_approved: boolean; is_favorite: boolean;
@@ -1203,6 +1203,15 @@ async function exportFinalAdPng(ad: FinalAdView, filename: string): Promise<void
 }
 
 function CreativePreview({ data, scale = 1, backgroundImageUrl, concept }: { data: RenderData; scale?: number; backgroundImageUrl?: string | null; concept?: AdConcept }) {
+  // FULL-AD mode: the image model already designed the complete ad — just show it.
+  if ((data as { fullAd?: boolean }).fullAd && backgroundImageUrl) {
+    return (
+      <div style={{ position: "relative", aspectRatio: `${data.width || 1080} / ${data.height || 1080}`, width: "100%", overflow: "hidden", borderRadius: 14 * scale, background: "#0b0b0b" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={backgroundImageUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+    );
+  }
   // FINAL AD mode: render the complete designer-grade square ad.
   if (data.ad) return <FinalAdRenderer ad={data.ad} scale={scale} />;
   const p = data.palette;
@@ -1562,6 +1571,8 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   const [adOnly, setAdOnly] = useState(false);
   // FINAL AD mode: the complete ready-to-post creative carries an `ad` spec.
   const ad = o.render_data?.ad as FinalAdView | undefined;
+  // FULL-AD mode: the image model designed the whole ad; we just show o.image_url.
+  const fullAd = Boolean(o.render_data?.fullAd) && Boolean(o.image_url);
   const adScores = ad?.scores ?? (o.creative_selection_metadata as unknown as Partial<FinalAdScores> | undefined);
   const adWarnings = adScores?.warnings ?? [];
   // The real property photo comes from the final ad or the render's image_placeholder.
@@ -1578,7 +1589,9 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           writes Hebrew and never invents assets. */}
       <div className="relative">
         <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
-        {ad ? (
+        {fullAd ? (
+          <span className="bg-brand-strong text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">מודעה שנוצרה ב-AI{o.render_data?.qa?.score ? ` · QA ${o.render_data.qa.score}` : ""}</span>
+        ) : ad ? (
           <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">מודעה סופית · מוכן לפרסום</span>
         ) : (
           <>
@@ -1588,6 +1601,9 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           </>
         )}
       </div>
+      {fullAd && (
+        <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">⚠️ נוצר ב-AI · ודאו שהטלפון, המחיר והטקסט מדויקים לפני פרסום.</p>
+      )}
       {ad && (
         <div className="flex flex-wrap items-center gap-1 px-0.5">
           {ad.isTopConcept && <span className="bg-ink text-card rounded-full px-1.5 py-0.5 text-[9px] font-black">★ קונספט מוביל</span>}
@@ -1643,7 +1659,12 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         <button onClick={() => wrap(() => favoriteQuickAction({ outputId: o.id, value: !o.is_favorite, entityType: et, entityId: eid }), `qf-${o.id}`)} className={`font-bold ${o.is_favorite ? "text-warning" : "text-muted"}`}><Icon name="Flame" size={12} /></button>
         <button onClick={() => wrap(() => regenerateQuickAction({ requestId: o.request_id, entityType: et, entityId: eid }), `qg-${o.id}`)} className="text-muted font-bold"><Icon name="Sparkles" size={12} /></button>
         <button onClick={() => wrap(() => duplicateQuickAction({ outputId: o.id, entityType: et, entityId: eid }), `qd-${o.id}`)} className="text-muted font-bold"><Icon name="Plus" size={12} /></button>
-        {ad ? (
+        {fullAd && o.image_url ? (
+          <>
+            <button onClick={() => setAdOnly(true)} className="text-brand-strong font-bold"><Icon name="Maximize2" size={12} /> מודעה בלבד</button>
+            <a href={o.image_url} download={`zono-ad-${o.id}.png`} target="_blank" rel="noreferrer" className="text-brand-strong font-bold"><Icon name="Download" size={12} /> הורד תמונה</a>
+          </>
+        ) : ad ? (
           <>
             <button onClick={() => setAdOnly(true)} className="text-brand-strong font-bold"><Icon name="Maximize2" size={12} /> מודעה בלבד</button>
             <button onClick={() => void doExport()} disabled={exporting} className="text-brand-strong font-bold disabled:opacity-50"><Icon name="Download" size={12} /> {exporting ? "מייצא…" : "הורד PNG"}</button>
@@ -1653,13 +1674,13 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         )}
       </div>
       {/* AD-ONLY JUDGING VIEW — the final creative alone, no card chrome. */}
-      {adOnly && ad && (
+      {adOnly && (ad || fullAd) && (
         <div onClick={() => setAdOnly(false)} className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black/80 p-4" role="dialog">
           <div className="w-full max-w-[540px]" onClick={(e) => e.stopPropagation()}>
             <CreativePreview data={o.render_data} scale={1.6} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
           </div>
           <div className="flex items-center gap-3">
-            <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-white" dir="ltr">{ad.trigger} · {ad.designPlan?.familyLabel}</span>
+            <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-white" dir="ltr">{fullAd ? "AI · " : ""}{ad?.trigger ?? "ad"} · {ad?.designPlan?.familyLabel ?? "OpenAI"}</span>
             <button onClick={() => setAdOnly(false)} className="rounded-full bg-white px-4 py-1.5 text-[12px] font-black text-black">סגור</button>
           </div>
         </div>
