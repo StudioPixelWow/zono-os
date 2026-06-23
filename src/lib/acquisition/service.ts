@@ -164,17 +164,18 @@ export interface AcquisitionCard {
   profileId: string; listingId: string; title: string | null; city: string | null; price: number | null;
   rooms: number | null; sqm: number | null; source: string; sourceType: string; badge: string | null;
   images: string[]; listingUrl: string | null; brokerName: string | null;
+  contactName: string | null; contactPhone: string | null;
   acquisitionScore: number; privateSellerScore: number; buyerDemandScore: number; priceOpportunityScore: number;
   doubleSide: number; status: string; nextBestAction: string | null; reason: string | null;
 }
 
-type ProfileWithListing = AcquisitionProfileRow & { external_listings: { title: string | null; city: string | null; price: number | null; rooms: number | null; sqm: number | null; source: string; listing_source_type: string; broker_detection_badge: string | null; images: unknown; listing_url: string | null; detected_broker_name: string | null } | null };
+type ProfileWithListing = AcquisitionProfileRow & { external_listings: { title: string | null; city: string | null; price: number | null; rooms: number | null; sqm: number | null; source: string; listing_source_type: string; broker_detection_badge: string | null; images: unknown; listing_url: string | null; detected_broker_name: string | null; contact_name: string | null; contact_phone: string | null } | null };
 
 export async function getAcquisitionBoard(): Promise<AcquisitionCard[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("inventory_acquisition_profiles")
-    .select("*, external_listings!inner(title,city,price,rooms,sqm,source,listing_source_type,broker_detection_badge,images,listing_url,detected_broker_name)")
+    .select("*, external_listings!inner(title,city,price,rooms,sqm,source,listing_source_type,broker_detection_badge,images,listing_url,detected_broker_name,contact_name,contact_phone)")
     .order("acquisition_score", { ascending: false }).limit(300);
   return ((data ?? []) as unknown as ProfileWithListing[]).map((p) => {
     const l = p.external_listings;
@@ -184,6 +185,7 @@ export async function getAcquisitionBoard(): Promise<AcquisitionCard[]> {
       sourceType: l?.listing_source_type ?? "unknown", badge: l?.broker_detection_badge ?? null,
       images: Array.isArray(l?.images) ? (l!.images as string[]) : [], listingUrl: l?.listing_url ?? null,
       brokerName: l?.detected_broker_name ?? null,
+      contactName: l?.contact_name ?? null, contactPhone: l?.contact_phone ?? null,
       acquisitionScore: p.acquisition_score, privateSellerScore: p.private_seller_score,
       buyerDemandScore: p.buyer_demand_score, priceOpportunityScore: p.price_opportunity_score,
       doubleSide: p.double_side_potential_score, status: p.acquisition_status,

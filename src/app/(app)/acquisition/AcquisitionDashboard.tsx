@@ -11,7 +11,7 @@
 // preserved below via <AcquisitionView embedded />.
 // ============================================================================
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -19,6 +19,7 @@ import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { createAcquisitionTaskAction, recomputeAcquisitionAction, type AcquisitionActionState } from "@/lib/acquisition/actions";
+import { ContactButtons } from "@/components/listings/ContactButtons";
 import type { AcquisitionCard, AcquisitionCommandCenter } from "@/lib/acquisition/service";
 
 const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", instagram: "אינסטגרם", manual_external: "ידני", partner_api: "שותף", website: "אתר", referral: "המלצה", unknown: "אחר" };
@@ -240,6 +241,7 @@ function HotCandidates({ candidates, onTask, pending }: { candidates: Acquisitio
                 <p className="text-muted text-xs">{c.city || "—"} · {SOURCE_LABELS[c.source] ?? c.source}</p>
                 <p className="text-brand-strong text-sm font-black">{c.price ? formatShekels(c.price) : "—"}</p>
                 <p className="text-muted text-[11px]">{[c.rooms ? `${c.rooms} חד׳` : null, c.sqm ? `${c.sqm} מ״ר` : null].filter(Boolean).join(" · ") || "—"}</p>
+                {(c.contactName || c.contactPhone) && <ContactButtons name={c.contactName} phone={c.contactPhone} />}
                 {c.reason && <p className="text-muted line-clamp-2 text-[11px] leading-snug">{c.reason}</p>}
                 <div className="mt-auto flex gap-1.5 pt-1">
                   <Button size="sm" loading={pending} onClick={() => onTask(c.profileId)} leadingIcon={<Icon name="Phone" size={13} />} className="flex-1">צור קשר</Button>

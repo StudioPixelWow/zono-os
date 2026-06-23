@@ -6,6 +6,7 @@ import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
+import { ContactButtons } from "@/components/listings/ContactButtons";
 import { ACQ_BOARD_COLUMNS } from "@/lib/acquisition/engine";
 import {
   createAcquisitionTaskAction, getAcquisitionDetailAction, promoteAcquisitionAction,
@@ -115,6 +116,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
                       </div>
                       <p className="text-muted text-[11px]">{c.city ?? "—"} · {SOURCE_LABELS[c.source] ?? c.source} · {c.price ? formatShekels(c.price) : "—"}</p>
                       {c.badge && <span className="bg-surface text-muted mt-1 inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold">{c.badge}</span>}
+                      {(c.contactName || c.contactPhone) && <div className="mt-2"><ContactButtons name={c.contactName} phone={c.contactPhone} /></div>}
                       <div className="text-muted mt-2 grid grid-cols-3 gap-1 text-[10px]">
                         <span>פרטי <b className={scoreTone(c.privateSellerScore)}>{c.privateSellerScore}</b></span>
                         <span>ביקוש <b className={scoreTone(c.buyerDemandScore)}>{c.buyerDemandScore}</b></span>
