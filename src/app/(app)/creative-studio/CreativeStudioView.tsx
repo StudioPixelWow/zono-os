@@ -19,6 +19,7 @@ import {
 import { CONCEPT_TYPE_LABELS } from "@/lib/creative-studio/concept-engine";
 import type { FinalAdData, FinalAdScores } from "@/lib/creative-studio/final-creative-engine";
 import type { BrandDNA, BrandGuidance } from "@/lib/creative-studio/brand-dna-engine";
+import type { DesignExecutionPlan } from "@/lib/creative-studio/design-system-engine";
 import {
   generateCampaignAction, duplicateCampaignAction, archiveCampaignAction, deleteCampaignAction, approveCampaignAction,
 } from "@/lib/creative-studio/campaign-actions";
@@ -61,7 +62,7 @@ type Visual = Record<string, unknown> & {
 };
 
 type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
-type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance };
+type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance; designPlan?: DesignExecutionPlan };
 type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
@@ -1448,6 +1449,16 @@ function CreativeDebugPanel({ ad, o }: { ad: FinalAdView; o: QuickOutput }) {
         <DebugKV k="מיקומים (מחיר/CTA/לוגו/סוכן)" v={[adr?.pricePlacement, adr?.ctaPlacement, adr?.logoPlacement, adr?.agentPlacement].filter(Boolean).join(" · ")} />
         <DebugKV k="color system / feel" v={`${adr?.colorSystem} · ${adr?.emotionalFeel}`} />
         <DebugKV k="AI סביבה" v={adr ? `${adr.aiEnvironment.atmosphere} · ${adr.aiEnvironment.lighting}` : "—"} />
+      </>)}
+      {ad.designPlan && section("Design Execution Plan (Renderer executes this)", <>
+        <DebugKV k="design family" v={`${ad.designPlan.familyLabel} (${ad.designPlan.family})`} />
+        <DebugKV k="layout" v={ad.designPlan.layoutStructure} />
+        <DebugKV k="דומיננטיות" v={`מחיר ${ad.designPlan.flags.priceDominant ? "✓" : "✗"} · תמונה ${ad.designPlan.flags.propertyImageDominant ? "✓" : "✗"}`} />
+        <DebugKV k="סוכן / לוגו" v={`סוכן ${ad.designPlan.flags.agentShown ? (ad.designPlan.flags.agentPhotoShown ? "תמונה" : "אינישלים") : "לא מוצג"} · לוגו ${ad.designPlan.flags.logoShown ? "✓" : "✗"}`} />
+        <DebugKV k="type scale (H/price/cta)" v={`${ad.designPlan.typography.headline} / ${ad.designPlan.typography.price} / ${ad.designPlan.typography.cta}`} />
+        <DebugKV k="background" v={`${ad.designPlan.backgroundTreatment.mode} · ${ad.designPlan.backgroundTreatment.scrim}`} />
+        <DebugKV k="effects" v={ad.designPlan.effects.join(", ")} />
+        <DebugKV k="not-a-card" v={ad.designPlan.notCardProof.reasons.join(" · ")} />
       </>)}
       {section("Final Prompt (AI environment — text-free)", <p dir="ltr" className="text-muted whitespace-pre-wrap break-words">{t?.finalPrompt ?? adr?.aiEnvironment.imageModelPrompt ?? "—"}</p>)}
       {section("Validation & Run", <>

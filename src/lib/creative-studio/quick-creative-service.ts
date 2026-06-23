@@ -23,6 +23,7 @@ import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
 import { type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
 import { directConceptsAI } from "./creative-thinking-ai";
 import { deriveBrandDNA, brandGuidanceForConcept } from "./brand-dna-engine";
+import { buildDesignExecutionPlan } from "./design-system-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
  *  DIFFERENT advertising concepts (distinct psychological trigger → angle, color
@@ -58,7 +59,11 @@ async function attachFinalAds(input: QuickInput, brand: BrandSnapshot, variation
     const r = v.render as unknown as Record<string, unknown>;
     // Observability: stamp generation duration + thinking provider onto the trace.
     const adTrace = c.ad.trace ? { ...c.ad.trace, generationMs, thinkingProvider: provider } : undefined;
-    r.ad = { ...c.ad, trace: adTrace, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: brandGuidanceForConcept(brandDNA, c.ad.trigger) };
+    const guidance = brandGuidanceForConcept(brandDNA, c.ad.trigger);
+    // DesignSystemEngine: strict Design Execution Plan the Renderer will execute.
+    const assets = { hasPropertyImage: Boolean(c.ad.propertyImage), hasLogo: Boolean(c.ad.logoUrl), hasAgentPhoto: Boolean(c.ad.agentPhoto), hasPhone: Boolean(c.ad.agentPhone) };
+    const designPlan = buildDesignExecutionPlan(c, brandDNA, guidance, assets);
+    r.ad = { ...c.ad, trace: adTrace, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: guidance, designPlan };
     r.width = c.ad.width; r.height = c.ad.height; r.format = "feed_1_1";
     v.variantName = `קונספט · ${c.triggerLabel}`;
     v.headline = c.ad.headline; v.subheadline = c.ad.subheadline; v.cta = c.ad.cta;
