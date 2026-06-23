@@ -37,7 +37,7 @@ export async function createPropertyAction(
     return { error: "יצירת הנכס נכשלה. נסה/י שוב." };
   }
   revalidatePath("/properties");
-  redirect(`/properties/${id}`);
+  redirect(`/properties/${id}?created=property`);
 }
 
 export async function updatePropertyAction(

@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getDashboardContext } from "@/lib/dashboard/context";
 import { DashboardDataProvider } from "@/components/dashboard/DashboardDataProvider";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { CreatedCelebration } from "@/components/ui/CreatedCelebration";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <DashboardDataProvider value={dashboardData}>
       <DashboardShell>{children}</DashboardShell>
+      <CreatedCelebration />
     </DashboardDataProvider>
   );
 }

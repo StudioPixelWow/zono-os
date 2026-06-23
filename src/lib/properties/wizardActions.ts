@@ -86,5 +86,5 @@ export async function publishPropertyAction(
   }
 
   revalidatePath("/properties");
-  redirect(`/properties/${id}`);
+  redirect(`/properties/${id}?created=property`);
 }

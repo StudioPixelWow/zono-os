@@ -47,7 +47,7 @@ export async function createBuyerAction(
     console.error("[buyers] intelligence auto-init failed:", e);
   }
   revalidatePath("/buyers");
-  redirect(`/buyers/${id}`);
+  redirect(`/buyers/${id}?created=buyer`);
 }
 
 export async function updateBuyerAction(

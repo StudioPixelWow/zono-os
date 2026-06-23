@@ -56,9 +56,9 @@ export async function createSeller360Action(
   revalidatePath("/sellers");
   if (propertyId) {
     revalidatePath(`/properties/${propertyId}`);
-    redirect(`/properties/${propertyId}`);
+    redirect(`/properties/${propertyId}?created=seller`);
   }
-  redirect(`/sellers/${id}`);
+  redirect(`/sellers/${id}?created=seller`);
 }
 
 export async function updateSeller360Action(id: string, input: Seller360Input): Promise<SellerCrudState> {
