@@ -40,7 +40,7 @@ export function DashboardHomeView({ dict, data }: { dict: DashboardDict; data: D
   const [fabOpen, setFabOpen] = useState(false);
 
   return (
-    <div dir="rtl" className="relative flex flex-col gap-8">
+    <div dir="rtl" className="relative flex flex-col gap-12 sm:gap-14">
       {/* 1 — Hero + KPI strip */}
       <Reveal>
         <div className="flex flex-col gap-5">

@@ -84,7 +84,7 @@ export function CityHeatmapCard({ t, data }: { t: Translate; data: DashboardHome
       </div>
       <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_150px]">
         <div className="relative aspect-[16/11]">
-          <div className="absolute inset-0 bg-gradient-to-br from-sky-100 via-surface to-success-soft/50" />
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-soft via-surface to-brand-light/25" />
           <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(var(--color-line) 1px,transparent 1px),linear-gradient(90deg,var(--color-line) 1px,transparent 1px)", backgroundSize: "44px 44px", opacity: 0.4 }} />
           {data.heatZones.map((z) => (
             <button key={z.id} onClick={() => setZone(z)} className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer" style={{ top: `${z.top}%`, insetInlineStart: `${z.left}%` }} aria-label={z.name}>
