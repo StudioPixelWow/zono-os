@@ -23,10 +23,11 @@ import type { CandidateBrief } from "./quality/zonoCreativeSelectionEngine";
 import { type FinalAdFacts, type FinalAdBrandAssets } from "./final-creative-engine";
 import { directConceptsAI } from "./creative-thinking-ai";
 import { deriveBrandDNA, brandGuidanceForConcept } from "./brand-dna-engine";
-import { buildDesignExecutionPlan, type DesignExecutionPlan } from "./design-system-engine";
+import { buildDesignExecutionPlan, type DesignExecutionPlan, type DesignFamily } from "./design-system-engine";
 import { produceAdScene } from "./creative-production-engine";
 import { finalLayoutQA } from "./layout-integrity";
-import type { FinalAdData } from "./final-creative-engine";
+import { scoreWow, type WowScore } from "./wow-score";
+import type { FinalAdData, ConceptTrigger } from "./final-creative-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
  *  DIFFERENT advertising concepts (distinct psychological trigger → angle, color
@@ -34,7 +35,18 @@ import type { FinalAdData } from "./final-creative-engine";
  *  Real assets + Hebrew stay deterministic. Each concept is injected as a
  *  finished, ready-to-post square ad spec. */
 /** One finished, layout-validated final-ad creative (concept + DEP + render_data). */
-interface FinalAdBuilt { trigger: string; triggerLabel: string; ad: FinalAdData; designPlan: DesignExecutionPlan; render: Record<string, unknown>; scores: { finalPostReadiness: number; warnings: string[]; blockers: string[] }; provider: string }
+interface FinalAdBuilt { trigger: string; triggerLabel: string; ad: FinalAdData; designPlan: DesignExecutionPlan; render: Record<string, unknown>; scores: { finalPostReadiness: number; warnings: string[]; blockers: string[] }; wow: WowScore; provider: string }
+
+// Each concept explores TWO premium master templates; the WOW engine picks the
+// stronger one (the "redesign / try again" loop). Templates are property-first.
+const TEMPLATE_OPTIONS: Record<ConceptTrigger, DesignFamily[]> = {
+  luxury: ["penthouse_collection", "luxury_editorial"],
+  family: ["boutique_residence", "premium_clean"],
+  investment: ["architectural_showcase", "editorial_real_estate"],
+  price_advantage: ["urban_prestige", "high_conversion_sales"],
+  urgency: ["urban_prestige", "high_conversion_sales"],
+};
+const DARK_TEMPLATES: DesignFamily[] = ["penthouse_collection", "luxury_dark", "urban_prestige"];
 
 /** PROPERTY AD path: build EXACTLY the 4 required, strategically-distinct
  *  concepts (family / investment / luxury / price_advantage). Each gets its own
@@ -59,9 +71,12 @@ async function buildFinalAds(input: QuickInput, brand: BrandSnapshot): Promise<F
   if (!approvedConcepts.length) return [];
   const generationMs = Date.now() - t0;
   const brandDNA = deriveBrandDNA(brandAssets);
+  const aiSceneLikely = resolveImageProvider().provider !== "mock";
 
-  // Build a DEP per concept; ENFORCE uniqueness on both trigger AND design family
-  // so a single generation never shows the same concept/family twice.
+  // CREATIVE-DIRECTOR PIPELINE: for each concept, EXPLORE its candidate master
+  // templates, WOW-score each (6 axes), and keep the strongest layout — the
+  // "score → redesign → try again" loop. Then enforce uniqueness on trigger AND
+  // design family so no concept/template repeats in one generation.
   const seenTrigger = new Set<string>(); const seenFamily = new Set<string>();
   const built: FinalAdBuilt[] = [];
   for (const ac of approvedConcepts) {
@@ -69,16 +84,36 @@ async function buildFinalAds(input: QuickInput, brand: BrandSnapshot): Promise<F
     if (seenTrigger.has(c.trigger)) continue;
     const guidance = brandGuidanceForConcept(brandDNA, c.ad.trigger);
     const assets = { hasPropertyImage: Boolean(c.ad.propertyImage), hasLogo: Boolean(c.ad.logoUrl), hasAgentPhoto: Boolean(c.ad.agentPhoto), hasPhone: Boolean(c.ad.agentPhone) };
-    const designPlan = buildDesignExecutionPlan(c, brandDNA, guidance, assets);
-    if (seenFamily.has(designPlan.family)) continue; // never duplicate a design family
-    seenTrigger.add(c.trigger); seenFamily.add(designPlan.family);
+    const options = TEMPLATE_OPTIONS[c.trigger] ?? ["luxury_editorial", "premium_clean"];
+    // Score every candidate template for this concept; rank best-first.
+    const scored = options.map((tpl) => {
+      const dep = buildDesignExecutionPlan(c, brandDNA, guidance, assets, tpl);
+      const wow = scoreWow({
+        template: dep.family, hasPropertyImage: assets.hasPropertyImage, propertyDominant: dep.flags.propertyImageDominant,
+        hasAiScene: aiSceneLikely, hasLogo: assets.hasLogo, agentShown: dep.flags.agentShown, agentSmall: true,
+        hasPrice: Boolean(c.ad.price), featureCount: c.ad.features.length, headlineLen: (c.ad.headline ?? "").length,
+        luxuryLevel: brand.luxury ?? 50, paletteDark: DARK_TEMPLATES.includes(dep.family),
+        layoutApproved: dep.layout?.approved !== false, effectsCount: dep.effects.length,
+      });
+      return { dep, wow };
+    }).sort((a, b) => b.wow.overall - a.wow.overall);
+    // Pick the best template whose family isn't already used (keeps 4 distinct).
+    const pick = scored.find((s) => !seenFamily.has(s.dep.family)) ?? scored[0];
+    seenTrigger.add(c.trigger); seenFamily.add(pick.dep.family);
+    const designPlan = pick.dep;
     const adTrace = c.ad.trace ? { ...c.ad.trace, generationMs, thinkingProvider: provider } : undefined;
     const ad: FinalAdData = { ...c.ad, trace: adTrace };
+    const wowCandidates = scored.map((s) => ({ template: s.dep.family, familyLabel: s.dep.familyLabel, overall: s.wow.overall, approved: s.wow.approved }));
     const render: Record<string, unknown> = {
       format: "feed_1_1", width: c.ad.width, height: c.ad.height,
-      ad: { ...ad, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: guidance, designPlan },
+      ad: { ...ad, template: c.ad.composition, scores: c.scores, brandDNA, brandGuidance: guidance, designPlan, wow: pick.wow, wowCandidates },
     };
-    built.push({ trigger: c.trigger, triggerLabel: c.triggerLabel, ad, designPlan, render, scores: { finalPostReadiness: c.scores.finalPostReadiness, warnings: c.scores.warnings, blockers: c.scores.blockers }, provider });
+    built.push({ trigger: c.trigger, triggerLabel: c.triggerLabel, ad, designPlan, render, scores: { finalPostReadiness: c.scores.finalPostReadiness, warnings: c.scores.warnings, blockers: c.scores.blockers }, wow: pick.wow, provider });
+  }
+  // Badge the single strongest concept (the chosen "winner") — observability.
+  if (built.length) {
+    const top = built.reduce((a, b) => (b.wow.overall > a.wow.overall ? b : a));
+    for (const b of built) (b.render.ad as Record<string, unknown>).isTopConcept = b === top;
   }
   return built;
 }
@@ -212,23 +247,26 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     const built = await buildFinalAds(g.input, brand.snapshot);
     if (built.length) {
       const qa = finalLayoutQA(built.map((b) => b.designPlan));
-      const selMeta = { candidatesTotal: built.length, rounds: 1, threshold: QUALITY_CONFIG.minQualityScore, layoutApproved: qa.approved, layoutReasons: qa.reasons, duplicateFamilies: qa.duplicateFamilies };
+      const top = built.reduce((a, b) => (b.wow.overall > a.wow.overall ? b : a));
+      const selMeta = { candidatesTotal: built.length, rounds: 1, threshold: QUALITY_CONFIG.minQualityScore, layoutApproved: qa.approved, layoutReasons: qa.reasons, duplicateFamilies: qa.duplicateFamilies, topConcept: top.trigger, topWow: top.wow.overall };
       const finalRows = built.map((b) => {
         const layoutOk = b.designPlan.layout?.approved !== false;
         const ready = b.scores.finalPostReadiness;
+        const w = b.wow;
         const features = b.ad.features.map((ft) => (ft.value ? `${ft.value} ${ft.label}` : ft.label)).join(" · ");
+        const isTop = b === top;
         return {
           org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
-          output_type: g.requestType, variant_name: `קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
+          output_type: g.requestType, variant_name: `${isTop ? "★ " : ""}קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
           render_data: b.render as unknown as Json, headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
-          brand_match_score: 90, readability_score: 92, conversion_score: ready, seller_lead_score: null, buyer_lead_score: null, overall_score: ready, status: "generated",
-          quality_status: layoutOk && b.scores.blockers.length === 0 ? "passed" : "below_threshold",
-          overall_quality_score: ready, wow_score: ready,
-          critic_summary: layoutOk ? `מודעה סופית — קונספט ${b.triggerLabel}, משפחת עיצוב ${b.designPlan.familyLabel}, פריסה תקינה (ללא חפיפות/חיתוך).` : `בעיית פריסה: ${(b.designPlan.layout?.violations ?? []).map((v) => v.detail).join(", ")}`,
+          brand_match_score: w.trust, readability_score: w.readability, conversion_score: w.attention, seller_lead_score: null, buyer_lead_score: null, overall_score: w.overall, status: "generated",
+          quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
+          overall_quality_score: w.overall, wow_score: w.overall,
+          critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · WOW ${w.overall} (יוקרה ${w.luxury}/אמון ${w.trust}/קריאות ${w.readability}/תשומת-לב ${w.attention}/פרימיום ${w.premiumFeel}/אימפקט ${w.visualImpact}). ${w.critique.director}`,
           quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
           used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json,
           property_primary_angle: propertyFirst.propertyPrimaryAngle,
-          creative_selection_metadata: { ...selMeta, family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, finalPostReadiness: ready, warnings: b.scores.warnings, blockers: b.scores.blockers, layout: b.designPlan.layout } as unknown as Json,
+          creative_selection_metadata: { ...selMeta, family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, finalPostReadiness: ready, warnings: b.scores.warnings, blockers: b.scores.blockers, layout: b.designPlan.layout } as unknown as Json,
         };
       });
       const { data: insP } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");

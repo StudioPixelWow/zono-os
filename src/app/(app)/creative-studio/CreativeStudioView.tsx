@@ -67,7 +67,8 @@ type Visual = Record<string, unknown> & {
 };
 
 type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
-type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance; designPlan?: DesignExecutionPlan };
+type WowView = { luxury: number; trust: number; readability: number; attention: number; premiumFeel: number; visualImpact: number; overall: number; approved: boolean; threshold: number; weakest?: { axis: string; score: number }; critique?: { director: string; artDirector: string; marketing: string; conversion: string } };
+type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance; designPlan?: DesignExecutionPlan; wow?: WowView; wowCandidates?: { template: string; familyLabel: string; overall: number; approved: boolean }[]; isTopConcept?: boolean };
 type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
@@ -1472,7 +1473,6 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
   // FINAL AD mode: the complete ready-to-post creative carries an `ad` spec.
   const ad = o.render_data?.ad as FinalAdView | undefined;
   const adScores = ad?.scores ?? (o.creative_selection_metadata as unknown as Partial<FinalAdScores> | undefined);
-  const readiness = adScores?.finalPostReadiness ?? null;
   const adWarnings = adScores?.warnings ?? [];
   // The real property photo comes from the final ad or the render's image_placeholder.
   const blocks = (o.render_data?.blocks ?? []) as { component?: string; imageUrl?: string }[];
@@ -1498,11 +1498,18 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
           </>
         )}
       </div>
-      {ad && readiness != null && (
+      {ad && (
         <div className="flex flex-wrap items-center gap-1 px-0.5">
-          <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${readiness >= 90 ? "bg-success text-card" : "bg-warning-soft text-warning"}`}>מוכנות לפרסום {readiness}</span>
-          <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-bold">קונספט: {ad.triggerLabel ?? ad.angleLabel}</span>
+          {ad.isTopConcept && <span className="bg-ink text-card rounded-full px-1.5 py-0.5 text-[9px] font-black">★ קונספט מוביל</span>}
+          {ad.wow && <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${ad.wow.approved ? "bg-success text-card" : ad.wow.overall >= 85 ? "bg-brand-soft text-brand-strong" : "bg-warning-soft text-warning"}`}>WOW {ad.wow.overall}</span>}
+          <span className="bg-brand-soft text-brand-strong rounded-full px-1.5 py-0.5 text-[9px] font-bold">{ad.designPlan?.familyLabel ?? ad.triggerLabel ?? ad.angleLabel}</span>
           {ad.artDirection?.emotionalTrigger && <span className="bg-surface text-muted rounded-full px-1.5 py-0.5 text-[9px] font-bold">{ad.artDirection.emotionalTrigger}</span>}
+        </div>
+      )}
+      {ad?.wow && (
+        <div className="text-muted flex flex-wrap gap-x-2 gap-y-0.5 px-0.5 text-[9px] font-bold">
+          <span>יוקרה {ad.wow.luxury}</span><span>אמון {ad.wow.trust}</span><span>קריאות {ad.wow.readability}</span>
+          <span>תשומת-לב {ad.wow.attention}</span><span>פרימיום {ad.wow.premiumFeel}</span><span>אימפקט {ad.wow.visualImpact}</span>
         </div>
       )}
       {/* Per-creative identity — proves the new engine produced this output */}
@@ -1675,6 +1682,19 @@ function CreativeDebugPanel({ ad, o }: { ad: FinalAdView; o: QuickOutput }) {
         <DebugKV k="status" v={ad.designPlan.layout.approved ? "✓ עבר — ללא חפיפות, בתוך השוליים, מחיר לא חתוך" : "✗ נכשל"} />
         {ad.designPlan.layout.violations.length > 0 && <DebugKV k="הפרות" v={ad.designPlan.layout.violations.map((v) => v.detail).join(" · ")} />}
         {ad.designPlan.layout.fixes.length > 0 && <DebugKV k="תיקונים אוטומטיים" v={ad.designPlan.layout.fixes.join(" · ")} />}
+      </>)}
+      {ad.wow && section("WOW Score (6 axes · gate ≥95)", <>
+        <DebugKV k="overall" v={`${ad.wow.overall} ${ad.wow.approved ? "✓ אושר" : "✗ נדרש שיפור"}${ad.isTopConcept ? " · ★ מוביל" : ""}`} />
+        <DebugKV k="יוקרה / אמון / קריאות" v={`${ad.wow.luxury} · ${ad.wow.trust} · ${ad.wow.readability}`} />
+        <DebugKV k="תשומת-לב / פרימיום / אימפקט" v={`${ad.wow.attention} · ${ad.wow.premiumFeel} · ${ad.wow.visualImpact}`} />
+        {ad.wow.weakest && <DebugKV k="הציר החלש" v={`${ad.wow.weakest.axis} (${ad.wow.weakest.score})`} />}
+        {ad.wowCandidates && ad.wowCandidates.length > 1 && <DebugKV k="תבניות שנבחנו" v={ad.wowCandidates.map((c) => `${c.familyLabel}=${c.overall}`).join(" · ")} />}
+        {ad.wow.critique && <>
+          <DebugKV k="Creative Director" v={ad.wow.critique.director} />
+          <DebugKV k="Art Director" v={ad.wow.critique.artDirector} />
+          <DebugKV k="Marketing" v={ad.wow.critique.marketing} />
+          <DebugKV k="Conversion" v={ad.wow.critique.conversion} />
+        </>}
       </>)}
       {section("Final Prompt (AI environment — text-free)", <p dir="ltr" className="text-muted whitespace-pre-wrap break-words">{t?.finalPrompt ?? adr?.aiEnvironment.imageModelPrompt ?? "—"}</p>)}
       {section("Creative Production Engine (AI scene)", <>
