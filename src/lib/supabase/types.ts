@@ -4232,6 +4232,22 @@ type ZonoQuickCreativeRequestsRow = {
   id: string; org_id: string; agent_id: string | null; office_id: string | null; property_id: string | null; deal_id: string | null;
   request_type: string; status: string; input_data: Json; brand_snapshot: Json; marketing_dna_snapshot: Json; created_by: string | null; created_at: string; updated_at: string;
 };
+type CreativeGenerationsRow = {
+  id: string; org_id: string; property_id: string | null; campaign_id: string | null; request_id: string | null; output_id: string | null;
+  kind: string; status: string; selected_template: string | null; brand_profile_id: string | null; source_manifest_json: Json;
+  final_image_url: string | null; approved_attempt_id: string | null; attempts_count: number; overall_score: number;
+  created_by: string | null; created_at: string; updated_at: string;
+};
+type CreativeGenerationAttemptsRow = {
+  id: string; generation_id: string; org_id: string; attempt_number: number; prompt: string | null; correction_prompt: string | null;
+  image_url: string | null; qa_status: string | null; qa_report_json: Json;
+  text_accuracy_score: number; numeric_accuracy_score: number; brand_score: number; layout_score: number; readability_score: number;
+  asset_integrity_score: number; real_estate_relevance_score: number; overall_score: number; fail_reasons: Json; created_at: string;
+};
+type CreativeQaReportsRow = {
+  id: string; generation_id: string; attempt_id: string; org_id: string; ocr_text: string | null; expected_text_manifest: Json;
+  mismatches_json: Json; critical_failures_json: Json; visual_findings_json: Json; score_json: Json; passed: boolean; created_at: string;
+};
 type ZonoQuickCreativeOutputsRow = {
   id: string; org_id: string; request_id: string; agent_id: string | null; office_id: string | null; property_id: string | null; deal_id: string | null;
   output_type: string; variant_name: string; format: string; title: string | null; render_data: Json; preview_url: string | null; thumbnail_url: string | null;
@@ -4784,6 +4800,9 @@ export interface Database {
       zono_visual_assets: TableShape<ZonoVisualAssetsRow, "org_id" | "entity_type" | "entity_id" | "visual_type">;
       zono_quick_creative_requests: TableShape<ZonoQuickCreativeRequestsRow, "org_id" | "request_type">;
       zono_quick_creative_outputs: TableShape<ZonoQuickCreativeOutputsRow, "org_id" | "request_id" | "output_type" | "variant_name" | "format">;
+      creative_generations: TableShape<CreativeGenerationsRow, "org_id" | "kind" | "status">;
+      creative_generation_attempts: TableShape<CreativeGenerationAttemptsRow, "generation_id" | "org_id" | "attempt_number">;
+      creative_qa_reports: TableShape<CreativeQaReportsRow, "generation_id" | "attempt_id" | "org_id">;
       zono_creative_candidates: TableShape<ZonoCreativeCandidatesRow, "org_id" | "request_id">;
       zono_creative_quality_reviews: TableShape<ZonoCreativeQualityReviewsRow, "org_id">;
       brand_identity_profiles: TableShape<BrandIdentityProfilesRow, "org_id" | "entity_type" | "entity_id">;

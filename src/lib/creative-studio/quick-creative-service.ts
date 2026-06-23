@@ -27,7 +27,8 @@ import { buildDesignExecutionPlan, type DesignExecutionPlan, type DesignFamily }
 import { produceAdScene } from "./creative-production-engine";
 import { finalLayoutQA } from "./layout-integrity";
 import { scoreWow, type WowScore } from "./wow-score";
-import { generateFinalAdImage, type AdSpec, type AdKind, type AdGenAssets } from "./openai-ad-pipeline";
+import { type AdSpec, type AdKind, type AdGenAssets } from "./openai-ad-pipeline";
+import { generateCreativeWithQA } from "./creative-qa-engine";
 import type { FinalAdData, ConceptTrigger } from "./final-creative-engine";
 
 /** ART DIRECTION + CONCEPT ENGINE (hybrid): turn one property into 4 strategically
@@ -137,13 +138,16 @@ type QuickVar = ReturnType<typeof buildQuickVariations>[number];
 
 /** Map a property concept (FinalAdData) → the kind-agnostic AdSpec the OpenAI
  *  generator consumes. */
-function adToSpec(ad: FinalAdData, kind: AdKind): AdSpec {
+function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: BrandSnapshot): AdSpec {
   return {
     kind, conceptLabel: ad.triggerLabel ?? ad.angleLabel ?? "קונספט",
     headline: ad.headline, subheadline: ad.subheadline ?? null,
     priceLabel: ad.priceLabel ?? "מחיר", price: ad.price ?? null,
     features: ad.features.map((f) => (f.value ? `${f.value} ${f.label}` : f.label)),
     cta: ad.cta, agentName: ad.agentName ?? null, agentPhone: ad.agentPhone ?? null,
+    city: input.city ?? null, street: input.address ?? null,
+    rooms: input.rooms ?? null, sqm: input.sizeSqm ?? null, floor: input.floor ?? null,
+    logoText: brand.officeName ?? null,
     palette: { bg: ad.palette.bg, bg2: ad.palette.bg2, accent: ad.palette.accent },
     emotionalFeel: ad.artDirection?.emotionalFeel ?? null, visualStory: ad.artDirection?.visualStory ?? null,
   };
@@ -158,6 +162,9 @@ function variationToSpec(v: QuickVar, input: QuickInput, brand: BrandSnapshot, k
     priceLabel: "מחיר", price,
     features: providedFeatures(input), cta: v.cta,
     agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null,
+    city: input.city ?? null, street: input.address ?? null,
+    rooms: input.rooms ?? null, sqm: input.sizeSqm ?? null, floor: input.floor ?? null,
+    logoText: brand.officeName ?? null,
     palette: { bg: brand.colors[0] || "#0F3D2E", bg2: brand.colors[1] || "#0A2A20", accent: brand.colors[2] || brand.colors[1] || "#C9A14A" },
     emotionalFeel: kind === "sold" ? "proud and celebratory" : "warm and trustworthy", visualStory: null,
   };
@@ -296,7 +303,6 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
       // the real assets. Per concept: generate → Vision-QA → retry → on failure
       // / no key, fall back to the deterministic renderer (flagged). No overlay.
       const assets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
-      const ts = Date.now();
       const finalRows: Record<string, unknown>[] = [];
       for (let i = 0; i < built.length; i++) {
         const b = built[i]; const w = b.wow; const isTop = b === top;
@@ -309,30 +315,26 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           overall_quality_score: w.overall, wow_score: w.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
           used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
         };
-        const gen = await generateFinalAdImage(adToSpec(b.ad, "property"), assets);
-        if (gen.status === "ai_full_ad" && gen.b64) {
-          const path = `${orgId}/full-ad/${requestId}-${i}-${ts}.png`;
-          const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, Buffer.from(gen.b64, "base64"), { contentType: gen.mime ?? "image/png", upsert: true });
-          const url = upErr ? null : supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path).data.publicUrl;
-          if (url) {
-            finalRows.push({ ...base,
-              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, wow: w, qa: gen.qa } as unknown as Json,
-              image_url: url, image_provider: gen.provider, image_status: "ai_full_ad", image_error: null,
-              quality_status: (gen.qa?.score ?? 0) >= 90 ? "passed" : "below_threshold",
-              critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}מודעה שנוצרה ב-AI (${b.triggerLabel}) · QA ${gen.qa?.score ?? "—"} · ${gen.attempts} ניסיון/ות.`,
-              creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: gen.qa, attempts: gen.attempts } as unknown as Json,
-            });
-            continue;
-          }
+        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind: "property", template: b.designPlan.family, spec: adToSpec(b.ad, "property", g.input, brand.snapshot), assets, bucket: VISUAL_BUCKET });
+        if (outcome.status === "approved" && outcome.imageUrl) {
+          finalRows.push({ ...base,
+            render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: outcome.scores, generationId: outcome.generationId } as unknown as Json,
+            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
+            quality_status: "passed",
+            critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}עבר QA · ציון ${outcome.scores?.overall ?? "—"} · ${outcome.attempts} ניסיון/ות (${b.triggerLabel}).`,
+            creative_selection_metadata: { ...selMeta, mode: "ai_full_ad", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
+          });
+          continue;
         }
-        // Fallback: deterministic composition (flagged). No OpenAI key, or QA failed.
+        // Fallback: deterministic composition (accurate by construction). Either no
+        // OpenAI key (no_provider) or no AI ad passed QA after 5 attempts (manual_review).
         const layoutOk = b.designPlan.layout?.approved !== false;
         finalRows.push({ ...base,
           render_data: b.render as unknown as Json,
-          image_status: gen.status === "no_provider" ? "no_provider" : "failed", image_error: gen.error ? gen.error.slice(0, 500) : null,
+          image_status: outcome.status === "no_provider" ? "no_provider" : "manual_review", image_error: outcome.failReasons.join(" · ").slice(0, 500) || null,
           quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
-          critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · רנדרר fallback (${gen.status === "no_provider" ? "ספק AI לא מוגדר" : "לא עבר QA חזותי"}).`,
-          creative_selection_metadata: { ...selMeta, mode: "fallback", family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, layout: b.designPlan.layout, genStatus: gen.status, genError: gen.error, genQa: gen.qa } as unknown as Json,
+          critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · ${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — אף גרסת AI לא עברה QA אחרי 5 ניסיונות (ממתין לבדיקה ידנית)"}.`,
+          creative_selection_metadata: { ...selMeta, mode: "fallback", family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, layout: b.designPlan.layout, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
         });
       }
       const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
@@ -364,28 +366,23 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           overall_quality_score: v.scores.overall, wow_score: v.scores.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
           used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
         };
-        const gen = await generateFinalAdImage(variationToSpec(v, g.input, brand.snapshot, kind), assets);
-        if (gen.status === "ai_full_ad" && gen.b64) {
-          const path = `${orgId}/full-ad/${requestId}-${i}-${ts}.png`;
-          const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, Buffer.from(gen.b64, "base64"), { contentType: gen.mime ?? "image/png", upsert: true });
-          const url = upErr ? null : supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path).data.publicUrl;
-          if (url) {
-            rows.push({ ...base,
-              render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: gen.qa } as unknown as Json,
-              image_url: url, image_provider: gen.provider, image_status: "ai_full_ad", image_error: null,
-              quality_status: (gen.qa?.score ?? 0) >= 90 ? "passed" : "below_threshold",
-              critic_summary: `מודעה שנוצרה ב-AI (${v.variantName}) · QA ${gen.qa?.score ?? "—"} · ${gen.attempts} ניסיון/ות.`,
-              creative_selection_metadata: { mode: "ai_full_ad", kind, qa: gen.qa, attempts: gen.attempts } as unknown as Json,
-            });
-            continue;
-          }
+        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind, template: null, spec: variationToSpec(v, g.input, brand.snapshot, kind), assets, bucket: VISUAL_BUCKET });
+        if (outcome.status === "approved" && outcome.imageUrl) {
+          rows.push({ ...base,
+            render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: outcome.scores, generationId: outcome.generationId } as unknown as Json,
+            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
+            quality_status: "passed",
+            critic_summary: `עבר QA · ציון ${outcome.scores?.overall ?? "—"} · ${outcome.attempts} ניסיון/ות (${v.variantName}).`,
+            creative_selection_metadata: { mode: "ai_full_ad", kind, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
+          });
+          continue;
         }
         rows.push({ ...base,
           render_data: v.render as unknown as Json,
-          image_status: gen.status === "no_provider" ? "no_provider" : "failed", image_error: gen.error ? gen.error.slice(0, 500) : null,
+          image_status: outcome.status === "no_provider" ? "no_provider" : "manual_review", image_error: outcome.failReasons.join(" · ").slice(0, 500) || null,
           quality_status: "passed",
-          critic_summary: `רנדרר fallback (${gen.status === "no_provider" ? "ספק AI לא מוגדר" : "לא עבר QA חזותי"}).`,
-          creative_selection_metadata: { mode: "fallback", kind, genStatus: gen.status, genError: gen.error, genQa: gen.qa } as unknown as Json,
+          critic_summary: `${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — לא עבר QA אחרי 5 ניסיונות"}.`,
+          creative_selection_metadata: { mode: "fallback", kind, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
         });
       }
       const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");

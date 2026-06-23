@@ -69,7 +69,7 @@ type Visual = Record<string, unknown> & {
 type RenderBlock = { component: string; text?: string; items?: string[]; align?: string; emphasis?: string; imageUrl?: string };
 type WowView = { luxury: number; trust: number; readability: number; attention: number; premiumFeel: number; visualImpact: number; overall: number; approved: boolean; threshold: number; weakest?: { axis: string; score: number }; critique?: { director: string; artDirector: string; marketing: string; conversion: string } };
 type FinalAdView = FinalAdData & { template?: string; scores?: FinalAdScores; brandDNA?: BrandDNA; brandGuidance?: BrandGuidance; designPlan?: DesignExecutionPlan; wow?: WowView; wowCandidates?: { template: string; familyLabel: string; overall: number; approved: boolean }[]; isTopConcept?: boolean };
-type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView; fullAd?: boolean; qa?: { score?: number } };
+type RenderData = { format: string; width: number; height: number; layoutLabel?: string; palette: { bg: string; bg2: string; text: string; muted: string; accent: string; onAccent: string }; blocks: RenderBlock[]; ad?: FinalAdView; fullAd?: boolean; qa?: { overall?: number; score?: number } | null };
 type Output = Record<string, unknown> & {
   id: string; output_type: string; title: string | null; status: string; render_data: RenderData; overall_score: number;
   brand_match_score: number; marketing_match_score: number; readability_score: number; hierarchy_score: number; conversion_score: number; is_approved: boolean; is_favorite: boolean;
@@ -1590,7 +1590,7 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
       <div className="relative">
         <CreativePreview data={o.render_data} scale={0.8} backgroundImageUrl={o.image_url} concept={conceptFor(o.render_data, o.creative_strategy)} />
         {fullAd ? (
-          <span className="bg-brand-strong text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">מודעה שנוצרה ב-AI{o.render_data?.qa?.score ? ` · QA ${o.render_data.qa.score}` : ""}</span>
+          <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">✓ עבר QA{(o.render_data?.qa?.overall ?? o.render_data?.qa?.score) ? ` · ${o.render_data?.qa?.overall ?? o.render_data?.qa?.score}` : ""}</span>
         ) : ad ? (
           <span className="bg-success text-card absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-black">מודעה סופית · מוכן לפרסום</span>
         ) : (
@@ -1602,7 +1602,7 @@ function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; 
         )}
       </div>
       {fullAd && (
-        <p className="bg-warning-soft text-warning rounded-lg px-2 py-1 text-[10px] font-bold">⚠️ נוצר ב-AI · ודאו שהטלפון, המחיר והטקסט מדויקים לפני פרסום.</p>
+        <p className="bg-success-soft text-success rounded-lg px-2 py-1 text-[10px] font-bold">✓ נוצר ב-AI ועבר בדיקת QA אוטומטית (טקסט, מספרים, לוגו, סוכן, RTL). מומלץ לוודא פרטים לפני פרסום.</p>
       )}
       {ad && (
         <div className="flex flex-wrap items-center gap-1 px-0.5">
