@@ -1,7 +1,9 @@
 /**
- * Product QA status registry (client-safe). Hand-maintained snapshot of the
- * "Critical Product QA Fixes" pack so the team can see, per issue, what is
- * production-ready vs partial vs pending. Update this as issues are delivered.
+ * Product QA status registry (client-safe). MANUAL, hand-maintained checklist of
+ * the "Critical Product QA Fixes" pack so the team can see, per issue, what is
+ * production-ready vs partial vs pending. This is NOT an automated QA system,
+ * live validation, or real-time monitoring — every status and date is set by
+ * hand. Update this file as issues are delivered.
  */
 export type QaStatus = "pass" | "partial" | "fail";
 
@@ -10,7 +12,8 @@ export interface QaItem {
   title: string;
   status: QaStatus;
   notes: string;
-  lastChecked: string; // ISO date
+  /** ISO date the item was last reviewed/updated MANUALLY. */
+  lastChecked: string;
 }
 
 const TODAY = "2026-06-22";

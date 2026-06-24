@@ -15,9 +15,9 @@ export default function ProductQaPage() {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">Admin · Product QA</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">דוח QA מוצר</h1>
-          <p className="text-muted mt-1 text-sm">מצב חבילת התיקונים הקריטיים — מה מוכן לפרודקשן, מה חלקי ומה ממתין.</p>
+          <p className="text-brand text-xs font-bold">Admin · QA ידני</p>
+          <h1 className="text-ink mt-1 text-2xl font-black">צ׳קליסט QA ידני</h1>
+          <p className="text-muted mt-1 text-sm">צ׳קליסט ידני של חבילת התיקונים הקריטיים — סטטוס ידני לכל נושא: מה מוכן, מה חלקי ומה ממתין.</p>
         </div>
         <div className="flex gap-2">
           <Pill label="עובר" value={QA_SUMMARY.pass} tone="bg-success-soft text-success" />
@@ -25,6 +25,11 @@ export default function ProductQaPage() {
           <Pill label="ממתין" value={QA_SUMMARY.fail} tone="bg-danger-soft text-danger" />
         </div>
       </div>
+
+      <p className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+        <Icon name="AlertTriangle" size={18} className="mt-0.5 shrink-0" />
+        צ׳קליסט זה מתוחזק ידנית ומשקף בדיקות ידניות בלבד — אין כאן ניטור אוטומטי, ולידציה חיה או QA בזמן אמת. התאריך מציין מתי הנושא עודכן ידנית.
+      </p>
 
       <div className="flex flex-col gap-2">
         {QA_ITEMS.map((item) => {
@@ -41,7 +46,7 @@ export default function ProductQaPage() {
                 </div>
                 <p className="text-muted mt-1 text-[13px] leading-relaxed">{item.notes}</p>
               </div>
-              <span className="text-muted shrink-0 text-[11px] font-semibold">{item.lastChecked}</span>
+              <span className="text-muted shrink-0 text-[11px] font-semibold">עודכן ידנית · {item.lastChecked}</span>
             </div>
           );
         })}

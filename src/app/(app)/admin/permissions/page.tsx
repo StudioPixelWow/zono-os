@@ -18,7 +18,7 @@ export default function PermissionsPage() {
         <div>
           <p className="text-brand text-xs font-bold">Admin · Permissions</p>
           <h1 className="text-ink mt-1 text-2xl font-black">מטריצת הרשאות</h1>
-          <p className="text-muted mt-1 text-sm">רישום הרשאות מרכזי — תפקיד מינימלי לכל פעולה ומשאב. תואם ל-RLS במסד הנתונים (has_min_role). אינו hardcoded בקוד.</p>
+          <p className="text-muted mt-1 text-sm">רישום הרשאות מרכזי — תפקיד מינימלי לכל פעולה ומשאב, אמור לשקף את מדיניות ה-RLS במסד הנתונים (has_min_role).</p>
         </div>
         <Link href="/" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />דשבורד</Link>
       </div>
@@ -55,6 +55,10 @@ export default function PermissionsPage() {
           </tbody>
         </table>
       </div>
+      <p className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+        <Icon name="AlertTriangle" size={18} className="mt-0.5 shrink-0" />
+        הרשימה מבוססת על הגדרות מערכת ואינה בדיקת הרשאות בזמן אמת. אכיפת ההרשאות בפועל מתבצעת ב-RLS במסד הנתונים — טבלה זו היא רישום-ייחוס בלבד ואינה מאמתת גישה חיה.
+      </p>
       <p className="text-muted text-[11px]">הערך בכל תא = התפקיד המינימלי הנדרש לפעולה. ״—״ = לא רלוונטי למשאב.</p>
     </div>
   );
