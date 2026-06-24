@@ -433,28 +433,56 @@ export async function syncAllDbCitiesTransactions(
     try { const r = await ensureCoverageTargetsForCity(orgId, city); if (r.created < 0) needsConfig = true; } catch { /* continue */ }
   }
 
-  // 3) Sync only a tiny batch of pending/failed targets this run (timeout-safe).
-  const { data: pending } = await supabase.from("geo_coverage_targets")
+  // Count what still genuinely awaits a pull — EXCLUDING failed, so a provider
+  // that keeps failing doesn't make the auto-drain loop forever.
+  const remainingCount = async () => {
+    const { count } = await supabase.from("geo_coverage_targets")
+      .select("id", { count: "exact", head: true }).eq("organization_id", orgId)
+      .in("coverage_status", ["pending", "pending_neighborhoods", "ready"] as never)
+      .in("city_name", citiesList as never);
+    return Math.max(0, count ?? 0);
+  };
+
+  // Guard: GovMap pulls require Apify in production. If it's not configured,
+  // stop immediately with a clear message instead of failing every target.
+  if (!isTransactionsApifyConfigured() && !isDev) {
+    return {
+      cities: citiesList.length, citiesList, targetsSynced: 0, pendingRemaining: await remainingCount(),
+      imported: 0, duplicates: 0, mock: false, needsConfig: true, errors: [],
+      fatalError: "APIFY_TOKEN חסר בשרת — לא ניתן למשוך עסקאות מ‑GovMap.",
+    };
+  }
+
+  // 3) Sync only a tiny batch this run (timeout-safe): pending first, then retry failed.
+  let pendingRows: { id: string; city_name: string }[] = [];
+  const { data: freshPending } = await supabase.from("geo_coverage_targets")
     .select("id,city_name").eq("organization_id", orgId)
-    .in("coverage_status", ["pending", "pending_neighborhoods", "failed"] as never)
-    .in("city_name", citiesList as never)
-    .order("priority", { ascending: true }).limit(maxTargets);
+    .in("coverage_status", ["pending", "pending_neighborhoods", "ready"] as never)
+    .in("city_name", citiesList as never).order("priority", { ascending: true }).limit(maxTargets);
+  pendingRows = (freshPending ?? []) as { id: string; city_name: string }[];
+  if (pendingRows.length === 0) {
+    // Nothing fresh — retry a couple of previously-failed targets once.
+    const { data: failedRows } = await supabase.from("geo_coverage_targets")
+      .select("id,city_name").eq("organization_id", orgId).eq("coverage_status", "failed")
+      .in("city_name", citiesList as never).order("priority", { ascending: true }).limit(maxTargets);
+    pendingRows = (failedRows ?? []) as { id: string; city_name: string }[];
+  }
 
   let imported = 0, duplicates = 0, mock = false; const errors: string[] = [];
-  for (const t of (pending ?? []) as { id: string; city_name: string }[]) {
+  for (const t of pendingRows) {
     try { const r = await syncCoverageTarget(t.id, dealDateRange); imported += r.imported; duplicates += r.duplicates; mock = mock || r.mock; if (r.error) errors.push(`${t.city_name}: ${r.error}`); }
     catch (e) { errors.push(`${t.city_name}: ${e instanceof Error ? e.message : "sync failed"}`); }
   }
 
-  // How many targets still await a pull (so the UI can prompt to run again).
-  const { count: pendingTotal } = await supabase.from("geo_coverage_targets")
-    .select("id", { count: "exact", head: true }).eq("organization_id", orgId)
-    .in("coverage_status", ["pending", "pending_neighborhoods", "failed"] as never)
-    .in("city_name", citiesList as never);
-  const pendingRemaining = Math.max(0, (pendingTotal ?? 0));
-
+  const pendingRemaining = await remainingCount();
   if (imported > 0) { try { await recomputeDerivedIntelligence(); } catch { /* best-effort */ } }
-  return { cities: citiesList.length, citiesList, targetsSynced: (pending ?? []).length, pendingRemaining, imported, duplicates, mock, needsConfig, errors: errors.slice(0, 10) };
+
+  // If we pulled targets but imported nothing AND every one errored, the provider
+  // is failing — surface it so the UI stops looping silently.
+  const fatalError = (pendingRows.length > 0 && imported === 0 && errors.length === pendingRows.length)
+    ? `המשיכה נכשלה: ${errors[0]}` : undefined;
+
+  return { cities: citiesList.length, citiesList, targetsSynced: pendingRows.length, pendingRemaining, imported, duplicates, mock, needsConfig, errors: errors.slice(0, 10), fatalError };
 }
 
 // ── Live progress for the all-cities pull (polled by the UI) ─────────────────
