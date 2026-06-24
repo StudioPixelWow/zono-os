@@ -11,6 +11,7 @@ import type { DistributionBoard, DailyWorkspace } from "@/lib/distribution/servi
 import type { DistributionCenterData } from "@/lib/distribution/center-data";
 import type { AssistantPost } from "@/lib/distribution/manual-publish-service";
 import type { CommentsBoard } from "@/lib/distribution/distribution-comment-service";
+import type { DistributionAnalytics } from "@/lib/distribution/analytics-scoring";
 import { recomputeDistributionAction, generateDailyBatchAction } from "@/lib/distribution/actions";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
@@ -54,6 +55,7 @@ export function DistributionCenterView({
   center,
   assistantPosts,
   commentsBoard,
+  analytics,
   complianceWarnings,
 }: {
   board: DistributionBoard;
@@ -62,6 +64,7 @@ export function DistributionCenterView({
   center: DistributionCenterData;
   assistantPosts: AssistantPost[];
   commentsBoard: CommentsBoard;
+  analytics: DistributionAnalytics;
   complianceWarnings: string[];
 }) {
   const router = useRouter();
@@ -154,7 +157,7 @@ export function DistributionCenterView({
         {section === "assistant" && <PublishAssistantSection posts={assistantPosts} complianceWarnings={complianceWarnings} runAction={runAction} pending={pending} />}
         {section === "comments" && <CommentsLeadsSection commentsBoard={commentsBoard} posts={center.posts} groups={center.groups} runAction={runAction} runActionAsync={runActionAsync} pending={pending} />}
         {section === "leads" && <LeadCollectionSection leads={center.leads} runAction={runAction} pending={pending} />}
-        {section === "analytics" && <AnalyticsSection analytics={center.analytics} stats={center.stats} />}
+        {section === "analytics" && <AnalyticsSection analytics={analytics} runAction={runAction} pending={pending} />}
         {section === "automation" && <AutomationCenterSection automations={center.automations} runAction={runAction} pending={pending} />}
       </div>
     </div>

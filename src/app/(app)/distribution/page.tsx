@@ -5,6 +5,8 @@ import { getPublishAssistantAction } from "@/lib/distribution/manual-publish-act
 import type { AssistantPost } from "@/lib/distribution/manual-publish-service";
 import { getCampaignCommentsAction } from "@/lib/distribution/distribution-comment-actions";
 import type { CommentsBoard } from "@/lib/distribution/distribution-comment-service";
+import { getDistributionAnalyticsAction } from "@/lib/distribution/distribution-analytics-actions";
+import type { DistributionAnalytics } from "@/lib/distribution/analytics-scoring";
 import { createClient } from "@/lib/supabase/server";
 import { DistributionCenterView } from "./_center/DistributionCenterView";
 import type { PropertyLite } from "./_center/variations";
@@ -15,6 +17,19 @@ const EMPTY_CENTER: DistributionCenterData = {
     scheduledPosts: 0, leads: 0, newLeads: 0, impressions: 0, clicks: 0, comments: 0, conversionRate: 0,
   },
   groups: [], campaigns: [], posts: [], leads: [], analytics: [], automations: [],
+};
+
+const EMPTY_ANALYTICS: DistributionAnalytics = {
+  summary: {
+    totalCampaigns: 0, totalGroupsUsed: 0, scheduledPosts: 0, publishedPosts: 0, failedPosts: 0,
+    importedComments: 0, detectedLeads: 0, hotLeads: 0, conversionRate: 0, avgLeadIntentScore: 0,
+    publishingSuccessRate: 0,
+  },
+  campaigns: [], groups: [], cities: [], variations: [], angles: [], ctas: [],
+  funnel: { published: 0, comments: 0, leads: 0, hotLeads: 0, converted: 0 },
+  failed: { totalFailed: 0, byReason: [], byGroup: [] },
+  recommendations: [],
+  sufficiency: { enough: false, publishedPosts: 0, comments: 0, note: "אין מספיק נתונים אמיתיים עדיין." },
 };
 
 export const dynamic = "force-dynamic";
@@ -31,6 +46,7 @@ export default async function DistributionPage() {
     comments: [],
     counts: { comments: 0, hotLeads: 0, leads: 0, needsReply: 0, ignored: 0, converted: 0, conversionRate: 0 },
   };
+  let analytics: DistributionAnalytics = EMPTY_ANALYTICS;
 
   try {
     board = await getDistributionBoard();
@@ -81,6 +97,12 @@ export default async function DistributionPage() {
   } catch (e) {
     console.error("[distribution] comments board load failed:", e);
   }
+  try {
+    const res = await getDistributionAnalyticsAction();
+    analytics = res.analytics;
+  } catch (e) {
+    console.error("[distribution] analytics load failed:", e);
+  }
 
   return (
     <DistributionCenterView
@@ -90,6 +112,7 @@ export default async function DistributionPage() {
       center={center}
       assistantPosts={assistantPosts}
       commentsBoard={commentsBoard}
+      analytics={analytics}
       complianceWarnings={COMPLIANCE_WARNINGS}
     />
   );
