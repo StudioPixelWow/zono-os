@@ -53,6 +53,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "marketing", label: "שיווק", route: "/marketing", icon: "Megaphone", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true },
   { id: "distribution", label: "הפצה", route: "/distribution", icon: "Send", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true },
   { id: "distribution-daily", label: "הפצה יומית", route: "/distribution/daily", icon: "Send", category: "צמיחה", roleMin: "agent", sidebar: false, searchable: true },
+  { id: "distribution-groups", label: "קבוצות פייסבוק", route: "/distribution/groups", icon: "Users", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true, description: "מנוע הפצה לקבוצות — רישום, ביצועים וייחוס לידים" },
   { id: "social-leads", label: "לידים מרשתות", route: "/social-leads", icon: "MessageCircle", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true },
 
   // ── ניהול ──
