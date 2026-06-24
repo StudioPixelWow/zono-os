@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "import:localities": "tsx scripts/import-israel-localities.ts"
+    "import:localities": "tsx scripts/import-israel-localities.ts",
+    "seed:distribution": "tsx scripts/seed-distribution.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

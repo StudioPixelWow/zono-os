@@ -1,67 +1,72 @@
 "use client";
 
-import type { DistributionBoard, DailyWorkspace } from "@/lib/distribution/service";
-import { Glass, StatTile, SectionHeading, ScoreBar, EmptyState, Icon, nfmt, compact, pct } from "./shared";
+import type { DistributionBoard } from "@/lib/distribution/service";
+import type { CenterStats, CenterCampaign } from "@/lib/distribution/center-data";
+import { Glass, StatTile, SectionHeading, EmptyState, Icon, nfmt, compact, pct } from "./shared";
+
+const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
+  draft: "טיוטה", scheduled: "מתוזמן", active: "פעיל", paused: "מושהה", completed: "הושלם", archived: "בארכיון",
+};
+const CAMPAIGN_STATUS_TONE: Record<string, string> = {
+  active: "bg-success-soft text-success", scheduled: "bg-brand-soft text-brand-strong",
+  paused: "bg-warning-soft text-warning", draft: "bg-line/70 text-muted",
+  completed: "bg-brand-soft text-brand-strong", archived: "bg-line/70 text-muted",
+};
 
 export function OverviewSection({
   board,
-  daily,
+  stats,
+  campaigns,
   onBuild,
 }: {
   board: DistributionBoard;
-  daily: DailyWorkspace;
+  stats: CenterStats;
+  campaigns: CenterCampaign[];
   onBuild: () => void;
 }) {
-  const totalGroups = board.communities.length;
-  const approved = board.approved.length;
-  const activeCampaigns = board.plans.length;
-  const leadsGenerated = board.communities.reduce((s, c) => s + (c.intel?.leads_generated ?? 0), 0);
-  const published = daily.items.filter((i) => i.status === "manual_published").length;
-  const failed = daily.items.filter((i) => i.status === "failed").length;
-  const done = published + failed;
-  const successRate = done > 0 ? Math.round((published / done) * 100) : null;
-  const avgPerf = board.communities.length
-    ? Math.round(board.communities.reduce((s, c) => s + (c.intel?.community_health_score ?? 0), 0) / board.communities.length)
-    : 0;
+  const livePosts = stats.publishedPosts + stats.scheduledPosts;
 
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading title="סקירת הפצה" subtitle="תמונת מצב חיה של ערוצי ההפצה שלך בפייסבוק" icon="LayoutDashboard" />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatTile label="קבוצות" value={nfmt(totalGroups)} hint={`${approved} מאושרות להפצה`} icon="Users" tone="brand" />
-        <StatTile label="קמפיינים פעילים" value={nfmt(activeCampaigns)} hint="תוכניות הפצה לנכסים" icon="Megaphone" tone="accent" />
-        <StatTile label="לידים שנוצרו" value={compact(leadsGenerated)} hint="מצטבר מכל הקהילות" icon="UserPlus" tone="success" />
-        <StatTile label="פוסטים שפורסמו" value={nfmt(published)} hint="במחזור ההפצה הנוכחי" icon="Send" tone="brand" />
-        <StatTile label="שיעור הצלחה" value={successRate == null ? "—" : pct(successRate)} hint={successRate == null ? "אין עדיין נתוני פרסום" : `${published}/${done} פורסמו`} icon="TrendingUp" tone={successRate != null && successRate >= 70 ? "success" : "warning"} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <StatTile label="קבוצות" value={nfmt(stats.groups)} hint={`${nfmt(stats.activeGroups)} פעילות`} icon="Users" tone="brand" />
+        <StatTile label="קמפיינים" value={nfmt(stats.campaigns)} hint={`${nfmt(stats.activeCampaigns)} פעילים`} icon="Megaphone" tone="accent" />
+        <StatTile label="פוסטים" value={nfmt(livePosts)} hint={`${nfmt(stats.publishedPosts)} פורסמו · ${nfmt(stats.scheduledPosts)} מתוזמנים`} icon="Send" tone="brand" />
+        <StatTile label="לידים" value={nfmt(stats.leads)} hint={`${nfmt(stats.newLeads)} חדשים`} icon="UserPlus" tone="success" />
+        <StatTile label="חשיפות" value={compact(stats.impressions)} hint={`${compact(stats.clicks)} קליקים`} icon="Eye" tone="accent" />
+        <StatTile label="קליקים" value={compact(stats.clicks)} hint="מצטבר מההפצה" icon="MousePointerClick" tone="brand" />
+        <StatTile label="תגובות" value={compact(stats.comments)} hint="אינטראקציות בקהילות" icon="MessageSquare" tone="warning" />
+        <StatTile label="שיעור המרה" value={pct(stats.conversionRate)} hint="קליקים ← לידים" icon="TrendingUp" tone={stats.conversionRate >= 5 ? "success" : "warning"} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        {/* Top distribution plans */}
+        {/* Active campaigns (real center data) */}
         <Glass className="flex flex-col gap-3 p-5">
-          <SectionHeading title="תוכניות הפצה מובילות" subtitle="נכסים מדורגים לפי פוטנציאל הפצה" icon="Rocket"
+          <SectionHeading title="קמפיינים פעילים" subtitle="קמפייני ההפצה שלך לפי ביצועים" icon="Rocket"
             action={<button type="button" onClick={onBuild} className="text-brand-strong text-sm font-bold">בנה קמפיין ←</button>} />
-          {board.plans.length === 0 ? (
-            <EmptyState icon="Rocket" title="אין עדיין תוכניות הפצה" body="הרץ חישוב מודיעין הפצה או בנה קמפיין כדי לדרג נכסים לקהילות המתאימות." />
+          {campaigns.length === 0 ? (
+            <EmptyState icon="Rocket" title="אין עדיין קמפיינים" body="בנה קמפיין הפצה ראשון — בחר נכס, קהל יעד וקבוצות, וZONO יתחיל לעבוד." />
           ) : (
             <div className="flex flex-col gap-2">
-              {board.plans.slice(0, 6).map((p, i) => (
-                <div key={p.propertyId} className="bg-card/60 border-line flex items-center gap-3 rounded-2xl border p-3">
+              {campaigns.slice(0, 6).map((c, i) => (
+                <div key={c.id} className="bg-card/60 border-line flex items-center gap-3 rounded-2xl border p-3">
                   <span className="bg-brand-soft text-brand-strong grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-black">{i + 1}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-ink truncate text-sm font-extrabold">{p.title}</p>
-                    <p className="text-muted text-[11px]">{p.communities} קהילות · חשיפה ~{compact(p.reach)} · {nfmt(p.leads)} לידים צפויים</p>
+                    <p className="text-ink truncate text-sm font-extrabold">{c.name}</p>
+                    <p className="text-muted text-[11px]">{c.totalGroups} קבוצות · {c.totalPosts} פוסטים · {nfmt(c.totalLeads)} לידים{c.targetCity ? ` · ${c.targetCity}` : ""}</p>
                   </div>
-                  <ScoreBar value={p.score} />
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${CAMPAIGN_STATUS_TONE[c.status] ?? "bg-line/70 text-muted"}`}>{CAMPAIGN_STATUS_LABEL[c.status] ?? c.status}</span>
                 </div>
               ))}
             </div>
           )}
         </Glass>
 
-        {/* Opportunities feed */}
+        {/* Opportunities feed (real board signals) */}
         <Glass className="flex flex-col gap-3 p-5">
-          <SectionHeading title="הזדמנויות AI" subtitle="איתותים חיים מנוע ההפצה" icon="Sparkles" />
+          <SectionHeading title="הזדמנויות AI" subtitle="איתותים חיים ממנוע ההפצה" icon="Sparkles" />
           {board.opportunities.length === 0 ? (
             <EmptyState icon="Sparkles" title="אין כרגע איתותים" body="ZONO יציף כאן הזדמנויות הפצה ברגע שהמודיעין יזהה קהילות ROI גבוה, פערים גיאוגרפיים או נכסים חמים." />
           ) : (
@@ -81,8 +86,8 @@ export function OverviewSection({
             </div>
           )}
           <div className="border-line mt-1 grid grid-cols-2 gap-2 border-t pt-3 text-center">
-            <div><p className="text-brand-strong text-xl font-black tabular-nums">{avgPerf}</p><p className="text-muted text-[11px] font-bold">ציון ביצועים ממוצע</p></div>
-            <div><p className="text-brand-strong text-xl font-black tabular-nums">{nfmt(approved)}</p><p className="text-muted text-[11px] font-bold">קבוצות מאושרות</p></div>
+            <div><p className="text-brand-strong text-xl font-black tabular-nums">{nfmt(stats.impressions ? Math.round((stats.clicks / Math.max(1, stats.impressions)) * 100) : 0)}%</p><p className="text-muted text-[11px] font-bold">שיעור הקלקה (CTR)</p></div>
+            <div><p className="text-brand-strong text-xl font-black tabular-nums">{nfmt(stats.activeGroups)}</p><p className="text-muted text-[11px] font-bold">קבוצות פעילות</p></div>
           </div>
         </Glass>
       </div>

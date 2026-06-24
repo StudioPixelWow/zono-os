@@ -8,6 +8,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { DistributionBoard, DailyWorkspace } from "@/lib/distribution/service";
+import type { DistributionCenterData } from "@/lib/distribution/center-data";
 import { recomputeDistributionAction, generateDailyBatchAction } from "@/lib/distribution/actions";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
@@ -34,14 +35,20 @@ const NAV: { key: SectionKey; label: string; icon: string }[] = [
   { key: "automation", label: "אוטומציה", icon: "Workflow" },
 ];
 
+export type RunAction = <R extends { error?: string }>(fn: () => Promise<R>, okMsg: string) => void;
+/** Awaitable variant — resolves with the action result (e.g. to read campaignId). */
+export type RunActionAsync = <R extends { error?: string }>(fn: () => Promise<R>, okMsg: string) => Promise<R>;
+
 export function DistributionCenterView({
   board,
   daily,
   properties,
+  center,
 }: {
   board: DistributionBoard;
   daily: DailyWorkspace;
   properties: PropertyLite[];
+  center: DistributionCenterData;
 }) {
   const router = useRouter();
   const [section, setSection] = useState<SectionKey>("overview");
@@ -50,14 +57,23 @@ export function DistributionCenterView({
   const [pending, startTransition] = useTransition();
   const [toast, setToast] = useState<string | null>(null);
 
-  function runAction(fn: () => Promise<{ error?: string }>, okMsg: string) {
+  const runAction: RunAction = (fn, okMsg) => {
     startTransition(async () => {
       const res = await fn();
       setToast(res?.error ? res.error : okMsg);
       router.refresh();
       setTimeout(() => setToast(null), 4000);
     });
-  }
+  };
+
+  // Awaitable runner for flows that need the returned payload (e.g. campaignId).
+  const runActionAsync: RunActionAsync = async (fn, okMsg) => {
+    const res = await fn();
+    setToast(res?.error ? res.error : okMsg);
+    router.refresh();
+    setTimeout(() => setToast(null), 4000);
+    return res;
+  };
 
   function handleGenerate(p: PropertyLite, aud: AudienceKey, count: number) {
     setVariations(generateVariations(p, aud, count));
@@ -115,14 +131,14 @@ export function DistributionCenterView({
 
       {/* Active section */}
       <div className="min-h-[40vh]">
-        {section === "overview" && <OverviewSection board={board} daily={daily} onBuild={() => setSection("builder")} />}
-        {section === "groups" && <GroupLibrarySection board={board} />}
-        {section === "builder" && <CampaignBuilderSection board={board} properties={properties} onGenerate={handleGenerate} />}
+        {section === "overview" && <OverviewSection board={board} stats={center.stats} campaigns={center.campaigns} onBuild={() => setSection("builder")} />}
+        {section === "groups" && <GroupLibrarySection groups={center.groups} runAction={runAction} pending={pending} />}
+        {section === "builder" && <CampaignBuilderSection groups={center.groups} campaigns={center.campaigns} properties={properties} onGenerate={handleGenerate} runAction={runAction} runActionAsync={runActionAsync} pending={pending} />}
         {section === "variations" && <AiVariationsSection variations={variations} propertyTitle={variationProperty} onBuild={() => setSection("builder")} />}
-        {section === "queue" && <PostingQueueSection daily={daily} />}
-        {section === "leads" && <LeadCollectionSection board={board} />}
-        {section === "analytics" && <AnalyticsSection board={board} daily={daily} />}
-        {section === "automation" && <AutomationCenterSection />}
+        {section === "queue" && <PostingQueueSection posts={center.posts} daily={daily} />}
+        {section === "leads" && <LeadCollectionSection leads={center.leads} runAction={runAction} pending={pending} />}
+        {section === "analytics" && <AnalyticsSection analytics={center.analytics} stats={center.stats} />}
+        {section === "automation" && <AutomationCenterSection automations={center.automations} runAction={runAction} pending={pending} />}
       </div>
     </div>
   );
