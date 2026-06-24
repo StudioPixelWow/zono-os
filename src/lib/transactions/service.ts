@@ -382,8 +382,9 @@ export async function refreshAgentCityRecent(): Promise<{ targets: number; impor
 
 // ── Pull transactions for EVERY city that appears anywhere in the org's data ──
 export interface AllCitiesSyncResult {
-  cities: number; citiesList: string[]; targetsSynced: number;
+  cities: number; citiesList: string[]; targetsSynced: number; pendingRemaining: number;
   imported: number; duplicates: number; mock: boolean; needsConfig: boolean; errors: string[];
+  fatalError?: string;
 }
 
 /**
@@ -395,8 +396,12 @@ export interface AllCitiesSyncResult {
 export async function syncAllDbCitiesTransactions(
   opts: { maxCities?: number; maxTargetsPerRun?: number; dealDateRange?: string } = {},
 ): Promise<AllCitiesSyncResult> {
-  const maxCities = opts.maxCities ?? 40;
-  const maxTargets = opts.maxTargetsPerRun ?? 25;
+  const maxCities = opts.maxCities ?? 60;
+  // Each GovMap pull hits Apify and can take tens of seconds — keep the batch
+  // tiny so one request never exceeds the serverless function timeout. Ensuring
+  // coverage targets for ALL cities is instant; the actual pulls drain in small
+  // batches per click (and via the cron).
+  const maxTargets = opts.maxTargetsPerRun ?? 4;
   const dealDateRange = opts.dealDateRange ?? "all";
   const { orgId, organization } = await ctx();
   const supabase = await createClient();
@@ -419,16 +424,16 @@ export async function syncAllDbCitiesTransactions(
 
   const citiesList = [...set].slice(0, maxCities);
   if (citiesList.length === 0) {
-    return { cities: 0, citiesList: [], targetsSynced: 0, imported: 0, duplicates: 0, mock: false, needsConfig: false, errors: [] };
+    return { cities: 0, citiesList: [], targetsSynced: 0, pendingRemaining: 0, imported: 0, duplicates: 0, mock: false, needsConfig: false, errors: [] };
   }
 
-  // 2) Ensure a coverage target exists for each city.
+  // 2) Ensure a coverage target exists for each city (fast — no Apify).
   let needsConfig = false;
   for (const city of citiesList) {
     try { const r = await ensureCoverageTargetsForCity(orgId, city); if (r.created < 0) needsConfig = true; } catch { /* continue */ }
   }
 
-  // 3) Sync pending/failed targets for these cities (bounded).
+  // 3) Sync only a tiny batch of pending/failed targets this run (timeout-safe).
   const { data: pending } = await supabase.from("geo_coverage_targets")
     .select("id,city_name").eq("organization_id", orgId)
     .in("coverage_status", ["pending", "pending_neighborhoods", "failed"] as never)
@@ -441,8 +446,15 @@ export async function syncAllDbCitiesTransactions(
     catch (e) { errors.push(`${t.city_name}: ${e instanceof Error ? e.message : "sync failed"}`); }
   }
 
+  // How many targets still await a pull (so the UI can prompt to run again).
+  const { count: pendingTotal } = await supabase.from("geo_coverage_targets")
+    .select("id", { count: "exact", head: true }).eq("organization_id", orgId)
+    .in("coverage_status", ["pending", "pending_neighborhoods", "failed"] as never)
+    .in("city_name", citiesList as never);
+  const pendingRemaining = Math.max(0, (pendingTotal ?? 0));
+
   if (imported > 0) { try { await recomputeDerivedIntelligence(); } catch { /* best-effort */ } }
-  return { cities: citiesList.length, citiesList, targetsSynced: (pending ?? []).length, imported, duplicates, mock, needsConfig, errors: errors.slice(0, 10) };
+  return { cities: citiesList.length, citiesList, targetsSynced: (pending ?? []).length, pendingRemaining, imported, duplicates, mock, needsConfig, errors: errors.slice(0, 10) };
 }
 
 export async function retryFailedTransactionSyncs(): Promise<{ retried: number; imported: number }> {

@@ -14,11 +14,20 @@ import {
 
 /** Pull transactions for EVERY city present in the org's data (bounded per run). */
 export async function syncAllCitiesTransactionsAction(): Promise<AllCitiesSyncResult> {
-  const r = await svcSyncAllCities();
-  revalidatePath("/transactions");
-  revalidatePath("/transactions/coverage");
-  revalidatePath("/transactions/streets");
-  return r;
+  try {
+    const r = await svcSyncAllCities();
+    revalidatePath("/transactions");
+    revalidatePath("/transactions/coverage");
+    revalidatePath("/transactions/streets");
+    return r;
+  } catch (e) {
+    // Never throw to the client — return a clean result so the UI shows a real message.
+    return {
+      cities: 0, citiesList: [], targetsSynced: 0, pendingRemaining: 0, imported: 0,
+      duplicates: 0, mock: false, needsConfig: false, errors: [],
+      fatalError: e instanceof Error ? e.message : "סנכרון נכשל",
+    };
+  }
 }
 
 export async function ensureCoverageTargetsAction() {

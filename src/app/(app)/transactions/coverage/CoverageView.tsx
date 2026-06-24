@@ -32,9 +32,10 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
   });
   const syncAllCities = () => runner.run(syncAllCitiesTransactionsAction, {
     id: "all-cities", pendingMessage: "מושך עסקאות לכל הערים שקיימות במערכת… (עשוי לקחת מספר דקות)",
-    success: (r) => r.needsConfig ? "נדרש להגדיר APIFY_TOKEN בסביבת השרת."
+    success: (r) => r.fatalError ? `שגיאה: ${r.fatalError}`
+      : r.needsConfig ? "נדרש להגדיר APIFY_TOKEN בסביבת השרת."
       : r.cities === 0 ? "לא נמצאו ערים בנתונים — הוסף נכסים/קונים תחילה."
-      : `נסרקו ${r.cities} ערים · ${r.targetsSynced} אזורים · יובאו ${r.imported} עסקאות${r.duplicates ? ` · ${r.duplicates} כפילויות` : ""}${r.errors.length ? ` · ${r.errors.length} שגיאות` : ""}${r.mock ? " (נתוני הדגמה)" : ""}.`,
+      : `נרשמו ${r.cities} ערים · נמשכו ${r.targetsSynced} אזורים (יובאו ${r.imported} עסקאות${r.duplicates ? ` · ${r.duplicates} כפילויות` : ""})${r.pendingRemaining ? ` · נותרו ${r.pendingRemaining} אזורים — לחץ שוב להמשך` : " · הושלם"}${r.errors.length ? ` · ${r.errors.length} שגיאות` : ""}${r.mock ? " (נתוני הדגמה)" : ""}.`,
   });
   const retry = () => runner.run(retryFailedSyncsAction, {
     id: "retry", pendingMessage: "מנסה שוב סנכרונים שנכשלו…",
