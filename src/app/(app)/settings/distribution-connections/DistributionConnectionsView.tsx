@@ -72,7 +72,7 @@ function fmt(iso: string | null): string {
   catch { return "—"; }
 }
 
-export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false, metaIntegration = null, groups = [], groupTasks = [] }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean; metaIntegration?: MetaIntegrationView | null; groups?: GroupDestination[]; groupTasks?: GroupTaskStatus[] }) {
+export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false, metaIntegration = null, groups = [], groupTasks = [], notice = null }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean; metaIntegration?: MetaIntegrationView | null; groups?: GroupDestination[]; groupTasks?: GroupTaskStatus[]; notice?: { tone: "ok" | "err"; text: string } | null }) {
   const [conns, setConns] = useState<ProviderConnectionView[]>(initial);
   const [pages, setPages] = useState<MetaDestinationView[]>(metaIntegration?.pages ?? []);
   const [instagram, setInstagram] = useState<MetaDestinationView[]>(metaIntegration?.instagram ?? []);
@@ -173,6 +173,14 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
           </div>
         </div>
       </motion.header>
+
+      {/* OAuth callback result (from ?meta=…). Honest success/failure feedback. */}
+      {notice && (
+        <div className={cn("mb-4 rounded-xl border px-4 py-2 text-sm font-semibold",
+          notice.tone === "err" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
+          {notice.text}
+        </div>
+      )}
 
       {(runner.note || runner.error) && (
         <div className={cn("mb-4 rounded-xl border px-4 py-2 text-sm font-semibold",
