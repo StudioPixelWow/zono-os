@@ -392,3 +392,77 @@ body {
   .zauth-anim-right, .zauth-anim-pulse { animation: none !important; }
   .zauth-particle { opacity: 0.4; }
 }
+
+/* ============================================================================
+   ZONO LOADER — premium branded route-loading screen. Lavender backdrop with a
+   soft radial glow, the ZONO logo cradled inside an orbiting conic ring and
+   expanding pulse rings, plus a shimmering progress bar. Scoped under .zload.
+   ========================================================================== */
+.zload-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 168px; height: 168px;
+}
+/* Orbiting conic ring around the logo. */
+.zload-orbit {
+  position: absolute; inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent 0 62%, rgba(168,85,247,0.0) 62%, #a855f7 80%, #c084fc 92%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  animation: zload-spin 1.25s linear infinite;
+  filter: drop-shadow(0 0 10px rgba(124,58,237,0.5));
+}
+@keyframes zload-spin { to { transform: rotate(360deg); } }
+
+/* Expanding pulse rings. */
+.zload-ring {
+  position: absolute;
+  width: 120px; height: 120px;
+  border-radius: 9999px;
+  border: 2px solid rgba(124, 58, 237, 0.45);
+  animation: zload-ring 2.4s ease-out infinite;
+}
+.zload-ring.r2 { animation-delay: 0.8s; }
+.zload-ring.r3 { animation-delay: 1.6s; }
+@keyframes zload-ring {
+  0% { transform: scale(0.7); opacity: 0.7; }
+  80% { opacity: 0; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* Logo soft float + breathe inside the stage. */
+.zload-logo { animation: zload-breathe 2.6s ease-in-out infinite; }
+@keyframes zload-breathe {
+  0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 10px 28px rgba(124,58,237,0.35)); }
+  50% { transform: translateY(-5px) scale(1.03); filter: drop-shadow(0 16px 36px rgba(124,58,237,0.5)); }
+}
+
+/* Shimmering progress bar. */
+.zload-bar {
+  position: relative;
+  height: 4px; width: 180px;
+  border-radius: 9999px;
+  background: rgba(124, 58, 237, 0.12);
+  overflow: hidden;
+}
+.zload-bar::after {
+  content: "";
+  position: absolute; inset: 0;
+  width: 45%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, #7c3aed, #c084fc, transparent);
+  animation: zload-slide 1.4s ease-in-out infinite;
+}
+@keyframes zload-slide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(360%); }
+}
+
+.zload-dots::after { content: "…"; animation: zload-dots 1.4s steps(4) infinite; }
+@keyframes zload-dots { 0% { content: "·"; } 33% { content: "··"; } 66% { content: "···"; } 100% { content: "····"; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .zload-orbit, .zload-ring, .zload-logo, .zload-bar::after, .zload-dots::after { animation: none !important; }
+}

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { useCurrentUser } from "./DashboardDataProvider";
 import { ZonoCommandButton } from "@/components/navigation/zono-command-center";
+import { ZonoLogo } from "@/components/brand/ZonoLogo";
 
 /** Routes wired so far. Items without a route stay visual-only for now. */
 const HREFS: Record<string, string> = {
@@ -117,8 +118,8 @@ export function Sidebar() {
 
   return (
     <aside className="bg-card/80 border-line sticky top-0 hidden h-screen w-[92px] shrink-0 flex-col items-center border-s py-6 backdrop-blur-xl lg:flex">
-      <Link href="/" className="zono-gradient-glow mb-3 grid h-11 w-11 place-items-center rounded-2xl text-lg font-black">
-        Z
+      <Link href="/" aria-label="ZONO" className="mb-3 grid h-11 w-11 place-items-center rounded-2xl">
+        <ZonoLogo width={44} height={44} className="!h-11 !w-11 object-contain" />
       </Link>
 
       {/* ZONO Command — full-screen navigation operating system (⌘K) */}
