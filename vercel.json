@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/external-listings-sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/transactions-refresh",
+      "schedule": "0 3 * * *"
     }
   ]
 }
