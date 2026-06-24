@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
@@ -156,6 +157,17 @@ export function DealsView({ board }: { board: DealsBoard }) {
 
 function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn: () => Promise<unknown>) => void }) {
   const ns = nextStage(d.deal_stage);
+  const [closing, setClosing] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [commission, setCommission] = useState("");
+
+  const confirmClose = () => {
+    const finalAmount = amount.trim() ? Number(amount.replace(/[^\d.]/g, "")) : null;
+    const finalCommission = commission.trim() ? Number(commission.replace(/[^\d.]/g, "")) : null;
+    run(() => advanceDealStageAction(d.id, "closed", { finalAmount, finalCommission }));
+    setClosing(false); setAmount(""); setCommission("");
+  };
+
   return (
     <div className="bg-card border-line flex flex-col gap-2 rounded-[18px] border p-3 shadow-[var(--shadow-soft)]">
       <div className="flex items-start justify-between gap-2">
@@ -176,11 +188,29 @@ function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn:
       {d.next_best_action && <p className="text-brand-strong text-[11px] font-bold">→ {d.next_best_action}</p>}
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {ns && <button className="text-brand-strong text-[11px] font-bold" disabled={pending} onClick={() => run(() => advanceDealStageAction(d.id, ns))}>קדם ל{DEAL_STAGE_LABEL[ns]}</button>}
-        <button className="text-success text-[11px] font-bold" disabled={pending} onClick={() => run(() => advanceDealStageAction(d.id, "closed"))}>סגור בהצלחה</button>
+        <button className="text-success text-[11px] font-bold" disabled={pending} onClick={() => setClosing((v) => !v)}>סגור בהצלחה</button>
         <button className="text-danger text-[11px] font-bold" disabled={pending} onClick={() => run(() => advanceDealStageAction(d.id, "lost"))}>אבד</button>
         {d.buyer_id && <Link href={`/buyers/${d.buyer_id}`} className="text-muted text-[11px] font-bold">קונה ↗</Link>}
         {d.property_id && <Link href={`/properties/${d.property_id}`} className="text-muted text-[11px] font-bold">נכס ↗</Link>}
       </div>
+
+      {/* Real-amount capture on close. Amounts are OPTIONAL — leaving them blank
+          still closes the deal (counted as won) but records no realized revenue. */}
+      {closing && (
+        <div className="border-line mt-1 flex flex-col gap-2 rounded-xl border border-dashed p-2.5">
+          <p className="text-muted text-[11px] font-bold">סגירת עסקה — הזן סכומים בפועל (לא חובה)</p>
+          <div className="flex gap-2">
+            <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="מחיר סגירה ₪"
+              className="border-line bg-surface text-ink h-8 w-full rounded-lg border px-2 text-xs outline-none" />
+            <input inputMode="numeric" value={commission} onChange={(e) => setCommission(e.target.value)} placeholder="עמלה ₪"
+              className="border-line bg-surface text-ink h-8 w-full rounded-lg border px-2 text-xs outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <button className="text-success bg-success-soft rounded-lg px-3 py-1 text-[11px] font-bold" disabled={pending} onClick={confirmClose}>אשר סגירה</button>
+            <button className="text-muted text-[11px] font-bold" onClick={() => setClosing(false)}>ביטול</button>
+          </div>
+        </div>
+      )}
       <div className="mt-1">
         <CreateLegalDocumentButton entityType="deal" entityId={d.id} label="מסמך משפטי" />
       </div>

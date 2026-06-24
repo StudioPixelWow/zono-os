@@ -160,6 +160,9 @@ export interface RevenueBoard {
   localities: { locality: string; revenue: number; forecast: number; deals: number }[];
   propertyTypes: { type: string; revenue: number; deals: number; conversion: number }[];
   growth: GrowthScenario[];
+  /** True only when at least one REAL canonical closed (won) deal exists. When
+   *  false, realized-revenue figures must show an honest empty state, never money. */
+  hasClosedDeals: boolean;
 }
 
 export async function getRevenueBoard(): Promise<RevenueBoard> {
@@ -214,9 +217,13 @@ export async function getRevenueBoard(): Promise<RevenueBoard> {
     avgCommissionPerDeal: 35000, avgDealsPerAgentMonth: 1.2,
   });
 
+  // Real realized-revenue gate: at least one canonical WON deal with a close date.
+  const { count: closedCount } = await supabase.from("deals").select("id", { count: "exact", head: true }).eq("status", "won").not("closed_at", "is", null);
+
   return {
     profile, targets: targetsRes.data ?? [],
     leakage: (leakRes.data ?? []).map((l) => ({ ...l, ownerName: l.owner_user_id ? names.get(l.owner_user_id) ?? null : null })),
     opportunities, agents: agents.slice(0, 12), localities, propertyTypes, growth,
+    hasClosedDeals: (closedCount ?? 0) > 0,
   };
 }

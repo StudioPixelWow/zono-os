@@ -120,11 +120,63 @@ function rel(orgId: string, st: string, sid: string, tt: string, tid: string, ty
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
-export async function advanceDealStage(dealId: string, stage: DealStage): Promise<void> {
+/** Real closing outcome supplied by the agent when a deal is won/lost. Money is
+ *  recorded ONLY from these real values — never from pipeline estimates. */
+export interface DealCloseOutcome { finalAmount?: number | null; finalCommission?: number | null; lostReason?: string | null }
+
+export async function advanceDealStage(dealId: string, stage: DealStage, outcome?: DealCloseOutcome): Promise<void> {
   const { userId, orgId } = await ctx();
   const supabase = await createClient();
   await supabase.from("deal_profiles").update({ deal_stage: stage, status: stage === "closed" ? "won" : stage === "lost" ? "lost" : "active", expected_close_date: expectedCloseDate(stage) } as never).eq("id", dealId);
   await supabase.from("deal_journeys").insert({ organization_id: orgId, deal_profile_id: dealId, stage, owner_id: userId, note: `קודם ל${DEAL_STAGE_LABEL[stage]}` } as never);
+  // CANONICAL REVENUE LEDGER: a won/lost deal_profile writes a REAL row to the
+  // canonical `deals` table (so /revenue, /ai-office, /command read facts, not
+  // estimates). The fact-of-close (counts) is always real; money (value /
+  // commission) is written ONLY when the agent supplies the actual amount —
+  // pipeline estimates are NEVER recorded as realized revenue.
+  if (stage === "closed" || stage === "lost") {
+    try { await syncCanonicalDealOnClose(supabase, orgId, dealId, stage === "closed" ? "won" : "lost", outcome ?? {}); }
+    catch (e) { console.error("[deals] canonical sync failed:", e); }
+  }
+}
+
+/** Upsert the canonical `deals` row for a closed/lost deal_profile (linked via
+ *  deal_profiles.deal_id for idempotency on re-close). Real fields only. */
+async function syncCanonicalDealOnClose(
+  supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, profileId: string,
+  status: "won" | "lost", outcome: DealCloseOutcome,
+): Promise<void> {
+  const { data: p } = await supabase.from("deal_profiles")
+    .select("id,buyer_id,seller_id,property_id,assigned_agent_id,deal_id,locality,deal_probability,expected_close_date")
+    .eq("id", profileId).eq("organization_id", orgId).maybeSingle();
+  if (!p) return;
+  const amount = outcome.finalAmount != null && outcome.finalAmount > 0 ? Math.round(outcome.finalAmount) : null;
+  const commission = outcome.finalCommission != null && outcome.finalCommission > 0 ? Math.round(outcome.finalCommission) : null;
+  const commissionPct = amount && commission ? Math.round((commission / amount) * 10000) / 100 : null;
+  const row = {
+    org_id: orgId,
+    owner_id: p.assigned_agent_id ?? null,
+    title: p.locality ? `עסקה · ${p.locality}` : "עסקה",
+    type: "sale",
+    status,                                                  // won | lost — real fact
+    value: status === "won" ? amount : null,                 // real money only (else NULL)
+    commission_amount: status === "won" ? commission : null,
+    commission_pct: status === "won" ? commissionPct : null,
+    probability: Math.max(0, Math.min(100, p.deal_probability ?? 0)),
+    buyer_id: p.buyer_id ?? null,
+    seller_id: p.seller_id ?? null,
+    property_id: p.property_id ?? null,
+    expected_close_date: p.expected_close_date ?? null,
+    closed_at: status === "won" ? new Date().toISOString() : null,
+    lost_reason: status === "lost" ? (outcome.lostReason ?? null) : null,
+  };
+  if (p.deal_id) {
+    await supabase.from("deals").update(row as never).eq("id", p.deal_id).eq("org_id", orgId);
+  } else {
+    const { data: created } = await supabase.from("deals").insert(row as never).select("id").single();
+    const newId = (created as { id: string } | null)?.id;
+    if (newId) await supabase.from("deal_profiles").update({ deal_id: newId } as never).eq("id", profileId);
+  }
 }
 
 export async function logNegotiation(dealId: string, input: { asking: number | null; buyerOffer: number | null; sellerCounter: number | null; note?: string }): Promise<void> {

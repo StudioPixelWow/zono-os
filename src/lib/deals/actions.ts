@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import {
   addObjection as svcAddObjection, advanceDealStage as svcAdvance, logNegotiation as svcLogNeg,
   recomputeDeals as svcRecompute, resolveObjection as svcResolveObjection, setDealTaskStatus as svcSetTask,
+  type DealCloseOutcome,
 } from "./service";
 import type { DealStage } from "./engine";
 
@@ -16,9 +17,10 @@ export async function recomputeDealsAction() {
   return r;
 }
 
-export async function advanceDealStageAction(dealId: string, stage: DealStage) {
-  await svcAdvance(dealId, stage);
+export async function advanceDealStageAction(dealId: string, stage: DealStage, outcome?: DealCloseOutcome) {
+  await svcAdvance(dealId, stage, outcome);
   revalidatePath("/deals");
+  revalidatePath("/revenue");
 }
 
 export async function logNegotiationAction(dealId: string, input: { asking: number | null; buyerOffer: number | null; sellerCounter: number | null; note?: string }) {

@@ -49,9 +49,16 @@ export function RevenueView({ board }: { board: RevenueBoard }) {
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
 
+      {/* Honest realized-revenue gate: no canonical closed deals → no real money to show. */}
+      {!board.hasClosedDeals && (
+        <p className="border-line bg-surface text-muted rounded-xl border px-4 py-3 text-sm font-semibold">
+          אין עדיין עסקאות סגורות להצגת הכנסות בפועל. תחזית הצנרת מבוססת על נתוני pipeline אמיתיים; הכנסות בפועל יוצגו לאחר סגירת עסקה ראשונה.
+        </p>
+      )}
+
       {/* Command center */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="הכנסות החודש" value={profile ? formatShekels(profile.current_month_revenue) : "—"} icon="BarChart3" tone="text-success" />
+        <Stat label="הכנסות החודש" value={profile && board.hasClosedDeals ? formatShekels(profile.current_month_revenue) : "—"} icon="BarChart3" tone="text-success" />
         <Stat label="צנרת 30 יום" value={profile ? formatShekels(profile.forecast_revenue_30) : "—"} icon="Clock" tone="text-brand-strong" />
         <Stat label="צנרת 90 יום" value={profile ? formatShekels(profile.forecast_revenue_90) : "—"} icon="TrendingUp" tone="text-success" />
         <Stat label="הכנסה בסיכון" value={profile ? formatShekels(profile.revenue_at_risk) : "—"} icon="AlertTriangle" tone="text-danger" />
