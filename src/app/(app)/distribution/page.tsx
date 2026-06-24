@@ -3,6 +3,8 @@ import { getDistributionCenter, type DistributionCenterData } from "@/lib/distri
 import { COMPLIANCE_WARNINGS } from "@/lib/distribution/distribution-provider";
 import { getPublishAssistantAction } from "@/lib/distribution/manual-publish-actions";
 import type { AssistantPost } from "@/lib/distribution/manual-publish-service";
+import { getCampaignCommentsAction } from "@/lib/distribution/distribution-comment-actions";
+import type { CommentsBoard } from "@/lib/distribution/distribution-comment-service";
 import { createClient } from "@/lib/supabase/server";
 import { DistributionCenterView } from "./_center/DistributionCenterView";
 import type { PropertyLite } from "./_center/variations";
@@ -25,6 +27,10 @@ export default async function DistributionPage() {
   let properties: PropertyLite[] = [];
   let center: DistributionCenterData = EMPTY_CENTER;
   let assistantPosts: AssistantPost[] = [];
+  let commentsBoard: CommentsBoard = {
+    comments: [],
+    counts: { comments: 0, hotLeads: 0, leads: 0, needsReply: 0, ignored: 0, converted: 0, conversionRate: 0 },
+  };
 
   try {
     board = await getDistributionBoard();
@@ -69,6 +75,12 @@ export default async function DistributionPage() {
   } catch (e) {
     console.error("[distribution] publish assistant load failed:", e);
   }
+  try {
+    const res = await getCampaignCommentsAction();
+    commentsBoard = res.board;
+  } catch (e) {
+    console.error("[distribution] comments board load failed:", e);
+  }
 
   return (
     <DistributionCenterView
@@ -77,6 +89,7 @@ export default async function DistributionPage() {
       properties={properties}
       center={center}
       assistantPosts={assistantPosts}
+      commentsBoard={commentsBoard}
       complianceWarnings={COMPLIANCE_WARNINGS}
     />
   );

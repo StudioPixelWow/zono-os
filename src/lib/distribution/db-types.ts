@@ -68,6 +68,9 @@ export interface DistCommentRow {
   author_external_id: string | null; external_comment_id: string | null; author_profile_url: string | null;
   comment_text: string | null; sentiment: string | null; intent: string | null; intent_score: number;
   lead_intent_score: number; is_lead: boolean; handled: boolean; occurred_at: string;
+  // Phase 7 — classification + suggested reply + lead link.
+  category: string | null; suggested_reply: string | null; should_create_lead: boolean;
+  analysis_reason: string | null; lead_id: string | null;
   metadata: Record<string, unknown>; created_at: string; updated_at: string;
 }
 
