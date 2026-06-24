@@ -37,8 +37,8 @@ const legend = [
 
 export function HeatmapSection({ neighborhoods = heatNeighborhoods, insight = heatmapInsight }: { neighborhoods?: HeatNeighborhood[]; insight?: string } = {}) {
   const hasData = neighborhoods.length > 0;
-  // Highest demand-delta first — real ranking, no geographic positioning.
-  const ranked = [...neighborhoods].sort((a, b) => b.changePct - a.changePct);
+  // Highest real opportunity score first (falls back to demand-delta).
+  const ranked = [...neighborhoods].sort((a, b) => (b.score ?? b.changePct) - (a.score ?? a.changePct));
 
   return (
     <SectionShell title="מודיעין ביקוש שכונתי" eyebrow="מודיעין שוק">
@@ -55,15 +55,24 @@ export function HeatmapSection({ neighborhoods = heatNeighborhoods, insight = he
           {/* Ranked locality demand — real data, no map */}
           <div className="bg-card border-line flex flex-col gap-2 rounded-[24px] border p-4 shadow-[var(--shadow-card)]">
             {ranked.map((n) => (
-              <div key={n.id} className="bg-surface border-line flex items-center justify-between gap-3 rounded-2xl border px-4 py-3">
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", dot[n.tone])} />
-                  <span className="text-ink truncate text-sm font-bold">{n.name}</span>
-                  {n.label && <span className="text-muted truncate text-xs">· {n.label}</span>}
-                </span>
-                <span className={cn("shrink-0 text-sm font-black", changeColor[n.tone])}>
-                  {n.changePct > 0 ? "+" : ""}{n.changePct}%
-                </span>
+              <div key={n.id} className="bg-surface border-line flex flex-col gap-1.5 rounded-2xl border px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", dot[n.tone])} />
+                    <span className="text-ink truncate text-sm font-bold">{n.name}</span>
+                    {n.label && <span className="text-muted truncate text-xs">· {n.label}</span>}
+                  </span>
+                  {/* Real opportunity score (0–100), explainable — not a decorative %. */}
+                  <span className={cn("shrink-0 text-sm font-black", changeColor[n.tone])}>
+                    {n.score != null ? `${n.score}/100` : `${n.changePct > 0 ? "+" : ""}${n.changePct}%`}
+                  </span>
+                </div>
+                {/* Explainability: top reasons behind the score (no black box). */}
+                {n.reasons && n.reasons.length > 0 && (
+                  <ul className="text-muted ms-5 list-disc space-y-0.5 pe-2 text-[11px] leading-snug">
+                    {n.reasons.slice(0, 3).map((reason, ri) => <li key={ri}>{reason}</li>)}
+                  </ul>
+                )}
               </div>
             ))}
             {insight && (

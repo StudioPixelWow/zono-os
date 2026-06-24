@@ -52,14 +52,14 @@ export async function HeatmapSectionContainer() {
   try {
     const cells = await getCurrentMarketHeatmap();
     if (cells.length) {
-      // Reuse the existing polygon layout slots; fill with real locality demand.
+      // Phase 25.1 — real opportunity score + band + explainability reasons.
       neighborhoods = cells.slice(0, heatNeighborhoods.length).map((c, i) => {
         const slot = heatNeighborhoods[i];
-        return { id: c.localityId ?? c.localityName, name: c.localityName, changePct: Math.round(c.demand - c.supply), tone: c.tone, label: c.heatLabel, points: slot.points, labelX: slot.labelX, labelY: slot.labelY };
+        return { id: c.localityId ?? c.localityName, name: c.localityName, changePct: Math.round(c.demand - c.supply), tone: c.tone, label: c.bandLabel, score: c.opportunity, reasons: c.reasons, points: slot.points, labelX: slot.labelX, labelY: slot.labelY };
       });
       const top = cells[0];
-      const hot = cells.filter((c) => c.heatLevel === "hot" || c.heatLevel === "opportunity").length;
-      insight = `${top.localityName}: ${top.heatLabel} · ${hot} אזורי הזדמנות פעילים · ${cells.reduce((s, c) => s + c.priceDrops, 0)} ירידות מחיר`;
+      const topReason = top.reasons[0] ?? "";
+      insight = `${top.localityName}: ${top.bandLabel} (${top.opportunity}/100)${topReason ? ` · ${topReason}` : ""}`;
     } else {
       neighborhoods = []; // real empty state (no fake data)
     }

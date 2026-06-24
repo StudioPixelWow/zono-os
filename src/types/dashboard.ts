@@ -66,7 +66,10 @@ export interface HeatNeighborhood {
   name: string;
   changePct: number;
   tone: Tone; // green=high, gold=stable, red=down, purple=opportunity
-  label: string; // "ביקוש גבוה" וכו'
+  label: string; // band label e.g. "פוטנציאל גבוה" / "ביקוש גבוה"
+  /** Phase 25.1 — real opportunity score (0..100) + explainability reasons. */
+  score?: number;
+  reasons?: string[];
   /** SVG polygon points for the heatmap shape. */
   points: string;
   /** Label anchor inside the polygon. */

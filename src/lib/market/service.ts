@@ -10,7 +10,9 @@ import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import {
   calculateDemandScore, calculateHeatLevel, calculateOpportunityScore, calculateSupplyScore,
-  HEAT_LABEL, HEAT_TONE, type HeatLevel,
+  calculateInventoryScore, calculateTransactionScore, calculateMomentum, calculateCompetitionScore,
+  calculateOpportunityScoreV2, classifyMarketScore, buildScoreReasons,
+  HEAT_LABEL, HEAT_TONE, MOMENTUM_LABEL, type HeatLevel, type MomentumClass, type MarketBandKey,
 } from "./engine";
 
 type DB = SupabaseClient<Database>;
@@ -51,6 +53,28 @@ async function buildSnapshots(db: DB, orgId: string): Promise<MarketSnapshotSumm
 
   const dropSince = new Date(Date.now() - 14 * DAY).toISOString();
   const newSince = new Date(Date.now() - 7 * DAY).toISOString();
+  const today = new Date().toISOString().slice(0, 10);
+  const tx90Since = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
+  const tx180Since = new Date(Date.now() - 180 * DAY).toISOString().slice(0, 10);
+  // Real closed transactions (GovMap/Madlan) + the most recent PRIOR snapshot per
+  // locality (for momentum). Both org-scoped; no fabricated data.
+  const [txRes, priorSnapRes] = await Promise.all([
+    db.from("property_transactions").select("city_name,deal_date").eq("organization_id", orgId).limit(8000),
+    db.from("market_area_snapshots").select("locality_name,demand_score,opportunity_score,avg_price_per_sqm,active_external_listings,active_internal_properties,date,metadata").eq("organization_id", orgId).lt("date", today).order("date", { ascending: false }).limit(2000),
+  ]);
+  const txRows = txRes.data ?? [];
+  // Most recent prior snapshot per locality_name.
+  const priorByLoc = new Map<string, { demand: number; opportunity: number; avgSqm: number | null; listings: number; tx90: number }>();
+  for (const p of (priorSnapRes.data ?? [])) {
+    if (priorByLoc.has(p.locality_name)) continue;
+    const meta = (p.metadata ?? {}) as Record<string, unknown>;
+    priorByLoc.set(p.locality_name, {
+      demand: p.demand_score, opportunity: p.opportunity_score, avgSqm: p.avg_price_per_sqm,
+      listings: (p.active_external_listings ?? 0) + (p.active_internal_properties ?? 0),
+      tx90: typeof meta.tx90 === "number" ? (meta.tx90 as number) : 0,
+    });
+  }
+
   const [extRes, propRes, buyersRes, intelRes, matchRes, relRes, histRes, dupRes] = await Promise.all([
     db.from("external_listings").select("id,city,price,sqm,rooms,has_agent,first_seen_at").eq("status", "active").is("promoted_property_id", null).limit(2000),
     db.from("properties").select("id,city,status,is_exclusive,exclusivity_scope").neq("status", "archived").limit(2000),
@@ -72,7 +96,6 @@ async function buildSnapshots(db: DB, orgId: string): Promise<MarketSnapshotSumm
   const dupListingIds = new Set((dupRes.data ?? []).map((d) => d.listing_id));
 
   const propCity = new Map(props.map((p) => [p.id, p.city]));
-  const today = new Date().toISOString().slice(0, 10);
   const rows: Database["public"]["Tables"]["market_area_snapshots"]["Insert"][] = [];
 
   for (const loc of localities) {
@@ -102,8 +125,41 @@ async function buildSnapshots(db: DB, orgId: string): Promise<MarketSnapshotSumm
 
     const demand = calculateDemandScore({ activeBuyers: locBuyers.length, avgBuyerReadiness: avgReadiness, avgBuyerEngagement: avgEngagement, matchedBuyers, relationshipSignals });
     const supply = calculateSupplyScore({ externalListings: locExt.length, internalProperties: locProps.length, newListings, priceDrops, duplicates, privateOwners });
-    const opportunity = calculateOpportunityScore({ demand, supply, belowAverage, priceDrops, readyBuyers, officeExclusiveCount: officeExclusive });
-    const heat = calculateHeatLevel(demand, supply, opportunity);
+    const heat = calculateHeatLevel(demand, supply, calculateOpportunityScore({ demand, supply, belowAverage, priceDrops, readyBuyers, officeExclusiveCount: officeExclusive }));
+
+    // ── PHASE 25.1 — real locality intelligence (every input is counted data) ──
+    const agentListings = locExt.filter((l) => l.has_agent === true).length;
+    const locTx = txRows.filter((t) => cityMatches(t.city_name, loc));
+    const tx90 = locTx.filter((t) => t.deal_date && t.deal_date >= tx90Since).length;
+    const txPrev90 = locTx.filter((t) => t.deal_date && t.deal_date >= tx180Since && t.deal_date < tx90Since).length;
+    const listings = locExt.length + locProps.length;
+
+    const inventory = calculateInventoryScore({ externalListings: locExt.length, internalProperties: locProps.length, newListings, priceDrops });
+    const transaction = calculateTransactionScore({ tx90, txPrev90, txTotal: locTx.length });
+    const competition = calculateCompetitionScore({ agentListings, totalListings: listings });
+
+    const prior = priorByLoc.get(loc.nameHe);
+    const priceSqmDeltaPct = prior?.avgSqm && avgSqm ? Math.round(((avgSqm - prior.avgSqm) / prior.avgSqm) * 1000) / 10 : 0;
+    const momentum = calculateMomentum({
+      hasHistory: !!prior,
+      demandDelta: prior ? demand - prior.demand : 0,
+      // momentum is computed before opportunity v2 (avoids circularity); it relies
+      // on demand/price/tx/listing trends, so opportunityDelta stays 0 here.
+      opportunityDelta: 0,
+      pricePerSqmDeltaPct: priceSqmDeltaPct,
+      listingDelta: prior ? listings - prior.listings : 0,
+      txDelta: prior ? tx90 - prior.tx90 : 0,
+    });
+
+    const opportunity = calculateOpportunityScoreV2({ inventory, demand, transaction, momentum: momentum.score, competition });
+    const band = classifyMarketScore(opportunity);
+    const reasons = buildScoreReasons({
+      demand, activeBuyers: locBuyers.length, readyBuyers,
+      inventory, listings, newListings,
+      transaction, tx90, txPrev90,
+      momentum, pricePerSqmDeltaPct: priceSqmDeltaPct, hasHistory: !!prior,
+      competition, agentListings, priceDrops, belowAverage,
+    });
 
     rows.push({
       organization_id: orgId, locality_id: loc.id, locality_name: loc.nameHe, date: today,
@@ -114,8 +170,17 @@ async function buildSnapshots(db: DB, orgId: string): Promise<MarketSnapshotSumm
       avg_rooms: rooms.length ? Math.round((rooms.reduce((a, b) => a + b, 0) / rooms.length) * 10) / 10 : null,
       price_drops_count: priceDrops, below_average_count: belowAverage, private_owner_count: privateOwners,
       duplicate_candidates_count: duplicates, active_buyers_count: locBuyers.length, matched_buyers_count: matchedBuyers,
+      // opportunity_score now holds the explainable v2 opportunity; demand/supply unchanged.
       demand_score: demand, supply_score: supply, opportunity_score: opportunity, heat_level: heat,
-      metadata: { readyBuyers, newListings, officeExclusive, relationshipSignals } as never,
+      metadata: {
+        readyBuyers, newListings, officeExclusive, relationshipSignals,
+        // Phase 25.1 extended, traceable scores:
+        inventory_score: inventory, transaction_score: transaction, competition_score: competition,
+        momentum_score: momentum.score, momentum_class: momentum.class,
+        band_key: band.key, band_label: band.label, band_tone: band.tone,
+        tx90, tx_prev90: txPrev90, agent_listings: agentListings, price_sqm_delta_pct: priceSqmDeltaPct,
+        reasons,
+      } as never,
     });
   }
 
@@ -158,6 +223,17 @@ export interface MarketHeatmapCell {
   belowAverage: number;
   activeBuyers: number;
   matchedBuyers: number;
+  // ── Phase 25.1 — explainable locality intelligence ──
+  inventoryScore: number;
+  transactionScore: number;
+  competitionScore: number;
+  momentumScore: number;
+  momentumClass: MomentumClass;
+  momentumLabel: string;
+  bandKey: MarketBandKey;
+  bandLabel: string;
+  /** Human, traceable reasons for the opportunity score. */
+  reasons: string[];
 }
 
 /** Latest snapshot per locality for the session org. */
@@ -172,14 +248,27 @@ export async function getCurrentMarketHeatmap(): Promise<MarketHeatmapCell[]> {
     if (seen.has(s.locality_name)) continue;
     seen.add(s.locality_name);
     const heat = (s.heat_level as HeatLevel) ?? "cool";
+    const m = (s.metadata ?? {}) as Record<string, unknown>;
+    const num = (k: string, d = 0) => (typeof m[k] === "number" ? (m[k] as number) : d);
+    const momentumClass = (typeof m.momentum_class === "string" ? m.momentum_class : "stable") as MomentumClass;
+    const bandKey = (typeof m.band_key === "string" ? m.band_key : "neutral") as MarketBandKey;
+    const bandLabel = typeof m.band_label === "string" ? (m.band_label as string) : "ניטרלי";
+    const bandTone = (typeof m.band_tone === "string" ? m.band_tone : null) as MarketHeatmapCell["tone"] | null;
+    const reasons = Array.isArray(m.reasons) ? (m.reasons as string[]) : [];
     cells.push({
       localityId: s.locality_id, localityName: s.locality_name, date: s.date,
       demand: s.demand_score, supply: s.supply_score, opportunity: s.opportunity_score,
-      heatLevel: heat, heatLabel: HEAT_LABEL[heat] ?? "—", tone: HEAT_TONE[heat] ?? "blue",
+      heatLevel: heat, heatLabel: HEAT_LABEL[heat] ?? "—",
+      // Real opportunity band drives the tone (falls back to heat tone for legacy rows).
+      tone: bandTone ?? HEAT_TONE[heat] ?? "blue",
       avgPricePerSqm: s.avg_price_per_sqm, avgPrice: s.avg_price,
       externalListings: s.active_external_listings, internalProperties: s.active_internal_properties,
       priceDrops: s.price_drops_count, belowAverage: s.below_average_count,
       activeBuyers: s.active_buyers_count, matchedBuyers: s.matched_buyers_count,
+      inventoryScore: num("inventory_score"), transactionScore: num("transaction_score"),
+      competitionScore: num("competition_score"), momentumScore: num("momentum_score", 50),
+      momentumClass, momentumLabel: MOMENTUM_LABEL[momentumClass],
+      bandKey, bandLabel, reasons,
     });
   }
   return cells.sort((a, b) => b.opportunity - a.opportunity || b.demand - a.demand);
