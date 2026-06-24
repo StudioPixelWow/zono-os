@@ -489,6 +489,7 @@ export async function syncAllDbCitiesTransactions(
 export interface CityCoverageProgress {
   total: number; completed: number; pending: number; failed: number; syncing: number;
   transactionsTotal: number; recentCities: { city: string; found: number }[];
+  apifyConfigured: boolean;
 }
 export async function getCityCoverageProgress(): Promise<CityCoverageProgress> {
   const { orgId } = await ctx();
@@ -516,6 +517,7 @@ export async function getCityCoverageProgress(): Promise<CityCoverageProgress> {
     total: total.count ?? 0, completed: completed.count ?? 0, pending: pending.count ?? 0,
     failed: failed.count ?? 0, syncing: syncing.count ?? 0, transactionsTotal: tx.count ?? 0,
     recentCities: [...byCity.entries()].map(([city, found]) => ({ city, found })).slice(0, 6),
+    apifyConfigured: isTransactionsApifyConfigured() || isDev,
   };
 }
 

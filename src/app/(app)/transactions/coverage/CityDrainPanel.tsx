@@ -58,13 +58,22 @@ export function CityDrainPanel() {
         <div className="flex items-center gap-2.5">
           <span className="text-brand">{draining ? <Icon name="Loader" size={20} className="animate-spin" /> : <Icon name="Building2" size={20} />}</span>
           <div>
-            <p className="text-ink text-sm font-black">משיכת עסקאות לכל הערים</p>
+            <div className="flex items-center gap-2">
+              <p className="text-ink text-sm font-black">משיכת עסקאות לכל הערים</p>
+              {progress && (
+                <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold",
+                  progress.apifyConfigured ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>
+                  <span className={cn("h-1.5 w-1.5 rounded-full", progress.apifyConfigured ? "bg-emerald-500" : "bg-red-500")} />
+                  {progress.apifyConfigured ? "Apify מחובר" : "Apify לא מחובר"}
+                </span>
+              )}
+            </div>
             <p className="text-muted text-xs">מושך מנות קטנות עד שכל הערים מכוסות — אפשר לעצור בכל רגע.</p>
           </div>
         </div>
         {draining
           ? <button onClick={stop} className="border-line bg-card text-danger inline-flex h-10 items-center gap-1.5 rounded-xl border px-4 text-sm font-bold hover:shadow"><Icon name="X" size={15} /> עצור</button>
-          : <button onClick={drain} className="btn-zono-primary zono-focus-ring inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold"><Icon name="Sparkles" size={16} /> משוך הכל אוטומטית</button>}
+          : <button onClick={drain} disabled={progress ? !progress.apifyConfigured : false} title={progress && !progress.apifyConfigured ? "נדרש להגדיר APIFY_TOKEN בשרת" : undefined} className="btn-zono-primary zono-focus-ring inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold disabled:opacity-50"><Icon name="Sparkles" size={16} /> משוך הכל אוטומטית</button>}
       </div>
 
       {progress && (
@@ -97,6 +106,11 @@ export function CityDrainPanel() {
         </>
       )}
 
+      {progress && !progress.apifyConfigured && (
+        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+          חיבור Apify לא מוגדר. כדי למשוך עסקאות מ‑GovMap יש להגדיר את משתנה הסביבה <code className="font-mono">APIFY_TOKEN</code> בשרת (Vercel), ואז לרענן.
+        </p>
+      )}
       {note && <p className="text-brand-strong mt-3 text-xs font-semibold">{note}</p>}
       {error && <p className="text-danger mt-3 text-xs font-semibold">{error}</p>}
     </div>
