@@ -9,7 +9,7 @@ export default async function RevenuePage() {
     board = await getRevenueBoard();
   } catch (e) {
     console.error("[revenue] load failed:", e);
-    board = { profile: null, targets: [], leakage: [], opportunities: [], agents: [], localities: [], propertyTypes: [], growth: [] };
+    board = { profile: null, targets: [], leakage: [], opportunities: [], agents: [], localities: [], propertyTypes: [], growth: [], hasClosedDeals: false };
   }
   return <RevenueView board={board} />;
 }
