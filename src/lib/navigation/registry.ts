@@ -38,6 +38,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "team", label: "מודיעין צוות", route: "/team", icon: "UserCheck", category: "מודיעין", roleMin: "manager", sidebar: true, searchable: true },
   { id: "graph", label: "קשרים עסקיים", route: "/graph", icon: "Sparkles", category: "מודיעין", roleMin: "agent", sidebar: true, searchable: true },
   { id: "acquisition", label: "גיוס מלאי", route: "/acquisition", icon: "Building2", category: "מודיעין", roleMin: "agent", sidebar: true, searchable: true },
+  { id: "demand", label: "ביקוש קונים", route: "/demand", icon: "Flame", category: "מודיעין", roleMin: "agent", sidebar: true, searchable: true, description: "מודיעין ביקוש — מה חסר במלאי והזדמנויות גיוס" },
 
   // ── שוק ועסקאות ──
   { id: "market", label: "מודיעין שוק", route: "/market", icon: "Map", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
