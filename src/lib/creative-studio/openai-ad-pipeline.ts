@@ -43,12 +43,21 @@ export function resolveSaleLabel(spec: AdSpec): string {
   return spec.kind === "sold" ? "נמכר" : "למכירה";
 }
 
+/** Israeli real-estate price format: ₪1,620,000 — no space after ₪, comma
+ *  thousands separators. Returns the original string when there are no digits. */
+export function normalizeIlsPrice(price: string | null | undefined): string | null {
+  if (!price) return null;
+  const digits = price.replace(/[^\d]/g, "");
+  if (!digits) return price;
+  return `₪${Number(digits).toLocaleString("en-US")}`;
+}
+
 /** Source-Data Lock: the manifest is the ONLY text the ad may contain. */
 export function buildSourceManifest(spec: AdSpec): SourceManifest {
   return {
     saleLabel: resolveSaleLabel(spec),
     headline: spec.headline, subheadline: spec.subheadline ?? null,
-    price: spec.price ?? null,
+    price: normalizeIlsPrice(spec.price),
     address: [spec.street, spec.city].filter(Boolean).join(", ") || null,
     city: spec.city ?? null, street: spec.street ?? null,
     rooms: spec.rooms ?? null, sqm: spec.sqm ?? null, floor: spec.floor ?? null,
@@ -95,7 +104,8 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
   const colors = [spec.palette.bg, spec.palette.bg2, spec.palette.accent].filter(Boolean).join(", ");
   const saleLabel = resolveSaleLabel(spec);
   const address = [spec.street, spec.city].filter(Boolean).join(", ");
-  const priceLine = [spec.priceLabel, spec.price].filter(Boolean).join(" ").trim();
+  // Israeli price format ₪1,620,000 (no space after ₪, comma separators).
+  const priceLine = normalizeIlsPrice(spec.price) ?? "";
 
   // Specs → a clean premium ICON STRIP (icon + number only). Ranked to favour
   // bedroom → area → parking → storage, de-duplicated, and capped at MAX 4.
@@ -146,11 +156,12 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
 
     // ── TEXT-LOCK (spec §3) — EXACT strings, never altered ─────────────────────
     "════ TEXT-LOCK — render ONLY these EXACT Hebrew strings, crisp and perfectly legible right-to-left (RTL). Reproduce each string letter-for-letter. NEVER rewrite, NEVER abbreviate, NEVER invent, NEVER autocorrect, NEVER replace letters, NEVER add similar words, NEVER translate, NEVER duplicate letters. No text may appear on the image that is not in this list: ════",
+    "HEBREW VALIDATION (mandatory before finalizing): every Hebrew string must be 100% correctly spelled (e.g. 'למכירה' never 'למכירת'). If you cannot render a string with 100% correct spelling, reproduce the EXACT provided characters verbatim — never substitute a similar-looking or similar-sounding word, never approximate, never paraphrase. PRESERVE EXACTLY and never alter: the property address, the property type, the agent name, the office name and the phone number. Never invent an address, a Hebrew word, or a number.",
     `• {{sale_label}} = "${saleLabel}"  ← LARGE, premium, highly visible — a luxury campaign HEADLINE BADGE (not a cheap sticker). This is the most prominent text element.`,
     `• {{headline}} = "${spec.headline}"`,
     spec.subheadline ? `• {{subheadline}} = "${spec.subheadline}"` : "",
     address ? `• {{property_address}} = "${address}"  ← HIGHLY VISIBLE and prominent. NOT tiny footer text, NOT legal copy. This is mandatory, large and easy to read.` : "",
-    priceLine ? `• {{price}} = "${priceLine}"  (confident, premium, never shouty)` : "",
+    priceLine ? `• {{price}} = "${priceLine}"  ← Israeli real-estate format EXACTLY as written (₪ then digits with comma thousands, NO space after ₪). Render it LARGER than the other supporting text with the STRONGEST visual emphasis — it is the primary commercial element, second only to the headline. Confident and premium, never shouty.` : "",
     spec.agentName ? `• {{agent_name}} = "${spec.agentName}"` : "",
     spec.agentPhone ? `• {{agent_phone}} = "${spec.agentPhone}"  (Latin digits, keep LTR, impossible to miss yet never promotional)` : "",
     spec.logoText ? `• {{office_name}} = "${spec.logoText}"` : "",
@@ -171,11 +182,14 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     "BRAND INTEGRATION: use ONLY the supplied branding — never invent logos or colors, never replace branding. Branding must feel premium, understated and trustworthy; the logo is a trust signal, naturally integrated, never the hero.",
     "AGENT POSITIONING: present the agent as a trusted advisor / luxury consultant / private banker — elegant, trustworthy, never a salesperson and never dominant. The property remains the hero.",
     "HEBREW TYPOGRAPHY: perfect RTL, professional Hebrew typography resembling premium developer brochures, architectural publications and luxury magazines. No AI-looking, decorative, stretched or fake-luxury fonts. Hebrew spelling errors are unacceptable.",
-    `BRAND COLOR SYSTEM: PRIORITIZE the supplied brand colors — ${colors} — throughout the design (backgrounds, typography, accents, icons, graphic elements, the sale-label badge, dividers, the phone block). Integrate them naturally. Do NOT force the brand colors where they would reduce visual quality, readability or the luxury feel — in that case lean on a refined premium palette (deep navy #062B4A, warm champagne gold, soft cream) WITHOUT inventing a new brand identity or altering the supplied logo. The result must feel premium, sophisticated and high-end FIRST, with brand colors woven in. Never overwhelm the property; never create visual noise.`,
+    `BRAND COLOR SYSTEM — derive ALL typography colors from the supplied brand palette: ${colors}. ROLE MAPPING: the HEADLINE uses the PRIMARY brand color (on dark backgrounds use the brand's approved light text color — never generic white unless white is part of the brand); the PRICE uses the brand ACCENT color and must visually stand out from every other text element as the primary commercial element; the CTA uses a brand color and stays clearly readable; the AGENT NAME uses a secondary/muted brand tone; the property DETAILS use neutral tones only. Color hierarchy (most → least emphasis): headline → price → CTA → agent name → details.`,
+    `BRAND LOCK — the supplied brand palette OVERRIDES all default styling. Use ONLY colors from the brand palette (${colors}). Do NOT introduce random gold, blue, cyan, orange, or random gradients unless those colors exist in the supplied palette. Never pick colors automatically or generate AI colors. The logo, headline, price, CTA and border colors are LOCKED to the brand palette. The ad must feel like it BELONGS to the brand — brand consistency outranks creative color choices.`,
     `ART DIRECTION: imagine a collaboration between Apple, Porsche, Architectural Digest and a luxury real-estate collection — the premium version of ${spec.logoText ?? "the supplied office brand"}. The final image must feel expensive, clean, architectural, editorial and aspirational. Brand personality: ${spec.brandPersonality ?? "premium professional"}.`,
     // ── LUXURY ART DIRECTION (developer-campaign brief) ───────────────────────
     "LUXURY LAYOUT: a vertical premium poster. A LARGE hero property photo occupies the upper section; below it, ELEGANT FLOATING INFORMATION PANELS (glassy, soft shadows) hold the headline, price and details. Sophisticated visual hierarchy, a clean grid, and lots of breathing space — minimalistic yet high-converting, high-end magazine quality.",
-    "LUXURY DESIGN ELEMENTS: a large bold Hebrew headline; the price displayed inside a premium FLOATING CARD; property features as luxury LINE ICONS (never text rows); elegant separators; restrained modern geometric shapes; thin GOLD ACCENT LINES; subtle glass effects; premium gradient overlays; refined luxury-brochure styling.",
+    "LUXURY DESIGN ELEMENTS: a large bold Hebrew headline; the price displayed inside a premium FLOATING CARD; property features as luxury LINE ICONS (never text rows); elegant separators; restrained modern geometric shapes; thin BRAND-ACCENT lines (use the brand accent color, not a default gold); subtle glass effects; premium gradient overlays in brand tones; refined luxury-brochure styling.",
+    "PREMIUM CLEANUP (refinement pass, NOT a redesign): reduce decorative/accent line work by ~20% versus a typical luxury layout — fewer thin lines, more restraint and breathing space. KEEP unchanged: the current composition, the visual hierarchy, the typography hierarchy, the agent placement and the supplied branding. This is a cleanup, not a layout change.",
+    "FEATURE ICONS MUST BE SHARP: the icon strip uses ONE identical, consistent, sharp, minimal, premium icon style (a single line-icon family) — never mixed styles, never blurry, never decorative AI icon-fonts, never corrupted glyphs.",
     // ── ZONO SIGNATURE DESIGN LANGUAGE (recognizable across every creative) ──
     "ZONO SIGNATURE DESIGN LANGUAGE — every creative must carry a recognizable ZONO visual signature so the brand is felt BEFORE the logo is read. This signature is NOT the logo, text, price, agent or CTA — it is a premium VISUAL SYSTEM. Apply a consistent, restrained set of these motifs: a subtle architectural FRAME around the composition; fine editorial LINE WORK; a soft luxury GLASS PANEL holding the key copy; layered DEPTH (foreground frame → property → atmospheric background); a refined premium GRADIENT treatment; magazine-inspired composition with intentional negative space; and a quiet geometric corner motif. The signature must be ELEGANT and understated — never flashy, never Canva, never a template, and it must NEVER overpower the property (the property is always the hero). Keep these motifs CONSISTENT in feel and placement from creative to creative so the ZONO style becomes instantly recognizable across all ads.",
     "AGENT SECTION: integrate the professional realtor portrait naturally into the composition with a premium contact block — luxury personal-branding feel, never a sticker, never dominant over the property.",
