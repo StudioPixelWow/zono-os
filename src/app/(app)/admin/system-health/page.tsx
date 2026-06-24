@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { getSystemHealth } from "@/lib/system/service";
+import { getIntegrationStatus } from "@/lib/env-validation";
 import { SystemHealthView } from "./SystemHealthView";
 
 export const dynamic = "force-dynamic";
 
 export default async function SystemHealthPage() {
   const health = await getSystemHealth().catch(() => null);
+  const integrations = getIntegrationStatus();
   if (!health) {
     return (
       <div className="bg-card border-line m-4 flex flex-col items-center gap-3 rounded-[20px] border p-10 text-center">
@@ -17,5 +19,5 @@ export default async function SystemHealthPage() {
       </div>
     );
   }
-  return <SystemHealthView health={health} />;
+  return <SystemHealthView health={health} integrations={integrations} />;
 }

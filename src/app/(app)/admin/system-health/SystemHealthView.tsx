@@ -8,16 +8,26 @@ import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { recomputeAllEnginesAction, recomputeEngineAction, recomputeWithDepsAction } from "@/lib/system/actions";
 import type { SystemHealth, EngineState } from "@/lib/system/service";
+import type { IntegrationStatus } from "@/lib/env-validation";
 
 const STATE_LABEL: Record<EngineState, string> = { fresh: "עדכני", stale: "מיושן", error: "שגיאה", running: "רץ", never: "לא חושב", embedded: "משובץ" };
 const STATE_TONE: Record<EngineState, string> = { fresh: "bg-success-soft text-success", stale: "bg-warning-soft text-warning", error: "bg-danger-soft text-danger", running: "bg-brand-soft text-brand-strong", never: "bg-surface text-muted", embedded: "bg-surface text-muted" };
 const fmt = (s: string | null) => (s ? new Date(s).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
 const healthTone = (n: number) => (n >= 80 ? "text-success" : n >= 50 ? "text-warning" : "text-danger");
 
-export function SystemHealthView({ health }: { health: SystemHealth }) {
+export function SystemHealthView({ health, integrations = [] }: { health: SystemHealth; integrations?: IntegrationStatus[] }) {
   const runner = useActionRunner();
   const { pending, busyId } = runner;
   const { engines, freshnessScore, counts, coverage } = health;
+
+  // Last successful / last failed run, derived from the latest run per engine.
+  const ran = engines.filter((e) => e.lastRunAt);
+  const lastSuccess = ran
+    .filter((e) => e.state === "fresh" || e.state === "stale")
+    .sort((a, b) => (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? ""))[0];
+  const lastFailure = ran
+    .filter((e) => e.state === "error")
+    .sort((a, b) => (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? ""))[0];
 
   const runAll = () => runner.run(recomputeAllEnginesAction, {
     id: "all", pendingMessage: "מריץ את כל המנועים לפי סדר התלויות…",
@@ -57,6 +67,45 @@ export function SystemHealthView({ health }: { health: SystemHealth }) {
       </div>
 
       <ActionFeedback runner={runner} />
+
+      {/* Last successful / last failed run (real, from engine_runs latest-per-engine). */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="bg-card border-line rounded-2xl border p-4">
+          <p className="text-muted text-[11px] font-bold">ריצה מוצלחת אחרונה</p>
+          {lastSuccess ? (
+            <><p className="text-success text-lg font-black">{lastSuccess.label}</p><p className="text-muted text-[11px]">{fmt(lastSuccess.lastRunAt)}{lastSuccess.durationMs != null ? ` · ${(lastSuccess.durationMs / 1000).toFixed(1)} ש׳` : ""}</p></>
+          ) : <p className="text-muted text-sm">—</p>}
+        </div>
+        <div className="bg-card border-line rounded-2xl border p-4">
+          <p className="text-muted text-[11px] font-bold">כשל אחרון</p>
+          {lastFailure ? (
+            <><p className="text-danger text-lg font-black">{lastFailure.label}</p><p className="text-muted text-[11px]">{fmt(lastFailure.lastRunAt)}{lastFailure.error ? ` · ${lastFailure.error}` : ""}</p></>
+          ) : <p className="text-success text-sm font-semibold">אין כשלים אחרונים ✓</p>}
+        </div>
+        <div className="bg-card border-line rounded-2xl border p-4">
+          <p className="text-muted text-[11px] font-bold">מנועים שהורצו</p>
+          <p className="text-brand-strong text-lg font-black">{ran.length}/{counts.total}</p>
+          <p className="text-muted text-[11px]">{counts.never} טרם הורצו</p>
+        </div>
+      </div>
+
+      {/* Integration setup state (P1.3) — never crashes; shows what's configured. */}
+      {integrations.length > 0 && (
+        <div className="bg-card border-line rounded-[20px] border p-4">
+          <p className="text-ink mb-2 text-sm font-extrabold">אינטגרציות חיצוניות</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {integrations.map((i) => (
+              <div key={i.key} className="border-line flex items-start gap-2 rounded-xl border p-2.5">
+                <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", i.configured ? "bg-success" : "bg-line")} />
+                <div className="min-w-0">
+                  <p className="text-ink text-[13px] font-bold">{i.label} <span className={cn("text-[10px] font-bold", i.configured ? "text-success" : "text-muted")}>· {i.configured ? "מוגדר" : "לא מוגדר"}</span></p>
+                  {!i.configured && <p className="text-muted text-[11px]">{i.note}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-card border-line overflow-hidden rounded-[20px] border">
         <table className="w-full text-right text-sm">
