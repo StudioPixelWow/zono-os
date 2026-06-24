@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
@@ -31,6 +32,15 @@ export function JourneysView({ cc }: { cc: JourneyCommandCenter }) {
     { id: "analytics", label: "אנליטיקה", icon: "BarChart3" },
   ];
 
+  // A journey only exists for a real buyer/seller row. When the org has none at
+  // all, show one strong, honest empty state instead of a wall of zeroed KPIs
+  // and empty tabs.
+  const hasAnyJourney =
+    cc.buyers.length > 0 ||
+    cc.sellers.length > 0 ||
+    cc.stuck.length > 0 ||
+    cc.ready.length > 0;
+
   return (
     <main dir="rtl" className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6">
       <header className="flex items-start justify-between gap-3">
@@ -46,6 +56,21 @@ export function JourneysView({ cc }: { cc: JourneyCommandCenter }) {
         </Button>
       </header>
 
+      <ActionFeedback runner={r} />
+
+      {!hasAnyJourney ? (
+        <div className="bg-card border-line flex flex-col items-center gap-3 rounded-3xl border px-6 py-16 text-center shadow-sm">
+          <span className="bg-brand-soft text-brand-strong grid h-16 w-16 place-items-center rounded-2xl"><Icon name="Route" size={30} /></span>
+          <h2 className="text-ink text-xl font-black">אין עדיין מסעות פעילים</h2>
+          <p className="text-muted max-w-md text-sm">מסעות יווצרו אוטומטית לאחר יצירת נכס, קונה, מוכר או ליד.</p>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+            <Link href="/buyers/new" className="bg-brand text-white rounded-xl px-4 py-2 text-sm font-bold">הוסף קונה</Link>
+            <Link href="/sellers/new" className="bg-surface text-ink border-line rounded-xl border px-4 py-2 text-sm font-bold">הוסף מוכר</Link>
+            <Link href="/properties/new" className="bg-surface text-ink border-line rounded-xl border px-4 py-2 text-sm font-bold">הוסף נכס</Link>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi label="קונים מוכנים" value={cc.kpis.readyBuyers} tone="text-success" />
         <Kpi label="מוכרים מוכנים" value={cc.kpis.readySellers} tone="text-success" />
@@ -54,8 +79,6 @@ export function JourneysView({ cc }: { cc: JourneyCommandCenter }) {
         <Kpi label="הזדמנויות" value={cc.kpis.journeyOpportunities} tone="text-warning" />
         <Kpi label="עמלה צפויה (מוכנים)" value={fmtMoney(cc.kpis.expectedCommission)} tone="text-brand-strong" />
       </div>
-
-      <ActionFeedback runner={r} />
 
       <nav className="border-line flex gap-1 overflow-x-auto border-b">
         {tabs.map((t) => (
@@ -74,6 +97,8 @@ export function JourneysView({ cc }: { cc: JourneyCommandCenter }) {
       {tab === "opportunities" && (cc.opportunities.length === 0 ? <Empty text="אין הזדמנויות פתוחות" /> : <div className="flex flex-col gap-2">{cc.opportunities.map((o) => <OppRow key={o.id} o={o} />)}</div>)}
       {tab === "milestones" && (cc.milestones.length === 0 ? <Empty text="אין אבני דרך שהושגו" /> : <div className="flex flex-col gap-2">{cc.milestones.map((m, i) => <div key={i} className="bg-card border-line flex items-center justify-between gap-2 rounded-2xl border p-3 shadow-sm"><span className="text-ink text-sm font-bold"><Icon name="MapPin" size={14} /> {m.milestone_label}</span><span className="text-muted text-[11px]">{m.reached_at ? new Date(m.reached_at).toLocaleDateString("he-IL") : ""}</span></div>)}</div>)}
       {tab === "analytics" && <Analytics cc={cc} />}
+      </>
+      )}
     </main>
   );
 }

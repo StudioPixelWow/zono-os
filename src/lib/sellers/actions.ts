@@ -48,6 +48,11 @@ export async function createSeller360Action(
       await logActivityEvent({ eventType: "seller.linked_to_property", entityType: "property", entityId: propertyId, relatedEntityType: "seller", relatedEntityId: id, title: "מוכר קושר לנכס" });
     }
     await initializeSellerIntelligence(id).catch((e) => console.error("[seller] auto-init failed:", e));
+    // Open the seller's customer journey from this real seller row (idempotent,
+    // best-effort — never blocks seller creation).
+    await import("@/lib/journey-intelligence/service")
+      .then((m) => m.ensureJourney("seller", id))
+      .catch((e) => console.error("[seller] journey ensure failed:", e));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
     console.error("[seller] 360 create failed:", e);

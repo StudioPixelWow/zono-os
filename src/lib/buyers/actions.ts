@@ -43,6 +43,9 @@ export async function createBuyerAction(
     await logActivityEvent({ eventType: "buyer.created", entityType: "buyer", entityId: id, title: "נוצר קונה חדש" });
     const { initializeBuyerIntelligence } = await import("@/lib/buyer-intelligence/service");
     await initializeBuyerIntelligence(id);
+    // Open the buyer's customer journey from this real buyer row (idempotent).
+    const { ensureJourney } = await import("@/lib/journey-intelligence/service");
+    await ensureJourney("buyer", id);
   } catch (e) {
     console.error("[buyers] intelligence auto-init failed:", e);
   }

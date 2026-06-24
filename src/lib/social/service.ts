@@ -138,6 +138,14 @@ export async function convertSocialLeadToLead(socialLeadId: string): Promise<Con
   // 7) Update social lead.
   await supabase.from("social_leads").update({ status: "converted", lead_id: lead.id, converted_buyer_id: buyer.id, reviewed_by: userId, reviewed_at: new Date().toISOString() } as never).eq("id", socialLeadId);
 
+  // 8) Open the converted buyer's customer journey (real buyer row; best-effort).
+  try {
+    const { ensureJourney } = await import("@/lib/journey-intelligence/service");
+    await ensureJourney("buyer", buyer.id);
+  } catch (e) {
+    console.error("[social] journey ensure on conversion failed:", e);
+  }
+
   return { leadId: lead.id, buyerId: buyer.id };
 }
 
