@@ -42,15 +42,18 @@ function geocodeKey(): string | null {
   return k && k.length > 0 ? k : null;
 }
 
-/** Build a single address query string from structured parts (Hebrew-friendly). */
+/** Build a single address query string from structured parts (Israeli-friendly). */
 export function buildQuery(input: GeocodeInput): string {
   const streetPart = [input.street, input.streetNumber].filter(Boolean).join(" ");
-  return [input.address || streetPart, input.neighborhood, input.city]
-    .map((s) => (s ?? "").trim())
+  const parts = [input.address || streetPart, input.neighborhood, input.city]
+    .map((s) => (s ?? "").trim().replace(/\s+/g, " ")) // collapse whitespace
     .filter(Boolean)
     // de-dupe consecutive identical parts (address often already contains city)
-    .filter((s, i, arr) => i === 0 || s !== arr[i - 1])
-    .join(", ");
+    .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
+  if (parts.length === 0) return "";
+  // Israeli formatting: append the country once (improves hit-rate; region=il also set).
+  const joined = parts.join(", ");
+  return /ישראל|israel/i.test(joined) ? joined : `${joined}, ישראל`;
 }
 
 const CONFIDENCE: Record<string, number> = {

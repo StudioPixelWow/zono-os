@@ -15,17 +15,18 @@ const ENTITIES: { key: GeocodeEntity; label: string; hint: string }[] = [
   { key: "properties", label: "נכסים", hint: "נכסים עם כתובת וללא קואורדינטות" },
   { key: "external_listings", label: "מודעות חיצוניות", hint: "מודעות שיובאו עם כתובת בלבד" },
   { key: "property_transactions", label: "עסקאות", hint: "עסקאות עם כתובת וללא קואורדינטות" },
+  { key: "neighborhoods", label: "מרכזי שכונות", hint: "השלמת מרכז (centroid) לשכונות ללא קואורדינטות" },
 ];
 
 export function GeocodingAdminView({ coverage = [] }: { coverage?: GeoCoverageRow[] }) {
   const runner = useActionRunner();
   const [results, setResults] = useState<Record<string, GeocodeRunResult>>({});
 
-  const run = (entity: GeocodeEntity) => runner.run(async () => {
-    const r = await geocodeMissingAction(entity, 50);
+  const run = (entity: GeocodeEntity, mode: "missing" | "failed" = "missing") => runner.run(async () => {
+    const r = await geocodeMissingAction(entity, 50, mode);
     setResults((m) => ({ ...m, [entity]: r }));
     return { ok: r.ok, message: r.message };
-  }, { id: `geo-${entity}`, pendingMessage: "מריץ גאוקודינג…", success: (r) => r.message ?? null });
+  }, { id: `geo-${entity}-${mode}`, pendingMessage: mode === "failed" ? "מנסה שוב כשלים…" : "מריץ גאוקודינג…", success: (r) => r.message ?? null });
 
   return (
     <main dir="rtl" className="mx-auto w-full max-w-4xl px-4 py-8">
@@ -51,7 +52,7 @@ export function GeocodingAdminView({ coverage = [] }: { coverage?: GeoCoverageRo
                 <div className="bg-surface mt-2 h-1.5 w-full overflow-hidden rounded-full">
                   <div className="bg-brand h-1.5 rounded-full" style={{ width: `${c.pct}%` }} />
                 </div>
-                <p className="text-muted mt-1.5 text-[11px]">{c.located}/{c.total} ממוקמים{c.missing ? ` · ${c.missing} חסרים` : ""}</p>
+                <p className="text-muted mt-1.5 text-[11px]">{c.located}/{c.total} ממוקמים{c.missing ? ` · ${c.missing} חסרים` : ""}{c.lowConfidence ? ` · ${c.lowConfidence} ביטחון נמוך` : ""}{c.failed ? ` · ${c.failed} נכשלו` : ""}</p>
               </div>
             ))}
           </div>
@@ -74,9 +75,14 @@ export function GeocodingAdminView({ coverage = [] }: { coverage?: GeoCoverageRo
                   <p className="text-ink font-black">{e.label}</p>
                   <p className="text-muted text-xs">{e.hint}</p>
                 </div>
-                <Button size="sm" onClick={() => run(e.key)} loading={runner.busyId === `geo-${e.key}`}>
-                  <Icon name="MapPin" size={14} className="ms-1" /> גאוקד חוסרים
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => run(e.key, "failed")} loading={runner.busyId === `geo-${e.key}-failed`}>
+                    נסה שוב כשלים
+                  </Button>
+                  <Button size="sm" onClick={() => run(e.key, "missing")} loading={runner.busyId === `geo-${e.key}-missing`}>
+                    <Icon name="MapPin" size={14} className="ms-1" /> גאוקד חוסרים
+                  </Button>
+                </div>
               </div>
               {r?.stats && (
                 <div className="mt-4 grid grid-cols-4 gap-2 text-center">
