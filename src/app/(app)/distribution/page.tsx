@@ -7,6 +7,8 @@ import { getCampaignCommentsAction } from "@/lib/distribution/distribution-comme
 import type { CommentsBoard } from "@/lib/distribution/distribution-comment-service";
 import { getDistributionAnalyticsAction } from "@/lib/distribution/distribution-analytics-actions";
 import type { DistributionAnalytics } from "@/lib/distribution/analytics-scoring";
+import { getDistributionAutomationsAction } from "@/lib/distribution/distribution-automation-actions";
+import type { AutomationBoard } from "@/lib/distribution/distribution-automation-service";
 import { createClient } from "@/lib/supabase/server";
 import { DistributionCenterView } from "./_center/DistributionCenterView";
 import type { PropertyLite } from "./_center/variations";
@@ -32,6 +34,18 @@ const EMPTY_ANALYTICS: DistributionAnalytics = {
   sufficiency: { enough: false, publishedPosts: 0, comments: 0, note: "אין מספיק נתונים אמיתיים עדיין." },
 };
 
+const EMPTY_AUTOMATION_BOARD: AutomationBoard = {
+  activeAutomations: [],
+  suggestedAutomations: [],
+  alerts: [],
+  followUpTasks: [],
+  repostReminders: [],
+  hotLeadAlerts: [],
+  recommendations: [],
+  counts: { active: 0, alerts: 0, tasks: 0, reposts: 0, hotLeads: 0, recommendations: 0 },
+  enough: false,
+};
+
 export const dynamic = "force-dynamic";
 
 const ACTIVE = ["active", "published", "ready", "under_offer", "in_contract"];
@@ -47,6 +61,7 @@ export default async function DistributionPage() {
     counts: { comments: 0, hotLeads: 0, leads: 0, needsReply: 0, ignored: 0, converted: 0, conversionRate: 0 },
   };
   let analytics: DistributionAnalytics = EMPTY_ANALYTICS;
+  let automationBoard: AutomationBoard = EMPTY_AUTOMATION_BOARD;
 
   try {
     board = await getDistributionBoard();
@@ -103,6 +118,12 @@ export default async function DistributionPage() {
   } catch (e) {
     console.error("[distribution] analytics load failed:", e);
   }
+  try {
+    const res = await getDistributionAutomationsAction();
+    automationBoard = res.board;
+  } catch (e) {
+    console.error("[distribution] automation board load failed:", e);
+  }
 
   return (
     <DistributionCenterView
@@ -113,6 +134,7 @@ export default async function DistributionPage() {
       assistantPosts={assistantPosts}
       commentsBoard={commentsBoard}
       analytics={analytics}
+      automationBoard={automationBoard}
       complianceWarnings={COMPLIANCE_WARNINGS}
     />
   );
