@@ -19,7 +19,9 @@ import {
   dealValue,
   matchStageIndex,
   nextBestMatchActions,
+  STAGE_LABELS,
   type MatchActionSeed,
+  type MatchStage,
 } from "./playbook";
 import {
   matchIntelligenceRepository,
@@ -239,6 +241,82 @@ export async function recommendedPropertiesForBuyer(buyerId: string): Promise<Re
   const matches = await matchIntelligenceRepository.listForBuyer(buyerId);
   const names = await propertyNames(matches.map((m) => m.property_id));
   return matches.map((m) => ({ matchId: m.id, otherId: m.property_id, title: names.get(m.property_id) ?? "נכס", compatibility: m.compatibility_score, closing: m.closing_probability, opportunity: m.opportunity_score, stage: m.match_stage }));
+}
+
+// ── Buyer detail "התאמות" tab — rich, real matched properties ────────────────
+/** One matched property for the buyer matches tab. All fields are real (no mocks). */
+export interface BuyerPropertyMatch {
+  matchId: string;
+  propertyId: string;
+  title: string;
+  /** neighborhood/city if known. */
+  locality: string | null;
+  address: string | null;
+  price: number | null;
+  compatibility: number;
+  closing: number;
+  opportunity: number;
+  stage: string;
+  stageLabel: string;
+  status: string;
+  /** Main reason this is a match (strongest advantage), if computed. */
+  reason: string | null;
+  /** Primary blocker / objection, if any. */
+  blocker: string | null;
+  nextBestAction: string | null;
+  estimatedCommission: number | null;
+  openRisks: number;
+  openObjections: number;
+}
+
+/**
+ * Real matched properties for a single buyer — powers the buyer detail
+ * "התאמות" tab. Reads match_intelligence_profiles (+ joined property location
+ * and open risk/objection counts). Returns [] when the matching engine hasn't
+ * produced matches for this buyer yet (honest empty state in the UI).
+ */
+export async function getBuyerPropertyMatches(buyerId: string): Promise<BuyerPropertyMatch[]> {
+  const matches = await matchIntelligenceRepository.listForBuyer(buyerId);
+  if (!matches.length) return [];
+  const supabase = await createClient();
+  const propIds = matches.map((m) => m.property_id);
+  const matchIds = matches.map((m) => m.id);
+  const [propsRes, risksRes, objsRes] = await Promise.all([
+    supabase.from("properties").select("id,title,city,neighborhood,formatted_address,price").in("id", propIds),
+    supabase.from("match_risks").select("match_id").in("match_id", matchIds).eq("status", "open"),
+    supabase.from("match_objections").select("match_id").in("match_id", matchIds).eq("resolved", false),
+  ]);
+  const props = new Map((propsRes.data ?? []).map((p) => [p.id, p]));
+  const riskCount = new Map<string, number>();
+  for (const r of risksRes.data ?? []) riskCount.set(r.match_id, (riskCount.get(r.match_id) ?? 0) + 1);
+  const objCount = new Map<string, number>();
+  for (const o of objsRes.data ?? []) objCount.set(o.match_id, (objCount.get(o.match_id) ?? 0) + 1);
+
+  return matches.map((m) => {
+    const p = props.get(m.property_id);
+    const locality = p ? (p.neighborhood && p.city ? `${p.neighborhood}, ${p.city}` : p.neighborhood ?? p.city ?? null) : null;
+    const stage = m.match_stage as MatchStage;
+    return {
+      matchId: m.id,
+      propertyId: m.property_id,
+      title: p?.title ?? "נכס",
+      locality,
+      address: p?.formatted_address ?? null,
+      price: p?.price ?? null,
+      compatibility: m.compatibility_score,
+      closing: m.closing_probability,
+      opportunity: m.opportunity_score,
+      stage: m.match_stage,
+      stageLabel: STAGE_LABELS[stage] ?? m.match_stage,
+      status: m.match_status,
+      reason: m.strongest_advantage,
+      blocker: m.primary_blocker,
+      nextBestAction: m.next_best_action,
+      estimatedCommission: m.estimated_commission,
+      openRisks: riskCount.get(m.id) ?? 0,
+      openObjections: objCount.get(m.id) ?? 0,
+    };
+  });
 }
 export async function recommendedBuyersForProperty(propertyId: string): Promise<RecoItem[]> {
   const matches = await matchIntelligenceRepository.listForProperty(propertyId);

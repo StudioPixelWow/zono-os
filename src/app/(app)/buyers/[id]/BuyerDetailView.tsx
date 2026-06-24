@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
@@ -22,6 +23,8 @@ import type { Database } from "@/lib/supabase/types";
 import { BuyerCommandCenter } from "./BuyerCommandCenter";
 import type { BuyerCommandCenter as BuyerCCData } from "@/lib/buyer-intelligence/service";
 import type { RecoItemView } from "@/components/activity/RecommendedMatches";
+import type { BuyerPropertyMatch } from "@/lib/matching-intelligence/service";
+import { recalcMatchesAction } from "@/lib/matching-intelligence/actions";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
@@ -79,6 +82,7 @@ export function BuyerDetailView({
   meetings,
   commandCenter,
   recommendations,
+  buyerMatches,
 }: {
   buyer: BuyerRow;
   activities: ActivityRow[];
@@ -87,6 +91,7 @@ export function BuyerDetailView({
   meetings: MeetingRow[];
   commandCenter: BuyerCCData | null;
   recommendations: RecoItemView[];
+  buyerMatches: BuyerPropertyMatch[];
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const prefs = buyerPreferences(b);
@@ -268,19 +273,124 @@ export function BuyerDetailView({
             </ul>
           ))}
 
-        {tab === "matches" && (
-          <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl">
-              <Icon name="Sparkles" size={26} />
-            </span>
-            <p className="text-ink text-lg font-extrabold">התאמות אוטומטיות — בקרוב</p>
-            <p className="text-muted max-w-sm text-sm">
-              כאן יוצגו נכסים מתאימים לקונה לפי ההעדפות, כשמודול ההתאמות (Matching)
-              יופעל בשלב הבא.
-            </p>
-          </div>
-        )}
+        {tab === "matches" && <BuyerMatchesTab matches={buyerMatches} />}
       </div>
+    </div>
+  );
+}
+
+const fmtShekels = (n: number | null) =>
+  n && n > 0 ? `₪${Math.round(n).toLocaleString("he-IL")}` : null;
+const scoreTone = (n: number) =>
+  n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-danger";
+
+/**
+ * Buyer detail "התאמות" tab — real matched properties from the matching engine
+ * (match_intelligence_profiles). No mock properties or hardcoded cards: when the
+ * engine has produced nothing for this buyer, an honest empty state is shown.
+ */
+function BuyerMatchesTab({ matches }: { matches: BuyerPropertyMatch[] }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => {
+    setError(null);
+    startTransition(async () => {
+      const res = await recalcMatchesAction();
+      if (res.error) setError(res.error);
+      else router.refresh();
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-muted text-sm">
+          {matches.length > 0
+            ? `${matches.length} נכסים תואמים לקונה לפי מנוע ההתאמות`
+            : "מנוע ההתאמות מצליב את העדפות הקונה מול מלאי הנכסים"}
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={pending}
+          leadingIcon={<Icon name="Sparkles" size={15} />}
+          onClick={refresh}
+        >
+          רענן התאמות
+        </Button>
+      </div>
+
+      {error && (
+        <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>
+      )}
+
+      {matches.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <span className="bg-surface text-muted grid h-14 w-14 place-items-center rounded-2xl">
+            <Icon name="Sparkles" size={26} />
+          </span>
+          <p className="text-ink text-lg font-extrabold">אין עדיין התאמות לקונה הזה</p>
+          <p className="text-muted max-w-sm text-sm">
+            הוסף נכסים או הרץ מנוע התאמות כדי ליצור התאמות אמיתיות.
+          </p>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {matches.map((m) => (
+            <li key={m.matchId} className="border-line rounded-[16px] border p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-ink truncate text-sm font-extrabold">{m.title}</p>
+                  <p className="text-muted truncate text-xs">
+                    {m.locality ?? m.address ?? "—"}
+                    {fmtShekels(m.price) ? ` · ${fmtShekels(m.price)}` : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3 text-[11px] font-bold">
+                  <span className={cn(scoreTone(m.compatibility))}>התאמה {m.compatibility}</span>
+                  <span className={cn(scoreTone(m.closing))}>סגירה {m.closing}%</span>
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Badge tone="neutral" size="sm">{m.stageLabel}</Badge>
+                {m.openRisks > 0 && (
+                  <Badge tone="danger" size="sm">{m.openRisks} סיכונים</Badge>
+                )}
+                {m.openObjections > 0 && (
+                  <Badge tone="warning" size="sm">{m.openObjections} התנגדויות</Badge>
+                )}
+              </div>
+
+              {m.reason && (
+                <p className="text-muted mt-2 text-xs">
+                  <span className="text-ink font-semibold">סיבת ההתאמה: </span>{m.reason}
+                </p>
+              )}
+              {m.blocker && (
+                <p className="text-danger mt-1 text-xs">
+                  <span className="font-semibold">חסם עיקרי: </span>{m.blocker}
+                </p>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link href={`/matches/${m.matchId}`}>
+                  <Button variant="secondary" size="sm" leadingIcon={<Icon name="Sparkles" size={14} />}>
+                    פתח התאמה מלאה
+                  </Button>
+                </Link>
+                <Link href={`/properties/${m.propertyId}`}>
+                  <Button variant="ghost" size="sm" leadingIcon={<Icon name="Building2" size={14} />}>
+                    פתח נכס
+                  </Button>
+                </Link>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

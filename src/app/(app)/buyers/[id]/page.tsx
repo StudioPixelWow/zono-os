@@ -7,7 +7,7 @@ import {
   getBuyerTasks,
 } from "@/lib/buyers/repository";
 import { getBuyerCommandCenter } from "@/lib/buyer-intelligence/service";
-import { recommendedPropertiesForBuyer } from "@/lib/matching-intelligence/service";
+import { recommendedPropertiesForBuyer, getBuyerPropertyMatches } from "@/lib/matching-intelligence/service";
 import { BuyerDetailView } from "./BuyerDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
@@ -27,13 +27,14 @@ export default async function BuyerDetailsPage({
   const buyer = await getBuyerById(id);
   if (!buyer) notFound();
 
-  const [activities, tasks, notes, meetings, commandCenter, recommendations] = await Promise.all([
+  const [activities, tasks, notes, meetings, commandCenter, recommendations, buyerMatches] = await Promise.all([
     getBuyerActivities(id),
     getBuyerTasks(id),
     getBuyerNotes(id),
     getBuyerMeetings(id),
     getBuyerCommandCenter(id),
     recommendedPropertiesForBuyer(id),
+    getBuyerPropertyMatches(id).catch(() => []),
   ]);
 
   return (
@@ -46,6 +47,7 @@ export default async function BuyerDetailsPage({
         meetings={meetings}
         commandCenter={commandCenter}
         recommendations={recommendations}
+        buyerMatches={buyerMatches}
       />
       <EntityRecommendationsPanel entityType="buyer" entityId={id} recommendations={await listRecommendationsForEntity("buyer", id).catch(() => [])} />
       <CreatePortalButton entityType="buyer" entityId={id} portalType="buyer" label="צור פורטל קונה" />
