@@ -10,7 +10,12 @@
 
 export type DistGroupStatus = "active" | "inactive" | "blocked" | "pending";
 export type DistCampaignStatus = "draft" | "scheduled" | "active" | "paused" | "completed" | "archived";
-export type DistPostStatus = "pending" | "scheduled" | "in_progress" | "published" | "failed" | "skipped";
+// status is a free-text column; it carries both the original engine vocabulary
+// and the Phase-5 posting-queue lifecycle (draft|scheduled|queued|publishing|
+// published|failed|cancelled).
+export type DistPostStatus =
+  | "pending" | "scheduled" | "in_progress" | "published" | "failed" | "skipped"
+  | "draft" | "queued" | "publishing" | "cancelled";
 export type DistLeadStatus = "new" | "contacted" | "qualified" | "converted" | "lost";
 export type DistCampaignGroupStatus = "selected" | "posted" | "skipped";
 

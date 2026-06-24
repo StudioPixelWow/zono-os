@@ -18,17 +18,19 @@ import { GroupLibrarySection } from "./GroupLibrarySection";
 import { CampaignBuilderSection } from "./CampaignBuilderSection";
 import { AiVariationsSection } from "./AiVariationsSection";
 import { PostingQueueSection } from "./PostingQueueSection";
+import { ScheduleBuilderSection } from "./ScheduleBuilderSection";
 import { LeadCollectionSection } from "./LeadCollectionSection";
 import { AnalyticsSection } from "./AnalyticsSection";
 import { AutomationCenterSection } from "./AutomationCenterSection";
 
-type SectionKey = "overview" | "groups" | "builder" | "variations" | "queue" | "leads" | "analytics" | "automation";
+type SectionKey = "overview" | "groups" | "builder" | "variations" | "schedule" | "queue" | "leads" | "analytics" | "automation";
 
 const NAV: { key: SectionKey; label: string; icon: string }[] = [
   { key: "overview", label: "סקירה", icon: "LayoutDashboard" },
   { key: "groups", label: "ספריית קבוצות", icon: "Users" },
   { key: "builder", label: "בניית קמפיין", icon: "Megaphone" },
   { key: "variations", label: "וריאציות AI", icon: "Sparkles" },
+  { key: "schedule", label: "בניית תור", icon: "CalendarClock" },
   { key: "queue", label: "תור פרסום", icon: "Send" },
   { key: "leads", label: "איסוף לידים", icon: "Inbox" },
   { key: "analytics", label: "אנליטיקה", icon: "BarChart3" },
@@ -135,7 +137,8 @@ export function DistributionCenterView({
         {section === "groups" && <GroupLibrarySection groups={center.groups} runAction={runAction} pending={pending} />}
         {section === "builder" && <CampaignBuilderSection groups={center.groups} campaigns={center.campaigns} properties={properties} onGenerate={handleGenerate} runAction={runAction} runActionAsync={runActionAsync} pending={pending} />}
         {section === "variations" && <AiVariationsSection variations={variations} propertyTitle={variationProperty} onBuild={() => setSection("builder")} />}
-        {section === "queue" && <PostingQueueSection posts={center.posts} daily={daily} />}
+        {section === "schedule" && <ScheduleBuilderSection campaigns={center.campaigns} groups={center.groups} runActionAsync={runActionAsync} />}
+        {section === "queue" && <PostingQueueSection posts={center.posts} campaigns={center.campaigns} groups={center.groups} daily={daily} runAction={runAction} pending={pending} />}
         {section === "leads" && <LeadCollectionSection leads={center.leads} runAction={runAction} pending={pending} />}
         {section === "analytics" && <AnalyticsSection analytics={center.analytics} stats={center.stats} />}
         {section === "automation" && <AutomationCenterSection automations={center.automations} runAction={runAction} pending={pending} />}
