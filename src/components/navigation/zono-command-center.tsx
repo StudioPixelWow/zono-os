@@ -28,11 +28,7 @@ interface Section {
 const SECTIONS: Section[] = [
   {
     key: "properties", emoji: "🏠", icon: "Building2", title: "נכסים", desc: "ניהול כלל הנכסים במערכת",
-    stats: [
-      { label: "נכסים פעילים", value: "142", tone: "brand" },
-      { label: "חדשים השבוע", value: "12", tone: "success" },
-      { label: "דורשים טיפול", value: "4", tone: "danger" },
-    ],
+    stats: [],
     links: [
       { label: "נכסים", href: "/properties" },
       { label: "גיוס נכסים", href: "/acquisition" },
@@ -42,11 +38,7 @@ const SECTIONS: Section[] = [
   },
   {
     key: "clients", emoji: "👥", icon: "Users", title: "לקוחות", desc: "ניהול קונים ומוכרים",
-    stats: [
-      { label: "קונים פעילים", value: "38", tone: "brand" },
-      { label: "מוכרים פעילים", value: "27", tone: "brand" },
-      { label: "לידים חדשים", value: "31", tone: "success" },
-    ],
+    stats: [],
     links: [
       { label: "קונים", href: "/buyers" },
       { label: "מוכרים", href: "/sellers" },
@@ -56,10 +48,7 @@ const SECTIONS: Section[] = [
   },
   {
     key: "deals", emoji: "💰", icon: "Handshake", title: "עסקאות", desc: "מעקב אחר תהליכי מכירה",
-    stats: [
-      { label: "עסקאות פעילות", value: "23", tone: "brand" },
-      { label: "הצעות פתוחות", value: "8", tone: "success" },
-    ],
+    stats: [],
     links: [
       { label: "עסקאות", href: "/deals" },
       { label: "משימות", href: "/command" },
@@ -69,11 +58,7 @@ const SECTIONS: Section[] = [
   },
   {
     key: "ai", emoji: "✨", icon: "Sparkles", title: "AI Center", desc: "מרכז הבינה של ZONO", highlight: true,
-    stats: [
-      { label: "הזדמנויות חדשות", value: "12", tone: "success" },
-      { label: "מוכרים בסיכון", value: "3", tone: "danger" },
-      { label: "קונים חמים", value: "8", tone: "brand" },
-    ],
+    stats: [],
     links: [
       { label: "AI Command Center", href: "/command" },
       { label: "AI Insights", href: "/ai-office" },
@@ -113,8 +98,6 @@ const QUICK_ACTIONS: { label: string; icon: string; href: string }[] = [
   { label: "עסקה חדשה", icon: "Handshake", href: "/deals" },
   { label: "קמפיין חדש", icon: "Sparkles", href: "/creative-studio" },
 ];
-
-const AI_INSIGHTS = ["12 הזדמנויות חדשות", "3 מוכרים בסיכון", "8 התאמות חדשות", "2 עסקאות מתקדמות"];
 
 /** Flat search index over every navigable destination. */
 const SEARCH_INDEX: { label: string; href: string; section: string; icon: string }[] = SECTIONS.flatMap((s) =>
@@ -278,14 +261,6 @@ export function ZonoCommandCenter() {
                         ))}
                       </div>
                     </motion.div>
-                  ))}
-                </div>
-
-                {/* AI insight strip */}
-                <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 rounded-[22px] border border-white/10 bg-white/5 px-6 py-4">
-                  <span className="inline-flex items-center gap-1.5 text-sm font-black text-white"><span className="zono-ai-gradient grid h-7 w-7 place-items-center rounded-lg"><Icon name="Sparkles" size={15} /></span>ZONO זיהה היום:</span>
-                  {AI_INSIGHTS.map((t) => (
-                    <span key={t} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white/75"><Icon name="Check" size={14} className="text-emerald-300" />{t}</span>
                   ))}
                 </div>
 

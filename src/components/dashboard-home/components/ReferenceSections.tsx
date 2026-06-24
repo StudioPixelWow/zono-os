@@ -11,7 +11,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import type { DashboardHomeData } from "@/lib/dashboard-home/types";
 import { whatsappNumber } from "@/components/listings/ContactButtons";
-import { type Translate, ilsC } from "./shared";
+import { type Translate, ilsC, EmptyState, EmptyStateDark } from "./shared";
 
 /* ─────────────────────────────────────────────────────────────────────────
    SECTION 9 — EXCLUSIVE EXTERNAL DEALS  ("עסקאות שאסור לפספס")
@@ -178,8 +178,11 @@ export function OpportunityMapSection({ t, data }: { t: Translate; data: Dashboa
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-ink text-xl font-black sm:text-2xl">מפת ההזדמנויות</h2>
-        <span className="bg-card border-line text-muted rounded-xl border px-3 py-1.5 text-sm font-bold">{data.cityName} והסביבה ▾</span>
+        {data.cityName && <span className="bg-card border-line text-muted rounded-xl border px-3 py-1.5 text-sm font-bold">{data.cityName} והסביבה ▾</span>}
       </div>
+      {zones.length === 0 ? (
+        <EmptyState className="min-h-[300px] justify-center" />
+      ) : (
       <div className="relative h-[600px] overflow-hidden rounded-[28px] sm:h-[660px]" style={{ background: "radial-gradient(120% 90% at 50% 40%, #241b54 0%, #15102e 55%, #0b0820 100%)" }}>
         {/* grid + nebula glow */}
         <div className="absolute inset-0 opacity-40" style={{ backgroundImage: "linear-gradient(rgba(168,139,250,0.10) 1px,transparent 1px),linear-gradient(90deg,rgba(168,139,250,0.10) 1px,transparent 1px)", backgroundSize: "52px 52px" }} />
@@ -240,6 +243,7 @@ export function OpportunityMapSection({ t, data }: { t: Translate; data: Dashboa
           {["Plus", "Minus", "Crosshair"].map((i) => <span key={i} className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80"><Icon name={i} size={16} /></span>)}
         </div>
       </div>
+      )}
     </section>
   );
 }
@@ -258,20 +262,24 @@ export function ActivityRadarSection({ t, data }: { t: Translate; data: Dashboar
           <h3 className="text-ink text-base font-black">פעילות אחרונה</h3>
           <Link href="/command" className="text-brand-strong text-sm font-bold">לכל הפעילויות</Link>
         </div>
-        <ol className="relative flex flex-col gap-4 pr-4">
-          <span className="bg-line absolute bottom-2 right-[5px] top-2 w-px" />
-          {data.activity.slice(0, 6).map((a) => (
-            <li key={a.id} className="relative flex items-start gap-3">
-              <span className="bg-brand absolute right-[-3px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-[var(--color-card)]" />
-              <span className="text-muted w-12 shrink-0 pt-0.5 text-[11px] font-bold tabular-nums">{a.time}</span>
-              <span className="bg-brand-soft text-brand-strong grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name={a.icon} size={15} /></span>
-              <div className="min-w-0 flex-1">
-                <p className="text-ink truncate text-sm font-bold">{a.entity}</p>
-                <p className="text-muted truncate text-xs">{t(a.detailKey)}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        {data.activity.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <ol className="relative flex flex-col gap-4 pr-4">
+            <span className="bg-line absolute bottom-2 right-[5px] top-2 w-px" />
+            {data.activity.slice(0, 6).map((a) => (
+              <li key={a.id} className="relative flex items-start gap-3">
+                <span className="bg-brand absolute right-[-3px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-[var(--color-card)]" />
+                <span className="text-muted w-12 shrink-0 pt-0.5 text-[11px] font-bold tabular-nums">{a.time}</span>
+                <span className="bg-brand-soft text-brand-strong grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name={a.icon} size={15} /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-ink truncate text-sm font-bold">{a.entity}</p>
+                  <p className="text-muted truncate text-xs">{t(a.detailKey)}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
 
       {/* Right — AI opportunity radar */}
@@ -280,15 +288,19 @@ export function ActivityRadarSection({ t, data }: { t: Translate; data: Dashboar
           <span className="zono-ai-gradient grid h-8 w-8 place-items-center rounded-xl text-white"><Icon name="Radar" size={16} /></span>
           <h3 className="text-ink text-base font-black">AI Opportunity Radar</h3>
         </div>
-        <div className="flex flex-col gap-2.5">
-          {data.opportunities.map((o) => (
-            <Link key={o.id} href={o.href} className="bg-surface/70 hover:bg-brand-soft/60 flex items-center gap-3 rounded-2xl p-3 transition">
-              <span className="bg-brand-soft text-brand grid h-10 w-10 shrink-0 place-items-center rounded-xl"><Icon name={RADAR_ICON[o.kind] ?? o.icon} size={18} /></span>
-              <p className="text-ink min-w-0 flex-1 text-[13px] font-semibold">{t(o.reasonKey)}</p>
-              <span className="bg-brand text-white grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-black tabular-nums">{o.count}</span>
-            </Link>
-          ))}
-        </div>
+        {data.opportunities.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {data.opportunities.map((o) => (
+              <Link key={o.id} href={o.href} className="bg-surface/70 hover:bg-brand-soft/60 flex items-center gap-3 rounded-2xl p-3 transition">
+                <span className="bg-brand-soft text-brand grid h-10 w-10 shrink-0 place-items-center rounded-xl"><Icon name={RADAR_ICON[o.kind] ?? o.icon} size={18} /></span>
+                <p className="text-ink min-w-0 flex-1 text-[13px] font-semibold">{t(o.reasonKey)}</p>
+                <span className="bg-brand text-white grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-black tabular-nums">{o.count}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -314,33 +326,15 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function ForecastArea({ points }: { points: number[] }) {
-  const w = 320, h = 130;
-  const pts = points.length > 1 ? points : [0.3, 0.4, 0.38, 0.5, 0.62, 0.58, 0.74, 0.9];
-  const line = pts.map((p, i) => `${(i / (pts.length - 1)) * w},${h - p * h}`).join(" ");
-  const area = `0,${h} ${line} ${w},${h}`;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" preserveAspectRatio="none" aria-hidden>
-      <defs><linearGradient id="fcArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="rgba(167,139,250,0.45)" /><stop offset="1" stopColor="rgba(124,58,237,0)" /></linearGradient></defs>
-      <polygon points={area} fill="url(#fcArea)" />
-      <polyline points={line} fill="none" stroke="#c4b5fd" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 export function AICommandCenterSection({ t, data }: { t: Translate; data: DashboardHomeData }) {
   void t;
-  const sellersAtRisk = data.sellers.filter((s) => s.bucket === "at_risk").length;
-  const hotBuyers = data.buyers.filter((b) => b.bucket === "hot").length;
   const oppTotal = data.opportunities.reduce((s, o) => s + o.count, 0);
-  const potential = data.hotProperties.reduce((s, p) => s + (p.price ?? 0), 0) * 0.02;
-  const score = Math.max(40, Math.min(99, Math.round(data.dealProbabilityPct || 82)));
-  const fcPoints = (data.marketTrends[0]?.points && data.marketTrends[0].points.length > 1) ? data.marketTrends[0].points : [];
+  const score = Math.max(0, Math.min(99, Math.round(data.dealProbabilityPct)));
+  const hasData = data.opportunities.length > 0 || data.dealProbabilityPct > 0 || data.hotProperties.length > 0;
   const metrics = [
-    { l: "פוטנציאל עסקאות", v: ilsC(potential), sub: "30 הימים הקרובים", tone: "text-white" },
     { l: "הזדמנויות פעילות", v: String(oppTotal), sub: "זוהו ע״י AI", tone: "text-brand-light" },
-    { l: "מוכרים בסיכון", v: String(sellersAtRisk), sub: "דורש טיפול", tone: "text-rose-300" },
-    { l: "קונים חמים", v: String(hotBuyers), sub: "פעילים כעת", tone: "text-emerald-300" },
+    { l: "נכסים חמים", v: String(data.hotProperties.length), sub: "פעילים כעת", tone: "text-white" },
   ];
   return (
     <section className="relative overflow-hidden rounded-[28px] p-6 sm:p-8" style={{ background: "linear-gradient(135deg, #1b1340 0%, #120c2c 60%, #0b0820 100%)" }}>
@@ -349,7 +343,10 @@ export function AICommandCenterSection({ t, data }: { t: Translate; data: Dashbo
         <span className="zono-ai-gradient grid h-9 w-9 place-items-center rounded-xl text-white"><Icon name="Sparkles" size={18} /></span>
         <h2 className="text-xl font-black text-white">AI Command Center</h2>
       </div>
-      <div className="relative grid grid-cols-1 items-center gap-8 lg:grid-cols-[1fr_auto_1.2fr]">
+      {!hasData ? (
+        <EmptyStateDark className="relative" />
+      ) : (
+      <div className="relative grid grid-cols-1 items-center gap-8 lg:grid-cols-[1fr_auto]">
         {/* Left metrics */}
         <div className="grid grid-cols-2 gap-4">
           {metrics.map((m) => (
@@ -360,25 +357,14 @@ export function AICommandCenterSection({ t, data }: { t: Translate; data: Dashbo
             </div>
           ))}
         </div>
-        {/* Center AI score */}
+        {/* AI score */}
         <div className="flex flex-col items-center gap-3">
           <ScoreRing score={score} />
-          <p className="max-w-[200px] text-center text-[12px] font-medium text-white/70">ההמלצה של ZONO: ישנן {data.opportunities.length} הזדמנויות עם סיכוי גבוה</p>
+          <p className="max-w-[220px] text-center text-[12px] font-medium text-white/70">ההמלצה של ZONO: זוהו {data.opportunities.length} הזדמנויות פעילות</p>
           <Link href="/command" className="btn-zono-primary rounded-xl px-4 py-2 text-sm font-bold text-white">ראה המלצות</Link>
         </div>
-        {/* Right forecast */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[13px] font-bold text-white/85">פוטנציאל עסקאות (₪)</p>
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/70">30 הימים האחרונים</span>
-          </div>
-          <div className="h-32"><ForecastArea points={fcPoints} /></div>
-          <div className="mt-2 flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
-            <span className="text-[12px] font-bold text-white/70">הצמיחה לחודש הקרוב</span>
-            <span className="text-emerald-300 text-sm font-black">+18% · {ilsC(potential * 0.85)}</span>
-          </div>
-        </div>
       </div>
+      )}
     </section>
   );
 }
@@ -388,70 +374,57 @@ export function AICommandCenterSection({ t, data }: { t: Translate; data: Dashbo
    ──────────────────────────────────────────────────────────────────────── */
 export function AIDealForecastSection({ t, data }: { t: Translate; data: DashboardHomeData }) {
   void t;
-  const leads = Math.max(5, data.buyers.length || 24);
-  const avgBudget = data.buyers.length ? data.buyers.reduce((s, b) => s + (b.budget ?? 0), 0) / data.buyers.length : 2_000_000;
-  const stages = [
-    { l: "לידים", f: 1 }, { l: "פגישות", f: 0.62 }, { l: "הצעות", f: 0.4 }, { l: "מו״מ", f: 0.24 }, { l: "סגירה", f: 0.12 },
-  ].map((s) => ({ ...s, count: Math.round(leads * s.f), value: ilsC(leads * s.f * avgBudget) }));
+  // Top opportunities — real AI opportunity signals (already-Hebrew titles).
+  const topOpps = data.opportunities.slice(0, 5);
 
-  const topOpps = [...data.buyers]
-    .map((b) => ({ name: b.name, score: Math.max(70, Math.min(99, 72 + b.matchCount * 3)), value: ilsC(b.budget) }))
-    .sort((a, b) => b.score - a.score).slice(0, 5);
-
+  // Market pulse — only the metrics with a real value from the heatmap cells.
+  const cn0 = data.cityNow;
+  const hasMarket = data.heatZones.length > 0 || cn0.newListings > 0 || cn0.priceDrops > 0 || cn0.demandTrendPct > 0 || !!cn0.hotNeighborhood;
   const pulse = [
-    { l: "ביקוש בשוק", v: `${data.cityNow.demandTrendPct > 0 ? "+" : ""}${data.cityNow.demandTrendPct}%`, up: data.cityNow.demandTrendPct >= 0, icon: "TrendingUp" },
-    { l: "ירידות מחיר", v: String(data.cityNow.priceDrops), up: false, icon: "TrendingDown" },
-    { l: "נכסים חדשים היום", v: String(data.cityNow.newListings), up: true, icon: "Sparkles" },
-    { l: "שכונה מובילה", v: data.cityNow.hotNeighborhood, up: true, icon: "Flame" },
+    { l: "ביקוש בשוק", v: `${cn0.demandTrendPct > 0 ? "+" : ""}${cn0.demandTrendPct}%`, up: cn0.demandTrendPct >= 0, icon: "TrendingUp" },
+    { l: "ירידות מחיר", v: String(cn0.priceDrops), up: false, icon: "TrendingDown" },
+    { l: "נכסים חדשים", v: String(cn0.newListings), up: true, icon: "Sparkles" },
+    ...(cn0.hotNeighborhood ? [{ l: "שכונה מובילה", v: cn0.hotNeighborhood, up: true, icon: "Flame" }] : []),
   ];
 
   return (
-    <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {/* Funnel */}
-      <div className="bg-card border-line rounded-[24px] border p-5 shadow-[var(--shadow-card)]">
-        <h3 className="text-ink mb-4 text-base font-black">משפך עסקאות</h3>
-        <div className="flex flex-col gap-2">
-          {stages.map((s, i) => (
-            <div key={s.l} className="zono-gradient flex items-center justify-between rounded-xl px-4 py-2.5 text-white" style={{ width: `${100 - i * 14}%`, opacity: 1 - i * 0.12 }}>
-              <span className="text-[13px] font-bold">{s.l}</span>
-              <span className="text-[12px] font-black tabular-nums" dir="ltr">{s.value}</span>
-            </div>
-          ))}
-        </div>
-        <p className="text-muted mt-3 text-xs font-bold">המרה כוללת · {Math.round((stages[4].count / Math.max(1, stages[0].count)) * 100)}%</p>
-      </div>
-
+    <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* Top opportunities */}
       <div className="bg-card border-line rounded-[24px] border p-5 shadow-[var(--shadow-card)]">
-        <h3 className="text-ink mb-4 text-base font-black">5 ההזדמנויות החזקות השבוע</h3>
-        <div className="flex flex-col gap-2">
-          {topOpps.map((o, i) => (
-            <div key={o.name} className="bg-surface/70 flex items-center gap-3 rounded-2xl p-2.5">
-              <span className="bg-brand-soft text-brand-strong grid h-7 w-7 shrink-0 place-items-center rounded-lg text-sm font-black">{i + 1}</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-ink truncate text-sm font-bold">{o.name}</p>
-                <p className="text-muted text-[11px] font-semibold" dir="ltr">{o.value}</p>
-              </div>
-              <span className="bg-brand text-white shrink-0 rounded-full px-2 py-0.5 text-xs font-black tabular-nums">{o.score}</span>
-            </div>
-          ))}
-        </div>
+        <h3 className="text-ink mb-4 text-base font-black">ההזדמנויות החזקות</h3>
+        {topOpps.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {topOpps.map((o, i) => (
+              <Link key={o.id} href={o.href} className="bg-surface/70 hover:bg-brand-soft/60 flex items-center gap-3 rounded-2xl p-2.5 transition">
+                <span className="bg-brand-soft text-brand-strong grid h-7 w-7 shrink-0 place-items-center rounded-lg text-sm font-black">{i + 1}</span>
+                <p className="text-ink min-w-0 flex-1 truncate text-sm font-bold">{t(o.reasonKey)}</p>
+                <span className="bg-brand text-white shrink-0 rounded-full px-2 py-0.5 text-xs font-black tabular-nums">{o.confidence}%</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Market pulse */}
       <div className="bg-card border-line rounded-[24px] border p-5 shadow-[var(--shadow-card)]">
         <h3 className="text-ink mb-4 text-base font-black">דופק שוק</h3>
-        <div className="flex flex-col gap-2.5">
-          {pulse.map((p) => (
-            <div key={p.l} className="bg-surface/70 flex items-center justify-between gap-2 rounded-2xl p-3">
-              <div className="flex items-center gap-2">
-                <span className={cn("grid h-8 w-8 place-items-center rounded-lg", p.up ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}><Icon name={p.icon} size={15} /></span>
-                <span className="text-ink text-[13px] font-bold">{p.l}</span>
+        {!hasMarket ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {pulse.map((p) => (
+              <div key={p.l} className="bg-surface/70 flex items-center justify-between gap-2 rounded-2xl p-3">
+                <div className="flex items-center gap-2">
+                  <span className={cn("grid h-8 w-8 place-items-center rounded-lg", p.up ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}><Icon name={p.icon} size={15} /></span>
+                  <span className="text-ink text-[13px] font-bold">{p.l}</span>
+                </div>
+                <span className={cn("text-sm font-black", p.up ? "text-success" : "text-danger")}>{p.v}</span>
               </div>
-              <span className={cn("text-sm font-black", p.up ? "text-success" : "text-danger")}>{p.v}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -480,16 +453,17 @@ function CountUp({ to }: { to: number }) {
 
 export function ZonoNeverSleepsSection({ t, data }: { t: Translate; data: DashboardHomeData }) {
   void t;
-  const oppFound = data.opportunities.reduce((s, o) => s + o.count, 0);
-  const buyerMatches = data.buyers.reduce((s, b) => s + (b.matchCount ?? 0), 0);
-  const sellersRisk = data.sellers.filter((s) => s.bucket === "at_risk").length;
-  const convos = data.activity.filter((a) => ["call", "whatsapp", "meeting"].includes(a.kind)).length;
+  const oppFound = data.opportunities.length;
+  const attentionFound = data.attention.length;
+  const zonesScanned = data.heatZones.length;
+  const competitorsTracked = data.competitors.length;
   const counters = [
-    { v: oppFound, l: "הזדמנויות חדשות שזוהו", i: "Target" },
-    { v: sellersRisk, l: "מוכרים בסיכון שאותרו", i: "ShieldAlert" },
-    { v: convos, l: "שיחות שנותחו", i: "MessageCircle" },
-    { v: buyerMatches, l: "התאמות קונים שנמצאו", i: "Users" },
+    { v: oppFound, l: "הזדמנויות שזוהו", i: "Target" },
+    { v: attentionFound, l: "פריטים שדורשים טיפול", i: "ShieldAlert" },
+    { v: zonesScanned, l: "אזורי שוק שנסרקו", i: "MapPin" },
+    { v: competitorsTracked, l: "מתחרים במעקב", i: "Users" },
   ];
+  const hasData = oppFound + attentionFound + zonesScanned + competitorsTracked > 0;
   return (
     <section className="relative overflow-hidden rounded-[28px] p-8 sm:p-10" style={{ background: "radial-gradient(120% 120% at 85% 20%, #3b1d6e 0%, #1a1140 45%, #0a0720 100%)" }}>
       <div className="absolute -right-10 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(circle, rgba(167,139,250,0.5), transparent 70%)" }} />
@@ -501,15 +475,19 @@ export function ZonoNeverSleepsSection({ t, data }: { t: Translate; data: Dashbo
             <p className="text-sm font-medium text-white/70">המנוע סורק, מתאים ומזהה הזדמנויות מסביב לשעון — גם כשאתה לא מחובר</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {counters.map((c) => (
-            <div key={c.l} className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center backdrop-blur-sm">
-              <span className="text-brand-light mx-auto mb-2 grid h-10 w-10 place-items-center rounded-xl bg-white/10"><Icon name={c.i} size={18} /></span>
-              <p className="text-4xl font-black text-white"><CountUp to={c.v} /></p>
-              <p className="mt-1 text-[12px] font-semibold text-white/70">{c.l}</p>
-            </div>
-          ))}
-        </div>
+        {!hasData ? (
+          <EmptyStateDark />
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {counters.map((c) => (
+              <div key={c.l} className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center backdrop-blur-sm">
+                <span className="text-brand-light mx-auto mb-2 grid h-10 w-10 place-items-center rounded-xl bg-white/10"><Icon name={c.i} size={18} /></span>
+                <p className="text-4xl font-black text-white"><CountUp to={c.v} /></p>
+                <p className="mt-1 text-[12px] font-semibold text-white/70">{c.l}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

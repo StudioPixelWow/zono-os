@@ -4,7 +4,14 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getDashboardDict } from "@/lib/dashboard-home/i18n";
 import { buildDashboardHomeData } from "@/lib/dashboard-home/data";
 import { getAcquisitionBoard } from "@/lib/acquisition/service";
-import { getCompetitorBoard } from "@/lib/competitor/service";
+import { getCompetitorBoard, type CompetitorProfileRow } from "@/lib/competitor/service";
+import { listBuyers } from "@/lib/buyers/repository";
+import { listSellers } from "@/lib/sellers/repository";
+import { getSocialLeadsBoard } from "@/lib/social/service";
+import { getDealsBoard } from "@/lib/deals/service";
+import { getExecutiveCommandCenter } from "@/lib/decision-intelligence/service";
+import { getCurrentMarketHeatmap, type MarketHeatmapCell } from "@/lib/market/service";
+import type { AttentionItemRow, OpportunityRow } from "@/lib/decision-intelligence/repository";
 import { DashboardHomeView } from "@/components/dashboard-home/DashboardHomeView";
 import type { ExclusiveDeal, CompetitorThreat } from "@/components/dashboard-home/components/ReferenceSections";
 
@@ -58,9 +65,13 @@ export default async function Home() {
 
   // "מי מאיים עליך כרגע?" — competitors ranked by threat (share + growth).
   let threats: CompetitorThreat[] = [];
+  let competitorRows: CompetitorProfileRow[] = [];
   try {
     const board = await getCompetitorBoard();
-    threats = board.competitors
+    competitorRows = [...board.competitors].sort(
+      (a, b) => (0.5 * b.market_share_score + 0.5 * b.growth_score) - (0.5 * a.market_share_score + 0.5 * a.growth_score),
+    );
+    threats = competitorRows
       .map((c) => ({
         id: c.id,
         name: c.display_name,
@@ -71,14 +82,56 @@ export default async function Home() {
         listings: c.total_listings,
         localities: c.active_localities,
       }))
-      .sort((a, b) => b.threat - a.threat)
       .slice(0, 6);
   } catch (e) {
     console.error("[home] competitor board failed:", e);
   }
 
+  // Real KPI counts — each in its own try/catch so one failure can't break the page.
+  let buyersCount = 0;
+  try { buyersCount = (await listBuyers({})).length; } catch (e) { console.error("[home] buyers failed:", e); }
+
+  let sellersCount = 0;
+  try { sellersCount = (await listSellers()).length; } catch (e) { console.error("[home] sellers failed:", e); }
+
+  let newLeadsCount = 0;
+  try { newLeadsCount = (await getSocialLeadsBoard()).counts.new; } catch (e) { console.error("[home] social board failed:", e); }
+
+  let activeDealsCount = 0;
+  let expectedRevenue = 0;
+  let dealProbabilityPct = 0;
+  try {
+    const deals = await getDealsBoard();
+    activeDealsCount = deals.deals.length;
+    expectedRevenue = deals.revenue.weightedRevenue;
+    dealProbabilityPct = deals.deals.length
+      ? Math.round(deals.deals.reduce((s, d) => s + (d.deal_probability ?? 0), 0) / deals.deals.length)
+      : 0;
+  } catch (e) {
+    console.error("[home] deals board failed:", e);
+  }
+
+  // Decision intelligence — attention + opportunity signals (already-Hebrew titles).
+  let attentionRows: AttentionItemRow[] = [];
+  let opportunityRows: OpportunityRow[] = [];
+  try {
+    const cc = await getExecutiveCommandCenter();
+    attentionRows = cc.attention;
+    opportunityRows = cc.opportunities;
+  } catch (e) {
+    console.error("[home] command center failed:", e);
+  }
+
+  // Market heatmap — real locality cells for the opportunity map + city pulse.
+  let marketCells: MarketHeatmapCell[] = [];
+  try { marketCells = await getCurrentMarketHeatmap(); } catch (e) { console.error("[home] market heatmap failed:", e); }
+
   const dict = getDashboardDict("he");
-  const data = buildDashboardHomeData({ agentName, cityName, realProperties: properties, featuredExternal });
+  const data = buildDashboardHomeData({
+    agentName, cityName, realProperties: properties, featuredExternal,
+    buyersCount, sellersCount, newLeadsCount, activeDealsCount, expectedRevenue, dealProbabilityPct,
+    attentionRows, opportunityRows, marketCells, competitorRows,
+  });
 
   return <DashboardHomeView dict={dict} data={data} exclusiveDeals={exclusiveDeals} threats={threats} />;
 }

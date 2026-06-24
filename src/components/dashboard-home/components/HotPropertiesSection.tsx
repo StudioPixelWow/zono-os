@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import type { PropertyCard } from "@/lib/dashboard-home/types";
-import { SectionHead, ils, type Translate } from "./shared";
+import { EmptyState, SectionHead, ils, type Translate } from "./shared";
 
 /** Prev/next arrows that scroll a horizontal carousel container (RTL-aware). */
 function CarouselArrows({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
@@ -70,13 +70,17 @@ export function HotPropertiesSection({ t, properties }: { t: Translate; properti
           </div>
         }
       />
-      <div ref={scrollRef} className="no-scrollbar flex scroll-px-1 snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
-        {properties.map((p) => (
-          <div key={p.id} className="snap-start">
-            <HotPropertyCard t={t} p={p} />
-          </div>
-        ))}
-      </div>
+      {properties.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <div ref={scrollRef} className="no-scrollbar flex scroll-px-1 snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
+          {properties.map((p) => (
+            <div key={p.id} className="snap-start">
+              <HotPropertyCard t={t} p={p} />
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

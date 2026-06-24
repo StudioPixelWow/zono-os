@@ -28,6 +28,29 @@ export const ATTENTION_DOT: Record<AttentionTone, string> = {
   danger: "bg-danger", warning: "bg-warning", success: "bg-success", brand: "bg-brand",
 };
 
+/** Honest empty state — shown inside a section whose real data array is empty.
+ *  No fabricated data; just an invitation to add the source entities. */
+export function EmptyState({ className }: { className?: string }) {
+  return (
+    <div className={cn("bg-card border-line text-muted flex flex-col items-center justify-center gap-1 rounded-[20px] border p-8 text-center", className)}>
+      <Icon name="Inbox" size={26} className="text-muted/70" />
+      <p className="text-ink text-sm font-bold">אין עדיין מספיק נתונים להצגה</p>
+      <p className="text-muted text-xs">הוסף נכסים, קונים או לידים כדי להפעיל את התובנות</p>
+    </div>
+  );
+}
+
+/** Dark-surface variant of the empty state for the dark centerpiece sections. */
+export function EmptyStateDark({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/5 p-8 text-center", className)}>
+      <Icon name="Inbox" size={26} className="text-white/50" />
+      <p className="text-sm font-bold text-white/90">אין עדיין מספיק נתונים להצגה</p>
+      <p className="text-xs text-white/60">הוסף נכסים, קונים או לידים כדי להפעיל את התובנות</p>
+    </div>
+  );
+}
+
 export function SectionHead({ n, title, action }: { n?: number; title: string; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">

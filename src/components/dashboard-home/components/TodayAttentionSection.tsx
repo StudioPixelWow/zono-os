@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import type { AttentionItem } from "@/lib/dashboard-home/types";
-import { ATTENTION_SOFT, ATTENTION_DOT, SectionHead, type Translate } from "./shared";
+import { ATTENTION_SOFT, ATTENTION_DOT, EmptyState, SectionHead, type Translate } from "./shared";
 
 export function AttentionCard({ t, item, index }: { t: Translate; item: AttentionItem; index: number }) {
   return (
@@ -38,14 +38,17 @@ export function AttentionCard({ t, item, index }: { t: Translate; item: Attentio
 
 /** "מה דורש טיפול היום?" — horizontal row of attention cards. */
 export function TodayAttentionSection({ t, items }: { t: Translate; items: AttentionItem[] }) {
-  if (!items.length) return null;
   return (
     <section className="flex flex-col gap-3">
       <SectionHead title={t("todayAttention.title")} />
       <p className="text-muted -mt-1 text-sm">{t("todayAttention.subtitle")}</p>
-      <div className="no-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-2 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0">
-        {items.map((item, i) => <AttentionCard key={item.id} t={t} item={item} index={i} />)}
-      </div>
+      {items.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <div className="no-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-2 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0">
+          {items.map((item, i) => <AttentionCard key={item.id} t={t} item={item} index={i} />)}
+        </div>
+      )}
     </section>
   );
 }
