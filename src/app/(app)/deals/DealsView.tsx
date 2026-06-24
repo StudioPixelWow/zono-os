@@ -9,6 +9,7 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import { DEAL_STAGE_LABEL, DEAL_STAGE_ORDER, OBJECTION_LABEL, type DealStage } from "@/lib/deals/engine";
 import { advanceDealStageAction, recomputeDealsAction, resolveObjectionAction, setDealTaskStatusAction } from "@/lib/deals/actions";
 import type { DealsBoard, DealRow } from "@/lib/deals/service";
+import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
 
 const PRIORITY: Record<string, string> = { high: "text-danger", medium: "text-warning", low: "text-muted" };
 const SEVERITY: Record<string, string> = { critical: "text-danger", high: "text-danger", medium: "text-warning", low: "text-muted" };
@@ -179,6 +180,9 @@ function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn:
         <button className="text-danger text-[11px] font-bold" disabled={pending} onClick={() => run(() => advanceDealStageAction(d.id, "lost"))}>אבד</button>
         {d.buyer_id && <Link href={`/buyers/${d.buyer_id}`} className="text-muted text-[11px] font-bold">קונה ↗</Link>}
         {d.property_id && <Link href={`/properties/${d.property_id}`} className="text-muted text-[11px] font-bold">נכס ↗</Link>}
+      </div>
+      <div className="mt-1">
+        <CreateLegalDocumentButton entityType="deal" entityId={d.id} label="מסמך משפטי" />
       </div>
     </div>
   );

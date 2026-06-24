@@ -8,6 +8,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { convertSocialLeadAction, generateSocialFollowupsAction, recomputeSocialLeadsAction, reviewSocialLeadAction, setFollowupStatusAction } from "@/lib/social/actions";
 import type { SocialLeadsBoard, SocialLeadRow } from "@/lib/social/service";
+import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
 
 const INTENT: Record<string, string> = { asking_price: "שאלת מחיר", asking_location: "שאלת מיקום", asking_viewing: "בקשת ביקור", asking_details: "בקשת פרטים", seller_interest: "מעוניין למכור", buyer_interest: "מעוניין לקנות", investor_interest: "להשקיע", commercial_interest: "מסחרי", negative: "שלילי", spam: "ספאם", unknown: "לא ידוע" };
 const PLATFORM: Record<string, string> = { facebook: "פייסבוק", whatsapp: "וואטסאפ", telegram: "טלגרם", instagram: "אינסטגרם", manual: "ידני" };
@@ -179,6 +180,11 @@ function LeadCard({ l, pending, run }: { l: SocialLeadRow; pending: boolean; run
         <button className="text-muted text-[11px] font-bold" disabled={pending} onClick={() => run(() => reviewSocialLeadAction(l.id, "reviewed"))}>סמן נבדק</button>
         <button className="text-danger text-[11px] font-bold" disabled={pending} onClick={() => run(() => reviewSocialLeadAction(l.id, "rejected", null, "נדחה ידנית"))}>דחה</button>
       </div>
+      {l.lead_id && (
+        <div className="mt-1">
+          <CreateLegalDocumentButton entityType="lead" entityId={l.lead_id} label="מסמך משפטי" />
+        </div>
+      )}
     </div>
   );
 }

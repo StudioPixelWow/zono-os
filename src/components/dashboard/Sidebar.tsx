@@ -25,7 +25,7 @@ const HREFS: Record<string, string> = {
   permissions: "/admin/permissions", configuration: "/admin/configuration",
   "mock-registry": "/admin/mock-registry", "audit-log": "/admin/audit-log",
   "product-qa": "/admin/product-qa", agents: "/admin/agents", settings: "/settings",
-  "creative-dna": "/creative-dna",
+  "creative-dna": "/creative-dna", "legal-templates": "/legal-templates",
 };
 
 interface NavLink { id: string; label: string; icon: string }
@@ -73,6 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "office-website", label: "אתר משרד", icon: "Building2" },
     { id: "agent-website", label: "אתר סוכן", icon: "UserCheck" },
     { id: "documents", label: "מסמכים", icon: "FileText" },
+    { id: "legal-templates", label: "מסמכים משפטיים", icon: "FileCheck2" },
     { id: "financing", label: "משכנתא", icon: "Calculator" },
   ]},
   { key: "office", label: "ניהול משרד", icon: "Briefcase", managerOnly: true, items: [

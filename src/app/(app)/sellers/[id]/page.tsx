@@ -12,6 +12,7 @@ import { RelationshipSection } from "@/components/graph/RelationshipSection";
 import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
 import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 import { CreatePortalButton } from "@/components/portals/CreatePortalButton";
+import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,9 @@ export default async function SellerDetailPage({
 
       <EntityRecommendationsPanel entityType="seller" entityId={id} recommendations={await listRecommendationsForEntity("seller", id).catch(() => [])} />
       <CreatePortalButton entityType="seller" entityId={id} portalType="seller" label="צור פורטל מוכר" />
+      <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
+        <CreateLegalDocumentButton entityType="seller" entityId={id} />
+      </div>
       <CommunicationSection entityType="seller" entityId={id} />
       <RelationshipSection entityType="seller" entityId={id} />
 
