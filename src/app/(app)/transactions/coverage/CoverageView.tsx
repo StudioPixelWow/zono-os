@@ -7,7 +7,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button, Spinner } from "@/components/ui/Button";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { useActionRunner } from "@/components/ui/useActionRunner";
-import { addCoverageNeighborhoodAction, autoDiscoverNeighborhoodsAction, ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction } from "@/lib/transactions/actions";
+import { addCoverageNeighborhoodAction, autoDiscoverNeighborhoodsAction, ensureCoverageTargetsAction, retryFailedSyncsAction, syncCoverageTargetAction, syncAllCitiesTransactionsAction } from "@/lib/transactions/actions";
 import type { CoverageBoard } from "@/lib/transactions/service";
 
 const STATUS_LABEL: Record<string, string> = { pending: "ממתין", ready: "מוכן", syncing: "מסנכרן", completed: "הושלם", failed: "נכשל", disabled: "מושבת", pending_neighborhoods: "ממתין לשכונות" };
@@ -29,6 +29,12 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
   const ensure = () => runner.run(ensureCoverageTargetsAction, {
     id: "ensure", pendingMessage: "יוצר אזורי כיסוי לפי אזור העבודה…",
     success: (r) => r.needsConfig ? "לא הוגדר אזור עבודה." : `נוצרו ${r.created} אזורי כיסוי${r.largeCityWarning ? " · עיר גדולה — מומלץ כיסוי לפי שכונות" : ""}.`,
+  });
+  const syncAllCities = () => runner.run(syncAllCitiesTransactionsAction, {
+    id: "all-cities", pendingMessage: "מושך עסקאות לכל הערים שקיימות במערכת… (עשוי לקחת מספר דקות)",
+    success: (r) => r.needsConfig ? "נדרש להגדיר APIFY_TOKEN בסביבת השרת."
+      : r.cities === 0 ? "לא נמצאו ערים בנתונים — הוסף נכסים/קונים תחילה."
+      : `נסרקו ${r.cities} ערים · ${r.targetsSynced} אזורים · יובאו ${r.imported} עסקאות${r.duplicates ? ` · ${r.duplicates} כפילויות` : ""}${r.errors.length ? ` · ${r.errors.length} שגיאות` : ""}${r.mock ? " (נתוני הדגמה)" : ""}.`,
   });
   const retry = () => runner.run(retryFailedSyncsAction, {
     id: "retry", pendingMessage: "מנסה שוב סנכרונים שנכשלו…",
@@ -72,6 +78,7 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
           <Button size="sm" variant="secondary" onClick={retry} loading={busyId === "retry"} disabled={pending} leadingIcon={<Icon name="Clock" size={15} />}>נסה כשלונות שוב</Button>
           <Button size="sm" variant="secondary" onClick={ensure} loading={busyId === "ensure"} disabled={pending} leadingIcon={<Icon name="Plus" size={15} />}>צור אזורי כיסוי</Button>
           <Button onClick={discover} loading={busyId === "discover"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{busyId === "discover" ? "מגלה…" : "גלה שכונות אוטומטית"}</Button>
+          <Button onClick={syncAllCities} loading={busyId === "all-cities"} disabled={pending} leadingIcon={<Icon name="Building2" size={16} />}>{busyId === "all-cities" ? "מושך…" : "סנכרן כל הערים ב‑DB"}</Button>
         </div>
       </div>
       {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — סנכרון יחזיר נתוני הדגמה בסביבת פיתוח בלבד.</p>}

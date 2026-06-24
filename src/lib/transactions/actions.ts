@@ -8,8 +8,18 @@ import {
   createAcquisitionTaskFromAlert as svcAcqTask, detectTransactionOpportunity as svcDetect, ensureCoverageTargetsForAgent as svcEnsure,
   generateBuildingIntelligence as svcBuilding, generateStreetIntelligence as svcStreet, refreshAgentCityRecent as svcRefresh,
   researchPropertyAgainstTransactions as svcResearch, retryFailedTransactionSyncs as svcRetry, setRadarAlertStatus as svcRadarStatus,
-  syncCoverageTarget as svcSyncTarget, syncTransactionsForAgent as svcSync, type ResearchSaveInput,
+  syncCoverageTarget as svcSyncTarget, syncTransactionsForAgent as svcSync,
+  syncAllDbCitiesTransactions as svcSyncAllCities, type ResearchSaveInput, type AllCitiesSyncResult,
 } from "./service";
+
+/** Pull transactions for EVERY city present in the org's data (bounded per run). */
+export async function syncAllCitiesTransactionsAction(): Promise<AllCitiesSyncResult> {
+  const r = await svcSyncAllCities();
+  revalidatePath("/transactions");
+  revalidatePath("/transactions/coverage");
+  revalidatePath("/transactions/streets");
+  return r;
+}
 
 export async function ensureCoverageTargetsAction() {
   const r = await svcEnsure();

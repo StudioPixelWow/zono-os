@@ -380,6 +380,71 @@ export async function refreshAgentCityRecent(): Promise<{ targets: number; impor
   return syncTransactionsForAgent("12");
 }
 
+// ── Pull transactions for EVERY city that appears anywhere in the org's data ──
+export interface AllCitiesSyncResult {
+  cities: number; citiesList: string[]; targetsSynced: number;
+  imported: number; duplicates: number; mock: boolean; needsConfig: boolean; errors: string[];
+}
+
+/**
+ * Collects the distinct set of cities referenced across the org's data
+ * (properties, existing transactions, coverage targets, buyer preferred areas,
+ * operating cities), ensures a coverage target per city, then runs the proven
+ * GovMap sync for pending/failed targets. Bounded per run (Apify cost guardrail).
+ */
+export async function syncAllDbCitiesTransactions(
+  opts: { maxCities?: number; maxTargetsPerRun?: number; dealDateRange?: string } = {},
+): Promise<AllCitiesSyncResult> {
+  const maxCities = opts.maxCities ?? 40;
+  const maxTargets = opts.maxTargetsPerRun ?? 25;
+  const dealDateRange = opts.dealDateRange ?? "all";
+  const { orgId, organization } = await ctx();
+  const supabase = await createClient();
+
+  // 1) Gather candidate cities from every source in the DB.
+  const set = new Set<string>();
+  const add = (raw: unknown) => { const c = canonicalCityName(typeof raw === "string" ? raw : ""); if (c) set.add(c); };
+
+  const [props, txs, targets, buyers] = await Promise.all([
+    supabase.from("properties").select("city").eq("org_id", orgId).not("city", "is", null).limit(5000),
+    supabase.from("property_transactions").select("city_name").eq("organization_id", orgId).not("city_name", "is", null).limit(5000),
+    supabase.from("geo_coverage_targets").select("city_name").eq("organization_id", orgId).limit(2000),
+    supabase.from("buyers").select("preferred_areas").eq("org_id", orgId).limit(5000),
+  ]);
+  for (const r of (props.data ?? []) as { city: string }[]) add(r.city);
+  for (const r of (txs.data ?? []) as { city_name: string }[]) add(r.city_name);
+  for (const r of (targets.data ?? []) as { city_name: string }[]) add(r.city_name);
+  for (const r of (buyers.data ?? []) as { preferred_areas: string[] | null }[]) (r.preferred_areas ?? []).forEach(add);
+  for (const c of (organization?.operating_cities ?? []) as string[]) add(c);
+
+  const citiesList = [...set].slice(0, maxCities);
+  if (citiesList.length === 0) {
+    return { cities: 0, citiesList: [], targetsSynced: 0, imported: 0, duplicates: 0, mock: false, needsConfig: false, errors: [] };
+  }
+
+  // 2) Ensure a coverage target exists for each city.
+  let needsConfig = false;
+  for (const city of citiesList) {
+    try { const r = await ensureCoverageTargetsForCity(orgId, city); if (r.created < 0) needsConfig = true; } catch { /* continue */ }
+  }
+
+  // 3) Sync pending/failed targets for these cities (bounded).
+  const { data: pending } = await supabase.from("geo_coverage_targets")
+    .select("id,city_name").eq("organization_id", orgId)
+    .in("coverage_status", ["pending", "pending_neighborhoods", "failed"] as never)
+    .in("city_name", citiesList as never)
+    .order("priority", { ascending: true }).limit(maxTargets);
+
+  let imported = 0, duplicates = 0, mock = false; const errors: string[] = [];
+  for (const t of (pending ?? []) as { id: string; city_name: string }[]) {
+    try { const r = await syncCoverageTarget(t.id, dealDateRange); imported += r.imported; duplicates += r.duplicates; mock = mock || r.mock; if (r.error) errors.push(`${t.city_name}: ${r.error}`); }
+    catch (e) { errors.push(`${t.city_name}: ${e instanceof Error ? e.message : "sync failed"}`); }
+  }
+
+  if (imported > 0) { try { await recomputeDerivedIntelligence(); } catch { /* best-effort */ } }
+  return { cities: citiesList.length, citiesList, targetsSynced: (pending ?? []).length, imported, duplicates, mock, needsConfig, errors: errors.slice(0, 10) };
+}
+
 export async function retryFailedTransactionSyncs(): Promise<{ retried: number; imported: number }> {
   const { orgId } = await ctx();
   const supabase = await createClient();
