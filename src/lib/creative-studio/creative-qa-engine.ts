@@ -17,6 +17,8 @@ import {
   deriveCritical, decideApproval, buildCorrectionPrompt, decideCreative, buildCreativeCorrection,
   type QaScores, type QaCritical, type QaVisionFindings, type SourceManifest, type CreativeScores,
 } from "./creative-qa";
+import { applyCreativeDNAToGenerationPrompt } from "@/lib/creative-dna/generation-integration";
+import type { ReferenceStrength } from "@/lib/creative-dna/types";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
 // Creative-first but TIME-BOUNDED: slow is fine, but a serverless function has a
@@ -66,6 +68,10 @@ function assembleScores(findings: QaVisionFindings | null, c: QaCritical): QaSco
 interface OrchestratorParams {
   orgId: string; propertyId: string | null; requestId: string | null; createdBy: string | null;
   kind: AdKind; template?: string | null; spec: AdSpec; assets: AdGenAssets; bucket: string;
+  // Creative DNA selection — applies a ready org DNA profile or a code preset to
+  // the art direction (resolved+logged once). When omitted, the org DEFAULT
+  // ready profile (if any) is applied automatically.
+  dna?: { profileId?: string | null; presetKey?: string | null; strength?: ReferenceStrength };
 }
 
 export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Promise<AdGenOutcome> {
@@ -80,6 +86,19 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
     status: "generating", selected_template: p.template ?? null, source_manifest_json: manifest as never, created_by: p.createdBy,
   } as never).select("id").single();
   const generationId = (genRow as { id: string } | null)?.id ?? null;
+
+  // CREATIVE DNA: resolve the Style-DNA prompt block ONCE (and log which DNA was
+  // applied into creative_generation_references). The block influences ART
+  // DIRECTION ONLY — never the locked source data — so it's a stable suffix
+  // appended to every attempt's prompt. Best-effort: failure never blocks.
+  let dnaSuffix = "";
+  try {
+    const applied = await applyCreativeDNAToGenerationPrompt("", {
+      profileId: p.dna?.profileId ?? null, presetKey: p.dna?.presetKey ?? null,
+      strength: p.dna?.strength, propertyId: p.propertyId, generationId, log: true,
+    });
+    if (applied.applied) dnaSuffix = applied.prompt; // begins with "\n\n# CREATIVE DNA …"
+  } catch { /* DNA is additive — never block generation on it */ }
 
   let correction = ""; let attempts = 0; const allFail: string[] = [];
   // SELF-CORRECTION pipeline (AI-only — no canvas, no overlay, no local editing):
@@ -103,7 +122,7 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
       break;
     }
     attempts = n;
-    const prompt = buildAdPrompt(p.spec, p.assets, correction);
+    const prompt = buildAdPrompt(p.spec, p.assets, correction) + dnaSuffix;
     // On a correction pass, ATTACH the previous generated image as the base to
     // edit (first ref) so OpenAI fixes ONLY the flagged text and preserves the
     // layout/composition/branding — it never redesigns or starts a new concept.
