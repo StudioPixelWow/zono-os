@@ -9,6 +9,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { DistributionBoard, DailyWorkspace } from "@/lib/distribution/service";
 import type { DistributionCenterData } from "@/lib/distribution/center-data";
+import type { AssistantPost } from "@/lib/distribution/manual-publish-service";
 import { recomputeDistributionAction, generateDailyBatchAction } from "@/lib/distribution/actions";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
@@ -22,8 +23,9 @@ import { ScheduleBuilderSection } from "./ScheduleBuilderSection";
 import { LeadCollectionSection } from "./LeadCollectionSection";
 import { AnalyticsSection } from "./AnalyticsSection";
 import { AutomationCenterSection } from "./AutomationCenterSection";
+import { PublishAssistantSection } from "./PublishAssistantSection";
 
-type SectionKey = "overview" | "groups" | "builder" | "variations" | "schedule" | "queue" | "leads" | "analytics" | "automation";
+type SectionKey = "overview" | "groups" | "builder" | "variations" | "schedule" | "queue" | "assistant" | "leads" | "analytics" | "automation";
 
 const NAV: { key: SectionKey; label: string; icon: string }[] = [
   { key: "overview", label: "סקירה", icon: "LayoutDashboard" },
@@ -32,6 +34,7 @@ const NAV: { key: SectionKey; label: string; icon: string }[] = [
   { key: "variations", label: "וריאציות AI", icon: "Sparkles" },
   { key: "schedule", label: "בניית תור", icon: "CalendarClock" },
   { key: "queue", label: "תור פרסום", icon: "Send" },
+  { key: "assistant", label: "עוזר פרסום", icon: "ShieldCheck" },
   { key: "leads", label: "איסוף לידים", icon: "Inbox" },
   { key: "analytics", label: "אנליטיקה", icon: "BarChart3" },
   { key: "automation", label: "אוטומציה", icon: "Workflow" },
@@ -46,11 +49,15 @@ export function DistributionCenterView({
   daily,
   properties,
   center,
+  assistantPosts,
+  complianceWarnings,
 }: {
   board: DistributionBoard;
   daily: DailyWorkspace;
   properties: PropertyLite[];
   center: DistributionCenterData;
+  assistantPosts: AssistantPost[];
+  complianceWarnings: string[];
 }) {
   const router = useRouter();
   const [section, setSection] = useState<SectionKey>("overview");
@@ -139,6 +146,7 @@ export function DistributionCenterView({
         {section === "variations" && <AiVariationsSection variations={variations} propertyTitle={variationProperty} onBuild={() => setSection("builder")} />}
         {section === "schedule" && <ScheduleBuilderSection campaigns={center.campaigns} groups={center.groups} runActionAsync={runActionAsync} />}
         {section === "queue" && <PostingQueueSection posts={center.posts} campaigns={center.campaigns} groups={center.groups} daily={daily} runAction={runAction} pending={pending} />}
+        {section === "assistant" && <PublishAssistantSection posts={assistantPosts} complianceWarnings={complianceWarnings} runAction={runAction} pending={pending} />}
         {section === "leads" && <LeadCollectionSection leads={center.leads} runAction={runAction} pending={pending} />}
         {section === "analytics" && <AnalyticsSection analytics={center.analytics} stats={center.stats} />}
         {section === "automation" && <AutomationCenterSection automations={center.automations} runAction={runAction} pending={pending} />}

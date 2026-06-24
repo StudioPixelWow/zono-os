@@ -57,6 +57,9 @@ export interface DistPostRow {
   scheduled_at: string | null; published_at: string | null; external_post_url: string | null;
   failure_reason: string | null; skipped_reason: string | null; reach: number; engagement: number;
   leads_count: number; priority_score: number; created_by: string | null; metadata: Record<string, unknown>;
+  // Phase 6 — provider + manual-publish fields.
+  provider: string | null; provider_status: string; manual_publish_required: boolean;
+  external_destination_url: string | null; published_by: string | null; published_manually_at: string | null;
   created_at: string; updated_at: string;
 }
 

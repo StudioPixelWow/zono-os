@@ -1,5 +1,8 @@
 import { getDistributionBoard, getDailyWorkspace, type DistributionBoard, type DailyWorkspace } from "@/lib/distribution/service";
 import { getDistributionCenter, type DistributionCenterData } from "@/lib/distribution/center-data";
+import { COMPLIANCE_WARNINGS } from "@/lib/distribution/distribution-provider";
+import { getPublishAssistantAction } from "@/lib/distribution/manual-publish-actions";
+import type { AssistantPost } from "@/lib/distribution/manual-publish-service";
 import { createClient } from "@/lib/supabase/server";
 import { DistributionCenterView } from "./_center/DistributionCenterView";
 import type { PropertyLite } from "./_center/variations";
@@ -21,6 +24,7 @@ export default async function DistributionPage() {
   let daily: DailyWorkspace = { batch: null, items: [] };
   let properties: PropertyLite[] = [];
   let center: DistributionCenterData = EMPTY_CENTER;
+  let assistantPosts: AssistantPost[] = [];
 
   try {
     board = await getDistributionBoard();
@@ -59,6 +63,21 @@ export default async function DistributionPage() {
   } catch (e) {
     console.error("[distribution] properties load failed:", e);
   }
+  try {
+    const res = await getPublishAssistantAction();
+    assistantPosts = res.posts;
+  } catch (e) {
+    console.error("[distribution] publish assistant load failed:", e);
+  }
 
-  return <DistributionCenterView board={board} daily={daily} properties={properties} center={center} />;
+  return (
+    <DistributionCenterView
+      board={board}
+      daily={daily}
+      properties={properties}
+      center={center}
+      assistantPosts={assistantPosts}
+      complianceWarnings={COMPLIANCE_WARNINGS}
+    />
+  );
 }

@@ -110,4 +110,38 @@ export const distributionPostsRepository = {
     c.successRate = attempted ? Math.round((c.published / attempted) * 10000) / 100 : 0;
     return c;
   },
+
+  // ── Phase 6: manual publishing ──────────────────────────────────────────────
+  /** Mark a post published BY HAND (no API). Stamps who/when + the external URL. */
+  async markPublishedManually(id: string, externalPostUrl: string | null): Promise<boolean> {
+    const s = await scope(); if (!s) return false;
+    const now = new Date().toISOString();
+    const { error } = await s.db.from(DIST.posts as never).update({
+      status: "published", published_at: now, published_manually_at: now, published_by: s.userId,
+      external_post_url: externalPostUrl ?? null, failure_reason: null,
+    } as never).eq("id", id).eq("org_id", s.orgId);
+    return !error;
+  },
+  /** Mark a manual publish as failed with a reason. */
+  async markManualFailed(id: string, reason: string): Promise<boolean> {
+    const s = await scope(); if (!s) return false;
+    const { error } = await s.db.from(DIST.posts as never)
+      .update({ status: "failed", failure_reason: reason.slice(0, 500) } as never)
+      .eq("id", id).eq("org_id", s.orgId);
+    return !error;
+  },
+  /** Save / update the external (Facebook) post URL without changing status. */
+  async saveExternalUrl(id: string, url: string): Promise<boolean> {
+    const s = await scope(); if (!s) return false;
+    const { error } = await s.db.from(DIST.posts as never)
+      .update({ external_post_url: url } as never).eq("id", id).eq("org_id", s.orgId);
+    return !error;
+  },
+  /** Stamp the resolved provider + connection status onto a post. */
+  async setProvider(id: string, provider: string, providerStatus: string): Promise<boolean> {
+    const s = await scope(); if (!s) return false;
+    const { error } = await s.db.from(DIST.posts as never)
+      .update({ provider, provider_status: providerStatus } as never).eq("id", id).eq("org_id", s.orgId);
+    return !error;
+  },
 };
