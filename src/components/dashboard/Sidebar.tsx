@@ -26,6 +26,7 @@ const HREFS: Record<string, string> = {
   "mock-registry": "/admin/mock-registry", "audit-log": "/admin/audit-log",
   "product-qa": "/admin/product-qa", agents: "/admin/agents", settings: "/settings",
   "creative-dna": "/creative-dna", "legal-templates": "/legal-templates",
+  "distribution-connections": "/settings/distribution-connections",
 };
 
 interface NavLink { id: string; label: string; icon: string }
@@ -65,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "creative-dna", label: "Creative DNA", icon: "Fingerprint" },
     { id: "communities", label: "קהילות", icon: "Users" },
     { id: "distribution", label: "הפצה יומית", icon: "Send" },
+    { id: "distribution-connections", label: "חיבורי הפצה", icon: "Send" },
     { id: "social-leads", label: "לידים חברתיים", icon: "MessageCircle" },
     { id: "whatsapp", label: "WhatsApp", icon: "MessageCircle" },
   ]},

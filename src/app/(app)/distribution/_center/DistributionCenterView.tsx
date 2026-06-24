@@ -29,6 +29,7 @@ import { LeadCollectionSection } from "./LeadCollectionSection";
 import { AnalyticsSection } from "./AnalyticsSection";
 import { AutomationCenterSection } from "./AutomationCenterSection";
 import { PublishAssistantSection } from "./PublishAssistantSection";
+import { FacebookConnectBanner } from "./FacebookConnectBanner";
 import { CommentsLeadsSection } from "./CommentsLeadsSection";
 
 type SectionKey = "overview" | "groups" | "builder" | "variations" | "schedule" | "queue" | "assistant" | "comments" | "leads" | "analytics" | "automation";
@@ -142,6 +143,9 @@ export function DistributionCenterView({
       {toast && (
         <div className="zono-glass text-ink rounded-2xl px-4 py-3 text-sm font-semibold">{toast}</div>
       )}
+
+      {/* Facebook connection status — manual mode until Meta API approval */}
+      <FacebookConnectBanner onOpenAssistant={() => setSection("assistant")} />
 
       {/* Section nav */}
       <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">

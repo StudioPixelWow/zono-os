@@ -235,6 +235,17 @@ export function PublishAssistantSection({
         icon="ShieldCheck"
       />
 
+      {/* Manual mode indicator — no Meta API connection yet */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
+          <Icon name="ShieldCheck" size={16} /> מצב פרסום ידני · Facebook עדיין לא מחובר ל-API
+        </p>
+        <a href="/settings/distribution-connections"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-amber-800 shadow-sm transition hover:brightness-95">
+          <Icon name="Send" size={13} /> חיבורי הפצה
+        </a>
+      </div>
+
       {/* Compliance banner — calm, clear */}
       <Glass className="flex flex-col gap-3 p-5">
         <div className="flex items-center gap-2.5">
