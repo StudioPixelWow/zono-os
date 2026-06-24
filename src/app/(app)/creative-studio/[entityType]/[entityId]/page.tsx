@@ -14,6 +14,11 @@ import { aiProviderStatus } from "@/lib/creative-studio/creative-production-engi
 import { CreativeStudioView } from "../../CreativeStudioView";
 
 export const dynamic = "force-dynamic";
+// AI image generation is slow; give its server actions the full Vercel window.
+// (Effective on Pro = up to 300s; Hobby is capped at 60s — image generation
+// needs Pro. The engine also enforces an internal time budget so it returns
+// before the function is killed.)
+export const maxDuration = 300;
 
 export default async function CreativeStudioEntityPage({ params }: { params: Promise<{ entityType: string; entityId: string }> }) {
   const { entityType, entityId: rawEntityId } = await params;

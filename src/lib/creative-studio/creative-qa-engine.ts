@@ -19,12 +19,19 @@ import {
 } from "./creative-qa";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
-// Cap retries at 3 (was 5). Combined with a per-image timeout and parallel
-// generation of the 2 final ads, this keeps worst-case wall-clock to a few
-// minutes instead of ~10. Override with ZONO_CREATIVE_MAX_ATTEMPTS if needed.
-// Creative-first: slow generation is acceptable — give the art director more
-// attempts to reach a premium, non-templated result (override with env).
-const MAX_ATTEMPTS = Math.max(1, Number(process.env.ZONO_CREATIVE_MAX_ATTEMPTS) || 4);
+// Creative-first but TIME-BOUNDED: slow is fine, but a serverless function has a
+// hard wall-clock limit — exceeding it returns a 504 and the user gets NOTHING.
+// So we cap attempts AND enforce an overall time budget: we stop starting new
+// attempts once there isn't enough time left for another full generation, and
+// return the best image so far. Both override via env.
+const MAX_ATTEMPTS = Math.max(1, Number(process.env.ZONO_CREATIVE_MAX_ATTEMPTS) || 3);
+// Per-ad budget. The 2 final ads run in parallel, so wall-clock ≈ one ad's
+// budget. Keep well under Vercel's max (300s on Pro) to leave room for upload +
+// QA + the surrounding flow. Override with ZONO_CREATIVE_TOTAL_BUDGET_MS.
+const TOTAL_BUDGET_MS = Math.max(60_000, Number(process.env.ZONO_CREATIVE_TOTAL_BUDGET_MS) || 200_000);
+// Rough cost of one full attempt (image gen + 2 vision QA calls). If less than
+// this remains in the budget, we don't start another attempt.
+const ATTEMPT_COST_MS = Math.max(40_000, Number(process.env.ZONO_CREATIVE_ATTEMPT_COST_MS) || 95_000);
 
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
@@ -85,8 +92,16 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   // overall is a light tiebreaker.
   const bestRank = (c: BestCandidate) => (c.creativeWow ?? 0) * 10 + c.scores.overall;
   let prevImageUrl: string | null = null;
+  const startedAt = Date.now();
 
   for (let n = 1; n <= MAX_ATTEMPTS; n++) {
+    // TIME BUDGET: never start an attempt we don't have time to finish — that is
+    // what causes the 504 (function killed mid-generation). After attempt #1, if
+    // less than one attempt's worth of budget remains, stop and return the best.
+    if (n > 1 && Date.now() - startedAt > TOTAL_BUDGET_MS - ATTEMPT_COST_MS) {
+      allFail.push("תקציב הזמן מוצה — מחזיר את הגרסה הטובה ביותר");
+      break;
+    }
     attempts = n;
     const prompt = buildAdPrompt(p.spec, p.assets, correction);
     // On a correction pass, ATTACH the previous generated image as the base to
