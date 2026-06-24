@@ -36,6 +36,74 @@ export const INTENT_TONE: Record<string, string> = {
   negotiation: "bg-warning-soft text-warning", question: "bg-surface text-ink", spam: "bg-danger-soft text-danger", unknown: "bg-surface text-muted",
 };
 
+// ── conversation-level intelligence (over REAL ingested messages) ───────────
+export interface WaMessage { direction: "inbound" | "outbound"; body: string | null; createdAt?: string | null }
+export interface PropertyIntent { rooms: number | null; budget: number | null; area: string | null; raw: string[] }
+
+/** Extract structured property hints from conversation text — real text only. */
+export function extractPropertyIntent(messages: WaMessage[]): PropertyIntent {
+  const text = messages.map((m) => m.body ?? "").join(" \n ");
+  const raw: string[] = [];
+  let rooms: number | null = null;
+  const roomsM = text.match(/(\d(?:\.5)?)\s*חדר/);
+  if (roomsM) { rooms = Number(roomsM[1]); raw.push(`${rooms} חדרים`); }
+  let budget: number | null = null;
+  const milM = text.match(/(\d(?:\.\d)?)\s*(?:מיליון|מ['׳]?)/);
+  if (milM) { budget = Math.round(Number(milM[1]) * 1_000_000); raw.push(`תקציב ~${milM[1]}M`); }
+  else { const kM = text.match(/(\d{3,4})\s*(?:אלף|k)/i); if (kM) { budget = Number(kM[1]) * 1000; } }
+  let area: string | null = null;
+  const areaM = text.match(/ב(?:שכונת|אזור|רחוב)\s+([֐-׿\s]{2,20})/);
+  if (areaM) { area = areaM[1].trim().split(/\s+/).slice(0, 3).join(" "); raw.push(area); }
+  return { rooms, budget, area, raw };
+}
+
+export type WaRole = "buyer" | "seller" | "investor" | "unknown";
+export interface ConversationAnalysis {
+  role: WaRole; topIntent: WaIntent; intentScore: number; summary: string;
+  needsResponse: boolean; nextBestAction: string; propertyIntent: PropertyIntent;
+}
+
+/** Deterministic conversation analysis: role, dominant intent, Hebrew summary, NBA. */
+export function summarizeConversation(messages: WaMessage[], contactName?: string | null): ConversationAnalysis {
+  const inbound = messages.filter((m) => m.direction === "inbound");
+  const counts: Record<string, number> = {};
+  let bestScore = 0; let topIntent: WaIntent = "unknown";
+  for (const m of inbound) {
+    const { intent, score } = detectIntent(m.body ?? "");
+    counts[intent] = (counts[intent] ?? 0) + 1;
+    if (score > bestScore) { bestScore = score; topIntent = intent; }
+  }
+  const buyerSignals = (counts.buyer_intent ?? 0) + (counts.viewing_request ?? 0) + (counts.financing ?? 0) + (counts.price_request ?? 0);
+  const sellerSignals = counts.seller_intent ?? 0;
+  const investorSignals = counts.investor_intent ?? 0;
+  let role: WaRole = "unknown";
+  if (sellerSignals > buyerSignals && sellerSignals >= investorSignals) role = "seller";
+  else if (investorSignals > buyerSignals && investorSignals >= sellerSignals) role = "investor";
+  else if (buyerSignals > 0) role = "buyer";
+
+  const pi = extractPropertyIntent(messages);
+  const last = messages[messages.length - 1];
+  const needsResponse = last?.direction === "inbound";
+
+  const name = contactName || "הליד";
+  const roleHe = role === "buyer" ? "קונה פוטנציאלי" : role === "seller" ? "מוכר פוטנציאלי" : role === "investor" ? "משקיע" : "פנייה כללית";
+  const intentHe = INTENT_LABELS[topIntent] ?? "לא ידוע";
+  const bits = [`${name} — ${roleHe}.`, `כוונה מרכזית: ${intentHe}.`];
+  if (pi.raw.length) bits.push(`מאפיינים שעלו: ${pi.raw.join(", ")}.`);
+  bits.push(`${inbound.length} הודעות נכנסות בשיחה.`);
+  if (needsResponse) bits.push("ממתין לתשובה ממך.");
+  const summary = bits.join(" ");
+
+  let nextBestAction = "המשך מעקב";
+  if (needsResponse && topIntent === "viewing_request") nextBestAction = "תאם צפייה בנכס";
+  else if (needsResponse && topIntent === "price_request") nextBestAction = "השב עם טווח מחיר/הצעה";
+  else if (role === "buyer") nextBestAction = "צור כרטיס קונה ושלח התאמות";
+  else if (role === "seller") nextBestAction = "צור כרטיס מוכר וקבע פגישת הערכה";
+  else if (needsResponse) nextBestAction = "השב לפנייה";
+
+  return { role, topIntent, intentScore: bestScore, summary, needsResponse, nextBestAction, propertyIntent: pi };
+}
+
 // ── sensitive-topic risk classification (→ approval) ──────────────────────────
 const SENSITIVE = /(מחיר|הנחה|לסגור על|עמלה|דמי תיווך|משפטי|חוזה|חתימה|התחייב|מימון|משכנתא|ריבית|להתמקח|הצעה נגדית|זמין מתי|מובטח)/;
 export function classifyRisk(body: string): { risk: "safe" | "review" | "sensitive"; requiresApproval: boolean } {

@@ -10,6 +10,7 @@ import {
   markDraftSentAction, recordMissedCallAction, createCampaignAction, createSmartLinkAction, computeDailyMissionsAction,
 } from "@/lib/whatsapp/actions";
 import { STATE_LABELS, STATE_TONE, INTENT_LABELS, INTENT_TONE, CAMPAIGN_GOALS } from "@/lib/whatsapp/engine";
+import { WhatsappIntelligencePanel } from "./WhatsappIntelligencePanel";
 import type { WhatsappCommandCenter, ConversationSummary, DraftSummary } from "@/lib/whatsapp/service";
 
 type Tab = "inbox" | "approvals" | "missed" | "followups" | "campaigns" | "smartlinks" | "segments" | "missions" | "settings";
@@ -48,6 +49,8 @@ export function WhatsappView({ cc }: { cc: WhatsappCommandCenter }) {
           <Icon name="Flame" size={14} />רענן משימות
         </Button>
       </header>
+
+      <WhatsappIntelligencePanel />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi label="דורש מענה" value={cc.kpis.needsReply} tone="text-warning" />
