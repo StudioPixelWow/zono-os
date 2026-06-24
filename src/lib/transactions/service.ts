@@ -457,6 +457,40 @@ export async function syncAllDbCitiesTransactions(
   return { cities: citiesList.length, citiesList, targetsSynced: (pending ?? []).length, pendingRemaining, imported, duplicates, mock, needsConfig, errors: errors.slice(0, 10) };
 }
 
+// ── Live progress for the all-cities pull (polled by the UI) ─────────────────
+export interface CityCoverageProgress {
+  total: number; completed: number; pending: number; failed: number; syncing: number;
+  transactionsTotal: number; recentCities: { city: string; found: number }[];
+}
+export async function getCityCoverageProgress(): Promise<CityCoverageProgress> {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  const head = (status?: string[]) => {
+    let q = supabase.from("geo_coverage_targets").select("id", { count: "exact", head: true }).eq("organization_id", orgId);
+    if (status) q = q.in("coverage_status", status as never); else q = q.neq("coverage_status", "disabled");
+    return q;
+  };
+  const [total, completed, pending, failed, syncing, tx, recent] = await Promise.all([
+    head(),
+    head(["completed"]),
+    head(["pending", "pending_neighborhoods", "ready"]),
+    head(["failed"]),
+    head(["syncing"]),
+    supabase.from("property_transactions").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+    supabase.from("geo_coverage_targets").select("city_name,transactions_found,last_sync_at").eq("organization_id", orgId).eq("coverage_status", "completed").order("last_sync_at", { ascending: false }).limit(8),
+  ]);
+  // Aggregate found per city across completed targets (neighbourhood rows roll up).
+  const byCity = new Map<string, number>();
+  for (const r of (recent.data ?? []) as { city_name: string; transactions_found: number | null }[]) {
+    byCity.set(r.city_name, (byCity.get(r.city_name) ?? 0) + (r.transactions_found ?? 0));
+  }
+  return {
+    total: total.count ?? 0, completed: completed.count ?? 0, pending: pending.count ?? 0,
+    failed: failed.count ?? 0, syncing: syncing.count ?? 0, transactionsTotal: tx.count ?? 0,
+    recentCities: [...byCity.entries()].map(([city, found]) => ({ city, found })).slice(0, 6),
+  };
+}
+
 export async function retryFailedTransactionSyncs(): Promise<{ retried: number; imported: number }> {
   const { orgId } = await ctx();
   const supabase = await createClient();

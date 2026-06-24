@@ -9,8 +9,14 @@ import {
   generateBuildingIntelligence as svcBuilding, generateStreetIntelligence as svcStreet, refreshAgentCityRecent as svcRefresh,
   researchPropertyAgainstTransactions as svcResearch, retryFailedTransactionSyncs as svcRetry, setRadarAlertStatus as svcRadarStatus,
   syncCoverageTarget as svcSyncTarget, syncTransactionsForAgent as svcSync,
-  syncAllDbCitiesTransactions as svcSyncAllCities, type ResearchSaveInput, type AllCitiesSyncResult,
+  syncAllDbCitiesTransactions as svcSyncAllCities, getCityCoverageProgress as svcCityProgress,
+  type ResearchSaveInput, type AllCitiesSyncResult, type CityCoverageProgress,
 } from "./service";
+
+/** Live progress for the all-cities pull (polled by the UI). */
+export async function getCityCoverageProgressAction(): Promise<CityCoverageProgress | { error: string }> {
+  try { return await svcCityProgress(); } catch (e) { return { error: e instanceof Error ? e.message : "failed" }; }
+}
 
 /** Pull transactions for EVERY city present in the org's data (bounded per run). */
 export async function syncAllCitiesTransactionsAction(): Promise<AllCitiesSyncResult> {
