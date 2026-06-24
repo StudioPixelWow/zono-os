@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { generateMarketSnapshotsForOrganization } from "./service";
+import { getCityNeighborhoodHeat, type NeighborhoodHeat } from "./neighborhood-heat";
 import { initializeOrganizationDecisionBrain } from "@/lib/decision-intelligence/service";
+
+/** Real neighborhood demand/price heat for a city (centroids + org activity). */
+export async function getNeighborhoodHeatAction(city?: string | null): Promise<NeighborhoodHeat> {
+  return getCityNeighborhoodHeat(city ?? null);
+}
 
 export interface MarketActionState {
   error?: string;

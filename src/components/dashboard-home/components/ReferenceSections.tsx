@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
 import type { DashboardHomeData } from "@/lib/dashboard-home/types";
 import { whatsappNumber } from "@/components/listings/ContactButtons";
 import { type Translate, ilsC, EmptyState, EmptyStateDark } from "./shared";
+import { ZonoMap, type ZonoMapPoint } from "@/components/maps/ZonoMap";
+import { getNeighborhoodHeatAction } from "@/lib/market/actions";
+import type { NeighborhoodHeat } from "@/lib/market/neighborhood-heat";
 
 /* ─────────────────────────────────────────────────────────────────────────
    SECTION 9 — EXCLUSIVE EXTERNAL DEALS  ("עסקאות שאסור לפספס")
@@ -168,39 +171,107 @@ const BUBBLE_TONE: Record<string, string> = {
   agent: "rgba(139,92,246,0.95)", negative: "rgba(99,102,241,0.85)", neutral: "rgba(148,163,184,0.8)",
 };
 
+const HEAT_DOT: Record<string, string> = {
+  danger: "bg-red-500", warning: "bg-amber-500", brand: "bg-violet-500", success: "bg-emerald-500",
+};
+
+/**
+ * Real neighborhood demand heat map: REAL centroids (israel_neighborhoods) +
+ * REAL org market activity per neighborhood (external listings + transactions).
+ * Renders the ZONO map where coordinates exist; a ranked neighborhood list
+ * alongside; and an honest fallback to area-insight cards when no neighborhood
+ * data is available. No fake coordinates, no invented prices.
+ */
 export function OpportunityMapSection({ t, data }: { t: Translate; data: DashboardHomeData }) {
   void t;
-  // Phase 24.5 — this was a fake scatter "map" (bubbles positioned by random
-  // top/left %, fake zoom/filters). Heat-zones carry real area metrics but NO real
-  // geography, so we present them as a ranked AREA-INSIGHTS panel — never a map.
-  const zones = [...data.heatZones].sort((a, b) => b.radius - a.radius).slice(0, 8);
+  const [heat, setHeat] = useState<NeighborhoodHeat | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    getNeighborhoodHeatAction(data.cityName || null)
+      .then((h) => { if (alive) setHeat(h); })
+      .catch(() => { if (alive) setHeat(null); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [data.cityName]);
+
+  const points = heat?.points ?? [];
+  const mapPoints: ZonoMapPoint[] = points
+    .filter((p) => p.lat != null && p.lng != null)
+    .map((p) => ({
+      id: p.id, lat: p.lat as number, lng: p.lng as number, title: p.name, tone: p.tone,
+      details: [
+        `${p.listings} מודעות · ${p.transactions} עסקאות`,
+        p.avgPrice ? `מחיר ממוצע: ${ilsC(p.avgPrice)}` : "אין נתוני מחיר",
+      ],
+    }));
+  const topList = points.filter((p) => p.activity > 0).slice(0, 8);
+
+  const header = (
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <h2 className="text-ink text-xl font-black sm:text-2xl">מפת ביקוש לפי שכונות</h2>
+        <p className="text-muted text-xs">צפיפות מודעות ועסקאות אמיתיות בכל שכונה — נתוני מיקום אמיתיים.</p>
+      </div>
+      {(heat?.city || data.cityName) && <span className="bg-card border-line text-muted shrink-0 rounded-xl border px-3 py-1.5 text-sm font-bold">{heat?.city || data.cityName}</span>}
+    </div>
+  );
+
+  // Honest fallback: no neighborhood centroids/activity → ranked area-insight cards.
+  if (!loading && points.length === 0) {
+    const zones = [...data.heatZones].sort((a, b) => b.radius - a.radius).slice(0, 8);
+    return (
+      <section className="flex flex-col gap-4">
+        {header}
+        {zones.length === 0 ? <EmptyState className="min-h-[220px] justify-center" /> : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {zones.map((z, i) => {
+              const accent = BUBBLE_TONE[z.tone] ?? BUBBLE_TONE.neutral;
+              return (
+                <div key={z.id} className="bg-card border-line relative overflow-hidden rounded-2xl border p-4 shadow-[var(--shadow-card)]">
+                  <span className="absolute inset-y-0 start-0 w-1.5" style={{ background: accent }} />
+                  <div className="flex items-center justify-between gap-2"><span className="text-ink truncate text-sm font-black">{i + 1}. {z.name}</span><span className="text-muted text-[11px] font-bold">פוטנציאל</span></div>
+                  <p className="text-ink mt-1 text-2xl font-black">{Math.abs(z.deltaPct)}%</p>
+                  <p className="text-muted text-xs font-semibold" dir="ltr">{ilsC(z.avgPrice)}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-muted text-[11px]">מפת שכונות אמיתית תוצג כאשר קיימות שכונות מזוהות ופעילות שוק לעיר זו.</p>
+      </section>
+    );
+  }
+
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-ink text-xl font-black sm:text-2xl">תובנות אזוריות</h2>
-        {data.cityName && <span className="bg-card border-line text-muted rounded-xl border px-3 py-1.5 text-sm font-bold">{data.cityName} והסביבה</span>}
-      </div>
-      {zones.length === 0 ? (
-        <EmptyState className="min-h-[220px] justify-center" />
+      {header}
+      {loading ? (
+        <div className="bg-card border-line h-80 animate-pulse rounded-card border" />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {zones.map((z, i) => {
-            const accent = BUBBLE_TONE[z.tone] ?? BUBBLE_TONE.neutral;
-            return (
-              <div key={z.id} className="bg-card border-line relative overflow-hidden rounded-2xl border p-4 shadow-[var(--shadow-card)]">
-                <span className="absolute inset-y-0 start-0 w-1.5" style={{ background: accent }} />
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-ink truncate text-sm font-black">{i + 1}. {z.name}</span>
-                  <span className="text-muted text-[11px] font-bold">פוטנציאל</span>
-                </div>
-                <p className="text-ink mt-1 text-2xl font-black">{Math.abs(z.deltaPct)}%</p>
-                <p className="text-muted text-xs font-semibold" dir="ltr">{ilsC(z.avgPrice)}</p>
-              </div>
-            );
-          })}
+        <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+          {mapPoints.length > 0
+            ? <ZonoMap points={mapPoints} heightClass="h-80 lg:h-full" emptyMessage="אין שכונות עם קואורדינטות אמיתיות להצגה." clusterThreshold={120} />
+            : <div className="border-line bg-card text-muted grid h-80 place-items-center rounded-card border text-center text-sm">נמצאה פעילות שוק אך עדיין ללא קואורדינטות שכונה. ההשלמה תתבצע עם זיהוי המיקומים.</div>}
+          <div className="border-line bg-card rounded-card border p-4 shadow-[var(--shadow-card)]">
+            <p className="text-ink mb-3 text-sm font-black">שכונות מובילות בביקוש</p>
+            {topList.length === 0 ? <p className="text-muted text-sm">אין עדיין פעילות שוק מתועדת בשכונות העיר.</p> : (
+              <ul className="space-y-2.5">
+                {topList.map((p, i) => (
+                  <li key={p.id} className="flex items-center gap-2.5">
+                    <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", HEAT_DOT[p.tone])} />
+                    <span className="text-muted w-4 text-xs font-bold tabular-nums">{i + 1}</span>
+                    <span className="text-ink flex-1 truncate text-sm font-bold">{p.name}</span>
+                    <span className="text-muted text-xs">{p.listings + p.transactions} פעילות{p.avgPrice ? ` · ${ilsC(p.avgPrice)}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
-      <p className="text-muted text-[11px]">מדדי ביקוש ומחיר לפי אזור. מפה גאוגרפית אמיתית זמינה במסך הנכסים, ותורחב עם השלמת קואורדינטות.</p>
+      <p className="text-muted text-[11px]">צבע השכונה מבטא עצמת פעילות (מודעות + עסקאות) אמיתית. מיקומים מ‑israel_neighborhoods; מחירים מנתוני השוק שלך.</p>
     </section>
   );
 }
