@@ -88,6 +88,10 @@ export async function GET(req: NextRequest) {
   }
   console.log(`${LOG} STEP 5: CSRF state verified + identity matched. Authorization code received (length=${code.length}).`);
 
+  // From here on, org_id/user_id come from the VERIFIED session — never the URL.
+  const verifiedOrgId = profile.org_id;
+  const verifiedUserId = user.id;
+
   // STEP 6+ — exchange code → token → long-lived; fetch identity; encrypt; store.
   try {
     console.log(`${LOG} STEP 6: exchanging authorization code for short-lived token...`);
@@ -111,29 +115,40 @@ export async function GET(req: NextRequest) {
     console.log(`${LOG} STEP 8b: encrypting access token (AES-256-GCM) before persistence...`);
     const accessTokenEncrypted = encryptSecret(long.accessToken);
 
-    console.log(`${LOG} STEP 8c: persisting connection to Supabase table 'distribution_provider_connections' (provider=facebook)...`);
-    const stored = await providerConnectionRepository.storeMetaConnection({
+    // SERVICE-ROLE write — only reached AFTER session + signed-state + identity
+    // verification above. org_id/user_id are the VERIFIED session values.
+    console.log(`${LOG} STEP 8c: persisting connection to Supabase table 'distribution_provider_connections' (provider=facebook) via service-role (verified org)...`);
+    const stored = await providerConnectionRepository.storeMetaConnectionServiceRole(verifiedOrgId, verifiedUserId, {
       accessTokenEncrypted, tokenExpiresAt, scopes: INITIAL_SCOPES,
       externalAccountId: identity.id, displayName: identity.name,
     });
     if (!stored) {
-      console.error(`${LOG} STEP 8c: DB SAVE FAILED (storeMetaConnection returned false — see [provider-connections] log above for code/message). Redirecting error.`);
+      console.error(`${LOG} AUDIT user_id=${verifiedUserId} org_id=${verifiedOrgId} provider=facebook result=FAILURE stage=db_save`);
+      console.error(`${LOG} DB SAVE FAILED (storeMetaConnectionServiceRole returned false — see [provider-connections] log above for code/message). Redirecting error.`);
       return back("meta=error&reason=store");
     }
-    console.log(`${LOG} STEP 8c: DB save OK.`);
+    console.log(`${LOG} DB SAVE SUCCESS`);
 
-    console.log(`${LOG} STEP 8d: updating facebook_connection_paths meta_oauth status → connected (UI status)...`);
-    const pathOk = await facebookConnectionPathService.setMetaStatus("connected", {
+    console.log(`${LOG} STEP 8d: updating facebook_connection_paths meta_oauth status → connected (UI status) via service-role...`);
+    const pathOk = await facebookConnectionPathService.setMetaStatusServiceRole(verifiedOrgId, verifiedUserId, "connected", {
       account_name: identity.name, account_id: identity.id, scopes: INITIAL_SCOPES,
     });
-    console.log(`${LOG} STEP 8d: path status update ${pathOk ? "OK" : "FAILED (UI may still read provider row)"}.`);
+    if (pathOk) {
+      console.log(`${LOG} PATH STATUS CONNECTED`);
+    } else {
+      console.error(`${LOG} STEP 8d: path status update FAILED (provider row saved; UI badge may lag).`);
+    }
 
+    // Audit trail — identity + outcome only, NEVER token values.
+    console.log(`${LOG} AUDIT user_id=${verifiedUserId} org_id=${verifiedOrgId} provider=facebook account_id=${identity.id} result=SUCCESS`);
     return back("meta=connected");
   } catch (err) {
     // Never leak the token; log the failure cause and mark error honestly.
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} STEP 6-8: token exchange / identity / encrypt FAILED — ${msg}`);
-    await facebookConnectionPathService.setMetaStatus("error", { reason: "exchange_failed" }).catch(() => {});
+    console.error(`${LOG} AUDIT user_id=${verifiedUserId} org_id=${verifiedOrgId} provider=facebook result=FAILURE stage=exchange`);
+    // Best-effort honest error status via service-role (verified org).
+    await facebookConnectionPathService.setMetaStatusServiceRole(verifiedOrgId, verifiedUserId, "error", { reason: "exchange_failed" }).catch(() => {});
     return back("meta=error&reason=exchange");
   }
 }

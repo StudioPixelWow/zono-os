@@ -7,7 +7,8 @@
 // manual_publish_required / not_connected. Tokens are never written here.
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
 import { getProviderByKey } from "./distribution-provider-registry";
 
@@ -168,6 +169,54 @@ export const providerConnectionRepository = {
       return false;
     }
     console.log(`[provider-connections] storeMetaConnection OK — row id=${(data as { id?: string } | null)?.id ?? "(no row returned)"}`);
+    return true;
+  },
+
+  /**
+   * Store a real Meta API connection using the SERVICE-ROLE client with an
+   * EXPLICIT, already-verified org_id + user_id. This is the OAuth callback's
+   * write path: the RLS-bound user client cannot reliably insert/update here
+   * (the policies require has_min_role('agent'), and the cookie-derived RLS
+   * context is not guaranteed inside a third-party OAuth redirect). The caller
+   * MUST have already (a) verified the Supabase session, (b) verified the signed
+   * state, and (c) confirmed state.orgId === session.org_id and
+   * state.userId === session.user.id. The token MUST already be encrypted.
+   * org_id is taken from the verified session — NEVER from the URL alone.
+   */
+  async storeMetaConnectionServiceRole(orgId: string, userId: string | null, input: {
+    accessTokenEncrypted: string;
+    refreshTokenEncrypted?: string | null;
+    tokenExpiresAt?: string | null;
+    scopes: string[];
+    externalAccountId: string | null;
+    displayName: string | null;
+  }): Promise<boolean> {
+    if (!orgId) {
+      console.error("[provider-connections] storeMetaConnectionServiceRole: missing orgId — refusing write");
+      return false;
+    }
+    if (!isServiceRoleConfigured()) {
+      console.error("[provider-connections] storeMetaConnectionServiceRole: SERVICE ROLE NOT CONFIGURED — cannot persist");
+      return false;
+    }
+    const db = createServiceRoleClient();
+    const { data, error } = await db.from(TABLE as never).upsert({
+      org_id: orgId, provider: "facebook", status: "connected", connection_mode: "api",
+      display_name: input.displayName, external_account_id: input.externalAccountId,
+      access_token_encrypted: input.accessTokenEncrypted,
+      refresh_token_encrypted: input.refreshTokenEncrypted ?? null,
+      token_expires_at: input.tokenExpiresAt ?? null,
+      scopes: input.scopes, last_validated_at: new Date().toISOString(), created_by: userId,
+    } as never, { onConflict: "org_id,provider" } as never).select("id").maybeSingle();
+    if (error) {
+      console.error(
+        `[provider-connections] storeMetaConnectionServiceRole FAILED on table=${TABLE} org_id=${orgId}: ` +
+        `code=${error.code ?? "?"} message=${error.message ?? "?"} ` +
+        `details=${(error as { details?: string }).details ?? "?"} hint=${(error as { hint?: string }).hint ?? "?"}`,
+      );
+      return false;
+    }
+    console.log(`[provider-connections] storeMetaConnectionServiceRole OK — row id=${(data as { id?: string } | null)?.id ?? "(no row returned)"}`);
     return true;
   },
 

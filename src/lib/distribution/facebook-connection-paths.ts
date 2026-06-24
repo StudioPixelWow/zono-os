@@ -18,7 +18,8 @@
 //   - No state is ever auto-faked to "connected"/"ready".
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
 
 const TABLE = "facebook_connection_paths";
@@ -98,6 +99,32 @@ export const facebookConnectionPathRepository = {
       metadata: safeMeta, last_checked_at: new Date().toISOString(), created_by: s.userId,
     } as never, { onConflict: "org_id,path_type" } as never);
     if (error) { console.error("[fb-connection-paths] setStatus:", error.message); return false; }
+    return true;
+  },
+
+  /**
+   * Set a path status using the SERVICE-ROLE client with an EXPLICIT,
+   * already-verified org_id. Used by the OAuth callback (see
+   * provider-connections.storeMetaConnectionServiceRole for the gating
+   * requirements). Strips sensitive keys; org_id is the verified session org —
+   * NEVER the URL. The token is never written to this table.
+   */
+  async setStatusServiceRole(
+    orgId: string,
+    userId: string | null,
+    pathType: FacebookPathType,
+    status: FacebookPathStatus,
+    metadata: Record<string, unknown> = {},
+  ): Promise<boolean> {
+    if (!orgId) { console.error("[fb-connection-paths] setStatusServiceRole: missing orgId — refusing write"); return false; }
+    if (!isServiceRoleConfigured()) { console.error("[fb-connection-paths] setStatusServiceRole: SERVICE ROLE NOT CONFIGURED"); return false; }
+    const safeMeta = stripSensitive(metadata);
+    const db = createServiceRoleClient();
+    const { error } = await db.from(TABLE as never).upsert({
+      org_id: orgId, path_type: pathType, status,
+      metadata: safeMeta, last_checked_at: new Date().toISOString(), created_by: userId,
+    } as never, { onConflict: "org_id,path_type" } as never);
+    if (error) { console.error("[fb-connection-paths] setStatusServiceRole:", error.message); return false; }
     return true;
   },
 };
@@ -180,6 +207,14 @@ export const facebookConnectionPathService = {
    */
   async setMetaStatus(status: MetaPathStatus, metadata: Record<string, unknown> = {}): Promise<boolean> {
     return facebookConnectionPathRepository.setStatus("meta_oauth", status, metadata);
+  },
+
+  /**
+   * Service-role variant for the OAuth callback — explicit verified org_id/user_id,
+   * non-sensitive metadata only (account name/id/scopes), never the token.
+   */
+  async setMetaStatusServiceRole(orgId: string, userId: string | null, status: MetaPathStatus, metadata: Record<string, unknown> = {}): Promise<boolean> {
+    return facebookConnectionPathRepository.setStatusServiceRole(orgId, userId, "meta_oauth", status, metadata);
   },
 
   /** Read-only refresh — returns current real state (never fabricates). */
