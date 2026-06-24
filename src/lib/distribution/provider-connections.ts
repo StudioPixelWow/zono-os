@@ -124,6 +124,31 @@ export const providerConnectionRepository = {
       .eq("org_id", s.orgId).eq("provider", provider);
     return !error;
   },
+  /**
+   * Store a real Meta API connection on the `facebook` provider row. The token
+   * MUST already be encrypted by the caller — this method never encrypts/logs.
+   */
+  async storeMetaConnection(input: {
+    accessTokenEncrypted: string;
+    refreshTokenEncrypted?: string | null;
+    tokenExpiresAt?: string | null;
+    scopes: string[];
+    externalAccountId: string | null;
+    displayName: string | null;
+  }): Promise<boolean> {
+    const s = await scope(); if (!s) return false;
+    const { error } = await s.db.from(TABLE as never).upsert({
+      org_id: s.orgId, provider: "facebook", status: "connected", connection_mode: "api",
+      display_name: input.displayName, external_account_id: input.externalAccountId,
+      access_token_encrypted: input.accessTokenEncrypted,
+      refresh_token_encrypted: input.refreshTokenEncrypted ?? null,
+      token_expires_at: input.tokenExpiresAt ?? null,
+      scopes: input.scopes, last_validated_at: new Date().toISOString(), created_by: s.userId,
+    } as never, { onConflict: "org_id,provider" } as never);
+    if (error) { console.error("[provider-connections] storeMetaConnection failed"); return false; }
+    return true;
+  },
+
   async disconnectProvider(provider: ConnectionProvider): Promise<boolean> {
     const s = await scope(); if (!s) return false;
     // Hard-clear any token material and mark disconnected (we never stored real tokens,

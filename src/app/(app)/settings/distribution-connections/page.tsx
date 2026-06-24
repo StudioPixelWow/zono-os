@@ -1,6 +1,7 @@
 import { getDistributionConnectionsAction, getFacebookConnectionPathsAction } from "@/lib/distribution/provider-connections-actions";
 import { CONNECTION_COMPLIANCE, type ProviderConnectionView } from "@/lib/distribution/provider-connections";
 import type { FacebookPathView } from "@/lib/distribution/facebook-connection-paths";
+import { getMetaOAuthConfig } from "@/lib/distribution/meta-oauth";
 import { DistributionConnectionsView } from "./DistributionConnectionsView";
 
 export const dynamic = "force-dynamic";
@@ -19,5 +20,6 @@ export default async function DistributionConnectionsPage() {
   } catch (e) {
     console.error("[distribution-connections] load failed:", e);
   }
-  return <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} />;
+  const metaConfigured = getMetaOAuthConfig().configured;
+  return <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} metaConfigured={metaConfigured} />;
 }

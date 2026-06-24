@@ -20,7 +20,6 @@ import {
   initializeManualFacebookConnectionAction,
   validateProviderConnectionAction,
   disconnectProviderAction,
-  startMetaOAuthAction,
   refreshExtensionStatusAction,
 } from "@/lib/distribution/provider-connections-actions";
 
@@ -64,15 +63,14 @@ function fmt(iso: string | null): string {
   catch { return "—"; }
 }
 
-export function DistributionConnectionsView({ initial, compliance, paths }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null }) {
+export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean }) {
   const [conns, setConns] = useState<ProviderConnectionView[]>(initial);
   const runner = useActionRunner();
 
   const refresh = async () => { try { setConns(await getDistributionConnectionsAction()); } catch { /* keep current */ } };
 
-  // Two parallel connection-type CTAs — neither ever fakes a connected/ready state.
-  const onConnectMeta = () => runner.run(async () => startMetaOAuthAction(),
-    { id: "connect-meta", pendingMessage: "פותח חיבור Meta…", success: (r) => r.message ?? null });
+  // The Meta CTA is a real navigation to /api/oauth/meta/start (server redirector).
+  // The extension CTA only reads real state — neither fakes a connected/ready status.
   const onCheckExtension = () => runner.run(async () => {
     const r = await refreshExtensionStatusAction();
     return { ok: true, message: r.data?.status === "not_installed" ? "התוסף עדיין לא מותקן/מחובר." : "סטטוס התוסף עודכן." };
@@ -116,10 +114,11 @@ export function DistributionConnectionsView({ initial, compliance, paths }: { in
           <PathCard
             path={paths.meta}
             icon="Globe"
-            cta="חבר Meta"
-            ctaBusyId="connect-meta"
-            onCta={onConnectMeta}
-            note="חיבור שרת-לשרת רשמי דרך Meta. הטוקנים נשמרים מוצפנים בצד ZONO — בכפוף לאישור Meta."
+            cta={!metaConfigured ? "נדרשת הגדרת Meta" : paths.meta.status === "connected" ? "התחבר מחדש" : paths.meta.status === "expired" || paths.meta.status === "error" ? "התחבר מחדש" : "חבר Meta"}
+            href={metaConfigured ? "/api/oauth/meta/start" : undefined}
+            disabled={!metaConfigured}
+            detail={paths.meta.status === "connected" ? (typeof paths.meta.metadata.account_name === "string" ? `מחובר: ${paths.meta.metadata.account_name}` : "מחובר") : undefined}
+            note={metaConfigured ? "חיבור שרת-לשרת רשמי דרך Meta. הטוקנים נשמרים מוצפנים בצד ZONO — בכפוף לאישור Meta." : "כדי להפעיל חיבור Meta יש להגדיר META_APP_ID, META_APP_SECRET, META_OAUTH_REDIRECT_URI, META_GRAPH_VERSION."}
             runner={runner}
           />
           <PathCard
@@ -258,10 +257,11 @@ function ProviderCard({
  * the extension only flips state from a real heartbeat.
  */
 function PathCard({
-  path, icon, cta, ctaBusyId, onCta, note, runner,
+  path, icon, cta, ctaBusyId, onCta, href, disabled, detail, note, runner,
 }: {
-  path: FacebookPathView; icon: string; cta: string; ctaBusyId: string;
-  onCta: () => void; note: string; runner: ReturnType<typeof useActionRunner>;
+  path: FacebookPathView; icon: string; cta: string; ctaBusyId?: string;
+  onCta?: () => void; href?: string; disabled?: boolean; detail?: string;
+  note: string; runner: ReturnType<typeof useActionRunner>;
 }) {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="border-line bg-card flex flex-col rounded-2xl border p-5">
@@ -286,12 +286,30 @@ function PathCard({
         </div>
       </div>
 
+      {detail ? (
+        <p className="text-ink mt-3 text-xs font-bold">{detail}</p>
+      ) : null}
+
       <p className="text-muted mt-3 text-xs leading-relaxed">{note}</p>
 
       <div className="mt-3">
-        <Button size="sm" onClick={onCta} loading={runner.busyId === ctaBusyId}>
-          <Icon name={icon} size={14} className="ms-1" /> {cta}
-        </Button>
+        {href ? (
+          // Real navigation (e.g. /api/oauth/meta/start) — a styled link, not a fake action.
+          <a
+            href={href}
+            className="zono-gradient-glow inline-flex items-center rounded-xl px-3.5 py-2 text-sm font-bold text-white"
+          >
+            <Icon name={icon} size={14} className="ms-1" /> {cta}
+          </a>
+        ) : disabled ? (
+          <Button size="sm" disabled>
+            <Icon name={icon} size={14} className="ms-1" /> {cta}
+          </Button>
+        ) : (
+          <Button size="sm" onClick={onCta} loading={ctaBusyId ? runner.busyId === ctaBusyId : false}>
+            <Icon name={icon} size={14} className="ms-1" /> {cta}
+          </Button>
+        )}
       </div>
     </motion.div>
   );

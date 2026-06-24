@@ -173,6 +173,15 @@ export const facebookConnectionPathService = {
     return { ok, message: ok ? "סטטוס התוסף עודכן." : "עדכון סטטוס התוסף נכשל." };
   },
 
+  /**
+   * Set the Meta OAuth path status (called by the real OAuth callback on success,
+   * or to mark expired/error). Stores only NON-sensitive metadata (display name,
+   * account id, scopes) — never the token.
+   */
+  async setMetaStatus(status: MetaPathStatus, metadata: Record<string, unknown> = {}): Promise<boolean> {
+    return facebookConnectionPathRepository.setStatus("meta_oauth", status, metadata);
+  },
+
   /** Read-only refresh — returns current real state (never fabricates). */
   async refreshExtensionStatus(): Promise<ExtensionPathStatus> {
     const { extension } = await this.getPaths();
