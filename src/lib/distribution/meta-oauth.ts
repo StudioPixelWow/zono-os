@@ -14,14 +14,22 @@ export interface MetaOAuthConfig {
   appSecret: string;
   redirectUri: string;
   graphVersion: string;
+  /** Facebook Login for Business configuration id. Permissions are defined in the
+   *  Meta App's Login configuration, NOT requested ad-hoc via `scope`. */
+  configId: string;
   configured: boolean;
   missing: string[];
 }
 
-/** Minimal scope needed just to establish the connection + read basic identity.
- *  Publishing / Pages / IG / Lead Ads / analytics scopes are requested in later
- *  phases (each behind its own Meta App Review). */
+/** Minimal scope kept ONLY for the legacy fallback path (when no config_id is set).
+ *  With Facebook Login for Business, permissions live in the Login configuration
+ *  on Meta's side and are NOT requested manually here. */
 export const INITIAL_SCOPES = ["public_profile"];
+
+/** Facebook Login for Business configuration id created in the Meta App dashboard.
+ *  Used as the default so the authorize URL always carries a valid config_id;
+ *  overridable per-deployment via META_LOGIN_CONFIG_ID. */
+export const DEFAULT_LOGIN_CONFIG_ID = "1334427291395263";
 
 const isReal = (v: string | undefined) => !!v && v.trim().length > 0;
 
@@ -31,12 +39,13 @@ export function getMetaOAuthConfig(): MetaOAuthConfig {
   const appSecret = process.env.META_APP_SECRET?.trim() ?? "";
   const redirectUri = process.env.META_OAUTH_REDIRECT_URI?.trim() ?? "";
   const graphVersion = (process.env.META_GRAPH_VERSION?.trim() || "v21.0");
+  const configId = (process.env.META_LOGIN_CONFIG_ID?.trim() || DEFAULT_LOGIN_CONFIG_ID);
   const missing: string[] = [];
   if (!isReal(appId)) missing.push("META_APP_ID");
   if (!isReal(appSecret)) missing.push("META_APP_SECRET");
   if (!isReal(redirectUri)) missing.push("META_OAUTH_REDIRECT_URI");
   if (!isReal(process.env.META_GRAPH_VERSION)) missing.push("META_GRAPH_VERSION");
-  return { appId, appSecret, redirectUri, graphVersion, configured: missing.length === 0, missing };
+  return { appId, appSecret, redirectUri, graphVersion, configId, configured: missing.length === 0, missing };
 }
 
 const graph = (cfg: MetaOAuthConfig, path: string) => `https://graph.facebook.com/${cfg.graphVersion}${path}`;
@@ -76,15 +85,24 @@ export function verifySignedState(state: string, cookieNonce: string, secret: st
   }
 }
 
-/** The Facebook Login dialog URL to redirect the user to. */
+/** The Facebook Login dialog URL to redirect the user to.
+ *  Uses Facebook Login for Business: passes `config_id` (the Login configuration
+ *  holds the granted permissions) instead of requesting legacy `scope` manually.
+ *  Falls back to legacy `scope` only if no config_id is available. */
 export function buildAuthorizeUrl(cfg: MetaOAuthConfig, state: string): string {
   const params = new URLSearchParams({
     client_id: cfg.appId,
     redirect_uri: cfg.redirectUri,
     state,
-    scope: INITIAL_SCOPES.join(","),
     response_type: "code",
   });
+  if (isReal(cfg.configId)) {
+    // Facebook Login for Business — permissions come from the Login configuration.
+    params.set("config_id", cfg.configId);
+  } else {
+    // Legacy fallback only.
+    params.set("scope", INITIAL_SCOPES.join(","));
+  }
   return `https://www.facebook.com/${cfg.graphVersion}/dialog/oauth?${params.toString()}`;
 }
 

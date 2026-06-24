@@ -14,7 +14,8 @@ User clicks "חבר Meta"  →  GET /api/oauth/meta/start
         │  2. Require Meta env configured (else → ?meta=setup_required)
         │  3. Create HMAC-signed state bound to {orgId, userId, nonce, exp}
         │  4. Set httpOnly cookie `meta_oauth_nonce` (the nonce only)
-        │  5. 302 → https://www.facebook.com/<ver>/dialog/oauth?...
+        │  5. 302 → https://www.facebook.com/<ver>/dialog/oauth?...&config_id=<id>
+        │     (Facebook Login for Business — config_id, NOT manual scope)
         ▼
 Facebook Login dialog (user consents to public_profile)
         │
@@ -68,7 +69,29 @@ HTTPS for OAuth redirect URIs).
 | `META_APP_SECRET`         | yes      | Meta app secret — token exchange **and** HMAC state signing.   |
 | `META_OAUTH_REDIRECT_URI` | yes      | Must match the Meta app's registered OAuth redirect URI.       |
 | `META_GRAPH_VERSION`      | yes      | Graph API version, e.g. `v21.0`.                               |
+| `META_LOGIN_CONFIG_ID`    | no       | Facebook Login for Business configuration id. Defaults to `1334427291395263`. |
 | `ZONO_ENCRYPTION_KEY`     | yes      | ≥16 chars. Derives the AES-256-GCM key for token-at-rest.      |
+
+## Facebook Login for Business
+
+This integration uses **Facebook Login for Business**. The authorize URL carries
+`config_id=<META_LOGIN_CONFIG_ID>` (default `1334427291395263`) **instead of**
+requesting legacy permissions via `scope`. The granted permissions live in the
+Login configuration created in the Meta App dashboard, so they are managed on
+Meta's side rather than hard-coded in the redirect. If `META_LOGIN_CONFIG_ID` is
+empty, the builder falls back to the legacy `scope=public_profile` path.
+
+The code→token exchange and short→long-lived token exchange are **unchanged and
+fully compatible** with Facebook Login for Business: both use
+`GET /oauth/access_token` with `client_id`, `client_secret`, `redirect_uri`,
+`code` (and `fb_exchange_token` for the long-lived step). The callback flow
+(state verification, identity fetch, encrypt + store) is identical.
+
+Example authorize URL (with `state` and `client_id` filled at runtime):
+
+```
+https://www.facebook.com/v21.0/dialog/oauth?client_id=<META_APP_ID>&redirect_uri=<META_OAUTH_REDIRECT_URI>&state=<SIGNED_STATE>&response_type=code&config_id=1334427291395263
+```
 
 If any of the four `META_*` vars is missing, both routes redirect honestly to
 `?meta=setup_required` and the UI shows "נדרשת הגדרת Meta" with a disabled
