@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { heroAssistantMessage, mapPins } from "@/data/mock";
+import { heroAssistantMessage } from "@/data/mock";
 import { formatShekels } from "@/lib/utils";
 import {
   DEAL_TYPE_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
 } from "@/lib/onboarding/options";
 import { Icon } from "../Icon";
-import { CityMap } from "../CityMap";
-import { DemoBadge } from "../DemoBadge";
 import { FloatingAssistant } from "../FloatingAssistant";
 import { motion } from "../motion";
 import { useCurrentUser, useDashboardData } from "../DashboardDataProvider";
@@ -134,10 +132,19 @@ export function HeroSection() {
         )}
       </div>
 
-      {/* Map — decorative illustration (not live data; badged in dev) */}
-      <div className="relative h-[340px] overflow-hidden rounded-[26px] border border-line bg-card shadow-[0_20px_50px_rgba(124,58,237,0.12)] sm:h-[420px]">
-        <DemoBadge label="מפה להמחשה" className="absolute start-3 top-3" />
-        <CityMap pins={mapPins} />
+      {/* Phase 24.2 — the hero no longer shows a decorative/simulated city map.
+          A real map lives on /properties (backed by real coordinates). This is an
+          honest branded CTA panel, not fake geography. */}
+      <div className="relative grid h-[340px] place-items-center overflow-hidden rounded-[26px] border border-line bg-gradient-to-br from-[#140d2b] via-[#1c1340] to-[#241a4d] shadow-[0_20px_50px_rgba(124,58,237,0.18)] sm:h-[420px]">
+        <div className="absolute inset-0 opacity-[0.18]" style={{ backgroundImage: "radial-gradient(circle at 30% 30%, #8b5cf6 0, transparent 45%), radial-gradient(circle at 75% 70%, #6d28d9 0, transparent 45%)" }} />
+        <div className="relative px-6 text-center">
+          <span className="zono-gradient-glow mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl text-white"><Icon name="MapPin" size={26} /></span>
+          <p className="text-lg font-black text-white">מפת הנכסים החיה</p>
+          <p className="mx-auto mt-1 max-w-xs text-xs text-[#c4b5fd]">צפה בנכסים שלך על מפה אמיתית — לפי מיקום מדויק. נכסים ללא מיקום לא יוצגו כסיכות מזויפות.</p>
+          <Link href="/properties" className="bg-white/10 hover:bg-white/20 mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white backdrop-blur transition">
+            <Icon name="Map" size={16} /> פתח את מפת הנכסים
+          </Link>
+        </div>
         <FloatingAssistant
           message={heroAssistantMessage}
           className="absolute bottom-4 end-4"
