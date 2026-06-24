@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
+import { Button } from "@/components/ui/Button";
 import { getSellerById } from "@/lib/sellers/repository";
 import { getSellerCommandCenter } from "@/lib/seller-intelligence/service";
 import { interestedBuyersForSeller } from "@/lib/matching-intelligence/service";
@@ -38,11 +39,20 @@ export default async function SellerDetailPage({
           <Icon name="ChevronRight" size={16} />
           חזרה למוכרים
         </Link>
-        <h1 className="text-ink mt-2 text-2xl font-black">{seller.full_name}</h1>
-        <p className="text-muted text-sm">
-          {seller.phone ?? "—"}
-          {seller.email ? ` · ${seller.email}` : ""}
-        </p>
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-ink text-2xl font-black">{seller.full_name}</h1>
+            <p className="text-muted text-sm">
+              {seller.phone ?? "—"}
+              {seller.email ? ` · ${seller.email}` : ""}
+            </p>
+          </div>
+          <Link href={`/sellers/${id}/edit`}>
+            <Button variant="ghost" leadingIcon={<Icon name="Settings" size={16} />}>
+              עריכת מוכר
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {seller360 && <Seller360Sections seller={seller360.seller} properties={seller360.properties} />}
