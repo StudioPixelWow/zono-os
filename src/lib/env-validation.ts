@@ -49,7 +49,7 @@ export function assertCoreEnv(): void {
   );
 }
 
-export type IntegrationKey = "openai" | "gemini" | "apify" | "meta" | "whatsapp" | "image";
+export type IntegrationKey = "openai" | "gemini" | "apify" | "meta" | "whatsapp" | "image" | "maps" | "geocoding";
 export interface IntegrationStatus {
   key: IntegrationKey;
   label: string;
@@ -101,6 +101,18 @@ export function getIntegrationStatus(): IntegrationStatus[] {
       label: "WhatsApp Business API",
       configured: has(process.env.WHATSAPP_ACCESS_TOKEN) || has(process.env.WHATSAPP_PHONE_NUMBER_ID),
       note: "לא מחובר — אינבוקס/שליחה ידניים (מסייע WhatsApp).",
+    },
+    {
+      key: "maps",
+      label: "Google Maps (תצוגת מפה)",
+      configured: has(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
+      note: "ללא מפתח ציבורי — המפות מציגות מצב “מפה לא זמינה” (ללא מפה מזויפת).",
+    },
+    {
+      key: "geocoding",
+      label: "Google Geocoding (השלמת קואורדינטות)",
+      configured: has(process.env.GOOGLE_MAPS_GEOCODE_API_KEY) || has(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
+      note: "ללא מפתח — גאוקודינג מחזיר כישלון כן; לא ממציא קואורדינטות.",
     },
   ];
 }

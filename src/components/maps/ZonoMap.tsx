@@ -203,7 +203,7 @@ export function ZonoMap({
     return (
       <div className={cn(shell, heightClass, "grid place-items-center text-center", className)}>
         <div className="px-6">
-          <p className="text-ink text-sm font-bold">המפה אינה זמינה</p>
+          <p className="text-ink text-sm font-bold">מפה לא זמינה</p>
           <p className="text-muted mt-1 text-xs">להצגת מפה אמיתית יש להגדיר את המפתח NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.</p>
         </div>
       </div>
