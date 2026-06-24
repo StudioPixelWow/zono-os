@@ -5,6 +5,7 @@
 // add group · recompute scores · record an attributed lead. User-controlled.
 // ============================================================================
 import { useState } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import { useActionRunner } from "@/components/ui/useActionRunner";
@@ -52,10 +53,11 @@ export function GroupsView({ groups, analytics }: { groups: GroupRow[]; analytic
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/distribution?section=builder" className="btn-zono-primary zono-focus-ring inline-flex h-10 items-center gap-1.5 rounded-xl px-5 text-sm font-bold"><Icon name="Send" size={15} /> התחל פרסום בקבוצות</Link>
           <button onClick={recompute} disabled={runner.busyId === "recompute"} className="border-line bg-card text-ink inline-flex h-10 items-center gap-1.5 rounded-xl border px-4 text-sm font-bold shadow-card hover:shadow-lg disabled:opacity-60">
             <Icon name="RefreshCw" size={15} className={runner.busyId === "recompute" ? "animate-spin" : ""} /> חשב ביצועים
           </button>
-          <button onClick={() => setShowAdd((s) => !s)} className="btn-zono-primary zono-focus-ring inline-flex h-10 items-center gap-1.5 rounded-xl px-4 text-sm font-bold">
+          <button onClick={() => setShowAdd((s) => !s)} className="border-line bg-card text-ink inline-flex h-10 items-center gap-1.5 rounded-xl border px-4 text-sm font-bold shadow-card hover:shadow-lg">
             <Icon name="Plus" size={15} /> הוסף קבוצה
           </button>
         </div>

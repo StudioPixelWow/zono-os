@@ -5,7 +5,7 @@
 // A premium, glassmorphic AI operating system over the real distribution data
 // layer. 8 sections, RTL Hebrew, purple-gradient design language.
 // ============================================================================
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { DistributionBoard, DailyWorkspace } from "@/lib/distribution/service";
 import type { DistributionCenterData } from "@/lib/distribution/center-data";
@@ -75,6 +75,12 @@ export function DistributionCenterView({
 }) {
   const router = useRouter();
   const [section, setSection] = useState<SectionKey>("overview");
+  // Deep-link: /distribution?section=builder opens straight on that tab.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("section");
+    const valid: SectionKey[] = ["overview", "groups", "builder", "variations", "schedule", "queue", "assistant", "comments", "leads", "analytics", "automation"];
+    if (s && (valid as string[]).includes(s)) queueMicrotask(() => setSection(s as SectionKey));
+  }, []);
   const [variations, setVariations] = useState<CampaignVariationView[]>([]);
   const [variationProperty, setVariationProperty] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
