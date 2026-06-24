@@ -1,11 +1,9 @@
 -- ============================================================================
--- ZONO — CONSOLIDATED DISTRIBUTION-ARC SQL (Supabase handover)
--- Generated: 2026-06-24T11:38:44Z
--- Run in order in the Supabase SQL editor. All statements are IDEMPOTENT
--- (create table if not exists / add column if not exists / policy guards),
--- so re-running is safe. Covers: distribution posts/queue/analytics/comments,
--- provider connections, Facebook connection paths, Meta destinations, Chrome
--- extension instances/pairings, and Phase 21 group-destination columns.
+-- ZONO — CONSOLIDATED DISTRIBUTION-ARC SQL (Supabase handover) — IDEMPOTENT
+-- Generated: 2026-06-24T11:46:32Z
+-- Safe to run start-to-finish on a DB in ANY state: every CREATE TABLE/INDEX
+-- uses IF NOT EXISTS, triggers use CREATE OR REPLACE, and every policy is
+-- preceded by DROP POLICY IF EXISTS. Run top-to-bottom in the Supabase SQL editor.
 -- ============================================================================
 
 
@@ -318,7 +316,7 @@ grant all privileges on public.social_connection_vault to service_role;
 
 
 -- ████████████████████████████████████████████████████████████████████████
--- [2/11] supabase/migrations/20260718130000_distribution_engine.sql
+-- [2/11] supabase/migrations/20260718130000_distribution_engine.sql  (made idempotent for re-run)
 -- ████████████████████████████████████████████████████████████████████████
 
 -- ============================================================================
@@ -335,7 +333,7 @@ grant all privileges on public.social_connection_vault to service_role;
 -- ============================================================================
 
 -- ── 1. distribution_groups — Facebook groups / communities to distribute to ──
-create table public.distribution_groups (
+create table if not exists public.distribution_groups (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   name               text not null,
@@ -358,13 +356,13 @@ create table public.distribution_groups (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_groups_org_idx       on public.distribution_groups(org_id);
-create index distribution_groups_status_idx    on public.distribution_groups(org_id, status);
-create index distribution_groups_city_idx       on public.distribution_groups(org_id, city);
-create index distribution_groups_perf_idx       on public.distribution_groups(org_id, performance_score desc);
+create index if not exists distribution_groups_org_idx       on public.distribution_groups(org_id);
+create index if not exists distribution_groups_status_idx    on public.distribution_groups(org_id, status);
+create index if not exists distribution_groups_city_idx       on public.distribution_groups(org_id, city);
+create index if not exists distribution_groups_perf_idx       on public.distribution_groups(org_id, performance_score desc);
 
 -- ── 2. distribution_campaigns — a distribution campaign (per property/audience) ─
-create table public.distribution_campaigns (
+create table if not exists public.distribution_campaigns (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   property_id        uuid references public.properties(id) on delete set null,
@@ -386,12 +384,12 @@ create table public.distribution_campaigns (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_campaigns_org_idx      on public.distribution_campaigns(org_id);
-create index distribution_campaigns_status_idx   on public.distribution_campaigns(org_id, status);
-create index distribution_campaigns_property_idx on public.distribution_campaigns(property_id);
+create index if not exists distribution_campaigns_org_idx      on public.distribution_campaigns(org_id);
+create index if not exists distribution_campaigns_status_idx   on public.distribution_campaigns(org_id, status);
+create index if not exists distribution_campaigns_property_idx on public.distribution_campaigns(property_id);
 
 -- ── 3. distribution_campaign_groups — campaign ↔ group selection (join) ───────
-create table public.distribution_campaign_groups (
+create table if not exists public.distribution_campaign_groups (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   campaign_id        uuid not null references public.distribution_campaigns(id) on delete cascade,
@@ -406,12 +404,12 @@ create table public.distribution_campaign_groups (
   updated_at         timestamptz not null default now(),
   unique (campaign_id, group_id)
 );
-create index distribution_campaign_groups_org_idx      on public.distribution_campaign_groups(org_id);
-create index distribution_campaign_groups_campaign_idx on public.distribution_campaign_groups(campaign_id);
-create index distribution_campaign_groups_group_idx    on public.distribution_campaign_groups(group_id);
+create index if not exists distribution_campaign_groups_org_idx      on public.distribution_campaign_groups(org_id);
+create index if not exists distribution_campaign_groups_campaign_idx on public.distribution_campaign_groups(campaign_id);
+create index if not exists distribution_campaign_groups_group_idx    on public.distribution_campaign_groups(group_id);
 
 -- ── 4. distribution_posts — a planned / published post (campaign × group) ─────
-create table public.distribution_posts (
+create table if not exists public.distribution_posts (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   campaign_id        uuid references public.distribution_campaigns(id) on delete cascade,
@@ -439,14 +437,14 @@ create table public.distribution_posts (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_posts_org_idx       on public.distribution_posts(org_id);
-create index distribution_posts_campaign_idx  on public.distribution_posts(campaign_id);
-create index distribution_posts_group_idx     on public.distribution_posts(group_id);
-create index distribution_posts_status_idx    on public.distribution_posts(org_id, status);
-create index distribution_posts_scheduled_idx on public.distribution_posts(org_id, scheduled_at);
+create index if not exists distribution_posts_org_idx       on public.distribution_posts(org_id);
+create index if not exists distribution_posts_campaign_idx  on public.distribution_posts(campaign_id);
+create index if not exists distribution_posts_group_idx     on public.distribution_posts(group_id);
+create index if not exists distribution_posts_status_idx    on public.distribution_posts(org_id, status);
+create index if not exists distribution_posts_scheduled_idx on public.distribution_posts(org_id, scheduled_at);
 
 -- ── 5. distribution_variations — AI content variations (per campaign/property) ─
-create table public.distribution_variations (
+create table if not exists public.distribution_variations (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   campaign_id        uuid references public.distribution_campaigns(id) on delete cascade,
@@ -466,18 +464,18 @@ create table public.distribution_variations (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_variations_org_idx      on public.distribution_variations(org_id);
-create index distribution_variations_campaign_idx on public.distribution_variations(campaign_id);
-create index distribution_variations_property_idx on public.distribution_variations(property_id);
+create index if not exists distribution_variations_org_idx      on public.distribution_variations(org_id);
+create index if not exists distribution_variations_campaign_idx on public.distribution_variations(campaign_id);
+create index if not exists distribution_variations_property_idx on public.distribution_variations(property_id);
 
 -- now that variations exists, link posts.variation_id
 alter table public.distribution_posts
   add constraint distribution_posts_variation_fkey
   foreign key (variation_id) references public.distribution_variations(id) on delete set null;
-create index distribution_posts_variation_idx on public.distribution_posts(variation_id);
+create index if not exists distribution_posts_variation_idx on public.distribution_posts(variation_id);
 
 -- ── 6. distribution_comments — comments collected on published posts ──────────
-create table public.distribution_comments (
+create table if not exists public.distribution_comments (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   post_id            uuid references public.distribution_posts(id) on delete cascade,
@@ -495,12 +493,12 @@ create table public.distribution_comments (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_comments_org_idx     on public.distribution_comments(org_id);
-create index distribution_comments_post_idx    on public.distribution_comments(post_id);
-create index distribution_comments_lead_idx    on public.distribution_comments(org_id, is_lead);
+create index if not exists distribution_comments_org_idx     on public.distribution_comments(org_id);
+create index if not exists distribution_comments_post_idx    on public.distribution_comments(post_id);
+create index if not exists distribution_comments_lead_idx    on public.distribution_comments(org_id, is_lead);
 
 -- ── 7. distribution_leads — leads generated from distribution ─────────────────
-create table public.distribution_leads (
+create table if not exists public.distribution_leads (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   campaign_id        uuid references public.distribution_campaigns(id) on delete set null,
@@ -521,14 +519,14 @@ create table public.distribution_leads (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_leads_org_idx       on public.distribution_leads(org_id);
-create index distribution_leads_status_idx    on public.distribution_leads(org_id, status);
-create index distribution_leads_campaign_idx  on public.distribution_leads(campaign_id);
-create index distribution_leads_property_idx  on public.distribution_leads(property_id);
-create index distribution_leads_assigned_idx  on public.distribution_leads(assigned_to);
+create index if not exists distribution_leads_org_idx       on public.distribution_leads(org_id);
+create index if not exists distribution_leads_status_idx    on public.distribution_leads(org_id, status);
+create index if not exists distribution_leads_campaign_idx  on public.distribution_leads(campaign_id);
+create index if not exists distribution_leads_property_idx  on public.distribution_leads(property_id);
+create index if not exists distribution_leads_assigned_idx  on public.distribution_leads(assigned_to);
 
 -- ── 8. distribution_schedules — scheduled posting slots ───────────────────────
-create table public.distribution_schedules (
+create table if not exists public.distribution_schedules (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   campaign_id        uuid references public.distribution_campaigns(id) on delete cascade,
@@ -543,13 +541,13 @@ create table public.distribution_schedules (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_schedules_org_idx       on public.distribution_schedules(org_id);
-create index distribution_schedules_when_idx      on public.distribution_schedules(org_id, scheduled_for);
-create index distribution_schedules_status_idx    on public.distribution_schedules(org_id, status);
-create index distribution_schedules_campaign_idx  on public.distribution_schedules(campaign_id);
+create index if not exists distribution_schedules_org_idx       on public.distribution_schedules(org_id);
+create index if not exists distribution_schedules_when_idx      on public.distribution_schedules(org_id, scheduled_for);
+create index if not exists distribution_schedules_status_idx    on public.distribution_schedules(org_id, status);
+create index if not exists distribution_schedules_campaign_idx  on public.distribution_schedules(campaign_id);
 
 -- ── 9. distribution_analytics — per-period aggregated metrics ─────────────────
-create table public.distribution_analytics (
+create table if not exists public.distribution_analytics (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   campaign_id        uuid references public.distribution_campaigns(id) on delete cascade,
@@ -568,16 +566,16 @@ create table public.distribution_analytics (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_analytics_org_idx       on public.distribution_analytics(org_id);
-create index distribution_analytics_period_idx    on public.distribution_analytics(org_id, period_date desc);
-create index distribution_analytics_campaign_idx  on public.distribution_analytics(campaign_id);
+create index if not exists distribution_analytics_org_idx       on public.distribution_analytics(org_id);
+create index if not exists distribution_analytics_period_idx    on public.distribution_analytics(org_id, period_date desc);
+create index if not exists distribution_analytics_campaign_idx  on public.distribution_analytics(campaign_id);
 -- one row per (campaign, group, day); NULLS NOT DISTINCT so campaign/group-less
 -- org-wide rollups also dedupe (Postgres 15+ / Supabase).
-create unique index distribution_analytics_unique_idx
+create unique index if not exists distribution_analytics_unique_idx
   on public.distribution_analytics(org_id, campaign_id, group_id, period_date) nulls not distinct;
 
 -- ── 10. distribution_automations — automation rules (human-supervised) ────────
-create table public.distribution_automations (
+create table if not exists public.distribution_automations (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   name               text not null,
@@ -594,21 +592,21 @@ create table public.distribution_automations (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_automations_org_idx     on public.distribution_automations(org_id);
-create index distribution_automations_type_idx    on public.distribution_automations(org_id, automation_type);
-create index distribution_automations_enabled_idx on public.distribution_automations(org_id, is_enabled);
+create index if not exists distribution_automations_org_idx     on public.distribution_automations(org_id);
+create index if not exists distribution_automations_type_idx    on public.distribution_automations(org_id, automation_type);
+create index if not exists distribution_automations_enabled_idx on public.distribution_automations(org_id, is_enabled);
 
 -- ── updated_at triggers ───────────────────────────────────────────────────────
-create trigger trg_distribution_groups_updated          before update on public.distribution_groups          for each row execute function public.set_updated_at();
-create trigger trg_distribution_campaigns_updated       before update on public.distribution_campaigns       for each row execute function public.set_updated_at();
-create trigger trg_distribution_campaign_groups_updated before update on public.distribution_campaign_groups for each row execute function public.set_updated_at();
-create trigger trg_distribution_posts_updated           before update on public.distribution_posts           for each row execute function public.set_updated_at();
-create trigger trg_distribution_variations_updated      before update on public.distribution_variations      for each row execute function public.set_updated_at();
-create trigger trg_distribution_comments_updated        before update on public.distribution_comments        for each row execute function public.set_updated_at();
-create trigger trg_distribution_leads_updated           before update on public.distribution_leads           for each row execute function public.set_updated_at();
-create trigger trg_distribution_schedules_updated       before update on public.distribution_schedules       for each row execute function public.set_updated_at();
-create trigger trg_distribution_analytics_updated       before update on public.distribution_analytics       for each row execute function public.set_updated_at();
-create trigger trg_distribution_automations_updated     before update on public.distribution_automations     for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_groups_updated          before update on public.distribution_groups          for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_campaigns_updated       before update on public.distribution_campaigns       for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_campaign_groups_updated before update on public.distribution_campaign_groups for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_posts_updated           before update on public.distribution_posts           for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_variations_updated      before update on public.distribution_variations      for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_comments_updated        before update on public.distribution_comments        for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_leads_updated           before update on public.distribution_leads           for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_schedules_updated       before update on public.distribution_schedules       for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_analytics_updated       before update on public.distribution_analytics       for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_automations_updated     before update on public.distribution_automations     for each row execute function public.set_updated_at();
 
 -- ── RLS — org isolation; reads = same org, writes = same org + agent role ─────
 do $$
@@ -621,9 +619,13 @@ begin
     'distribution_automations'
   ] loop
     execute format('alter table public.%I enable row level security;', t);
+    execute format($f$drop policy if exists "%1$s_select" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_select" on public.%1$I for select to authenticated using (org_id = public.current_org_id());$f$, t);
+    execute format($f$drop policy if exists "%1$s_insert" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_insert" on public.%1$I for insert to authenticated with check (org_id = public.current_org_id() and public.has_min_role('agent'));$f$, t);
+    execute format($f$drop policy if exists "%1$s_update" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_update" on public.%1$I for update to authenticated using (org_id = public.current_org_id() and public.has_min_role('agent')) with check (org_id = public.current_org_id());$f$, t);
+    execute format($f$drop policy if exists "%1$s_delete" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_delete" on public.%1$I for delete to authenticated using (org_id = public.current_org_id() and public.has_min_role('agent'));$f$, t);
     execute format('grant select, insert, update, delete on public.%I to authenticated;', t);
     execute format('grant all privileges on public.%I to service_role;', t);
@@ -632,7 +634,7 @@ end $$;
 
 
 -- ████████████████████████████████████████████████████████████████████████
--- [3/11] supabase/migrations/20260719120000_distribution_infrastructure.sql
+-- [3/11] supabase/migrations/20260719120000_distribution_infrastructure.sql  (made idempotent for re-run)
 -- ████████████████████████████████████████████████████████████████████████
 
 -- ============================================================================
@@ -656,7 +658,7 @@ end $$;
 -- ============================================================================
 
 -- ── 1. distribution_channels — a publish target (group / page / marketplace) ──
-create table public.distribution_channels (
+create table if not exists public.distribution_channels (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   kind               text not null,                            -- facebook_group | facebook_page | facebook_marketplace | (future)
@@ -677,13 +679,13 @@ create table public.distribution_channels (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_channels_org_idx     on public.distribution_channels(org_id);
-create index distribution_channels_kind_idx     on public.distribution_channels(org_id, kind);
-create index distribution_channels_status_idx   on public.distribution_channels(org_id, connection_status);
-create index distribution_channels_group_idx    on public.distribution_channels(group_id);
+create index if not exists distribution_channels_org_idx     on public.distribution_channels(org_id);
+create index if not exists distribution_channels_kind_idx     on public.distribution_channels(org_id, kind);
+create index if not exists distribution_channels_status_idx   on public.distribution_channels(org_id, connection_status);
+create index if not exists distribution_channels_group_idx    on public.distribution_channels(group_id);
 
 -- ── 2. distribution_publish_jobs — durable work queue (lease + retry + dedupe) ─
-create table public.distribution_publish_jobs (
+create table if not exists public.distribution_publish_jobs (
   id                 uuid primary key default gen_random_uuid(),
   org_id             uuid not null references public.organizations(id) on delete cascade,
   post_id            uuid references public.distribution_posts(id) on delete cascade,
@@ -709,23 +711,23 @@ create table public.distribution_publish_jobs (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index distribution_publish_jobs_org_idx     on public.distribution_publish_jobs(org_id);
-create index distribution_publish_jobs_post_idx     on public.distribution_publish_jobs(post_id);
-create index distribution_publish_jobs_channel_idx  on public.distribution_publish_jobs(channel_id);
+create index if not exists distribution_publish_jobs_org_idx     on public.distribution_publish_jobs(org_id);
+create index if not exists distribution_publish_jobs_post_idx     on public.distribution_publish_jobs(post_id);
+create index if not exists distribution_publish_jobs_channel_idx  on public.distribution_publish_jobs(channel_id);
 -- The hot CLAIM path: ready jobs ordered by priority then run_after.
-create index distribution_publish_jobs_claim_idx
+create index if not exists distribution_publish_jobs_claim_idx
   on public.distribution_publish_jobs(status, run_after, priority desc);
 -- Lease recovery sweep.
-create index distribution_publish_jobs_lease_idx
+create index if not exists distribution_publish_jobs_lease_idx
   on public.distribution_publish_jobs(status, lease_expires_at);
 -- Idempotency: one live job per (org, key).
-create unique index distribution_publish_jobs_idem_idx
+create unique index if not exists distribution_publish_jobs_idem_idx
   on public.distribution_publish_jobs(org_id, idempotency_key)
   where idempotency_key is not null;
 
 -- ── updated_at triggers ───────────────────────────────────────────────────────
-create trigger trg_distribution_channels_updated      before update on public.distribution_channels      for each row execute function public.set_updated_at();
-create trigger trg_distribution_publish_jobs_updated   before update on public.distribution_publish_jobs   for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_channels_updated      before update on public.distribution_channels      for each row execute function public.set_updated_at();
+create or replace trigger trg_distribution_publish_jobs_updated   before update on public.distribution_publish_jobs   for each row execute function public.set_updated_at();
 
 -- ── RLS — org isolation; reads = same org, writes = same org + agent role ─────
 do $$
@@ -733,9 +735,13 @@ declare t text;
 begin
   foreach t in array array['distribution_channels','distribution_publish_jobs'] loop
     execute format('alter table public.%I enable row level security;', t);
+    execute format($f$drop policy if exists "%1$s_select" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_select" on public.%1$I for select to authenticated using (org_id = public.current_org_id());$f$, t);
+    execute format($f$drop policy if exists "%1$s_insert" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_insert" on public.%1$I for insert to authenticated with check (org_id = public.current_org_id() and public.has_min_role('agent'));$f$, t);
+    execute format($f$drop policy if exists "%1$s_update" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_update" on public.%1$I for update to authenticated using (org_id = public.current_org_id() and public.has_min_role('agent')) with check (org_id = public.current_org_id());$f$, t);
+    execute format($f$drop policy if exists "%1$s_delete" on public.%1$I;$f$, t);
     execute format($f$create policy "%1$s_delete" on public.%1$I for delete to authenticated using (org_id = public.current_org_id() and public.has_min_role('agent'));$f$, t);
     execute format('grant select, insert, update, delete on public.%I to authenticated;', t);
     execute format('grant all privileges on public.%I to service_role;', t);
@@ -1172,4 +1178,3 @@ alter table public.distribution_provider_destinations
 -- hand-added groups never collide.
 alter table public.distribution_provider_destinations
   alter column external_id drop not null;
-

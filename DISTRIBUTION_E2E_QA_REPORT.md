@@ -198,7 +198,17 @@ without `pages_manage_posts` returns a clear "permission" message.
 
 ## Supabase handover
 
-`DISTRIBUTION_SUPABASE_CONSOLIDATED.sql` bundles the 11 idempotent distribution-arc
-migrations (distribution engine/infrastructure/provider/comments + provider
-connections + facebook connection paths + Meta destinations + extension instances +
-Phase 21 group columns) in apply order for the Supabase SQL editor.
+`DISTRIBUTION_SUPABASE_CONSOLIDATED.sql` bundles the 11 distribution-arc migrations
+(distribution engine/infrastructure/provider/comments + provider connections +
+facebook connection paths + Meta destinations + extension instances + Phase 21 group
+columns) in apply order for the Supabase SQL editor.
+
+**Re-run safe.** The original `distribution_engine` and `distribution_infrastructure`
+migrations were authored for a fresh DB (bare `CREATE TABLE/INDEX/TRIGGER/POLICY`),
+which threw `42P07: relation "distribution_groups" already exists` when re-applied to
+an already-populated DB. The consolidated file fixes this: those two sections were
+made **idempotent** — `CREATE TABLE/INDEX IF NOT EXISTS`, `CREATE OR REPLACE TRIGGER`,
+and a `DROP POLICY IF EXISTS` before every `CREATE POLICY`. The other nine files were
+already idempotent (guarded policies / drop-first triggers). The file can now be run
+top-to-bottom on a database in any state without errors. (The source migration files
+in `supabase/migrations/` are unchanged — they only ever run against a fresh replay.)
