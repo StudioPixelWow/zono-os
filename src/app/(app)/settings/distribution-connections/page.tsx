@@ -1,17 +1,23 @@
-import { getDistributionConnectionsAction } from "@/lib/distribution/provider-connections-actions";
+import { getDistributionConnectionsAction, getFacebookConnectionPathsAction } from "@/lib/distribution/provider-connections-actions";
 import { CONNECTION_COMPLIANCE, type ProviderConnectionView } from "@/lib/distribution/provider-connections";
+import type { FacebookPathView } from "@/lib/distribution/facebook-connection-paths";
 import { DistributionConnectionsView } from "./DistributionConnectionsView";
 
 export const dynamic = "force-dynamic";
 
-// חיבורי הפצה — Facebook Connection Center (Phase 10.3). Connection MANAGEMENT
-// only: no Meta API yet, publishing stays manual via the Publish Assistant.
+// חיבורי הפצה — Facebook Connection Center. Two PARALLEL connection types up top
+// (Meta OAuth + Chrome extension), then per-destination provider management.
+// Connection MANAGEMENT only — no publishing, no fabricated connected state.
 export default async function DistributionConnectionsPage() {
   let connections: ProviderConnectionView[] = [];
+  let paths: { meta: FacebookPathView; extension: FacebookPathView } | null = null;
   try {
-    connections = await getDistributionConnectionsAction();
+    [connections, paths] = await Promise.all([
+      getDistributionConnectionsAction(),
+      getFacebookConnectionPathsAction(),
+    ]);
   } catch (e) {
     console.error("[distribution-connections] load failed:", e);
   }
-  return <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} />;
+  return <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} />;
 }

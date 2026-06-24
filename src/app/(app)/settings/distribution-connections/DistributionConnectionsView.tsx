@@ -14,11 +14,14 @@ import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { cn } from "@/lib/utils";
 import type { ConnectionProvider, ConnectionStatus, ProviderConnectionView } from "@/lib/distribution/provider-connections";
+import type { FacebookPathView, FacebookPathStatus } from "@/lib/distribution/facebook-connection-paths";
 import {
   getDistributionConnectionsAction,
   initializeManualFacebookConnectionAction,
   validateProviderConnectionAction,
   disconnectProviderAction,
+  startMetaOAuthAction,
+  refreshExtensionStatusAction,
 } from "@/lib/distribution/provider-connections-actions";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -37,17 +40,43 @@ const STATUS_TONE: Record<ConnectionStatus, string> = {
 
 const GROUP_ICON: Record<string, string> = { facebook: "Globe", instagram: "Sparkles", whatsapp: "MessageCircle" };
 
+// ── Phase 17: connection-PATH status labels/tones (two distinct state machines) ──
+const PATH_STATUS_LABEL: Record<FacebookPathStatus, string> = {
+  // Meta OAuth
+  not_connected: "לא מחובר", connected: "מחובר", expired: "פג תוקף", error: "שגיאה",
+  // Chrome extension
+  not_installed: "לא מותקן", installed: "מותקן", facebook_session_detected: "זוהה חיבור Facebook", ready: "מוכן",
+};
+const PATH_STATUS_TONE: Record<FacebookPathStatus, string> = {
+  not_connected: "bg-surface text-muted border-line",
+  connected: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  expired: "bg-amber-50 text-amber-700 border-amber-200",
+  error: "bg-red-50 text-red-700 border-red-200",
+  not_installed: "bg-surface text-muted border-line",
+  installed: "bg-blue-50 text-blue-700 border-blue-200",
+  facebook_session_detected: "bg-blue-50 text-blue-700 border-blue-200",
+  ready: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
+
 function fmt(iso: string | null): string {
   if (!iso) return "טרם נבדק";
   try { return new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
   catch { return "—"; }
 }
 
-export function DistributionConnectionsView({ initial, compliance }: { initial: ProviderConnectionView[]; compliance: string[] }) {
+export function DistributionConnectionsView({ initial, compliance, paths }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null }) {
   const [conns, setConns] = useState<ProviderConnectionView[]>(initial);
   const runner = useActionRunner();
 
   const refresh = async () => { try { setConns(await getDistributionConnectionsAction()); } catch { /* keep current */ } };
+
+  // Two parallel connection-type CTAs — neither ever fakes a connected/ready state.
+  const onConnectMeta = () => runner.run(async () => startMetaOAuthAction(),
+    { id: "connect-meta", pendingMessage: "פותח חיבור Meta…", success: (r) => r.message ?? null });
+  const onCheckExtension = () => runner.run(async () => {
+    const r = await refreshExtensionStatusAction();
+    return { ok: true, message: r.data?.status === "not_installed" ? "התוסף עדיין לא מותקן/מחובר." : "סטטוס התוסף עודכן." };
+  }, { id: "check-extension", pendingMessage: "בודק תוסף…", success: (r) => r.message ?? null });
 
   const onInitFacebook = () => runner.run(async () => {
     const r = await initializeManualFacebookConnectionAction(); await refresh(); return r;
@@ -78,6 +107,30 @@ export function DistributionConnectionsView({ initial, compliance }: { initial: 
         <div className={cn("mb-4 rounded-xl border px-4 py-2 text-sm font-semibold",
           runner.error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
           {runner.error ?? runner.note}
+        </div>
+      )}
+
+      {/* Two PARALLEL connection types — distinct paths, never the same connection */}
+      {paths && (
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <PathCard
+            path={paths.meta}
+            icon="Globe"
+            cta="חבר Meta"
+            ctaBusyId="connect-meta"
+            onCta={onConnectMeta}
+            note="חיבור שרת-לשרת רשמי דרך Meta. הטוקנים נשמרים מוצפנים בצד ZONO — בכפוף לאישור Meta."
+            runner={runner}
+          />
+          <PathCard
+            path={paths.extension}
+            icon="Download"
+            cta="התקן תוסף Chrome"
+            ctaBusyId="check-extension"
+            onCta={onCheckExtension}
+            note="התוסף פועל בדפדפן שלך. ZONO לעולם לא מקבל סיסמה או עוגיות פייסבוק — רק שולח לתוסף פוסטים מוכנים, והפרסום מתבצע באישורך."
+            runner={runner}
+          />
         </div>
       )}
 
@@ -194,6 +247,52 @@ function ProviderCard({
           </div>
         </div>
       )}
+    </motion.div>
+  );
+}
+
+/**
+ * One of the two PARALLEL connection-type cards (Meta OAuth | Chrome extension).
+ * Shows the path's distinct status + the destinations it serves. CTAs never
+ * fabricate a connected/ready state — Meta returns an honest "in progress",
+ * the extension only flips state from a real heartbeat.
+ */
+function PathCard({
+  path, icon, cta, ctaBusyId, onCta, note, runner,
+}: {
+  path: FacebookPathView; icon: string; cta: string; ctaBusyId: string;
+  onCta: () => void; note: string; runner: ReturnType<typeof useActionRunner>;
+}) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="border-line bg-card flex flex-col rounded-2xl border p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="zono-gradient-glow grid h-10 w-10 place-items-center rounded-xl text-white"><Icon name={icon} size={20} /></span>
+          <div>
+            <p className="text-ink font-black">{path.title}</p>
+            <p className="text-muted mt-0.5 text-xs leading-relaxed">{path.description}</p>
+          </div>
+        </div>
+        <span className={cn("shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold", PATH_STATUS_TONE[path.status])}>{PATH_STATUS_LABEL[path.status]}</span>
+      </div>
+
+      {/* Destinations this path serves — makes the two paths' scopes explicit. */}
+      <div className="mt-3">
+        <p className="text-ink text-xs font-bold">יעדים דרך מסלול זה</p>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {path.destinations.map((d) => (
+            <span key={d} className="bg-surface text-muted rounded-md px-2 py-0.5 text-xs font-semibold">{d}</span>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-muted mt-3 text-xs leading-relaxed">{note}</p>
+
+      <div className="mt-3">
+        <Button size="sm" onClick={onCta} loading={runner.busyId === ctaBusyId}>
+          <Icon name={icon} size={14} className="ms-1" /> {cta}
+        </Button>
+      </div>
     </motion.div>
   );
 }

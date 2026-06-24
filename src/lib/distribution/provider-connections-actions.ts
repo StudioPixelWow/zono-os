@@ -9,6 +9,9 @@ import { revalidatePath } from "next/cache";
 import {
   providerConnectionService, type ConnectionProvider, type ProviderConnectionView,
 } from "./provider-connections";
+import {
+  facebookConnectionPathService, type ExtensionPathStatus, type FacebookPathView,
+} from "./facebook-connection-paths";
 
 export interface ConnActionResult<T = undefined> { ok: boolean; message?: string; data?: T }
 const revalidate = () => { try { revalidatePath("/settings/distribution-connections"); } catch { /* noop */ } };
@@ -34,6 +37,43 @@ export async function validateProviderConnectionAction(provider: ConnectionProvi
 
 export async function disconnectProviderAction(provider: ConnectionProvider): Promise<ConnActionResult> {
   const res = await providerConnectionService.disconnect(provider);
+  revalidate();
+  return res;
+}
+
+// ── Phase 17: two parallel Facebook connection PATHS (Meta OAuth + Chrome ext) ──
+
+/** Both connection paths with honest defaults — never a fabricated connected/ready. */
+export async function getFacebookConnectionPathsAction(): Promise<{ meta: FacebookPathView; extension: FacebookPathView }> {
+  return facebookConnectionPathService.getPaths();
+}
+
+/**
+ * "חבר Meta" — start the official Meta OAuth path. OAuth + App Review are not yet
+ * wired, so this returns an honest "in progress" message and does NOT set
+ * connected. (Real OAuth handshake lands in a later integration phase.)
+ */
+export async function startMetaOAuthAction(): Promise<ConnActionResult> {
+  const res = await facebookConnectionPathService.startMetaOAuth();
+  revalidate();
+  return res;
+}
+
+/**
+ * Read the real Chrome-extension path state (never fabricates installed/ready).
+ * The status only becomes installed/ready when the real extension heartbeats.
+ */
+export async function refreshExtensionStatusAction(): Promise<ConnActionResult<{ status: ExtensionPathStatus }>> {
+  const status = await facebookConnectionPathService.refreshExtensionStatus();
+  return { ok: true, data: { status } };
+}
+
+/**
+ * Heartbeat endpoint for the real Chrome extension to report its NON-sensitive
+ * status (never a password/cookie/session). Validates the status value.
+ */
+export async function recordExtensionHeartbeatAction(status: ExtensionPathStatus, version?: string): Promise<ConnActionResult> {
+  const res = await facebookConnectionPathService.recordExtensionHeartbeat(status, version);
   revalidate();
   return res;
 }
