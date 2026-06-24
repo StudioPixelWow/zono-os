@@ -28,6 +28,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "buyers", label: "קונים", route: "/buyers", icon: "Users", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "sellers", label: "מוכרים", route: "/sellers", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "matches", label: "התאמות", route: "/matches", icon: "Sparkles", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
+  { id: "valuation", label: "הערכת שווי", route: "/valuation", icon: "Calculator", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "מנוע תמחור נכסים — ZONO Price Intelligence" },
   { id: "deals", label: "עסקאות", route: "/deals", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
 
   // ── מודיעין ──

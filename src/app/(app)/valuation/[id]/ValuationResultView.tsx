@@ -1,0 +1,455 @@
+"use client";
+// ============================================================================
+// ZONO Price Intelligence — premium result screen (RTL, glass, soft gradients).
+// Hero value · KPI cards · AI insights · what-if slider · comparables carousel ·
+// broker sold-nearby · pricing strategies · market pulse · PDF builder + send.
+// ============================================================================
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Icon } from "@/components/dashboard/Icon";
+import { cn } from "@/lib/utils";
+import { useActionRunner } from "@/components/ui/useActionRunner";
+import {
+  runValuationAction, generateValuationReportAction, sendValuationReportAsPdfAction,
+  createSellerFollowupFromValuationAction,
+} from "@/lib/valuation/actions";
+import { computeWhatIf } from "@/lib/valuation/valuation-engine";
+import {
+  type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
+  STRATEGY_LABEL, VALUATION_DISCLAIMER,
+} from "@/lib/valuation/types";
+
+const ils = (n: number | null | undefined) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
+const ils0 = (n: number | null | undefined) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
+
+function Section({ title, icon, children, action }: { title: string; icon: string; children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <section className="mt-6">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-ink flex items-center gap-2 text-lg font-black"><Icon name={icon} size={18} className="text-brand" /> {title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function ValuationResultView({ record, initialReportToken }: { record: ValuationRecord; initialReportToken: string | null }) {
+  const runner = useActionRunner();
+  const r = record.result;
+  const i = record.input;
+  const market = record.market;
+  const heroImg = record.comparables.find((c) => c.imageUrl)?.imageUrl ?? null;
+  const addr = [i.street, i.houseNumber, i.neighborhood, i.city].filter(Boolean).join(" ") || i.city || "נכס";
+
+  const [reportToken, setReportToken] = useState<string | null>(initialReportToken);
+  const [sendOpen, setSendOpen] = useState(false);
+
+  const reportUrl = reportToken ? `/valuation-report/${reportToken}` : null;
+
+  // ── states: still computing / draft ─────────────────────────────────────────
+  if (record.status !== "completed" || !r) {
+    return (
+      <main dir="rtl" className="mx-auto w-full max-w-3xl px-4 py-12 text-center">
+        <span className="zono-gradient-glow mx-auto mb-4 grid h-14 w-14 place-items-center rounded-3xl text-white"><Icon name="Calculator" size={26} /></span>
+        <h1 className="text-ink text-2xl font-black">{addr}</h1>
+        <p className="text-muted mt-1">ההערכה עדיין לא חושבה.</p>
+        {runner.error && <p className="mt-3 text-sm font-semibold text-red-600">{runner.error}</p>}
+        <button onClick={() => runner.run(() => runValuationAction(record.id), { pendingMessage: "מחשב…", success: () => "ההערכה חושבה." })}
+          disabled={runner.pending} className="btn-zono-primary zono-focus-ring mx-auto mt-5 inline-flex h-11 items-center gap-2 rounded-xl px-6 text-sm font-bold disabled:opacity-60">
+          <Icon name="Sparkles" size={16} /> חשב שווי עכשיו
+        </button>
+      </main>
+    );
+  }
+
+  const noData = (r.estimatedValue ?? 0) <= 0;
+  const conf = r.confidenceScore ?? 0;
+  const positives = record.adjustments.filter((a) => a.direction === "positive");
+  const negatives = record.adjustments.filter((a) => a.direction === "negative");
+
+  return (
+    <main dir="rtl" className="mx-auto w-full max-w-5xl px-4 py-6">
+      {/* Top bar */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <Link href="/valuation" className="text-muted hover:text-ink inline-flex items-center gap-1.5 text-sm font-bold">
+          <Icon name="ChevronRight" size={16} /> כל ההערכות
+        </Link>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setSendOpen(true)} className="border-line bg-card text-ink inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-bold shadow-card hover:shadow-lg">
+            <Icon name="Send" size={14} /> שתף דוח
+          </button>
+          <button onClick={() => runner.run(async () => {
+            const res = await generateValuationReportAction(record.id);
+            if (res.ok) { setReportToken(res.data.token); if (typeof window !== "undefined") window.open(`/valuation-report/${res.data.token}`, "_blank"); }
+            return res;
+          }, { id: "pdf", pendingMessage: "מפיק PDF…", success: (res) => (res.ok ? "הדוח נוצר ונפתח." : null) })}
+            disabled={runner.busyId === "pdf"} className="btn-zono-primary zono-focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-bold disabled:opacity-60">
+            <Icon name="FileText" size={14} /> צור PDF
+          </button>
+        </div>
+      </div>
+
+      {(runner.note || runner.error) && (
+        <div className={cn("mb-4 rounded-xl border px-4 py-2 text-sm font-semibold", runner.error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
+          {runner.error ?? runner.note}
+        </div>
+      )}
+
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-[28px] border border-line shadow-card">
+        {heroImg ? <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <div className="absolute inset-0 bg-gradient-to-br from-brand to-[#3b1d6e]" />}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-black/25" />
+        <div className="relative px-6 py-10 text-center text-white sm:py-14">
+          <p className="text-sm font-bold text-white/85">{addr}</p>
+          {(i.rooms || i.builtSqm) && <p className="text-xs text-white/70">{[i.rooms && `${i.rooms} חדרים`, i.builtSqm && `${i.builtSqm} מ"ר`, i.floor != null && `קומה ${i.floor}`].filter(Boolean).join(" · ")}</p>}
+          <div className="mt-4 inline-block rounded-3xl bg-white/10 px-8 py-5 backdrop-blur-md">
+            <p className="text-xs font-bold uppercase tracking-wide text-white/80">שווי מוערך</p>
+            <p className="mt-1 text-4xl font-black tracking-tight sm:text-5xl">{ils(r.estimatedValue)}</p>
+            <p className="mt-1 text-sm text-white/80">טווח {ils(r.lowValue)} – {ils(r.highValue)}</p>
+          </div>
+          <div className="mx-auto mt-5 max-w-sm">
+            <div className="flex items-center justify-between text-xs font-bold text-white/85">
+              <span>ביטחון: {CONFIDENCE_LABEL[r.confidenceLevel ?? "low"]}</span><span>{conf}%</span>
+            </div>
+            <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/20">
+              <div className="h-2 rounded-full bg-gradient-to-l from-emerald-300 to-emerald-500" style={{ width: `${conf}%` }} />
+            </div>
+            <p className="mt-2 text-xs text-white/75">מבוסס על עסקאות, מודעות פעילות ונכסים שמכרת באזור</p>
+          </div>
+        </div>
+      </section>
+
+      {noData && (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          לא נמצאו מספיק עסקאות/מודעות להשוואה ישירה באזור. ההערכה אינדיקטיבית בלבד — ניתן לייבא עסקאות שוק ומודעות כדי לדייק.
+        </div>
+      )}
+
+      {/* KPI cards */}
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <KpiCard icon="Megaphone" label="מחיר מומלץ לפרסום" value={ils(r.recommendedListingPrice)} tone="brand" sub="אסטרטגיה: מאוזנת" />
+        <KpiCard icon="Target" label="מחיר יעד לסגירה" value={ils(r.targetClosingPrice)} tone="warning" sub={`מינימום: ${ils(r.minimumAcceptablePrice)}`} />
+        <KpiCard icon="Flame" label="ביקוש באזור" value={DEMAND_LABEL[market?.demandLevel ?? "low"]} tone="success" sub={market ? `${market.transactionCount} עסקאות · ${market.activeListingCount} מודעות` : ""} />
+      </div>
+
+      {/* AI insights */}
+      <Section title="AI Insights" icon="Sparkles">
+        <div className="border-line bg-card rounded-card border p-5 shadow-card">
+          <p className="text-muted mb-4 text-sm leading-relaxed">{r.explanation}</p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <FactorList title="מעלי ערך" tone="pos" items={positives} />
+            <FactorList title="מורידי ערך" tone="neg" items={negatives} />
+          </div>
+        </div>
+      </Section>
+
+      {/* What-if slider */}
+      {!noData && <WhatIf estimated={r.estimatedValue ?? 0} demand={market?.demandLevel ?? "medium"} recommended={r.recommendedListingPrice ?? 0} />}
+
+      {/* Comparables */}
+      <Section title="עסקאות ומודעות דומות" icon="Building2">
+        <Comparables record={record} />
+      </Section>
+
+      {/* Broker sold nearby */}
+      <BrokerSold record={record} onFollowup={() => runner.run(() => createSellerFollowupFromValuationAction(record.id), { id: "fup", pendingMessage: "יוצר מעקב…", success: (res) => (res.ok && res.data.taskId ? "משימת מעקב נוצרה." : "המעקב נשמר.") })} busy={runner.busyId === "fup"} />
+
+      {/* Pricing strategies */}
+      <Section title="אסטרטגיית תמחור" icon="Layers">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(r.strategies ?? []).map((s) => <StrategyCard key={s.key} s={s} />)}
+        </div>
+      </Section>
+
+      {/* Market pulse */}
+      {market && (
+        <Section title="דופק השוק" icon="BarChart3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Pulse label='מחיר ממוצע למ"ר' value={ils(market.avgPricePerSqm)} />
+            <Pulse label='מחיר חציוני למ"ר' value={ils(market.medianPricePerSqm)} />
+            <Pulse label="ביקוש" value={DEMAND_LABEL[market.demandLevel]} />
+            <Pulse label="היצע" value={DEMAND_LABEL[market.supplyLevel]} />
+            <Pulse label="מגמה" value={`${market.trendDirection === "up" ? "↑" : market.trendDirection === "down" ? "↓" : "→"} ${market.trendPercent}%`} />
+            <Pulse label="פער מודעה-עסקה" value={market.listingToSoldGapPercent != null ? `${market.listingToSoldGapPercent}%` : "—"} />
+            <Pulse label="נזילות שוק" value={`${r.liquidityScore}/100`} />
+            <Pulse label="ימים בשוק (צפי)" value={`${r.daysOnMarketEstimate}`} />
+          </div>
+        </Section>
+      )}
+
+      {/* PDF builder CTA */}
+      <Section title="דוח שווי לבעל נכס" icon="FileText">
+        <div className="border-line bg-gradient-to-br from-brand-soft to-card rounded-card border p-5 shadow-card">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button onClick={() => runner.run(async () => {
+              const res = await generateValuationReportAction(record.id);
+              if (res.ok) { setReportToken(res.data.token); if (typeof window !== "undefined") window.open(`/valuation-report/${res.data.token}`, "_blank"); }
+              return res;
+            }, { id: "pdf2", pendingMessage: "מפיק PDF…", success: (res) => (res.ok ? "הדוח נוצר." : null) })}
+              disabled={runner.busyId === "pdf2"} className="btn-zono-primary zono-focus-ring inline-flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-bold disabled:opacity-60">
+              <Icon name="FileText" size={16} /> צור PDF
+            </button>
+            <CTA icon="Send" label="שלח כ-PDF" onClick={() => setSendOpen(true)} />
+            <CTA icon="MessageCircle" label="שלח בוואטסאפ" onClick={() => { setSendOpen(true); }} />
+            <CTA icon="Mail" label="שלח במייל" onClick={() => { setSendOpen(true); }} />
+            <CTA icon="UserPlus" label="צור פגישת גיוס" onClick={() => runner.run(() => createSellerFollowupFromValuationAction(record.id), { id: "meet", pendingMessage: "יוצר…", success: () => "משימת גיוס נוצרה." })} busy={runner.busyId === "meet"} />
+            {reportUrl && <a href={reportUrl} target="_blank" rel="noreferrer" className="border-line bg-card text-ink inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold hover:shadow-lg"><Icon name="Eye" size={16} /> תצוגת דוח</a>}
+          </div>
+          <p className="text-muted mt-3 text-xs">{VALUATION_DISCLAIMER}</p>
+        </div>
+      </Section>
+
+      {sendOpen && <SendModal valuationId={record.id} hasReport={!!reportToken} onClose={() => setSendOpen(false)} onGenerated={(t) => setReportToken(t)} />}
+    </main>
+  );
+}
+
+// ── sub-components ─────────────────────────────────────────────────────────────
+function KpiCard({ icon, label, value, sub, tone }: { icon: string; label: string; value: string; sub?: string; tone: "brand" | "success" | "warning" }) {
+  const ring = tone === "brand" ? "text-brand" : tone === "success" ? "text-emerald-600" : "text-amber-600";
+  return (
+    <div className="border-line bg-card rounded-card border p-5 shadow-card">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-muted text-sm font-bold">{label}</span>
+        <Icon name={icon} size={18} className={ring} />
+      </div>
+      <p className="text-ink text-2xl font-black">{value}</p>
+      {sub && <p className="text-muted mt-1 text-xs">{sub}</p>}
+    </div>
+  );
+}
+
+function FactorList({ title, tone, items }: { title: string; tone: "pos" | "neg"; items: ValuationRecord["adjustments"] }) {
+  const color = tone === "pos" ? "text-emerald-600" : "text-red-600";
+  return (
+    <div>
+      <p className={cn("mb-2 text-sm font-black", color)}>{title}</p>
+      {items.length === 0 ? <p className="text-muted text-sm">—</p> : (
+        <ul className="space-y-1.5">
+          {items.map((a, idx) => (
+            <li key={idx} className="border-line group relative flex items-center justify-between gap-2 border-b py-1.5 text-sm">
+              <span className="text-ink flex items-center gap-1.5">
+                {a.label}
+                <span className="text-muted cursor-help" title={a.reason}><Icon name="Sparkles" size={12} /></span>
+              </span>
+              <b className={color}>{a.percentageImpact ? `${tone === "pos" ? "+" : "-"}${a.percentageImpact}%` : ils0(a.valueImpact)}</b>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function WhatIf({ estimated, demand, recommended }: { estimated: number; demand: "low" | "medium" | "high"; recommended: number }) {
+  const min = Math.round(estimated * 0.92 / 10000) * 10000;
+  const max = Math.round(estimated * 1.16 / 10000) * 10000;
+  const [price, setPrice] = useState(recommended || estimated);
+  const wi = useMemo(() => computeWhatIf(price, estimated, demand), [price, estimated, demand]);
+  return (
+    <Section title='מה יקרה אם נפרסם במחיר…' icon="Target">
+      <div className="border-line bg-card rounded-card border p-5 shadow-card">
+        <div className="mb-2 text-center">
+          <span className="bg-brand-soft text-brand-strong inline-block rounded-full px-4 py-1 text-lg font-black">{ils(price)}</span>
+        </div>
+        <input type="range" min={min} max={max} step={10000} value={price} onChange={(e) => setPrice(Number(e.target.value))}
+          className="accent-brand h-2 w-full cursor-pointer" />
+        <div className="text-muted mt-1 flex justify-between text-xs font-semibold"><span>{ils(min)}</span><span>{ils(max)}</span></div>
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <Pulse label="סיכוי מכירה" value={`${wi.saleProbability}%`} accent />
+          <Pulse label="ימים בשוק" value={`${Math.round(wi.daysOnMarket * 0.85)}–${wi.daysOnMarket}`} />
+          <Pulse label="סיכון מו״מ" value={DEMAND_LABEL[wi.negotiationRisk]} />
+          <Pulse label="ביקוש קונים" value={DEMAND_LABEL[wi.buyerDemand]} />
+          <Pulse label="תחרות" value={DEMAND_LABEL[wi.competitionLevel]} />
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function Comparables({ record }: { record: ValuationRecord }) {
+  const comps = record.comparables;
+  if (comps.length === 0) {
+    return <div className="border-line bg-card text-muted rounded-card border border-dashed p-8 text-center text-sm shadow-card">לא נמצאו עסקאות/מודעות להשוואה ישירה באזור. ניתן לייבא נתוני שוק כדי להעשיר את ההשוואה.</div>;
+  }
+  return (
+    <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+      {comps.slice(0, 16).map((c, idx) => (
+        <div key={idx} className="border-line bg-card w-60 shrink-0 overflow-hidden rounded-card border shadow-card">
+          <div className="relative h-28 w-full bg-line/40">
+            {c.imageUrl ? <img src={c.imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-muted"><Icon name="Building2" size={24} /></div>}
+            <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">{SOURCE_LABEL[c.source] ?? c.source}{c.isDemo ? " · דמו" : ""}</span>
+            <span className="absolute left-2 top-2 rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-white">{c.comparableType === "sold" ? "עסקה" : "מודעה"}</span>
+          </div>
+          <div className="p-3">
+            <p className="text-ink truncate text-sm font-bold">{c.street || c.neighborhood || c.city || "—"}</p>
+            <p className="text-brand-strong mt-0.5 text-lg font-black">{ils(c.price)}</p>
+            <p className="text-muted text-xs">{c.pricePerSqm ? `${ils(c.pricePerSqm)} למ"ר` : ""}</p>
+            <div className="text-muted mt-2 flex flex-wrap gap-1.5 text-[11px]">
+              {c.rooms != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{c.rooms} חד׳</span>}
+              {c.sqm != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{c.sqm} {'מ"ר'}</span>}
+              {c.floor != null && <span className="bg-line/50 rounded px-1.5 py-0.5">קומה {c.floor}</span>}
+              {c.distanceMeters != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{Math.round(c.distanceMeters)} {"מ'"}</span>}
+            </div>
+            {c.similarityScore != null && (
+              <div className="mt-2">
+                <div className="text-muted flex justify-between text-[10px] font-bold"><span>התאמה</span><span>{c.similarityScore}%</span></div>
+                <div className="bg-line/50 mt-0.5 h-1 w-full overflow-hidden rounded-full"><div className="bg-brand h-1 rounded-full" style={{ width: `${c.similarityScore}%` }} /></div>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BrokerSold({ record, onFollowup, busy }: { record: ValuationRecord; onFollowup: () => void; busy: boolean }) {
+  const items = record.brokerSold;
+  if (items.length === 0) {
+    return (
+      <Section title="נכסים שמכרתי באזור" icon="Handshake">
+        <div className="border-line bg-card text-muted rounded-card border border-dashed p-8 text-center text-sm shadow-card">
+          לא נמצאו עסקאות שלך באזור. ניתן עדיין להפיק דוח הערכת שווי מבוסס שוק.
+        </div>
+      </Section>
+    );
+  }
+  const withPerf = items.filter((b) => b.performanceVsMarketPercent != null);
+  const avgPerf = withPerf.length ? Math.round((withPerf.reduce((s, b) => s + (b.performanceVsMarketPercent ?? 0), 0) / withPerf.length) * 10) / 10 : null;
+  return (
+    <Section title="נכסים שמכרתי באזור" icon="Handshake" action={<button onClick={onFollowup} disabled={busy} className="text-brand text-sm font-bold disabled:opacity-50">צור מסע מוכר +</button>}>
+      <p className="text-muted -mt-1 mb-3 text-sm">נמצאו {items.length} עסקאות שלך באזור.</p>
+      {avgPerf != null && (
+        <div className="mb-3 rounded-card border border-emerald-200 bg-emerald-50 p-4">
+          <p className="font-black text-emerald-700">אתה מוכר באזור הזה ב־{avgPerf > 0 ? "+" : ""}{avgPerf}% {avgPerf >= 0 ? "מעל" : "מתחת ל"}ממוצע השוק</p>
+          <p className="mt-1 text-xs text-emerald-600">נתון זה יכול להופיע בדוח לבעל הנכס כדי לחזק את האמינות שלך.</p>
+        </div>
+      )}
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+        {items.slice(0, 12).map((b, idx) => (
+          <div key={idx} className="border-line bg-card w-56 shrink-0 overflow-hidden rounded-card border shadow-card">
+            <div className="relative h-24 w-full bg-line/40">
+              {b.imageUrl ? <img src={b.imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-muted"><Icon name="Home" size={22} /></div>}
+              <span className="absolute right-2 top-2 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">נמכר על ידך</span>
+            </div>
+            <div className="p-3">
+              <p className="text-ink truncate text-sm font-bold">{b.address || b.neighborhood || "—"}</p>
+              <p className="text-brand-strong mt-0.5 text-lg font-black">{ils(b.salePrice)}</p>
+              <p className="text-muted text-xs">{b.pricePerSqm ? `${ils(b.pricePerSqm)} למ"ר` : ""} {b.saleDate ? `· ${b.saleDate}` : ""}</p>
+              {b.performanceVsMarketPercent != null && (
+                <p className={cn("mt-1 text-xs font-bold", b.performanceVsMarketPercent >= 0 ? "text-emerald-600" : "text-amber-600")}>
+                  {b.performanceVsMarketPercent > 0 ? "+" : ""}{b.performanceVsMarketPercent}% מול השוק
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function StrategyCard({ s }: { s: { key: StrategyKey; label: string; price: number; saleProbability: number; daysOnMarket: number; risk: string; recommended?: boolean } }) {
+  return (
+    <div className={cn("rounded-card border p-5 shadow-card", s.recommended ? "border-brand bg-brand-soft ring-2 ring-brand/20" : "border-line bg-card")}>
+      <div className="flex items-center justify-between">
+        <p className="text-ink font-black">{STRATEGY_LABEL[s.key] ?? s.label}</p>
+        {s.recommended && <span className="bg-brand rounded-full px-2 py-0.5 text-[11px] font-bold text-white">מומלץ</span>}
+      </div>
+      <p className="text-ink mt-2 text-2xl font-black">{ils(s.price)}</p>
+      <div className="text-muted mt-3 space-y-1 text-xs">
+        <p className="flex justify-between"><span>סיכוי מכירה</span><b className="text-ink">{s.saleProbability}%</b></p>
+        <p className="flex justify-between"><span>ימים בשוק</span><b className="text-ink">~{s.daysOnMarket}</b></p>
+        <p className="flex justify-between"><span>סיכון</span><b className="text-ink">{s.risk}</b></p>
+      </div>
+    </div>
+  );
+}
+
+function Pulse({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={cn("rounded-xl border p-3 text-center", accent ? "border-brand bg-brand-soft" : "border-line bg-card")}>
+      <p className="text-muted text-[11px] font-bold">{label}</p>
+      <p className={cn("mt-1 text-base font-black", accent ? "text-brand-strong" : "text-ink")}>{value}</p>
+    </div>
+  );
+}
+
+function CTA({ icon, label, onClick, busy }: { icon: string; label: string; onClick: () => void; busy?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={busy} className="border-line bg-card text-ink inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold hover:shadow-lg disabled:opacity-60">
+      <Icon name={icon} size={16} /> {label}
+    </button>
+  );
+}
+
+function SendModal({ valuationId, hasReport, onClose, onGenerated }: { valuationId: string; hasReport: boolean; onClose: () => void; onGenerated: (t: string) => void }) {
+  const [channel, setChannel] = useState<"whatsapp" | "email">("whatsapp");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("מצורף דוח הערכת שווי אינדיקטיבי לנכס.");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<{ handoffUrl: string | null } | null>(null);
+  void hasReport;
+
+  const send = async () => {
+    setBusy(true); setErr(null);
+    const res = await sendValuationReportAsPdfAction({
+      valuationId, channel, recipientName: name || null,
+      recipientPhone: channel === "whatsapp" ? phone || null : null,
+      recipientEmail: channel === "email" ? email || null : null, message,
+    });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    onGenerated(res.data.token);
+    setDone({ handoffUrl: res.data.handoffUrl });
+    if (res.data.handoffUrl && typeof window !== "undefined") window.open(res.data.handoffUrl, "_blank");
+  };
+
+  const cls = "border-line bg-card focus:border-brand focus:ring-brand/20 w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none focus:ring-2";
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div dir="rtl" className="bg-card w-full max-w-md rounded-[24px] border border-line p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-ink text-lg font-black">שלח דוח כ-PDF</h3>
+          <button onClick={onClose} className="text-muted hover:text-ink"><Icon name="X" size={18} /></button>
+        </div>
+
+        {done ? (
+          <div className="text-center">
+            <span className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-100 text-emerald-600"><Icon name="Check" size={24} /></span>
+            <p className="text-ink font-black">הדוח מוכן לשליחה</p>
+            <p className="text-muted mt-1 text-sm">{done.handoffUrl ? "נפתח חלון שליחה — אשר ושלח דרך הערוץ." : "הדוח נשמר. הוסף נמען כדי לשלוח."}</p>
+            {done.handoffUrl && <a href={done.handoffUrl} target="_blank" rel="noreferrer" className="btn-zono-primary zono-focus-ring mt-4 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold"><Icon name={channel === "whatsapp" ? "MessageCircle" : "Mail"} size={15} /> פתח שוב</a>}
+            <button onClick={onClose} className="text-muted mt-3 block w-full text-sm font-bold">סגור</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {(["whatsapp", "email"] as const).map((ch) => (
+                <button key={ch} onClick={() => setChannel(ch)} className={cn("flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition",
+                  channel === ch ? "border-brand bg-brand-soft text-brand-strong" : "border-line bg-card text-muted")}>
+                  <Icon name={ch === "whatsapp" ? "MessageCircle" : "Mail"} size={16} /> {ch === "whatsapp" ? "וואטסאפ" : "מייל"}
+                </button>
+              ))}
+            </div>
+            <input className={cls} value={name} onChange={(e) => setName(e.target.value)} placeholder="שם הנמען" />
+            {channel === "whatsapp"
+              ? <input className={cls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="טלפון (050…)" inputMode="tel" />
+              : <input className={cls} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="אימייל" inputMode="email" />}
+            <textarea className={cn(cls, "min-h-20 resize-y")} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="הודעה קצרה" />
+            {err && <p className="text-sm font-semibold text-red-600">{err}</p>}
+            <button onClick={send} disabled={busy} className="btn-zono-primary zono-focus-ring inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold disabled:opacity-60">
+              <Icon name="Send" size={16} /> {busy ? "מכין…" : "הכן ושלח"}
+            </button>
+            <p className="text-muted text-center text-[11px]">{VALUATION_DISCLAIMER}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
