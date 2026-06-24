@@ -15,12 +15,14 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import { cn } from "@/lib/utils";
 import type { ConnectionProvider, ConnectionStatus, ProviderConnectionView } from "@/lib/distribution/provider-connections";
 import type { FacebookPathView, FacebookPathStatus } from "@/lib/distribution/facebook-connection-paths";
+import type { MetaPageDestinationView } from "@/lib/distribution/meta-pages";
 import {
   getDistributionConnectionsAction,
   initializeManualFacebookConnectionAction,
   validateProviderConnectionAction,
   disconnectProviderAction,
   refreshExtensionStatusAction,
+  syncMetaPagesAction,
 } from "@/lib/distribution/provider-connections-actions";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -63,11 +65,21 @@ function fmt(iso: string | null): string {
   catch { return "—"; }
 }
 
-export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean }) {
+export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false, metaPages = [] }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean; metaPages?: MetaPageDestinationView[] }) {
   const [conns, setConns] = useState<ProviderConnectionView[]>(initial);
+  const [pages, setPages] = useState<MetaPageDestinationView[]>(metaPages);
+  const [pagesSynced, setPagesSynced] = useState(false);
   const runner = useActionRunner();
 
   const refresh = async () => { try { setConns(await getDistributionConnectionsAction()); } catch { /* keep current */ } };
+
+  // Page discovery (GET /me/accounts) — DISCOVERY ONLY, never publishes.
+  const onSyncPages = () => runner.run(async () => {
+    const r = await syncMetaPagesAction();
+    setPagesSynced(true);
+    if (r.ok) { setPages(r.pages); return { ok: true, message: r.message }; }
+    return { ok: false, message: r.message };
+  }, { id: "sync-pages", pendingMessage: "מסנכרן עמודים…", success: (r) => r.message ?? null });
 
   // The Meta CTA is a real navigation to /api/oauth/meta/start (server redirector).
   // The extension CTA only reads real state — neither fakes a connected/ready status.
@@ -130,6 +142,42 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
             note="התוסף פועל בדפדפן שלך. ZONO לעולם לא מקבל סיסמה או עוגיות פייסבוק — רק שולח לתוסף פוסטים מוכנים, והפרסום מתבצע באישורך."
             runner={runner}
           />
+        </div>
+      )}
+
+      {/* Phase 19: Facebook Pages available under the connected Meta account.
+          Discovery only — these are publishing DESTINATIONS, nothing publishes here. */}
+      {paths && paths.meta.status === "connected" && (
+        <div className="border-line bg-card mb-6 rounded-2xl border p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Icon name="Globe" size={18} className="text-brand" />
+              <p className="text-ink font-black">עמודי Facebook זמינים</p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={onSyncPages} loading={runner.busyId === "sync-pages"}>
+              <Icon name="Download" size={14} className="ms-1" /> סנכרן עמודים
+            </Button>
+          </div>
+
+          {pages.length > 0 ? (
+            <div className="mt-4 grid gap-2">
+              {pages.map((p) => (
+                <div key={p.externalId} className="border-line bg-surface flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-ink truncate text-sm font-bold">{p.name}</p>
+                    <p className="text-muted text-xs">{p.category ?? "—"} · עודכן {fmt(p.lastSyncedAt)}</p>
+                  </div>
+                  <span className="bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold">
+                    {p.status === "available" ? "זמין" : p.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted mt-4 text-sm">
+              {pagesSynced ? "לא נמצאו עמודי Facebook לניהול בחשבון המחובר" : "לחץ “סנכרן עמודים” כדי למשוך את עמודי ה-Facebook שבניהולך."}
+            </p>
+          )}
         </div>
       )}
 

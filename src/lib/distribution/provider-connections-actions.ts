@@ -12,6 +12,7 @@ import {
 import {
   facebookConnectionPathService, type ExtensionPathStatus, type FacebookPathView,
 } from "./facebook-connection-paths";
+import { metaPagesService, type MetaPageDestinationView, type SyncMetaPagesResult } from "./meta-pages";
 
 export interface ConnActionResult<T = undefined> { ok: boolean; message?: string; data?: T }
 const revalidate = () => { try { revalidatePath("/settings/distribution-connections"); } catch { /* noop */ } };
@@ -74,6 +75,23 @@ export async function refreshExtensionStatusAction(): Promise<ConnActionResult<{
  */
 export async function recordExtensionHeartbeatAction(status: ExtensionPathStatus, version?: string): Promise<ConnActionResult> {
   const res = await facebookConnectionPathService.recordExtensionHeartbeat(status, version);
+  revalidate();
+  return res;
+}
+
+// ── Phase 19: Facebook Page discovery (GET /me/accounts) — DISCOVERY ONLY ──────
+
+/** Read the stored Facebook Page destinations for the current org (no tokens). */
+export async function getMetaPagesAction(): Promise<MetaPageDestinationView[]> {
+  return metaPagesService.listPages();
+}
+
+/**
+ * Discover + store the Pages the connected Facebook account manages. Never
+ * publishes. Returns honest not_connected / expired / permission states.
+ */
+export async function syncMetaPagesAction(): Promise<SyncMetaPagesResult> {
+  const res = await metaPagesService.syncPages();
   revalidate();
   return res;
 }

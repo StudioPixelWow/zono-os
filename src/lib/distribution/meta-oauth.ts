@@ -140,3 +140,74 @@ export async function fetchIdentity(cfg: MetaOAuthConfig, accessToken: string): 
   if (!res.ok || !json.id) throw new Error(json.error?.message || "identity fetch failed");
   return { id: json.id, name: json.name ?? "Meta user" };
 }
+
+// ── Page discovery (Phase 19) — read-only; NOTHING here publishes ─────────────
+
+/** Permission required to list the user's managed Pages via GET /me/accounts. */
+export const PAGE_DISCOVERY_SCOPES = ["pages_show_list"] as const;
+
+/** A Facebook Page the connected user manages (no publishing — discovery only). */
+export interface MetaPage {
+  id: string;
+  name: string;
+  category: string | null;
+  /** Page-scoped token, if Meta returns it. Caller MUST encrypt before storing. */
+  accessToken: string | null;
+  /** e.g. ["MANAGE","CREATE_CONTENT",...] when returned — informational only. */
+  tasks: string[];
+}
+
+export type PagesErrorType = "expired" | "permission" | "unknown";
+export interface FetchPagesResult {
+  pages: MetaPage[];
+  error?: { type: PagesErrorType; message: string };
+}
+
+/**
+ * GET /me/accounts — list the Pages the connected user manages.
+ * Returns a discriminated result instead of throwing so the caller can map
+ * token-expiry vs missing-permission to honest UI states. Never logs tokens.
+ */
+export async function fetchPages(cfg: MetaOAuthConfig, accessToken: string): Promise<FetchPagesResult> {
+  const url = graph(cfg, "/me/accounts") + "?" + new URLSearchParams({
+    fields: "id,name,category,access_token,tasks",
+    limit: "100",
+    access_token: accessToken,
+  }).toString();
+
+  let json: {
+    data?: Array<{ id?: string; name?: string; category?: string; access_token?: string; tasks?: string[] }>;
+    error?: { message?: string; code?: number; type?: string };
+  };
+  try {
+    const res = await fetch(url, { method: "GET" });
+    json = await res.json();
+  } catch {
+    return { pages: [], error: { type: "unknown", message: "network error fetching pages" } };
+  }
+
+  if (json.error) {
+    const code = json.error.code;
+    const msg = json.error.message ?? "graph error";
+    // 190 = invalid/expired access token. 102/463/467 are also session/token issues.
+    if (code === 190 || code === 102 || code === 463 || code === 467) {
+      return { pages: [], error: { type: "expired", message: msg } };
+    }
+    // 200/10/3 = permission errors; also catch explicit permission wording.
+    if (code === 200 || code === 10 || code === 3 || /permission|pages_show_list/i.test(msg)) {
+      return { pages: [], error: { type: "permission", message: msg } };
+    }
+    return { pages: [], error: { type: "unknown", message: msg } };
+  }
+
+  const pages: MetaPage[] = (json.data ?? [])
+    .filter((p) => !!p.id)
+    .map((p) => ({
+      id: p.id as string,
+      name: p.name ?? "(ללא שם)",
+      category: p.category ?? null,
+      accessToken: p.access_token ?? null,
+      tasks: Array.isArray(p.tasks) ? p.tasks : [],
+    }));
+  return { pages };
+}
