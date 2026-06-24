@@ -385,6 +385,24 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
       if (insErr) { console.error("[quick-creative][property_ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
       const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
       if (!adIds.length) throw new Error("שמירת המודעות נכשלה — לא נוצרו פריטים.");
+      // Honest result: if NOT A SINGLE concept produced a real AI image, fail loudly
+      // with the actual reason instead of reporting a false success. The two real
+      // causes are: (1) the OpenAI image provider isn't configured, or (2) there
+      // are no reference photos (property has no images and no office logo / agent
+      // photo) for the AI to design the campaign from.
+      const withImage = finalRows.filter((r) => (r as { image_url?: string | null }).image_url).length;
+      if (withImage === 0) {
+        const reasons = Array.from(new Set(finalRows.flatMap((r) => {
+          const m = (r as { creative_selection_metadata?: { failReasons?: string[] } }).creative_selection_metadata;
+          return m?.failReasons ?? [];
+        }))).slice(0, 4);
+        const hint = reasons.some((x) => x.includes("ספק")) || reasons.length === 0
+          ? "ספק התמונות של OpenAI לא מוגדר (הגדר OPENAI_API_KEY ו-ZONO_IMAGE_PROVIDER=openai)"
+          : reasons.some((x) => x.includes("נכסים לרפרנס"))
+            ? "אין תמונות רפרנס — הוסף תמונות לנכס או לוגו/תמונת סוכן למותג"
+            : reasons.join(" · ");
+        throw new Error(`לא נוצרו תמונות AI אמיתיות — ${hint}`);
+      }
       return { requestId, created: adIds.length };
     }
   }
