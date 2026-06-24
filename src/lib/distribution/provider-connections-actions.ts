@@ -14,6 +14,8 @@ import {
 } from "./facebook-connection-paths";
 import { metaPagesService, type MetaPageDestinationView, type MetaIntegrationView, type SyncMetaPagesResult } from "./meta-pages";
 import { metaPublishService, type PublishResult } from "./meta-publish";
+import { startPairing, revokeAllInstances } from "./extension-service";
+import { getSessionContext } from "@/lib/auth/session";
 
 export interface ConnActionResult<T = undefined> { ok: boolean; message?: string; data?: T }
 const revalidate = () => { try { revalidatePath("/settings/distribution-connections"); } catch { /* noop */ } };
@@ -100,6 +102,26 @@ export async function syncMetaPagesAction(): Promise<SyncMetaPagesResult> {
 /** Full Meta integration snapshot: pages + instagram + lead forms + permissions readiness. */
 export async function getMetaIntegrationAction(): Promise<MetaIntegrationView> {
   return metaPagesService.getIntegration();
+}
+
+// ── Phase 20: Chrome extension pairing (Facebook Groups assistant) ─────────────
+
+/** Start a pairing session — returns a short-lived one-time code to show the user. */
+export async function startExtensionPairingAction(): Promise<ConnActionResult<{ code: string; expiresAt: string }>> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile?.org_id || !profile.id) return { ok: false, message: "אין הרשאה." };
+  const res = await startPairing(profile.org_id, profile.id);
+  if (!res) return { ok: false, message: "יצירת קוד החיבור נכשלה." };
+  return { ok: true, data: { code: res.code, expiresAt: res.expiresAt }, message: "קוד חיבור נוצר." };
+}
+
+/** Disable the Chrome extension for this org (revoke all instances). */
+export async function revokeExtensionAction(): Promise<ConnActionResult> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile?.org_id) return { ok: false, message: "אין הרשאה." };
+  const ok = await revokeAllInstances(profile.org_id, profile.id ?? null);
+  revalidate();
+  return { ok, message: ok ? "התוסף נותק." : "ניתוק התוסף נכשל." };
 }
 
 /**

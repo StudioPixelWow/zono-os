@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZONO Facebook Assistant</title>
+  <style>
+    body { font-family: system-ui, sans-serif; width: 340px; margin: 0; padding: 14px; color: #1b1b1f; }
+    h1 { font-size: 15px; margin: 0 0 10px; }
+    .card { border: 1px solid #e5e5ea; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+    .muted { color: #6b6b76; font-size: 12px; }
+    input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d0d0d8; border-radius: 8px; }
+    button { padding: 8px 12px; border: 0; border-radius: 8px; background: #6d28d9; color: #fff; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #efeef5; color: #1b1b1f; }
+    pre { white-space: pre-wrap; font-size: 12px; background: #f6f5fb; padding: 8px; border-radius: 8px; }
+    .row { display: flex; gap: 8px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>ZONO — עוזר פרסום לקבוצות</h1>
+
+  <div class="card" id="pairCard">
+    <p class="muted">הדבק את קוד החיבור מ-ZONO (הגדרות → חיבורי הפצה).</p>
+    <input id="code" placeholder="ZONO-XXXX-XXXX" />
+    <div class="row"><button id="pairBtn">חבר</button></div>
+    <p class="muted" id="pairMsg"></p>
+  </div>
+
+  <div class="card" id="postCard" style="display:none">
+    <p class="muted">הפוסט הבא לפרסום ידני (אתה מפרסם, ZONO לא):</p>
+    <p id="dest" style="font-weight:700"></p>
+    <pre id="text"></pre>
+    <div class="row">
+      <button id="copyBtn" class="secondary">העתק טקסט</button>
+      <button id="openBtn" class="secondary">פתח יעד</button>
+    </div>
+    <div class="row">
+      <button id="publishedBtn">פרסמתי ✓</button>
+      <button id="cancelBtn" class="secondary">בטל</button>
+    </div>
+    <p class="muted" id="postMsg"></p>
+  </div>
+
+  <div class="row"><button id="refreshBtn" class="secondary">רענן פוסט הבא</button></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

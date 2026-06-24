@@ -24,6 +24,8 @@ import {
   refreshExtensionStatusAction,
   syncMetaPagesAction,
   publishToFacebookPageAction,
+  startExtensionPairingAction,
+  revokeExtensionAction,
 } from "@/lib/distribution/provider-connections-actions";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -104,6 +106,22 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
     return { ok: true, message: r.data?.status === "not_installed" ? "התוסף עדיין לא מותקן/מחובר." : "סטטוס התוסף עודכן." };
   }, { id: "check-extension", pendingMessage: "בודק תוסף…", success: (r) => r.message ?? null });
 
+  // Chrome extension pairing (Facebook Groups assistant).
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const onStartPairing = () => runner.run(async () => {
+    const r = await startExtensionPairingAction();
+    if (r.ok && r.data) { setPairingCode(r.data.code); return { ok: true, message: "קוד חיבור נוצר — הזן אותו בתוסף." }; }
+    return { ok: false, message: r.message ?? "יצירת קוד נכשלה." };
+  }, { id: "pair-start", pendingMessage: "יוצר קוד…", success: (r) => r.message ?? null });
+  const onRevokeExtension = () => runner.run(async () => {
+    const r = await revokeExtensionAction(); setPairingCode(null); return r;
+  }, { id: "pair-revoke", pendingMessage: "מנתק…", success: (r) => r.message ?? null });
+
+  const extMeta = (paths?.extension.metadata ?? {}) as Record<string, unknown>;
+  const extVersion = typeof extMeta.version === "string" ? extMeta.version : null;
+  const extProfile = typeof extMeta.facebook_profile_name === "string" ? extMeta.facebook_profile_name : null;
+  const extSession = extMeta.facebook_session_detected === true;
+
   const onInitFacebook = () => runner.run(async () => {
     const r = await initializeManualFacebookConnectionAction(); await refresh(); return r;
   }, { id: "init-facebook", pendingMessage: "מפעיל מצב ידני…", success: (r) => r.message ?? null });
@@ -158,6 +176,53 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
             note="התוסף פועל בדפדפן שלך. ZONO לעולם לא מקבל סיסמה או עוגיות פייסבוק — רק שולח לתוסף פוסטים מוכנים, והפרסום מתבצע באישורך."
             runner={runner}
           />
+        </div>
+      )}
+
+      {/* ── Chrome extension (Phase 20): pairing + status. Browser-assisted Groups/
+             Marketplace publishing with human approval. No FB password/cookies. ── */}
+      {paths && (
+        <div className="border-line bg-card mb-6 rounded-2xl border p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Icon name="Download" size={18} className="text-brand" />
+              <p className="text-ink font-black">תוסף Chrome — פרסום לקבוצות</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={onStartPairing} loading={runner.busyId === "pair-start"}>
+                <Icon name="Download" size={14} className="ms-1" /> התחל חיבור תוסף
+              </Button>
+              {paths.extension.status !== "not_installed" && (
+                <Button size="sm" variant="ghost" onClick={onRevokeExtension} loading={runner.busyId === "pair-revoke"}>
+                  נתק תוסף
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Live status */}
+          <div className="mt-3 grid gap-1.5 text-sm">
+            <p className="text-muted">סטטוס: <span className="text-ink font-bold">{PATH_STATUS_LABEL[paths.extension.status]}</span></p>
+            <p className="text-muted">חיבור Facebook בדפדפן: <span className="text-ink font-bold">{extSession ? "זוהה" : "לא זוהה"}</span></p>
+            <p className="text-muted">מוכן לפרסום: <span className="text-ink font-bold">{paths.extension.status === "ready" ? "כן" : "לא"}</span></p>
+            <p className="text-muted">פעימה אחרונה: <span className="text-ink font-bold">{fmt(paths.extension.lastCheckedAt)}</span></p>
+            {extVersion && <p className="text-muted">גרסת תוסף: <span className="text-ink font-bold" dir="ltr">{extVersion}</span></p>}
+            {extProfile && <p className="text-muted">פרופיל Facebook: <span className="text-ink font-bold">{extProfile}</span></p>}
+          </div>
+
+          {/* Pairing instructions + code */}
+          {pairingCode && (
+            <div className="border-brand/30 bg-brand-soft mt-4 rounded-xl border p-4">
+              <p className="text-ink text-sm font-bold">קוד חיבור (תקף ל-10 דקות, חד-פעמי)</p>
+              <p className="text-brand-strong my-2 text-2xl font-black tracking-widest" dir="ltr">{pairingCode}</p>
+              <ol className="text-muted mt-1 grid list-decimal gap-1 pe-5 text-xs">
+                <li>התקן את תוסף ZONO ל-Chrome</li>
+                <li>פתח את התוסף</li>
+                <li>הזן את קוד החיבור הזה</li>
+                <li>השאר את Facebook פתוח בדפדפן</li>
+              </ol>
+            </div>
+          )}
         </div>
       )}
 

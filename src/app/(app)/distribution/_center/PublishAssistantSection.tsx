@@ -41,11 +41,14 @@ export function PublishAssistantSection({
   complianceWarnings,
   runAction,
   pending,
+  extensionReady = false,
 }: {
   posts: AssistantPost[];
   complianceWarnings: string[];
   runAction: RunAction;
   pending: boolean;
+  /** Phase 20: whether the Chrome extension (Groups assistant) is ready. */
+  extensionReady?: boolean;
 }) {
   const [providerMsg, setProviderMsg] = useState<string | null>(null);
   const [providerChecking, setProviderChecking] = useState(false);
@@ -242,6 +245,19 @@ export function PublishAssistantSection({
         </p>
         <a href="/settings/distribution-connections"
           className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-amber-800 shadow-sm transition hover:brightness-95">
+          <Icon name="Send" size={13} /> חיבורי הפצה
+        </a>
+      </div>
+
+      {/* Phase 20: Chrome extension (Facebook Groups assistant) readiness */}
+      <div className={cn("flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-3",
+        extensionReady ? "border-emerald-200 bg-emerald-50" : "border-line bg-card")}>
+        <p className={cn("flex items-center gap-2 text-sm font-bold", extensionReady ? "text-emerald-800" : "text-ink")}>
+          <Icon name="Download" size={16} />
+          {extensionReady ? "פרסום לקבוצות באמצעות תוסף Chrome" : "חבר תוסף Chrome כדי לפרסם לקבוצות"}
+        </p>
+        <a href="/settings/distribution-connections"
+          className="zono-glass text-ink hover:text-brand-strong inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition">
           <Icon name="Send" size={13} /> חיבורי הפצה
         </a>
       </div>
