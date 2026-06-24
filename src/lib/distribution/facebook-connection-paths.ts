@@ -21,6 +21,7 @@ import "server-only";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
+import { providerConnectionRepository } from "./provider-connections";
 
 const TABLE = "facebook_connection_paths";
 
@@ -129,6 +130,21 @@ export const facebookConnectionPathRepository = {
   },
 };
 
+/**
+ * Map the canonical provider-connection status (distribution_provider_connections,
+ * provider='facebook') to the Meta OAuth path status the UI badge expects.
+ * Only an API-mode 'connected' row is "connected"; expired/error pass through;
+ * everything else (not_connected/manual_mode/pending_approval/disconnected) maps
+ * to the honest "not_connected".
+ */
+function mapProviderStatusToMetaPath(status?: string | null, mode?: string | null): MetaPathStatus {
+  if (status === "connected" && mode === "api") return "connected";
+  if (status === "expired") return "expired";
+  if (status === "error") return "error";
+  const candidate = (status ?? "not_connected") as MetaPathStatus;
+  return (VALID_META as string[]).includes(candidate) ? candidate : "not_connected";
+}
+
 /** Remove anything that looks like a credential/secret before persisting. */
 function stripSensitive(meta: Record<string, unknown>): Record<string, unknown> {
   const banned = /(password|cookie|session|token|secret|credential|auth)/i;
@@ -145,10 +161,27 @@ export const facebookConnectionPathService = {
     const metaRow = byType.get("meta_oauth");
     const extRow = byType.get("chrome_extension");
 
-    const metaStatus = (VALID_META as string[]).includes(metaRow?.status as string)
-      ? (metaRow!.status as MetaPathStatus) : "not_connected";
+    // ── Single source of truth for Meta status ──────────────────────────────
+    // The Meta Official card MUST derive its status from the SAME persisted
+    // connection the Facebook provider card uses: distribution_provider_connections
+    // where provider='facebook'. The facebook_connection_paths.meta_oauth row is
+    // only a secondary mirror (account name/scopes metadata) and can lag, which
+    // previously produced the impossible "Facebook=connected / Meta=not_connected"
+    // split. We now read the canonical provider row and map it.
+    const fbConn = await providerConnectionRepository.getProviderConnection("facebook");
+    const metaStatus = mapProviderStatusToMetaPath(fbConn?.status, fbConn?.connection_mode);
+
     const extStatus = (VALID_EXT as string[]).includes(extRow?.status as string)
       ? (extRow!.status as ExtensionPathStatus) : "not_installed";
+
+    // Prefer canonical provider identity; fall back to the path row's metadata.
+    const pathMeta = stripSensitive(metaRow?.metadata ?? {});
+    const metaMetadata: Record<string, unknown> = {
+      ...pathMeta,
+      ...(fbConn?.display_name ? { account_name: fbConn.display_name } : {}),
+      ...(fbConn?.external_account_id ? { account_id: fbConn.external_account_id } : {}),
+      ...(fbConn?.scopes?.length ? { scopes: fbConn.scopes } : {}),
+    };
 
     return {
       meta: {
@@ -157,8 +190,8 @@ export const facebookConnectionPathService = {
         description: "לעמודי פייסבוק, אינסטגרם, לידים, אנליטיקה ו-WhatsApp Business",
         status: metaStatus,
         destinations: META_DESTINATIONS,
-        lastCheckedAt: metaRow?.last_checked_at ?? null,
-        metadata: stripSensitive(metaRow?.metadata ?? {}),
+        lastCheckedAt: fbConn?.last_validated_at ?? metaRow?.last_checked_at ?? null,
+        metadata: metaMetadata,
       },
       extension: {
         pathType: "chrome_extension",

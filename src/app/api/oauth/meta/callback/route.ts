@@ -9,6 +9,7 @@
 // UI status) can be traced in server logs. Tokens are NEVER logged.
 // ============================================================================
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/auth/session";
 import {
   getMetaOAuthConfig, verifySignedState, exchangeCodeForToken, exchangeForLongLived, fetchIdentity, INITIAL_SCOPES,
@@ -138,6 +139,10 @@ export async function GET(req: NextRequest) {
     } else {
       console.error(`${LOG} STEP 8d: path status update FAILED (provider row saved; UI badge may lag).`);
     }
+
+    // Force fresh data on the settings page so the status badges reflect the new
+    // connection immediately (both cards now read the same canonical source).
+    try { revalidatePath(SETTINGS); } catch { /* noop */ }
 
     // Audit trail — identity + outcome only, NEVER token values.
     console.log(`${LOG} AUDIT user_id=${verifiedUserId} org_id=${verifiedOrgId} provider=facebook account_id=${identity.id} result=SUCCESS`);
