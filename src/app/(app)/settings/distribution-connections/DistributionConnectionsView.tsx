@@ -15,7 +15,7 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import { cn } from "@/lib/utils";
 import type { ConnectionProvider, ConnectionStatus, ProviderConnectionView } from "@/lib/distribution/provider-connections";
 import type { FacebookPathView, FacebookPathStatus } from "@/lib/distribution/facebook-connection-paths";
-import type { MetaPageDestinationView } from "@/lib/distribution/meta-pages";
+import type { MetaIntegrationView, MetaDestinationView } from "@/lib/distribution/meta-pages";
 import {
   getDistributionConnectionsAction,
   initializeManualFacebookConnectionAction,
@@ -23,6 +23,7 @@ import {
   disconnectProviderAction,
   refreshExtensionStatusAction,
   syncMetaPagesAction,
+  publishToFacebookPageAction,
 } from "@/lib/distribution/provider-connections-actions";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -65,21 +66,36 @@ function fmt(iso: string | null): string {
   catch { return "—"; }
 }
 
-export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false, metaPages = [] }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean; metaPages?: MetaPageDestinationView[] }) {
+export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false, metaIntegration = null }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean; metaIntegration?: MetaIntegrationView | null }) {
   const [conns, setConns] = useState<ProviderConnectionView[]>(initial);
-  const [pages, setPages] = useState<MetaPageDestinationView[]>(metaPages);
+  const [pages, setPages] = useState<MetaDestinationView[]>(metaIntegration?.pages ?? []);
+  const [instagram, setInstagram] = useState<MetaDestinationView[]>(metaIntegration?.instagram ?? []);
+  const [leadForms, setLeadForms] = useState<MetaDestinationView[]>(metaIntegration?.leadForms ?? []);
   const [pagesSynced, setPagesSynced] = useState(false);
+  const [composeText, setComposeText] = useState<Record<string, string>>({});
   const runner = useActionRunner();
+
+  const readiness = metaIntegration?.readiness ?? { pagesConnected: 0, canPublishPages: false, instagramReady: false, leadsReady: false, analyticsReady: false };
+  const permissions = metaIntegration?.permissions ?? [];
 
   const refresh = async () => { try { setConns(await getDistributionConnectionsAction()); } catch { /* keep current */ } };
 
-  // Page discovery (GET /me/accounts) — DISCOVERY ONLY, never publishes.
+  // Discovery (GET /me/accounts + IG + lead forms) — DISCOVERY ONLY, never publishes.
   const onSyncPages = () => runner.run(async () => {
     const r = await syncMetaPagesAction();
     setPagesSynced(true);
-    if (r.ok) { setPages(r.pages); return { ok: true, message: r.message }; }
+    if (r.ok) { setPages(r.pages); setInstagram(r.instagram); setLeadForms(r.leadForms); return { ok: true, message: r.message }; }
     return { ok: false, message: r.message };
-  }, { id: "sync-pages", pendingMessage: "מסנכרן עמודים…", success: (r) => r.message ?? null });
+  }, { id: "sync-pages", pendingMessage: "מסנכרן יעדים…", success: (r) => r.message ?? null });
+
+  // Publish ONE post to a Facebook PAGE (official Graph API). Pages only — never groups.
+  const onPublishPage = (externalId: string) => runner.run(async () => {
+    const text = (composeText[externalId] ?? "").trim();
+    if (!text) return { ok: false, message: "כתוב טקסט לפוסט לפני הפרסום." };
+    const r = await publishToFacebookPageAction({ destinationExternalId: externalId, text });
+    if (r.ok) { setComposeText((c) => ({ ...c, [externalId]: "" })); return { ok: true, message: r.message }; }
+    return { ok: false, message: r.message };
+  }, { id: `publish-${externalId}`, pendingMessage: "מפרסם לעמוד…", success: (r) => r.message ?? null });
 
   // The Meta CTA is a real navigation to /api/oauth/meta/start (server redirector).
   // The extension CTA only reads real state — neither fakes a connected/ready status.
@@ -145,39 +161,119 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
         </div>
       )}
 
-      {/* Phase 19: Facebook Pages available under the connected Meta account.
-          Discovery only — these are publishing DESTINATIONS, nothing publishes here. */}
+      {/* ── Meta first release (Phase 19): Pages + publish, Instagram, Lead Ads,
+             analytics readiness, permissions. Shown only when Meta is connected. ── */}
       {paths && paths.meta.status === "connected" && (
-        <div className="border-line bg-card mb-6 rounded-2xl border p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Icon name="Globe" size={18} className="text-brand" />
-              <p className="text-ink font-black">עמודי Facebook זמינים</p>
+        <div className="mb-6 grid gap-4">
+          {/* Facebook Pages + official Page publishing */}
+          <div className="border-line bg-card rounded-2xl border p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Icon name="Globe" size={18} className="text-brand" />
+                <p className="text-ink font-black">עמודי Facebook זמינים</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={onSyncPages} loading={runner.busyId === "sync-pages"}>
+                <Icon name="Download" size={14} className="ms-1" /> סנכרן עמודים
+              </Button>
             </div>
-            <Button size="sm" variant="ghost" onClick={onSyncPages} loading={runner.busyId === "sync-pages"}>
-              <Icon name="Download" size={14} className="ms-1" /> סנכרן עמודים
-            </Button>
+
+            {pages.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {pages.map((p) => (
+                  <div key={p.externalId} className="border-line bg-surface rounded-xl border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-ink truncate text-sm font-bold">{p.name}</p>
+                        <p className="text-muted text-xs">{p.category ?? "—"} · עודכן {fmt(p.lastSyncedAt)}</p>
+                      </div>
+                      <span className="bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold">
+                        {p.status === "available" ? "זמין" : p.status}
+                      </span>
+                    </div>
+                    {/* Official Page publishing (Pages only — never groups). */}
+                    {readiness.canPublishPages ? (
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <input
+                          type="text" dir="rtl" placeholder="טקסט לפוסט בעמוד…"
+                          className="border-line bg-card text-ink w-full rounded-lg border px-3 py-2 text-sm"
+                          value={composeText[p.externalId] ?? ""}
+                          onChange={(e) => setComposeText((c) => ({ ...c, [p.externalId]: e.target.value }))}
+                        />
+                        <Button size="sm" onClick={() => onPublishPage(p.externalId)} loading={runner.busyId === `publish-${p.externalId}`}>
+                          <Icon name="Send" size={14} className="ms-1" /> פרסם לעמוד Facebook
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-muted mt-2 text-xs">פרסום ישיר ייפתח לאחר אישור pages_manage_posts. עד אז ניתן לפרסם דרך מסייע הפרסום הידני.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted mt-4 text-sm">
+                {pagesSynced ? "לא נמצאו עמודי Facebook לניהול בחשבון המחובר" : "לחץ “סנכרן עמודים” כדי למשוך את עמודי ה-Facebook שבניהולך."}
+              </p>
+            )}
           </div>
 
-          {pages.length > 0 ? (
-            <div className="mt-4 grid gap-2">
-              {pages.map((p) => (
-                <div key={p.externalId} className="border-line bg-surface flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-ink truncate text-sm font-bold">{p.name}</p>
-                    <p className="text-muted text-xs">{p.category ?? "—"} · עודכן {fmt(p.lastSyncedAt)}</p>
+          {/* Instagram Business accounts (discovery + readiness) */}
+          <div className="border-line bg-card rounded-2xl border p-5">
+            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Sparkles" size={18} className="text-brand" /> Instagram</p>
+            {instagram.length > 0 ? (
+              <div className="mt-3 grid gap-2">
+                {instagram.map((ig) => (
+                  <div key={ig.externalId} className="border-line bg-surface flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
+                    <p className="text-ink truncate text-sm font-bold">@{ig.name}</p>
+                    <span className={cn("shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold", readiness.instagramReady ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                      {readiness.instagramReady ? "Instagram מוכן לחיבור מתקדם" : "נדרש אישור Meta לפרסום Instagram"}
+                    </span>
                   </div>
-                  <span className="bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold">
-                    {p.status === "available" ? "זמין" : p.status}
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted mt-3 text-sm">{pagesSynced ? "נדרשות הרשאות Instagram כדי לזהות חשבון Instagram Business" : "סנכרן עמודים כדי לזהות חשבונות Instagram Business מקושרים."}</p>
+            )}
+          </div>
+
+          {/* Facebook Lead Ads forms (discovery only) */}
+          <div className="border-line bg-card rounded-2xl border p-5">
+            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Target" size={18} className="text-brand" /> טפסי Lead Ads זמינים</p>
+            {leadForms.length > 0 ? (
+              <div className="mt-3 grid gap-2">
+                {leadForms.map((f) => (
+                  <div key={f.externalId} className="border-line bg-surface flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
+                    <p className="text-ink truncate text-sm font-bold">{f.name}</p>
+                    <span className="bg-surface text-muted border-line shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold">{f.status}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted mt-3 text-sm">{readiness.leadsReady ? "לא נמצאו טפסי Lead Ads בעמודים המחוברים." : "נדרש leads_retrieval כדי למשוך טפסי Lead Ads"}</p>
+            )}
+          </div>
+
+          {/* Analytics readiness — no fake metrics */}
+          <div className="border-line bg-card rounded-2xl border p-5">
+            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Sparkles" size={18} className="text-brand" /> אנליטיקה</p>
+            <p className="text-muted mt-2 text-sm">
+              {readiness.analyticsReady ? "read_insights פעיל — נתוני ביצועים יוצגו בשלב הבא." : "אנליטיקה תופעל לאחר אישור read_insights"}
+            </p>
+          </div>
+
+          {/* Permissions panel */}
+          <div className="border-line bg-card rounded-2xl border p-5">
+            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Shield" size={18} className="text-brand" /> הרשאות Meta</p>
+            <div className="mt-3 grid gap-1.5">
+              {permissions.map((perm) => (
+                <div key={perm.permission} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-muted"><span dir="ltr" className="text-ink font-mono font-bold">{perm.permission}</span> — {perm.unlocks}</span>
+                  <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-xs font-bold", perm.granted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-surface text-muted border-line")}>
+                    {perm.granted ? "מאושר" : "חסר"}
                   </span>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-muted mt-4 text-sm">
-              {pagesSynced ? "לא נמצאו עמודי Facebook לניהול בחשבון המחובר" : "לחץ “סנכרן עמודים” כדי למשוך את עמודי ה-Facebook שבניהולך."}
-            </p>
-          )}
+          </div>
         </div>
       )}
 

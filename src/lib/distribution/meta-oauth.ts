@@ -211,3 +211,118 @@ export async function fetchPages(cfg: MetaOAuthConfig, accessToken: string): Pro
     }));
   return { pages };
 }
+
+/** Map a Graph error object to a typed reason (shared by all read/write helpers). */
+function classifyGraphError(error?: { message?: string; code?: number; type?: string }): { type: PagesErrorType; message: string } {
+  const code = error?.code;
+  const msg = error?.message ?? "graph error";
+  if (code === 190 || code === 102 || code === 463 || code === 467) return { type: "expired", message: msg };
+  if (code === 200 || code === 10 || code === 3 || /permission|pages_show_list|instagram|leads_retrieval|read_insights/i.test(msg)) {
+    return { type: "permission", message: msg };
+  }
+  return { type: "unknown", message: msg };
+}
+
+// ── Instagram discovery (Part D) ──────────────────────────────────────────────
+export interface MetaInstagramAccount { igUserId: string; username: string | null; linkedPageId: string }
+export interface FetchInstagramResult { account: MetaInstagramAccount | null; error?: { type: PagesErrorType; message: string } }
+
+/** GET /{page-id}?fields=instagram_business_account{id,username} — uses the PAGE token. */
+export async function fetchInstagramForPage(cfg: MetaOAuthConfig, pageId: string, pageToken: string): Promise<FetchInstagramResult> {
+  const url = graph(cfg, `/${pageId}`) + "?" + new URLSearchParams({
+    fields: "instagram_business_account{id,username}", access_token: pageToken,
+  }).toString();
+  let json: { instagram_business_account?: { id?: string; username?: string }; error?: { message?: string; code?: number } };
+  try { json = await (await fetch(url, { method: "GET" })).json(); }
+  catch { return { account: null, error: { type: "unknown", message: "network error" } }; }
+  if (json.error) return { account: null, error: classifyGraphError(json.error) };
+  const ig = json.instagram_business_account;
+  if (!ig?.id) return { account: null };
+  return { account: { igUserId: ig.id, username: ig.username ?? null, linkedPageId: pageId } };
+}
+
+// ── Lead Ads form discovery (Part F) ──────────────────────────────────────────
+export interface MetaLeadForm { id: string; name: string; status: string | null; pageId: string }
+export interface FetchLeadFormsResult { forms: MetaLeadForm[]; error?: { type: PagesErrorType; message: string } }
+
+/** GET /{page-id}/leadgen_forms — uses the PAGE token. Requires leads_retrieval. */
+export async function fetchLeadForms(cfg: MetaOAuthConfig, pageId: string, pageToken: string): Promise<FetchLeadFormsResult> {
+  const url = graph(cfg, `/${pageId}/leadgen_forms`) + "?" + new URLSearchParams({
+    fields: "id,name,status", limit: "100", access_token: pageToken,
+  }).toString();
+  let json: { data?: Array<{ id?: string; name?: string; status?: string }>; error?: { message?: string; code?: number } };
+  try { json = await (await fetch(url, { method: "GET" })).json(); }
+  catch { return { forms: [], error: { type: "unknown", message: "network error" } }; }
+  if (json.error) return { forms: [], error: classifyGraphError(json.error) };
+  const forms = (json.data ?? []).filter((f) => !!f.id).map((f) => ({
+    id: f.id as string, name: f.name ?? "(ללא שם)", status: f.status ?? null, pageId,
+  }));
+  return { forms };
+}
+
+// ── Granted permissions (Parts G/H) ───────────────────────────────────────────
+export const META_RELEASE_PERMISSIONS = [
+  "pages_show_list", "pages_manage_posts", "pages_read_engagement",
+  "read_insights", "instagram_basic", "instagram_content_publish", "leads_retrieval",
+] as const;
+export type MetaPermission = (typeof META_RELEASE_PERMISSIONS)[number];
+
+export interface FetchPermissionsResult { granted: string[]; error?: { type: PagesErrorType; message: string } }
+
+/** GET /me/permissions — returns the list of granted permission strings (status=granted). */
+export async function fetchPermissions(cfg: MetaOAuthConfig, userToken: string): Promise<FetchPermissionsResult> {
+  const url = graph(cfg, "/me/permissions") + "?" + new URLSearchParams({ access_token: userToken }).toString();
+  let json: { data?: Array<{ permission?: string; status?: string }>; error?: { message?: string; code?: number } };
+  try { json = await (await fetch(url, { method: "GET" })).json(); }
+  catch { return { granted: [], error: { type: "unknown", message: "network error" } }; }
+  if (json.error) return { granted: [], error: classifyGraphError(json.error) };
+  const granted = (json.data ?? []).filter((p) => p.status === "granted" && p.permission).map((p) => p.permission as string);
+  return { granted };
+}
+
+// ── Facebook Page publishing (Part C) — official Graph API, page token ─────────
+export type PublishErrorType = "expired" | "permission" | "graph_error";
+export interface PublishPageResult {
+  ok: boolean;
+  externalPostId?: string;
+  externalPostUrl?: string | null;
+  error?: { type: PublishErrorType; message: string };
+}
+
+function mapPublishError(error?: { message?: string; code?: number; type?: string }): { type: PublishErrorType; message: string } {
+  const c = classifyGraphError(error);
+  if (c.type === "expired") return { type: "expired", message: c.message };
+  if (c.type === "permission") return { type: "permission", message: c.message };
+  return { type: "graph_error", message: c.message };
+}
+
+/**
+ * Publish ONE post to a Facebook PAGE (text, or image+caption if imageUrl is a
+ * public URL). Uses the page-scoped token. Returns the external post id/url ONLY
+ * when the Graph API call truly succeeds — never fakes success.
+ */
+export async function publishToPage(
+  cfg: MetaOAuthConfig, pageId: string, pageToken: string,
+  input: { text: string; imageUrl: string | null },
+): Promise<PublishPageResult> {
+  const isPhoto = !!input.imageUrl && /^https:\/\//i.test(input.imageUrl);
+  const endpoint = isPhoto ? `/${pageId}/photos` : `/${pageId}/feed`;
+  const body = new URLSearchParams({ access_token: pageToken });
+  if (isPhoto) { body.set("url", input.imageUrl as string); if (input.text) body.set("caption", input.text); }
+  else { body.set("message", input.text); }
+
+  let json: { id?: string; post_id?: string; error?: { message?: string; code?: number; type?: string } };
+  try {
+    const res = await fetch(graph(cfg, endpoint), { method: "POST", body });
+    json = await res.json();
+  } catch {
+    return { ok: false, error: { type: "graph_error", message: "network error publishing" } };
+  }
+  if (json.error || (!json.id && !json.post_id)) {
+    return { ok: false, error: mapPublishError(json.error) };
+  }
+  // /photos returns { id, post_id }; /feed returns { id }. Prefer the feed post id.
+  const externalPostId = json.post_id || (json.id as string);
+  const externalPostUrl = `https://www.facebook.com/${externalPostId}`;
+  return { ok: true, externalPostId, externalPostUrl };
+}

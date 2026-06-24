@@ -12,7 +12,8 @@ import {
 import {
   facebookConnectionPathService, type ExtensionPathStatus, type FacebookPathView,
 } from "./facebook-connection-paths";
-import { metaPagesService, type MetaPageDestinationView, type SyncMetaPagesResult } from "./meta-pages";
+import { metaPagesService, type MetaPageDestinationView, type MetaIntegrationView, type SyncMetaPagesResult } from "./meta-pages";
+import { metaPublishService, type PublishResult } from "./meta-publish";
 
 export interface ConnActionResult<T = undefined> { ok: boolean; message?: string; data?: T }
 const revalidate = () => { try { revalidatePath("/settings/distribution-connections"); } catch { /* noop */ } };
@@ -87,11 +88,28 @@ export async function getMetaPagesAction(): Promise<MetaPageDestinationView[]> {
 }
 
 /**
- * Discover + store the Pages the connected Facebook account manages. Never
- * publishes. Returns honest not_connected / expired / permission states.
+ * Discover + store Pages + linked Instagram + Lead Ads forms for the connected
+ * Facebook account. Never publishes. Honest not_connected/expired/permission.
  */
 export async function syncMetaPagesAction(): Promise<SyncMetaPagesResult> {
   const res = await metaPagesService.syncPages();
+  revalidate();
+  return res;
+}
+
+/** Full Meta integration snapshot: pages + instagram + lead forms + permissions readiness. */
+export async function getMetaIntegrationAction(): Promise<MetaIntegrationView> {
+  return metaPagesService.getIntegration();
+}
+
+/**
+ * Publish a prepared post to a connected Facebook PAGE (official Graph API).
+ * Pages only — never groups. Publishes ONLY on confirmed API success.
+ */
+export async function publishToFacebookPageAction(input: {
+  destinationExternalId: string; text: string; imageUrl?: string | null; postId?: string | null;
+}): Promise<PublishResult> {
+  const res = await metaPublishService.publishToFacebookPage(input);
   revalidate();
   return res;
 }

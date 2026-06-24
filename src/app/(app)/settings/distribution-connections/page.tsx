@@ -1,7 +1,7 @@
-import { getDistributionConnectionsAction, getFacebookConnectionPathsAction, getMetaPagesAction } from "@/lib/distribution/provider-connections-actions";
+import { getDistributionConnectionsAction, getFacebookConnectionPathsAction, getMetaIntegrationAction } from "@/lib/distribution/provider-connections-actions";
 import { CONNECTION_COMPLIANCE, type ProviderConnectionView } from "@/lib/distribution/provider-connections";
 import type { FacebookPathView } from "@/lib/distribution/facebook-connection-paths";
-import type { MetaPageDestinationView } from "@/lib/distribution/meta-pages";
+import type { MetaIntegrationView } from "@/lib/distribution/meta-pages";
 import { getMetaOAuthConfig } from "@/lib/distribution/meta-oauth";
 import { DistributionConnectionsView } from "./DistributionConnectionsView";
 
@@ -13,16 +13,16 @@ export const dynamic = "force-dynamic";
 export default async function DistributionConnectionsPage() {
   let connections: ProviderConnectionView[] = [];
   let paths: { meta: FacebookPathView; extension: FacebookPathView } | null = null;
-  let metaPages: MetaPageDestinationView[] = [];
+  let metaIntegration: MetaIntegrationView | null = null;
   try {
-    [connections, paths, metaPages] = await Promise.all([
+    [connections, paths, metaIntegration] = await Promise.all([
       getDistributionConnectionsAction(),
       getFacebookConnectionPathsAction(),
-      getMetaPagesAction(),
+      getMetaIntegrationAction(),
     ]);
   } catch (e) {
     console.error("[distribution-connections] load failed:", e);
   }
   const metaConfigured = getMetaOAuthConfig().configured;
-  return <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} metaConfigured={metaConfigured} metaPages={metaPages} />;
+  return <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} metaConfigured={metaConfigured} metaIntegration={metaIntegration} />;
 }
