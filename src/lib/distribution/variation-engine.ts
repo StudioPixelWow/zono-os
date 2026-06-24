@@ -56,6 +56,25 @@ export interface DistResult {
   count: number;
 }
 
+/** Display DTO for a variation READ BACK from distribution_variations (the DB is
+ *  the single source of truth — the UI renders this, never the in-memory output). */
+export interface CampaignVariationView {
+  id: string;
+  index: number;
+  angle: string;
+  angleLabel: string;
+  tone: string;
+  headline: string;
+  hook: string;
+  body: string;
+  cta: string;
+  hashtags: string[];
+  wow: number;
+  engagement: number;
+  prediction: number; // lead score
+  selected: boolean;  // DB is_selected (top 4)
+}
+
 const ANGLE_LABEL: Record<AngleKey, string> = {
   family: "משפחתי", investment: "השקעה", urgency: "דחיפות", emotional: "רגשי",
   local: "מקומי", luxury: "יוקרה", value: "תמורה", exclusivity: "בלעדיות",

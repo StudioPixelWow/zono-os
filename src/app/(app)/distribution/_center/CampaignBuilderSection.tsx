@@ -32,7 +32,7 @@ export function CampaignBuilderSection({
   groups: CenterGroup[];
   campaigns: CenterCampaign[];
   properties: PropertyLite[];
-  onGenerate: (p: PropertyLite, aud: AudienceKey, count: number) => void;
+  onGenerate: (campaignId: string, count: number) => void;
   runAction: RunAction;
   runActionAsync: RunActionAsync;
   pending: boolean;
@@ -50,7 +50,6 @@ export function CampaignBuilderSection({
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [groupCity, setGroupCity] = useState("");
 
-  const property = properties.find((p) => p.id === propertyId) ?? null;
   const activeCampaign = campaigns.find((c) => c.id === activeCampaignId) ?? null;
 
   const cityOptions = useMemo(() => {
@@ -159,20 +158,20 @@ export function CampaignBuilderSection({
             <Icon name="Plus" size={16} /> צור קמפיין
           </button>
 
-          {/* AI variation preview — kept as-is */}
+          {/* AI variations — generated for the ACTIVE campaign and saved to Supabase. */}
           <div className="flex items-center gap-2">
             <span className="text-muted text-xs font-bold">וריאציות:</span>
             <input type="range" min={4} max={20} step={2} value={count} onChange={(e) => setCount(Number(e.target.value))} className="accent-brand w-28" />
             <span className="text-brand-strong w-6 text-sm font-black tabular-nums">{count}</span>
-            <button type="button" disabled={!property || !audience}
-              onClick={() => property && audience && onGenerate(property, audience, count)}
+            <button type="button" disabled={pending || !activeCampaignId}
+              onClick={() => activeCampaignId && onGenerate(activeCampaignId, count)}
               className="zono-ai-gradient inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-105 disabled:opacity-50">
               <Icon name="Sparkles" size={16} /> צור {count} וריאציות AI
             </button>
           </div>
         </div>
-        {(!property || !audience) && (
-          <p className="text-muted text-[11px]">לתצוגת וריאציות AI — בחר נכס מקושר וקהל יעד.</p>
+        {!activeCampaignId && (
+          <p className="text-muted text-[11px]">להפקת וריאציות AI — צור קמפיין (או בחר קיים בשלב 2). הוריאציות יישמרו לקמפיין וייטענו מה-DB.</p>
         )}
       </Glass>
 

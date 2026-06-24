@@ -16,7 +16,9 @@ import type { AutomationBoard } from "@/lib/distribution/distribution-automation
 import { recomputeDistributionAction, generateDailyBatchAction } from "@/lib/distribution/actions";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
-import { generateVariations, type PropertyLite, type AudienceKey, type Variation } from "./variations";
+import { type PropertyLite } from "./variations";
+import { generateCampaignVariationsAction } from "@/lib/distribution/variation-actions";
+import type { CampaignVariationView } from "@/lib/distribution/variation-engine";
 import { OverviewSection } from "./OverviewSection";
 import { GroupLibrarySection } from "./GroupLibrarySection";
 import { CampaignBuilderSection } from "./CampaignBuilderSection";
@@ -72,7 +74,7 @@ export function DistributionCenterView({
 }) {
   const router = useRouter();
   const [section, setSection] = useState<SectionKey>("overview");
-  const [variations, setVariations] = useState<Variation[]>([]);
+  const [variations, setVariations] = useState<CampaignVariationView[]>([]);
   const [variationProperty, setVariationProperty] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [toast, setToast] = useState<string | null>(null);
@@ -95,10 +97,19 @@ export function DistributionCenterView({
     return res;
   };
 
-  function handleGenerate(p: PropertyLite, aud: AudienceKey, count: number) {
-    setVariations(generateVariations(p, aud, count));
-    setVariationProperty(p.title);
+  // Generate AI variations → PERSIST to distribution_variations → render the rows
+  // read back from the DB (the database is the single source of truth).
+  function handleGenerate(campaignId: string, count: number) {
     setSection("variations");
+    startTransition(async () => {
+      const res = await generateCampaignVariationsAction({ campaignId, count });
+      if (res.error) { setToast(res.error); setTimeout(() => setToast(null), 4000); return; }
+      setVariations(res.variations ?? []);
+      setVariationProperty(res.campaignName ?? null);
+      setToast(`${res.saved ?? 0} וריאציות נשמרו · 4 המובילות נבחרו אוטומטית`);
+      router.refresh();
+      setTimeout(() => setToast(null), 4000);
+    });
   }
 
   return (

@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Glass, SectionHeading, EmptyState, ScoreBar } from "./shared";
-import type { Variation } from "./variations";
+import type { CampaignVariationView } from "@/lib/distribution/variation-engine";
 
 export function AiVariationsSection({
   variations,
   propertyTitle,
   onBuild,
 }: {
-  variations: Variation[];
+  variations: CampaignVariationView[];
   propertyTitle: string | null;
   onBuild: () => void;
 }) {
@@ -29,13 +29,13 @@ export function AiVariationsSection({
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionHeading title="וריאציות תוכן AI" subtitle={`${variations.length} גרסאות${propertyTitle ? ` · ${propertyTitle}` : ""} · מדורגות לפי תחזית המרה`} icon="Sparkles"
+      <SectionHeading title="וריאציות תוכן AI" subtitle={`${variations.length} גרסאות${propertyTitle ? ` · ${propertyTitle}` : ""} · נשמרו ב-DB · 4 המובילות סומנו אוטומטית`} icon="Sparkles"
         action={selected.size > 0 ? <span className="bg-brand-soft text-brand-strong rounded-full px-3 py-1 text-sm font-bold">{selected.size} נבחרו</span> : undefined} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {variations.map((v, i) => {
+        {variations.map((v) => {
           const isSel = selected.has(v.id);
-          const top = i < 2;
+          const top = v.selected;
           return (
             <Glass key={v.id} className={cn("flex flex-col gap-3 p-4", isSel && "ring-brand ring-2")}>
               <div className="flex items-center justify-between">
