@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getListingPreview, promoteExternalListing, runImport, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncSummary, type SyncMode } from "./service";
+import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getSyncProgress, getListingPreview, promoteExternalListing, runImport, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncProgress, type SyncSummary, type SyncMode } from "./service";
 
 export interface ExternalActionState {
   error?: string;
@@ -52,6 +52,11 @@ export async function promoteExternalListingAction(listingId: string): Promise<E
 
 export async function getImportDiagnosticsAction(): Promise<ImportDiagnostics> {
   return getImportDiagnostics();
+}
+
+/** Lightweight live progress for the running sync — polled by the UI. */
+export async function getSyncProgressAction(): Promise<SyncProgress> {
+  return getSyncProgress();
 }
 
 export async function getExternalListingDetailAction(listingId: string): Promise<ExternalListingDetail | null> {

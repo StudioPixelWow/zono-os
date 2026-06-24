@@ -264,7 +264,15 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     completedCities.push(loc.name);
     const cursorRemaining = allCityNames.filter((c) => !completedCities.includes(c));
     try {
-      await db.from("import_jobs").update({ params: { ...opts, mode, completedCities, cursorRemaining } as never }).eq("id", jobId);
+      // Live progress checkpoint: counters + city progress so the UI can show a
+      // real, honest progress bar while the (long) Apify scrape runs.
+      await db.from("import_jobs").update({
+        total_found: totalFound, total_imported: summary.inserted, total_updated: summary.updated,
+        params: {
+          ...opts, mode, completedCities, cursorRemaining,
+          totalCities: localities.length, completedCount: completedCities.length, currentCity: loc.name,
+        } as never,
+      }).eq("id", jobId);
     } catch { /* checkpoint is best-effort */ }
   }
 
@@ -307,6 +315,61 @@ export async function getImportDiagnostics(): Promise<ImportDiagnostics> {
   if (!job) return { job: null, logs: [], apifyConfigured: isApifyConfigured() };
   const { data: logs } = await supabase.from("import_job_logs").select("level,message,metadata,created_at").eq("job_id", job.id).order("created_at", { ascending: true }).limit(60);
   return { job, logs: logs ?? [], apifyConfigured: isApifyConfigured() };
+}
+
+// ── Live sync progress (polled by the UI during a running sync) ──────────────
+export interface SyncProgress {
+  active: boolean;            // a sync is currently running
+  hasJob: boolean;
+  status: string;             // running | completed | completed_with_errors | failed
+  provider: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  totalCities: number;
+  completedCount: number;
+  currentCity: string | null;
+  found: number;
+  imported: number;
+  updated: number;
+  error: string | null;
+  recentLogs: string[];       // last few human log lines
+  apifyConfigured: boolean;
+}
+
+/** Compact live progress for the latest import job — cheap to poll every few sec. */
+export async function getSyncProgress(): Promise<SyncProgress> {
+  const empty: SyncProgress = {
+    active: false, hasJob: false, status: "idle", provider: "", startedAt: null, finishedAt: null,
+    totalCities: 0, completedCount: 0, currentCity: null, found: 0, imported: 0, updated: 0,
+    error: null, recentLogs: [], apifyConfigured: isApifyConfigured(),
+  };
+  const { profile } = await getSessionContext();
+  if (!profile) return empty;
+  const supabase = await createClient();
+  const { data: jobs } = await supabase
+    .from("import_jobs")
+    .select("id,provider,status,total_found,total_imported,total_updated,error,started_at,finished_at,params,created_at")
+    .order("created_at", { ascending: false }).limit(1);
+  const job = jobs?.[0] as
+    | { id: string; provider: string; status: string; total_found: number; total_imported: number; total_updated: number; error: string | null; started_at: string | null; finished_at: string | null; params: Record<string, unknown> | null }
+    | undefined;
+  if (!job) return empty;
+
+  const params = (job.params ?? {}) as { totalCities?: number; completedCount?: number; currentCity?: string };
+  const active = job.status === "running";
+  const { data: logs } = await supabase
+    .from("import_job_logs").select("message,level").eq("job_id", job.id)
+    .not("level", "eq", "debug").order("created_at", { ascending: false }).limit(4);
+  const recentLogs = ((logs ?? []) as { message: string }[]).map((l) => l.message).reverse();
+
+  return {
+    active, hasJob: true, status: job.status, provider: job.provider,
+    startedAt: job.started_at, finishedAt: job.finished_at,
+    totalCities: params.totalCities ?? 0, completedCount: params.completedCount ?? 0,
+    currentCity: params.currentCity ?? null,
+    found: job.total_found ?? 0, imported: job.total_imported ?? 0, updated: job.total_updated ?? 0,
+    error: job.error, recentLogs, apifyConfigured: isApifyConfigured(),
+  };
 }
 
 // ── Admin actor-verification debug tool (does NOT run a full sync) ────────────

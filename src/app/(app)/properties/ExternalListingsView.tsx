@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
@@ -10,11 +10,13 @@ import { SmartPropertyGrid, type MatchSummary } from "@/components/listings/Smar
 import {
   buildMarketAnalysisAction,
   getImportDiagnosticsAction,
+  getSyncProgressAction,
   importMadlanAction,
   importYad2Action,
   promoteExternalListingAction,
   syncNowAction,
 } from "@/lib/external-listings/actions";
+import type { SyncProgress } from "@/lib/external-listings/service";
 import { recalcDecisionBrainAction } from "@/lib/decision-intelligence/actions";
 import { createBrokerFromListingAction, decideListingMatchAction, runBrokerDetectionAction } from "@/lib/broker/actions";
 import { openAcquisitionAction } from "@/lib/acquisition/actions";
@@ -39,6 +41,7 @@ const SOURCE_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   unknown: { label: "לא ידוע", cls: "bg-surface text-muted" },
 };
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-3 text-sm outline-none transition";
+const nowMs = () => Date.now(); // module-scope so the render-purity lint stays happy
 const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
 /** Inline hover preview — no navigation. Card appears below the trigger. */
@@ -66,6 +69,71 @@ interface DebugReport {
   env: { apifyToken: boolean; yad2ActorId: boolean; madlanActorId: boolean; cronSecret: boolean };
 }
 
+/** Live, honest progress while a (long) external sync runs. Polls the import job. */
+function SyncProgressPanel({ progress, syncing, elapsedMs }: { progress: SyncProgress | null; syncing: boolean; elapsedMs: number }) {
+  if (!syncing || !progress) return null;
+  const { totalCities, completedCount, currentCity, found, imported, updated, recentLogs, provider } = progress;
+  const hasTotal = totalCities > 0;
+  const pct = hasTotal ? Math.min(100, Math.round((completedCount / totalCities) * 100)) : 0;
+  const mm = Math.floor(elapsedMs / 60000);
+  const ss = Math.floor((elapsedMs % 60000) / 1000);
+  const elapsed = `${mm}:${ss.toString().padStart(2, "0")}`;
+  const sources = (provider || "yad2+madlan").split("+").map((s) => SOURCE_LABELS[s] ?? s).join(" · ");
+
+  return (
+    <div className="border-brand-light/40 from-brand-soft/60 to-card relative overflow-hidden rounded-[20px] border bg-gradient-to-bl p-5">
+      <div className="zono-gradient-glow pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full opacity-20 blur-3xl" />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-brand"><Icon name="Loader" size={20} className="animate-spin" /></span>
+            <div>
+              <p className="text-ink text-sm font-black">מסנכרן מודעות חיצוניות מהשוק…</p>
+              <p className="text-muted text-xs">סורק את {sources} באזורי הפעילות שלך</p>
+            </div>
+          </div>
+          <div className="text-end">
+            <p className="text-ink font-mono text-sm font-bold tabular-nums">{elapsed}</p>
+            <p className="text-muted text-[11px]">זמן ריצה</p>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-4">
+          <div className="text-muted mb-1 flex justify-between text-xs font-semibold">
+            <span>{hasTotal ? `נסרקו ${completedCount} מתוך ${totalCities} אזורים` : "מתחבר לשירות הסריקה…"}</span>
+            {hasTotal && <span>{pct}%</span>}
+          </div>
+          <div className="bg-line/50 h-2.5 w-full overflow-hidden rounded-full">
+            {hasTotal
+              ? <div className="zono-gradient-glow h-2.5 rounded-full transition-all duration-500" style={{ width: `${Math.max(4, pct)}%` }} />
+              : <div className="bg-brand/60 h-2.5 w-1/3 animate-pulse rounded-full" />}
+          </div>
+          {currentCity && <p className="text-brand-strong mt-1.5 text-xs font-bold">כעת: {currentCity}</p>}
+        </div>
+
+        {/* Live counters */}
+        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+          <div className="bg-card/70 rounded-xl border border-line/60 p-2"><p className="text-muted text-[11px] font-bold">נמצאו</p><p className="text-ink text-lg font-black tabular-nums">{found}</p></div>
+          <div className="bg-card/70 rounded-xl border border-line/60 p-2"><p className="text-muted text-[11px] font-bold">חדשים</p><p className="text-success text-lg font-black tabular-nums">{imported}</p></div>
+          <div className="bg-card/70 rounded-xl border border-line/60 p-2"><p className="text-muted text-[11px] font-bold">עודכנו</p><p className="text-brand-strong text-lg font-black tabular-nums">{updated}</p></div>
+        </div>
+
+        {/* Recent activity */}
+        {recentLogs.length > 0 && (
+          <div className="mt-3 space-y-1">
+            {recentLogs.slice(-3).map((l, i) => (
+              <p key={i} className="text-muted truncate text-[11px]"><span className="text-brand">•</span> {l}</p>
+            ))}
+          </div>
+        )}
+
+        <p className="text-muted mt-3 text-[11px]">הסריקה מול הפורטלים עשויה להימשך מספר דקות. אפשר להמשיך לעבוד — נעדכן כאן בזמן אמת והמודעות יתווספו אוטומטית.</p>
+      </div>
+    </div>
+  );
+}
+
 export function ExternalListingsView({ listings, marketStats, isAdmin = false, matches = {} }: { listings: Row[]; marketStats?: { priceDrops: number; duplicateCandidates: number }; isAdmin?: boolean; matches?: Record<string, MatchSummary> }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +142,58 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
   const [diag, setDiag] = useState<ImportDiagnostics | null>(null);
   const [pending, start] = useTransition();
   const [dayAgo] = useState(() => Date.now() - 86_400_000);
+  // ── Live sync progress (polls the running import job) ──────────────────────
+  const [syncing, setSyncing] = useState(false);
+  const [progress, setProgress] = useState<SyncProgress | null>(null);
+  const [syncStartTs, setSyncStartTs] = useState<number | null>(null);
+  const [nowTs, setNowTs] = useState(() => nowMs());
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopTimers = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (clockRef.current) { clearInterval(clockRef.current); clockRef.current = null; }
+  };
+
+  const poll = async () => {
+    try {
+      const p = await getSyncProgressAction();
+      setProgress(p);
+      if (!p.active && p.hasJob && p.finishedAt) { stopTimers(); setSyncing(false); router.refresh(); }
+    } catch { /* keep polling */ }
+  };
+
+  const startSync = () => {
+    setError(null); setMsg(null); setSyncing(true);
+    setSyncStartTs(nowMs()); setNowTs(nowMs());
+    setProgress({ active: true, hasJob: false, status: "running", provider: "", startedAt: null, finishedAt: null, totalCities: 0, completedCount: 0, currentCity: null, found: 0, imported: 0, updated: 0, error: null, recentLogs: [], apifyConfigured: true });
+    // Fire the (long) sync — it runs to completion server-side; we poll meanwhile.
+    syncNowAction(null, null, syncMode).then((r) => {
+      stopTimers(); setSyncing(false);
+      if (r?.error) setError(r.error);
+      else if (r?.summary) setMsg(`הסנכרון הושלם: ${r.summary.inserted} מודעות חדשות, ${r.summary.updated} עודכנו${r.summary.errors.length ? ` · ${r.summary.errors.length} שגיאות` : ""}`);
+      getSyncProgressAction().then(setProgress).catch(() => {});
+      router.refresh();
+    }).catch((e) => { stopTimers(); setSyncing(false); setError(e instanceof Error ? e.message : "הסנכרון נכשל"); });
+    stopTimers();
+    pollRef.current = setInterval(poll, 2500);
+    clockRef.current = setInterval(() => setNowTs(nowMs()), 1000);
+    poll();
+  };
+
+  // Resume the live panel if a sync is already running (e.g. user navigated back).
+  useEffect(() => {
+    getSyncProgressAction().then((p) => {
+      if (p.active) {
+        setProgress(p); setSyncing(true);
+        setSyncStartTs(p.startedAt ? new Date(p.startedAt).getTime() : nowMs());
+        if (!pollRef.current) pollRef.current = setInterval(poll, 2500);
+        if (!clockRef.current) clockRef.current = setInterval(() => setNowTs(nowMs()), 1000);
+      }
+    }).catch(() => {});
+    return () => stopTimers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Admin actor-verification debug tool
   const [dbgCity, setDbgCity] = useState("");
   const [dbgSave, setDbgSave] = useState(false);
@@ -189,7 +309,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
             <option value="full">סנכרון מלא (500/עיר)</option>
             {isAdmin && <option value="backfill">סנכרון מתקדם (1000/עיר)</option>}
           </select>
-          <Button size="sm" onClick={() => run(() => syncNowAction(null, null, syncMode))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>סנכרן עכשיו</Button>
+          <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Sparkles" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
           <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
           <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
           <Link href="/broker-intelligence"><Button size="sm" variant="ghost">מודיעין מתווכים</Button></Link>
@@ -198,6 +318,8 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
           <Button size="sm" variant="ghost" onClick={loadDiag} disabled={pending}>דיבאג ייבוא</Button>
         </div>
       </div>
+
+      <SyncProgressPanel progress={progress} syncing={syncing} elapsedMs={syncStartTs ? nowTs - syncStartTs : 0} />
 
       {diag && (
         <div className="bg-card border-line rounded-[20px] border p-4">
