@@ -30,7 +30,7 @@ export const navItems: NavItem[] = [
   { id: "home", label: "בית", icon: "Home", active: true },
   { id: "ai-office", label: "מוח המשרד · AI", icon: "Sparkles" },
   { id: "command", label: "מרכז פיקוד", icon: "Flame" },
-  { id: "map", label: "מפה חכמה", icon: "Map" },
+  { id: "map", label: "מודיעין שוק", icon: "Map" },
   { id: "properties", label: "נכסים", icon: "Building2" },
   { id: "buyers", label: "קונים", icon: "Users" },
   { id: "sellers", label: "מוכרים", icon: "UserCheck" },

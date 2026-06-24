@@ -313,14 +313,14 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
       </div>
 
       {/* 10) Activity heatmap (placeholder summary) */}
-      <SectionCard title="מפת חום פעילות" icon="Clock">
+      <SectionCard title="פעילות לפי שעות" icon="Clock">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <ScoreTile label="ביצוע" value={p.organization_execution_score} tone={scoreTone(p.organization_execution_score)} />
           <ScoreTile label="תשומת לב" value={p.organization_attention_score} tone={attentionTone(p.organization_attention_score)} />
           <ScoreTile label="נכסים תקועים" value={p.stalled_properties} tone={p.stalled_properties > 0 ? "risk" : "good"} />
           <ScoreTile label="מוכרים ללא קשר" value={p.stalled_sellers} tone={p.stalled_sellers > 0 ? "risk" : "good"} />
         </div>
-        <p className="text-muted mt-2 text-[11px]">מפת חום מבוססת-זמן מפורטת תתווסף בשלב הבא.</p>
+        <p className="text-muted mt-2 text-[11px]">תצוגת פעילות מפורטת תתווסף בשלב הבא.</p>
       </SectionCard>
 
       {/* AI insights */}

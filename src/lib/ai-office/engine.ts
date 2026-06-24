@@ -133,7 +133,7 @@ export function generateGrowthPlan(planType: GrowthPlanType, snap: Snapshot): Gr
       { phase: "שלב 3", action: "בניית מנוע הפניות ומוניטין", metric: "+הכנסה חוזרת" },
     ] },
     territory_expansion: { title: "תוכנית הרחבת טריטוריה", uplift: 0.22, steps: [
-      { phase: "מחקר", action: "זיהוי שטחים לבנים והזדמנויות גיוס", metric: "מפת הזדמנויות" },
+      { phase: "מחקר", action: "זיהוי שטחים לבנים והזדמנויות גיוס", metric: "תובנות הזדמנויות" },
       { phase: "כניסה", action: "גיוס מלאי ראשוני ובניית נוכחות", metric: "+מלאי, +לידים" },
       { phase: "ביסוס", action: "בניית מוניטין אזורי והפניות", metric: "+אמון, +עסקאות" },
     ] },
@@ -148,7 +148,7 @@ export function generateGrowthPlan(planType: GrowthPlanType, snap: Snapshot): Gr
       { phase: "מתמשך", action: "מנוע הפניות + נכסים בטווח ריאלי", metric: "+הכנסה חוזרת" },
     ] },
     market_share: { title: "תוכנית הגדלת נתח שוק", uplift: 0.17, steps: [
-      { phase: "ניתוח", action: "זיהוי אזורים בשליטת מתחרים", metric: "מפת תחרות" },
+      { phase: "ניתוח", action: "זיהוי אזורים בשליטת מתחרים", metric: "ניתוח תחרות" },
       { phase: "התקפה", action: "גיוס מלאי ומיתוג אזורי ממוקד", metric: "+נוכחות" },
       { phase: "שימור", action: "מוניטין והפניות לביצור מובילות", metric: "+אמון אזורי" },
     ] },

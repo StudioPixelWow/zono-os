@@ -52,7 +52,7 @@ export const ENGINES: EngineDef[] = [
     run: async () => { const cities = await orgCities(); const r = await ensureNationalNeighborhoods(cities); return { rows: r.reduce((a, x) => a + Math.max(0, x.discovered), 0), summary: { cities: cities.length } }; } },
   { key: "transactions", label: "מודיעין עסקאות", category: "transactions", deps: ["geo"], stalenessHours: 24,
     run: async () => { const d = await recomputeDerivedIntelligence(); const p = await recomputePipelineResearch(); return { rows: d.buildings + d.streets + p.reports, summary: { ...d, ...p } }; } },
-  { key: "market", label: "מודיעין שוק / מפת ביקוש", category: "market", deps: ["transactions"], stalenessHours: 24,
+  { key: "market", label: "מודיעין שוק / מדדי ביקוש", category: "market", deps: ["transactions"], stalenessHours: 24,
     run: async () => { const r = await generateMarketSnapshotsForOrganization(); return { rows: r.snapshots, summary: { ...r } }; } },
   { key: "broker", label: "זיהוי מתווכים", category: "broker", deps: [], stalenessHours: 24,
     run: async () => { const r = await runBrokerDetectionForOrg(); return { rows: r.matched, summary: { ...r } }; } },

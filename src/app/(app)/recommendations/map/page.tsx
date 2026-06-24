@@ -21,14 +21,14 @@ export default async function RecommendationMapPage() {
         <div>
           <p className="text-brand text-xs font-bold">ZONO · אזורי ביקוש</p>
           <h1 className="text-ink mt-1 text-2xl font-black">אזורי ביקוש</h1>
-          <p className="text-muted mt-1 text-sm">צפיפות המלצות, ביקוש וביטחון לפי עיר/שכונה. תצוגת מפה אינטראקטיבית תתווסף בהמשך.</p>
+          <p className="text-muted mt-1 text-sm">צפיפות המלצות, ביקוש וביטחון לפי עיר/שכונה. תצוגה גאוגרפית תתווסף כשיהיו קואורדינטות אמיתיות לאזורים.</p>
         </div>
         <Link href="/recommendations" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />חזרה למודיעין</Link>
       </div>
 
       {points.length === 0 ? (
         <div className="bg-card border-line rounded-[20px] border p-6 text-center">
-          <p className="text-muted text-sm">אין נקודות עדיין. צור המלצות ואז לחץ ״רענן מפה״ במודיעין ההמלצות.</p>
+          <p className="text-muted text-sm">אין נתונים עדיין. צור המלצות ואז לחץ ״רענן״ במודיעין ההמלצות.</p>
         </div>
       ) : (
         <div className="bg-card border-line overflow-hidden rounded-[20px] border">

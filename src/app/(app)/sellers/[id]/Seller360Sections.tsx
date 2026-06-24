@@ -57,7 +57,7 @@ export function Seller360Sections({ seller: s, properties }: { seller: SellerRow
           <Row k="אמצעי קשר מועדף" v={opt(CONTACT_METHOD_OPTIONS, s.preferred_contact_method)} />
         </Card>
 
-        <Card title="מפת בעלות" icon="Building2">
+        <Card title="בעלויות הנכס" icon="Building2">
           {properties.length === 0 ? <p className="text-muted text-sm">אין נכסים מקושרים.</p> : (
             <ul className="flex flex-col gap-2">
               {properties.map((p) => (

@@ -691,7 +691,7 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
       opportunity_score: clamp(Math.max(c.opportunity, c.demand >= 70 ? 72 : 0)),
       impact_score: clamp(c.demand), confidence_score: 70,
       title: `${c.localityName} · מוקד שוק`,
-      description: `מפת ביקוש: ${reasons.join(" · ")} (ביקוש ${c.demand}, היצע ${c.supply}).`,
+      description: `מדדי ביקוש: ${reasons.join(" · ")} (ביקוש ${c.demand}, היצע ${c.supply}).`,
       recommended_action: c.demand >= 60 && c.externalListings <= 2 ? "גייס מלאי באזור — יש ביקוש" : "מקד פעילות שיווק וגיוס באזור",
       status: "open",
     });

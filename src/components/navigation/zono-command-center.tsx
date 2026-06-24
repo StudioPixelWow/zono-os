@@ -33,7 +33,7 @@ const SECTIONS: Section[] = [
       { label: "נכסים", href: "/properties" },
       { label: "גיוס נכסים", href: "/acquisition" },
       { label: "נכסים חמים", href: "/" },
-      { label: "מפת הזדמנויות", href: "/market" },
+      { label: "מודיעין שוק", href: "/market" },
     ],
   },
   {

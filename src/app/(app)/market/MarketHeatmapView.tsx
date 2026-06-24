@@ -37,11 +37,11 @@ export function MarketHeatmapView({ cells }: { cells: MarketHeatmapCell[] }) {
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
           <p className="text-brand text-xs font-bold">ZONO Market Intelligence</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">מפת ביקוש ומחירים</h1>
+          <h1 className="text-ink mt-1 text-2xl font-black">מדדי ביקוש ומחירים</h1>
           <p className="text-muted mt-1 text-sm">ביקוש, היצע והזדמנויות לכל אזור פעילות — מנתוני המודעות, הקונים והנכסים שלך.</p>
         </div>
         <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Map" size={16} />}>
-          {pending ? "מחשב…" : "חשב מפת ביקוש מחדש"}
+          {pending ? "מחשב…" : "חשב מדדי ביקוש מחדש"}
         </Button>
       </div>
 
@@ -51,8 +51,8 @@ export function MarketHeatmapView({ cells }: { cells: MarketHeatmapCell[] }) {
       {cells.length === 0 ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
           <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Map" size={26} /></span>
-          <p className="text-ink text-lg font-extrabold">אין עדיין נתוני מפת ביקוש</p>
-          <p className="text-muted max-w-sm text-sm">לחץ ״חשב מפת ביקוש מחדש״ כדי לבנות תמונת שוק עדכנית לכל אזורי הפעילות.</p>
+          <p className="text-ink text-lg font-extrabold">אין עדיין נתוני ביקוש</p>
+          <p className="text-muted max-w-sm text-sm">לחץ ״חשב מדדי ביקוש מחדש״ כדי לבנות תמונת שוק עדכנית לכל אזורי הפעילות.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

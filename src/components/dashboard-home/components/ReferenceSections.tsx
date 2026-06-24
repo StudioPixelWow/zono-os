@@ -170,80 +170,37 @@ const BUBBLE_TONE: Record<string, string> = {
 
 export function OpportunityMapSection({ t, data }: { t: Translate; data: DashboardHomeData }) {
   void t;
-  const zones = [...data.heatZones].sort((a, b) => b.radius - a.radius);
-  const hero = zones[0];
-  const rest = zones.slice(1, 6);
-  const filters = ["מכירה", "קנייה", "השכרה", "טווח מחירים", "נכסים מסחריים"];
+  // Phase 24.5 — this was a fake scatter "map" (bubbles positioned by random
+  // top/left %, fake zoom/filters). Heat-zones carry real area metrics but NO real
+  // geography, so we present them as a ranked AREA-INSIGHTS panel — never a map.
+  const zones = [...data.heatZones].sort((a, b) => b.radius - a.radius).slice(0, 8);
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-ink text-xl font-black sm:text-2xl">מפת ההזדמנויות</h2>
-        {data.cityName && <span className="bg-card border-line text-muted rounded-xl border px-3 py-1.5 text-sm font-bold">{data.cityName} והסביבה ▾</span>}
+        <h2 className="text-ink text-xl font-black sm:text-2xl">תובנות אזוריות</h2>
+        {data.cityName && <span className="bg-card border-line text-muted rounded-xl border px-3 py-1.5 text-sm font-bold">{data.cityName} והסביבה</span>}
       </div>
       {zones.length === 0 ? (
-        <EmptyState className="min-h-[300px] justify-center" />
+        <EmptyState className="min-h-[220px] justify-center" />
       ) : (
-      <div className="relative h-[600px] overflow-hidden rounded-[28px] sm:h-[660px]" style={{ background: "radial-gradient(120% 90% at 50% 40%, #241b54 0%, #15102e 55%, #0b0820 100%)" }}>
-        {/* grid + nebula glow */}
-        <div className="absolute inset-0 opacity-40" style={{ backgroundImage: "linear-gradient(rgba(168,139,250,0.10) 1px,transparent 1px),linear-gradient(90deg,rgba(168,139,250,0.10) 1px,transparent 1px)", backgroundSize: "52px 52px" }} />
-        <div className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-3xl" style={{ background: "radial-gradient(circle, rgba(124,58,237,0.55) 0%, transparent 70%)" }} />
-
-        {/* Filter panel (right, RTL) */}
-        <div className="absolute right-5 top-5 z-20 hidden w-56 flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md sm:flex">
-          <p className="text-[11px] font-black text-white/60">סינון מתקדם</p>
-          {filters.map((f) => (
-            <label key={f} className="flex items-center gap-2 text-[13px] font-semibold text-white/85">
-              <span className="grid h-4 w-4 place-items-center rounded border border-white/25 bg-white/5" />{f}
-            </label>
-          ))}
-          <div className="mt-1">
-            <div className="h-1 w-full rounded-full bg-white/15"><div className="h-1 w-2/3 rounded-full bg-brand-light" /></div>
-            <div className="mt-1 flex justify-between text-[10px] font-bold text-white/50"><span dir="ltr">₪10M</span><span dir="ltr">₪500K</span></div>
-          </div>
-          <span className="rounded-lg border border-white/15 bg-white/5 px-2 py-1.5 text-center text-[12px] font-bold text-white/80">הכל ▾</span>
-        </div>
-
-        {/* Hero bubble (center) */}
-        {hero && (
-          <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-            <div className="zono-pulse grid h-44 w-44 place-items-center rounded-full text-center" style={{ background: "radial-gradient(circle at 35% 30%, rgba(168,139,250,0.45), rgba(124,58,237,0.25))", border: "2px solid rgba(196,181,253,0.9)", boxShadow: "0 0 60px rgba(124,58,237,0.7), inset 0 0 40px rgba(168,139,250,0.4)" }}>
-              <div>
-                <p className="text-sm font-bold text-white/85">{hero.name}</p>
-                <p className="text-4xl font-black text-white">{Math.abs(hero.deltaPct)}%</p>
-                <p className="text-[11px] font-semibold text-white/70">פוטנציאל</p>
-                <p className="text-sm font-black text-brand-light" dir="ltr">{ilsC(hero.avgPrice)}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Satellite bubbles positioned by heat-zone coordinates */}
-        {rest.map((z) => {
-          const size = Math.max(76, Math.min(130, z.radius * 1.6));
-          return (
-            <div key={z.id} className="absolute z-10 -translate-x-1/2 -translate-y-1/2" style={{ top: `${Math.min(82, Math.max(16, z.top))}%`, left: `${Math.min(86, Math.max(14, z.left))}%` }}>
-              <div className="grid place-items-center rounded-full text-center" style={{ height: size, width: size, background: "rgba(255,255,255,0.04)", border: `2px solid ${BUBBLE_TONE[z.tone] ?? BUBBLE_TONE.neutral}`, boxShadow: `0 0 28px ${BUBBLE_TONE[z.tone] ?? BUBBLE_TONE.neutral}` }}>
-                <div>
-                  <p className="text-[11px] font-bold text-white/80">{z.name}</p>
-                  <p className="text-lg font-black text-white">{Math.abs(z.deltaPct)}%</p>
-                  <p className="text-[10px] font-semibold text-brand-light" dir="ltr">{ilsC(z.avgPrice)}</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {zones.map((z, i) => {
+            const accent = BUBBLE_TONE[z.tone] ?? BUBBLE_TONE.neutral;
+            return (
+              <div key={z.id} className="bg-card border-line relative overflow-hidden rounded-2xl border p-4 shadow-[var(--shadow-card)]">
+                <span className="absolute inset-y-0 start-0 w-1.5" style={{ background: accent }} />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ink truncate text-sm font-black">{i + 1}. {z.name}</span>
+                  <span className="text-muted text-[11px] font-bold">פוטנציאל</span>
                 </div>
+                <p className="text-ink mt-1 text-2xl font-black">{Math.abs(z.deltaPct)}%</p>
+                <p className="text-muted text-xs font-semibold" dir="ltr">{ilsC(z.avgPrice)}</p>
               </div>
-            </div>
-          );
-        })}
-
-        {/* Legend + zoom */}
-        <div className="absolute bottom-5 right-5 z-20 flex items-center gap-3 text-[11px] font-bold text-white/75">
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: BUBBLE_TONE.opportunity }} /> פוטנציאל גבוה</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-indigo-400" /> בינוני</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-slate-400" /> נמוך</span>
+            );
+          })}
         </div>
-        <div className="absolute bottom-5 left-5 z-20 flex flex-col gap-1.5">
-          {["Plus", "Minus", "Crosshair"].map((i) => <span key={i} className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80"><Icon name={i} size={16} /></span>)}
-        </div>
-      </div>
       )}
+      <p className="text-muted text-[11px]">מדדי ביקוש ומחיר לפי אזור. מפה גאוגרפית אמיתית זמינה במסך הנכסים, ותורחב עם השלמת קואורדינטות.</p>
     </section>
   );
 }

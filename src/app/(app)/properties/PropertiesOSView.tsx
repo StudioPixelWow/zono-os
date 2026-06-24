@@ -349,7 +349,7 @@ function MarketMapSection({ properties }: { properties: PropertyRow[] }) {
           <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">מחיר ממוצע</p><p className="text-ink text-lg font-black">{avg ? ilsCompact(avg) : "—"}</p></div>
           <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">ללא מיקום</p><p className="text-ink text-lg font-black">{properties.length - located.length}</p></div>
         </div>
-        <Link href="/market" className="bg-brand-soft text-brand-strong mt-auto rounded-xl px-3 py-2.5 text-center text-sm font-bold">פתח מפת שוק מלאה</Link>
+        <Link href="/market" className="bg-brand-soft text-brand-strong mt-auto rounded-xl px-3 py-2.5 text-center text-sm font-bold">פתח מודיעין שוק מלא</Link>
       </div>
     </div>
   );

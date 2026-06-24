@@ -64,7 +64,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "revenue", label: "הכנסות", icon: "BarChart3", tier: "advanced" },
     { id: "territories", label: "טריטוריות", icon: "Map", tier: "advanced" },
     { id: "transactions", label: "שוק ועסקאות", icon: "Landmark", tier: "advanced" },
-    { id: "map", label: "מפה חכמה", icon: "Map", tier: "advanced" },
+    { id: "map", label: "מודיעין שוק", icon: "Map", tier: "advanced" },
     { id: "competitors", label: "מתחרים", icon: "BarChart3", tier: "advanced" },
     { id: "acquisition", label: "גיוס נכסים", icon: "Building", tier: "advanced" },
     { id: "graph", label: "קשרים עסקיים", icon: "Sparkles", tier: "hidden" },

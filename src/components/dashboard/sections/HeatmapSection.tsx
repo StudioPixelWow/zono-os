@@ -47,8 +47,8 @@ export function HeatmapSection({ neighborhoods = heatNeighborhoods, insight = he
         <div className="bg-card border-line grid min-h-[220px] place-items-center rounded-[24px] border p-6 text-center shadow-[var(--shadow-card)]">
           <div>
             <p className="text-ink text-sm font-extrabold">אין עדיין נתוני ביקוש שכונתי</p>
-            <p className="text-muted mx-auto mt-1 max-w-xs text-xs">חשב מפת ביקוש במסך מפת השוק כדי לבנות את המודיעין מנתוני המודעות, הקונים והנכסים שלך.</p>
-            <Link href="/market" className="text-brand-strong mt-3 inline-block text-sm font-bold">למסך מפת השוק ←</Link>
+            <p className="text-muted mx-auto mt-1 max-w-xs text-xs">חשב מדדי ביקוש במסך מודיעין השוק כדי לבנות את המודיעין מנתוני המודעות, הקונים והנכסים שלך.</p>
+            <Link href="/market" className="text-brand-strong mt-3 inline-block text-sm font-bold">למסך מודיעין השוק ←</Link>
           </div>
         </div>
       ) : (
@@ -96,7 +96,7 @@ export function HeatmapSection({ neighborhoods = heatNeighborhoods, insight = he
             </div>
             <Link href="/market" className="bg-brand hover:bg-brand-strong mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition">
               <Icon name="Map" size={16} />
-              למסך מפת השוק
+              למסך מודיעין השוק
             </Link>
             <p className="text-muted text-[11px]">מפה גאוגרפית מלאה תתווסף עם תשתית הגבולות (פוליגונים).</p>
           </div>

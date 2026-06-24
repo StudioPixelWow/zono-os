@@ -100,7 +100,7 @@ export function RoutingView({ board }: { board: RoutingBoard }) {
 
           {/* Territory intelligence / team heatmap */}
           <div className="bg-card border-line rounded-[20px] border p-4">
-            <p className="text-ink mb-2 text-sm font-extrabold">מפת חום צוותית — מוביל לפי אזור</p>
+            <p className="text-ink mb-2 text-sm font-extrabold">מוביל לפי אזור (צוות)</p>
             {territory.length === 0 ? <p className="text-muted text-sm">אין נתוני טריטוריה</p> : (
               <ul className="flex flex-col gap-1.5">
                 {territory.map((t) => (

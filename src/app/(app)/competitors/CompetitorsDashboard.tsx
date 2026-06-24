@@ -209,7 +209,7 @@ function HeatMap({ localities }: { localities: Board["localities"] }) {
   const tone = (c: number) => (c >= 70 ? "bg-danger/25 text-danger" : c >= 45 ? "bg-warning/30 text-warning" : "bg-success/30 text-success");
   return (
     <div className="bg-card border-line flex flex-col gap-3 rounded-[22px] border p-4 shadow-[var(--shadow-card)]">
-      <SectionHead title="מפת תחרות — שליטה בשכונות" />
+      <SectionHead title="שליטה תחרותית בשכונות" />
       <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-gradient-to-br from-sky-50 via-surface to-brand-soft/40">
         <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(var(--color-line) 1px,transparent 1px),linear-gradient(90deg,var(--color-line) 1px,transparent 1px)", backgroundSize: "44px 44px", opacity: 0.4 }} />
         {top.map((l, i) => {
