@@ -51,10 +51,12 @@ const TEMPLATE_OPTIONS: Record<ConceptTrigger, DesignFamily[]> = {
 };
 const DARK_TEMPLATES: DesignFamily[] = ["penthouse_collection", "luxury_dark", "urban_prestige"];
 const FINAL_ADS = 2; // expensive image generations per run (down from 4)
+// CREATIVE-FIRST / AI-ONLY: a property creative is ONLY ever a real AI-generated
+// ad image — the deterministic template renderer is never used as a creative.
+// (legacy doc retained below)
 // FINAL_AD_IMAGE_ONLY: a creative is ONLY a real AI-generated ad image — never a
 // deterministic card render. On failure we surface an error instead of a card.
-// Default ON; set ZONO_FINAL_AD_IMAGE_ONLY="false" to re-enable the legacy fallback.
-const FINAL_AD_IMAGE_ONLY = process.env.ZONO_FINAL_AD_IMAGE_ONLY !== "false";
+// (always on now — no env toggle; templates are never used as creatives.)
 
 /** PROPERTY AD path: build EXACTLY the 4 required, strategically-distinct
  *  concepts (family / investment / luxury / price_advantage). Each gets its own
@@ -364,27 +366,18 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
               creative_selection_metadata: { ...selMeta, mode: passed ? "ai_full_ad" : "ai_self_correct", trigger: b.trigger, isTopConcept: isTop, wow: w, qa: outcome.scores, attempts: outcome.attempts, warning: outcome.warning, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
             };
           }
-          // No image at all (no provider, or generation threw). With strict mode ON
-          // (default) we surface an explicit error instead of a deterministic card.
-          if (FINAL_AD_IMAGE_ONLY) {
-            return { ...base, status: "failed",
-              render_data: { failed: true, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel } } as unknown as Json,
-              image_url: null, image_provider: outcome.provider, image_status: "failed",
-              image_error: (outcome.status === "no_provider" ? "ספק AI לא מוגדר (OPENAI_API_KEY / ZONO_IMAGE_PROVIDER=openai)" : (outcome.failReasons.join(" · ") || "יצירת התמונה נכשלה")).slice(0, 500),
-              quality_status: "failed",
-              critic_summary: `יצירת התמונה נכשלה — ${outcome.status === "no_provider" ? "ספק ה-AI אינו מוגדר" : "לא הופקה תמונה"} (${b.triggerLabel}).`,
-              is_hidden_due_to_quality: true,
-              creative_selection_metadata: { ...selMeta, mode: "failed", trigger: b.trigger, isTopConcept: isTop, wow: w, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
-            };
-          }
-          // Legacy fallback (only when strict mode is explicitly disabled): deterministic render.
-          const layoutOk = b.designPlan.layout?.approved !== false;
-          return { ...base,
-            render_data: b.render as unknown as Json,
-            image_status: outcome.status === "no_provider" ? "no_provider" : "manual_review", image_error: outcome.failReasons.join(" · ").slice(0, 500) || null,
-            quality_status: layoutOk && w.approved ? "passed" : "below_threshold",
-            critic_summary: `${isTop ? "★ קונספט מוביל. " : ""}${b.designPlan.familyLabel} · ${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — אף גרסת AI לא עברה QA אחרי כל הניסיונות (ממתין לבדיקה ידנית)"}.`,
-            creative_selection_metadata: { ...selMeta, mode: "fallback", family: b.designPlan.family, depId: b.designPlan.depId, trigger: b.trigger, isTopConcept: isTop, wow: w, layout: b.designPlan.layout, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+          // CREATIVE-FIRST / AI-ONLY: a property ad is ONLY ever a real AI-generated
+          // campaign image. We NEVER fall back to the deterministic template renderer
+          // (that is exactly the "photo + text overlay / template" look we reject).
+          // When no AI image was produced, surface an explicit error — never a template.
+          return { ...base, status: "failed",
+            render_data: { failed: true, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel } } as unknown as Json,
+            image_url: null, image_provider: outcome.provider, image_status: "failed",
+            image_error: (outcome.status === "no_provider" ? "ספק AI לא מוגדר (OPENAI_API_KEY / ZONO_IMAGE_PROVIDER=openai)" : (outcome.failReasons.join(" · ") || "יצירת התמונה נכשלה")).slice(0, 500),
+            quality_status: "failed",
+            critic_summary: `יצירת התמונה נכשלה — ${outcome.status === "no_provider" ? "ספק ה-AI אינו מוגדר" : "לא הופקה תמונה"} (${b.triggerLabel}).`,
+            is_hidden_due_to_quality: true,
+            creative_selection_metadata: { ...selMeta, mode: "failed", trigger: b.trigger, isTopConcept: isTop, wow: w, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
           };
         }),
       );

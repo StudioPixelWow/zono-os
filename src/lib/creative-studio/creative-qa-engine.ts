@@ -22,7 +22,9 @@ type DB = Awaited<ReturnType<typeof createClient>>;
 // Cap retries at 3 (was 5). Combined with a per-image timeout and parallel
 // generation of the 2 final ads, this keeps worst-case wall-clock to a few
 // minutes instead of ~10. Override with ZONO_CREATIVE_MAX_ATTEMPTS if needed.
-const MAX_ATTEMPTS = Math.max(1, Number(process.env.ZONO_CREATIVE_MAX_ATTEMPTS) || 3);
+// Creative-first: slow generation is acceptable — give the art director more
+// attempts to reach a premium, non-templated result (override with env).
+const MAX_ATTEMPTS = Math.max(1, Number(process.env.ZONO_CREATIVE_MAX_ATTEMPTS) || 4);
 
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
@@ -79,7 +81,9 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   // — never blocking the user.
   type BestCandidate = { scores: QaScores; creativeWow: number | null; imageUrl: string };
   let best: BestCandidate | null = null;
-  const bestRank = (c: BestCandidate) => c.scores.overall + (c.creativeWow ?? 0) / 100;
+  // Creative-first ranking: the Creative Director's WOW dominates; correctness
+  // overall is a light tiebreaker.
+  const bestRank = (c: BestCandidate) => (c.creativeWow ?? 0) * 10 + c.scores.overall;
   let prevImageUrl: string | null = null;
 
   for (let n = 1; n <= MAX_ATTEMPTS; n++) {
@@ -98,24 +102,28 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
     const imageUrl = upErr ? null : db.storage.from(p.bucket).getPublicUrl(path).data.publicUrl;
     if (imageUrl) prevImageUrl = imageUrl;
 
-    // LAYER 1 — correctness QA (deterministic).
+    // CREATIVE-FIRST MODE — the Creative Director outranks the QA checklist.
+    // Correctness QA still runs, but ONLY hard DATA errors (wrong phone/price/
+    // agent/city, broken Hebrew, missing sale-label/address, wrong logo/face) can
+    // block; the soft score thresholds no longer gate. The Creative Director
+    // (desirability) is the primary approval gate — a beautiful, art-directed ad
+    // is the goal, never a "correct but templated" one.
     const findings = await runCreativeQA(img.b64, manifest, p.assets);
     const critical = findings ? deriveCritical(findings, manifest) : allCriticalFail();
     const scores = assembleScores(findings, critical);
     const decision = decideApproval(scores, critical);
+    const criticalClean = decision.criticalFailures.length === 0;
 
-    // LAYER 2 — Creative QA (desirability). Only judged once correctness passes;
-    // BOTH layers must pass to approve. A correct-but-weak ad is regenerated.
-    let creative: CreativeFindings | null = null;
-    let creativeDecision = { passed: false, reasons: ["—"], hardFailures: [] as string[] };
-    if (decision.passed) {
-      creative = await runCreativeDirectorQA(img.b64);
-      creativeDecision = creative
-        ? decideCreative(creative.scores, creative.hardFails, creative.proudToPublish)
-        : { passed: false, reasons: ["Creative QA לא זמין"], hardFailures: [] };
-    }
-    const approved = decision.passed && creativeDecision.passed;
-    const combinedFail = [...decision.failReasons, ...(decision.passed ? creativeDecision.reasons : [])];
+    // LAYER 2 — Creative QA runs EVERY attempt (the primary gate), not gated on
+    // the correctness checklist.
+    const creative: CreativeFindings | null = await runCreativeDirectorQA(img.b64);
+    const creativeDecision = creative
+      ? decideCreative(creative.scores, creative.hardFails, creative.proudToPublish)
+      : { passed: false, reasons: ["Creative QA לא זמין"], hardFailures: [] as string[] };
+
+    // Approve when the Creative Director is proud AND no critical DATA error remains.
+    const approved = creativeDecision.passed && criticalClean;
+    const combinedFail = [...decision.criticalFailures, ...creativeDecision.reasons];
 
     const attemptId = await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl, passed: approved, scores, failReasons: combinedFail, findings, manifest, critical, creative: creative?.scores ?? null });
 
@@ -123,16 +131,16 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
       if (generationId) await db.from("creative_generations").update({ status: "approved", final_image_url: imageUrl, approved_attempt_id: attemptId, attempts_count: n, overall_score: creative?.scores.overallWow ?? scores.overall } as never).eq("id", generationId);
       return { status: "approved", generationId, imageUrl, provider: "openai", scores, creativeWow: creative?.scores.overallWow ?? null, attempts: n, failReasons: [], warning: null };
     }
-    // Keep the BEST generated image so the retry budget returns the strongest
-    // candidate (with a review warning), never blocking the user.
+    // Keep the BEST generated image (ranked by creative WOW first) so the retry
+    // budget returns the strongest candidate, never blocking the user.
     if (imageUrl) {
       const cand: BestCandidate = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl };
       if (!best || bestRank(cand) > bestRank(best)) best = cand;
     }
-    // Build the next correction: fix correctness first; if correct but not
-    // desirable, send the creative-director's design feedback instead.
-    if (!decision.passed) correction = buildCorrectionPrompt(decision, critical, manifest);
-    else if (creative && !creativeDecision.passed) correction = buildCreativeCorrection(creative.scores, creative.hardFails);
+    // Next correction — CREATIVE FIRST: redesign for desirability unless a hard
+    // DATA error must be fixed; then it's a light text-only correction.
+    if (creative && !creativeDecision.passed) correction = buildCreativeCorrection(creative.scores, creative.hardFails);
+    else if (!criticalClean) correction = buildCorrectionPrompt(decision, critical, manifest);
     allFail.push(...combinedFail);
   }
 

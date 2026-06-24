@@ -123,15 +123,17 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
         : "Campaign type: a lifestyle acquisition campaign for a property on the market.";
 
   const lines = [
-    'ZONO PREMIUM REAL ESTATE CREATIVE ENGINE — create a premium real-estate ADVERTISING CAMPAIGN image. This is NOT a property listing, NOT a sales flyer, NOT a Facebook card. Create a LIFESTYLE ACQUISITION CAMPAIGN. The viewer must feel "I want to live there" BEFORE they think "this property is for sale". Sell emotion before information, atmosphere before specifications, ownership before features.',
+    'ZONO PREMIUM REAL ESTATE CREATIVE ENGINE — CREATIVE-FIRST MODE. You are an AWARD-WINNING ART DIRECTOR designing a premium real-estate ADVERTISING CAMPAIGN from scratch. DESIGN the advertisement — do not place text blocks over a photo. The viewer must feel "I want to live there" BEFORE they think "this property is for sale". Sell emotion before information, atmosphere before specifications, ownership before features.',
+    "ABSOLUTELY FORBIDDEN (this is the #1 rule): do NOT produce a plain property photo with a text overlay; do NOT produce a template, a card, a flyer, a listing layout, a Canva/Wix-style composition, or a real-estate post. If the result looks like a photo with text slapped on top, it is REJECTED. The output must look ART-DIRECTED: a designed campaign with intentional composition, layered depth, editorial typography and a clear creative concept — like a real human art director made it.",
+    "REFERENCE BAR — every ad must feel like: Architectural Digest, a luxury developer launch campaign, a premium real-estate brochure, or Apple-style marketing. Cinematic, expensive, editorial, aspirational.",
     kindLine,
     `Concept: ${spec.conceptLabel}. Property brief: ${brief}.`,
     refs.length ? `SUPPLIED ASSETS — ${refs.join("; ")}. Use ALL supplied assets; never invent or substitute any of them.` : "",
 
-    // ── PROMPT PRIORITY (spec §7) ─────────────────────────────────────────────
-    "PROMPT PRIORITY (in order): (1) VISUAL QUALITY — a stunning, premium, scroll-stopping creative; (2) EXACT TEXT PRESERVATION — every Hebrew string spelled exactly as locked below; (3) BRAND CONSISTENCY. Never sacrifice visual quality for QA, and never turn this into a boring, generic, templated layout.",
+    // ── PRIORITY: CREATIVE DIRECTOR > QA ──────────────────────────────────────
+    "PRIORITY (in order): (1) CREATIVE EXCELLENCE — a stunning, art-directed, scroll-stopping campaign is the primary KPI; spend the effort to make it beautiful; (2) EXACT TEXT PRESERVATION — every Hebrew string spelled exactly as locked below; (3) BRAND CONSISTENCY. Creative quality outranks validation: never flatten the design into a safe template to satisfy a checklist. A boring, templated, or overlay-style layout is a FAILURE even if every word is correct.",
 
-    "PROPERTY HERO RULE: the property is the hero. Property photography occupies ~70–80% of the composition. Nothing may visually overpower or compete with the property — no oversized logos, no aggressive overlays, no marketing gimmicks. Treat the property image like a luxury architectural-magazine cover.",
+    "PROPERTY HERO RULE: the real property photography is the hero and the emotional anchor (~65–80% of the frame), integrated into a DESIGNED composition — not a full-bleed photo with a caption. Use art-director techniques: cinematic crop, depth, negative space, an elegant type system, refined dividers and brand accents. Treat it like a luxury architectural-magazine COVER, not a property card.",
     "VISUAL STORYTELLING: respect architecture, composition, interior design, lighting and depth. Do not cover important rooms or block architectural features. Let the property breathe and create desire through atmosphere.",
 
     // ── TEXT-LOCK (spec §3) — EXACT strings, never altered ─────────────────────
@@ -150,8 +152,8 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     // ── TEXT HIERARCHY (spec §2) ──────────────────────────────────────────────
     "TEXT HIERARCHY (top → bottom of importance and visual weight): {{sale_label}} → {{headline}} → {{property_address}} → {{price}} / CTA / agent. The sale label and the address must both be unmistakably visible.",
 
-    // ── TEXT REDUCTION (spec §4 + §11) ────────────────────────────────────────
-    "TEXT REDUCTION: keep total Hebrew text minimal — the fewer text fields the model renders, the higher the typography quality. Mandatory text only: the sale label, the headline, the property address, the price, the agent name and the phone. Do NOT render long feature paragraphs, crowded specification rows, or any text not locked above.",
+    // ── TEXT REDUCTION (spec §4 + §11) — to free the ART DIRECTOR, not to bare the photo ──
+    "TEXT ECONOMY: keep the worded text minimal so the DESIGN can breathe — fewer words means more room for art direction and higher typography quality. The mandatory words are only: the sale label, the headline, the property address, the price, the agent name and the phone. But minimal text does NOT mean a bare photo with a caption — the reduced text must be set as DESIGNED, editorial typography that is part of the composition. NEVER render feature paragraphs, specification rows, bullet lists, or spec tables — convert every property attribute into the premium icon system below.",
 
     // ── PROPERTY FEATURES AS ICONS (spec §10) ─────────────────────────────────
     iconSpecs.length
