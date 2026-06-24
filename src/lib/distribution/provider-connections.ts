@@ -136,16 +136,38 @@ export const providerConnectionRepository = {
     externalAccountId: string | null;
     displayName: string | null;
   }): Promise<boolean> {
-    const s = await scope(); if (!s) return false;
-    const { error } = await s.db.from(TABLE as never).upsert({
+    const s = await scope();
+    if (!s) {
+      // No org/session scope — the save cannot be attempted (RLS would reject anyway).
+      console.error("[provider-connections] storeMetaConnection: NO SCOPE (missing session/org_id) — cannot persist");
+      return false;
+    }
+    console.log(
+      `[provider-connections] storeMetaConnection: upserting table=${TABLE} org_id=${s.orgId} provider=facebook ` +
+      `status=connected mode=api external_account_id=${input.externalAccountId ?? "null"} ` +
+      `display_name=${input.displayName ?? "null"} scopes=${JSON.stringify(input.scopes)} ` +
+      `token_present=${input.accessTokenEncrypted ? "yes(encrypted)" : "no"} ` +
+      `token_expires_at=${input.tokenExpiresAt ?? "null"}`,
+    );
+    const { data, error } = await s.db.from(TABLE as never).upsert({
       org_id: s.orgId, provider: "facebook", status: "connected", connection_mode: "api",
       display_name: input.displayName, external_account_id: input.externalAccountId,
       access_token_encrypted: input.accessTokenEncrypted,
       refresh_token_encrypted: input.refreshTokenEncrypted ?? null,
       token_expires_at: input.tokenExpiresAt ?? null,
       scopes: input.scopes, last_validated_at: new Date().toISOString(), created_by: s.userId,
-    } as never, { onConflict: "org_id,provider" } as never);
-    if (error) { console.error("[provider-connections] storeMetaConnection failed"); return false; }
+    } as never, { onConflict: "org_id,provider" } as never).select("id").maybeSingle();
+    if (error) {
+      // Log the real failure cause (code/message/details/hint) — never the token.
+      // A common cause is RLS: the insert/update policy requires has_min_role('agent').
+      console.error(
+        `[provider-connections] storeMetaConnection FAILED on table=${TABLE} org_id=${s.orgId}: ` +
+        `code=${error.code ?? "?"} message=${error.message ?? "?"} ` +
+        `details=${(error as { details?: string }).details ?? "?"} hint=${(error as { hint?: string }).hint ?? "?"}`,
+      );
+      return false;
+    }
+    console.log(`[provider-connections] storeMetaConnection OK — row id=${(data as { id?: string } | null)?.id ?? "(no row returned)"}`);
     return true;
   },
 
