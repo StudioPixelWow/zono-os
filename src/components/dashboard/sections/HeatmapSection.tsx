@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
 import { SectionShell } from "../SectionShell";
 import { ZonoOrb } from "../FloatingAssistant";
+import { WhyButton } from "@/components/explainability/WhyButton";
 
 // Phase 24.2 — this was a fake SVG "heatmap": real locality demand data was
 // painted onto hardcoded polygon slots (fake geography). Per the no-fake-map
@@ -63,16 +64,15 @@ export function HeatmapSection({ neighborhoods = heatNeighborhoods, insight = he
                     {n.label && <span className="text-muted truncate text-xs">· {n.label}</span>}
                   </span>
                   {/* Real opportunity score (0–100), explainable — not a decorative %. */}
-                  <span className={cn("shrink-0 text-sm font-black", changeColor[n.tone])}>
-                    {n.score != null ? `${n.score}/100` : `${n.changePct > 0 ? "+" : ""}${n.changePct}%`}
+                  <span className="flex shrink-0 items-center gap-2">
+                    {n.reasons && n.reasons.length > 0 && (
+                      <WhyButton reasons={n.reasons} source="נתוני שוק אמיתיים (קונים · מודעות · עסקאות · היסטוריה)" />
+                    )}
+                    <span className={cn("text-sm font-black", changeColor[n.tone])}>
+                      {n.score != null ? `${n.score}/100` : `${n.changePct > 0 ? "+" : ""}${n.changePct}%`}
+                    </span>
                   </span>
                 </div>
-                {/* Explainability: top reasons behind the score (no black box). */}
-                {n.reasons && n.reasons.length > 0 && (
-                  <ul className="text-muted ms-5 list-disc space-y-0.5 pe-2 text-[11px] leading-snug">
-                    {n.reasons.slice(0, 3).map((reason, ri) => <li key={ri}>{reason}</li>)}
-                  </ul>
-                )}
               </div>
             ))}
             {insight && (
