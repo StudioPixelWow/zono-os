@@ -64,7 +64,7 @@ export const ENGINES: EngineDef[] = [
     run: async () => { const r = await recomputeAgentTwinsForOrg(); return { rows: r.agents, summary: { ...r } }; } },
   { key: "team", label: "מודיעין צוות", category: "team", deps: ["routing"], stalenessHours: 24,
     run: async () => { const r = await recomputeTeamIntelligence(); return { rows: r.agents, summary: { ...r } }; } },
-  { key: "graph", label: "מפת קשרים", category: "graph", deps: ["transactions"], stalenessHours: 24,
+  { key: "graph", label: "קשרים עסקיים", category: "graph", deps: ["transactions"], stalenessHours: 24,
     run: async () => { const r = await generateKnowledgeGraph(); return { rows: r.nodes, summary: { ...r } }; } },
   { key: "marketing", label: "מודיעין שיווק", category: "marketing", deps: [], stalenessHours: 48,
     run: async () => { const r = await recomputeMarketingIntelligence(); return { rows: sum(r as unknown as Record<string, unknown>), summary: { ...r } }; } },

@@ -29,7 +29,7 @@ export async function RelationshipSection({ entityType, entityId }: { entityType
       <div className="mb-3 flex items-center gap-2">
         <span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Route" size={16} /></span>
         <h3 className="text-ink text-sm font-extrabold">מודיעין קשרים</h3>
-        <Link href="/graph" className="text-brand-strong mr-auto text-xs font-bold hover:underline">למפת הקשרים ←</Link>
+        <Link href="/graph" className="text-brand-strong mr-auto text-xs font-bold hover:underline">לתובנות הקשרים ←</Link>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[...groups.entries()].map(([typeLabel, list]) => (

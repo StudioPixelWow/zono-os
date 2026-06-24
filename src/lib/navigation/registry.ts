@@ -35,7 +35,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "revenue", label: "הכנסות", route: "/revenue", icon: "BarChart3", category: "מודיעין", roleMin: "manager", sidebar: true, searchable: true },
   { id: "routing", label: "ניתוב לידים", route: "/routing", icon: "Route", category: "מודיעין", roleMin: "manager", sidebar: true, searchable: true },
   { id: "team", label: "מודיעין צוות", route: "/team", icon: "UserCheck", category: "מודיעין", roleMin: "manager", sidebar: true, searchable: true },
-  { id: "graph", label: "מפת קשרים", route: "/graph", icon: "Sparkles", category: "מודיעין", roleMin: "agent", sidebar: true, searchable: true },
+  { id: "graph", label: "קשרים עסקיים", route: "/graph", icon: "Sparkles", category: "מודיעין", roleMin: "agent", sidebar: true, searchable: true },
   { id: "acquisition", label: "גיוס מלאי", route: "/acquisition", icon: "Building2", category: "מודיעין", roleMin: "agent", sidebar: true, searchable: true },
 
   // ── שוק ועסקאות ──

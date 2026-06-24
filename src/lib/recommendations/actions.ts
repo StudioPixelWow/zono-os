@@ -55,7 +55,7 @@ export async function buildRecommendationPackageAction(entityType: string, entit
   return run(() => buildRecommendationPackage(entityType, entityId, packageType), (r) => `נבנתה חבילה עם ${(r as { recommendations: number }).recommendations} המלצות`);
 }
 export async function generateRecommendationMapPointsAction(): Promise<RecActionState> {
-  return run(() => generateRecommendationMapPoints(), (r) => `${(r as { points: number }).points} נקודות על המפה`);
+  return run(() => generateRecommendationMapPoints(), (r) => `${(r as { points: number }).points} אזורים עודכנו`);
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────

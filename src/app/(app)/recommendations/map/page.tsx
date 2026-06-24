@@ -19,9 +19,9 @@ export default async function RecommendationMapPage() {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">Recommendation Map</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">מפת המלצות</h1>
-          <p className="text-muted mt-1 text-sm">צפיפות המלצות, ביקוש וביטחון לפי עיר/שכונה. תצוגת רשימה (מפה גרפית בהמשך).</p>
+          <p className="text-brand text-xs font-bold">ZONO · אזורי ביקוש</p>
+          <h1 className="text-ink mt-1 text-2xl font-black">אזורי ביקוש</h1>
+          <p className="text-muted mt-1 text-sm">צפיפות המלצות, ביקוש וביטחון לפי עיר/שכונה. תצוגת מפה אינטראקטיבית תתווסף בהמשך.</p>
         </div>
         <Link href="/recommendations" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />חזרה למודיעין</Link>
       </div>

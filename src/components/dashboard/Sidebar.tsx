@@ -58,7 +58,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "transactions", label: "שוק ועסקאות", icon: "Landmark" },
     { id: "competitors", label: "מתחרים", icon: "BarChart3" },
     { id: "acquisition", label: "גיוס נכסים", icon: "Building" },
-    { id: "graph", label: "מפת קשרים", icon: "Sparkles" },
+    { id: "graph", label: "קשרים עסקיים", icon: "Sparkles" },
     { id: "map", label: "מפה חכמה", icon: "Map" },
   ]},
   { key: "marketing", label: "שיווק", icon: "Megaphone", items: [

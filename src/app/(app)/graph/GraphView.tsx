@@ -29,18 +29,18 @@ export function GraphView({ board }: { board: GraphBoard }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Knowledge Graph</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">מפת קשרים חכמה</h1>
+          <p className="text-brand text-xs font-bold">ZONO · קשרים עסקיים</p>
+          <h1 className="text-ink mt-1 text-2xl font-black">קשרי לקוחות ונכסים</h1>
           <p className="text-muted mt-1 text-sm">כל הקשרים בין קונים, מוכרים, נכסים, סוכנים, מתווכים ואזורים — והזדמנויות נסתרות שנובעות מהם.</p>
         </div>
-        <Button onClick={gen} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "בונה…" : "בנה את הגרף"}</Button>
+        <Button onClick={gen} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב קשרים"}</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
 
       {/* Command center */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="צמתים" value={cc.nodes} icon="Building2" />
+        <Stat label="ישויות" value={cc.nodes} icon="Building2" />
         <Stat label="קשרים" value={cc.edges} icon="Route" tone="text-brand-strong" />
         <Stat label="סיגנלים" value={cc.signals} icon="Sparkles" tone="text-success" />
         <Stat label="אשכולות קונים" value={cc.buyerClusters} icon="Users" />
@@ -48,11 +48,15 @@ export function GraphView({ board }: { board: GraphBoard }) {
         <Stat label="אזורים" value={cc.localities} icon="MapPin" />
       </div>
 
+      {cc.nodes > 0 && (
+        <p className="text-muted text-[11px]">תצוגת גרף ויזואלית (צמתים וקשרים) תתווסף בהמשך — כרגע מוצגות תובנות הקשרים בפורמט נתונים.</p>
+      )}
+
       {cc.nodes === 0 ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
           <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Route" size={26} /></span>
-          <p className="text-ink text-lg font-extrabold">הגרף עדיין לא נבנה</p>
-          <p className="text-muted max-w-sm text-sm">לחץ ״בנה את הגרף״ כדי לחבר את כל הישויות ולגלות הזדמנויות נסתרות.</p>
+          <p className="text-ink text-lg font-extrabold">הקשרים עדיין לא חושבו</p>
+          <p className="text-muted max-w-sm text-sm">לחץ ״חשב קשרים״ כדי לחבר את כל הישויות ולגלות הזדמנויות נסתרות.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

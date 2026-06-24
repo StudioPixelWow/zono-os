@@ -56,8 +56,8 @@ export function RecommendationsView({ cc }: { cc: RecommendationCommandCenter })
         </div>
         <div className="flex flex-wrap gap-2">
           <Button loading={pending && busyId === "all"} onClick={() => act("all", recomputeAllRecommendationsAction)} leadingIcon={<Icon name="Sparkles" size={16} />}>צור המלצות</Button>
-          <Link href="/recommendations/map" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="Map" size={15} />מפת המלצות</Link>
-          <Button size="sm" variant="secondary" loading={pending && busyId === "map"} onClick={() => act("map", generateRecommendationMapPointsAction)}>רענן מפה</Button>
+          <Link href="/recommendations/map" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="MapPin" size={15} />אזורי ביקוש</Link>
+          <Button size="sm" variant="secondary" loading={pending && busyId === "map"} onClick={() => act("map", generateRecommendationMapPointsAction)}>רענן אזורים</Button>
           <Button size="sm" variant="secondary" loading={pending && busyId === "expire"} onClick={() => act("expire", expireStaleRecommendationsAction)}>פוג ישנות</Button>
         </div>
       </div>
