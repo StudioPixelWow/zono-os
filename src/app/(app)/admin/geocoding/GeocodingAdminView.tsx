@@ -9,6 +9,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { geocodeMissingAction, type GeocodeEntity, type GeocodeRunResult } from "@/lib/maps/geocoding-actions";
+import type { GeoCoverageRow } from "@/lib/maps/geo-coverage";
 
 const ENTITIES: { key: GeocodeEntity; label: string; hint: string }[] = [
   { key: "properties", label: "נכסים", hint: "נכסים עם כתובת וללא קואורדינטות" },
@@ -16,7 +17,7 @@ const ENTITIES: { key: GeocodeEntity; label: string; hint: string }[] = [
   { key: "property_transactions", label: "עסקאות", hint: "עסקאות עם כתובת וללא קואורדינטות" },
 ];
 
-export function GeocodingAdminView() {
+export function GeocodingAdminView({ coverage = [] }: { coverage?: GeoCoverageRow[] }) {
   const runner = useActionRunner();
   const [results, setResults] = useState<Record<string, GeocodeRunResult>>({});
 
@@ -31,10 +32,31 @@ export function GeocodingAdminView() {
       <header className="mb-6 flex items-center gap-3">
         <span className="zono-gradient-glow grid h-11 w-11 place-items-center rounded-2xl text-white"><Icon name="MapPin" size={22} /></span>
         <div>
-          <h1 className="text-ink text-2xl font-black">גאוקודינג מיקומים</h1>
-          <p className="text-muted text-sm">משלים קואורדינטות אמיתיות לרשומות עם כתובת בלבד — כדי שיופיעו על המפה. ZONO לעולם לא ממציא מיקום.</p>
+          <h1 className="text-ink text-2xl font-black">מרכז מודיעין גאוגרפי</h1>
+          <p className="text-muted text-sm">כיסוי קואורדינטות אמיתי לכל ישות, והשלמת מיקומים חסרים. ZONO לעולם לא ממציא מיקום.</p>
         </div>
       </header>
+
+      {/* Coverage % per entity — real counts (located vs total). */}
+      {coverage.length > 0 && (
+        <div className="mb-6">
+          <p className="text-ink mb-2 text-sm font-black">כיסוי גאוגרפי</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {coverage.map((c) => (
+              <div key={c.key} className="border-line bg-card rounded-2xl border p-3 shadow-card">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ink truncate text-xs font-bold">{c.label}</span>
+                  <span className={`text-sm font-black ${c.pct >= 80 ? "text-success" : c.pct >= 40 ? "text-warning" : "text-danger"}`}>{c.pct}%</span>
+                </div>
+                <div className="bg-surface mt-2 h-1.5 w-full overflow-hidden rounded-full">
+                  <div className="bg-brand h-1.5 rounded-full" style={{ width: `${c.pct}%` }} />
+                </div>
+                <p className="text-muted mt-1.5 text-[11px]">{c.located}/{c.total} ממוקמים{c.missing ? ` · ${c.missing} חסרים` : ""}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {(runner.note || runner.error) && (
         <div className={`mb-4 rounded-xl border px-4 py-2 text-sm font-semibold ${runner.error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
