@@ -97,3 +97,50 @@ on `user_confirmed_published`** — never faked.
 3. Result capture: best-effort external post URL when the user shares it.
 4. Optional, policy-reviewed semi-automation — only if compliant with Meta terms
    and with explicit per-action user consent.
+
+---
+
+## Phase 21 — Group Publishing MVP
+
+### MVP flow
+```
+ZONO: add Facebook group(s) manually (name + URL + notes)
+  → select groups + write post text → "שלח לתוסף"
+     → one prepared distribution_posts row per group (status=scheduled,
+       metadata.channel_kind=facebook_group, destination_name/url) — NO server publish
+Extension popup: GET /next-post → shows group name, URL, text, image
+  → user: Open group / Open image / Copy text  (sends opened/copied events)
+  → user publishes BY HAND on Facebook
+  → user: "פרסמתי ✓" (optional URL) / "נכשל" / "דלג"
+     → POST /publish-result → ZONO marks published / failed / cancelled
+ZONO: per-group status (ממתין → נפתח → הועתק → פורסם/נכשל/דולג) with timestamps
+```
+
+### What is manual (assisted, not automated)
+- The user opens the group, copies the text, pastes it into Facebook, and clicks
+  Post themselves. ZONO never fills the Facebook form or clicks Post.
+- The user explicitly reports the outcome; `published` is set ONLY on the user's
+  confirmation.
+
+### What is NOT automated (intentionally)
+- No DOM auto-fill of the Facebook composer.
+- No auto-click "Post". No background/hidden posting.
+- No automatic group discovery (groups are added by hand).
+- No hard rate enforcement — only a soft recommended delay + warning.
+
+### Safety guarantees (MVP)
+- No Facebook cookies/passwords/session tokens read, stored, or transmitted.
+- Group/marketplace destinations store only name + URL + notes (no credentials).
+- Compliance banner shown; recommended 60–90s delay between groups.
+- Every publish requires explicit human confirmation; no fake success.
+
+### API endpoints (Phase 21)
+- `GET /api/extension/facebook/next-post` (group/marketplace posts)
+- `POST /api/extension/facebook/event` `{postId, event: opened|copied}` (assistive, non-publish)
+- `POST /api/extension/facebook/publish-result` `{postId, result, externalPostUrl?, errorMessage?}`
+  results: `user_confirmed_published | user_cancelled | failed | needs_manual_action | user_skipped`
+
+### Phase 22 plan (future, not built)
+Assisted auto-fill of the composer (text + image attach) while still requiring the
+user to click Post; per-group pacing scheduler; optional result-URL capture from
+the active tab — all gated on Meta-policy review and explicit per-action consent.

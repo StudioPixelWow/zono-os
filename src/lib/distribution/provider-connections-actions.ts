@@ -14,7 +14,11 @@ import {
 } from "./facebook-connection-paths";
 import { metaPagesService, type MetaPageDestinationView, type MetaIntegrationView, type SyncMetaPagesResult } from "./meta-pages";
 import { metaPublishService, type PublishResult } from "./meta-publish";
-import { startPairing, revokeAllInstances } from "./extension-service";
+import {
+  startPairing, revokeAllInstances,
+  addGroupDestination, listGroupDestinations, createGroupPublishTasks, listGroupTaskStatuses,
+  type GroupDestination, type GroupTaskStatus,
+} from "./extension-service";
 import { getSessionContext } from "@/lib/auth/session";
 
 export interface ConnActionResult<T = undefined> { ok: boolean; message?: string; data?: T }
@@ -122,6 +126,38 @@ export async function revokeExtensionAction(): Promise<ConnActionResult> {
   const ok = await revokeAllInstances(profile.org_id, profile.id ?? null);
   revalidate();
   return { ok, message: ok ? "התוסף נותק." : "ניתוק התוסף נכשל." };
+}
+
+// ── Phase 21: manual Facebook group destinations + group publish tasks ─────────
+
+export async function listFacebookGroupsAction(): Promise<GroupDestination[]> {
+  return listGroupDestinations();
+}
+
+export async function addFacebookGroupAction(input: {
+  destinationType: "facebook_group" | "facebook_marketplace"; name: string; url: string; notes?: string;
+}): Promise<ConnActionResult<GroupDestination>> {
+  if (!input.name?.trim() || !input.url?.trim()) return { ok: false, message: "יש להזין שם וקישור." };
+  const row = await addGroupDestination(input);
+  revalidate();
+  return row ? { ok: true, data: row, message: "הקבוצה נוספה." } : { ok: false, message: "הוספת הקבוצה נכשלה." };
+}
+
+/** Create one prepared publish task per selected group (assigned to the extension). No server publish. */
+export async function sendGroupPublishTasksAction(input: {
+  destinationIds: string[]; text: string; imageUrl?: string | null;
+}): Promise<ConnActionResult<{ created: number }>> {
+  if (!input.destinationIds?.length) return { ok: false, message: "בחר לפחות קבוצה אחת." };
+  if (!input.text?.trim()) return { ok: false, message: "כתוב טקסט לפוסט." };
+  const res = await createGroupPublishTasks(input);
+  revalidate();
+  return res.created > 0
+    ? { ok: true, data: res, message: `נשלחו ${res.created} משימות פרסום לתוסף.` }
+    : { ok: false, message: "יצירת משימות הפרסום נכשלה." };
+}
+
+export async function listGroupTaskStatusesAction(): Promise<GroupTaskStatus[]> {
+  return listGroupTaskStatuses();
 }
 
 /**

@@ -60,6 +60,17 @@ async function reportResult(payload) {
   return !!json.ok;
 }
 
+// Lightweight interaction event (opened | copied) — NOT a publish.
+async function reportEvent(postId, event) {
+  const creds = await getCreds();
+  if (!creds) return false;
+  const res = await fetch(`${ZONO_BASE}/api/extension/facebook/event`, {
+    method: "POST", headers: authHeaders(creds), body: JSON.stringify({ postId, event }),
+  });
+  const json = await res.json();
+  return !!json.ok;
+}
+
 // Periodic heartbeat (the content script supplies the session flag via message).
 chrome.alarms.create("heartbeat", { periodInMinutes: 5 });
 chrome.alarms.onAlarm.addListener((a) => {
@@ -71,6 +82,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === "PAIR") sendResponse(await completePairing(msg.code));
     else if (msg.type === "HEARTBEAT") { await heartbeat(msg.facebookSessionDetected, msg.facebookProfileName); sendResponse({ ok: true }); }
     else if (msg.type === "NEXT_POST") sendResponse({ post: await fetchNextPost() });
+    else if (msg.type === "EVENT") sendResponse({ ok: await reportEvent(msg.postId, msg.event) });
     else if (msg.type === "REPORT") sendResponse({ ok: await reportResult(msg.payload) });
   })();
   return true; // async response

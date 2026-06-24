@@ -9,7 +9,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authInstance, recordPublishResult, type PublishResultKind } from "@/lib/distribution/extension-service";
 
-const VALID: PublishResultKind[] = ["user_confirmed_published", "user_cancelled", "failed", "needs_manual_action"];
+const VALID: PublishResultKind[] = ["user_confirmed_published", "user_cancelled", "failed", "needs_manual_action", "user_skipped"];
 
 export async function POST(req: NextRequest) {
   const inst = await authInstance(req.headers.get("x-zono-instance-id"), req.headers.get("x-zono-extension-secret"));

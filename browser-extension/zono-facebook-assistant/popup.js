@@ -30,20 +30,38 @@ $("pairBtn").addEventListener("click", async () => {
 });
 
 $("copyBtn").addEventListener("click", async () => {
-  if (currentPost) { await navigator.clipboard.writeText(currentPost.text || ""); $("postMsg").textContent = "הטקסט הועתק"; }
+  if (!currentPost) return;
+  await navigator.clipboard.writeText(currentPost.text || "");
+  $("postMsg").textContent = "הטקסט הועתק";
+  send("EVENT", { postId: currentPost.postId, event: "copied" }); // assisted, not a publish
 });
 $("openBtn").addEventListener("click", () => {
-  if (currentPost && currentPost.destinationUrl) chrome.tabs.create({ url: currentPost.destinationUrl });
+  if (currentPost && currentPost.destinationUrl) {
+    chrome.tabs.create({ url: currentPost.destinationUrl });
+    send("EVENT", { postId: currentPost.postId, event: "opened" });
+  }
+});
+$("openImgBtn").addEventListener("click", () => {
+  const url = currentPost && currentPost.imageUrls && currentPost.imageUrls[0];
+  if (url) chrome.tabs.create({ url });
 });
 $("publishedBtn").addEventListener("click", async () => {
   if (!currentPost) return;
-  const r = await send("REPORT", { payload: { postId: currentPost.postId, result: "user_confirmed_published" } });
+  // Optional: capture the published post URL.
+  const url = prompt("הדבק קישור לפוסט שפורסם (לא חובה):") || null;
+  const r = await send("REPORT", { payload: { postId: currentPost.postId, result: "user_confirmed_published", externalPostUrl: url } });
   $("postMsg").textContent = r.ok ? "דווח כפורסם ✓" : "הדיווח נכשל";
   if (r.ok) await showNextPost();
 });
-$("cancelBtn").addEventListener("click", async () => {
+$("failedBtn").addEventListener("click", async () => {
   if (!currentPost) return;
-  await send("REPORT", { payload: { postId: currentPost.postId, result: "user_cancelled" } });
+  const reason = prompt("מה הסיבה לכשל? (לא חובה)") || null;
+  await send("REPORT", { payload: { postId: currentPost.postId, result: "failed", errorMessage: reason } });
+  await showNextPost();
+});
+$("skipBtn").addEventListener("click", async () => {
+  if (!currentPost) return;
+  await send("REPORT", { payload: { postId: currentPost.postId, result: "user_skipped" } });
   await showNextPost();
 });
 $("refreshBtn").addEventListener("click", showNextPost);

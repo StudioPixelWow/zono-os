@@ -15,10 +15,13 @@
 // ============================================================================
 import "server-only";
 import crypto from "node:crypto";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { isServiceRoleConfigured } from "@/lib/supabase/env";
+import { getSessionContext } from "@/lib/auth/session";
 import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
+
+type UserDb = Awaited<ReturnType<typeof createClient>>;
 
 const PAIRINGS = "facebook_extension_pairings";
 const INSTANCES = "facebook_extension_instances";
@@ -185,9 +188,11 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
   }) ?? rows.find((r) => !!r.group_id);
   if (!pick) return null;
 
-  let destinationName: string | null = null;
+  // Destination name/url: prefer metadata (Phase 21 manual group destinations),
+  // then a linked distribution_groups row, then the raw external URL.
+  let destinationName: string | null = (pick.metadata?.destination_name as string) ?? null;
   let destinationUrl: string | null = pick.external_destination_url ?? null;
-  if (pick.group_id) {
+  if (!destinationName && pick.group_id) {
     const { data: g } = await db.from(DIST.groups as never)
       .select("name,group_url").eq("id", pick.group_id).maybeSingle();
     const grp = g as { name?: string; group_url?: string } | null;
@@ -207,7 +212,7 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
 }
 
 // ── Publish result reporting (Part E) ─────────────────────────────────────────
-export type PublishResultKind = "user_confirmed_published" | "user_cancelled" | "failed" | "needs_manual_action";
+export type PublishResultKind = "user_confirmed_published" | "user_cancelled" | "failed" | "needs_manual_action" | "user_skipped";
 export interface PublishReport {
   postId: string;
   result: PublishResultKind;
@@ -222,11 +227,15 @@ export async function recordPublishResult(inst: AuthedInstance, report: PublishR
   let patch: Record<string, unknown>;
   switch (report.result) {
     case "user_confirmed_published":
-      patch = { status: "published", published_at: now, published_manually_at: now,
+      // published ONLY on human confirmation — stamps who + when.
+      patch = { status: "published", published_at: now, published_manually_at: now, published_by: inst.userId,
         external_post_url: report.externalPostUrl ?? null, failure_reason: null };
       break;
     case "user_cancelled":
       patch = { status: "cancelled", skipped_reason: "user_cancelled" };
+      break;
+    case "user_skipped":
+      patch = { status: "cancelled", skipped_reason: "user_skipped" };
       break;
     case "failed":
       patch = { status: "failed", failure_reason: (report.errorMessage ?? "extension reported failure").slice(0, 500) };
@@ -242,6 +251,107 @@ export async function recordPublishResult(inst: AuthedInstance, report: PublishR
   if (error) { console.error(`${LOG} recordPublishResult failed: ${error.message}`); return false; }
   console.log(`${LOG} org_id=${inst.orgId} post=${report.postId} result=${report.result}`);
   return true;
+}
+
+// ── Lightweight post events (Part E): opened / copied — stamps metadata. ──────
+export type PostEventKind = "opened" | "copied";
+export async function recordPostEvent(inst: AuthedInstance, postId: string, event: PostEventKind): Promise<boolean> {
+  const db = createServiceRoleClient();
+  const { data } = await db.from(DIST.posts as never)
+    .select("metadata").eq("id", postId).eq("org_id", inst.orgId).maybeSingle();
+  const meta = ((data as { metadata?: Record<string, unknown> } | null)?.metadata) ?? {};
+  const stamp = event === "opened" ? { opened_at: new Date().toISOString() } : { copied_at: new Date().toISOString() };
+  const { error } = await db.from(DIST.posts as never)
+    .update({ metadata: { ...meta, ...stamp } } as never).eq("id", postId).eq("org_id", inst.orgId);
+  return !error;
+}
+
+// ── Group destinations (Part A) — manual; RLS user client (logged-in agent) ───
+const DEST = "distribution_provider_destinations";
+
+export interface GroupDestination {
+  id: string; name: string; url: string | null; destinationType: string; notes: string | null; status: string; lastUsedAt: string | null;
+}
+
+async function userScope(): Promise<{ db: UserDb; orgId: string; userId: string | null } | null> {
+  const { profile } = await getSessionContext();
+  if (!profile?.org_id) return null;
+  return { db: await createClient(), orgId: profile.org_id, userId: profile.id ?? null };
+}
+
+/** Add a Facebook GROUP / MARKETPLACE destination manually (no discovery). */
+export async function addGroupDestination(input: {
+  destinationType: "facebook_group" | "facebook_marketplace"; name: string; url: string; notes?: string;
+}): Promise<GroupDestination | null> {
+  const s = await userScope(); if (!s) return null;
+  const { data, error } = await s.db.from(DEST as never).insert({
+    org_id: s.orgId, provider: "facebook", destination_type: input.destinationType,
+    name: input.name, destination_url: input.url || null, status: "active",
+    metadata: input.notes ? { notes: input.notes } : {}, created_by: s.userId,
+  } as never).select("id,name,destination_url,destination_type,status,metadata,last_used_at").maybeSingle();
+  if (error) { console.error(`${LOG} addGroupDestination failed: ${error.message}`); return null; }
+  if (!data) return null;
+  const r = data as unknown as { id: string; name: string | null; destination_url: string | null; destination_type: string; status: string; metadata: Record<string, unknown> | null; last_used_at: string | null };
+  return { id: r.id, name: r.name ?? "", url: r.destination_url, destinationType: r.destination_type, notes: (r.metadata?.notes as string) ?? null, status: r.status, lastUsedAt: r.last_used_at };
+}
+
+/** List the org's manually-added Facebook group/marketplace destinations. */
+export async function listGroupDestinations(): Promise<GroupDestination[]> {
+  const s = await userScope(); if (!s) return [];
+  const { data } = await s.db.from(DEST as never)
+    .select("id,name,destination_url,destination_type,status,metadata,last_used_at")
+    .eq("org_id", s.orgId).eq("provider", "facebook")
+    .in("destination_type", ["facebook_group", "facebook_marketplace"] as never)
+    .order("name", { ascending: true });
+  return ((data ?? []) as unknown as Array<{ id: string; name: string | null; destination_url: string | null; destination_type: string; status: string; metadata: Record<string, unknown> | null; last_used_at: string | null }>)
+    .map((r) => ({ id: r.id, name: r.name ?? "", url: r.destination_url, destinationType: r.destination_type, notes: (r.metadata?.notes as string) ?? null, status: r.status, lastUsedAt: r.last_used_at }));
+}
+
+// ── Create prepared publish TASKS for selected groups (Part B) ────────────────
+export interface GroupTaskInput { destinationIds: string[]; text: string; imageUrl?: string | null; hashtags?: string[] }
+
+/** Create one prepared distribution_post per selected group. No server publish. */
+export async function createGroupPublishTasks(input: GroupTaskInput): Promise<{ created: number }> {
+  const s = await userScope(); if (!s) return { created: 0 };
+  const dests = await listGroupDestinations();
+  const chosen = dests.filter((d) => input.destinationIds.includes(d.id));
+  if (chosen.length === 0) return { created: 0 };
+  const now = new Date().toISOString();
+  const rows = chosen.map((d) => ({
+    org_id: s.orgId, status: "scheduled", post_text: input.text, hashtags: input.hashtags ?? [],
+    image_url: input.imageUrl ?? null, external_destination_url: d.url,
+    provider: "facebook", provider_status: "manual", manual_publish_required: true,
+    metadata: { channel_kind: d.destinationType, destination_id: d.id, destination_name: d.name },
+    created_by: s.userId, scheduled_at: now,
+  }));
+  const { error } = await s.db.from(DIST.posts as never).insert(rows as never);
+  if (error) { console.error(`${LOG} createGroupPublishTasks failed: ${error.message}`); return { created: 0 }; }
+  // Stamp last_used_at on the chosen destinations (best-effort).
+  await s.db.from(DEST as never).update({ last_used_at: now } as never)
+    .eq("org_id", s.orgId).in("id", chosen.map((d) => d.id) as never);
+  return { created: rows.length };
+}
+
+// ── Per-group task status for the ZONO UI (Part E) ────────────────────────────
+export interface GroupTaskStatus {
+  postId: string; destinationName: string | null; status: string;
+  openedAt: string | null; copiedAt: string | null; publishedAt: string | null;
+  externalPostUrl: string | null; failureReason: string | null; skippedReason: string | null;
+}
+export async function listGroupTaskStatuses(limit = 50): Promise<GroupTaskStatus[]> {
+  const s = await userScope(); if (!s) return [];
+  const { data } = await s.db.from(DIST.posts as never)
+    .select("id,status,metadata,published_at,external_post_url,failure_reason,skipped_reason,created_at")
+    .eq("org_id", s.orgId).order("created_at", { ascending: false }).limit(200);
+  const rows = ((data ?? []) as unknown as Array<{ id: string; status: string; metadata: Record<string, unknown> | null; published_at: string | null; external_post_url: string | null; failure_reason: string | null; skipped_reason: string | null }>)
+    .filter((r) => { const k = r.metadata?.channel_kind as string; return k === "facebook_group" || k === "facebook_marketplace"; })
+    .slice(0, limit);
+  return rows.map((r) => ({
+    postId: r.id, destinationName: (r.metadata?.destination_name as string) ?? null, status: r.status,
+    openedAt: (r.metadata?.opened_at as string) ?? null, copiedAt: (r.metadata?.copied_at as string) ?? null,
+    publishedAt: r.published_at, externalPostUrl: r.external_post_url,
+    failureReason: r.failure_reason, skippedReason: r.skipped_reason,
+  }));
 }
 
 // ── helper: set chrome_extension path via service-role (explicit org) ─────────

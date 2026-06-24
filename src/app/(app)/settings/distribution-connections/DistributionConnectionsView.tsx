@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { ConnectionProvider, ConnectionStatus, ProviderConnectionView } from "@/lib/distribution/provider-connections";
 import type { FacebookPathView, FacebookPathStatus } from "@/lib/distribution/facebook-connection-paths";
 import type { MetaIntegrationView, MetaDestinationView } from "@/lib/distribution/meta-pages";
+import type { GroupDestination, GroupTaskStatus } from "@/lib/distribution/extension-service";
 import {
   getDistributionConnectionsAction,
   initializeManualFacebookConnectionAction,
@@ -26,6 +27,9 @@ import {
   publishToFacebookPageAction,
   startExtensionPairingAction,
   revokeExtensionAction,
+  addFacebookGroupAction,
+  sendGroupPublishTasksAction,
+  listGroupTaskStatusesAction,
 } from "@/lib/distribution/provider-connections-actions";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -68,7 +72,7 @@ function fmt(iso: string | null): string {
   catch { return "—"; }
 }
 
-export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false, metaIntegration = null }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean; metaIntegration?: MetaIntegrationView | null }) {
+export function DistributionConnectionsView({ initial, compliance, paths, metaConfigured = false, metaIntegration = null, groups = [], groupTasks = [] }: { initial: ProviderConnectionView[]; compliance: string[]; paths: { meta: FacebookPathView; extension: FacebookPathView } | null; metaConfigured?: boolean; metaIntegration?: MetaIntegrationView | null; groups?: GroupDestination[]; groupTasks?: GroupTaskStatus[] }) {
   const [conns, setConns] = useState<ProviderConnectionView[]>(initial);
   const [pages, setPages] = useState<MetaDestinationView[]>(metaIntegration?.pages ?? []);
   const [instagram, setInstagram] = useState<MetaDestinationView[]>(metaIntegration?.instagram ?? []);
@@ -121,6 +125,29 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
   const extVersion = typeof extMeta.version === "string" ? extMeta.version : null;
   const extProfile = typeof extMeta.facebook_profile_name === "string" ? extMeta.facebook_profile_name : null;
   const extSession = extMeta.facebook_session_detected === true;
+  const extReady = paths?.extension.status === "ready";
+
+  // Phase 21: Facebook group destinations + group publishing tasks.
+  const [groupList, setGroupList] = useState<GroupDestination[]>(groups);
+  const [tasks, setTasks] = useState<GroupTaskStatus[]>(groupTasks);
+  const [gName, setGName] = useState(""); const [gUrl, setGUrl] = useState(""); const [gNotes, setGNotes] = useState("");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [groupText, setGroupText] = useState("");
+  const toggleGroup = (id: string) => setSelected((s) => ({ ...s, [id]: !s[id] }));
+
+  const onAddGroup = () => runner.run(async () => {
+    const r = await addFacebookGroupAction({ destinationType: "facebook_group", name: gName, url: gUrl, notes: gNotes || undefined });
+    if (r.ok && r.data) { setGroupList((l) => [...l, r.data as GroupDestination]); setGName(""); setGUrl(""); setGNotes(""); return { ok: true, message: r.message }; }
+    return { ok: false, message: r.message ?? "הוספה נכשלה." };
+  }, { id: "add-group", pendingMessage: "מוסיף קבוצה…", success: (r) => r.message ?? null });
+
+  const selectedCount = Object.values(selected).filter(Boolean).length;
+  const onSendGroupTasks = () => runner.run(async () => {
+    const ids = Object.keys(selected).filter((id) => selected[id]);
+    const r = await sendGroupPublishTasksAction({ destinationIds: ids, text: groupText });
+    if (r.ok) { setTasks(await listGroupTaskStatusesAction()); setSelected({}); return { ok: true, message: r.message }; }
+    return { ok: false, message: r.message ?? "שליחה נכשלה." };
+  }, { id: "send-group-tasks", pendingMessage: "שולח לתוסף…", success: (r) => r.message ?? null });
 
   const onInitFacebook = () => runner.run(async () => {
     const r = await initializeManualFacebookConnectionAction(); await refresh(); return r;
@@ -221,6 +248,77 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
                 <li>הזן את קוד החיבור הזה</li>
                 <li>השאר את Facebook פתוח בדפדפן</li>
               </ol>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Phase 21: Facebook GROUP publishing MVP (browser-assisted, human-approved) ── */}
+      {paths && (
+        <div className="border-line bg-card mb-6 rounded-2xl border p-5">
+          <p className="text-ink flex items-center gap-2 font-black"><Icon name="Globe" size={18} className="text-brand" /> פרסום לקבוצות Facebook באמצעות תוסף Chrome</p>
+
+          {/* Compliance / safety guard */}
+          <p className="border-amber-200 bg-amber-50 mt-3 rounded-xl border px-3 py-2 text-xs font-semibold text-amber-800">
+            פרסום בקבוצות נעשה מתוך הדפדפן שלך ובאישור שלך בלבד. יש לפעול לפי חוקי כל קבוצה. מומלץ להשהות 60–90 שניות בין פרסום לקבוצה לקבוצה.
+          </p>
+
+          {/* Add a group manually */}
+          <div className="mt-4">
+            <p className="text-ink text-sm font-bold">הוסף קבוצת Facebook</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <input className="border-line bg-surface text-ink rounded-lg border px-3 py-2 text-sm" placeholder="שם הקבוצה" value={gName} onChange={(e) => setGName(e.target.value)} />
+              <input dir="ltr" className="border-line bg-surface text-ink rounded-lg border px-3 py-2 text-sm" placeholder="https://facebook.com/groups/..." value={gUrl} onChange={(e) => setGUrl(e.target.value)} />
+              <input className="border-line bg-surface text-ink rounded-lg border px-3 py-2 text-sm" placeholder="תגיות/הערות (לא חובה)" value={gNotes} onChange={(e) => setGNotes(e.target.value)} />
+            </div>
+            <div className="mt-2"><Button size="sm" variant="ghost" onClick={onAddGroup} loading={runner.busyId === "add-group"}>הוסף קבוצה</Button></div>
+          </div>
+
+          {/* Select groups + compose + send to extension (only when ready) */}
+          {groupList.length > 0 ? (
+            <div className="mt-4">
+              <p className="text-ink text-sm font-bold">בחר קבוצות לפרסום</p>
+              <div className="mt-2 grid gap-1.5">
+                {groupList.map((g) => (
+                  <label key={g.id} className="border-line bg-surface flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm">
+                    <span className="flex items-center gap-2">
+                      <input type="checkbox" checked={!!selected[g.id]} onChange={() => toggleGroup(g.id)} />
+                      <span className="text-ink font-bold">{g.name}</span>
+                      {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="text-brand text-xs underline">פתח</a>}
+                    </span>
+                    <span className="text-muted text-xs">{g.lastUsedAt ? `שומש ${fmt(g.lastUsedAt)}` : "טרם שומש"}</span>
+                  </label>
+                ))}
+              </div>
+              <textarea className="border-line bg-surface text-ink mt-2 w-full rounded-lg border px-3 py-2 text-sm" rows={3} placeholder="טקסט הפוסט לקבוצות…" value={groupText} onChange={(e) => setGroupText(e.target.value)} />
+              <div className="mt-2 flex items-center gap-3">
+                <Button size="sm" onClick={onSendGroupTasks} loading={runner.busyId === "send-group-tasks"} disabled={!extReady || selectedCount === 0}>
+                  <Icon name="Send" size={14} className="ms-1" /> שלח לתוסף ({selectedCount})
+                </Button>
+                {!extReady && <span className="text-muted text-xs">חבר תוסף Chrome (סטטוס “מוכן”) כדי לשלוח לקבוצות.</span>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted mt-4 text-sm">הוסף קבוצות כדי להתחיל. גילוי אוטומטי של קבוצות אינו פעיל בשלב זה.</p>
+          )}
+
+          {/* Per-group task status */}
+          {tasks.length > 0 && (
+            <div className="mt-5">
+              <p className="text-ink text-sm font-bold">סטטוס פרסום לקבוצות</p>
+              <div className="mt-2 grid gap-1.5">
+                {tasks.map((t) => {
+                  const label = t.status === "published" ? "פורסם" : t.status === "failed" ? "נכשל"
+                    : t.skippedReason ? "דולג" : t.copiedAt ? "הועתק" : t.openedAt ? "נפתח" : "ממתין";
+                  const when = t.publishedAt ?? t.copiedAt ?? t.openedAt ?? null;
+                  return (
+                    <div key={t.postId} className="border-line bg-surface flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm">
+                      <span className="text-ink truncate font-bold">{t.destinationName ?? "קבוצה"}</span>
+                      <span className="text-muted text-xs">{label}{when ? ` · ${fmt(when)}` : ""}{t.externalPostUrl ? " · " : ""}{t.externalPostUrl && <a href={t.externalPostUrl} target="_blank" rel="noopener noreferrer" className="text-brand underline">צפה</a>}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
