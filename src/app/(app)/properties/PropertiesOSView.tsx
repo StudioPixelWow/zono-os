@@ -22,6 +22,7 @@ import {
   type PropertyRow,
 } from "@/lib/properties/labels";
 import { cn } from "@/lib/utils";
+import { ZonoMap, type ZonoMapPoint } from "@/components/maps/ZonoMap";
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 
@@ -314,52 +315,41 @@ function HotPropertiesCarousel({ properties, covers }: { properties: PropertyRow
   );
 }
 
-/* ── 7. Market map (mock heat) ───────────────────────────────────────────── */
+/* ── 7. Properties map (REAL coordinates only — Phase 24) ─────────────────── */
 
-const MAP_PINS = [
-  { top: "22%", start: "18%", n: 8, tone: "bg-danger" },
-  { top: "40%", start: "55%", n: 6, tone: "bg-success" },
-  { top: "62%", start: "32%", n: 3, tone: "bg-warning" },
-  { top: "34%", start: "78%", n: 7, tone: "bg-success" },
-  { top: "70%", start: "68%", n: 4, tone: "bg-brand" },
-];
+function MarketMapSection({ properties }: { properties: PropertyRow[] }) {
+  // Only properties with REAL coordinates appear on the map. No invented pins.
+  const located = properties.filter((p) => p.latitude != null && p.longitude != null);
+  const points: ZonoMapPoint[] = located.map((p) => ({
+    id: p.id,
+    lat: p.latitude as number,
+    lng: p.longitude as number,
+    title: p.title ?? propertyAddressLine(p),
+    details: [propertyAddressLine(p), (p.price ?? 0) > 0 ? ils(p.price as number) : ""].filter(Boolean),
+    tone: TERMINAL.has(p.status) ? "warning" : "brand",
+    href: `/properties/${p.id}`,
+  }));
+  // Real aggregate stats only (no fabricated numbers).
+  const active = properties.filter((p) => !TERMINAL.has(p.status)).length;
+  const priced = properties.filter((p) => (p.price ?? 0) > 0);
+  const avg = priced.length ? priced.reduce((s, p) => s + (p.price ?? 0), 0) / priced.length : 0;
 
-function MarketMapSection() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-      <div className="bg-card border-line relative aspect-[16/9] overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)] lg:aspect-auto">
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-soft via-surface to-success-soft/40" />
-        <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(var(--color-line) 1px, transparent 1px), linear-gradient(90deg, var(--color-line) 1px, transparent 1px)", backgroundSize: "44px 44px", opacity: 0.5 }} />
-        {MAP_PINS.map((p, i) => (
-          <div key={i} className="absolute" style={{ top: p.top, insetInlineStart: p.start }}>
-            <span className={cn("zono-pulse relative grid h-9 w-9 place-items-center rounded-full text-xs font-black text-white shadow-lg", p.tone)}>{p.n}</span>
-          </div>
-        ))}
-        <div className="bg-card/90 border-line absolute bottom-3 start-3 rounded-xl border px-3 py-2 text-[11px] font-bold backdrop-blur">
-          <span className="text-ink">מפת השוק החיה</span>
-          <div className="text-muted mt-1 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1"><span className="bg-danger h-2 w-2 rounded-full" />ביקוש גבוה</span>
-            <span className="inline-flex items-center gap-1"><span className="bg-warning h-2 w-2 rounded-full" />בינוני</span>
-            <span className="inline-flex items-center gap-1"><span className="bg-success h-2 w-2 rounded-full" />נמוך</span>
-          </div>
-        </div>
-      </div>
+      <ZonoMap
+        points={points}
+        heightClass="aspect-[16/9] lg:aspect-auto lg:h-full lg:min-h-[320px]"
+        emptyMessage="נדרש מיקום מדויק להצגת נכסים על המפה. הוסף/י כתובת מדויקת בעת יצירת נכס, או הרץ/י גאוקודינג מהמנהל."
+      />
       <div className="bg-card border-line flex flex-col gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
-        <p className="text-ink text-base font-black">קרית ביאליק</p>
+        <p className="text-ink text-base font-black">סקירת מלאי</p>
         <div className="grid grid-cols-2 gap-3">
-          {[
-            { l: "נכסים פעילים", v: "14" },
-            { l: "מחיר ממוצע", v: "₪2.1M" },
-            { l: "ביקוש", v: "+12%", up: true },
-            { l: "קונים מחפשים", v: "7" },
-          ].map((s) => (
-            <div key={s.l} className="bg-surface rounded-xl p-3">
-              <p className="text-muted text-[11px] font-bold">{s.l}</p>
-              <p className={cn("text-lg font-black", s.up ? "text-success" : "text-ink")}>{s.v}</p>
-            </div>
-          ))}
+          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">נכסים פעילים</p><p className="text-ink text-lg font-black">{active}</p></div>
+          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">על המפה</p><p className="text-ink text-lg font-black">{located.length}</p></div>
+          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">מחיר ממוצע</p><p className="text-ink text-lg font-black">{avg ? ilsCompact(avg) : "—"}</p></div>
+          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">ללא מיקום</p><p className="text-ink text-lg font-black">{properties.length - located.length}</p></div>
         </div>
-        <Link href="/market" className="bg-brand-soft text-brand-strong mt-auto rounded-xl px-3 py-2.5 text-center text-sm font-bold">פתח מפה מלאה</Link>
+        <Link href="/market" className="bg-brand-soft text-brand-strong mt-auto rounded-xl px-3 py-2.5 text-center text-sm font-bold">פתח מפת שוק מלאה</Link>
       </div>
     </div>
   );
@@ -600,8 +590,8 @@ export function PropertiesOSView({
         </section>
 
         <section className="flex flex-col gap-3">
-          <SectionTitle title="מפת השוק החיה" action={<ViewAll href="/market" />} />
-          <MarketMapSection />
+          <SectionTitle title="מפת הנכסים" action={<ViewAll href="/market" />} />
+          <MarketMapSection properties={properties} />
         </section>
 
         <section className="flex flex-col gap-3">

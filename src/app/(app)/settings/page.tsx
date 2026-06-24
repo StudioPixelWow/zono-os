@@ -15,6 +15,7 @@ const GROUPS: { title: string; items: { label: string; href: string; icon: strin
     items: [
       { label: "אזורי פעילות", href: "/settings/operating-areas", icon: "MapPin", desc: "ניהול ערי ושכונות הפעילות שלך" },
       { label: "העשרת שכונות (AI)", href: "/admin/neighborhood-enrichment", icon: "Sparkles", desc: "העלאת קובץ ערים ויצירת שכונות אוטומטית" },
+      { label: "גאוקודינג מיקומים", href: "/admin/geocoding", icon: "MapPin", desc: "השלמת קואורדינטות אמיתיות לנכסים/מודעות/עסקאות להצגה על המפה" },
     ],
   },
   {

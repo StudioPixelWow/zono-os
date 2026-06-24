@@ -24,7 +24,5 @@ export { MatchCard } from "./domain/MatchCard";
 export type { MatchCardProps } from "./domain/MatchCard";
 export { ZonoAssistantBubble } from "./domain/ZonoAssistantBubble";
 export type { ZonoAssistantBubbleProps } from "./domain/ZonoAssistantBubble";
-export { MapMock } from "./domain/MapMock";
-export type { MapMockProps, MapMarker } from "./domain/MapMock";
 export { JourneyTimeline } from "./domain/JourneyTimeline";
 export type { JourneyTimelineProps } from "./domain/JourneyTimeline";
