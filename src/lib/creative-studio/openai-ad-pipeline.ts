@@ -63,23 +63,25 @@ export function refUrlsFor(assets: AdGenAssets): string[] {
   return [...assets.propertyImages.slice(0, 4), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
 }
 
-/** Map a Hebrew feature string → a premium architectural icon description, so the
- *  model renders SPECS AS ICONS (not text rows). Returns null when no clean icon
- *  fits — those features are simply dropped to protect Hebrew spelling quality. */
-function featureToIcon(feat: string): string | null {
+/** Map a Hebrew feature string → a clean premium ICON + NUMBER ONLY token (no
+ *  words, no labels). The model renders a minimal icon strip — never text rows.
+ *  Returns null when no clean icon fits (that feature is dropped). Priority order
+ *  is set by the caller so the strip favours bedroom → area → parking → storage. */
+function featureToIcon(feat: string): { rank: number; token: string } | null {
   const f = feat.trim();
   const num = (f.match(/[\d.]+/) ?? [])[0] ?? "";
-  if (/חדר/.test(f)) return `a minimal architectural BED/ROOM icon with the number ${num || "X"}`;
-  if (/מ["״׳']?\s*ר|מטר|sqm|מ"ר/i.test(f)) return `a minimal floor-plan / ruler icon with the number ${num || "X"} (square meters)`;
-  if (/קומה/.test(f)) return `a minimal building-floors icon with the number ${num || "X"}`;
-  if (/חני/.test(f)) return "a minimal car / parking icon";
-  if (/מחסן/.test(f)) return "a minimal storage-box icon";
-  if (/מרפסת|טראס/.test(f)) return "a minimal terrace / balcony icon";
-  if (/מעלית/.test(f)) return "a minimal elevator icon";
-  if (/ממ["״׳']?ד|ממד|מקלט/.test(f)) return "a minimal shield (safe-room / mamad) icon";
-  if (/גינה|גן/.test(f)) return "a minimal leaf / garden icon";
-  if (/פנטהאוז|פנטהוז/.test(f)) return "a minimal skyline (penthouse) icon";
-  if (/נוף|ים|פתוח/.test(f)) return "a minimal horizon (open / sea view) icon";
+  const withNum = (icon: string) => (num ? `a line-style ${icon} icon followed by the numeral ${num} only (no word, no unit)` : `a line-style ${icon} icon`);
+  if (/חדר/.test(f)) return { rank: 0, token: withNum("bed") };
+  if (/מ["״׳']?\s*ר|מטר|sqm|מ"ר/i.test(f)) return { rank: 1, token: withNum("floor-plan / area") };
+  if (/חני/.test(f)) return { rank: 2, token: withNum("car / parking") };
+  if (/מחסן/.test(f)) return { rank: 3, token: withNum("storage-box") };
+  if (/מרפסת|טראס/.test(f)) return { rank: 4, token: withNum("balcony / terrace") };
+  if (/קומה/.test(f)) return { rank: 5, token: withNum("building-floor") };
+  if (/מעלית/.test(f)) return { rank: 6, token: "a line-style elevator icon" };
+  if (/ממ["״׳']?ד|ממד|מקלט/.test(f)) return { rank: 7, token: "a line-style shield (safe-room) icon" };
+  if (/גינה|גן/.test(f)) return { rank: 8, token: "a line-style leaf (garden) icon" };
+  if (/פנטהאוז|פנטהוז/.test(f)) return { rank: 9, token: "a line-style skyline (penthouse) icon" };
+  if (/נוף|ים|פתוח/.test(f)) return { rank: 10, token: "a line-style horizon (sea view) icon" };
   return null;
 }
 
@@ -95,9 +97,15 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
   const address = [spec.street, spec.city].filter(Boolean).join(", ");
   const priceLine = [spec.priceLabel, spec.price].filter(Boolean).join(" ").trim();
 
-  // Specs → premium ICONS (not text). Drop features without a clean icon so the
-  // image model renders less Hebrew (fewer text fields ⇒ fewer spelling errors).
-  const iconSpecs = spec.features.map(featureToIcon).filter(Boolean) as string[];
+  // Specs → a clean premium ICON STRIP (icon + number only). Ranked to favour
+  // bedroom → area → parking → storage, de-duplicated, and capped at MAX 4.
+  const iconSpecs = Array.from(
+    new Map(
+      (spec.features.map(featureToIcon).filter(Boolean) as { rank: number; token: string }[])
+        .sort((a, b) => a.rank - b.rank)
+        .map((x) => [x.rank, x.token]),
+    ).values(),
+  ).slice(0, 4);
 
   // Supplied-asset map so the model knows which reference image is which.
   const refs: string[] = [];
@@ -155,10 +163,10 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     // ── TEXT REDUCTION (spec §4 + §11) — to free the ART DIRECTOR, not to bare the photo ──
     "TEXT ECONOMY: keep the worded text minimal so the DESIGN can breathe — fewer words means more room for art direction and higher typography quality. The mandatory words are only: the sale label, the headline, the property address, the price, the agent name and the phone. But minimal text does NOT mean a bare photo with a caption — the reduced text must be set as DESIGNED, editorial typography that is part of the composition. NEVER render feature paragraphs, specification rows, bullet lists, or spec tables — convert every property attribute into the premium icon system below.",
 
-    // ── PROPERTY FEATURES AS ICONS (spec §10) ─────────────────────────────────
+    // ── PROPERTY FEATURE ICON STRIP (icon + number ONLY) ──────────────────────
     iconSpecs.length
-      ? `PROPERTY FEATURES VISUAL SYSTEM — communicate specifications with PREMIUM ARCHITECTURAL ICONS, not words. Render this small, elegant icon row (a single consistent icon family): ${iconSpecs.join("; ")}. Icons must feel premium, minimal, architectural, editorial, luxury-brochure quality — never cartoon, never emoji, never colorful, never playful. The viewer should understand the specs in under 2 seconds. Specs are SUPPORTING information; the property image stays the hero.`
-      : "PROPERTY FEATURES: if specs are shown at all, use minimal premium architectural icons (a single consistent family) — never text rows. Keep them tiny and secondary.",
+      ? `PROPERTY FEATURE ICON STRIP — render ONE clean, horizontal premium icon strip of AT MOST 4 features, in this order: ${iconSpecs.join("; ")}. CRITICAL RULES: each item is an ICON + a NUMBER ONLY — absolutely NO words, NO labels, NO units, NO Hebrew, NO specification table, NO feature paragraph. The icons are minimal thin-line architectural pictograms from ONE consistent family (Apple / Porsche / Architectural Digest minimalism). Numerals must be crisp, standard, perfectly legible digits — NOT stylized, NOT decorative, NOT AI-fabricated glyphs. If any icon or number cannot be rendered cleanly, OMIT that item entirely rather than produce a corrupted symbol, broken number, or icon-typography artifact. The strip is small, elegant and secondary — the property photo stays the hero. Understand it in under 2 seconds.`
+      : "PROPERTY FEATURES: show no specification text at all unless it can be a clean icon + number; never render feature words, rows, or tables.",
 
     "BRAND INTEGRATION: use ONLY the supplied branding — never invent logos or colors, never replace branding. Branding must feel premium, understated and trustworthy; the logo is a trust signal, naturally integrated, never the hero.",
     "AGENT POSITIONING: present the agent as a trusted advisor / luxury consultant / private banker — elegant, trustworthy, never a salesperson and never dominant. The property remains the hero.",
@@ -168,6 +176,8 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     // ── LUXURY ART DIRECTION (developer-campaign brief) ───────────────────────
     "LUXURY LAYOUT: a vertical premium poster. A LARGE hero property photo occupies the upper section; below it, ELEGANT FLOATING INFORMATION PANELS (glassy, soft shadows) hold the headline, price and details. Sophisticated visual hierarchy, a clean grid, and lots of breathing space — minimalistic yet high-converting, high-end magazine quality.",
     "LUXURY DESIGN ELEMENTS: a large bold Hebrew headline; the price displayed inside a premium FLOATING CARD; property features as luxury LINE ICONS (never text rows); elegant separators; restrained modern geometric shapes; thin GOLD ACCENT LINES; subtle glass effects; premium gradient overlays; refined luxury-brochure styling.",
+    // ── ZONO SIGNATURE DESIGN LANGUAGE (recognizable across every creative) ──
+    "ZONO SIGNATURE DESIGN LANGUAGE — every creative must carry a recognizable ZONO visual signature so the brand is felt BEFORE the logo is read. This signature is NOT the logo, text, price, agent or CTA — it is a premium VISUAL SYSTEM. Apply a consistent, restrained set of these motifs: a subtle architectural FRAME around the composition; fine editorial LINE WORK; a soft luxury GLASS PANEL holding the key copy; layered DEPTH (foreground frame → property → atmospheric background); a refined premium GRADIENT treatment; magazine-inspired composition with intentional negative space; and a quiet geometric corner motif. The signature must be ELEGANT and understated — never flashy, never Canva, never a template, and it must NEVER overpower the property (the property is always the hero). Keep these motifs CONSISTENT in feel and placement from creative to creative so the ZONO style becomes instantly recognizable across all ads.",
     "AGENT SECTION: integrate the professional realtor portrait naturally into the composition with a premium contact block — luxury personal-branding feel, never a sticker, never dominant over the property.",
     "REFERENCE FEEL: RE/MAX Luxury Collection, a Dubai luxury real-estate campaign, high-end residential development marketing, an architectural-magazine cover, a premium property-investment brochure.",
     "RENDERING: ultra-realistic, photorealistic, high-end interior photography, natural daylight, luxury atmosphere, 8K quality, premium marketing design.",
