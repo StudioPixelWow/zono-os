@@ -82,18 +82,24 @@ const ZONO_HEAT_GRADIENT = [
 ];
 
 let mapsPromise: Promise<void> | null = null;
+/** Reason the Maps JS API rejected the key (Google calls window.gm_authFailure
+ *  on invalid key / referer-not-allowed / API-not-activated). Surfaced so the
+ *  on-screen error is actionable instead of generic. */
+export let mapsAuthFailed = false;
 function loadGoogleMaps(key: string): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
-  const w = window as unknown as { google?: GoogleNS };
+  const w = window as unknown as { google?: GoogleNS; gm_authFailure?: () => void };
   if (w.google?.maps) return Promise.resolve();
   if (mapsPromise) return mapsPromise;
   mapsPromise = new Promise<void>((resolve, reject) => {
+    // Google invokes this when the key is rejected (auth/referrer/API disabled).
+    w.gm_authFailure = () => { mapsAuthFailed = true; mapsPromise = null; reject(new Error("maps_auth_failed")); };
     const s = document.createElement("script");
     // `visualization` adds the real HeatmapLayer (density of real points).
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=visualization`;
     s.async = true; s.defer = true;
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error("maps_load_failed"));
+    s.onerror = () => { mapsPromise = null; reject(new Error("maps_load_failed")); };
     document.head.appendChild(s);
   });
   return mapsPromise;
@@ -263,7 +269,15 @@ export function ZonoMap({
       )}
       {state === "error" && (
         <div className="bg-card/90 absolute inset-0 grid place-items-center text-center">
-          <p className="text-danger px-6 text-xs">שירות המפות לא זמין כעת. ודא שהמפתח תקין ו-Maps JavaScript API מופעל.</p>
+          <div className="px-6">
+            <p className="text-danger text-xs font-bold">שירות המפות נדחה על ידי Google.</p>
+            <p className="text-muted mt-1.5 text-[11px] leading-relaxed">
+              {mapsAuthFailed
+                ? "המפתח (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) נדחה. בדוק 3 דברים: (1) Maps JavaScript API מופעל על המפתח; (2) הגבלת ה‑HTTP referrers כוללת את הדומיין הזה; (3) חיוב פעיל. אחרי תיקון — Redeploy."
+                : "המפה לא נטענה. בדוק חיבור אינטרנט והמפתח NEXT_PUBLIC_GOOGLE_MAPS_API_KEY."}
+            </p>
+            <p className="text-muted mt-1.5 text-[10px]">לסיבה המדויקת: F12 → Console (חפש &quot;…MapError&quot;).</p>
+          </div>
         </div>
       )}
     </div>
