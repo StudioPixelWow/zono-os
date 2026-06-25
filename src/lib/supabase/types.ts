@@ -4291,6 +4291,38 @@ type OrgInvitationsRow = {
   expires_at: string | null; accepted_at: string | null; created_at: string; updated_at: string;
 };
 
+// ── ZI Expert™ (Phase 22) — support conversation history ─────────────────────
+type ZiConversationsRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  title: string;
+  route: string | null;
+  module_id: string | null;
+  pinned: boolean;
+  archived: boolean;
+  message_count: number;
+  last_message_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ZiMessagesRow = {
+  id: string;
+  organization_id: string;
+  conversation_id: string;
+  user_id: string;
+  role: "user" | "assistant";
+  content: string;
+  source: "ai" | "fallback" | "cache" | null;
+  route: string | null;
+  module_id: string | null;
+  rating: "up" | "down" | null;
+  deleted_at: string | null;
+  created_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -4314,6 +4346,8 @@ export interface Database {
       units: TableShape<UnitsRow, "org_id" | "project_id" | "unit_number">;
       properties: TableShape<PropertiesRow, "org_id" | "title" | "type" | "price">;
       org_invitations: TableShape<OrgInvitationsRow, "org_id" | "email" | "token">;
+      zi_conversations: TableShape<ZiConversationsRow, "organization_id" | "user_id">;
+      zi_messages: TableShape<ZiMessagesRow, "organization_id" | "conversation_id" | "user_id" | "role" | "content">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       property_journeys: TableShape<
         PropertyJourneysRow,

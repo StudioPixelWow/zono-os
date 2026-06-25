@@ -4,6 +4,7 @@ import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
 import { CommandPalette } from "@/components/search/CommandPalette";
 import { ZonoCommandCenter } from "@/components/navigation/zono-command-center";
+import { ZIWidget } from "@/components/zi-expert/ZIWidget";
 
 /**
  * App frame: RTL slim sidebar (right/start side) + header + scrolling main +
@@ -24,6 +25,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <MobileNav />
       <CommandPalette />
       <ZonoCommandCenter />
+      <ZIWidget />
     </div>
   );
 }
