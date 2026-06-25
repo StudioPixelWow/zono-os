@@ -130,6 +130,24 @@ export async function getPropertyRadarLiveData(): Promise<PropertyRadarLiveData>
   feed.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const feedTop = feed.slice(0, 80);
 
+  // Phase 14 — enrich feed with Seller Intelligence (exclusive probability etc.).
+  try {
+    const feedSourceIds = [...new Set(feedTop.map((f) => f.marketPropertySourceId).filter((x): x is string => !!x))];
+    const { getSellerEnrichmentForSources } = await import("../../exclusive-acquisition/engine");
+    const enrich = await getSellerEnrichmentForSources(feedSourceIds);
+    for (const f of feedTop) {
+      const e = f.marketPropertySourceId ? enrich[f.marketPropertySourceId] : undefined;
+      if (e) {
+        f.exclusiveProbability = e.exclusiveProbability;
+        f.exclusiveBand = e.exclusiveBand;
+        f.sellerScore = e.sellerScore;
+        f.recommendedAction = e.recommendedAction;
+        f.lastContactAt = e.lastContactAt;
+        f.nextFollowupAt = e.nextFollowupAt;
+      }
+    }
+  } catch { /* enrichment is best-effort — never breaks the live feed */ }
+
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const todayLinks = links.filter((l) => l.created_at >= todayIso);
   const privateToday = todayLinks.filter((l) => sources.get(l.market_property_source_id)?.listing_type === "private").length;
@@ -245,7 +263,10 @@ export async function getPropertyRadarLiveData(): Promise<PropertyRadarLiveData>
     const s = sources.get(it.marketPropertySourceId);
     const c = extractCoord({ ...(s?.raw_metadata ?? {}), ...(s?.raw_full_payload ?? {}) });
     if (!c) continue;
-    const tone = it.kind === "hot_deal" ? "danger" : it.kind === "price_drop" ? "warning" : it.kind === "new_property" ? "brand" : "neutral";
+    // Exclusive Opportunities layer: green (very high/high) · orange (medium) · gray (low).
+    const tone = it.exclusiveBand
+      ? (it.exclusiveBand === "very_high" || it.exclusiveBand === "high" ? "success" : it.exclusiveBand === "medium" ? "warning" : "neutral")
+      : it.kind === "hot_deal" ? "danger" : it.kind === "price_drop" ? "warning" : it.kind === "new_property" ? "brand" : "neutral";
     mapPoints.push({ id: it.marketPropertySourceId, lat: c.lat, lng: c.lng, title: it.addressText ?? it.city ?? "נכס", details: [it.price ? `₪${it.price.toLocaleString("he-IL")}` : "", it.opportunityScore != null ? `ציון ${it.opportunityScore}` : ""].filter(Boolean), tone });
   }
 

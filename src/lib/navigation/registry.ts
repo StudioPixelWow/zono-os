@@ -28,6 +28,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "properties", label: "נכסים", route: "/properties", icon: "Building", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "buyers", label: "קונים", route: "/buyers", icon: "Users", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "sellers", label: "מוכרים", route: "/sellers", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
+  { id: "exclusive-opportunities", label: "הזדמנויות בלעדיות", route: "/exclusive-opportunities", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "Seller Intelligence™ — מי הכי קרוב לחתום בלעדיות ואת מי לפנות קודם" },
   { id: "matches", label: "התאמות", route: "/matches", icon: "Sparkles", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "valuation", label: "הערכת שווי", route: "/valuation", icon: "Calculator", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "מנוע תמחור נכסים — ZONO Price Intelligence" },
   { id: "deals", label: "עסקאות", route: "/deals", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },

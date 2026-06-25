@@ -45,6 +45,13 @@ export interface LiveFeedItem {
   opportunityScore: number | null;
   buyerMatchCount: number;
   provider: string;
+  // Phase 14 — Seller Intelligence enrichment (present when a profile exists).
+  exclusiveProbability?: number | null;
+  exclusiveBand?: "very_high" | "high" | "medium" | "low" | null;
+  sellerScore?: number | null;
+  recommendedAction?: string | null;
+  lastContactAt?: string | null;
+  nextFollowupAt?: string | null;
 }
 
 export interface HotDealItem {

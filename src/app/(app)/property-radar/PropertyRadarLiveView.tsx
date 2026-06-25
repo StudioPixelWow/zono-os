@@ -346,10 +346,22 @@ function FeedCard({ item, onOpen }: { item: LiveFeedItem; onOpen: () => void }) 
           </div>
         </div>
       </div>
+      {item.exclusiveProbability != null && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg bg-brand-soft/30 px-2 py-1 text-[11px] font-bold">
+          <span className={`rounded-full px-1.5 py-0.5 ${item.exclusiveBand === "very_high" || item.exclusiveBand === "high" ? "bg-emerald-100 text-emerald-700" : item.exclusiveBand === "medium" ? "bg-amber-100 text-amber-700" : "bg-black/5 text-ink/55"}`}>בלעדיות {item.exclusiveProbability}%</span>
+          {item.sellerScore != null && <span className="text-ink/60">ציון מוכר {item.sellerScore}</span>}
+          {item.recommendedAction && <span className="text-brand-strong">{EXCLUSIVE_ACTION_LABEL[item.recommendedAction] ?? ""}</span>}
+          {item.lastContactAt && <span className="text-ink/45">קשר אחרון {timeAgo(item.lastContactAt)}</span>}
+        </div>
+      )}
       <div className="mt-2"><ActionButtons phone={item.phone} externalUrl={item.externalUrl} sourceId={item.marketPropertySourceId} onOpen={onOpen} onBuyers={item.buyerMatchCount > 0 ? onOpen : undefined} /></div>
     </div>
   );
 }
+
+const EXCLUSIVE_ACTION_LABEL: Record<string, string> = {
+  call_today: "להתקשר היום", send_whatsapp: "וואטסאפ", schedule_meeting: "לקבוע פגישה", follow_up_tomorrow: "מעקב מחר", wait: "להמתין",
+};
 
 function HotDealCard({ item, onOpen }: { item: HotDealItem; onOpen: () => void }) {
   return (
