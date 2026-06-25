@@ -289,8 +289,8 @@ export function ZonoCommandCenter() {
 
                 {/* Bottom statement */}
                 <div className="flex flex-col items-center gap-1.5 pt-2 text-center">
-                  <p className="text-xl font-black text-white sm:text-2xl">ZONO הוא מערכת ההפעלה של העסק שלך</p>
-                  <p className="max-w-lg text-sm font-medium text-white/55">כל הנכסים, הלקוחות, העסקאות והבינה העסקית במקום אחד.</p>
+                  <p className="text-xl font-black text-white sm:text-2xl">ZONO הבינה שתהפוך אותך לסוכן החזק ביותר בזון שלך.</p>
+                  <p className="max-w-lg text-sm font-medium text-white/55">כל הנכסים, הלקוחות, העסקאות, האוטומציות והבינה העסקית — בפלטפורמה אחת שעובדת בשבילך.</p>
                 </div>
               </>
             )}
