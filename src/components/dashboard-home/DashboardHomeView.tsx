@@ -18,6 +18,7 @@ import type { DashboardHomeData } from "@/lib/dashboard-home/types";
 import { DashboardHero, DashboardKpiStrip } from "./components/DashboardHero";
 import { TodayAttentionSection } from "./components/TodayAttentionSection";
 import { HotPropertiesSection } from "./components/HotPropertiesSection";
+import { HomeHeatmapSection } from "./components/HomeHeatmapSection";
 import {
   OpportunityMapSection,
   ActivityRadarSection,
@@ -72,6 +73,9 @@ export function DashboardHomeView({
 
       {/* 4 — Opportunity Map (full-width dark centerpiece) */}
       <OpportunityMapSection t={t} data={data} />
+
+      {/* 4b — Live property heatmap · מפת הנכסים החיה (real internal + external) */}
+      <HomeHeatmapSection />
 
       {/* 5 — Activity Timeline + AI Opportunity Radar */}
       <ActivityRadarSection t={t} data={data} />
