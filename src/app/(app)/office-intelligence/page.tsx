@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { getOfficeDashboardAction } from "@/lib/office-intelligence/actions";
 import { OfficeIntelligencePage } from "@/components/office-intelligence/OfficeIntelligencePage";
+import { IntelligenceErrorBoundary } from "@/components/intelligence/IntelligenceErrorBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,5 @@ export default async function OfficeIntelligenceRoute() {
       </div>
     );
   }
-  return <OfficeIntelligencePage initial={res.data} />;
+  return <IntelligenceErrorBoundary title="מודיעין המשרד נכשל בטעינה"><OfficeIntelligencePage initial={res.data} /></IntelligenceErrorBoundary>;
 }

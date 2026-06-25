@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { getExecutiveDashboardAction } from "@/lib/business-intelligence/actions";
 import { ExecutiveIntelligenceView } from "@/components/business-intelligence/ExecutiveIntelligenceView";
+import { IntelligenceErrorBoundary } from "@/components/intelligence/IntelligenceErrorBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,5 @@ export default async function ExecutiveIntelligenceRoute() {
       </div>
     );
   }
-  return <ExecutiveIntelligenceView initial={res.data} />;
+  return <IntelligenceErrorBoundary title="מודיעין המנהלים נכשל בטעינה"><ExecutiveIntelligenceView initial={res.data} /></IntelligenceErrorBoundary>;
 }

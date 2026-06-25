@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { getCompetitorDashboardAction } from "@/lib/competitor-intelligence/actions";
 import { CompetitorIntelligencePage } from "@/components/competitor-intelligence/CompetitorIntelligencePage";
+import { IntelligenceErrorBoundary } from "@/components/intelligence/IntelligenceErrorBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,5 @@ export default async function CompetitorIntelligenceRoute() {
       </div>
     );
   }
-  return <CompetitorIntelligencePage initial={res.data} />;
+  return <IntelligenceErrorBoundary title="מודיעין המתחרים נכשל בטעינה"><CompetitorIntelligencePage initial={res.data} /></IntelligenceErrorBoundary>;
 }

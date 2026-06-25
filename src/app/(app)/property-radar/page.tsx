@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { getPropertyRadarLiveDataAction } from "@/lib/property-radar/live/actions";
 import { PropertyRadarLiveView } from "./PropertyRadarLiveView";
+import { IntelligenceErrorBoundary } from "@/components/intelligence/IntelligenceErrorBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,5 @@ export default async function PropertyRadarLivePage() {
       </div>
     );
   }
-  return <PropertyRadarLiveView initial={res.data} />;
+  return <IntelligenceErrorBoundary title="מרכז הפיקוד נכשל בטעינה"><PropertyRadarLiveView initial={res.data} /></IntelligenceErrorBoundary>;
 }

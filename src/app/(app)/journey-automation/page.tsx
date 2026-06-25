@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { getJourneyDashboardAction, getJourneyWorkflowsAction } from "@/lib/journey-automation/server-actions";
 import { JourneyAutomationView } from "@/components/journey-automation/JourneyAutomationView";
+import { IntelligenceErrorBoundary } from "@/components/intelligence/IntelligenceErrorBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,5 @@ export default async function JourneyAutomationRoute() {
       </div>
     );
   }
-  return <JourneyAutomationView initial={dash.data} workflows={wfs.ok ? wfs.data : []} />;
+  return <IntelligenceErrorBoundary title="אוטומציית המסעות נכשלה בטעינה"><JourneyAutomationView initial={dash.data} workflows={wfs.ok ? wfs.data : []} /></IntelligenceErrorBoundary>;
 }
