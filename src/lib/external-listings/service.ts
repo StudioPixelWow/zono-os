@@ -356,19 +356,45 @@ export async function getSyncProgress(): Promise<SyncProgress> {
   if (!job) return empty;
 
   const params = (job.params ?? {}) as { totalCities?: number; completedCount?: number; currentCity?: string };
-  const active = job.status === "running";
+
+  // Staleness guard: a job stuck in "running" past this window is orphaned —
+  // the serverless run was almost certainly killed (timeout) before it could
+  // mark itself completed. Treat it as finished (not active) so the live timer
+  // stops and the scheduler isn't blocked. Best-effort auto-close the row.
+  const STALE_MS = 15 * 60 * 1000; // 15 minutes
+  const startedMs = job.started_at ? new Date(job.started_at).getTime() : 0;
+  const isStale = job.status === "running" && startedMs > 0 && Date.now() - startedMs > STALE_MS;
+
+  let status = job.status;
+  let finishedAt = job.finished_at;
+  let error = job.error;
+  if (isStale) {
+    status = "failed";
+    finishedAt = new Date().toISOString();
+    error = job.error ?? "הסנכרון לא הושלם (פג זמן הריצה) — ניתן להפעיל שוב";
+    // Close the orphaned job so it no longer reads as running. Best-effort.
+    try {
+      await supabase
+        .from("import_jobs")
+        .update({ status: "failed", finished_at: finishedAt, error })
+        .eq("id", job.id)
+        .eq("status", "running");
+    } catch { /* best-effort — UI already treats it as finished */ }
+  }
+  const active = status === "running";
+
   const { data: logs } = await supabase
     .from("import_job_logs").select("message,level").eq("job_id", job.id)
     .not("level", "eq", "debug").order("created_at", { ascending: false }).limit(4);
   const recentLogs = ((logs ?? []) as { message: string }[]).map((l) => l.message).reverse();
 
   return {
-    active, hasJob: true, status: job.status, provider: job.provider,
-    startedAt: job.started_at, finishedAt: job.finished_at,
+    active, hasJob: true, status, provider: job.provider,
+    startedAt: job.started_at, finishedAt,
     totalCities: params.totalCities ?? 0, completedCount: params.completedCount ?? 0,
     currentCity: params.currentCity ?? null,
     found: job.total_found ?? 0, imported: job.total_imported ?? 0, updated: job.total_updated ?? 0,
-    error: job.error, recentLogs, apifyConfigured: isApifyConfigured(),
+    error, recentLogs, apifyConfigured: isApifyConfigured(),
   };
 }
 
