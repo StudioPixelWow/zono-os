@@ -22,6 +22,7 @@ export const MODULES: ModuleEntry[] = [
   // ── ראשי ──
   { id: "home", label: "בית", route: "/", icon: "Home", category: "ראשי", roleMin: "viewer", sidebar: true, searchable: true, description: "דשבורד ראשי" },
   { id: "command", label: "מרכז פיקוד", route: "/command", icon: "Flame", category: "ראשי", roleMin: "agent", sidebar: true, searchable: true, description: "מרכז ההחלטות הניהולי" },
+  { id: "property-radar-live", label: "רדאר נכסים — חי", route: "/property-radar", icon: "Activity", category: "ראשי", roleMin: "agent", sidebar: true, searchable: true, description: "מרכז פיקוד שוק בזמן אמת — נכסים חדשים, ירידות מחיר, עסקאות חמות, התאמות קונים" },
 
   // ── מכירות ──
   { id: "properties", label: "נכסים", route: "/properties", icon: "Building", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
