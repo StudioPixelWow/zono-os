@@ -17,6 +17,7 @@ import {
 } from "./providers";
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
 import { detectForOrg } from "@/lib/broker/service";
+import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
   calculateExternalDealPotential,
@@ -286,9 +287,65 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     console.error("[broker] detection during sync failed:", e);
   }
 
+  // Geocode freshly-synced listings that still lack real coordinates, so they
+  // show on the live map. Best-effort + capped (serverless time + API quota);
+  // never invents coordinates and never breaks the import.
+  try {
+    const geo = await geocodeOrgExternalListings(db, orgId);
+    if (geo.attempted > 0) await log(`גיאוקודינג: ${geo.success} מוקמו · ${geo.failed} נכשלו · ${geo.skipped} ללא כתובת (מתוך ${geo.attempted})`);
+  } catch (e) {
+    console.error("[geocode] external listings geocode during sync failed:", e);
+  }
+
   summary.success = summary.errors.length === 0;
   await db.from("import_jobs").update({ status: summary.errors.length ? "completed_with_errors" : "completed", total_found: totalFound, total_imported: summary.inserted, total_updated: summary.updated, error: summary.errors.length ? summary.errors.slice(0, 5).join("; ") : null, finished_at: new Date().toISOString() }).eq("id", jobId);
   return summary;
+}
+
+interface GeocodeBatchStats { attempted: number; success: number; failed: number; skipped: number }
+
+/**
+ * Geocode active external listings for an org that still have no coordinates.
+ * Capped per run; the remaining backlog is filled over subsequent syncs/cron
+ * passes. Persists lat/lng + geocode metadata so we never re-geocode on render.
+ * Real coordinates only — failures are marked, never invented.
+ */
+async function geocodeOrgExternalListings(db: DB, orgId: string, limit = 80): Promise<GeocodeBatchStats> {
+  const stats: GeocodeBatchStats = { attempted: 0, success: 0, failed: 0, skipped: 0 };
+  const { data } = await db
+    .from("external_listings" as never)
+    .select("id,address,street,street_number,neighborhood,city")
+    .eq("org_id", orgId)
+    .eq("status", "active")
+    .is("lat", null)
+    .limit(limit);
+  const rows = (data ?? []) as unknown as { id: string; address: string | null; street: string | null; street_number: string | null; neighborhood: string | null; city: string | null }[];
+
+  for (const r of rows) {
+    const input = { address: r.address, street: r.street, streetNumber: r.street_number, neighborhood: r.neighborhood, city: r.city };
+    if (!buildQuery(input)) { stats.skipped++; continue; }
+    stats.attempted++;
+    const out = await geocodeAddress(input);
+    const now = new Date().toISOString();
+    if (!out.ok) {
+      stats.failed++;
+      try { await db.from("external_listings" as never).update({ geocode_status: "failed", geocode_error: out.message } as never).eq("id", r.id); } catch { /* best-effort */ }
+      continue;
+    }
+    const low = out.result.confidence < 0.5;
+    try {
+      await db.from("external_listings" as never).update({
+        lat: out.result.lat, lng: out.result.lng,
+        geocode_confidence: out.result.confidence,
+        formatted_address: out.result.formattedAddress,
+        geocoded_at: now, geocode_provider: out.result.provider,
+        geocode_status: low ? "low_confidence" : "geocoded", geocode_error: null,
+      } as never).eq("id", r.id);
+      stats.success++;
+    } catch { stats.failed++; }
+    await new Promise((res) => setTimeout(res, 120)); // gentle rate limit
+  }
+  return stats;
 }
 
 /** User-triggered import (RLS, session org). Used by the API routes. */
