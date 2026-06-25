@@ -1,56 +1,24 @@
 "use client";
 // ============================================================================
-// ZONO — login experience. A "living real-estate operating system" sign-in:
-// a deep navy/purple environment with a digital-city network, drifting
-// particles, breathing ambient glow, and glassmorphism "live" widgets that
-// continuously appear, move and fade — so the platform feels ALIVE before login.
-// RTL Hebrew. Wired to the REAL `signIn` server action. Honors reduced-motion.
+// ZONO — login experience. A deep navy/purple "living operating system" sign-in:
+// ambient breathing glow, a digital-city intelligence network with drifting
+// particles, the ZONO robot mascot standing beside a glass login card, and two
+// signature live chips (WhatsApp + property-match). RTL Hebrew. Wired to the
+// REAL `signIn` server action. Honors reduced-motion. (Phase 19.5 visual pass.)
 // ============================================================================
 import Link from "next/link";
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import {
-  UserPlus, MessageCircle, Home, Sparkles, TrendingUp, Building2,
-  ListChecks, Handshake, CalendarClock, BarChart3, Tag, Users, type LucideIcon,
-} from "lucide-react";
+import { useActionState, useMemo, useState } from "react";
+import { MessageCircle, Home } from "lucide-react";
 import { signIn, type AuthFormState } from "@/lib/auth/actions";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
 
-// ── Live widget catalogue (the "system is working" feed) ─────────────────────
-interface LiveItem { icon: LucideIcon; title: string; sub: string }
-const LIVE_ITEMS: LiveItem[] = [
-  { icon: UserPlus, title: "ליד חדש התקבל", sub: "מקור: פייסבוק" },
-  { icon: MessageCircle, title: "3 שיחות WhatsApp חדשות", sub: "ממתינות למענה" },
-  { icon: Home, title: "נמצאה התאמת נכס", sub: "94% התאמה" },
-  { icon: Sparkles, title: "תובנת AI נוצרה", sub: "הזדמנות לפעולה" },
-  { icon: TrendingUp, title: "זוהתה הזדמנות שוק", sub: "מחיר מתחת לשוק" },
-  { icon: Building2, title: "נכס חדש נוסף", sub: "3 חדרים · חיפה" },
-  { icon: ListChecks, title: "משימה להיום", sub: "מעקב אחר קונה" },
-  { icon: Handshake, title: "עסקה עברה למשא ומתן", sub: "שלב מתקדם" },
-  { icon: CalendarClock, title: "פגישה בעוד 30 דקות", sub: "סיור בנכס" },
-  { icon: BarChart3, title: "ביצועי קמפיין עלו", sub: "+18% חשיפה" },
-  { icon: Tag, title: "התראת שינוי מחיר", sub: "ירידה של ₪40,000" },
-  { icon: Users, title: "נמצאה התאמת קונה", sub: "מוכן לרכישה" },
-];
-
-const ANIMS = ["fade", "up", "left", "right", "pulse"] as const;
-// Anchor slots around the screen edges (never the center — the panel lives there).
-const ZONES: Array<React.CSSProperties> = [
-  { top: "11%", insetInlineStart: "5%" },
-  { top: "18%", insetInlineEnd: "6%" },
-  { top: "42%", insetInlineStart: "3.5%" },
-  { top: "46%", insetInlineEnd: "4.5%" },
-  { bottom: "15%", insetInlineStart: "7%" },
-  { bottom: "11%", insetInlineEnd: "8%" },
-  { top: "7%", insetInlineStart: "38%" },
-  { bottom: "7%", insetInlineStart: "40%" },
-];
-
-interface ActiveWidget { id: number; item: LiveItem; zone: React.CSSProperties; anim: string }
+// The mascot is hosted by the brand site; if hotlinking is blocked it falls back
+// to a local /zono-robot.png (drop the PNG in /public to self-host).
+const ROBOT_REMOTE = "https://s-pixel.co.il/wp-content/uploads/2026/06/41a88c3f-7369-4e03-9571-65dbe5c7a470-1.png";
+const ROBOT_LOCAL = "/zono-robot.png";
 
 export function LoginExperience() {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(signIn, {});
-  const [widgets, setWidgets] = useState<ActiveWidget[]>([]);
-  const seq = useRef(0);
 
   // Particles: generated once, stable across renders.
   const particles = useMemo(
@@ -62,29 +30,6 @@ export function LoginExperience() {
     })),
     [],
   );
-
-  // Live-widget scheduler: spawn one every ~2.2s, auto-remove after its lifetime.
-  useEffect(() => {
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const compact = window.matchMedia?.("(max-width: 640px)").matches;
-    if (reduce || compact) return; // calm experience on small screens / reduced motion
-
-    let lastZone = -1;
-    const spawn = () => {
-      const id = ++seq.current;
-      const item = LIVE_ITEMS[id % LIVE_ITEMS.length];
-      let z = Math.floor(Math.random() * ZONES.length);
-      if (z === lastZone) z = (z + 1) % ZONES.length;
-      lastZone = z;
-      const anim = ANIMS[id % ANIMS.length];
-      const life = 6200;
-      setWidgets((w) => [...w, { id, item, zone: ZONES[z], anim }]);
-      window.setTimeout(() => setWidgets((w) => w.filter((x) => x.id !== id)), life);
-    };
-    spawn();
-    const t = window.setInterval(spawn, 2200);
-    return () => window.clearInterval(t);
-  }, []);
 
   return (
     <div dir="rtl" className="zauth">
@@ -111,24 +56,23 @@ export function LoginExperience() {
         ))}
       </div>
 
-      {/* Floating live widgets */}
-      <div className="pointer-events-none absolute inset-0">
-        {widgets.map((w) => {
-          const Ico = w.item.icon;
-          return (
-            <div
-              key={w.id}
-              className={`zauth-widget zauth-glass zauth-anim-${w.anim}`}
-              style={{ ...w.zone, ["--life" as string]: "6.2s" }}
-            >
-              <span className="zauth-w-ico"><Ico size={17} className="text-[#d6c8ff]" /></span>
-              <span>
-                <span className="zauth-w-title block">{w.item.title}</span>
-                <span className="zauth-w-sub">{w.item.sub}</span>
-              </span>
-            </div>
-          );
-        })}
+      {/* Robot mascot beside the card */}
+      <RobotMascot />
+
+      {/* Signature live chips */}
+      <div className="zauth-chip zauth-glass" style={{ top: "8%", insetInlineEnd: "9%" }}>
+        <span className="zauth-chip-ico"><MessageCircle size={17} /></span>
+        <span>
+          <span className="zauth-chip-title block">3 שיחות WhatsApp חדשות</span>
+          <span className="zauth-chip-sub">ממתינות למענה</span>
+        </span>
+      </div>
+      <div className="zauth-chip c2 zauth-glass" style={{ bottom: "12%", insetInlineEnd: "7%" }}>
+        <span className="zauth-chip-ico"><Home size={17} /></span>
+        <span>
+          <span className="zauth-chip-title block">נמצאה התאמת נכס</span>
+          <span className="zauth-chip-sub">94% התאמה</span>
+        </span>
       </div>
 
       {/* Foreground: logo + login panel */}
@@ -187,6 +131,24 @@ export function LoginExperience() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** ZONO robot mascot. Tries the brand-hosted image (no-referrer to dodge hotlink
+ *  protection), falls back to a local self-hosted copy, then hides gracefully. */
+function RobotMascot() {
+  const [src, setSrc] = useState(ROBOT_REMOTE);
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt="ZONO"
+      className="zauth-robot"
+      referrerPolicy="no-referrer"
+      onError={() => { if (src !== ROBOT_LOCAL) setSrc(ROBOT_LOCAL); else setHidden(true); }}
+    />
   );
 }
 
