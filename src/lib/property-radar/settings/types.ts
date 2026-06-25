@@ -80,11 +80,22 @@ export interface ProviderEnvSummary {
   madlanActorConfigured: boolean;
 }
 
+export interface MarketCacheSummary {
+  freshCount: number;
+  staleCount: number;
+  scanningCount: number;
+  errorCount: number;
+  areasCount: number;
+  lastMarketScanAt: string | null;
+  duplicateScansAvoided: number;
+}
+
 export interface PropertyRadarPageData {
   settings: PropertyRadarSettingsForm;
   status: PropertyRadarStatus;
   health: ProviderHealth[];
   env: ProviderEnvSummary;
+  market: MarketCacheSummary;
   isDev: boolean;
 }
 

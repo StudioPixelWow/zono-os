@@ -13,6 +13,7 @@ import { getPropertyRadarProviderEnv } from "../connectors/env";
 import { runPropertyRadarOrchestrator } from "../scheduler/orchestrator";
 import type {
   ManualSyncResultDTO,
+  MarketCacheSummary,
   PropertyRadarPageData,
   PropertyRadarRunRow,
   PropertyRadarSettingsForm,
@@ -257,12 +258,43 @@ function envSummary(): ProviderEnvSummary {
   };
 }
 
+/** Shared-market cache summary (global system metrics — not org listing data). */
+async function readMarketSummary(db: Db): Promise<MarketCacheSummary> {
+  const empty: MarketCacheSummary = {
+    freshCount: 0, staleCount: 0, scanningCount: 0, errorCount: 0,
+    areasCount: 0, lastMarketScanAt: null, duplicateScansAvoided: 0,
+  };
+  try {
+    const { data } = await db
+      .from("market_area_cache_state" as never)
+      .select("status, active_orgs_count, last_scan_at")
+      .limit(5000);
+    const rows = (data ?? []) as unknown as { status: string | null; active_orgs_count: number | null; last_scan_at: string | null }[];
+    let last: string | null = null;
+    for (const r of rows) {
+      if (r.status === "fresh") empty.freshCount++;
+      else if (r.status === "stale") empty.staleCount++;
+      else if (r.status === "scanning") empty.scanningCount++;
+      else if (r.status === "error") empty.errorCount++;
+      // Each area scanned ONCE instead of once-per-org → (orgs-1) scans avoided.
+      empty.duplicateScansAvoided += Math.max(0, (r.active_orgs_count ?? 0) - 1);
+      if (r.last_scan_at && (!last || r.last_scan_at > last)) last = r.last_scan_at;
+    }
+    empty.areasCount = rows.length;
+    empty.lastMarketScanAt = last;
+    return empty;
+  } catch {
+    return empty; // table may not exist yet (migration not run) — degrade safely
+  }
+}
+
 export async function getPropertyRadarSettingsPageData(): Promise<PropertyRadarPageData> {
   const { db, orgId } = await ctx();
   const settings = await readSettings(db, orgId);
   const status = await readStatus(db, orgId, settings);
   const health = await readProviderHealth(db, orgId);
-  return { settings, status, health, env: envSummary(), isDev };
+  const market = await readMarketSummary(db);
+  return { settings, status, health, env: envSummary(), market, isDev };
 }
 
 /** Server-only health utility (env + sync run logs; never calls providers). */

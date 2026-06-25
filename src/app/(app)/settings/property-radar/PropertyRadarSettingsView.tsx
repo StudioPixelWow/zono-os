@@ -211,6 +211,21 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
         </div>
       </Section>
 
+      {/* 5.5 · שכבת שוק משותפת */}
+      <Section icon={<Activity size={18} />} title="שכבת שוק משותפת">
+        <p className="text-sm text-ink/60">
+          ZONO סורק כל אזור פעם אחת ומשתף את המידע הרלוונטי בין סוכנים. כך נחסכות סריקות כפולות וקרדיטים.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat label="אזורים במטמון" value={fmt(initial.market.areasCount)} />
+          <Stat label="טרי" value={fmt(initial.market.freshCount)} />
+          <Stat label="לא עדכני / סורק" value={`${fmt(initial.market.staleCount)} / ${fmt(initial.market.scanningCount)}`} />
+          <Stat label="שגיאה" value={fmt(initial.market.errorCount)} />
+          <Stat label="סריקה משותפת אחרונה" value={dt(initial.market.lastMarketScanAt)} />
+          <Stat label="סריקות כפולות שנחסכו" value={`~${fmt(initial.market.duplicateScansAvoided)}`} highlight />
+        </div>
+      </Section>
+
       {/* 6 · בדיקה ידנית */}
       <Section icon={<PlayCircle size={18} />} title="בדיקה ידנית">
         <p className="text-sm text-ink/60">הרץ סריקה מיידית לארגון שלך בלבד. הסריקה מכבדת את מגבלת הקרדיטים וההגדרות.</p>
