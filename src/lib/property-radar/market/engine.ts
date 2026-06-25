@@ -123,6 +123,7 @@ export async function runMarketAreaSync(
     // 5) watermark + 6) scan
     const watermark = await repo.getMarketWatermark(provider, marketAreaKey);
     const ttlMinutes = watermark?.ttl_minutes ?? cacheState?.ttl_minutes ?? DEFAULT_TTL_MINUTES;
+    const scanStartedAt = Date.now();
     const scan = await providerImpl.scanAreaMetadata(input.area, {
       maxPages: input.options?.maxPages,
       unchangedStreakStopThreshold: input.options?.unchangedStreakStopThreshold,
@@ -130,6 +131,18 @@ export async function runMarketAreaSync(
       watermarkExternalId: watermark?.latest_external_id ?? null,
     });
     result.scannedCount = scan.listings.length;
+
+    // Phase 12 — automatic provider QA on the fresh batch. Best-effort: never
+    // blocks/breaks/slows the sync (errors swallowed; persistence lazy-loaded).
+    if (!dryRun && scan.listings.length > 0) {
+      try {
+        const { runProviderQA } = await import("../provider-qa/engine");
+        await runProviderQA({
+          provider, listings: scan.listings, latencyMs: Date.now() - scanStartedAt,
+          creditsUsed: scan.creditsUsedEstimate, marketAreaKey,
+        });
+      } catch { /* QA must never affect the sync */ }
+    }
 
     // 7) decide vs shared sources
     const existing = await repo.getExistingMarketSourcesForArea(provider, marketAreaKey);
