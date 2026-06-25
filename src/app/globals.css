@@ -545,6 +545,18 @@ body {
   /* never distort proportions, never cover the face */
 }
 .zi-avatar__fallback { position: relative; z-index: 1; color: #fff; display: grid; place-items: center; }
+/* Bare launcher: image only — no purple disc, no ring. Soft glow comes from the
+   launcher wrapper (.zi-launcher::before). The robot fills the button. */
+.zi-avatar--bare {
+  background: none !important;
+  box-shadow: none !important;
+}
+.zi-avatar--bare .zi-avatar__ring { display: none; }
+.zi-avatar--bare .zi-avatar__img {
+  width: 100%; height: 100%;
+  filter: drop-shadow(0 6px 16px rgba(124, 58, 237, 0.55));
+}
+.zi-avatar--bare .zi-avatar__status { inset-inline-end: 8%; bottom: 6%; }
 .zi-avatar__status {
   position: absolute; z-index: 2;
   bottom: 4%; inset-inline-end: 4%;

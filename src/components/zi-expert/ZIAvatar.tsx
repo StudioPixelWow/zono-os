@@ -14,10 +14,12 @@ const ZI_AVATAR_LOCAL = "/zi-avatar.png";
 
 export type ZiAvatarState = "idle" | "thinking" | "online";
 
-export function ZIAvatar({ size = 56, state = "idle", showStatus = true, className = "" }: {
+export function ZIAvatar({ size = 56, state = "idle", showStatus = true, bare = false, className = "" }: {
   size?: number;
   state?: ZiAvatarState;
   showStatus?: boolean;
+  /** Image-only: drop the purple disc + ring (used for the floating launcher). */
+  bare?: boolean;
   className?: string;
 }) {
   const [src, setSrc] = useState(ZI_AVATAR_URL);
@@ -25,7 +27,7 @@ export function ZIAvatar({ size = 56, state = "idle", showStatus = true, classNa
 
   return (
     <span
-      className={`zi-avatar ${state === "thinking" ? "zi-avatar--thinking" : "zi-avatar--idle"} ${className}`}
+      className={`zi-avatar ${bare ? "zi-avatar--bare" : ""} ${state === "thinking" ? "zi-avatar--thinking" : "zi-avatar--idle"} ${className}`}
       style={{ width: size, height: size }}
       aria-hidden="true"
     >

@@ -95,8 +95,9 @@ export function DashboardHomeView({
       {/* 10 — מי מאיים עליך כרגע? · competitor threats */}
       <CompetitorThreatsSection threats={threats} />
 
-      {/* AI floating action button */}
-      <div className="fixed bottom-24 start-5 z-30 lg:bottom-8">
+      {/* AI floating action button — moved to physical left (inline-end) so it
+          doesn't collide with the ZI launcher on the right. */}
+      <div className="fixed bottom-24 end-5 z-30 lg:bottom-8">
         {fabOpen && (
           <div className="bg-card border-line mb-3 flex w-56 flex-col gap-0.5 rounded-2xl border p-2 shadow-[var(--shadow-lift)]">
             {FAB_ACTIONS.map((a) => (

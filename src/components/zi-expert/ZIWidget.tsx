@@ -163,9 +163,9 @@ export function ZIWidget() {
             transition={{ type: "spring", stiffness: 320, damping: 22 }}
             onClick={openWidget}
             aria-label="פתח את ZI — המומחה שלך ל-ZONO"
-            className="zi-launcher fixed bottom-5 left-5 z-[150]"
+            className="zi-launcher fixed bottom-5 right-5 z-[150]"
           >
-            <ZIAvatar size={62} state="idle" />
+            <ZIAvatar size={76} state="idle" bare />
           </motion.button>
         )}
       </AnimatePresence>
@@ -179,7 +179,7 @@ export function ZIWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed bottom-5 left-5 z-[150] flex h-[min(620px,calc(100vh-2.5rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl"
+            className="fixed bottom-5 right-5 z-[150] flex h-[min(620px,calc(100vh-2.5rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl"
           >
             <ZIChatWindow
               messages={messages}
