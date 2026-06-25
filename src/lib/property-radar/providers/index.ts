@@ -14,6 +14,7 @@ export type {
   PropertyProviderScanResult,
   PropertyRadarArea,
 } from "./types";
+export type { ProviderCapabilities } from "../connectors/types";
 
 // Errors
 export {

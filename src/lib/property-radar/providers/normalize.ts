@@ -37,13 +37,22 @@ function imagesOf(raw: Raw): string[] {
   return cover ? [cover] : [];
 }
 
-/** private | broker | unknown — from agent/advertiser signals. */
-function listingTypeOf(raw: Raw): ListingType {
+/** private | broker | project | unknown — from advertiser / project signals. */
+export function listingTypeOf(raw: Raw): ListingType {
+  // Project / new-from-developer signals win first.
+  const isProject = boolOf(raw, ["isProject", "fromDeveloper", "isNewProject"]);
+  const projectHint = (
+    (str(pick(raw, ["projectName", "developer", "developerName", "category", "adType"])) ?? "") +
+    " " +
+    (str(pick(raw, ["contactType", "advertiserType"])) ?? "")
+  ).toLowerCase();
+  if (isProject === true || /project|developer|קבלן|יזם|פרויקט|מקבלן/.test(projectHint)) return "project";
+
   const hasAgent = boolOf(raw, ["hasAgent", "isAgent", "isAgency"]);
   if (hasAgent === true) return "broker";
   if (hasAgent === false) return "private";
   const contactType = (str(pick(raw, ["contactType", "advertiserType"])) ?? "").toLowerCase();
-  if (/agent|agency|broker|מתווך|תיווך/.test(contactType)) return "broker";
+  if (/agent|agency|broker|מתווך|תיווך|משרד/.test(contactType)) return "broker";
   if (/private|owner|פרטי|בעל/.test(contactType)) return "private";
   return "unknown";
 }

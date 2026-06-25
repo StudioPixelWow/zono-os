@@ -35,8 +35,11 @@ function dt(iso: string | null): string {
 export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarPageData }) {
   const [form, setForm] = useState<PropertyRadarSettingsForm>(initial.settings);
   const [provider, setProvider] = useState<PropertyProviderName>(
-    initial.providers.find((p) => p.implemented)?.name ?? "yad2",
+    initial.health.find((h) => h.configured && h.enabled)?.provider ??
+      initial.health[0]?.provider ??
+      "yad2",
   );
+  const selectedHealth = initial.health.find((h) => h.provider === provider);
   const [syncResult, setSyncResult] = useState<ManualSyncResultDTO | null>(null);
   const runner = useActionRunner();
   const status = initial.status;
@@ -109,8 +112,23 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
         <Toggle label="הפעל סנכרון אוטומטי" desc="מנוע הרדאר ירוץ אוטומטית כל שעה" checked={form.sync_enabled} onChange={(v) => set("sync_enabled", v)} />
         <Toggle label="מצב חכם מומלץ" desc="קצב סריקה משתנה לפי חום האזור — חוסך קרדיטים" checked={form.smart_sync_enabled} onChange={(v) => set("smart_sync_enabled", v)} />
         <div className="grid grid-cols-2 gap-2">
-          <ProviderToggle label="יד2" available={initial.providers.find((p) => p.name === "yad2")} checked={form.provider_yad2_enabled} onChange={(v) => set("provider_yad2_enabled", v)} />
-          <ProviderToggle label="מדלן" available={initial.providers.find((p) => p.name === "madlan")} checked={form.provider_madlan_enabled} onChange={(v) => set("provider_madlan_enabled", v)} />
+          <ProviderToggle label="יד2" available={initial.health.find((h) => h.provider === "yad2")} checked={form.provider_yad2_enabled} onChange={(v) => set("provider_yad2_enabled", v)} />
+          <ProviderToggle label="מדלן" available={initial.health.find((h) => h.provider === "madlan")} checked={form.provider_madlan_enabled} onChange={(v) => set("provider_madlan_enabled", v)} />
+        </div>
+
+        {/* Provider health badges */}
+        <div className="flex flex-col gap-1.5 rounded-xl bg-black/[0.03] p-3">
+          {initial.health.map((h) => (
+            <div key={h.provider} className="flex items-center gap-2 text-xs">
+              <HealthBadge status={h.status} />
+              <span className="font-bold text-ink">{h.label}</span>
+              <span className="text-ink/55">{h.message}</span>
+              {h.lastSuccessfulRunAt && <span className="mr-auto text-ink/45">סנכרון אחרון {dt(h.lastSuccessfulRunAt)}</span>}
+            </div>
+          ))}
+          <p className="mt-1 border-t border-black/5 pt-1.5 text-[11px] text-ink/50">
+            מצב ספק: <b>{initial.env.providerMode}</b> · טוקן Apify: {initial.env.apifyTokenExists ? "מוגדר" : "חסר"} · Actor יד2: {initial.env.yad2ActorConfigured ? "מוגדר" : "חסר"} · Actor מדלן: {initial.env.madlanActorConfigured ? "מוגדר" : "חסר"}
+          </p>
         </div>
       </Section>
 
@@ -202,14 +220,25 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
             onChange={(e) => setProvider(e.target.value as PropertyProviderName)}
             className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-ink focus:border-brand focus:outline-none"
           >
-            {initial.providers.filter((p) => p.implemented).map((p) => (
-              <option key={p.name} value={p.name}>{p.label}{p.name !== "mock" && !p.configured ? " (לא מוגדר)" : ""}</option>
+            {initial.health.map((h) => (
+              <option key={h.provider} value={h.provider}>
+                {h.label}{h.provider !== "mock" && !h.configured ? " (לא מוגדר)" : ""}
+              </option>
             ))}
           </select>
-          <Button onClick={manualSync} loading={runner.pending} disabled={!form.sync_enabled || noAreas} leadingIcon={<Sparkles size={16} />} variant="secondary">
+          <Button
+            onClick={manualSync}
+            loading={runner.pending}
+            disabled={!form.sync_enabled || noAreas || (provider !== "mock" && !(selectedHealth?.configured && selectedHealth?.enabled))}
+            leadingIcon={<Sparkles size={16} />}
+            variant="secondary"
+          >
             הפעל סריקה עכשיו
           </Button>
         </div>
+        {provider !== "mock" && selectedHealth && !selectedHealth.configured && (
+          <p className="text-xs font-bold text-amber-700">{selectedHealth.label} אינו מוגדר — לא ניתן להריץ סריקה.</p>
+        )}
 
         {syncResult && (
           <div className={`rounded-2xl border p-4 ${syncResult.ok ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
@@ -319,4 +348,16 @@ function MiniStat({ label, value }: { label: string; value: number }) {
       <p className="text-[11px] text-ink/55">{label}</p>
     </div>
   );
+}
+
+function HealthBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    online: { label: "מחובר", cls: "bg-emerald-100 text-emerald-700" },
+    not_configured: { label: "לא מוגדר", cls: "bg-amber-100 text-amber-700" },
+    disabled: { label: "כבוי", cls: "bg-black/10 text-ink/60" },
+    error: { label: "שגיאה", cls: "bg-red-100 text-red-700" },
+    unknown: { label: "—", cls: "bg-black/10 text-ink/60" },
+  };
+  const v = map[status] ?? map.unknown;
+  return <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${v.cls}`}>{v.label}</span>;
 }

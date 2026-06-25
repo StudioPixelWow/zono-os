@@ -53,9 +53,12 @@ export interface OrchestratorDeps {
 
 function resolveDefaultProvider(explicit?: PropertyProviderName): PropertyProviderName | null {
   if (explicit) return explicit;
-  const p = process.env.PROPERTY_RADAR_PROVIDER;
-  if (p === "mock" || p === "yad2" || p === "madlan") return p;
-  return null; // no provider configured → run nothing (safe default)
+  // PROPERTY_RADAR_PROVIDER is a MODE (mock|apify). In apify mode the caller must
+  // pass an explicit provider name (jobs fan out per provider); only mock mode
+  // resolves to a runnable default here.
+  const mode = (process.env.PROPERTY_RADAR_PROVIDER ?? "").trim().toLowerCase();
+  if (mode === "mock") return "mock";
+  return null; // safe default — run nothing
 }
 
 async function getDefaultDataAccess(): Promise<OrchestratorDataAccess> {

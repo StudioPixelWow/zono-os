@@ -54,19 +54,37 @@ export interface PropertyRadarStatus {
   recentRuns: PropertyRadarRunRow[];
 }
 
-export interface ProviderAvailability {
-  name: PropertyProviderName;
+export type ProviderHealthStatus = "online" | "not_configured" | "disabled" | "error" | "unknown";
+
+export interface ProviderHealth {
+  provider: PropertyProviderName;
   label: string;
-  /** Implemented in code (yad2/madlan are real now; mock is dev-only). */
+  /** Implemented in code (yad2/madlan are real; mock is dev-only). */
   implemented: boolean;
-  /** Connector configured via env (token + actor present). */
+  /** Connector configured via env (mode apify + token + actor present). */
   configured: boolean;
+  /** Enabled via settings/env. */
+  enabled: boolean;
+  status: ProviderHealthStatus;
+  lastSuccessfulRunAt: string | null;
+  failuresToday: number;
+  averageDurationMs: number | null;
+  message: string;
+}
+
+/** Env presence summary — booleans only, never the secret values. */
+export interface ProviderEnvSummary {
+  providerMode: "mock" | "apify" | "none";
+  apifyTokenExists: boolean;
+  yad2ActorConfigured: boolean;
+  madlanActorConfigured: boolean;
 }
 
 export interface PropertyRadarPageData {
   settings: PropertyRadarSettingsForm;
   status: PropertyRadarStatus;
-  providers: ProviderAvailability[];
+  health: ProviderHealth[];
+  env: ProviderEnvSummary;
   isDev: boolean;
 }
 

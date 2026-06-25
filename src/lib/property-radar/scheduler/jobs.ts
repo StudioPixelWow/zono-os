@@ -9,18 +9,27 @@ import type { PropertyProviderName } from "../types";
 import { runMissingValidation } from "../sync/missing-validation";
 import { runPropertyRadarOrchestrator } from "./orchestrator";
 import { createOrchestratorDataAccess } from "./data-access";
+import { getPropertyRadarProviderEnv } from "../connectors/env";
 import type { OrchestratorSummary, RunOrchestratorInput } from "./types";
 
-const VALID: PropertyProviderName[] = ["mock", "yad2", "madlan"];
-
-/** Providers configured for automatic runs (CSV in PROPERTY_RADAR_PROVIDER). */
+/**
+ * Providers to run automatically, derived from the env MODE + enable flags:
+ *   PROPERTY_RADAR_PROVIDER=mock  → [mock]   (dev only — never in production)
+ *   PROPERTY_RADAR_PROVIDER=apify → [yad2 if enabled, madlan if enabled]
+ *   otherwise                     → []       (safe no-op)
+ */
 function resolveProviders(): PropertyProviderName[] {
-  const raw = process.env.PROPERTY_RADAR_PROVIDER ?? "";
-  const names = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s): s is PropertyProviderName => (VALID as string[]).includes(s));
-  return [...new Set(names)];
+  const env = getPropertyRadarProviderEnv();
+  if (env.providerMode === "mock") {
+    return process.env.NODE_ENV !== "production" ? ["mock"] : [];
+  }
+  if (env.providerMode === "apify") {
+    const out: PropertyProviderName[] = [];
+    if (env.yad2Enabled) out.push("yad2");
+    if (env.madlanEnabled) out.push("madlan");
+    return out;
+  }
+  return [];
 }
 
 /** Hourly automatic radar pass — one orchestrator run per configured provider. */

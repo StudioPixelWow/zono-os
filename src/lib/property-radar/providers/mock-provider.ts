@@ -146,6 +146,15 @@ function buildListing(
 
 export class MockPropertyProvider implements PropertyProvider {
   readonly providerName = "mock" as const;
+  readonly capabilities = {
+    supportsIncremental: true,
+    supportsPagination: true,
+    supportsPriceUpdates: true,
+    supportsDeletedDetection: true,
+    supportsPublishedDate: true,
+    estimatedCreditCostPerPage: 0,
+    estimatedCreditCostPerFullFetch: 0,
+  } as const;
 
   // Cheap list scan — deterministic metadata for the given area.
   async scanAreaMetadata(

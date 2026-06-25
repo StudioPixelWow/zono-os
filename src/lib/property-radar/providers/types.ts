@@ -7,6 +7,7 @@
 // new/changed listings).
 // ============================================================================
 import type { ListingType, PropertyProviderName } from "../types";
+import type { ProviderCapabilities } from "../connectors/types";
 
 /** Cheap, list-level listing data — what an incremental scan returns per card. */
 export interface NormalizedListingMetadata {
@@ -79,6 +80,8 @@ export interface PropertyProviderScanResult {
 /** The contract every provider implements. */
 export interface PropertyProvider {
   readonly providerName: PropertyProviderName;
+  /** What this provider can do (drives engine/scoring expectations). */
+  readonly capabilities: ProviderCapabilities;
   /** Cheap list scan — returns listing metadata for change detection. */
   scanAreaMetadata(
     area: PropertyRadarArea,

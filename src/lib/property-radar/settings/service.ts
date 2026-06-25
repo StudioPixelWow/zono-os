@@ -9,7 +9,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { RADAR_TABLES } from "../types";
 import type { PropertyProviderName } from "../types";
 import { startOfUtcDayIso } from "../scheduler/credit-budget";
-import { getRadarConnectorConfig } from "../connectors/config";
+import { getPropertyRadarProviderEnv } from "../connectors/env";
 import { runPropertyRadarOrchestrator } from "../scheduler/orchestrator";
 import type {
   ManualSyncResultDTO,
@@ -17,7 +17,8 @@ import type {
   PropertyRadarRunRow,
   PropertyRadarSettingsForm,
   PropertyRadarStatus,
-  ProviderAvailability,
+  ProviderEnvSummary,
+  ProviderHealth,
 } from "./types";
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -191,19 +192,83 @@ async function readStatus(
   };
 }
 
-function providerAvailability(): ProviderAvailability[] {
-  const out: ProviderAvailability[] = [];
-  if (isDev) out.push({ name: "mock", label: "בדיקה (Mock)", implemented: true, configured: true });
-  out.push({ name: "yad2", label: "יד2", implemented: true, configured: !!getRadarConnectorConfig("yad2") });
-  out.push({ name: "madlan", label: "מדלן", implemented: true, configured: !!getRadarConnectorConfig("madlan") });
+interface RunStat { provider: string; status: string; started_at: string | null; finished_at: string | null; }
+
+async function readProviderHealth(db: Db, orgId: string): Promise<ProviderHealth[]> {
+  const env = getPropertyRadarProviderEnv();
+  const todayIso = startOfUtcDayIso(new Date());
+
+  // Pull today's runs once; aggregate per provider in memory (no external calls).
+  const { data } = await db
+    .from(RADAR_TABLES.runs as never)
+    .select("provider, status, started_at, finished_at")
+    .eq("org_id", orgId)
+    .gte("started_at", todayIso);
+  const runs = (data ?? []) as unknown as RunStat[];
+
+  const statsFor = (p: string) => {
+    const rows = runs.filter((r) => r.provider === p);
+    const failuresToday = rows.filter((r) => r.status === "failed").length;
+    const successes = rows.filter((r) => r.status === "success" && r.finished_at);
+    const lastSuccessfulRunAt = successes
+      .map((r) => r.finished_at as string)
+      .sort()
+      .at(-1) ?? null;
+    const durations = rows
+      .filter((r) => r.started_at && r.finished_at)
+      .map((r) => Date.parse(r.finished_at as string) - Date.parse(r.started_at as string))
+      .filter((d) => Number.isFinite(d) && d >= 0);
+    const averageDurationMs = durations.length
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : null;
+    return { failuresToday, lastSuccessfulRunAt, averageDurationMs };
+  };
+
+  const build = (
+    provider: "mock" | "yad2" | "madlan",
+    label: string,
+    configured: boolean,
+    enabled: boolean,
+  ): ProviderHealth => {
+    const s = statsFor(provider);
+    let status: ProviderHealth["status"];
+    let message: string;
+    if (!enabled) { status = "disabled"; message = "כבוי"; }
+    else if (!configured) { status = "not_configured"; message = "לא מוגדר — חסר טוקן/Actor או PROPERTY_RADAR_PROVIDER≠apify"; }
+    else if (s.failuresToday > 0) { status = "error"; message = `${s.failuresToday} כשלים היום`; }
+    else { status = "online"; message = "מחובר ומוכן"; }
+    return { provider, label, implemented: true, configured, enabled, status, ...s, message };
+  };
+
+  const out: ProviderHealth[] = [];
+  if (isDev) out.push(build("mock", "בדיקה (Mock)", true, true));
+  out.push(build("yad2", "יד2", env.providerMode === "apify" && env.apifyTokenExists && !!env.yad2ActorId, env.yad2Enabled));
+  out.push(build("madlan", "מדלן", env.providerMode === "apify" && env.apifyTokenExists && !!env.madlanActorId, env.madlanEnabled));
   return out;
+}
+
+function envSummary(): ProviderEnvSummary {
+  const env = getPropertyRadarProviderEnv();
+  return {
+    providerMode: env.providerMode,
+    apifyTokenExists: env.apifyTokenExists,
+    yad2ActorConfigured: !!env.yad2ActorId,
+    madlanActorConfigured: !!env.madlanActorId,
+  };
 }
 
 export async function getPropertyRadarSettingsPageData(): Promise<PropertyRadarPageData> {
   const { db, orgId } = await ctx();
   const settings = await readSettings(db, orgId);
   const status = await readStatus(db, orgId, settings);
-  return { settings, status, providers: providerAvailability(), isDev };
+  const health = await readProviderHealth(db, orgId);
+  return { settings, status, health, env: envSummary(), isDev };
+}
+
+/** Server-only health utility (env + sync run logs; never calls providers). */
+export async function getPropertyProviderHealth(): Promise<ProviderHealth[]> {
+  const { db, orgId } = await ctx();
+  return readProviderHealth(db, orgId);
 }
 
 export async function updatePropertyRadarSettings(
@@ -245,12 +310,19 @@ export async function runManualPropertyRadarSync(
     return { ...empty, skippedReason: "הסנכרון האוטומטי כבוי" };
   }
 
-  // Provider gating: mock dev-only; yad2/madlan must be enabled in settings.
+  // Provider gating: mock dev-only; yad2/madlan must be enabled AND configured.
   const provider = input.providerName;
+  const env = getPropertyRadarProviderEnv();
   if (!provider) return { ...empty, skippedReason: "לא נבחר ספק" };
   if (provider === "mock" && !isDev) return { ...empty, skippedReason: "Mock זמין רק בפיתוח" };
-  if (provider === "yad2" && !settings.provider_yad2_enabled) return { ...empty, skippedReason: "יד2 מושבת בהגדרות" };
-  if (provider === "madlan" && !settings.provider_madlan_enabled) return { ...empty, skippedReason: "מדלן מושבת בהגדרות" };
+  if (provider === "yad2") {
+    if (!settings.provider_yad2_enabled || !env.yad2Enabled) return { ...empty, skippedReason: "יד2 מושבת" };
+    if (env.providerMode !== "apify" || !env.apifyTokenExists || !env.yad2ActorId) return { ...empty, skippedReason: "יד2 לא מוגדר (חסר טוקן/Actor)" };
+  }
+  if (provider === "madlan") {
+    if (!settings.provider_madlan_enabled || !env.madlanEnabled) return { ...empty, skippedReason: "מדלן מושבת" };
+    if (env.providerMode !== "apify" || !env.apifyTokenExists || !env.madlanActorId) return { ...empty, skippedReason: "מדלן לא מוגדר (חסר טוקן/Actor)" };
+  }
 
   const startedAtIso = new Date().toISOString();
   const summary = await runPropertyRadarOrchestrator({
