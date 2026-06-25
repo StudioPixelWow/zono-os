@@ -10,6 +10,10 @@ import { Handshake, Phone, MessageCircle, CalendarClock, RotateCcw, CheckCircle2
 import {
   recomputeExclusiveAcquisitionAction, recordSellerOutcomeAction, recordSellerTouchpointAction,
 } from "@/lib/exclusive-acquisition/actions";
+import { AiActionButton } from "@/components/ai-copilot/AiCopilotPanel";
+import {
+  prepareSellerCallAction, explainOpportunityAction, generateWhatsappAction, morningBriefAction,
+} from "@/lib/ai-copilot/actions";
 import { LIFECYCLE_LABEL } from "@/lib/exclusive-acquisition/lifecycle";
 import type {
   ContactPriorityItem, ExclusiveBand, ExclusiveDashboard, SellerProfile,
@@ -57,9 +61,13 @@ export function ExclusiveOpportunitiesView({ initial }: { initial: ExclusiveDash
           <h1 className="text-xl font-black text-ink">הזדמנויות בלעדיות — Seller Intelligence™</h1>
           <p className="text-xs font-bold text-ink/55">מי הכי קרוב לחתום בלעדיות, את מי לפנות קודם — ולמה. מנוע דטרמיניסטי, ללא AI.</p>
         </div>
-        <button onClick={recompute} disabled={busy} className="ms-auto inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-sm font-black text-white disabled:opacity-60">
-          <RotateCcw size={15} className={busy ? "animate-spin" : ""} /> חשב מחדש
-        </button>
+        <div className="ms-auto flex items-center gap-2">
+          <AiActionButton label="תדריך בוקר" title="תדריך בוקר — ZONO Copilot" run={morningBriefAction}
+            className="inline-flex items-center gap-1 rounded-xl bg-violet-100 px-3 py-2 text-sm font-black text-violet-700 hover:bg-violet-200" />
+          <button onClick={recompute} disabled={busy} className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-sm font-black text-white disabled:opacity-60">
+            <RotateCcw size={15} className={busy ? "animate-spin" : ""} /> חשב מחדש
+          </button>
+        </div>
       </header>
       {note && <p className="rounded-xl bg-brand-soft/50 px-3 py-2 text-sm font-bold text-brand-strong">{note}</p>}
 
@@ -166,6 +174,11 @@ function OpportunityRow({ p, onChanged }: { p: SellerProfile; onChanged: () => v
         <button disabled={busy} onClick={() => touch("whatsapp")} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 disabled:opacity-50"><MessageCircle size={12} /> וואטסאפ</button>
         <button disabled={busy} onClick={() => outcome("exclusive_signed")} className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"><CheckCircle2 size={12} /> נחתמה בלעדיות</button>
         <button disabled={busy} onClick={() => outcome("declined")} className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700 disabled:opacity-50"><XCircle size={12} /> סירב</button>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-black/5 pt-1.5">
+        <AiActionButton label="הכן שיחה" title="תדריך שיחה — ZONO Copilot" run={() => prepareSellerCallAction(p.id)} />
+        <AiActionButton label="וואטסאפ" title="הודעת וואטסאפ — ZONO Copilot" run={() => generateWhatsappAction(p.id, p.listingType === "private" ? "private_listing" : "buyer_recommendation", "professional")} />
+        <AiActionButton label="הסבר הזדמנות" title="הסבר הזדמנות — ZONO Copilot" run={() => explainOpportunityAction(p.id)} />
       </div>
     </div>
   );
