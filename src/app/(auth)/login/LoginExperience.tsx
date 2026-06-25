@@ -56,9 +56,6 @@ export function LoginExperience() {
         ))}
       </div>
 
-      {/* Robot mascot beside the card */}
-      <RobotMascot />
-
       {/* Signature live chips */}
       <div className="zauth-chip zauth-glass" style={{ top: "8%", insetInlineEnd: "9%" }}>
         <span className="zauth-chip-ico"><MessageCircle size={17} /></span>
@@ -77,10 +74,13 @@ export function LoginExperience() {
 
       {/* Foreground: logo + login panel */}
       <div className="relative z-10 flex min-h-screen items-center justify-center px-5 py-10">
-        <div className="w-full max-w-[400px]">
+        <div className="zauth-stage relative w-full max-w-[400px]">
+          {/* Robot mascot — anchored to the card so it stands touching/overflowing it */}
+          <RobotMascot />
+
           {/* Logo hero */}
           <div className="zauth-logo mb-7 flex flex-col items-center text-center">
-            <ZonoLogo priority width={188} height={62} className="drop-shadow-[0_8px_30px_rgba(124,58,237,0.45)]" />
+            <ZonoLogo priority width={264} height={86} className="drop-shadow-[0_8px_30px_rgba(124,58,237,0.45)]" />
             <p className="mt-4 text-[13px] font-semibold tracking-wide text-[#b9a9f0]">
               מערכת ההפעלה החכמה לנדל״ן
             </p>
