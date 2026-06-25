@@ -22,6 +22,8 @@ export interface GeocodeRunResult {
   candidates: number;
   stats?: GeocodeRunStats;
   message: string;
+  /** First failure reason + message from Google — surfaced so a 100%-fail run is diagnosable. */
+  sampleError?: string | null;
 }
 
 interface Row { id: string; [k: string]: unknown }
@@ -84,6 +86,7 @@ export async function geocodeMissingAction(entity: GeocodeEntity, limit = 50, mo
   }
 
   const stats: GeocodeRunStats = { success: 0, lowConfidence: 0, failed: 0, skipped: 0 };
+  let sampleError: string | null = null;
   for (const r of rows) {
     const input = cfg.toInput(r);
     if (!buildQuery(input)) { stats.skipped++; continue; }
@@ -92,6 +95,15 @@ export async function geocodeMissingAction(entity: GeocodeEntity, limit = 50, mo
 
     if (!out.ok) {
       stats.failed++;
+      if (!sampleError) sampleError = `${out.reason}: ${out.message}`;
+      // A REQUEST_DENIED/config failure repeats for every row — bail early so we
+      // don't burn 50 identical denials, and report the reason.
+      if (out.reason === "denied" || out.reason === "config") {
+        return {
+          ok: false, entity, candidates: rows.length, stats, sampleError,
+          message: `הגיאוקודינג נחסם: ${out.message} — בדוק שה‑Geocoding API מופעל, שהחיוב פעיל, ושמפתח השרת אינו מוגבל ל‑HTTP referrers.`,
+        };
+      }
       if (cfg.hasStatus) {
         await db.from(entity as never).update({ geocode_status: "failed", geocode_error: out.message } as never)
           .eq("id", r.id).eq(cfg.orgCol as string, profile.org_id).then(() => {}, () => {});
@@ -125,7 +137,7 @@ export async function geocodeMissingAction(entity: GeocodeEntity, limit = 50, mo
   }
 
   return {
-    ok: true, entity, candidates: rows.length, stats,
-    message: `הושלם: ${stats.success} מדויקים · ${stats.lowConfidence} ביטחון נמוך · ${stats.failed} נכשלו · ${stats.skipped} דולגו.`,
+    ok: true, entity, candidates: rows.length, stats, sampleError,
+    message: `הושלם: ${stats.success} מדויקים · ${stats.lowConfidence} ביטחון נמוך · ${stats.failed} נכשלו · ${stats.skipped} דולגו.${stats.failed > 0 && sampleError ? ` · סיבת כישלון: ${sampleError}` : ""}`,
   };
 }
