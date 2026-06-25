@@ -62,6 +62,8 @@ export const MODULES: ModuleEntry[] = [
   // ── ניהול ──
   { id: "office-intelligence", label: "מודיעין משרד", route: "/office-intelligence", icon: "Building2", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "Office Intelligence™ — מערכת ההפעלה הניהולית: KPIs, ביצועי סוכנים, לוח מובילים, סיכונים, צפי ויעדים" },
   { id: "operating-areas", label: "אזורי פעילות", route: "/settings/operating-areas", icon: "MapPin", category: "ניהול", roleMin: "agent", sidebar: true, searchable: true, description: "ניהול ערי ושכונות הפעילות" },
+  { id: "journey-automation", label: "אוטומציית מסעות", route: "/journey-automation", icon: "Sparkles", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "Journey Automation OS™ — תזמור כל המנועים: טריגרים, תנאים, השהיות, SLA, סימולציה וביקורת" },
+  { id: "journey-builder", label: "בונה מסעות", route: "/journey-builder", icon: "Sparkles", category: "ניהול", roleMin: "manager", sidebar: false, searchable: true, description: "בונה מסעות ויזואלי (Drag & Drop)" },
   { id: "system-health", label: "מנועי חישוב", route: "/admin/system-health", icon: "Settings", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "מרכז חישוב — סטטוס ורענון מנועים" },
   { id: "data-quality", label: "איכות דאטה", route: "/admin/data-quality", icon: "Shield", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "זיהוי דאטה שבורה" },
   { id: "modules", label: "מדריך מודולים", route: "/search/modules", icon: "Search", category: "ניהול", roleMin: "viewer", sidebar: false, searchable: true, description: "כל המודולים במערכת" },
