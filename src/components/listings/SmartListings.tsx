@@ -206,6 +206,10 @@ function PropertyIntelligenceDrawer({ base, onClose }: { base: Row; onClose: () 
   const [pending, start] = useTransition();
   useEffect(() => {
     let alive = true;
+    // Show the spinner while (re)fetching detail for the current id. This is the
+    // intended "loading before async fetch" pattern; the setter is immediately
+    // followed by an async load, so it cannot cascade.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     getExternalListingDetailAction(base.id).then((d) => { if (alive) setDetail(d); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
