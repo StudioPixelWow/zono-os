@@ -11,7 +11,11 @@ import type { PropertyProviderName } from "../types";
 import { startOfUtcDayIso } from "../scheduler/credit-budget";
 import { getPropertyRadarProviderEnv } from "../connectors/env";
 import { runPropertyRadarOrchestrator } from "../scheduler/orchestrator";
+import { getSchedulerMode } from "../scheduler/jobs";
+import { runMarketAreaSync } from "../market/engine";
+import { fanoutFreshCacheToOrg } from "../scheduler/market-orchestrator";
 import type {
+  ManualMarketResultDTO,
   ManualSyncResultDTO,
   MarketCacheSummary,
   PropertyRadarPageData,
@@ -294,7 +298,65 @@ export async function getPropertyRadarSettingsPageData(): Promise<PropertyRadarP
   const status = await readStatus(db, orgId, settings);
   const health = await readProviderHealth(db, orgId);
   const market = await readMarketSummary(db);
-  return { settings, status, health, env: envSummary(), market, isDev };
+  return { settings, status, health, env: envSummary(), market, schedulerMode: getSchedulerMode(), isDev };
+}
+
+/** The org's distinct active operating cities (for manual market sync). */
+async function getOrgActiveCities(db: Db, orgId: string): Promise<string[]> {
+  const { data } = await db
+    .from("user_operating_localities" as never)
+    .select("city_name")
+    .eq("organization_id", orgId)
+    .eq("is_active", true);
+  const rows = (data ?? []) as unknown as { city_name: string | null }[];
+  return [...new Set(rows.map((r) => (r.city_name ?? "").trim()).filter(Boolean))];
+}
+
+/** Manual sync via the SHARED market cache for the current org's areas. */
+export async function runManualMarketSync(input: ManualSyncInput = {}): Promise<ManualMarketResultDTO> {
+  const { db, orgId } = await ctx();
+  const settings = await readSettings(db, orgId);
+  const env = getPropertyRadarProviderEnv();
+  const empty: ManualMarketResultDTO = {
+    ok: false, provider: input.providerName ?? null, areasProcessed: 0, scanned: 0,
+    cacheFresh: 0, linksCreated: 0, alerts: 0, errors: [],
+  };
+  if (!settings.sync_enabled) return { ...empty, skippedReason: "הסנכרון האוטומטי כבוי" };
+
+  const provider = input.providerName;
+  if (!provider) return { ...empty, skippedReason: "לא נבחר ספק" };
+  if (provider === "mock" && !isDev) return { ...empty, skippedReason: "Mock זמין רק בפיתוח" };
+  if (provider === "yad2" && (!settings.provider_yad2_enabled || env.providerMode !== "apify" || !env.apifyTokenExists || !env.yad2ActorId))
+    return { ...empty, skippedReason: "יד2 מושבת/לא מוגדר" };
+  if (provider === "madlan" && (!settings.provider_madlan_enabled || env.providerMode !== "apify" || !env.apifyTokenExists || !env.madlanActorId))
+    return { ...empty, skippedReason: "מדלן מושבת/לא מוגדר" };
+
+  const cities = await getOrgActiveCities(db, orgId);
+  if (cities.length === 0) return { ...empty, skippedReason: "לא הוגדרו אזורי התמחות" };
+
+  const res: ManualMarketResultDTO = { ...empty, ok: true, provider };
+  for (const city of cities) {
+    const area = { city };
+    try {
+      const r = await runMarketAreaSync({ providerName: provider, area, runType: "manual" });
+      res.areasProcessed++;
+      if (r.status === "cache_fresh") {
+        res.cacheFresh++;
+        // Cache fresh → still fan out the existing listings to THIS org.
+        const f = await fanoutFreshCacheToOrg(orgId, area, provider);
+        res.linksCreated += f.linksCreated;
+        res.alerts += f.alertsCreated;
+      } else {
+        res.scanned++;
+        res.alerts += r.alertsCreatedCount;
+        if (r.errors.length) res.errors.push(...r.errors);
+      }
+    } catch (e) {
+      res.errors.push(`${city}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  res.ok = res.errors.length === 0;
+  return res;
 }
 
 /** Server-only health utility (env + sync run logs; never calls providers). */

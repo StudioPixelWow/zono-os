@@ -8,9 +8,23 @@ import "server-only";
 import type { PropertyProviderName } from "../types";
 import { runMissingValidation } from "../sync/missing-validation";
 import { runPropertyRadarOrchestrator } from "./orchestrator";
+import { runMarketRadarOrchestrator, type MarketOrchestratorSummary } from "./market-orchestrator";
 import { createOrchestratorDataAccess } from "./data-access";
 import { getPropertyRadarProviderEnv } from "../connectors/env";
 import type { OrchestratorSummary, RunOrchestratorInput } from "./types";
+import { getSchedulerMode, type SchedulerMode } from "./mode";
+
+export { getSchedulerMode, type SchedulerMode };
+
+/** Hourly shared-market pass (Phase 9 default). */
+export function runMarketHourlyJob(): Promise<MarketOrchestratorSummary> {
+  return runMarketRadarOrchestrator();
+}
+
+/** Daily shared-market validation — re-evaluates due areas (missing/deleted handled in-engine). */
+export function runMarketValidationJob(): Promise<MarketOrchestratorSummary> {
+  return runMarketRadarOrchestrator();
+}
 
 /**
  * Providers to run automatically, derived from the env MODE + enable flags:

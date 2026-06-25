@@ -14,8 +14,10 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import {
   updatePropertyRadarSettingsAction,
   runManualPropertyRadarSyncAction,
+  runManualMarketSyncAction,
 } from "@/lib/property-radar/settings/actions";
 import type {
+  ManualMarketResultDTO,
   ManualSyncResultDTO,
   PropertyRadarPageData,
   PropertyRadarSettingsForm,
@@ -41,6 +43,7 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
   );
   const selectedHealth = initial.health.find((h) => h.provider === provider);
   const [syncResult, setSyncResult] = useState<ManualSyncResultDTO | null>(null);
+  const [marketResult, setMarketResult] = useState<ManualMarketResultDTO | null>(null);
   const runner = useActionRunner();
   const status = initial.status;
 
@@ -67,6 +70,19 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
     });
   }
 
+  function marketSync() {
+    setMarketResult(null);
+    runner.run(() => runManualMarketSyncAction({ providerName: provider }), {
+      pendingMessage: "מריץ סריקת שוק משותף…",
+      success: (r) => {
+        if (!r.ok) return r.error;
+        setMarketResult(r.data);
+        if (r.data.skippedReason) return r.data.skippedReason;
+        return `אזורים ${fmt(r.data.areasProcessed)} · נסרקו ${fmt(r.data.scanned)} · מהמטמון ${fmt(r.data.cacheFresh)} · התראות ${fmt(r.data.alerts)}`;
+      },
+    });
+  }
+
   const noAreas = status.activeAreasCount === 0;
 
   return (
@@ -87,6 +103,14 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
         <p className="relative mt-2 max-w-2xl text-sm font-medium text-white/85">
           ZONO סורק אוטומטית את אזורי ההתמחות שלך, מזהה נכסים פרטיים חדשים ושולח לך התראה לפני המתחרים — בלי לבזבז קרדיטים.
         </p>
+        <div className="relative mt-3 flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black">
+            {initial.schedulerMode === "market" ? "מצב שוק משותף" : "מצב סוכן בודד"}
+          </span>
+          <span className="text-xs font-medium text-white/80">
+            מצב שוק משותף סורק כל אזור פעם אחת בלבד ומחלק הזדמנויות רלוונטיות לכל הסוכנים שפועלים בו.
+          </span>
+        </div>
       </div>
 
       {/* Result / error banner */}
@@ -250,7 +274,40 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
           >
             הפעל סריקה עכשיו
           </Button>
+          <Button
+            onClick={marketSync}
+            loading={runner.pending}
+            disabled={!form.sync_enabled || noAreas || (provider !== "mock" && !(selectedHealth?.configured && selectedHealth?.enabled))}
+            leadingIcon={<Activity size={16} />}
+            variant="ghost"
+          >
+            סריקה דרך מטמון שוק משותף
+          </Button>
         </div>
+
+        {marketResult && (
+          <div className={`rounded-2xl border p-4 ${marketResult.ok ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+            {marketResult.skippedReason ? (
+              <p className="text-sm font-bold text-amber-800">{marketResult.skippedReason}</p>
+            ) : (
+              <>
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-black text-emerald-800"><CheckCircle2 size={16} /> סריקת שוק משותף הושלמה</p>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  <MiniStat label="אזורים" value={marketResult.areasProcessed} />
+                  <MiniStat label="נסרקו" value={marketResult.scanned} />
+                  <MiniStat label="מהמטמון" value={marketResult.cacheFresh} />
+                  <MiniStat label="לינקים" value={marketResult.linksCreated} />
+                  <MiniStat label="התראות" value={marketResult.alerts} />
+                </div>
+                {marketResult.cacheFresh > 0 && (
+                  <p className="mt-2 text-xs font-semibold text-brand-strong">
+                    {fmt(marketResult.cacheFresh)} אזורים הוגשו מהמטמון המשותף (ללא קריאה לספק) — נחסכו קרדיטים.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
         {provider !== "mock" && selectedHealth && !selectedHealth.configured && (
           <p className="text-xs font-bold text-amber-700">{selectedHealth.label} אינו מוגדר — לא ניתן להריץ סריקה.</p>
         )}

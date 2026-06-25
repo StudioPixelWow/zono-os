@@ -96,7 +96,20 @@ export interface PropertyRadarPageData {
   health: ProviderHealth[];
   env: ProviderEnvSummary;
   market: MarketCacheSummary;
+  schedulerMode: "market" | "org";
   isDev: boolean;
+}
+
+export interface ManualMarketResultDTO {
+  ok: boolean;
+  provider: string | null;
+  skippedReason?: string;
+  areasProcessed: number;
+  scanned: number;
+  cacheFresh: number;
+  linksCreated: number;
+  alerts: number;
+  errors: string[];
 }
 
 export interface ManualSyncResultDTO {

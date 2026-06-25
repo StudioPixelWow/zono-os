@@ -281,6 +281,43 @@ export function createMarketRepository(db: Db = createServiceRoleClient()): Mark
       return ids.map((orgId) => ({ orgId }));
     },
 
+    async getMarketSourcesForFanout(provider, marketAreaKey): Promise<{ sourceId: string; source: NormalizedListingMetadata }[]> {
+      const { data, error } = await db
+        .from(MARKET.sources as never)
+        .select("id, provider, external_id, external_url, listing_type, title, city, neighborhood, street, address_text, property_type, price, rooms, floor, size_sqm, image_url, phone, contact_name, published_at, provider_updated_at, raw_metadata")
+        .eq("provider", provider)
+        .eq("market_area_key", marketAreaKey)
+        .eq("source_status", "active")
+        .limit(500);
+      if (error) throw new Error(`getMarketSourcesForFanout failed: ${error.message}`);
+      const rows = (data ?? []) as unknown as Record<string, unknown>[];
+      return rows.map((r) => ({
+        sourceId: String(r.id),
+        source: {
+          provider: String(r.provider) as NormalizedListingMetadata["provider"],
+          externalId: String(r.external_id),
+          externalUrl: (r.external_url as string | null) ?? null,
+          listingType: (r.listing_type as NormalizedListingMetadata["listingType"]) ?? "unknown",
+          title: (r.title as string | null) ?? null,
+          city: (r.city as string | null) ?? null,
+          neighborhood: (r.neighborhood as string | null) ?? null,
+          street: (r.street as string | null) ?? null,
+          addressText: (r.address_text as string | null) ?? null,
+          propertyType: (r.property_type as string | null) ?? null,
+          price: (r.price as number | null) ?? null,
+          rooms: (r.rooms as number | null) ?? null,
+          floor: (r.floor as string | null) ?? null,
+          sizeSqm: (r.size_sqm as number | null) ?? null,
+          imageUrl: (r.image_url as string | null) ?? null,
+          phone: (r.phone as string | null) ?? null,
+          contactName: (r.contact_name as string | null) ?? null,
+          publishedAt: (r.published_at as string | null) ?? null,
+          providerUpdatedAt: (r.provider_updated_at as string | null) ?? null,
+          rawMetadata: (r.raw_metadata as Record<string, unknown>) ?? {},
+        },
+      }));
+    },
+
     async getOrgRadarSettings(orgId): Promise<RadarSettingsLite> {
       const { data } = await db
         .from(RADAR_TABLES.settings as never)

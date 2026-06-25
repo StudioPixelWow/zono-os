@@ -201,6 +201,8 @@ export interface MarketRepository {
   upsertMarketAreaCacheState(provider: PropertyProviderName, marketAreaKey: string, patch: UpsertCacheStatePatch): Promise<void>;
   // Fan-out
   getRelevantOrgsForMarketArea(city: string, neighborhood: string | null): Promise<RelevantOrg[]>;
+  /** Active shared sources for an area, normalized for fan-out (fresh-cache path). */
+  getMarketSourcesForFanout(provider: PropertyProviderName, marketAreaKey: string): Promise<{ sourceId: string; source: NormalizedListingMetadata }[]>;
   getOrgRadarSettings(orgId: string): Promise<RadarSettingsLite>;
   upsertOrgMarketPropertyLink(orgId: string, marketPropertySourceId: string, patch: UpsertOrgLinkPatch): Promise<{ linkId: string; created: boolean }>;
   existingUnreadMarketAlertExists(orgId: string, marketPropertySourceId: string, alertType: string): Promise<boolean>;

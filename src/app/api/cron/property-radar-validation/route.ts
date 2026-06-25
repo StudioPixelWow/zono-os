@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { runDailyPropertyRadarValidationJob } from "@/lib/property-radar/scheduler/jobs";
+import { getSchedulerMode, runDailyPropertyRadarValidationJob, runMarketValidationJob } from "@/lib/property-radar/scheduler/jobs";
 
 /**
  * Daily Property Radar™ missing/deleted validation — secured by CRON_SECRET.
@@ -14,10 +14,20 @@ export async function GET(req: NextRequest) {
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  const mode = getSchedulerMode();
   try {
+    if (mode === "market") {
+      const s = await runMarketValidationJob();
+      return NextResponse.json({
+        ok: true, mode, providers: s.providers,
+        areasScanned: s.areasScanned, areasSkippedFresh: s.areasSkippedFresh,
+        skippedReason: s.skippedReason, errorCount: s.errors.length,
+      });
+    }
     const s = await runDailyPropertyRadarValidationJob();
     return NextResponse.json({
       ok: true,
+      mode,
       providers: s.providers,
       orgs: s.orgs,
       totalMissing: s.totalMissing,

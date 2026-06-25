@@ -5,11 +5,13 @@
 import { revalidatePath } from "next/cache";
 import {
   getPropertyRadarSettingsPageData,
+  runManualMarketSync,
   runManualPropertyRadarSync,
   updatePropertyRadarSettings,
   type ManualSyncInput,
 } from "./service";
 import type {
+  ManualMarketResultDTO,
   ManualSyncResultDTO,
   PropertyRadarPageData,
   PropertyRadarSettingsForm,
@@ -45,6 +47,18 @@ export async function runManualPropertyRadarSyncAction(
 ): Promise<Result<ManualSyncResultDTO>> {
   try {
     const data = await runManualPropertyRadarSync(input);
+    revalidatePath("/settings/property-radar");
+    return { ok: true, data };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function runManualMarketSyncAction(
+  input: ManualSyncInput,
+): Promise<Result<ManualMarketResultDTO>> {
+  try {
+    const data = await runManualMarketSync(input);
     revalidatePath("/settings/property-radar");
     return { ok: true, data };
   } catch (e) {

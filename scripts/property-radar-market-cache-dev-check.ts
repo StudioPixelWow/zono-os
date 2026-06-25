@@ -35,6 +35,7 @@ import type {
 
 interface StoredSource extends MarketPropertySource {
   market_area_key: string | null;
+  _meta?: NormalizedListingMetadata;
 }
 
 class InMemoryMarketRepo implements MarketRepository {
@@ -82,15 +83,20 @@ class InMemoryMarketRepo implements MarketRepository {
       id, provider: m.provider, external_id: m.externalId, source_status: "active",
       content_hash: hash, missing_count: 0, price: m.price ?? null, city: m.city ?? null,
       neighborhood: m.neighborhood ?? null, published_at: m.publishedAt ?? null,
-      last_seen_at: new Date().toISOString(), market_area_key: key,
+      last_seen_at: new Date().toISOString(), market_area_key: key, _meta: m,
     });
     return id;
+  }
+  async getMarketSourcesForFanout(provider: string, key: string): Promise<{ sourceId: string; source: NormalizedListingMetadata }[]> {
+    return [...this.sources.values()]
+      .filter((s) => s.provider === provider && s.market_area_key === key && s.source_status === "active" && s._meta)
+      .map((s) => ({ sourceId: s.id, source: s._meta as NormalizedListingMetadata }));
   }
   async updateMarketSourceSeen(sourceId: string, m: NormalizedListingMetadata, hash: string): Promise<void> {
     const s = this.byId(sourceId); if (s) { s.content_hash = hash; s.source_status = "active"; s.missing_count = 0; s.price = m.price ?? s.price; }
   }
-  async updateMarketSourceFullDetails(sourceId: string, _d: NormalizedListingDetails, hash: string): Promise<void> {
-    const s = this.byId(sourceId); if (s) s.content_hash = hash;
+  async updateMarketSourceFullDetails(sourceId: string, d: NormalizedListingDetails, hash: string): Promise<void> {
+    const s = this.byId(sourceId); if (s) { s.content_hash = hash; s._meta = d; }
   }
   async markMarketSourceMissing(sourceId: string): Promise<void> {
     const s = this.byId(sourceId); if (s) { s.missing_count += 1; s.source_status = "missing"; }

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { runHourlyPropertyRadarJob } from "@/lib/property-radar/scheduler/jobs";
+import { getSchedulerMode, runHourlyPropertyRadarJob, runMarketHourlyJob } from "@/lib/property-radar/scheduler/jobs";
 
 /**
  * Hourly Property Radar™ orchestrator — secured by CRON_SECRET. Disabled unless
@@ -14,17 +14,35 @@ export async function GET(req: NextRequest) {
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  const mode = getSchedulerMode();
   try {
+    if (mode === "market") {
+      const s = await runMarketHourlyJob();
+      return NextResponse.json({
+        ok: true,
+        mode,
+        providers: s.providers,
+        areasQueued: s.areasQueued,
+        areasScanned: s.areasScanned,
+        areasSkippedFresh: s.areasSkippedFresh,
+        providerCallsAvoided: s.providerCallsAvoided,
+        affectedOrgs: s.affectedOrgs,
+        alertsCreated: s.alertsCreated,
+        creditsUsed: s.creditsUsed,
+        creditsSavedEstimate: s.creditsSavedEstimate,
+        duplicateScansAvoided: s.duplicateScansAvoided,
+        skippedReason: s.skippedReason,
+        errorCount: s.errors.length,
+      });
+    }
+    // legacy org mode
     const summaries = await runHourlyPropertyRadarJob();
     return NextResponse.json({
       ok: true,
+      mode,
       providers: summaries.map((s) => ({
         provider: s.provider,
-        orgsConsidered: s.orgsConsidered,
-        areasConsidered: s.areasConsidered,
-        areasDue: s.areasDue,
         areasRun: s.areasRun,
-        areasSkipped: s.areasSkipped,
         newListings: s.newListings,
         creditsUsed: s.creditsUsed,
         skippedReason: s.skippedReason,
