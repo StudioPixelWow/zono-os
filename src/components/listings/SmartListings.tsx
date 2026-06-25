@@ -29,7 +29,6 @@ const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
   manual_external: { label: "משרד", cls: "bg-brand-soft text-brand-strong" },
   partner_api: { label: "שותף", cls: "bg-surface text-muted" },
 };
-const SOURCE_TYPE_LABEL: Record<string, string> = { private_seller: "מוכר פרטי", broker: "פרסום מתווך", agency: "משרד תיווך", office: "משרד תיווך", unknown: "לא ידוע" };
 
 function imageUrls(raw: unknown, max = 12): string[] {
   if (!Array.isArray(raw)) return [];

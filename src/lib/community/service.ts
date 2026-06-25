@@ -40,7 +40,6 @@ export async function getCommunityCommandCenter(): Promise<CommunityCommandCente
 
   const { data: cp } = await supabase.from("community_profiles").select("id,name,platform,city,audience_type,members_count,lead_score,deal_score,roi_score,trust_score,status").eq("organization_id", orgId).order("roi_score", { ascending: false, nullsFirst: false }).limit(200);
   const rows = (cp ?? []) as Record<string, unknown>[];
-  const ids = rows.map((c) => c.id as string);
 
   // attribution counts (guarded — tables exist from Distribution OS)
   const leadByComm = new Map<string, number>(); const dealByComm = new Map<string, number>();
