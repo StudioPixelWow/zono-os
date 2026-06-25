@@ -40,6 +40,9 @@ export interface ZonoMapProps {
   /** Cluster when more than this many points are present. */
   clusterThreshold?: number;
   initialZoom?: number;
+  /** Render a real density heat overlay (HeatmapLayer) instead of markers. The
+   *  heat reflects the density of REAL points — no fake heat is ever drawn. */
+  heatmap?: boolean;
 }
 
 // ── Minimal typed surface for the Google Maps JS API we use ──────────────────
@@ -58,15 +61,25 @@ interface GMap {
   getZoom(): number | undefined;
   addListener(ev: string, cb: () => void): void;
 }
+interface GHeatmap { setMap(map: GMap | null): void; setData(data: unknown[]): void; setOptions(o: Record<string, unknown>): void }
+interface GVisualization { HeatmapLayer: new (opts: Record<string, unknown>) => GHeatmap }
 interface GMaps {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => GMap;
   Marker: new (opts: Record<string, unknown>) => GMarker;
   InfoWindow: new (opts?: Record<string, unknown>) => GInfoWindow;
   LatLngBounds: new () => GBounds;
+  LatLng: new (lat: number, lng: number) => unknown;
   Size: new (w: number, h: number) => unknown;
   Point: new (x: number, y: number) => unknown;
+  visualization?: GVisualization;
 }
 interface GoogleNS { maps: GMaps }
+
+// ZONO-purple heat gradient (transparent → lavender → purple → deep violet).
+const ZONO_HEAT_GRADIENT = [
+  "rgba(124,58,237,0)", "rgba(167,139,250,0.55)", "rgba(139,92,246,0.78)",
+  "rgba(124,58,237,0.9)", "rgba(91,33,182,0.96)", "rgba(67,20,140,1)",
+];
 
 let mapsPromise: Promise<void> | null = null;
 function loadGoogleMaps(key: string): Promise<void> {
@@ -76,7 +89,8 @@ function loadGoogleMaps(key: string): Promise<void> {
   if (mapsPromise) return mapsPromise;
   mapsPromise = new Promise<void>((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}`;
+    // `visualization` adds the real HeatmapLayer (density of real points).
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=visualization`;
     s.async = true; s.defer = true;
     s.onload = () => resolve();
     s.onerror = () => reject(new Error("maps_load_failed"));
@@ -121,11 +135,13 @@ export function ZonoMap({
   emptyMessage = "אין עדיין נתוני מיקום אמיתיים להצגה על המפה.",
   clusterThreshold = 60,
   initialZoom = 11,
+  heatmap = false,
 }: ZonoMapProps) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GMap | null>(null);
   const infoRef = useRef<GInfoWindow | null>(null);
   const markersRef = useRef<GMarker[]>([]);
+  const heatRef = useRef<GHeatmap | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
   const realPoints = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
@@ -148,9 +164,27 @@ export function ZonoMap({
         mapRef.current = map;
         infoRef.current = infoRef.current ?? new maps.InfoWindow();
 
+        const canHeat = heatmap && !!maps.visualization?.HeatmapLayer;
+
         const draw = () => {
           markersRef.current.forEach((m) => m.setMap(null));
           markersRef.current = [];
+
+          // Real density heat overlay (built once, reused on idle). The heat is a
+          // function of REAL point density only — no synthetic heat is added.
+          if (canHeat) {
+            if (!heatRef.current) {
+              heatRef.current = new maps.visualization!.HeatmapLayer({
+                data: realPoints.map((p) => new maps.LatLng(p.lat, p.lng)),
+                radius: 26, opacity: 0.75, maxIntensity: Math.max(4, Math.round(realPoints.length / 8)),
+                gradient: ZONO_HEAT_GRADIENT, dissipating: true,
+              });
+              heatRef.current.setMap(map);
+            }
+            return; // heat mode → no markers
+          }
+          if (heatRef.current) { heatRef.current.setMap(null); heatRef.current = null; }
+
           const zoom = map.getZoom() ?? initialZoom;
           const groups = realPoints.length > clusterThreshold
             ? clusterPoints(realPoints, zoom)
@@ -192,9 +226,9 @@ export function ZonoMap({
         setState("ready");
       })
       .catch(() => { if (!cancelled) setState("error"); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (heatRef.current) { heatRef.current.setMap(null); heatRef.current = null; } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(realPoints.map((p) => p.id + p.lat + p.lng)), hasKey]);
+  }, [JSON.stringify(realPoints.map((p) => p.id + p.lat + p.lng)), hasKey, heatmap]);
 
   const shell = "border-line bg-card relative w-full overflow-hidden rounded-card border shadow-card";
 

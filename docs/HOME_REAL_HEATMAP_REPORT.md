@@ -43,12 +43,19 @@ text tokens) · Price min/max · New (last 14 days) · Private owners (external
 re-queries via the action with a live "טוען…" indicator.
 
 ## 5. Heat / cluster logic
-A real Google heatmap layer is not yet wired into ZonoMap, so per the brief the
-section uses **clustered branded ZONO markers** (purple = internal, green =
-external) and is labeled a live property map — **not** "heatmap" in the UI copy.
-Clustering kicks in above 60 points (`ZonoMap clusterThreshold`). No fake heat
-circles. (Future: a real density heat overlay can be added to ZonoMap and swapped
-in without changing the data layer.)
+A **real density heat overlay is now implemented** via Google Maps
+`visualization.HeatmapLayer` (loaded with `&libraries=visualization`). Heat
+intensity is a pure function of REAL point density — stronger heat where more
+real listings exist — with a ZONO-purple gradient (`ZONO_HEAT_GRADIENT`:
+transparent → lavender → purple → deep violet), `radius: 26`, `opacity: 0.75`,
+and `maxIntensity` scaled to the dataset. No synthetic/fake heat is ever added;
+points without real coordinates are excluded before the layer is built.
+
+The section has a **חום / נקודות** toggle (default: heat). In "נקודות" mode it
+falls back to clustered branded ZONO markers (purple = internal, green =
+external; clustering above 60 points) for click-through to the property/source.
+If the `visualization` library fails to load, ZonoMap automatically falls back to
+markers so the map is never blank.
 
 ## 6. Empty states
 - No Google key → **"מפה לא זמינה"**.
