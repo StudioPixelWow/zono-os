@@ -60,6 +60,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "social-leads", label: "לידים מרשתות", route: "/social-leads", icon: "MessageCircle", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true },
 
   // ── ניהול ──
+  { id: "executive-intelligence", label: "מודיעין מנהלים", route: "/executive-intelligence", icon: "BarChart3", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "Executive Business Intelligence™ — המוח העסקי: הכנסה צפויה, פייפליין, תחזיות, ROI, בריאות משרד, סיכונים ודוחות" },
   { id: "office-intelligence", label: "מודיעין משרד", route: "/office-intelligence", icon: "Building2", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "Office Intelligence™ — מערכת ההפעלה הניהולית: KPIs, ביצועי סוכנים, לוח מובילים, סיכונים, צפי ויעדים" },
   { id: "operating-areas", label: "אזורי פעילות", route: "/settings/operating-areas", icon: "MapPin", category: "ניהול", roleMin: "agent", sidebar: true, searchable: true, description: "ניהול ערי ושכונות הפעילות" },
   { id: "journey-automation", label: "אוטומציית מסעות", route: "/journey-automation", icon: "Sparkles", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "Journey Automation OS™ — תזמור כל המנועים: טריגרים, תנאים, השהיות, SLA, סימולציה וביקורת" },
