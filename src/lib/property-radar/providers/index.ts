@@ -19,6 +19,7 @@ export type {
 export {
   PropertyProviderError,
   ProviderNotImplementedError,
+  ProviderNotConfiguredError,
   ProviderRateLimitError,
   ProviderBlockedError,
   ProviderListingNotFoundError,

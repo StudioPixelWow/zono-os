@@ -30,6 +30,21 @@ export class PropertyProviderError extends Error {
   }
 }
 
+/** Provider is implemented but its connector/credentials aren't configured. */
+export class ProviderNotConfiguredError extends PropertyProviderError {
+  constructor(providerName: PropertyProviderName, message?: string, cause?: unknown) {
+    super({
+      providerName,
+      message:
+        message ??
+        `Provider not configured: ${providerName} — set the PROPERTY_RADAR_* / APIFY_* env vars`,
+      cause,
+      retryable: false,
+    });
+    this.name = "ProviderNotConfiguredError";
+  }
+}
+
 /** Provider exists in the registry but is a placeholder with no implementation. */
 export class ProviderNotImplementedError extends PropertyProviderError {
   constructor(providerName: PropertyProviderName, message?: string, cause?: unknown) {

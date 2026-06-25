@@ -1,26 +1,12 @@
 // ============================================================================
-// ZONO Property Radar™ — Madlan provider (PLACEHOLDER).
-// Architecture stub only. Real incremental scanning + detail fetching against
-// Madlan lands in a later phase. Every method throws ProviderNotImplementedError.
+// ZONO Property Radar™ — Madlan provider (connector-backed, real).
+// Delegates fetching to a swappable ScrapeConnector configured purely via env
+// (PROPERTY_RADAR_MADLAN_ACTOR / APIFY_MADLAN_ACTOR_ID + token). Fails clearly
+// with ProviderNotConfiguredError when the connector isn't set up.
 // ============================================================================
-import type {
-  NormalizedListingDetails,
-  PropertyProvider,
-  PropertyProviderScanResult,
-  PropertyRadarArea,
-} from "./types";
-import { ProviderNotImplementedError } from "./errors";
+import { ApifyBackedProvider } from "./apify-backed-provider";
 
-export class MadlanPropertyProvider implements PropertyProvider {
+export class MadlanPropertyProvider extends ApifyBackedProvider {
   readonly providerName = "madlan" as const;
-
-  async scanAreaMetadata(_area: PropertyRadarArea): Promise<PropertyProviderScanResult> {
-    void _area;
-    throw new ProviderNotImplementedError("madlan", "Madlan scanAreaMetadata is not implemented yet");
-  }
-
-  async fetchListingDetails(externalId: string): Promise<NormalizedListingDetails> {
-    void externalId;
-    throw new ProviderNotImplementedError("madlan", "Madlan fetchListingDetails is not implemented yet");
-  }
+  // Override buildInput() here if the Madlan actor expects different keys.
 }

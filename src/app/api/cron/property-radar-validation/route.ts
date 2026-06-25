@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const s = await runDailyPropertyRadarValidationJob();
     return NextResponse.json({
       ok: true,
-      provider: s.provider,
+      providers: s.providers,
       orgs: s.orgs,
       totalMissing: s.totalMissing,
       totalDeleted: s.totalDeleted,

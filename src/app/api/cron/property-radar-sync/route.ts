@@ -15,19 +15,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    const s = await runHourlyPropertyRadarJob();
+    const summaries = await runHourlyPropertyRadarJob();
     return NextResponse.json({
       ok: true,
-      provider: s.provider,
-      orgsConsidered: s.orgsConsidered,
-      areasConsidered: s.areasConsidered,
-      areasDue: s.areasDue,
-      areasRun: s.areasRun,
-      areasSkipped: s.areasSkipped,
-      newListings: s.newListings,
-      creditsUsed: s.creditsUsed,
-      skippedReason: s.skippedReason,
-      errorCount: s.errors.length,
+      providers: summaries.map((s) => ({
+        provider: s.provider,
+        orgsConsidered: s.orgsConsidered,
+        areasConsidered: s.areasConsidered,
+        areasDue: s.areasDue,
+        areasRun: s.areasRun,
+        areasSkipped: s.areasSkipped,
+        newListings: s.newListings,
+        creditsUsed: s.creditsUsed,
+        skippedReason: s.skippedReason,
+        errorCount: s.errors.length,
+      })),
+      totals: {
+        areasRun: summaries.reduce((a, s) => a + s.areasRun, 0),
+        newListings: summaries.reduce((a, s) => a + s.newListings, 0),
+        creditsUsed: summaries.reduce((a, s) => a + s.creditsUsed, 0),
+      },
     });
   } catch (e) {
     console.error("[property-radar-sync] cron failed", e);

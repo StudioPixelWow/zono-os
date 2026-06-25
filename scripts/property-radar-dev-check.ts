@@ -20,7 +20,7 @@ import {
   getPropertyProvider,
   validateNormalizedListingMetadata,
   ProviderListingNotFoundError,
-  ProviderNotImplementedError,
+  PropertyProviderError,
 } from "../src/lib/property-radar/providers";
 import type { PropertyRadarArea } from "../src/lib/property-radar/providers";
 
@@ -77,17 +77,18 @@ async function main(): Promise<void> {
   }
   assert(notFoundThrown, "unknown id throws ProviderListingNotFoundError");
 
-  // 5. yad2 / madlan placeholders throw ProviderNotImplementedError
+  // 5. yad2 / madlan are real (connector-backed). With no env configured they
+  //    must fail CLEANLY with a PropertyProviderError (not configured), never hang.
   for (const name of ["yad2", "madlan"] as const) {
     const p = getPropertyProvider(name);
-    assert(p.providerName === name, `getPropertyProvider('${name}') → placeholder`);
+    assert(p.providerName === name, `getPropertyProvider('${name}') → real provider`);
     let thrown = false;
     try {
       await p.scanAreaMetadata(area);
     } catch (e) {
-      thrown = e instanceof ProviderNotImplementedError;
+      thrown = e instanceof PropertyProviderError;
     }
-    assert(thrown, `${name}.scanAreaMetadata throws ProviderNotImplementedError`);
+    assert(thrown, `${name}.scanAreaMetadata fails cleanly when unconfigured`);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
