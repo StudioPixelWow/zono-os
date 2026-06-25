@@ -10,7 +10,40 @@
 // ============================================================================
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
-import { geocodeAddress, buildQuery, type GeocodeInput } from "./geocoding";
+import { geocodeAddress, buildQuery, geocodeKeyInfo, type GeocodeInput, type GeocodeKeyInfo } from "./geocoding";
+
+export interface GeocodeKeyCheck {
+  ok: boolean;
+  key: GeocodeKeyInfo;
+  liveStatus: string;     // "OK" or "<reason>: <google message>"
+  message: string;        // human summary (Hebrew)
+}
+
+/**
+ * Live diagnostic: which key the SERVER actually uses (fingerprint only) + a
+ * real one-shot geocode so a "key invalid" issue is unambiguous. Never exposes
+ * the key. Lets you compare the running value to your Google Cloud key.
+ */
+export async function checkGeocodeKeyAction(): Promise<GeocodeKeyCheck> {
+  const { profile } = await getSessionContext();
+  if (!profile?.org_id) return { ok: false, key: geocodeKeyInfo(), liveStatus: "unauthorized", message: "אין הרשאה." };
+  const key = geocodeKeyInfo();
+  if (!key.present) {
+    return { ok: false, key, liveStatus: "no_key", message: "לא מוגדר מפתח גיאוקודינג בשרת (GOOGLE_MAPS_GEOCODE_API_KEY ריק)." };
+  }
+  const out = await geocodeAddress({ city: "חיפה" });
+  if (out.ok) {
+    return { ok: true, key, liveStatus: "OK", message: `המפתח עובד ✓ (משתמש במשתנה ${key.source === "geocode" ? "GOOGLE_MAPS_GEOCODE_API_KEY" : "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"}).` };
+  }
+  const hints: string[] = [];
+  if (out.reason === "denied") {
+    hints.push("המפתח ששמור בשרת אינו תקין או אינו מורשה. השווה את האורך/סיומת למפתח 'ZONO Server Geocoder' שעבד בדפדפן.");
+    if (key.source === "public") hints.push("שים לב: השרת נופל ל‑NEXT_PUBLIC (מפתח דפדפן) — כנראה ש‑GOOGLE_MAPS_GEOCODE_API_KEY ריק/לא נפרס.");
+    if (key.hadWhitespace) hints.push("זוהה רווח/שורה נסתרים בערך — נקה והדבק מחדש.");
+    hints.push("אם הערך נכון אך עדיין נכשל — לא נעשה Redeploy אחרי העדכון.");
+  }
+  return { ok: false, key, liveStatus: `${out.reason}: ${out.message}`, message: hints.join(" ") || out.message };
+}
 
 export type GeocodeEntity = "properties" | "external_listings" | "property_transactions" | "neighborhoods";
 export type GeocodeMode = "missing" | "failed";

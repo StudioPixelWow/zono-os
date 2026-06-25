@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
-import { geocodeMissingAction, type GeocodeEntity, type GeocodeRunResult } from "@/lib/maps/geocoding-actions";
+import { geocodeMissingAction, checkGeocodeKeyAction, type GeocodeEntity, type GeocodeRunResult, type GeocodeKeyCheck } from "@/lib/maps/geocoding-actions";
 import type { GeoCoverageRow } from "@/lib/maps/geo-coverage";
 
 const ENTITIES: { key: GeocodeEntity; label: string; hint: string }[] = [
@@ -21,6 +21,13 @@ const ENTITIES: { key: GeocodeEntity; label: string; hint: string }[] = [
 export function GeocodingAdminView({ coverage = [] }: { coverage?: GeoCoverageRow[] }) {
   const runner = useActionRunner();
   const [results, setResults] = useState<Record<string, GeocodeRunResult>>({});
+  const [keyCheck, setKeyCheck] = useState<GeocodeKeyCheck | null>(null);
+
+  const checkKey = () => runner.run(async () => {
+    const r = await checkGeocodeKeyAction();
+    setKeyCheck(r);
+    return { ok: r.ok, message: r.ok ? "המפתח עובד ✓" : "המפתח לא עובד — ראה פירוט" };
+  }, { id: "geo-key-check", pendingMessage: "בודק מפתח…", success: (r) => r.message });
 
   const run = (entity: GeocodeEntity, mode: "missing" | "failed" = "missing") => runner.run(async () => {
     const r = await geocodeMissingAction(entity, 50, mode);
@@ -37,6 +44,35 @@ export function GeocodingAdminView({ coverage = [] }: { coverage?: GeoCoverageRo
           <p className="text-muted text-sm">כיסוי קואורדינטות אמיתי לכל ישות, והשלמת מיקומים חסרים. ZONO לעולם לא ממציא מיקום.</p>
         </div>
       </header>
+
+      {/* Key health check — surfaces which key the SERVER uses + a live test. */}
+      <div className="border-line bg-card mb-6 rounded-2xl border p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-ink text-sm font-black">בדיקת מפתח גיאוקודינג</p>
+            <p className="text-muted text-xs">בודק איזה מפתח השרת באמת משתמש בו + קריאה חיה לגוגל. לא חושף את המפתח.</p>
+          </div>
+          <Button size="sm" onClick={checkKey} loading={runner.busyId === "geo-key-check"}>
+            <Icon name="ShieldCheck" size={14} className="ms-1" /> בדוק מפתח
+          </Button>
+        </div>
+        {keyCheck && (
+          <div className={`mt-3 rounded-xl border p-3 text-xs ${keyCheck.ok ? "border-emerald-300/40 bg-emerald-500/10" : "border-rose-300/40 bg-rose-500/10"}`}>
+            <p className={`font-black ${keyCheck.ok ? "text-success" : "text-danger"}`}>{keyCheck.ok ? "✓ המפתח עובד" : "✗ המפתח לא עובד"}</p>
+            <p className="text-ink mt-1.5">משתנה בשימוש: <b dir="ltr">{keyCheck.key.source === "geocode" ? "GOOGLE_MAPS_GEOCODE_API_KEY" : keyCheck.key.source === "public" ? "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY (fallback!)" : "אין מפתח"}</b></p>
+            {keyCheck.key.present && (
+              <p className="text-muted mt-0.5" dir="ltr">
+                key: {keyCheck.key.prefix}…{keyCheck.key.suffix} · length {keyCheck.key.length}
+                {!keyCheck.key.startsWithAIza && " · ⚠ doesn't start with AIza"}
+                {keyCheck.key.hadWhitespace && " · ⚠ whitespace detected"}
+              </p>
+            )}
+            <p className="text-ink mt-1.5">תגובת גוגל: <b dir="ltr">{keyCheck.liveStatus}</b></p>
+            <p className="text-muted mt-1.5">{keyCheck.message}</p>
+            <p className="text-muted mt-2 text-[11px]">השווה את ה‑prefix/suffix/length למפתח &quot;ZONO Server Geocoder&quot; שעבד בדפדפן. אם שונה → הערך ב‑Vercel לא נכון. אם זהה אך עדיין נכשל → לא נעשה Redeploy.</p>
+          </div>
+        )}
+      </div>
 
       {/* Coverage % per entity — real counts (located vs total). */}
       {coverage.length > 0 && (

@@ -42,6 +42,36 @@ function geocodeKey(): string | null {
   return k && k.length > 0 ? k : null;
 }
 
+/** Non-sensitive fingerprint of the key the SERVER actually resolves — for the
+ *  admin diagnostic. Never returns the full key (prefix/suffix only). */
+export interface GeocodeKeyInfo {
+  source: "geocode" | "public" | "none";
+  present: boolean;
+  length: number;
+  prefix: string;          // first 4 chars (valid Google keys start with "AIza")
+  suffix: string;          // last 4 chars — enough to compare, not to reconstruct
+  startsWithAIza: boolean;
+  /** True if the trimmed value differs from the raw env (hidden whitespace). */
+  hadWhitespace: boolean;
+}
+export function geocodeKeyInfo(): GeocodeKeyInfo {
+  const rawGeo = process.env.GOOGLE_MAPS_GEOCODE_API_KEY ?? "";
+  const rawPub = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  const geo = rawGeo.trim();
+  const pub = rawPub.trim();
+  const usingGeo = geo.length > 0;
+  const key = usingGeo ? geo : (pub.length > 0 ? pub : "");
+  const raw = usingGeo ? rawGeo : rawPub;
+  const source: GeocodeKeyInfo["source"] = usingGeo ? "geocode" : pub.length > 0 ? "public" : "none";
+  if (!key) return { source: "none", present: false, length: 0, prefix: "", suffix: "", startsWithAIza: false, hadWhitespace: false };
+  return {
+    source, present: true, length: key.length,
+    prefix: key.slice(0, 4), suffix: key.slice(-4),
+    startsWithAIza: key.startsWith("AIza"),
+    hadWhitespace: raw.length !== key.length,
+  };
+}
+
 /** Build a single address query string from structured parts (Israeli-friendly). */
 export function buildQuery(input: GeocodeInput): string {
   const streetPart = [input.street, input.streetNumber].filter(Boolean).join(" ");
