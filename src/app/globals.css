@@ -387,13 +387,13 @@ body {
 @keyframes zauth-logofloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
 /* Robot mascot — anchored to the card column (.zauth-stage). Stands at the
-   card's inline-start edge (physical right in RTL) and leans in, overflowing
+   card's inline-end edge (physical right in RTL) and leans in, overflowing
    onto the form so it reads as "touching" the card. Gently breathing + glow. */
 .zauth-robot {
   position: absolute;
   bottom: -28px;
-  inset-inline-start: 100%;
-  margin-inline-start: -168px;       /* overlap deeper into the card so it clearly touches/spills */
+  inset-inline-end: 100%;
+  margin-inline-end: -168px;         /* overlap deeper into the card so it clearly touches/spills */
   width: clamp(400px, 44vw, 720px);  /* larger, more present mascot */
   height: auto;
   z-index: 20;                        /* above the card edge; pointer-events:none keeps form usable */
