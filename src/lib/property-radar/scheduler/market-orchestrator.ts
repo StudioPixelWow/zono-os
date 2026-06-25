@@ -11,6 +11,7 @@ import { runMarketAreaSync } from "../market/engine";
 import { fanoutSourcesToOrg } from "../market/fanout";
 import { createMarketAreaKey } from "../market/area-key";
 import type { MarketRepository } from "../market/types";
+import type { MatchingPort } from "../matching/types";
 import { buildMarketAreaQueue, type MarketQueueItem } from "./market-queue";
 import type { OrchestratorDataAccess } from "./types";
 
@@ -150,24 +151,45 @@ export async function runMarketRadarOrchestrator(
 }
 
 // ── Manual: fan out an already-fresh shared cache to a single org ────────────
-export interface FreshCacheFanoutResult { linksCreated: number; scoresUpdated: number; alertsCreated: number; sourceCount: number }
+export interface FreshCacheFanoutResult {
+  linksCreated: number;
+  scoresUpdated: number;
+  alertsCreated: number;
+  matchesUpserted: number;
+  tasksCreated: number;
+  sourceCount: number;
+}
+
+/** Lazy-load the real (server-only) matching repository; null if unavailable. */
+async function defaultMatchingRepo(): Promise<MatchingPort | null> {
+  try {
+    const mod = await import("../matching/repository");
+    return mod.createMatchingRepository();
+  } catch {
+    return null;
+  }
+}
 
 export async function fanoutFreshCacheToOrg(
   orgId: string,
   area: { city: string; neighborhood?: string | null },
   providerName: PropertyProviderName,
-  deps?: { marketRepo?: MarketRepository },
+  deps?: { marketRepo?: MarketRepository; matching?: MatchingPort | null },
 ): Promise<FreshCacheFanoutResult> {
   const marketRepo = deps?.marketRepo ?? (await defaultMarketRepo());
+  const matching = deps && "matching" in deps ? deps.matching ?? null : await defaultMatchingRepo();
   const key = createMarketAreaKey(area);
   const sources = await marketRepo.getMarketSourcesForFanout(providerName, key);
-  if (sources.length === 0) return { linksCreated: 0, scoresUpdated: 0, alertsCreated: 0, sourceCount: 0 };
+  if (sources.length === 0) {
+    return { linksCreated: 0, scoresUpdated: 0, alertsCreated: 0, matchesUpserted: 0, tasksCreated: 0, sourceCount: 0 };
+  }
 
   const counts = await fanoutSourcesToOrg(
     marketRepo,
     orgId,
     { city: area.city, neighborhood: area.neighborhood ?? null },
     sources.map((s) => ({ sourceId: s.sourceId, source: s.source, isNew: true, isUpdate: false, priceDropped: false })),
+    { matching },
   );
   return { ...counts, sourceCount: sources.length };
 }

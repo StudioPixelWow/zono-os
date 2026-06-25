@@ -56,6 +56,9 @@ export function createPropertyOpportunityAlert(
 ): BuiltPropertyAlert {
   const { source, score } = input;
   const isPrivate = source.listingType === "private";
+  const matchCount = Math.max(0, score.buyerMatchCount);
+  // Hebrew "N matching buyers found" line surfaced on the alert + "show buyers" CTA.
+  const buyerLine = matchCount > 0 ? `נמצאו ${matchCount} קונים מתאימים` : null;
 
   // Choose alert type + copy.
   let alertType: string;
@@ -69,7 +72,7 @@ export function createPropertyOpportunityAlert(
     alertType = "new_private_property";
     title = "נקלט נכס פרטי חדש!";
     message = "פנה מהר לפני שייחטף!";
-  } else if (score.buyerMatchCount > 0) {
+  } else if (matchCount > 0) {
     alertType = "buyer_match";
     title = "נכס חדש שמתאים לקונים שלך";
     message = score.recommendation;
@@ -78,6 +81,8 @@ export function createPropertyOpportunityAlert(
     title = "הזדמנות חדשה באזור שלך";
     message = score.recommendation;
   }
+  // Always append the buyer-match line when there is demand (any alert type).
+  if (buyerLine) message = `${message} · ${buyerLine}`;
 
   const agentName = input.agentName ?? null;
   const whatsappMessage = buildPropertyWhatsappMessage({
@@ -111,7 +116,9 @@ export function createPropertyOpportunityAlert(
     recommendation: score.recommendation,
     opportunityScore: score.totalScore,
     breakdown: score.breakdown,
-    buyerMatchCount: score.buyerMatchCount,
+    buyerMatchCount: matchCount,
+    buyerMatchLine: buyerLine,
+    showBuyerMatches: matchCount > 0,
     whatsappMessage,
     whatsappUrl,
     callUrl,

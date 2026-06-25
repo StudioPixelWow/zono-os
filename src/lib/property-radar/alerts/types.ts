@@ -23,6 +23,10 @@ export interface PropertyRadarAlertMetadata {
   recommendation?: string | null;
   opportunityScore?: number | null;
   buyerMatchCount?: number | null;
+  buyerMatchLine?: string | null;
+  showBuyerMatches?: boolean | null;
+  /** Set on shared-market alerts — the source id the Buyer Match Panel queries. */
+  marketPropertySourceId?: string | null;
   whatsappUrl?: string | null;
   whatsappMessage?: string | null;
   callUrl?: string | null;

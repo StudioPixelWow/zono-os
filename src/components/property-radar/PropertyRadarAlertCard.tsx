@@ -3,8 +3,10 @@
 // ZONO Property Radar™ — alert card (presentational). RTL, premium, command-
 // center feel. Resilient to missing image / price / reasons.
 // ============================================================================
-import { Building2, MapPin, Sparkles, BedDouble, Ruler, Layers, Clock } from "lucide-react";
+import { useState } from "react";
+import { Building2, MapPin, Sparkles, BedDouble, Ruler, Layers, Clock, Users } from "lucide-react";
 import type { PropertyRadarAlertDTO } from "@/lib/property-radar/alerts/types";
+import { BuyerMatchPanel } from "./BuyerMatchPanel";
 
 function formatPrice(price?: number | null): string | null {
   if (price == null || !Number.isFinite(price)) return null;
@@ -32,6 +34,10 @@ export function PropertyRadarAlertCard({ alert }: { alert: PropertyRadarAlertDTO
   const published = timeAgo(m.publishedAt);
   const score = alert.opportunityScore ?? m.opportunityScore ?? null;
   const reasons = (m.reasons ?? []).filter(Boolean);
+  const [showBuyers, setShowBuyers] = useState(false);
+  const buyerMatchCount = m.buyerMatchCount ?? 0;
+  const matchSourceId = m.marketPropertySourceId ?? alert.propertySourceId ?? null;
+  const canShowBuyers = !!matchSourceId && buyerMatchCount > 0;
   const addr =
     m.addressText ??
     ([m.street, m.neighborhood, m.city].filter(Boolean).join(", ") || m.city || "");
@@ -112,6 +118,23 @@ export function PropertyRadarAlertCard({ alert }: { alert: PropertyRadarAlertDTO
                 {m.recommendation}
               </p>
             )}
+          </div>
+        )}
+
+        {/* Matching buyers — "נמצאו N קונים מתאימים" + show-buyers toggle */}
+        {canShowBuyers && (
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setShowBuyers((s) => !s)}
+              className="flex items-center justify-between gap-2 rounded-2xl bg-brand px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:opacity-95"
+            >
+              <span className="flex items-center gap-2">
+                <Users size={16} /> נמצאו {buyerMatchCount} קונים מתאימים
+              </span>
+              <span className="text-[12px] font-bold opacity-90">{showBuyers ? "הסתר" : "הצג קונים"}</span>
+            </button>
+            {showBuyers && matchSourceId && <BuyerMatchPanel marketPropertySourceId={matchSourceId} />}
           </div>
         )}
       </div>

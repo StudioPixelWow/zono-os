@@ -14,17 +14,30 @@ import { createListingContentHash } from "../utils";
 import { createMarketAreaKey } from "./area-key";
 import { computeNextScanAfter, DEFAULT_TTL_MINUTES, isCacheFresh } from "./cache-state";
 import { fanoutMarketSourcesToRelevantOrgs } from "./fanout";
+import type { MatchingPort } from "../matching/types";
 import type { FanoutSource, MarketRepository, MarketSyncInput, MarketSyncResult } from "./types";
 
 const MISSING_TO_DELETED_THRESHOLD = 2;
 
 export interface MarketSyncDeps {
   repo?: MarketRepository;
+  /** Optional buyer-matching port. If omitted, the engine lazy-loads the real one. */
+  matching?: MatchingPort | null;
 }
 
 async function getDefaultRepository(): Promise<MarketRepository> {
   const mod = await import("./repository"); // server-only, lazy
   return mod.createMarketRepository();
+}
+
+/** Lazy-load the real (server-only) matching repository; null if unavailable. */
+async function getDefaultMatching(): Promise<MatchingPort | null> {
+  try {
+    const mod = await import("../matching/repository"); // server-only, lazy
+    return mod.createMatchingRepository();
+  } catch {
+    return null;
+  }
 }
 
 function newest(listings: NormalizedListingMetadata[]): NormalizedListingMetadata | null {
@@ -71,6 +84,9 @@ export async function runMarketAreaSync(
     creditsSavedEstimate: 0,
     affectedOrgsCount: 0,
     alertsCreatedCount: 0,
+    matchesUpsertedCount: 0,
+    matchTasksCreatedCount: 0,
+    matchesDeactivatedCount: 0,
     errors: [],
   };
 
@@ -82,6 +98,12 @@ export async function runMarketAreaSync(
     result.errors.push(`repository unavailable: ${errMsg(e)}`);
     return result;
   }
+
+  // Resolve the buyer-matching port: explicit (incl. null opt-out) wins; otherwise
+  // lazy-load the real one. Unavailable (e.g. dev-check) → null → safe fallback.
+  let matching: MatchingPort | null;
+  if (deps && "matching" in deps) matching = deps.matching ?? null;
+  else matching = dryRun ? null : await getDefaultMatching();
 
   const providerImpl = getPropertyProvider(provider); // pure
 
@@ -150,7 +172,14 @@ export async function runMarketAreaSync(
     for (const ex of existing) {
       if (seenExt.has(ex.external_id) || ex.source_status === "deleted") continue;
       if (ex.missing_count >= MISSING_TO_DELETED_THRESHOLD) {
-        if (!dryRun) await repo.markMarketSourceDeleted(ex.id);
+        if (!dryRun) {
+          await repo.markMarketSourceDeleted(ex.id);
+          // Deleted property → deactivate its buyer matches across all orgs.
+          if (matching) {
+            try { result.matchesDeactivatedCount += await matching.markMatchesInactiveForSource(ex.id); }
+            catch (e) { result.errors.push(`deactivate matches: ${errMsg(e)}`); }
+          }
+        }
         result.deletedCount++;
       } else {
         if (!dryRun) await repo.markMarketSourceMissing(ex.id);
@@ -173,11 +202,15 @@ export async function runMarketAreaSync(
     // 12) fan-out to relevant orgs (personal score + alerts)
     if (!dryRun && fanoutSources.length > 0) {
       try {
-        const fan = await fanoutMarketSourcesToRelevantOrgs(repo, {
-          provider, marketAreaKey, city, neighborhood, marketSources: fanoutSources,
-        });
+        const fan = await fanoutMarketSourcesToRelevantOrgs(
+          repo,
+          { provider, marketAreaKey, city, neighborhood, marketSources: fanoutSources },
+          { matching },
+        );
         result.affectedOrgsCount = fan.affectedOrgsCount;
         result.alertsCreatedCount = fan.alertsCreated;
+        result.matchesUpsertedCount = fan.matchesUpserted;
+        result.matchTasksCreatedCount = fan.tasksCreated;
       } catch (e) {
         result.errors.push(`fanout: ${errMsg(e)}`); // non-fatal → partial
       }

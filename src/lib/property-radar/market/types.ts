@@ -157,6 +157,9 @@ export interface MarketSyncResult {
   creditsSavedEstimate: number;
   affectedOrgsCount: number;
   alertsCreatedCount: number;
+  matchesUpsertedCount: number;
+  matchTasksCreatedCount: number;
+  matchesDeactivatedCount: number;
   errors: string[];
 }
 
@@ -182,6 +185,8 @@ export interface FanoutResult {
   linksCreated: number;
   scoresUpdated: number;
   alertsCreated: number;
+  matchesUpserted: number;
+  tasksCreated: number;
 }
 
 // ── Repository contract (service-role impl; in-memory in tests) ──────────────
