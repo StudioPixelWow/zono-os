@@ -69,6 +69,11 @@ export const MODULES: ModuleEntry[] = [
   { id: "data-quality", label: "איכות דאטה", route: "/admin/data-quality", icon: "Shield", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "זיהוי דאטה שבורה" },
   { id: "platform-health", label: "מרכז בריאות מערכת", route: "/system-health", icon: "Activity", category: "ניהול", roleMin: "admin", sidebar: true, searchable: true, description: "Enterprise Reliability Platform™ — סטטוס כל רכיבי התשתית (DB, Realtime, Cron, ספקים, תורים, AI, מנועים, אחסון), התראות תפעוליות וזמני תגובה" },
   { id: "platform-admin", label: "ניהול פלטפורמה", route: "/platform-admin", icon: "Settings", category: "ניהול", roleMin: "admin", sidebar: true, searchable: true, description: "כלי תשתית למנהלי מערכת — דגלי תכונה (Feature Flags), השקה הדרגתית ויומן ביקורת מרכזי" },
+  { id: "launch-readiness", label: "מוכנות להשקה", route: "/launch-readiness", icon: "Activity", category: "ניהול", roleMin: "admin", sidebar: true, searchable: true, description: "Commercial Launch Platform™ — ציון מוכנות לפרודקשן (תשתית/אבטחה/ביצועים/ניטור/אמינות) ואימות פריסה" },
+  { id: "diagnostics", label: "דיאגנוסטיקה", route: "/admin/diagnostics", icon: "Activity", category: "ניהול", roleMin: "admin", sidebar: true, searchable: true, description: "בדיקת תקינות מערכת — סביבה, DB, ספקים, מפות, AI, תורים, אחסון, הרשאות, RLS" },
+  { id: "getting-started", label: "תחילת עבודה", route: "/getting-started", icon: "Sparkles", category: "ראשי", roleMin: "agent", sidebar: false, searchable: true, description: "צ׳קליסט הקמה — 8 שלבים מהקמת המשרד ועד הדשבורד הראשון" },
+  { id: "help", label: "מרכז עזרה", route: "/help", icon: "HelpCircle", category: "ראשי", roleMin: "viewer", sidebar: false, searchable: true, description: "מאגר ידע, שאלות נפוצות והכוונה" },
+  { id: "plan", label: "חבילה ורישוי", route: "/settings/plan", icon: "Tag", category: "ניהול", roleMin: "manager", sidebar: false, searchable: true, description: "חבילות (Starter/Professional/Office/Enterprise), הרשאות פיצ׳רים ומגבלות שימוש" },
   { id: "modules", label: "מדריך מודולים", route: "/search/modules", icon: "Search", category: "ניהול", roleMin: "viewer", sidebar: false, searchable: true, description: "כל המודולים במערכת" },
 ];
 

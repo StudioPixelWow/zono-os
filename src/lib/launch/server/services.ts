@@ -39,9 +39,11 @@ export async function setBeta(scope: "org" | "user", targetUserId: string | null
 // ── Feedback ────────────────────────────────────────────────────────────────--
 export async function submitFeedback(input: FeedbackInput, context: FeedbackContext): Promise<string | null> {
   const ctx = await getLaunchContext();
+  // Stamp the authoritative role server-side (never trust the client envelope).
+  const enriched: FeedbackContext = { ...context, roleKey: ctx.roleKey };
   return createLaunchRepository(ctx.db).insertFeedback({
     orgId: ctx.orgId, userId: ctx.userId, type: input.type, title: input.title.slice(0, 200), body: input.body.slice(0, 4000),
-    severity: input.severity ?? null, page: context.page, context, correlationId: context.correlationId,
+    severity: input.severity ?? null, page: context.page, context: enriched, correlationId: context.correlationId,
   });
 }
 export async function listFeedback(): Promise<Record<string, unknown>[]> {
