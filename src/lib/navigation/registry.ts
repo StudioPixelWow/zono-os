@@ -10,7 +10,7 @@ export interface ModuleEntry {
   route: string;
   icon: string;
   category: string;
-  roleMin: "viewer" | "agent" | "manager" | "owner";
+  roleMin: "viewer" | "agent" | "manager" | "admin" | "owner";
   sidebar: boolean;
   searchable: boolean;
   description?: string;
@@ -67,10 +67,12 @@ export const MODULES: ModuleEntry[] = [
   { id: "journey-builder", label: "בונה מסעות", route: "/journey-builder", icon: "Sparkles", category: "ניהול", roleMin: "manager", sidebar: false, searchable: true, description: "בונה מסעות ויזואלי (Drag & Drop)" },
   { id: "system-health", label: "מנועי חישוב", route: "/admin/system-health", icon: "Settings", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "מרכז חישוב — סטטוס ורענון מנועים" },
   { id: "data-quality", label: "איכות דאטה", route: "/admin/data-quality", icon: "Shield", category: "ניהול", roleMin: "manager", sidebar: true, searchable: true, description: "זיהוי דאטה שבורה" },
+  { id: "platform-health", label: "מרכז בריאות מערכת", route: "/system-health", icon: "Activity", category: "ניהול", roleMin: "admin", sidebar: true, searchable: true, description: "Enterprise Reliability Platform™ — סטטוס כל רכיבי התשתית (DB, Realtime, Cron, ספקים, תורים, AI, מנועים, אחסון), התראות תפעוליות וזמני תגובה" },
+  { id: "platform-admin", label: "ניהול פלטפורמה", route: "/platform-admin", icon: "Settings", category: "ניהול", roleMin: "admin", sidebar: true, searchable: true, description: "כלי תשתית למנהלי מערכת — דגלי תכונה (Feature Flags), השקה הדרגתית ויומן ביקורת מרכזי" },
   { id: "modules", label: "מדריך מודולים", route: "/search/modules", icon: "Search", category: "ניהול", roleMin: "viewer", sidebar: false, searchable: true, description: "כל המודולים במערכת" },
 ];
 
-const RANK: Record<ModuleEntry["roleMin"], number> = { viewer: 20, agent: 40, manager: 60, owner: 100 };
+const RANK: Record<ModuleEntry["roleMin"], number> = { viewer: 20, agent: 40, manager: 60, admin: 80, owner: 100 };
 
 /** Modules a given role rank may access. */
 export function modulesForRole(rank: number): ModuleEntry[] {
