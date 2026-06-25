@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { MODULES } from "@/lib/navigation/registry";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 
@@ -31,8 +32,9 @@ const SECTIONS: Section[] = [
     stats: [],
     links: [
       { label: "נכסים", href: "/properties" },
+      { label: "הערכת שווי", href: "/valuation" },
       { label: "גיוס נכסים", href: "/acquisition" },
-      { label: "נכסים חמים", href: "/" },
+      { label: "עסקאות שוק", href: "/transactions" },
       { label: "מודיעין שוק", href: "/market" },
     ],
   },
@@ -42,6 +44,7 @@ const SECTIONS: Section[] = [
     links: [
       { label: "קונים", href: "/buyers" },
       { label: "מוכרים", href: "/sellers" },
+      { label: "ביקוש קונים", href: "/demand" },
       { label: "לידים", href: "/social-leads" },
       { label: "התאמות", href: "/matches" },
     ],
@@ -71,7 +74,8 @@ const SECTIONS: Section[] = [
     stats: [],
     links: [
       { label: "WhatsApp", href: "/whatsapp" },
-      { label: "Facebook Groups", href: "/distribution" },
+      { label: "Facebook Groups", href: "/distribution/groups" },
+      { label: "הפצה", href: "/distribution" },
       { label: "קמפיינים", href: "/creative-studio" },
       { label: "אתרי לקוח", href: "/portals" },
     ],
@@ -99,10 +103,29 @@ const QUICK_ACTIONS: { label: string; icon: string; href: string }[] = [
   { label: "קמפיין חדש", icon: "Sparkles", href: "/creative-studio" },
 ];
 
-/** Flat search index over every navigable destination. */
-const SEARCH_INDEX: { label: string; href: string; section: string; icon: string }[] = SECTIONS.flatMap((s) =>
-  s.links.map((l) => ({ label: l.label, href: l.href, section: s.title, icon: s.icon })),
-);
+/**
+ * Flat search index over every navigable destination. We start from the curated
+ * category links, then merge in the ENTIRE navigation registry (every searchable
+ * module) so nothing is ever missing from ⌘K — including newer modules like
+ * הערכת שווי / ביקוש קונים / קבוצות פייסבוק.
+ */
+const SEARCH_INDEX: { label: string; href: string; section: string; icon: string }[] = (() => {
+  const seen = new Set<string>();
+  const out: { label: string; href: string; section: string; icon: string }[] = [];
+  for (const s of SECTIONS) {
+    for (const l of s.links) {
+      if (seen.has(l.href)) continue;
+      seen.add(l.href);
+      out.push({ label: l.label, href: l.href, section: s.title, icon: s.icon });
+    }
+  }
+  for (const m of MODULES) {
+    if (!m.searchable || seen.has(m.route)) continue;
+    seen.add(m.route);
+    out.push({ label: m.label, href: m.route, section: m.category, icon: m.icon });
+  }
+  return out;
+})();
 
 export function ZonoCommandCenter() {
   const router = useRouter();
