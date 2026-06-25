@@ -14,6 +14,7 @@ const GROUPS: { title: string; items: { label: string; href: string; icon: strin
     title: "אזור ופעילות",
     items: [
       { label: "אזורי פעילות", href: "/settings/operating-areas", icon: "MapPin", desc: "ניהול ערי ושכונות הפעילות שלך" },
+      { label: "סנכרון נכסים אוטומטי", href: "/settings/property-radar", icon: "Radar", desc: "Property Radar — סריקת יד2/מדלן, התראות וקרדיטים" },
       { label: "העשרת שכונות (AI)", href: "/admin/neighborhood-enrichment", icon: "Sparkles", desc: "העלאת קובץ ערים ויצירת שכונות אוטומטית" },
       { label: "גאוקודינג מיקומים", href: "/admin/geocoding", icon: "MapPin", desc: "השלמת קואורדינטות אמיתיות לנכסים/מודעות/עסקאות להצגה על המפה" },
     ],

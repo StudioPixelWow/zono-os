@@ -85,6 +85,8 @@ export interface RunOrchestratorInput {
   dryRun?: boolean;
   maxOrgs?: number;
   maxAreasPerOrg?: number;
+  /** Run type recorded on sync runs (default "automatic"). */
+  runType?: "automatic" | "manual" | "validation";
 }
 
 export interface PlannedArea {
@@ -110,9 +112,14 @@ export interface AreaRunOutcome {
   city: string;
   neighborhood: string | null;
   status: "success" | "partial" | "failed";
+  scannedCount: number;
   newCount: number;
   updatedCount: number;
+  unchangedCount: number;
+  missingCount: number;
+  deletedCount: number;
   creditsUsed: number;
+  creditsSaved: number;
   error?: string;
 }
 

@@ -178,7 +178,7 @@ export async function runPropertyRadarOrchestrator(
           orgId,
           providerName: provider,
           area: { id: c.area.areaId ?? null, city: c.area.city, neighborhood },
-          runType: "automatic",
+          runType: input.runType ?? "automatic",
           options: {
             maxPages: settings.maxPagesPerScan,
             unchangedStreakStopThreshold: settings.unchangedStreakStopThreshold,
@@ -226,9 +226,14 @@ function runOutcome(
     city,
     neighborhood,
     status: res.status,
+    scannedCount: res.scannedCount,
     newCount: res.newCount,
     updatedCount: res.updatedCount,
+    unchangedCount: res.unchangedCount,
+    missingCount: res.missingCount,
+    deletedCount: res.deletedCount,
     creditsUsed: res.creditsUsed,
+    creditsSaved: res.creditsSavedEstimate,
     error: res.errors.length ? res.errors.join(" | ") : undefined,
   };
 }
