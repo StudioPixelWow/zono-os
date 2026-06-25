@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "dev-check:platform": "tsx scripts/platform-dev-check.ts",
+    "readiness": "tsx scripts/zono-production-readiness.ts",
     "import:localities": "tsx scripts/import-israel-localities.ts",
     "seed:distribution": "tsx scripts/seed-distribution.ts"
   },
