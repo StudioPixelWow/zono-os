@@ -49,6 +49,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "transactions-radar", label: "רדאר הזדמנויות", route: "/transactions/radar", icon: "Flame", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "transactions-coverage", label: "כיסוי דאטה", route: "/transactions/coverage", icon: "MapPin", category: "שוק ועסקאות", roleMin: "agent", sidebar: false, searchable: true },
   { id: "competitors", label: "מתחרים", route: "/competitors", icon: "Shield", category: "שוק ועסקאות", roleMin: "manager", sidebar: true, searchable: true },
+  { id: "competitor-intelligence", label: "מודיעין מתחרים", route: "/competitor-intelligence", icon: "Activity", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "Competitor Intelligence™ — פעילות מתחרים, ירידות מחיר, אזורים מתחממים ונתח שוק מוערך מנתוני מודעות ציבוריים" },
   { id: "broker-intelligence", label: "מודיעין מתווכים", route: "/broker-intelligence", icon: "Users", category: "שוק ועסקאות", roleMin: "manager", sidebar: false, searchable: true },
 
   // ── צמיחה ──

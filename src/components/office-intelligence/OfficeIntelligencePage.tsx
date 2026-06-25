@@ -22,6 +22,7 @@ import { OfficeForecastPanel } from "./OfficeForecastPanel";
 import { OfficeGoalsPanel } from "./OfficeGoalsPanel";
 import { OfficeReportsPanel } from "./OfficeReportsPanel";
 import { OfficeCopilotPanel } from "./OfficeCopilotPanel";
+import { OfficeCompetitorWidget } from "./OfficeCompetitorWidget";
 
 type TabKey = "overview" | "team" | "opportunities" | "growth" | "reports";
 const TABS: { key: TabKey; label: string }[] = [
@@ -84,6 +85,7 @@ export function OfficeIntelligencePage({ initial }: { initial: OfficeDashboard }
             <OfficeForecastPanel forecast={data.forecast} benchmarks={data.benchmarks} />
           </div>
           <OfficeHeatmap points={data.mapPoints} marketShare={data.marketShare} />
+          <OfficeCompetitorWidget />
           <OfficeActivityStream activity={data.activity} />
         </div>
       )}

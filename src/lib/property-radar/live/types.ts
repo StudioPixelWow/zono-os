@@ -162,4 +162,8 @@ export interface PropertySidePanelData {
   firstSeen: string | null;
   timeline: PropertyTimelineEntryDTO[];
   priceHistory: { at: string; price: number | null }[];
+  /** Phase 17 — competitor office inferred from PUBLIC listing data (best-effort). */
+  competitorName: string | null;
+  competitorConfidence: number | null;
+  competitorSourceLabel: string | null;
 }

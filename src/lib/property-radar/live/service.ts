@@ -302,6 +302,17 @@ export async function getPropertySidePanel(marketPropertySourceId: string): Prom
     return s?.image_url ? [s.image_url] : [];
   })();
 
+  // Phase 17 — competitor inference from PUBLIC listing data (best-effort).
+  let competitorName: string | null = null;
+  let competitorConfidence: number | null = null;
+  let competitorSourceLabel: string | null = null;
+  try {
+    const { getCompetitorEnrichmentForSources } = await import("../../competitor-intelligence/engine");
+    const enrich = await getCompetitorEnrichmentForSources([marketPropertySourceId]);
+    const e = enrich[marketPropertySourceId];
+    if (e) { competitorName = e.competitorName; competitorConfidence = e.confidence; competitorSourceLabel = e.sourceLabel; }
+  } catch { /* competitor enrichment is best-effort — never breaks the panel */ }
+
   return {
     marketPropertySourceId,
     addressText: s?.address_text ?? null, city: s?.city ?? null, neighborhood: s?.neighborhood ?? null,
@@ -311,5 +322,6 @@ export async function getPropertySidePanel(marketPropertySourceId: string): Prom
     firstSeen: tl?.firstSeen ?? s?.first_seen_at ?? null,
     timeline: (tl?.entries ?? []).map((e): PropertyTimelineEntryDTO => ({ at: e.at, kind: e.kind, label: e.label })),
     priceHistory,
+    competitorName, competitorConfidence, competitorSourceLabel,
   };
 }

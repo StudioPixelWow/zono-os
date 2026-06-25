@@ -503,6 +503,16 @@ function PropertySidePanel({ id, data, loading, onClose }: { id: string; data: P
             </div>
             <ActionButtons phone={data.phone} externalUrl={data.externalUrl} sourceId={id} onOpen={() => data.externalUrl && openUrl(data.externalUrl)} />
 
+            {data.competitorName && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
+                <p className="text-[12px] font-black text-amber-800">משויך כנראה ל: {data.competitorName}</p>
+                <p className="mt-0.5 text-[11px] font-bold text-amber-700/80">
+                  {data.competitorConfidence != null ? `ודאות: ${data.competitorConfidence}%` : ""}
+                  {data.competitorSourceLabel ? ` · ${data.competitorSourceLabel}` : ""}
+                </p>
+              </div>
+            )}
+
             {data.priceHistory.length > 0 && (
               <div className="rounded-2xl bg-brand-soft/30 p-3">
                 <p className="mb-1.5 text-xs font-black text-brand-strong">היסטוריית מחיר</p>
