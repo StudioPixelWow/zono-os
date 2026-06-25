@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/transactions-refresh",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/property-radar-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/property-radar-validation",
+      "schedule": "30 4 * * *"
     }
   ]
 }

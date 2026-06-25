@@ -5,6 +5,7 @@ import { getDashboardContext } from "@/lib/dashboard/context";
 import { DashboardDataProvider } from "@/components/dashboard/DashboardDataProvider";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { CreatedCelebration } from "@/components/ui/CreatedCelebration";
+import { PropertyRadarAlertProvider } from "@/components/property-radar";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <DashboardDataProvider value={dashboardData}>
       <DashboardShell>{children}</DashboardShell>
       <CreatedCelebration />
+      <PropertyRadarAlertProvider />
     </DashboardDataProvider>
   );
 }
