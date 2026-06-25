@@ -19,9 +19,14 @@ export async function GET(req: NextRequest) {
     if (mode === "market") {
       const s = await runMarketValidationJob();
       return NextResponse.json({
-        ok: true, mode, providers: s.providers,
-        areasScanned: s.areasScanned, areasSkippedFresh: s.areasSkippedFresh,
-        skippedReason: s.skippedReason, errorCount: s.errors.length,
+        ok: true, mode, status: s.status, providers: s.providers,
+        areasProcessed: s.areasProcessed, sourcesRefreshed: s.sourcesRefreshed,
+        metadataScans: s.metadataScans, fullFetches: s.fullFetches,
+        eventsCreated: s.eventsCreated, priceDrops: s.priceDrops, hotDeals: s.hotDeals,
+        removed: s.removed, backOnMarket: s.backOnMarket,
+        buyerMatchGained: s.buyerMatchGained, buyerMatchLost: s.buyerMatchLost,
+        alertsCreated: s.alertsCreated, affectedOrgs: s.affectedOrgs,
+        creditsUsedEstimate: s.creditsUsedEstimate, errorCount: s.errors.length,
       });
     }
     const s = await runDailyPropertyRadarValidationJob();

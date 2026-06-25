@@ -250,6 +250,20 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
         </div>
       </Section>
 
+      {/* 5.6 · רענון שוק יומי */}
+      <Section icon={<Activity size={18} />} title="רענון שוק יומי">
+        <p className="text-sm text-ink/60">
+          הרענון היומי בודק שינויים בנכסים קיימים — ירידות מחיר, חזרה לשוק ושינויים שהופכים נכסים לרלוונטיים לקונים.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Stat label="רענון יומי אחרון" value={dt(status.dailyMarket.lastRefreshAt)} />
+          <Stat label="ירידות מחיר היום" value={fmt(status.dailyMarket.priceDropsToday)} />
+          <Stat label="עסקאות חמות היום" value={fmt(status.dailyMarket.hotDealsToday)} highlight />
+          <Stat label="חזרו לשוק היום" value={fmt(status.dailyMarket.backOnMarketToday)} />
+          <Stat label="קונים חדשים שהותאמו היום" value={fmt(status.dailyMarket.buyerMatchesGainedToday)} />
+        </div>
+      </Section>
+
       {/* 6 · בדיקה ידנית */}
       <Section icon={<PlayCircle size={18} />} title="בדיקה ידנית">
         <p className="text-sm text-ink/60">הרץ סריקה מיידית לארגון שלך בלבד. הסריקה מכבדת את מגבלת הקרדיטים וההגדרות.</p>

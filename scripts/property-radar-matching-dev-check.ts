@@ -113,6 +113,14 @@ class MatchingRepo implements MatchingRepository {
     for (const r of this.rows.values()) if (r.sourceId === sourceId && r.isActive) { r.isActive = false; n++; }
     return n;
   }
+  async reconcileActiveMatches(orgId: string, sourceId: string, relevantBuyerIds: string[]) {
+    const keep = new Set(relevantBuyerIds);
+    let n = 0;
+    for (const r of this.rows.values()) {
+      if (r.orgId === orgId && r.sourceId === sourceId && r.isActive && !keep.has(r.buyerId)) { r.isActive = false; n++; }
+    }
+    return n;
+  }
   async perfectMatchTaskExists(orgId: string, buyerId: string) {
     return this.tasks.some((t) => t.orgId === orgId && t.buyerId === buyerId);
   }

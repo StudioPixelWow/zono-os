@@ -39,6 +39,14 @@ export interface PropertyRadarRunRow {
   creditsSaved: number;
 }
 
+export interface DailyMarketRefreshStats {
+  lastRefreshAt: string | null;
+  priceDropsToday: number;
+  hotDealsToday: number;
+  backOnMarketToday: number;
+  buyerMatchesGainedToday: number;
+}
+
 export interface PropertyRadarStatus {
   lastSuccessfulSyncAt: string | null;
   nextEstimatedSyncAt: string | null;
@@ -52,6 +60,7 @@ export interface PropertyRadarStatus {
   fullFetchesToday: number;
   creditsSavedToday: number;
   recentRuns: PropertyRadarRunRow[];
+  dailyMarket: DailyMarketRefreshStats;
 }
 
 export type ProviderHealthStatus = "online" | "not_configured" | "disabled" | "error" | "unknown";

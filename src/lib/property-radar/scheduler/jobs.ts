@@ -9,6 +9,8 @@ import type { PropertyProviderName } from "../types";
 import { runMissingValidation } from "../sync/missing-validation";
 import { runPropertyRadarOrchestrator } from "./orchestrator";
 import { runMarketRadarOrchestrator, type MarketOrchestratorSummary } from "./market-orchestrator";
+import { runDailyMarketEventsRefresh } from "../events/engine";
+import type { DailyMarketRefreshResult } from "../events/types";
 import { createOrchestratorDataAccess } from "./data-access";
 import { getPropertyRadarProviderEnv } from "../connectors/env";
 import type { OrchestratorSummary, RunOrchestratorInput } from "./types";
@@ -21,9 +23,14 @@ export function runMarketHourlyJob(): Promise<MarketOrchestratorSummary> {
   return runMarketRadarOrchestrator();
 }
 
-/** Daily shared-market validation — re-evaluates due areas (missing/deleted handled in-engine). */
-export function runMarketValidationJob(): Promise<MarketOrchestratorSummary> {
-  return runMarketRadarOrchestrator();
+/**
+ * Daily shared-market validation (Phase 11) — runs the Daily Market Events
+ * Refresh: cheap metadata re-scan of every active area, diff vs cache, record
+ * market events, and fan price-drop/hot-deal/back-on-market/buyer-relevance
+ * consequences into the per-org tables. Full fetch only when the hash changed.
+ */
+export function runMarketValidationJob(): Promise<DailyMarketRefreshResult> {
+  return runDailyMarketEventsRefresh();
 }
 
 /**

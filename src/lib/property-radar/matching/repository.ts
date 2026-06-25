@@ -153,6 +153,21 @@ export function createMatchingRepository(db: Db = createServiceRoleClient()): Ma
       return { matchId: (data as unknown as { id: string }).id, created: true, scoreChanged: true };
     },
 
+    async reconcileActiveMatches(orgId, marketPropertySourceId, relevantBuyerIds): Promise<number> {
+      let q = db
+        .from(MATCHES as never)
+        .update({ is_active: false } as never)
+        .eq("org_id", orgId)
+        .eq("market_property_source_id", marketPropertySourceId)
+        .eq("is_active", true);
+      if (relevantBuyerIds.length > 0) {
+        q = (q as ReturnType<typeof q.not>).not("buyer_id", "in", `(${relevantBuyerIds.join(",")})`);
+      }
+      const { data, error } = await q.select("id");
+      if (error) throw new Error(`reconcileActiveMatches failed: ${error.message}`);
+      return ((data as unknown as unknown[]) ?? []).length;
+    },
+
     async markMatchesInactiveForSource(marketPropertySourceId: string): Promise<number> {
       const { data, error } = await db
         .from(MATCHES as never)

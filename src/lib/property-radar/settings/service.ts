@@ -181,6 +181,38 @@ async function readStatus(
   if (settings.provider_yad2_enabled) providersEnabled.push("יד2");
   if (settings.provider_madlan_enabled) providersEnabled.push("מדלן");
 
+  // Daily market events stats (Phase 11) — scoped to the org's active cities.
+  const cityList = [...cities];
+  const dailyMarket = {
+    lastRefreshAt: null as string | null,
+    priceDropsToday: 0,
+    hotDealsToday: 0,
+    backOnMarketToday: 0,
+    buyerMatchesGainedToday: 0,
+  };
+  if (cityList.length > 0) {
+    const { data: evRows } = await db
+      .from("market_property_events" as never)
+      .select("event_type, detected_at")
+      .in("city", cityList as never)
+      .gte("detected_at", todayIso)
+      .limit(5000);
+    for (const e of ((evRows ?? []) as unknown as { event_type: string; detected_at: string }[])) {
+      if (e.event_type === "price_drop") dailyMarket.priceDropsToday++;
+      else if (e.event_type === "hot_deal") dailyMarket.hotDealsToday++;
+      else if (e.event_type === "back_on_market") dailyMarket.backOnMarketToday++;
+      else if (e.event_type === "buyer_match_gained") dailyMarket.buyerMatchesGainedToday++;
+    }
+    const { data: lastEv } = await db
+      .from("market_property_events" as never)
+      .select("detected_at")
+      .in("city", cityList as never)
+      .order("detected_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    dailyMarket.lastRefreshAt = (lastEv as { detected_at: string | null } | null)?.detected_at ?? null;
+  }
+
   return {
     lastSuccessfulSyncAt: (lastOk as { finished_at: string | null } | null)?.finished_at ?? null,
     nextEstimatedSyncAt: settings.sync_enabled ? nextHourBoundary(new Date()) : null,
@@ -194,6 +226,7 @@ async function readStatus(
     fullFetchesToday,
     creditsSavedToday,
     recentRuns,
+    dailyMarket,
   };
 }
 

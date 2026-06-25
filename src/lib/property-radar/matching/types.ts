@@ -214,6 +214,12 @@ export interface MatchingRepository {
   getActiveBuyersForOrg(orgId: string): Promise<MatchableBuyer[]>;
   upsertBuyerPropertyMatch(input: UpsertMatchInput): Promise<UpsertMatchResult>;
   markMatchesInactiveForSource(marketPropertySourceId: string): Promise<number>;
+  /**
+   * Keep only `relevantBuyerIds` active for (org, source); deactivate the rest.
+   * Used by the daily refresh so buyers who are no longer relevant are dropped.
+   * Returns the number deactivated.
+   */
+  reconcileActiveMatches(orgId: string, marketPropertySourceId: string, relevantBuyerIds: string[]): Promise<number>;
   perfectMatchTaskExists(orgId: string, buyerId: string, marketPropertySourceId: string): Promise<boolean>;
   createPerfectMatchTask(input: PerfectMatchTaskInput): Promise<void>;
   getTopMatchesForSource(orgId: string, marketPropertySourceId: string, limit?: number): Promise<StoredBuyerMatch[]>;
