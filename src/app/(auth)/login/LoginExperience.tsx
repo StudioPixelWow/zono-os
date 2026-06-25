@@ -57,37 +57,44 @@ export function LoginExperience() {
       </div>
 
       {/* Signature live chips */}
-      <div className="zauth-chip zauth-glass" style={{ top: "8%", insetInlineEnd: "9%" }}>
-        <span className="zauth-chip-ico"><MessageCircle size={17} /></span>
-        <span>
+      <div className="zauth-chip zauth-glass zauth-intro intro-chip1" style={{ top: "8%", insetInlineEnd: "9%" }}>
+        <span className="zauth-chip-ico"><MessageCircle size={18} /></span>
+        <span className="zauth-chip-body">
           <span className="zauth-chip-title block">3 שיחות WhatsApp חדשות</span>
           <span className="zauth-chip-sub">ממתינות למענה</span>
         </span>
+        <span className="zauth-chip-live" aria-hidden="true" />
       </div>
-      <div className="zauth-chip c2 zauth-glass" style={{ bottom: "12%", insetInlineEnd: "7%" }}>
-        <span className="zauth-chip-ico"><Home size={17} /></span>
-        <span>
+      <div className="zauth-chip c2 zauth-glass zauth-intro intro-chip2" style={{ bottom: "12%", insetInlineEnd: "7%" }}>
+        <span className="zauth-chip-ico"><Home size={18} /></span>
+        <span className="zauth-chip-body">
           <span className="zauth-chip-title block">נמצאה התאמת נכס</span>
           <span className="zauth-chip-sub">94% התאמה</span>
         </span>
+        <span className="zauth-chip-live v" aria-hidden="true" />
       </div>
 
       {/* Foreground: logo + login panel */}
       <div className="relative z-10 flex min-h-screen items-center justify-center px-5 py-10">
-        <div className="zauth-stage relative w-full max-w-[400px]">
+        <div className="zauth-stage relative w-full max-w-[462px]">
           {/* Robot mascot — anchored to the card so it stands touching/overflowing it */}
           <RobotMascot />
 
           {/* Logo hero */}
-          <div className="zauth-logo mb-7 flex flex-col items-center text-center">
-            <ZonoLogo priority width={264} height={86} className="drop-shadow-[0_8px_30px_rgba(124,58,237,0.45)]" />
-            <p className="mt-4 text-[13px] font-semibold tracking-wide text-[#b9a9f0]">
-              מערכת ההפעלה החכמה לנדל״ן
+          <div className="zauth-logo zauth-intro intro-logo mb-5 flex flex-col items-center text-center">
+            <span className="zauth-logo-wrap">
+              <ZonoLogo priority width={272} height={88} className="drop-shadow-[0_8px_34px_rgba(124,58,237,0.5)]" />
+            </span>
+            <p className="zauth-intro intro-sub1 mt-3.5 text-[14px] font-bold tracking-wide text-[#cdbff5]">
+              הבינה שתהפוך אותך לסוכן הכי חזק בזון שלך.
+            </p>
+            <p className="zauth-intro intro-sub2 mt-1 text-[12px] font-medium text-[#9a89d4]">
+              נהל נכסים, לקוחות, עסקאות ובינה עסקית — במקום אחד.
             </p>
           </div>
 
           {/* Glass login card */}
-          <form action={action} className="zauth-card zauth-glass p-7 sm:p-8">
+          <form action={action} className="zauth-card zauth-glass zauth-intro intro-card p-8 sm:p-9">
             <h1 className="mb-1 text-center text-xl font-black text-white">התחברות</h1>
             <p className="mb-6 text-center text-xs text-[#a896e0]">ברוך/ה הבא/ה למרכז השליטה</p>
 
