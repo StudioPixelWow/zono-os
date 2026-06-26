@@ -177,7 +177,17 @@ async function persistResult(
     demand_score: result.demandScore, liquidity_score: result.liquidityScore,
     overpricing_risk_score: result.overpricingRiskScore, days_on_market_estimate: result.daysOnMarketEstimate,
     explanation: result.explanation,
-    metadata: { strategies: result.strategies, basePricePerSqm: result.basePpsqm, evidenceCount: result.evidenceCount },
+    metadata: {
+      strategies: result.strategies, basePricePerSqm: result.basePpsqm, evidenceCount: result.evidenceCount,
+      // Phase 2/3 (AVM): persist availability + QA debug so the PDF/report read the
+      // exact same computed values (and can honestly show "no data" without ₪0).
+      valuationAvailable: result.valuationAvailable ?? true,
+      valuationQuality: result.valuationQuality ?? null,
+      unavailableReason: result.unavailableReason ?? null,
+      missingData: result.missingData ?? [],
+      recommendedAction: result.recommendedAction ?? null,
+      debug: result.debug ?? null,
+    },
   } as never).eq("id", id).eq("organization_id", orgId);
 }
 
@@ -239,6 +249,13 @@ export async function getValuation(id: string): Promise<ValuationRecord | null> 
     overpricingRiskScore: num(r.overpricing_risk_score) ?? 0, daysOnMarketEstimate: num(r.days_on_market_estimate) ?? 0,
     explanation: (r.explanation as string) ?? "", adjustments, strategies: (meta.strategies as ValuationResult["strategies"]) ?? [],
     market: market ?? undefined as never, basePpsqm: num(meta.basePricePerSqm) ?? 0, evidenceCount: num(meta.evidenceCount) ?? 0,
+    // AVM availability + QA metadata (Phase 2/3).
+    valuationAvailable: meta.valuationAvailable as boolean | undefined,
+    valuationQuality: (meta.valuationQuality as ValuationResult["valuationQuality"]) ?? undefined,
+    unavailableReason: (meta.unavailableReason as string | null) ?? null,
+    missingData: (meta.missingData as string[]) ?? [],
+    recommendedAction: (meta.recommendedAction as string | null) ?? null,
+    debug: (meta.debug as ValuationResult["debug"]) ?? undefined,
   } : null;
 
   return {

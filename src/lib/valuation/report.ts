@@ -4,8 +4,17 @@
 // print-to-PDF friendly) with all 9 sections + the mandatory indicative
 // disclaimer. Uses ONLY real computed values from the valuation record.
 // ============================================================================
-import type { ValuationRecord } from "./types";
+import type { ValuationRecord, ValuationQualityLevel } from "./types";
 import { SOURCE_LABEL, CONFIDENCE_LABEL, DEMAND_LABEL, STRATEGY_LABEL, VALUATION_DISCLAIMER } from "./types";
+import { normalizedComparableWeights } from "./valuation-engine";
+
+const QUALITY_LABEL: Record<ValuationQualityLevel, string> = {
+  high: "גבוהה", medium: "בינונית", low: "נמוכה", insufficient: "לא מספקת",
+};
+const TIER_LABEL: Record<string, string> = {
+  building: "אותו בניין", street: "אותו רחוב", neighborhood: "אותה שכונה",
+  r300: "רדיוס 300 מ'", r700: "רדיוס 700 מ'", city: "כלל העיר",
+};
 
 export interface ReportBrand {
   orgName: string;
@@ -29,6 +38,8 @@ export function buildReportPayload(record: ValuationRecord, brand: ReportBrand):
 }
 
 const fmt = (n: number | null | undefined) => `₪${Math.round(Number(n ?? 0)).toLocaleString("he-IL")}`;
+/** Money or em-dash — never renders a misleading ₪0 for missing values. */
+const money = (n: number | null | undefined) => (n != null && Number(n) > 0 ? fmt(n) : "—");
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
@@ -54,7 +65,32 @@ export function renderReportHtml(payload: ReportPayload): string {
     ["שנת בנייה", i.buildingYear ? String(i.buildingYear) : "—"],
   ];
 
-  const comps = v.comparables.slice(0, 8);
+  // ── AVM availability + QA metadata (Phase 3) ───────────────────────────────
+  const available = r?.valuationAvailable !== false && (r?.estimatedValue ?? 0) > 0;
+  const debug = r?.debug ?? null;
+  const quality = (r?.valuationQuality ?? (available ? r?.confidenceLevel : "insufficient")) as ValuationQualityLevel | undefined;
+
+  // Comparables actually shown, with the relative weight each contributed.
+  const comps = [...v.comparables]
+    .filter((c) => (c.pricePerSqm ?? 0) > 0)
+    .sort((a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0))
+    .slice(0, 12);
+  const weights = normalizedComparableWeights(i, comps);
+
+  // Sources used, grouped the way the agent expects to see them.
+  const sourceCounts = new Map<string, number>();
+  for (const c of v.comparables) {
+    const key = c.source === "zono"
+      ? (c.comparableType === "sold" ? "עסקאות פנימיות (ZONO)" : "נכסים פנימיים (ZONO)")
+      : c.source === "govmap" ? "GovMap (עסקאות רשמיות)"
+      : c.source === "madlan" ? "Madlan"
+      : c.source === "yad2" ? "יד2"
+      : c.source === "tax_authority" ? "רשות המסים"
+      : "ייבוא חיצוני";
+    sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+  }
+  const sourceList = [...sourceCounts.entries()];
+
   const pos = v.adjustments.filter((a) => a.direction === "positive");
   const neg = v.adjustments.filter((a) => a.direction === "negative");
 
@@ -62,22 +98,26 @@ export function renderReportHtml(payload: ReportPayload): string {
     `<section class="card"><h2>${esc(title)}</h2>${body}</section>`;
 
   const compsRows = comps.length
-    ? comps.map((c) => `<tr>
-        <td>${esc(c.street || c.neighborhood || c.city || "—")}</td>
+    ? comps.map((c, idx) => `<tr>
         <td><span class="badge${c.isDemo ? " demo" : ""}">${esc(SOURCE_LABEL[c.source] ?? c.source)}${c.isDemo ? " · דמו" : ""}</span></td>
-        <td>${c.comparableType === "sold" ? "עסקה" : "מודעה"}</td>
-        <td>${c.rooms ?? "—"} חד׳</td>
-        <td>${c.sqm ?? "—"} מ"ר</td>
-        <td>${fmt(c.price)}</td>
+        <td>${esc(c.street || c.neighborhood || c.city || "—")}</td>
+        <td>${esc(c.propertyType || "—")}</td>
+        <td>${c.rooms ?? "—"}</td>
+        <td>${c.sqm ?? "—"}</td>
+        <td>${c.floor != null ? c.floor : "—"}</td>
+        <td>${money(c.price)}</td>
         <td>${c.pricePerSqm ? fmt(c.pricePerSqm) : "—"}</td>
+        <td>${c.comparableType === "sold" ? "עסקה" : "מודעה"}${(c.saleDate || c.listingDate) ? `<br><span class="muted-inline">${esc((c.saleDate || c.listingDate || "").slice(0, 10))}</span>` : ""}</td>
+        <td>${c.distanceMeters != null ? `${Math.round(c.distanceMeters)} מ'` : "—"}</td>
         <td>${c.similarityScore ?? "—"}%</td>
+        <td>${weights[idx] != null ? `${weights[idx]}%` : "—"}</td>
       </tr>`).join("")
-    : `<tr><td colspan="8" class="muted">לא נמצאו עסקאות/מודעות להשוואה ישירה באזור.</td></tr>`;
+    : `<tr><td colspan="12" class="muted">לא נמצאו עסקאות/מודעות להשוואה ישירה באזור.</td></tr>`;
 
   const brokerRows = v.brokerSold.length
     ? v.brokerSold.slice(0, 8).map((b) => `<tr>
         <td>${esc(b.address || b.neighborhood || "—")}</td>
-        <td>${fmt(b.salePrice)}</td>
+        <td>${money(b.salePrice)}</td>
         <td>${b.pricePerSqm ? fmt(b.pricePerSqm) : "—"}</td>
         <td>${b.saleDate ? esc(b.saleDate) : "—"}</td>
         <td>${b.performanceVsMarketPercent != null ? `${b.performanceVsMarketPercent > 0 ? "+" : ""}${b.performanceVsMarketPercent}%` : "—"}</td>
@@ -133,6 +173,15 @@ th{color:#6b6385;font-weight:700;font-size:12px}
 .cta{background:linear-gradient(135deg,var(--brand),#3b1d6e);color:#fff;border-radius:18px;padding:24px;text-align:center}
 .cta h2{color:#fff}
 .contact{font-size:15px;margin-top:8px}
+.tw{overflow-x:auto}
+.muted-inline{color:#8a82a0;font-size:11px}
+.srcs{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+.src{display:flex;justify-content:space-between;border-bottom:1px solid #f3f0fa;padding:6px 0;font-size:14px}
+.src b{color:var(--brand)}
+.rec-action{margin-top:10px;background:#faf5ff;border:1px solid #efeafb;border-radius:12px;padding:12px;font-weight:700;color:var(--brand)}
+.method{background:#faf8ff;border:1px solid #efeafb;border-radius:12px;padding:12px 16px;margin:12px 0}
+.method-h{font-weight:800;color:var(--brand);margin-bottom:6px}
+.method ul{margin:0;padding-inline-start:18px}.method li{font-size:13px;padding:3px 0}
 .disclaimer{font-size:12px;color:#6b6385;background:#f3f0fa;border-radius:12px;padding:14px;margin-top:16px}
 .no-print{margin:16px 0;text-align:center}
 .print-btn{background:var(--brand);color:#fff;border:0;border-radius:12px;padding:12px 28px;font-size:15px;font-weight:800;cursor:pointer}
@@ -148,44 +197,80 @@ th{color:#6b6385;font-weight:700;font-size:12px}
     <h1>${esc(addr)}</h1>
     <div class="sub">${esc(brand.brokerName || brand.orgName)} · ${esc(date)}</div>
     ${brand.propertyImageUrl ? `<img class="hero-img" src="${esc(brand.propertyImageUrl)}" alt="">` : ""}
-    <div class="value">${fmt(r?.estimatedValue)}</div>
-    <div class="range">טווח: ${fmt(r?.lowValue)} – ${fmt(r?.highValue)} · רמת ביטחון: ${esc(CONFIDENCE_LABEL[r?.confidenceLevel ?? "low"])} (${r?.confidenceScore ?? 0}%)</div>
+    ${available
+      ? `<div class="value">${fmt(r?.estimatedValue)}</div>
+    <div class="range">טווח: ${fmt(r?.lowValue)} – ${fmt(r?.highValue)} · רמת ביטחון: ${esc(CONFIDENCE_LABEL[r?.confidenceLevel ?? "low"])} (${r?.confidenceScore ?? 0}%) · איכות נתונים: ${esc(QUALITY_LABEL[quality ?? "low"])}</div>`
+      : `<div class="value" style="font-size:24px">לא נמצאו מספיק נתונים להערכת שווי אמינה</div>
+    <div class="range">נדרשת השלמת נתונים או סריקת עסקאות לפני הפקת הערכה.</div>`}
   </div>
 
+  <!-- 1b. No-data panel (honest — never shows a fabricated zero value) -->
+  ${!available ? section("מדוע לא הופקה הערכת שווי", `
+    <p style="font-size:14px">${esc(r?.unavailableReason || "לא נמצאו מספיק עסקאות ומודעות עם מחיר להשוואה אמינה באזור.")}</p>
+    ${(r?.missingData?.length) ? `<div style="margin-top:6px"><b>נתונים חסרים:</b> ${r!.missingData!.map(esc).join(" · ")}</div>` : ""}
+    ${sourceList.length ? `<div style="margin-top:6px"><b>מקורות שנבדקו:</b> ${sourceList.map(([s, n]) => `${esc(s)} (${n})`).join(" · ")}</div>` : `<div style="margin-top:6px"><b>מקורות שנבדקו:</b> פנימי, GovMap, Madlan, יד2 — ללא תוצאות מספיקות.</div>`}
+    ${r?.recommendedAction ? `<div class="rec-action">המלצה: ${esc(r.recommendedAction)}</div>` : ""}
+  `) : ""}
+
   <!-- 2. Valuation summary -->
-  ${section("סיכום הערכה", `<div class="kpis">
+  ${available ? section("סיכום הערכה", `<div class="kpis">
     <div class="kpi"><div class="l">שווי מוערך</div><div class="v">${fmt(r?.estimatedValue)}</div></div>
     <div class="kpi"><div class="l">מחיר מומלץ לפרסום</div><div class="v">${fmt(r?.recommendedListingPrice)}</div></div>
     <div class="kpi"><div class="l">מחיר יעד לסגירה</div><div class="v">${fmt(r?.targetClosingPrice)}</div></div>
     <div class="kpi"><div class="l">מחיר למ"ר</div><div class="v">${fmt(r?.estimatedPricePerSqm)}</div></div>
-  </div>`)}
+  </div>`) : ""}
+
+  <!-- 2b. AVM analysis stats -->
+  ${available ? section("בסיס החישוב (AVM)", `<div class="kpis">
+    <div class="kpi"><div class="l">מחיר ממוצע למ"ר</div><div class="v">${debug?.avgPricePerSqm ? fmt(debug.avgPricePerSqm) : "—"}</div></div>
+    <div class="kpi"><div class="l">מחיר חציוני למ"ר</div><div class="v">${debug?.medianPricePerSqm ? fmt(debug.medianPricePerSqm) : "—"}</div></div>
+    <div class="kpi"><div class="l">מחיר משוקלל למ"ר</div><div class="v">${debug?.weightedPricePerSqm ? fmt(debug.weightedPricePerSqm) : "—"}</div></div>
+    <div class="kpi"><div class="l">השוואות בשימוש</div><div class="v">${debug?.comparableCount ?? v.comparables.length}</div></div>
+    <div class="kpi"><div class="l">עסקאות / מודעות</div><div class="v">${debug?.soldComparableCount ?? "—"} / ${debug?.activeComparableCount ?? "—"}</div></div>
+    <div class="kpi"><div class="l">רמת קרבה</div><div class="v">${esc(TIER_LABEL[debug?.fallbackLevel ?? ""] ?? "—")}</div></div>
+    <div class="kpi"><div class="l">חריגים שהוסרו</div><div class="v">${debug?.outliersRemoved ?? 0}</div></div>
+    <div class="kpi"><div class="l">איכות הערכה</div><div class="v">${esc(QUALITY_LABEL[quality ?? "low"])}</div></div>
+  </div>`) : ""}
+
+  <!-- 2c. Sources used -->
+  ${sourceList.length ? section("מקורות הנתונים", `<div class="srcs">${sourceList.map(([s, n]) => `<div class="src"><span>${esc(s)}</span><b>${n}</b></div>`).join("")}</div>`) : ""}
 
   <!-- 3. Property details -->
   ${section("פרטי הנכס", `<div class="spec">${specRows.map(([k, val]) => `<div class="row"><span>${esc(k)}</span><b>${val}</b></div>`).join("")}</div>`)}
 
   <!-- 4. Market pulse -->
-  ${section("דופק השוק", `<div class="kpis">
+  ${available ? section("דופק השוק", `<div class="kpis">
     <div class="kpi"><div class="l">מחיר חציוני למ"ר</div><div class="v">${v.market?.medianPricePerSqm ? fmt(v.market.medianPricePerSqm) : "—"}</div></div>
     <div class="kpi"><div class="l">ביקוש</div><div class="v">${esc(DEMAND_LABEL[v.market?.demandLevel ?? "low"])}</div></div>
     <div class="kpi"><div class="l">היצע</div><div class="v">${esc(DEMAND_LABEL[v.market?.supplyLevel ?? "low"])}</div></div>
     <div class="kpi"><div class="l">מגמה</div><div class="v">${v.market ? (v.market.trendDirection === "up" ? "↑" : v.market.trendDirection === "down" ? "↓" : "→") + " " + v.market.trendPercent + "%" : "—"}</div></div>
-  </div>`)}
+  </div>`) : ""}
 
   <!-- 5. Comparable transactions -->
-  ${section("עסקאות ומודעות דומות", `<table><thead><tr><th>כתובת</th><th>מקור</th><th>סוג</th><th>חדרים</th><th>שטח</th><th>מחיר</th><th>למ"ר</th><th>התאמה</th></tr></thead><tbody>${compsRows}</tbody></table>`)}
+  ${section("עסקאות ומודעות בשימוש בהערכה", `<div class="tw"><table><thead><tr><th>מקור</th><th>כתובת</th><th>סוג נכס</th><th>חד׳</th><th>מ"ר</th><th>קומה</th><th>מחיר</th><th>למ"ר</th><th>סטטוס/תאריך</th><th>מרחק</th><th>התאמה</th><th>משקל</th></tr></thead><tbody>${compsRows}</tbody></table></div>`)}
 
   <!-- 6. Broker sold nearby (only if exists) -->
   ${v.brokerSold.length ? section("נכסים שמכרתי באזור", `<table><thead><tr><th>כתובת</th><th>מחיר מכירה</th><th>למ"ר</th><th>תאריך</th><th>מול השוק</th></tr></thead><tbody>${brokerRows}</tbody></table>`) : ""}
 
-  <!-- 7. AI explanation -->
+  <!-- 7. AI explanation + methodology -->
   ${section("הסבר ההערכה", `<p style="font-size:14px">${esc(r?.explanation || "—")}</p>
+    ${available ? `<div class="method">
+      <div class="method-h">איך חושבה ההערכה</div>
+      <ul>
+        <li>ההערכה מבוססת על ${debug?.comparableCount ?? v.comparables.length} השוואות${sourceList.length ? ` ממקורות: ${sourceList.map(([s]) => esc(s)).join(", ")}` : ""}.</li>
+        <li>עדיפות ניתנה לעסקאות שנסגרו על פני מודעות פעילות (עסקאות סגורות מקבלות משקל גבוה יותר).</li>
+        <li>רמת הקרבה ששימשה לחישוב: ${esc(TIER_LABEL[debug?.fallbackLevel ?? ""] ?? "כלל העיר")} — ההשוואות הקרובות ביותר מקבלות משקל גבוה יותר.</li>
+        <li>הוסרו ${debug?.outliersRemoved ?? 0} ערכים חריגים כדי למנוע הטיית מחיר.</li>
+        <li>רמת הביטחון (${esc(QUALITY_LABEL[quality ?? "low"])}) נגזרת מכמות העסקאות, מידת הקרבה, עדכניות הנתונים ושלמות פרטי הנכס.</li>
+      </ul>
+    </div>` : ""}
     <div class="factors">
       <div><div class="pos">מעלי ערך</div><ul>${pos.length ? pos.map((a) => `<li><span>${esc(a.label)}</span><b class="pos">${a.percentageImpact ? `+${a.percentageImpact}%` : fmt(a.valueImpact)}</b></li>`).join("") : '<li class="muted">—</li>'}</ul></div>
       <div><div class="neg">מורידי ערך</div><ul>${neg.length ? neg.map((a) => `<li><span>${esc(a.label)}</span><b class="neg">${a.percentageImpact ? `-${a.percentageImpact}%` : ""}</b></li>`).join("") : '<li class="muted">—</li>'}</ul></div>
     </div>`)}
 
   <!-- 8. Pricing strategy -->
-  ${section("אסטרטגיית תמחור", `<div class="strats">${strategies || '<div class="muted">—</div>'}</div>`)}
+  ${available ? section("אסטרטגיית תמחור", `<div class="strats">${strategies || '<div class="muted">—</div>'}</div>`) : ""}
 
   <!-- 9. Summary + CTA -->
   <div class="cta">

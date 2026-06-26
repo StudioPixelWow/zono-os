@@ -181,6 +181,26 @@ export function computeBasePricePerSqm(
   };
 }
 
+/**
+ * Raw per-comparable weight used by the base-price calculation
+ * (similarity × source-reliability × recency, with the same floors as the
+ * engine). Exposed so the PDF/report can show the influence each comparable had.
+ */
+export function comparableWeight(input: ValuationInput, c: Comparable): number {
+  const sim = Math.max(0.12, computeSimilarity(input, c) / 100);
+  return Math.max(0.03, sim * sourceWeight(c) * recencyWeight(c));
+}
+
+/**
+ * Normalized per-comparable weights (percent, summing to ~100) over a displayed
+ * set — the share of the valuation each comparable contributed.
+ */
+export function normalizedComparableWeights(input: ValuationInput, comps: Comparable[]): number[] {
+  const ws = comps.map((c) => comparableWeight(input, c));
+  const sum = ws.reduce((a, b) => a + b, 0) || 1;
+  return ws.map((w) => Math.round((w / sum) * 1000) / 10);
+}
+
 // ── Adjustments (% impacts on the built-area value) ──────────────────────────
 export function buildAdjustments(input: ValuationInput, basePpsqm: number): ValuationAdjustment[] {
   const built = input.builtSqm ?? 0;
