@@ -189,19 +189,45 @@ export async function emitMarketEventsAndAlerts(organizationId: string, bridge: 
     });
     try { await db.from("market_property_events" as never).insert(dropEventRows as never); } catch { /* best-effort */ }
 
-    const dropAlertRows = bridge.priceDrops.slice(0, 50).map((d) => {
-      const delta = d.nextPrice - d.prevPrice;
-      const pct = d.prevPrice > 0 ? Math.round((Math.abs(delta) / d.prevPrice) * 100) : 0;
-      const hot = Math.abs(delta) >= PRICE_DROP_HOT_ABS || pct >= PRICE_DROP_HOT_PERCENT;
-      return {
-        org_id: organizationId, alert_type: "price_drop",
-        title: hot ? "ירידת מחיר משמעותית" : "ירידת מחיר באזור שלך",
-        message: [`-${pct}%`, d.city].filter(Boolean).join(" · "),
-        priority: hot ? "urgent" : "high", status: "unread",
-        metadata: { marketPropertySourceId: d.sourceId, provider: d.provider, externalId: d.externalId, prevPrice: d.prevPrice, nextPrice: d.nextPrice, city: d.city } as never,
-      };
-    });
-    try { const { error } = await db.from("property_alerts" as never).insert(dropAlertRows as never); if (!error) alertsCreated += dropAlertRows.length; } catch { /* best-effort */ }
+    // Self-healing dedup guard: skip a price_drop alert when one already exists
+    // for the same market source within the last 24h. The bridge makes drops
+    // idempotent across runs (it updates the source price), but this protects
+    // against a silently-failed price upsert re-detecting the same drop and
+    // against an overlap with the Property Radar daily-refresh — so the popup
+    // queue never gets a duplicate price drop for the same listing.
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const recentlyAlerted = new Set<string>();
+    try {
+      const { data: recent } = await db
+        .from("property_alerts" as never)
+        .select("metadata")
+        .eq("org_id", organizationId)
+        .eq("alert_type", "price_drop")
+        .gte("created_at", since24h);
+      for (const a of (recent ?? []) as unknown as { metadata: { marketPropertySourceId?: string } | null }[]) {
+        const id = a.metadata?.marketPropertySourceId;
+        if (id) recentlyAlerted.add(id);
+      }
+    } catch { /* best-effort — if the guard read fails we still cap at 50 below */ }
+
+    const dropAlertRows = bridge.priceDrops
+      .filter((d) => !(d.sourceId && recentlyAlerted.has(d.sourceId)))
+      .slice(0, 50)
+      .map((d) => {
+        const delta = d.nextPrice - d.prevPrice;
+        const pct = d.prevPrice > 0 ? Math.round((Math.abs(delta) / d.prevPrice) * 100) : 0;
+        const hot = Math.abs(delta) >= PRICE_DROP_HOT_ABS || pct >= PRICE_DROP_HOT_PERCENT;
+        return {
+          org_id: organizationId, alert_type: "price_drop",
+          title: hot ? "ירידת מחיר משמעותית" : "ירידת מחיר באזור שלך",
+          message: [`-${pct}%`, d.city].filter(Boolean).join(" · "),
+          priority: hot ? "urgent" : "high", status: "unread",
+          metadata: { marketPropertySourceId: d.sourceId, provider: d.provider, externalId: d.externalId, prevPrice: d.prevPrice, nextPrice: d.nextPrice, city: d.city } as never,
+        };
+      });
+    if (dropAlertRows.length) {
+      try { const { error } = await db.from("property_alerts" as never).insert(dropAlertRows as never); if (!error) alertsCreated += dropAlertRows.length; } catch { /* best-effort */ }
+    }
   }
 
   return { newProperties: freshNew.length, priceDrops: bridge.priceDrops.length, alertsCreated };
