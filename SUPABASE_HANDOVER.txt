@@ -1,0 +1,88 @@
+SUPABASE HANDOVER — SQL TO RUN
+==============================
+
+The profile popup itself needs NO new SQL — it writes to existing `users`
+columns (full_name, title, avatar_url).
+
+All migrations below are additive and idempotent (safe to re-run). Run them
+in order. If you prefer pasting raw SQL instead of \i, open each file under
+supabase/migrations/ and run its contents directly in the Supabase SQL editor
+in the same order. Each uses `create table if not exists` /
+`add column if not exists` / `drop policy if exists`, so re-running against a
+DB that already has some of them won't error.
+
+
+-- Phase 24 — ZI Expert Diagnostics
+\i supabase/migrations/20260754120000_zi_diagnostics.sql
+-- creates: zi_diagnostic_runs (+ RLS)
+
+-- Phase 26.0 — Agency Foundation
+\i supabase/migrations/20260755120000_agency_foundation.sql
+-- creates: agencies, agency_branches, agency_agents, agency_identity_matches,
+--          agency_profiles, agency_scores, agency_signals, agency_timeline (+ RLS)
+
+-- Phase 26.1 — Agency Identity Resolver
+\i supabase/migrations/20260756120000_agency_resolver.sql
+-- creates: agency_aliases, agency_resolution_candidates (+ RLS)
+
+-- Phase 25 — ZI Interactive Learning
+\i supabase/migrations/20260757120000_zi_learning.sql
+-- creates: zi_learning_progress (per-user RLS), zi_tutorials, zi_walkthroughs,
+--          zi_glossary, zi_faq (manager/author RLS)
+
+-- Phase 26.2 — Agency Auto-Builder + Clean Identity
+\i supabase/migrations/20260758120000_agency_autobuilder.sql
+-- alters agencies: + brand_name, franchise_name, display_name, created_from,
+--                  creation_confidence, identity_status, identity_metadata
+-- alters agency_resolution_candidates: + suggested_* columns
+
+-- Phase 26.3 — Agency Knowledge Graph™
+\i supabase/migrations/20260759120000_agency_knowledge_graph.sql
+-- creates: agency_entity_relationships (+ indexes + unique key + RLS)
+--   unique (organization_id, agency_id, entity_type, entity_id, relationship_type)
+
+-- Phase 2 — Professional AVM valuation algorithm
+-- NO SQL REQUIRED. Engine-only upgrade (src/lib/valuation): adds
+-- valuationAvailable / quality / missingData / recommendedAction / debug to the
+-- computed result. Existing valuation tables are unchanged.
+
+-- Phase 26.4 — Agency Territory Dominance Engine™
+\i supabase/migrations/20260760120000_agency_territory_stats.sql
+-- creates: agency_territory_stats (+ indexes + unique key + RLS)
+--   unique (organization_id, agency_id, territory_type, territory_key, period_days)
+
+-- Phase 3 — Connect valuation output to PDF report
+-- NO SQL REQUIRED. The AVM debug/availability is persisted inside the existing
+-- property_valuations.metadata jsonb column (no schema change).
+
+-- Phase 26.5 — Agency Scoring Engine™
+\i supabase/migrations/20260761120000_agency_scoring.sql
+-- alters agency_scores: + competition_threat, data_confidence, score_breakdown,
+--                       period_start, period_end, calculated_at (+ indexes)
+
+-- Phase 4 — Valuation Intelligence & Explainability
+\i supabase/migrations/20260762120000_valuation_intelligence.sql
+-- creates: valuation_history (audit, append-only),
+--          valuation_explanations (latest explanation object, 1 per valuation) + RLS
+--   (valuation_comparables already exists from the price-intelligence phase)
+
+-- Phase 26.6 — Agency Signals + Timeline Intelligence™
+\i supabase/migrations/20260763120000_agency_signals_intelligence.sql
+-- alters agency_signals: + entity/territory cols, score_before/after, importance,
+--   confidence, status, dedupe_key, detected_at, resolved_at, expires_at
+--   (+ partial unique index: one ACTIVE signal per dedupe_key)
+-- alters agency_timeline: + entity/territory cols, importance, dedupe_key
+
+-- Valuation self-learning — accuracy from completed deals
+\i supabase/migrations/20260764120000_valuation_accuracy.sql
+-- creates: valuation_accuracy (predicted vs actual + deal context + error) + RLS
+
+-- Premium seller presentation — NO SQL REQUIRED.
+-- Stored in the existing valuation_reports table (report_type='seller_presentation');
+-- the share link reuses the existing public /valuation-report/[token] route.
+
+-- Phase 26.7 — AI SWOT + Executive Agency Summary™
+\i supabase/migrations/20260765120000_agency_intelligence_reports.sql
+-- creates: agency_intelligence_reports (executive_summary, SWOT, recommendations,
+--   key_signals/scores, source_snapshot, data_confidence) + RLS
+--   unique (organization_id, agency_id, report_type, period_start, period_end)

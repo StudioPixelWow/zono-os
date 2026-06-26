@@ -50,6 +50,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "transactions-coverage", label: "כיסוי דאטה", route: "/transactions/coverage", icon: "MapPin", category: "שוק ועסקאות", roleMin: "agent", sidebar: false, searchable: true },
   { id: "competitors", label: "מתחרים", route: "/competitors", icon: "Shield", category: "שוק ועסקאות", roleMin: "manager", sidebar: true, searchable: true },
   { id: "competitor-intelligence", label: "מודיעין מתחרים", route: "/competitor-intelligence", icon: "Activity", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "Competitor Intelligence™ — פעילות מתחרים, ירידות מחיר, אזורים מתחממים ונתח שוק מוערך מנתוני מודעות ציבוריים" },
+  { id: "competition-radar", label: "רדאר מתחרים", route: "/competition-radar", icon: "Radar", category: "שוק ועסקאות", roleMin: "manager", sidebar: true, searchable: true, description: "רדאר מתחרים™ — מודיעין תחרותי על משרדי תיווך: ציוני איום, שליטה אזורית, אותות שוק, ניתוח SWOT והמלצות פעולה" },
   { id: "broker-intelligence", label: "מודיעין מתווכים", route: "/broker-intelligence", icon: "Users", category: "שוק ועסקאות", roleMin: "manager", sidebar: false, searchable: true },
 
   // ── צמיחה ──
