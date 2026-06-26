@@ -4441,6 +4441,23 @@ type AgencyTimelineRow = {
   description: string | null; metadata: unknown; event_date: string; created_at: string;
 };
 
+// ── Phase 26.1 — Agency Identity Resolver ────────────────────────────────────
+type AgencyAliasesRow = {
+  id: string; organization_id: string; agency_id: string; alias: string;
+  normalized_alias: string; source: string | null; created_at: string;
+};
+type AgencyResolutionCandidatesRow = {
+  id: string; organization_id: string; raw_text: string; normalized_name: string;
+  source: string | null; source_ref: string | null;
+  status: "pending" | "accepted" | "rejected" | "auto_created" | "needs_review" | "enriched";
+  confidence: number | null; matched_agency_id: string | null; evidence: unknown;
+  // Phase 26.2 suggested_* columns (nullable, additive)
+  suggested_name: string | null; suggested_display_name: string | null;
+  suggested_brand_name: string | null; suggested_city: string | null;
+  suggested_branch: string | null; suggested_aliases: unknown;
+  resolved_at: string | null; created_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -4479,6 +4496,8 @@ export interface Database {
       agency_scores: TableShape<AgencyScoresRow, "organization_id" | "agency_id">;
       agency_signals: TableShape<AgencySignalsRow, "organization_id" | "agency_id" | "signal_type" | "title">;
       agency_timeline: TableShape<AgencyTimelineRow, "organization_id" | "agency_id" | "event_type" | "title">;
+      agency_aliases: TableShape<AgencyAliasesRow, "organization_id" | "agency_id" | "alias" | "normalized_alias">;
+      agency_resolution_candidates: TableShape<AgencyResolutionCandidatesRow, "organization_id" | "raw_text">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       property_journeys: TableShape<
         PropertyJourneysRow,

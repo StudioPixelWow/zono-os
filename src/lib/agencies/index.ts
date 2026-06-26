@@ -11,3 +11,10 @@ export {
   nameSimilarity, duplicateScore, isLikelyDuplicate, DUPLICATE_THRESHOLD,
   type AgencyLike, type DuplicateScore,
 } from "./duplicate-detection";
+// ── Identity Resolver (Phase 26.1, pure) ─────────────────────────────────────
+export { resolveAgencyText, RESOLVE_ACCEPT, RESOLVE_REVIEW } from "./resolver/resolver";
+export { toKnownAgency } from "./resolver/types";
+export type {
+  ResolutionInput, ResolutionResult, AgencyMatch, KnownAgency, CandidateStatus,
+  ResolutionCandidateRecord,
+} from "./resolver/types";
