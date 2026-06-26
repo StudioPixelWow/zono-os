@@ -36,7 +36,8 @@ function main(): void {
   // 1) Relationship key stability.
   console.log("Relationship key:");
   const base: RelationshipInput = { agencyId: "ag1", entityType: "property", entityId: "p1", relationshipType: "property_listing" };
-  assert(relationshipKey(base) === relationshipKey({ ...base, confidence: 0.9 }), "key ignores confidence (stable identity)");
+  const baseWithConfidence: RelationshipInput = { ...base, confidence: 0.9 };
+  assert(relationshipKey(base) === relationshipKey(baseWithConfidence), "key ignores confidence (stable identity)");
   assert(relationshipKey(base) !== relationshipKey({ ...base, relationshipType: "property_sold" }), "different relationship_type → different key");
 
   // 2) Dedup of relationship inputs (duplicate prevention).
