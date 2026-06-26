@@ -72,3 +72,14 @@ export {
 } from "./intelligence/agencyChangeDetector";
 export { dedupeKey, metricKey, materiallyChanged, dedupeDetectedBatch } from "./intelligence/agencySignalDedupe";
 export { detectAgencySignals as detectAgencySignalsPure } from "./intelligence/agencySignalDetector";
+// ── AI SWOT + Executive Agency Summary (Phase 26.7, pure) ────────────────────
+export {
+  confidenceWord, OPPORTUNITY_SIGNALS, THREAT_SIGNALS,
+} from "./reports/agencyReportTypes";
+export type {
+  AgencyReportType, SwotItem, AgencyRecommendation, AgencyReportSnapshot, AgencyReport,
+  SnapshotScores, SnapshotSignal, SnapshotTerritory, SnapshotGraph,
+} from "./reports/agencyReportTypes";
+export { generateAgencySwot } from "./reports/agencySwotGenerator";
+export { generateAgencyExecutiveSummary } from "./reports/agencyExecutiveSummaryGenerator";
+export { generateAgencyRecommendations } from "./reports/agencyRecommendationEngine";
