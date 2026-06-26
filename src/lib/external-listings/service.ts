@@ -233,7 +233,17 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   const logDebug = (message: string, metadata: Record<string, unknown>) =>
     db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level: "debug", metadata: metadata as never });
 
+  // Soft wall-clock budget: stop BEFORE the serverless function is killed so the
+  // job is always marked completed (never stuck "running") with whatever it had
+  // time to import. Remaining cities are recorded in the cursor for resume.
+  const syncStart = Date.now();
+  const SOFT_BUDGET_MS = 230_000; // leaves margin under maxDuration=300s
+
   for (const loc of localities) {
+    if (completedCities.length > 0 && Date.now() - syncStart > SOFT_BUDGET_MS) {
+      await log(`עצירה מבוקרת לאחר ${completedCities.length} ערים (תקציב זמן) — ניתן להמשיך בלחיצה נוספת`, "warn");
+      break;
+    }
     // Run the city's sources (Yad2 + Madlan) CONCURRENTLY — each Apify scrape can
     // take up to ~110s, so running them in parallel roughly halves the wall-clock
     // per city and keeps the whole sync inside the serverless time budget.
@@ -421,7 +431,7 @@ export async function getSyncProgress(): Promise<SyncProgress> {
   // the serverless run was almost certainly killed (timeout) before it could
   // mark itself completed. Treat it as finished (not active) so the live timer
   // stops and the scheduler isn't blocked. Best-effort auto-close the row.
-  const STALE_MS = 15 * 60 * 1000; // 15 minutes
+  const STALE_MS = 4 * 60 * 1000; // 4 minutes
   const startedMs = job.started_at ? new Date(job.started_at).getTime() : 0;
   const isStale = job.status === "running" && startedMs > 0 && Date.now() - startedMs > STALE_MS;
 

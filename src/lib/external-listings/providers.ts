@@ -92,7 +92,7 @@ function client(): ApifyClient {
 /** Run an Apify actor and return its default dataset items (bounded). */
 async function runActor(actorId: string, input: Record<string, unknown>, limit = MAX_LISTINGS_PER_CITY): Promise<RawListing[]> {
   // Guardrails: cap the actor run + wait so a request can't hang indefinitely.
-  const run = await client().actor(actorId).call(input, { timeout: 120, waitSecs: 110, memory: 512 });
+  const run = await client().actor(actorId).call(input, { timeout: 100, waitSecs: 90, memory: 512 });
   if (run.status !== "SUCCEEDED") {
     throw new Error(`actor ${actorId} status=${run.status}`);
   }
