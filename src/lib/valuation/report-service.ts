@@ -10,6 +10,7 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { getValuation } from "./service";
 import { buildReportPayload, renderReportHtml, type ReportBrand } from "./report";
+import { renderPresentationHtml } from "./presentation";
 import type { ValuationRecord } from "./types";
 
 export interface GeneratedReport {
@@ -64,6 +65,36 @@ export async function generateValuationReport(valuationId: string): Promise<Gene
   const db = await createClient();
   const { data, error } = await db.from("valuation_reports" as never).insert({
     organization_id: profile.org_id, valuation_id: valuationId, report_type: "seller_pdf",
+    status: "generated", public_token: token, html_snapshot: html,
+    report_payload: payload as unknown as Record<string, unknown>,
+  } as never).select("id").single();
+  if (error) throw new Error(error.message);
+  return { reportId: (data as unknown as { id: string }).id, token, html };
+}
+
+/**
+ * Build + persist the premium seller PRESENTATION (luxury consulting document).
+ * Reuses the valuation_reports table + public token, so the same share link /
+ * public viewer renders it. Exports: PDF (print), Presentation (slide mode), Share.
+ */
+export async function generateValuationPresentation(valuationId: string): Promise<GeneratedReport> {
+  const { profile } = await getSessionContext();
+  if (!profile?.org_id) throw new Error("אין הרשאה.");
+  const record = await getValuation(valuationId);
+  if (!record) throw new Error("הערכת השווי לא נמצאה.");
+  if (record.status !== "completed") throw new Error("יש להשלים את חישוב ההערכה לפני הפקת המצגת.");
+
+  const brand = await buildBrand(record);
+  const token = randomUUID().replace(/-/g, "");
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "";
+  brand.publicUrl = baseUrl ? `${baseUrl}/valuation-report/${token}` : `/valuation-report/${token}`;
+
+  const payload = buildReportPayload(record, brand);
+  const html = renderPresentationHtml(payload);
+
+  const db = await createClient();
+  const { data, error } = await db.from("valuation_reports" as never).insert({
+    organization_id: profile.org_id, valuation_id: valuationId, report_type: "seller_presentation",
     status: "generated", public_token: token, html_snapshot: html,
     report_payload: payload as unknown as Record<string, unknown>,
   } as never).select("id").single();

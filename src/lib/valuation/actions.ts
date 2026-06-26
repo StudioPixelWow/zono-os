@@ -11,7 +11,7 @@ import {
   type ValuationListItem, type RunOutput,
 } from "./service";
 import {
-  generateValuationReport, sendValuationReportAsPdf, getLatestReport,
+  generateValuationReport, generateValuationPresentation, sendValuationReportAsPdf, getLatestReport,
   type GeneratedReport, type SendReportInput, type SendReportResult,
 } from "./report-service";
 import { getBrokerSoldProperties } from "./providers";
@@ -68,6 +68,12 @@ export async function listValuationsAction(): Promise<Result<ValuationListItem[]
 
 export async function generateValuationReportAction(id: string): Promise<Result<GeneratedReport>> {
   try { return { ok: true, data: await generateValuationReport(id) }; }
+  catch (e) { return fail(e); }
+}
+
+/** Generate the premium seller presentation; returns the share token + HTML. */
+export async function generateValuationPresentationAction(id: string): Promise<Result<GeneratedReport>> {
+  try { return { ok: true, data: await generateValuationPresentation(id) }; }
   catch (e) { return fail(e); }
 }
 
