@@ -17,7 +17,7 @@ import {
 } from "./providers";
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
 import { detectForOrg } from "@/lib/broker/service";
-import { reconcileListingLifecycle, recalculateListingSignals } from "@/lib/market-acceptance";
+import { reconcileListingLifecycle, recalculateListingSignals, calculateMarketAcceptanceScoresForOrganization } from "@/lib/market-acceptance";
 import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
@@ -334,8 +334,9 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
       scannedCities: completedCities,
     });
     await recalculateListingSignals(orgId); // MAI-2 evidence signals (no scoring)
+    await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
   } catch (e) {
-    console.error("[market-acceptance] lifecycle/signals reconcile (syncOrg) failed:", e);
+    console.error("[market-acceptance] lifecycle/signals/scores reconcile (syncOrg) failed:", e);
   }
 
   summary.success = summary.errors.length === 0;
@@ -506,7 +507,8 @@ export async function finishSyncJob(jobId: string, cities: string[], errorCount 
       scannedCities: cities,
     });
     await recalculateListingSignals(orgId); // MAI-2 evidence signals (no scoring)
-  } catch (e) { console.error("[market-acceptance] lifecycle/signals reconcile (finishSyncJob) failed:", e); }
+    await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
+  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores reconcile (finishSyncJob) failed:", e); }
   await db.from("import_jobs").update({
     status: errorCount ? "completed_with_errors" : "completed",
     finished_at: new Date().toISOString(),

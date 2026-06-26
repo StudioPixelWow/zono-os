@@ -168,3 +168,76 @@ export interface SignalRecomputeResult {
   withFullConfidence: number; // signals whose every value was directly observed
   skipped: number;       // rows with no computable signals
 }
+
+// ── MAI-3 — Market Exit & Acceptance Confidence (interpretation layer) ───────
+
+/** Acceptance scoring model version. Bump when the formula/classification changes. */
+export const ACCEPTANCE_MODEL_VERSION = "mai-3.0";
+
+/**
+ * Cautious classifications. DISAPPEARED is a fact; SOLD is not — so we only ever
+ * say "likely". OFFICIAL_TRANSACTION_FOUND requires a real matched transaction
+ * (not produced in MAI-3 — there is no per-listing official match yet).
+ */
+export type MarketAcceptanceClassification =
+  | "ACTIVE"
+  | "LIKELY_MARKET_EXIT"
+  | "LIKELY_ACCEPTED"
+  | "LIKELY_REJECTED"
+  | "UNCERTAIN"
+  | "RETURNED"
+  | "OFFICIAL_TRANSACTION_FOUND";
+
+/** One explainable evidence item behind a score. */
+export interface AcceptanceEvidence {
+  type: "positive" | "negative" | "neutral";
+  label: string;                                 // Hebrew, human-readable
+  signal: string;                                // which signal it came from
+  value: number | boolean | string | null;
+  weight: number;                                // signed contribution to the score
+  source: string;
+  confidence: number;                            // 0..1 of the underlying signal
+}
+
+/** Deterministic scoring output for one listing (before the explanation paragraph). */
+export interface MarketAcceptanceScore {
+  marketExitConfidence: number;        // 0..100
+  marketAcceptanceConfidence: number;  // 0..100 (≤ exit by invariant)
+  marketRejectionConfidence: number;   // 0..100
+  classification: MarketAcceptanceClassification;
+  evidence: AcceptanceEvidence[];
+  confidenceInputs: Record<string, unknown>;
+}
+
+/** Persisted row of `market_acceptance_scores`. */
+export interface MarketAcceptanceScoreRow {
+  id: string;
+  organization_id: string;
+  provider: string;
+  external_id: string;
+  signal_version: string;
+  model_version: string;
+  calculated_at: string;
+  market_exit_confidence: number | null;
+  market_acceptance_confidence: number | null;
+  market_rejection_confidence: number | null;
+  classification: MarketAcceptanceClassification;
+  evidence: AcceptanceEvidence[];
+  confidence_inputs: Record<string, unknown>;
+  explanation: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Summary returned by an org-wide acceptance scoring pass. */
+export interface AcceptanceScoreSummary {
+  total: number;
+  active: number;
+  likelyMarketExit: number;
+  likelyAccepted: number;
+  likelyRejected: number;
+  uncertain: number;
+  returned: number;
+  officialTransactionFound: number;
+}

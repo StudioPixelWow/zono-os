@@ -153,3 +153,27 @@ export async function upsertSignalRows(rows: Record<string, unknown>[]): Promise
     catch { /* best-effort — retried on the next sync */ }
   }
 }
+
+// ── MAI-3 — acceptance scoring IO ───────────────────────────────────────────
+export interface SignalsRowLite { provider: string; external_id: string; signal_version: string; signals: import("./types").SignalSet }
+
+/** Read the org's signal rows as scoring input. */
+export async function getSignalsForScoring(organizationId: string): Promise<SignalsRowLite[]> {
+  const db = createServiceRoleClient() as Db;
+  const { data } = await db
+    .from("market_listing_signals" as never)
+    .select("provider,external_id,signal_version,signals")
+    .eq("organization_id", organizationId)
+    .limit(20000);
+  return (data ?? []) as unknown as SignalsRowLite[];
+}
+
+/** Upsert computed acceptance-score rows (conflict-keyed by org+provider+ext+model). */
+export async function upsertAcceptanceScoreRows(rows: Record<string, unknown>[]): Promise<void> {
+  if (!rows.length) return;
+  const db = createServiceRoleClient() as Db;
+  for (let i = 0; i < rows.length; i += 500) {
+    try { await db.from("market_acceptance_scores" as never).upsert(rows.slice(i, i + 500) as never, { onConflict: "organization_id,provider,external_id,model_version" }); }
+    catch { /* best-effort — retried on the next sync */ }
+  }
+}

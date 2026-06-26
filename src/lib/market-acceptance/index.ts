@@ -1,4 +1,12 @@
 export * from "./types";
-export { reconcileListingLifecycle, recalculateListingSignals } from "./service";
+export {
+  reconcileListingLifecycle, recalculateListingSignals,
+  calculateMarketAcceptanceScoresForOrganization,
+} from "./service";
 export { computeListingSignals, type SignalInput, type PriceChangeObservation } from "./signals";
-export { validateSignalSet, type SignalQaResult } from "./qa";
+export { scoreMarketAcceptance, type AcceptanceScoringInput } from "./scoring";
+export { buildAcceptanceExplanation } from "./explain";
+export {
+  validateSignalSet, type SignalQaResult,
+  runAcceptanceScoringQa, type AcceptanceQaCase,
+} from "./qa";
