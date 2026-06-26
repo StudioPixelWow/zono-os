@@ -244,10 +244,12 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
       await log(`עצירה מבוקרת לאחר ${completedCities.length} ערים (תקציב זמן) — ניתן להמשיך בלחיצה נוספת`, "warn");
       break;
     }
-    // Run the city's sources (Yad2 + Madlan) CONCURRENTLY — each Apify scrape can
-    // take up to ~110s, so running them in parallel roughly halves the wall-clock
-    // per city and keeps the whole sync inside the serverless time budget.
-    await Promise.all(sources.map(async (source) => {
+    // Sources run SEQUENTIALLY (fastest one first) and we CHECKPOINT after EACH
+    // source — so the panel leaves "connecting" and the counters start ticking
+    // within seconds of the first source returning, AND partial results persist
+    // if the serverless function is later cut short. (Concurrent runs meant
+    // nothing was saved until BOTH finished — worse on a tight time budget.)
+    for (const source of sources) {
       const t0 = Date.now();
       try {
         const provider = getProvider(source);
@@ -265,13 +267,25 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
         const r = await upsertListings(db, orgId, source, listings, jobId);
         summary.inserted += r.inserted; summary.updated += r.updated;
         await log(`${source} · ${loc.name}: ${listings.length} פריטים ב-${ms}ms (${r.inserted} חדשים, ${r.updated} עודכנו)`);
+        // Live per-SOURCE checkpoint — surfaces real numbers immediately so the
+        // panel shows progress instead of an endless "connecting" spinner.
+        try {
+          await db.from("import_jobs").update({
+            total_found: totalFound, total_imported: summary.inserted, total_updated: summary.updated,
+            params: {
+              ...opts, mode, completedCities,
+              cursorRemaining: allCityNames.filter((c) => !completedCities.includes(c)),
+              totalCities: localities.length, completedCount: completedCities.length, currentCity: loc.name,
+            } as never,
+          }).eq("id", jobId);
+        } catch { /* checkpoint is best-effort */ }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "שגיאה";
         summary.errors.push(`${source}/${loc.name}: ${msg}`);
         await log(`כשל ב-${source} · ${loc.name} (${Date.now() - t0}ms): ${msg}`, "error");
         // continue with the other source / city
       }
-    }));
+    }
     try { await detectDuplicates(db, orgId, loc.name); } catch { /* best-effort */ }
     // Cursor checkpoint: record this city as done so an interrupted backfill can
     // resume from the cities still remaining.

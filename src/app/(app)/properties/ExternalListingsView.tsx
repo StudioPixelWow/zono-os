@@ -200,7 +200,10 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
   const [dbgBusy, setDbgBusy] = useState(false);
   const [dbgReport, setDbgReport] = useState<DebugReport | null>(null);
   const [dbgError, setDbgError] = useState<string | null>(null);
-  const [syncMode, setSyncMode] = useState<"quick" | "standard" | "full" | "backfill">("standard");
+  // Default to the FAST mode (50/city) so a sync starts filling within seconds
+  // like it used to — 250/city makes each Apify actor run long enough to risk a
+  // serverless timeout before any listing is saved. Heavier modes stay available.
+  const [syncMode, setSyncMode] = useState<"quick" | "standard" | "full" | "backfill">("quick");
   const [source, setSource] = useState("");
   const [sourceType, setSourceType] = useState("");
   const [minRooms, setMinRooms] = useState("");
