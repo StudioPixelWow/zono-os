@@ -13,6 +13,7 @@ import { runValuation as runEngine, normalizeInput } from "./valuation-engine";
 import { buildValuationIntelligence, ALGORITHM_VERSION } from "./intelligence";
 import { getCityCalibration } from "./accuracy-service";
 import { applyCalibration } from "./accuracy";
+import { recordValuationWeight } from "@/lib/valuation-weight-engine";
 import type { ValuationIntelligence, EstimatedAccuracy } from "./types";
 import type {
   ValuationInput, ValuationRecord, ValuationResult, Comparable, BrokerSoldProperty,
@@ -134,6 +135,30 @@ export async function runValuationById(id: string): Promise<RunOutput> {
   });
 
   await persistResult(db, orgId, id, input, result, comparables, brokerSold, result.market, result.adjustments);
+
+  // MAI-5 — Valuation Weight Engine (best-effort, additive). Combines the AVM
+  // result with Market Acceptance Intelligence into a transparent weighted
+  // confidence + range. NEVER changes the estimated value; official transactions
+  // stay dominant. Persisted to valuation_weight_results only (no UI yet).
+  try {
+    const propertyId = (valRow as { property_id?: string | null }).property_id ?? null;
+    await recordValuationWeight({
+      organizationId: orgId, valuationId: id, propertyId,
+      base: {
+        estimatedValue: result.estimatedValue, lowValue: result.lowValue, highValue: result.highValue,
+        confidenceScore: result.confidenceScore,
+        officialTxCount: result.market.transactionCount, activeListingCount: result.market.activeListingCount,
+        trendPercent: result.market.trendPercent, dataQualityScore: result.market.dataQualityScore,
+        avgSimilarity: result.debug?.comparableCount ? Math.max(0, Math.min(100, result.confidenceScore)) : 0,
+        hasLocation: input.latitude != null && input.longitude != null,
+        hasFeatures: input.rooms != null || input.builtSqm != null,
+      },
+      segment: { city: input.city, neighborhood: input.neighborhood, propertyType: input.propertyType, rooms: input.rooms },
+    });
+  } catch (e) {
+    console.error("[valuation-weight] record failed (non-blocking):", e);
+  }
+
   return { result, providers, brokerSold };
 }
 
