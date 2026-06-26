@@ -120,3 +120,9 @@ DB that already has some of them won't error.
 -- creates: agency_intelligence_sources (provenance/visibility/retention),
 --          agency_intelligence_audit_log (append-only who/when/old/new/reason),
 --          agency_intelligence_policies (per-org governance) (+ indexes + RLS)
+
+-- Phase 26.15 — Report Export + Client Presentation™
+\i supabase/migrations/20260770120000_agency_report_exports.sql
+-- creates: agency_report_exports (export status/file_url/provenance per report) (+ indexes + RLS)
+-- NOTE: report HTML is uploaded to the existing public `documents` storage bucket
+--       (org-scoped path); no new bucket required.

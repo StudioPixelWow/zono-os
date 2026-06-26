@@ -11,6 +11,7 @@ import { AgencyTimelinePanel } from "./AgencyTimelinePanel";
 import { AgencySwotPanel } from "./AgencySwotPanel";
 import { AgencyRecommendationsPanel } from "./AgencyRecommendationsPanel";
 import { AgencyEmptyState } from "./AgencyEmptyState";
+import { RadarExportButtons } from "./RadarExportButtons";
 import { Card } from "@/components/ui/Card";
 import {
   refreshCompetitionRadarIntelligence, getCompetitionRadarAgencyDetailsAction,
@@ -58,6 +59,8 @@ export function CompetitionRadarPage({ overview, agencies, scoredCount, selected
         refreshing={runner.pending}
         lastConfidence={details?.dataConfidence ?? null}
       />
+
+      {empty === "none" && <RadarExportButtons agencyId={details?.agencyId ?? null} agencyCity={details?.city ?? null} />}
 
       {(runner.note || runner.error) && (
         <div className={`rounded-lg border px-3 py-2 text-sm ${runner.error ? "border-danger/40 bg-danger-soft/40 text-danger" : "border-success/40 bg-success-soft/40 text-success"}`}>
