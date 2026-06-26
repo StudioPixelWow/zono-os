@@ -80,3 +80,91 @@ export interface LifecycleReconcileResult {
   returned: number;       // rows that came back from a gone state
   eventsAppended: number; // timeline rows written
 }
+
+// ── MAI-2 — Signal Engine (evidence only, no scoring) ───────────────────────
+
+/** Current signal-schema version. Bump when the signal set changes. */
+export const SIGNAL_VERSION = "mai-2.0";
+
+/** Every signal carries its value + provenance + confidence. Explainable. */
+export interface Signal {
+  /** Canonical signal name (see SIGNAL_NAMES). */
+  name: string;
+  /** Observed value. null when the underlying data is missing (never invented). */
+  value: number | boolean | string | null;
+  /** Which table/derivation produced it (provenance). */
+  source: string;
+  /** ISO timestamp of when it was computed. */
+  lastUpdated: string;
+  /** 0..1 — 1.0 = directly observed; lower when a needed field was missing. */
+  confidence: number;
+}
+
+/** A computed signal set keyed by signal name. */
+export type SignalSet = Record<string, Signal>;
+
+/** The full result of computing signals for one listing. */
+export interface ListingSignalsResult {
+  provider: string;
+  externalId: string;
+  lifecycleId: string | null;
+  signals: SignalSet;
+  confidenceInputs: Record<string, unknown>;
+}
+
+/** Persisted row of `market_listing_signals`. */
+export interface ListingSignalsRow {
+  id: string;
+  organization_id: string;
+  provider: string;
+  external_id: string;
+  lifecycle_id: string | null;
+  signal_version: string;
+  last_calculated_at: string;
+  signals: SignalSet;
+  confidence_inputs: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+/** The complete list of signals this engine emits (evidence only). */
+export const SIGNAL_NAMES = [
+  "DaysOnMarket",
+  "ListingAge",
+  "FirstSeenDaysAgo",
+  "LastSeenDaysAgo",
+  "TimesSeen",
+  "TimesDisappeared",
+  "TimesReturned",
+  "ReturnedAfterDisappear",
+  "StillActive",
+  "CurrentlyMissing",
+  "CurrentState",
+  "CurrentPrice",
+  "LastKnownPrice",
+  "PriceChangesCount",
+  "AveragePriceReduction",
+  "LargestPriceReduction",
+  "PriceMomentum",
+  "ImageChanges",
+  "DescriptionChanges",
+  "StatusChanges",
+  "DuplicateConfidence",
+  "ProviderCount",
+  "NeighborhoodActivity",
+  "AreaSupply",
+  "AreaDemand",
+  "RecentOfficialDealsNearby",
+  "TransactionNearby",
+] as const;
+
+export type SignalName = (typeof SIGNAL_NAMES)[number];
+
+/** Summary returned by a signal recompute pass (for logging). */
+export interface SignalRecomputeResult {
+  listings: number;      // lifecycle rows considered
+  written: number;       // signal rows upserted
+  withFullConfidence: number; // signals whose every value was directly observed
+  skipped: number;       // rows with no computable signals
+}
