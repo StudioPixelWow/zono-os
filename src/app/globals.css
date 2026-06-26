@@ -313,6 +313,16 @@ body {
   border: 1px solid rgba(248, 113, 113, 0.28); background: rgba(239, 68, 68, 0.12);
   padding: 10px 12px; text-align: center; font-size: 12.5px; font-weight: 600; color: #fecaca;
 }
+.zauth-ok {
+  position: relative; margin-bottom: 18px; border-radius: 14px;
+  border: 1px solid rgba(52, 211, 153, 0.28); background: rgba(16, 185, 129, 0.12);
+  padding: 10px 12px; text-align: center; font-size: 12.5px; font-weight: 600; color: #a7f3d0;
+}
+.zauth-note {
+  position: relative; margin-bottom: 18px; border-radius: 14px;
+  border: 1px solid rgba(167, 139, 250, 0.30); background: rgba(124, 58, 237, 0.14);
+  padding: 10px 12px; text-align: center; font-size: 12px; font-weight: 600; color: #ddd0ff;
+}
 
 /* Fields — taller, thin borders, soft inner shadow, minimal leading icon. */
 .zauth-field { position: relative; margin-bottom: 18px; }
