@@ -375,6 +375,53 @@ export function dedupeComparables(comparables: Comparable[]): Comparable[] {
   return [...keep.values()];
 }
 
+// ── Proximity search ladder (Phase 1) ────────────────────────────────────────
+// Comparables are collected city-wide, then NARROWED to the closest geography
+// that still yields enough evidence: same building → street → neighborhood →
+// 300m → 700m → whole city. We stop expanding once `minNeeded` comparables are
+// available, so a valuation always prefers the nearest real evidence — but never
+// returns nothing: if no tier reaches the threshold, the full city set is used.
+export const PROXIMITY_TIERS = ["building", "street", "neighborhood", "r300", "r700", "city"] as const;
+export type ProximityTier = (typeof PROXIMITY_TIERS)[number];
+
+const eqText = (a?: string | null, b?: string | null) =>
+  !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Smallest (closest) tier a comparable belongs to relative to the subject. */
+export function proximityTier(input: ValuationInput, c: Comparable): ProximityTier {
+  const d = c.distanceMeters;
+  if (d != null && d <= 30) return "building";
+  if (eqText(input.street, c.street) || (d != null && d <= 120)) return "street";
+  if (eqText(input.neighborhood, c.neighborhood)) return "neighborhood";
+  if (d != null && d <= 300) return "r300";
+  if (d != null && d <= 700) return "r700";
+  return "city";
+}
+
+/**
+ * Return the closest-tier subset of comparables that together reach `minNeeded`,
+ * expanding tier-by-tier. Never returns fewer than what exists: if even the full
+ * city set is below the threshold, every comparable is returned.
+ */
+export function selectByProximityLadder(
+  input: ValuationInput, comparables: Comparable[], minNeeded = 6,
+): { selected: Comparable[]; tier: ProximityTier; counts: Record<ProximityTier, number> } {
+  const counts = { building: 0, street: 0, neighborhood: 0, r300: 0, r700: 0, city: 0 } as Record<ProximityTier, number>;
+  const byTier = new Map<ProximityTier, Comparable[]>();
+  for (const t of PROXIMITY_TIERS) byTier.set(t, []);
+  for (const c of comparables) { const t = proximityTier(input, c); counts[t]++; byTier.get(t)!.push(c); }
+
+  const selected: Comparable[] = [];
+  let reached: ProximityTier = "city";
+  for (const t of PROXIMITY_TIERS) {
+    selected.push(...byTier.get(t)!);
+    reached = t;
+    if (selected.length >= minNeeded) break;
+  }
+  // If even the whole city set is short, we still return all of it (never empty).
+  return { selected: selected.length ? selected : comparables, tier: reached, counts };
+}
+
 export function runValuation({ input, comparables: rawComparables, brokerSold, market: marketIn }: RunValuationArgs): ValuationResult {
   // Normalize: derive price-per-sqm from price/sqm when a source omitted it, so
   // no priced comparable is wasted. Then unify ALL sources → dedupe.
@@ -389,7 +436,13 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
   const listings = comparables.filter((c) => c.comparableType === "listing");
   const market = marketIn ?? buildMarketSnapshot(sold, listings);
 
-  const { basePpsqm, avgSimilarity, usable } = computeBasePricePerSqm(input, comparables, market);
+  // Narrow to the closest geography that still has enough evidence (building →
+  // street → neighborhood → 300m → 700m → city). Pricing then prefers nearby
+  // comparables; the full set remains available if no tier reaches the threshold.
+  const ladder = selectByProximityLadder(input, comparables, 6);
+  const work = ladder.selected;
+
+  const { basePpsqm, avgSimilarity, usable } = computeBasePricePerSqm(input, work, market);
   const built = input.builtSqm ?? 0;
   const evidenceCount = usable.length || (market.transactionCount + market.activeListingCount);
 
@@ -404,6 +457,7 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
       internalComparables: internal, externalComparables: external, transactions: txns,
       sourcesUsed: sources, basePpsqm: basePpsqm ? Math.round(basePpsqm) : null,
       avgSimilarity, evidenceCount, builtSqm: built,
+      proximityTier: ladder.tier, proximityCounts: ladder.counts, usedComparables: work.length,
       reason: !basePpsqm ? "no_priced_comparables_and_no_market" : built <= 0 ? "missing_built_sqm" : "ok",
     });
   }
