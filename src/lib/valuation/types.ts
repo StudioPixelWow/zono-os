@@ -9,6 +9,23 @@ export type ComparableType = "sold" | "listing";
 export type AdjustmentDirection = "positive" | "negative";
 export type DemandLevel = "low" | "medium" | "high";
 export type StrategyKey = "conservative" | "balanced" | "aggressive";
+/** Overall quality band of a valuation, driven by data breadth + confidence. */
+export type ValuationQualityLevel = "high" | "medium" | "low" | "insufficient";
+
+/** Internal QA / debug metadata returned with every valuation (not for display). */
+export interface ValuationDebug {
+  comparableCount: number;
+  soldComparableCount: number;
+  activeComparableCount: number;
+  sourcesUsed: string[];
+  fallbackLevel: string;          // proximity tier actually used (building→…→city)
+  avgPricePerSqm: number | null;
+  medianPricePerSqm: number | null;
+  weightedPricePerSqm: number | null;
+  outliersRemoved: number;
+  confidenceScore: number;        // 0..100
+  reasonCodes: string[];          // e.g. ok | no_priced_comparables | missing_built_sqm | only_active_listings
+}
 
 /** Raw human input collected by the wizard. All optional until computed. */
 export interface ValuationInput {
@@ -146,6 +163,19 @@ export interface ValuationResult {
   market: MarketSnapshot;
   basePpsqm: number;
   evidenceCount: number;
+  // ── Phase 2 (AVM) — additive, optional so existing consumers/UI keep working ──
+  /** True when a real, evidence-backed valuation was produced. */
+  valuationAvailable?: boolean;
+  /** Overall quality band (insufficient when valuationAvailable is false). */
+  valuationQuality?: ValuationQualityLevel;
+  /** Hebrew reason a valuation could not be produced (when unavailable). */
+  unavailableReason?: string | null;
+  /** Inputs / evidence that are missing (when unavailable). */
+  missingData?: string[];
+  /** Hebrew next step the agent should take (when unavailable). */
+  recommendedAction?: string | null;
+  /** QA metadata — comparable counts, sources, ppsqm, outliers, reason codes. */
+  debug?: ValuationDebug;
 }
 
 /** A fully-loaded valuation as read from the DB for the result/report screens. */

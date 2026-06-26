@@ -12,8 +12,17 @@
 import type {
   Comparable, BrokerSoldProperty, ValuationInput, ValuationResult,
   ValuationAdjustment, MarketSnapshot, PricingStrategy, WhatIfPoint,
-  ConfidenceLevel, DemandLevel,
+  ConfidenceLevel, DemandLevel, ValuationDebug, ValuationQualityLevel,
 } from "./types";
+
+/**
+ * Per-source reliability (0..1) — public alias of sourceWeight, exposed so the
+ * unified-comparable normalizer and QA can reference the same priority order:
+ * SOLD beats ACTIVE; official/internal sources beat portals.
+ */
+export function sourceReliability(c: Comparable): number {
+  return sourceWeight(c);
+}
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const round = (n: number, step = 1000) => Math.round(n / step) * step;
@@ -132,7 +141,7 @@ function removeOutliers(comps: Comparable[]): Comparable[] {
  */
 export function computeBasePricePerSqm(
   input: ValuationInput, comparables: Comparable[], market: MarketSnapshot | null,
-): { basePpsqm: number | null; avgSimilarity: number; usable: Comparable[] } {
+): { basePpsqm: number | null; avgSimilarity: number; usable: Comparable[]; weightedPpsqm: number | null; medianPpsqm: number | null; outliersRemoved: number } {
   // Keep EVERY priced comparable — only similarity-rank them.
   const scored = comparables
     .map((c) => ({ ...c, similarityScore: computeSimilarity(input, c) }))
@@ -141,10 +150,11 @@ export function computeBasePricePerSqm(
   if (scored.length === 0) {
     // No priced comparable anywhere → last-resort market baseline (still real, not zero).
     const fallback = market?.medianPricePerSqm ?? market?.avgPricePerSqm ?? null;
-    return { basePpsqm: fallback, avgSimilarity: 0, usable: [] };
+    return { basePpsqm: fallback, avgSimilarity: 0, usable: [], weightedPpsqm: null, medianPpsqm: null, outliersRemoved: 0 };
   }
 
   const trimmed = removeOutliers(scored);
+  const outliersRemoved = scored.length - trimmed.length;
   let wsum = 0, vsum = 0, simSum = 0;
   for (const c of trimmed) {
     const sim = Math.max(0.12, (c.similarityScore ?? 0) / 100); // floor: far comps still count
@@ -161,7 +171,14 @@ export function computeBasePricePerSqm(
     : (weighted ?? med ?? market?.medianPricePerSqm ?? market?.avgPricePerSqm ?? null);
 
   const usable = scored.sort((a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0));
-  return { basePpsqm: base, avgSimilarity: Math.round(simSum / trimmed.length), usable };
+  return {
+    basePpsqm: base,
+    avgSimilarity: Math.round(simSum / trimmed.length),
+    usable,
+    weightedPpsqm: weighted != null ? Math.round(weighted) : null,
+    medianPpsqm: med != null ? Math.round(med) : null,
+    outliersRemoved,
+  };
 }
 
 // ── Adjustments (% impacts on the built-area value) ──────────────────────────
@@ -422,6 +439,36 @@ export function selectByProximityLadder(
   return { selected: selected.length ? selected : comparables, tier: reached, counts };
 }
 
+/** Quality band from data breadth + confidence (insufficient when unavailable). */
+export function valuationQuality(available: boolean, confidenceScore: number, usableCount: number): ValuationQualityLevel {
+  if (!available) return "insufficient";
+  if (usableCount === 0) return "low"; // produced only from a market baseline
+  if (confidenceScore >= 75) return "high";
+  if (confidenceScore >= 50) return "medium";
+  return "low";
+}
+
+/** Which inputs/evidence are missing when a valuation cannot be produced. */
+export function buildMissingData(input: ValuationInput, hasPricedComparables: boolean): string[] {
+  const missing: string[] = [];
+  if (!input.city) missing.push("עיר");
+  if (!input.builtSqm || input.builtSqm <= 0) missing.push('שטח בנוי במ"ר');
+  if (!hasPricedComparables) missing.push("עסקאות/מודעות להשוואה באזור");
+  if (!input.rooms) missing.push("מספר חדרים");
+  return missing;
+}
+
+/** Hebrew next-step recommendation when a valuation cannot be produced. */
+export function recommendedActionFor(missingData: string[]): string {
+  if (missingData.includes("עסקאות/מודעות להשוואה באזור")) {
+    return "להריץ סריקת עסקאות ומודעות לאזור (GovMap / Madlan / יד2) ולאחר מכן לחשב מחדש.";
+  }
+  if (missingData.some((m) => m.includes("שטח בנוי") || m === "עיר")) {
+    return "להשלים את פרטי הנכס החסרים (עיר ושטח בנוי) ולחשב מחדש.";
+  }
+  return "להשלים נתונים חסרים ולחשב מחדש.";
+}
+
 export function runValuation({ input, comparables: rawComparables, brokerSold, market: marketIn }: RunValuationArgs): ValuationResult {
   // Normalize: derive price-per-sqm from price/sqm when a source omitted it, so
   // no priced comparable is wasted. Then unify ALL sources → dedupe.
@@ -442,34 +489,65 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
   const ladder = selectByProximityLadder(input, comparables, 6);
   const work = ladder.selected;
 
-  const { basePpsqm, avgSimilarity, usable } = computeBasePricePerSqm(input, work, market);
+  const { basePpsqm, avgSimilarity, usable, weightedPpsqm, medianPpsqm, outliersRemoved } = computeBasePricePerSqm(input, work, market);
   const built = input.builtSqm ?? 0;
   const evidenceCount = usable.length || (market.transactionCount + market.activeListingCount);
 
+  // QA / debug metadata (returned with every result; also logged).
+  const priced = comparables.filter((c) => (c.pricePerSqm ?? 0) > 0);
+  const soldCount = priced.filter((c) => c.comparableType === "sold").length;
+  const activeCount = priced.length - soldCount;
+  const sourcesUsed = [...new Set(priced.map((c) => c.source))];
+  const reasonCodes: string[] = [];
+  if (!basePpsqm) reasonCodes.push("no_priced_comparables");
+  if (built <= 0) reasonCodes.push("missing_built_sqm");
+  if (basePpsqm && built > 0) {
+    reasonCodes.push("ok");
+    if (usable.length === 0) reasonCodes.push("market_baseline_only");
+    if (soldCount === 0 && activeCount > 0) reasonCodes.push("only_active_listings");
+  }
+  const debug: ValuationDebug = {
+    comparableCount: priced.length,
+    soldComparableCount: soldCount,
+    activeComparableCount: activeCount,
+    sourcesUsed,
+    fallbackLevel: ladder.tier,
+    avgPricePerSqm: market.avgPricePerSqm,
+    medianPricePerSqm: medianPpsqm ?? market.medianPricePerSqm,
+    weightedPricePerSqm: weightedPpsqm,
+    outliersRemoved,
+    confidenceScore: 0, // filled below
+    reasonCodes,
+  };
+
   // Diagnostics — why a valuation could/couldn't be produced.
   if (typeof console !== "undefined") {
-    const priced = comparables.filter((c) => (c.pricePerSqm ?? 0) > 0);
-    const internal = priced.filter((c) => c.source === "zono").length;
-    const external = priced.length - internal;
-    const txns = priced.filter((c) => c.comparableType === "sold").length;
-    const sources = [...new Set(priced.map((c) => c.source))];
     console.info("[valuation]", {
-      internalComparables: internal, externalComparables: external, transactions: txns,
-      sourcesUsed: sources, basePpsqm: basePpsqm ? Math.round(basePpsqm) : null,
-      avgSimilarity, evidenceCount, builtSqm: built,
-      proximityTier: ladder.tier, proximityCounts: ladder.counts, usedComparables: work.length,
-      reason: !basePpsqm ? "no_priced_comparables_and_no_market" : built <= 0 ? "missing_built_sqm" : "ok",
+      ...debug,
+      internalComparables: priced.filter((c) => c.source === "zono").length,
+      externalComparables: priced.filter((c) => c.source !== "zono").length,
+      avgSimilarity, evidenceCount, builtSqm: built, usedComparables: work.length,
+      proximityCounts: ladder.counts,
     });
   }
 
-  // No usable price evidence → honest low-confidence empty result.
+  // No usable price evidence → honest result that NEVER pretends a ₪0 valuation.
   if (!basePpsqm || built <= 0) {
+    const missingData = buildMissingData(input, priced.length > 0);
     const empty: ValuationResult = {
       estimatedValue: 0, lowValue: 0, highValue: 0,
       recommendedListingPrice: 0, targetClosingPrice: 0, minimumAcceptablePrice: 0,
       estimatedPricePerSqm: 0, confidenceScore: 15, confidenceLevel: "low",
       demandScore: 0, liquidityScore: 0, overpricingRiskScore: 0, daysOnMarketEstimate: 0,
       explanation: "", adjustments: [], strategies: [], market, basePpsqm: 0, evidenceCount: 0,
+      valuationAvailable: false,
+      valuationQuality: "insufficient",
+      unavailableReason: !basePpsqm
+        ? "לא נמצאו עסקאות או מודעות עם מחיר להשוואה — לא ניתן להפיק הערכת שווי אמינה."
+        : 'חסר שטח בנוי במ"ר — לא ניתן לחשב שווי.',
+      missingData,
+      recommendedAction: recommendedActionFor(missingData),
+      debug: { ...debug, confidenceScore: 15 },
     };
     empty.explanation = buildExplanation(input, empty, brokerSold);
     return empty;
@@ -533,6 +611,12 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
     demandScore, liquidityScore, overpricingRiskScore, daysOnMarketEstimate,
     explanation: "", adjustments, strategies, market,
     basePpsqm: Math.round(basePpsqm), evidenceCount,
+    valuationAvailable: true,
+    valuationQuality: valuationQuality(true, confidenceScore, usable.length),
+    unavailableReason: null,
+    missingData: [],
+    recommendedAction: null,
+    debug: { ...debug, confidenceScore },
   };
   result.explanation = buildExplanation(input, result, brokerSold);
   return result;
