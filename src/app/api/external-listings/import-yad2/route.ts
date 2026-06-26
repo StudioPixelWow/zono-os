@@ -2,6 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { runImport } from "@/lib/external-listings/service";
 
+// Apify scrapes are long (up to ~110s per city). Give the function the full
+// serverless budget (clamped to the plan max) + the Node runtime so it can
+// actually finish importing instead of being killed mid-scan — which would
+// otherwise leave the import job stuck in "running" with 0 listings pulled.
+export const runtime = "nodejs";
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
+
 // Real Apify (Yad2). Uses the authenticated org; never trusts a client org id.
 export async function POST(req: NextRequest) {
   const { profile } = await getSessionContext();

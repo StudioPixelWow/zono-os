@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { organizationsWithActiveLocalities, syncExternalListingsForOrganization } from "@/lib/external-listings/service";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 /**
  * Nightly external-listings sync (Vercel Cron, 02:00). Secured by CRON_SECRET.
  * Loops orgs that have active operating localities; service-role, no session.
