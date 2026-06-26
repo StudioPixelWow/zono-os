@@ -2,12 +2,15 @@
 // ZI Expert™ — the chat window: header, optional history panel, message thread,
 // page-aware suggestions and the composer.
 import { useState } from "react";
-import { Search, Pin, Trash2, ArrowUpRight, Send } from "lucide-react";
+import Link from "next/link";
+import { Search, Pin, Trash2, ArrowUpRight, Send, BookOpen, ThumbsUp, ThumbsDown, HelpCircle } from "lucide-react";
 import { ZIHeader } from "./ZIHeader";
 import { ZIConversation } from "./ZIConversation";
 import { ZISuggestions } from "./ZISuggestions";
 import { groupConversationsByRecency, searchConversations } from "@/lib/zi-expert/conversation";
 import type { ZiConversation, ZiMessage, ZiSuggestion } from "@/lib/zi-expert/types";
+import type { FeedbackRating } from "@/lib/zi-expert/knowledge-types";
+import type { ZiAnswerMeta } from "./ZIWidget";
 
 export interface ZIChatWindowProps {
   messages: ZiMessage[];
@@ -28,6 +31,8 @@ export interface ZIChatWindowProps {
   onOpenConversation: (id: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
+  answerMeta: ZiAnswerMeta | null;
+  onFeedback: (rating: FeedbackRating) => void;
 }
 
 export function ZIChatWindow(p: ZIChatWindowProps) {
@@ -63,6 +68,46 @@ export function ZIChatWindow(p: ZIChatWindowProps) {
             onRate={p.onRate}
             onRegenerate={p.onRegenerate}
           />
+
+          {/* Sources + helpful + follow-ups for the latest answer. */}
+          {p.answerMeta && (p.answerMeta.sources.length > 0 || p.answerMeta.followups.length > 0) && (
+            <div className="border-t border-white/10 bg-white/[0.02] px-3.5 py-2.5">
+              {p.answerMeta.sources.length > 0 && (
+                <div className="mb-2">
+                  <p className="mb-1 flex items-center gap-1 text-[11px] font-bold text-white/40"><BookOpen size={11} /> מקורות תשובה</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {p.answerMeta.sources.map((s) => (
+                      s.route
+                        ? <Link key={s.id} href={s.route} onClick={p.onClose} className="rounded-lg border border-violet-400/25 bg-white/[0.04] px-2 py-1 text-[11px] font-bold text-violet-100 transition hover:bg-violet-500/15">{s.title}</Link>
+                        : <span key={s.id} className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold text-white/70">{s.title}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {p.answerMeta.followups.length > 0 && (
+                <div className="mb-2">
+                  <p className="mb-1 text-[11px] font-bold text-white/40">שאלות המשך</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {p.answerMeta.followups.map((q, i) => (
+                      <button key={i} type="button" disabled={busy} onClick={() => p.onSubmit(q)} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-white/75 transition hover:bg-white/[0.08] disabled:opacity-40">{q}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-white/40">האם זה עזר?</span>
+                {p.answerMeta.rated ? (
+                  <span className="text-[11px] font-bold text-emerald-300">תודה על המשוב ✓</span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <button type="button" onClick={() => p.onFeedback("helpful")} title="עזר" className="rounded-md p-1 text-white/50 transition hover:bg-white/10 hover:text-emerald-300"><ThumbsUp size={13} /></button>
+                    <button type="button" onClick={() => p.onFeedback("not_helpful")} title="לא עזר" className="rounded-md p-1 text-white/50 transition hover:bg-white/10 hover:text-rose-300"><ThumbsDown size={13} /></button>
+                    <button type="button" onClick={() => p.onFeedback("missing_info")} title="חסר מידע" className="rounded-md p-1 text-white/50 transition hover:bg-white/10 hover:text-amber-300"><HelpCircle size={13} /></button>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-white/10 bg-white/[0.02] px-3.5 py-3">
             {p.messages.length === 0 && (

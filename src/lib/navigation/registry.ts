@@ -75,6 +75,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "help", label: "מרכז עזרה", route: "/help", icon: "HelpCircle", category: "ראשי", roleMin: "viewer", sidebar: false, searchable: true, description: "מאגר ידע, שאלות נפוצות והכוונה" },
   { id: "plan", label: "חבילה ורישוי", route: "/settings/plan", icon: "Tag", category: "ניהול", roleMin: "manager", sidebar: false, searchable: true, description: "חבילות (Starter/Professional/Office/Enterprise), הרשאות פיצ׳רים ומגבלות שימוש" },
   { id: "support-tools", label: "כלי תמיכה", route: "/admin/support", icon: "ShieldCheck", category: "ניהול", roleMin: "admin", sidebar: true, searchable: true, description: "ניתוח שימוש, משוב נכנס וגישת תמיכה (קריאה בלבד) עם יומן ביקורת" },
+  { id: "zi-knowledge", label: "מאגר הידע של ZI", route: "/admin/zi-knowledge", icon: "Sparkles", category: "ניהול", roleMin: "admin", sidebar: false, searchable: true, description: "ZI Expert™ Knowledge — מאמרי מוצר, חיפוש, משוב ושאלות ללא מענה; סנכרון המאגר המובנה" },
   { id: "release-notes", label: "מה חדש", route: "/release-notes", icon: "ScrollText", category: "ראשי", roleMin: "viewer", sidebar: false, searchable: true, description: "Release Notes — מה התחדש בכל גרסה" },
   { id: "modules", label: "מדריך מודולים", route: "/search/modules", icon: "Search", category: "ניהול", roleMin: "viewer", sidebar: false, searchable: true, description: "כל המודולים במערכת" },
 ];

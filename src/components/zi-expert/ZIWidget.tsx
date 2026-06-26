@@ -14,9 +14,21 @@ import { useZiContext } from "@/hooks/useZiContext";
 import { chunkForStream } from "@/lib/zi-expert";
 import {
   askZiAction, deleteConversationAction, loadConversationAction, loadConversationsAction,
-  pinConversationAction, rateMessageAction,
+  pinConversationAction, rateMessageAction, submitKnowledgeFeedbackAction,
 } from "@/lib/zi-expert/actions";
 import type { ZiConversation, ZiMessage } from "@/lib/zi-expert/types";
+import type { FeedbackRating } from "@/lib/zi-expert/knowledge-types";
+
+/** Sources + follow-ups + feedback context for the most recent answer. */
+export interface ZiAnswerMeta {
+  question: string;
+  answer: string;
+  route: string | null;
+  moduleId: string | null;
+  sources: { id: string; slug: string; title: string; category: string; route: string | null }[];
+  followups: string[];
+  rated: FeedbackRating | null;
+}
 
 let tempCounter = 0;
 const tempId = () => `temp-${Date.now()}-${tempCounter++}`;
@@ -32,6 +44,7 @@ export function ZIWidget() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [streaming, setStreaming] = useState<string | null>(null);
+  const [answerMeta, setAnswerMeta] = useState<ZiAnswerMeta | null>(null);
   const loadedOnce = useRef(false);
   const streamTimer = useRef<number | null>(null);
 
@@ -89,6 +102,7 @@ export function ZIWidget() {
     };
     setMessages((prev) => [...prev, optimistic]);
     setThinking(true);
+    setAnswerMeta(null);
 
     const res = await askZiAction({ question: q, conversationId, client });
     setThinking(false);
@@ -105,6 +119,10 @@ export function ZIWidget() {
     setConversationId(res.data.conversationId);
     setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? res.data.question : m)));
     revealAnswer(res.data.answer);
+    setAnswerMeta({
+      question: q, answer: res.data.answer.content, route: client.route, moduleId: res.data.answer.moduleId,
+      sources: res.data.sources ?? [], followups: res.data.followups ?? [], rated: null,
+    });
     void refreshConversations();
   }, [thinking, streaming, conversationId, client, revealAnswer, refreshConversations]);
 
@@ -114,6 +132,7 @@ export function ZIWidget() {
       setConversationId(id);
       setMessages(res.data.messages);
       setHistoryOpen(false);
+      setAnswerMeta(null);
     }
   }, []);
 
@@ -124,7 +143,19 @@ export function ZIWidget() {
     setStreaming(null);
     setThinking(false);
     setHistoryOpen(false);
+    setAnswerMeta(null);
   }, []);
+
+  /** Record "האם זה עזר?" feedback for the most recent answer. */
+  const sendFeedback = useCallback(async (rating: FeedbackRating) => {
+    if (!answerMeta) return;
+    setAnswerMeta((m) => (m ? { ...m, rated: rating } : m));
+    await submitKnowledgeFeedbackAction({
+      question: answerMeta.question, answer: answerMeta.answer,
+      articleIds: answerMeta.sources.map((s) => s.id),
+      route: answerMeta.route, moduleId: answerMeta.moduleId, rating,
+    });
+  }, [answerMeta]);
 
   const rate = useCallback(async (messageId: string, rating: "up" | "down") => {
     setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, rating: m.rating === rating ? null : rating } : m)));
@@ -200,6 +231,8 @@ export function ZIWidget() {
               onOpenConversation={openConversation}
               onPin={pin}
               onDelete={remove}
+              answerMeta={streaming === null ? answerMeta : null}
+              onFeedback={sendFeedback}
             />
           </motion.div>
         )}
