@@ -4527,6 +4527,15 @@ type AgencyReportExportsRow = {
   file_url: string | null; requested_by: string | null; requested_at: string; generated_at: string | null;
   metadata: unknown; error_message: string | null; created_at: string;
 };
+type ZonoOrchestratorRunsRow = {
+  id: string; organization_id: string; user_id: string | null; trigger: string; source: string | null;
+  status: string; started_at: string; finished_at: string | null; duration_ms: number | null;
+  steps: unknown; error: string | null; metadata: unknown;
+};
+type ZonoOrchestratorLocksRow = {
+  organization_id: string; locked_at: string; lock_token: string; expires_at: string;
+  trigger: string | null; created_by: string | null;
+};
 
 // ── Phase 26.12 — AI Resolution Center (Human-in-the-Loop) ───────────────────
 type AgencyAiFeedbackRow = {
@@ -4662,6 +4671,8 @@ export interface Database {
       agency_intelligence_audit_log: TableShape<AgencyIntelligenceAuditLogRow, "organization_id" | "action" | "entity_type">;
       agency_intelligence_policies: TableShape<AgencyIntelligencePoliciesRow, "organization_id" | "policy_key">;
       agency_report_exports: TableShape<AgencyReportExportsRow, "organization_id" | "export_type" | "status">;
+      zono_orchestrator_runs: TableShape<ZonoOrchestratorRunsRow, "organization_id" | "trigger" | "status">;
+      zono_orchestrator_locks: TableShape<ZonoOrchestratorLocksRow, "organization_id" | "lock_token" | "expires_at">;
       valuation_history: TableShape<ValuationHistoryRow, "organization_id" | "valuation_id">;
       valuation_explanations: TableShape<ValuationExplanationsRow, "organization_id" | "valuation_id">;
       valuation_accuracy: TableShape<ValuationAccuracyRow, "organization_id">;

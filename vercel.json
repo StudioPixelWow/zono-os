@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/zono-master-sync",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/cron/external-listings-sync",
       "schedule": "0 2 * * *"
     },

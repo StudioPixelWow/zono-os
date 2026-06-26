@@ -1,6 +1,8 @@
+import { after } from "next/server";
 import { listProperties, type PropertyRow } from "@/lib/properties/repository";
 import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
 import { getSessionContext } from "@/lib/auth/session";
+import { runOrchestratorForSession } from "@/lib/orchestrator";
 import { getDashboardDict } from "@/lib/dashboard-home/i18n";
 import { buildDashboardHomeData } from "@/lib/dashboard-home/data";
 import { getAcquisitionBoard } from "@/lib/acquisition/service";
@@ -22,6 +24,16 @@ export default async function Home() {
   const { profile } = await getSessionContext();
   const agentName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "סוכן";
   const cityName = profile?.primary_city ?? undefined;
+
+  // ZONO Orchestrator — AFTER the response is sent, refresh intelligence in the
+  // background but only if data is stale (>15 min) and no run is active. Never
+  // blocks the dashboard render. Revalidation is skipped (invalid in `after`).
+  if (profile) {
+    after(async () => {
+      try { await runOrchestratorForSession("dashboard_load", { skipRevalidation: true, source: "dashboard_load" }); }
+      catch { /* best-effort background refresh */ }
+    });
+  }
 
   let properties: PropertyRow[] = [];
   try {

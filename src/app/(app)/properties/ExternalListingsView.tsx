@@ -19,6 +19,7 @@ import {
   runSyncChunkAction,
   finishSyncJobAction,
 } from "@/lib/external-listings/actions";
+import { runManualSyncOrchestratorAction } from "@/lib/orchestrator/actions";
 import type { SyncProgress } from "@/lib/external-listings/service";
 import { recalcDecisionBrainAction } from "@/lib/decision-intelligence/actions";
 import { createBrokerFromListingAction, decideListingMatchAction, runBrokerDetectionAction } from "@/lib/broker/actions";
@@ -196,9 +197,19 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
         }
 
         const fin = await finishSyncJobAction(plan.jobId, plan.cities, errCount);
+        // ZONO Orchestrator — bridge new listings into market sources, refresh
+        // snapshots + decision brain, emit events/alerts (popups) and revalidate
+        // the intelligence routes. Best-effort; never fails the sync.
+        let orchSuffix = "";
+        try {
+          const orch = await runManualSyncOrchestratorAction();
+          if ((orch.newProperties ?? 0) > 0 || (orch.priceDrops ?? 0) > 0) {
+            orchSuffix = ` · ${orch.newProperties ?? 0} אירועי נכס · ${orch.alertsCreated ?? 0} התראות`;
+          }
+        } catch { /* orchestration is best-effort */ }
         stopTimers(); setSyncing(false);
         if (fin?.error) setError(fin.error);
-        else setMsg(`הסנכרון הושלם: ${inserted} מודעות חדשות, ${updated} עודכנו${errCount ? ` · ${errCount} שגיאות מקור` : ""}`);
+        else setMsg(`הסנכרון הושלם: ${inserted} מודעות חדשות, ${updated} עודכנו${errCount ? ` · ${errCount} שגיאות מקור` : ""}${orchSuffix}`);
         setProgress((p) => p ? { ...p, active: false, status: errCount ? "completed_with_errors" : "completed", finishedAt: new Date().toISOString(), found, imported: inserted, updated } : p);
         router.refresh();
       } catch (e) {
