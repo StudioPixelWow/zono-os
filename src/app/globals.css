@@ -630,3 +630,54 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .zi-avatar--idle, .zi-avatar--thinking, .zi-typing-dot, .zi-caret { animation: none !important; }
 }
+
+/* ============================================================================
+   ZONO — global sticky "רענן מערכת" system-refresh button (Phase 26.2).
+   Fixed to the physical LEFT, premium purple, RTL-safe, mobile icon-only.
+   ========================================================================== */
+.zono-sysrefresh-wrap {
+  position: fixed; left: 16px; top: 58%; transform: translateY(-50%);
+  z-index: 70; display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+.zono-sysrefresh {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 11px 16px; border: none; cursor: pointer; border-radius: 9999px;
+  font-weight: 800; font-size: 13.5px; color: #fff; font-family: inherit;
+  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 52%, #9333ea 100%);
+  box-shadow: 0 10px 26px rgba(109, 40, 217, 0.4), 0 0 0 1px rgba(255,255,255,0.06) inset;
+  transition: transform 0.18s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, filter 0.18s ease;
+}
+.zono-sysrefresh:hover:not(:disabled) { transform: translateY(-1.5px); box-shadow: 0 16px 36px rgba(109,40,217,0.55); filter: brightness(1.05); }
+.zono-sysrefresh:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.zono-sysrefresh:disabled { opacity: 0.85; cursor: default; }
+.zono-sysrefresh:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(196,181,253,0.85), 0 10px 26px rgba(109,40,217,0.4); }
+.zono-sysrefresh-label { white-space: nowrap; }
+.zono-sysrefresh-status { display: inline-grid; place-items: center; }
+.zono-sysrefresh-spin { animation: zono-sysrefresh-rot 0.9s linear infinite; }
+@keyframes zono-sysrefresh-rot { to { transform: rotate(360deg); } }
+
+/* Per-phase accent on the status dot. */
+.zono-sysrefresh-wrap[data-phase="success"] .zono-sysrefresh-status { color: #6ee7b7; }
+.zono-sysrefresh-wrap[data-phase="partial"] .zono-sysrefresh-status { color: #fcd34d; }
+.zono-sysrefresh-wrap[data-phase="failed"]  .zono-sysrefresh-status { color: #fca5a5; }
+
+/* Transient toast above the button. */
+.zono-sysrefresh-toast {
+  max-width: 240px; padding: 9px 13px; border-radius: 14px; font-size: 12.5px; font-weight: 600;
+  color: #f3f0ff; background: rgba(26, 18, 52, 0.96); border: 1px solid rgba(167, 139, 250, 0.3);
+  box-shadow: 0 16px 40px rgba(3, 1, 12, 0.5);
+  animation: zono-sysrefresh-pop 0.3s cubic-bezier(0.22,1,0.36,1);
+}
+@keyframes zono-sysrefresh-pop { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
+
+/* Mobile: icon-only pill so it never covers navigation. */
+@media (max-width: 768px) {
+  .zono-sysrefresh-wrap { left: 12px; top: auto; bottom: 86px; transform: none; }
+  .zono-sysrefresh { padding: 12px; }
+  .zono-sysrefresh-label { display: none; }
+  .zono-sysrefresh-toast { max-width: 200px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zono-sysrefresh-spin { animation: none !important; }
+  .zono-sysrefresh-toast { animation: none !important; }
+}

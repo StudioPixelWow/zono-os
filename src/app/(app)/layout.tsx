@@ -8,6 +8,8 @@ import { CreatedCelebration } from "@/components/ui/CreatedCelebration";
 import { PropertyRadarAlertProvider } from "@/components/property-radar";
 import { LaunchOverlay } from "@/components/launch/LaunchOverlay";
 import { CarouselWheelScroll } from "@/components/ui/CarouselWheelScroll";
+import { ZonoRealtimeProvider } from "@/components/realtime/ZonoRealtimeProvider";
+import { StickySystemRefreshButton } from "@/components/orchestrator/StickySystemRefreshButton";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <PropertyRadarAlertProvider />
       <LaunchOverlay />
       <CarouselWheelScroll />
+      <ZonoRealtimeProvider />
+      <StickySystemRefreshButton />
     </DashboardDataProvider>
   );
 }
