@@ -1,20 +1,19 @@
 "use server";
 // ============================================================================
-// ZONO — Competition Radar server actions (Phase 26.8). Thin, typed wrappers.
-// The refresh action runs the EXISTING agency intelligence jobs (26.3–26.7) in
-// sequence, capped so it never blocks the UI for too long, isolating failures.
-// Read-only otherwise. No destructive actions.
+// ZONO — Competition Radar server actions (Phase 26.8, refresh rewired in 26.11).
+// The refresh action now runs the ORCHESTRATED daily agency-intelligence pipeline
+// (resolve → graph → territory → scores → signals → reports → RAIN) via a single
+// idempotent, logged job instead of firing the steps separately. Read-only
+// otherwise. No destructive actions.
 // ============================================================================
 import {
   getCompetitionRadarAgencyDetails, getCompetitionRadarTerritories, getCompetitionRadarSignals,
   getCompetitionRadarTimeline,
   type RadarTerritoryFilters, type RadarSignalFilters,
 } from "./competitionRadarQueries";
-import { buildAgencyKnowledgeGraphJob } from "../jobs/buildAgencyKnowledgeGraphJob";
-import { calculateAgencyTerritoryStatsJob } from "../jobs/calculateAgencyTerritoryStatsJob";
-import { calculateAgencyScoresJob } from "../jobs/calculateAgencyScoresJob";
-import { detectAgencySignalsJob } from "../jobs/detectAgencySignalsJob";
-import { generateAgencyReportsJob } from "../jobs/generateAgencyReportsJob";
+import { currentOrgId } from "../_context";
+import { runDailyAgencyIntelligenceJob } from "../jobs/dailyAgencyIntelligenceJob";
+import type { AgencyJobStepName, DailyAgencyIntelligenceResult } from "../jobs/agencyJobTypes";
 import type {
   RadarAgencyDetails, RadarTerritoryRow, RadarSignalRow, RadarTimelineRow,
 } from "./competitionRadarFormat";
@@ -32,42 +31,42 @@ export interface RefreshRadarResult {
   signalsCreated: number;
   reportsGenerated: number;
   errors: number;
+  status: DailyAgencyIntelligenceResult["status"];
   message: string;
 }
 
+const stepNum = (r: DailyAgencyIntelligenceResult, name: AgencyJobStepName, key: string): number =>
+  Number(r.steps.find((s) => s.name === name)?.summary[key] ?? 0);
+
+function messageFor(r: DailyAgencyIntelligenceResult): string {
+  if (r.status === "success") return "המודיעין התחרותי עודכן בהצלחה.";
+  if (r.status === "partial_success") return `העדכון הושלם חלקית (${r.summary.stepsFailed} שלבים נכשלו). חלק מהנתונים עשויים להיות חסרים.`;
+  return "העדכון נכשל בשלב קריטי. חלק מהמודיעין לא עודכן — נסה שוב מאוחר יותר.";
+}
+
 /**
- * Refresh the competition radar by re-running the agency intelligence pipeline.
- * Safe + idempotent: each job upserts and isolates failures; capped to a bounded
- * batch so the request returns promptly. (Agency identity resolution runs in its
- * own flow and is not triggered here.)
+ * Refresh the competition radar by running the orchestrated daily agency
+ * intelligence pipeline (idempotent, logged, severity-aware). Surfaces running /
+ * success / partial_success / failed via the returned status + message.
  */
 export async function refreshCompetitionRadarIntelligence(): Promise<Result<RefreshRadarResult>> {
-  const out: RefreshRadarResult = {
-    agenciesScanned: 0, relationshipsCreated: 0, territoriesCalculated: 0,
-    scoresCalculated: 0, signalsCreated: 0, reportsGenerated: 0, errors: 0,
-    message: "",
-  };
-  const cap = { maxAgencies: 60 };
   try {
-    const graph = await buildAgencyKnowledgeGraphJob(cap).catch((e) => { out.errors++; console.error("[radar] graph job", e); return null; });
-    if (graph) { out.agenciesScanned = graph.agenciesScanned; out.relationshipsCreated = graph.relationshipsCreated; }
-
-    const terr = await calculateAgencyTerritoryStatsJob(cap).catch((e) => { out.errors++; console.error("[radar] territory job", e); return null; });
-    if (terr) out.territoriesCalculated = terr.territoriesCalculated;
-
-    const scores = await calculateAgencyScoresJob(cap).catch((e) => { out.errors++; console.error("[radar] scores job", e); return null; });
-    if (scores) out.scoresCalculated = scores.scoresCalculated;
-
-    const signals = await detectAgencySignalsJob(cap).catch((e) => { out.errors++; console.error("[radar] signals job", e); return null; });
-    if (signals) out.signalsCreated = signals.signalsCreated;
-
-    const reports = await generateAgencyReportsJob(cap).catch((e) => { out.errors++; console.error("[radar] reports job", e); return null; });
-    if (reports) out.reportsGenerated = reports.reportsCreated + reports.reportsUpdated;
-
-    out.message = out.errors === 0
-      ? "המודיעין התחרותי עודכן בהצלחה."
-      : `העדכון הושלם חלקית (${out.errors} שגיאות). חלק מהנתונים עשויים להיות חסרים.`;
-    return { ok: true, data: out };
+    const org = await currentOrgId();
+    const r = await runDailyAgencyIntelligenceJob(org, { maxAgencies: 60 });
+    return {
+      ok: true,
+      data: {
+        agenciesScanned: stepNum(r, "build_knowledge_graph", "agenciesScanned"),
+        relationshipsCreated: stepNum(r, "build_knowledge_graph", "relationshipsCreated"),
+        territoriesCalculated: stepNum(r, "calculate_territory_stats", "territoriesCalculated"),
+        scoresCalculated: stepNum(r, "calculate_scores", "scoresCalculated"),
+        signalsCreated: stepNum(r, "detect_signals", "signalsCreated"),
+        reportsGenerated: stepNum(r, "generate_reports", "reportsCreated") + stepNum(r, "generate_reports", "reportsUpdated"),
+        errors: r.summary.stepsFailed,
+        status: r.status,
+        message: messageFor(r),
+      },
+    };
   } catch (e) {
     return fail(e);
   }

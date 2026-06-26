@@ -4498,6 +4498,13 @@ type RainEdgesRow = {
   active: boolean; first_seen_at: string; last_seen_at: string; created_at: string; updated_at: string;
 };
 
+// ── Phase 26.11 — Daily Agency Intelligence Job ──────────────────────────────
+type AgencyIntelligenceJobRunsRow = {
+  id: string; organization_id: string; job_name: string; status: string;
+  started_at: string | null; finished_at: string | null; duration_ms: number | null;
+  result: unknown; error_message: string | null; created_at: string;
+};
+
 // ── Phase 4 — Valuation Intelligence & Explainability ────────────────────────
 type ValuationHistoryRow = {
   id: string; organization_id: string; valuation_id: string; property_id: string | null;
@@ -4618,6 +4625,7 @@ export interface Database {
       agency_intelligence_reports: TableShape<AgencyIntelligenceReportsRow, "organization_id" | "agency_id" | "report_type">;
       rain_nodes: TableShape<RainNodesRow, "organization_id" | "node_type" | "entity_id" | "label">;
       rain_edges: TableShape<RainEdgesRow, "organization_id" | "source_node_id" | "target_node_id" | "edge_type">;
+      agency_intelligence_job_runs: TableShape<AgencyIntelligenceJobRunsRow, "organization_id" | "job_name" | "status">;
       valuation_history: TableShape<ValuationHistoryRow, "organization_id" | "valuation_id">;
       valuation_explanations: TableShape<ValuationExplanationsRow, "organization_id" | "valuation_id">;
       valuation_accuracy: TableShape<ValuationAccuracyRow, "organization_id">;

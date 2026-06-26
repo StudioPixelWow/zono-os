@@ -96,3 +96,12 @@ DB that already has some of them won't error.
 -- creates: rain_nodes (+ indexes + RLS), rain_edges (+ indexes + RLS)
 --   rain_nodes unique  (organization_id, node_type, entity_id)
 --   rain_edges unique  (organization_id, source_node_id, target_node_id, edge_type)
+
+-- Phase 26.10 — AI Copilot for Competition Intelligence™
+-- NO SQL REQUIRED. Backend query layer only; reads existing agency intelligence
+-- + RAIN tables. Nothing to run for this phase.
+
+-- Phase 26.11 — Daily Agency Intelligence Job™
+\i supabase/migrations/20260767120000_agency_intelligence_job_runs.sql
+-- creates: agency_intelligence_job_runs (run log for the orchestrated daily
+--   pipeline; statuses queued|running|success|partial_success|failed) (+ indexes + RLS)
