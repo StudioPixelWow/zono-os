@@ -4467,7 +4467,7 @@ type AgencyAliasesRow = {
 type AgencyResolutionCandidatesRow = {
   id: string; organization_id: string; raw_text: string; normalized_name: string;
   source: string | null; source_ref: string | null;
-  status: "pending" | "accepted" | "rejected" | "auto_created" | "needs_review" | "enriched";
+  status: "pending" | "accepted" | "rejected" | "auto_created" | "needs_review" | "enriched" | "ignored";
   confidence: number | null; matched_agency_id: string | null; evidence: unknown;
   // Phase 26.2 suggested_* columns (nullable, additive)
   suggested_name: string | null; suggested_display_name: string | null;
@@ -4503,6 +4503,14 @@ type AgencyIntelligenceJobRunsRow = {
   id: string; organization_id: string; job_name: string; status: string;
   started_at: string | null; finished_at: string | null; duration_ms: number | null;
   result: unknown; error_message: string | null; created_at: string;
+};
+
+// ── Phase 26.12 — AI Resolution Center (Human-in-the-Loop) ───────────────────
+type AgencyAiFeedbackRow = {
+  id: string; organization_id: string; candidate_id: string | null; agency_id: string | null;
+  action: string; previous_confidence: number | null; final_result: string | null;
+  feedback_reason: string | null; reviewed_by: string | null; reviewed_at: string;
+  metadata: unknown; created_at: string;
 };
 
 // ── Phase 4 — Valuation Intelligence & Explainability ────────────────────────
@@ -4626,6 +4634,7 @@ export interface Database {
       rain_nodes: TableShape<RainNodesRow, "organization_id" | "node_type" | "entity_id" | "label">;
       rain_edges: TableShape<RainEdgesRow, "organization_id" | "source_node_id" | "target_node_id" | "edge_type">;
       agency_intelligence_job_runs: TableShape<AgencyIntelligenceJobRunsRow, "organization_id" | "job_name" | "status">;
+      agency_ai_feedback: TableShape<AgencyAiFeedbackRow, "organization_id" | "action">;
       valuation_history: TableShape<ValuationHistoryRow, "organization_id" | "valuation_id">;
       valuation_explanations: TableShape<ValuationExplanationsRow, "organization_id" | "valuation_id">;
       valuation_accuracy: TableShape<ValuationAccuracyRow, "organization_id">;

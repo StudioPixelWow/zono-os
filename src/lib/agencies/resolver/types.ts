@@ -6,7 +6,7 @@
 import type { Agency } from "../types";
 
 export type CandidateStatus =
-  | "pending" | "accepted" | "rejected" | "auto_created" | "needs_review" | "enriched";
+  | "pending" | "accepted" | "rejected" | "auto_created" | "needs_review" | "enriched" | "ignored";
 
 export interface ResolutionInput {
   rawText: string;

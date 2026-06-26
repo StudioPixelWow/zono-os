@@ -105,3 +105,8 @@ DB that already has some of them won't error.
 \i supabase/migrations/20260767120000_agency_intelligence_job_runs.sql
 -- creates: agency_intelligence_job_runs (run log for the orchestrated daily
 --   pipeline; statuses queued|running|success|partial_success|failed) (+ indexes + RLS)
+
+-- Phase 26.12 — AI Resolution Center™ (Human-in-the-Loop)
+\i supabase/migrations/20260768120000_agency_ai_feedback.sql
+-- creates: agency_ai_feedback (learning + audit log for every manual review) (+ indexes + RLS)
+-- alters agency_resolution_candidates: status check now also allows 'ignored'
