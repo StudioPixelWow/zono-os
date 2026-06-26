@@ -76,15 +76,8 @@ export function LoginExperience() {
         ))}
       </div>
 
-      {/* Signature chips — quiet floating glass, cycling through live signals */}
-      <RotatingChip
-        style={{ top: "9%", insetInlineEnd: "8%" }} floatClass="zauth-float-a"
-        startIndex={0} intervalMs={4600} enterDelay={1.05} reduce={!!reduce}
-      />
-      <RotatingChip
-        style={{ bottom: "12%", insetInlineEnd: "6.5%" }} floatClass="zauth-float-b"
-        startIndex={1} intervalMs={5500} enterDelay={1.22} reduce={!!reduce}
-      />
+      {/* Live signals — keep popping in across the left side, constantly refreshing */}
+      <PopupSwarm reduce={!!reduce} />
 
       {/* ZI assistant — secondary, beside the card inside a soft ambient circle */}
       <Robot reduce={!!reduce} />
@@ -171,47 +164,69 @@ const POPUPS = [
   { Icon: Activity, title: "השוק התחמם באזור", sub: "ביקוש עולה", tone: "v" },
 ] as const;
 
-/** A floating glass chip pinned to one spot that fades between different live
- *  signals over time (instead of showing a single fixed message). */
-function RotatingChip({
-  style, floatClass, startIndex, intervalMs, enterDelay, reduce,
-}: {
-  style: CSSProperties; floatClass: string; startIndex: number; intervalMs: number; enterDelay: number; reduce: boolean;
-}) {
-  const [i, setI] = useState(startIndex % POPUPS.length);
+// Anchor spots for the popups — all on the (physical) LEFT side / corners, so
+// they never collide with the centered card or the robot on the right.
+const POPUP_SPOTS: CSSProperties[] = [
+  { top: "8%", insetInlineEnd: "7%" },
+  { top: "29%", insetInlineEnd: "4%" },
+  { bottom: "27%", insetInlineEnd: "5%" },
+  { bottom: "9%", insetInlineEnd: "8%" },
+];
+interface ActivePopup { id: number; spot: CSSProperties; popup: (typeof POPUPS)[number] }
+
+/** A living swarm of live-signal popups that keep popping in, refreshing and
+ *  leaving — so the screen feels alive (instead of two static chips). */
+function PopupSwarm({ reduce }: { reduce: boolean }) {
+  // Reduced motion: two static signals (set via the initializer — never in the effect).
+  const [active, setActive] = useState<ActivePopup[]>(() =>
+    reduce
+      ? [{ id: 1, spot: POPUP_SPOTS[0], popup: POPUPS[0] }, { id: 2, spot: POPUP_SPOTS[3], popup: POPUPS[1] }]
+      : [],
+  );
   useEffect(() => {
     if (reduce) return;
-    const t = setInterval(() => setI((p) => (p + 2) % POPUPS.length), intervalMs);
-    return () => clearInterval(t);
-  }, [reduce, intervalMs]);
-  const p = POPUPS[i];
-  const Icon = p.Icon;
+    let id = 0, spotIdx = 0, popupIdx = 0;
+    const lifeTimers: ReturnType<typeof setTimeout>[] = [];
+    const spawn = () => {
+      const myId = ++id;
+      const spot = POPUP_SPOTS[spotIdx % POPUP_SPOTS.length];
+      const popup = POPUPS[popupIdx % POPUPS.length];
+      spotIdx++; popupIdx = (popupIdx + 3) % POPUPS.length;
+      // Replace anything already at this spot, then add the fresh one.
+      setActive((prev) => [...prev.filter((a) => a.spot !== spot), { id: myId, spot, popup }]);
+      lifeTimers.push(setTimeout(() => setActive((prev) => prev.filter((a) => a.id !== myId)), 4400));
+    };
+    // First spawns scheduled (not synchronous) so we never setState during the effect body.
+    const kick0 = setTimeout(spawn, 250);
+    const kick1 = setTimeout(spawn, 1100);
+    const loop = setInterval(spawn, 2000);
+    return () => { clearInterval(loop); clearTimeout(kick0); clearTimeout(kick1); lifeTimers.forEach(clearTimeout); };
+  }, [reduce]);
+
   return (
-    <motion.div
-      className={`zauth-chip zauth-glass ${floatClass}`}
-      style={style}
-      initial={reduce ? false : { opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: reduce ? 0 : enterDelay, duration: 0.6, ease: EASE }}
-    >
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.span
-          key={p.title}
-          className="zauth-chip-inner"
-          initial={reduce ? false : { opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
-          transition={{ duration: 0.45, ease: EASE }}
-        >
-          <span className="zauth-chip-ico"><Icon size={16} /></span>
-          <span className="zauth-chip-body">
-            <span className="zauth-chip-title">{p.title}</span>
-            <span className="zauth-chip-sub">{p.sub}</span>
-          </span>
-          <span className={`zauth-chip-live ${p.tone === "v" ? "v" : ""}`} aria-hidden="true" />
-        </motion.span>
-      </AnimatePresence>
-    </motion.div>
+    <AnimatePresence>
+      {active.map((a) => {
+        const Icon = a.popup.Icon;
+        return (
+          <motion.div
+            key={a.id} className="zauth-chip zauth-glass" style={a.spot} aria-hidden="true"
+            initial={reduce ? false : { opacity: 0, x: -24, scale: 0.88 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, x: -16, scale: 0.95 }}
+            transition={{ duration: 0.5, ease: EASE }}
+          >
+            <span className="zauth-chip-inner">
+              <span className="zauth-chip-ico"><Icon size={16} /></span>
+              <span className="zauth-chip-body">
+                <span className="zauth-chip-title">{a.popup.title}</span>
+                <span className="zauth-chip-sub">{a.popup.sub}</span>
+              </span>
+              <span className={`zauth-chip-live ${a.popup.tone === "v" ? "v" : ""}`} />
+            </span>
+          </motion.div>
+        );
+      })}
+    </AnimatePresence>
   );
 }
 

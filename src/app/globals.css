@@ -389,10 +389,11 @@ body {
 .zauth-robot-wrap {
   position: absolute; z-index: 6;
   top: 50%; left: 50%;
-  /* Offset to the (physical) right of the centered card and scaling with the
-     viewport so it always CLEARS the form — never overlapping it on wide screens. */
-  transform: translate(clamp(360px, 30vw, 560px), -50%);
-  width: clamp(150px, 12vw, 208px);
+  /* Offset well to the (physical) right of the centered card. The min (440px)
+     guarantees it clears the card edge at every width; it scales out further on
+     wide screens. The robot NEVER overlaps the form. */
+  transform: translate(clamp(440px, 34vw, 660px), -50%);
+  width: clamp(140px, 11vw, 196px);
   pointer-events: none;
 }
 .zauth-robot-halo {
