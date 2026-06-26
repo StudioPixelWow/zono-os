@@ -389,10 +389,10 @@ body {
 .zauth-robot-wrap {
   position: absolute; z-index: 6;
   top: 50%; left: 50%;
-  /* Anchored to the centered card so it stays just to its (physical) right —
-     close to the form rather than drifting off toward the screen edge. */
-  transform: translate(clamp(230px, 21vw, 360px), -50%);
-  width: clamp(150px, 13vw, 216px);
+  /* Offset to the (physical) right of the centered card and scaling with the
+     viewport so it always CLEARS the form — never overlapping it on wide screens. */
+  transform: translate(clamp(360px, 30vw, 560px), -50%);
+  width: clamp(150px, 12vw, 208px);
   pointer-events: none;
 }
 .zauth-robot-halo {
