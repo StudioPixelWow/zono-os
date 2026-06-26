@@ -83,43 +83,43 @@ interface OrgData {
 
 const EXT_DAY = 86_400_000;
 
-async function gatherOrgData(): Promise<OrgData> {
+async function gatherOrgData(orgId: string): Promise<OrgData> {
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
   const priceDropSince = new Date(Date.now() - 14 * EXT_DAY).toISOString();
   const [pp, props, sp, sellers, tasks, commits, bp, buyers, mp, extL, extH, extD, cFollow, cCommit, cProf, mkt, bkRev, bkDet, acqP, compSig, agtOver, grSig, fcSig, tProf, tSnap, tLeak, revP, mktOpp, distOpp, socLeads, dealP, txnAlerts] = await Promise.all([
-    supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score"),
-    supabase.from("properties").select("id,title,price,status,seller_id").neq("status", "archived"),
-    supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact"),
-    supabase.from("sellers").select("id,full_name"),
-    supabase.from("tasks").select("id", { count: "exact", head: true }).neq("status", "done").not("due_at", "is", null).lt("due_at", nowIso),
-    supabase.from("seller_commitments").select("seller_id,title,due_date").eq("status", "open").not("due_date", "is", null).lt("due_date", nowIso),
-    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_health_score,buyer_conversion_probability,buyer_readiness_score,buyer_engagement_score,buyer_financing_score,days_since_activity,current_stage"),
-    supabase.from("buyers").select("id,full_name,budget_min,budget_max,rooms_min,rooms_max,preferred_areas"),
-    supabase.from("match_intelligence_profiles").select("id,buyer_id,property_id,closing_probability,risk_score,opportunity_score,revenue_score,urgency_score,match_stage,match_status"),
-    supabase.from("external_listings").select("id,title,city,price,sqm,rooms,has_agent,opportunity_score,published_at").eq("status", "active").is("promoted_property_id", null).order("opportunity_score", { ascending: false }).limit(60),
-    supabase.from("external_listing_history").select("listing_id").eq("change_type", "price_changed").gte("created_at", priceDropSince).limit(500),
-    supabase.from("external_listing_duplicates").select("listing_id").eq("status", "suspected").limit(500),
-    supabase.from("communication_followups").select("id,title,entity_type,entity_id,due_at,priority").eq("status", "open").not("due_at", "is", null).lt("due_at", nowIso).order("due_at", { ascending: true }).limit(60),
-    supabase.from("communication_commitments").select("id,commitment_text,entity_type,entity_id,status,due_date").in("status", ["open", "broken"]).order("due_date", { ascending: true, nullsFirst: false }).limit(60),
-    supabase.from("communication_intelligence_profiles").select("entity_type,entity_id,unanswered_messages_count,days_since_contact,sentiment_score,next_best_action").limit(500),
-    supabase.from("market_area_snapshots").select("locality_id,locality_name,date,demand_score,supply_score,opportunity_score,below_average_count,price_drops_count,active_external_listings,active_buyers_count,matched_buyers_count").order("date", { ascending: false }).limit(300),
-    supabase.from("broker_match_reviews").select("listing_id,broker_id").eq("status", "pending").limit(40),
-    supabase.from("external_listings").select("detected_broker_id,detected_broker_name,city").not("detected_broker_id", "is", null).eq("status", "active").in("broker_detection_status", ["auto", "approved"]).limit(1000),
-    supabase.from("inventory_acquisition_profiles").select("id,acquisition_score,private_seller_score,buyer_demand_score,double_side_potential_score,next_best_action,reason_summary,acquisition_status,external_listings(title,city)").gte("acquisition_score", 55).not("acquisition_status", "in", "(not_relevant,promoted_to_crm,lost)").order("acquisition_score", { ascending: false }).limit(40),
-    supabase.from("competitor_signals").select("competitor_profile_id,signal_type,title,description,severity").in("signal_type", ["dominant_broker", "competitor_losing_inventory", "vulnerable_broker", "competitor_growing"]).order("confidence_score", { ascending: false }).limit(30),
-    supabase.from("agent_intelligence_profiles").select("user_id,agent_score,workload_score,users(full_name)").gte("agent_score", 70).lt("workload_score", 35).limit(15),
-    supabase.from("graph_signals").select("id,signal_type,title,description,impact_score").eq("status", "new").in("signal_type", ["hidden_buyer_cluster", "hidden_seller_cluster", "deal_acceleration", "locality_opportunity", "referral_opportunity"]).order("impact_score", { ascending: false }).limit(20),
-    supabase.from("deal_forecast_signals").select("id,forecast_id,signal_type,title,description,impact_score").eq("status", "new").order("impact_score", { ascending: false }).limit(30),
-    supabase.from("team_intelligence_profiles").select("user_id,performance_tier,growth_trend,workload_score,coaching_score,performance_score,ai_coaching_plan,lost_deals,users(full_name)").limit(200),
-    supabase.from("team_performance_snapshots").select("office_risk_score,territory_coverage").order("date", { ascending: false }).limit(1),
-    supabase.from("team_opportunity_leaks").select("id,leak_type,title,reason,lost_revenue_impact,severity,entity_type,entity_id").eq("status", "open").order("lost_revenue_impact", { ascending: false }).limit(15),
-    supabase.from("organization_revenue_profiles").select("revenue_gap,gap_level,revenue_gap_score,revenue_at_risk,forecast_revenue_90,ai_revenue_summary").maybeSingle(),
-    supabase.from("marketing_opportunity_signals").select("id,signal_type,title,description,impact_score,entity_type,entity_id,recommended_action").eq("status", "open").order("impact_score", { ascending: false }).limit(15),
-    supabase.from("distribution_opportunity_signals").select("id,signal_type,title,description,impact_score,property_id,community_id").eq("status", "new").order("impact_score", { ascending: false }).limit(15),
-    supabase.from("social_leads").select("id,person_name,intent,lead_quality_score,status,priority_score,recommended_next_action").in("status", ["new", "reviewed", "qualified"]).order("priority_score", { ascending: false }).limit(15),
-    supabase.from("deal_profiles").select("id,deal_stage,deal_health,deal_risk,deal_velocity,deal_probability,deal_value,commission_value,next_best_action,locality,expected_close_date").eq("status", "active").order("deal_value", { ascending: false }).limit(60),
-    supabase.from("transaction_opportunity_radar_alerts").select("id,opportunity_type,opportunity_score,confidence_score,city_name,neighborhood_name,address,gap_from_market_percent,estimated_market_value,reason_hebrew,recommended_action_hebrew").in("status", ["new", "reviewing"]).order("opportunity_score", { ascending: false }).limit(20),
+    supabase.from("property_intelligence_profiles").select("property_id,health_score,success_score,risk_score,marketing_score,exposure_score,momentum_score").eq("org_id", orgId),
+    supabase.from("properties").select("id,title,price,status,seller_id").eq("org_id", orgId).neq("status", "archived"),
+    supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_health_score,days_since_last_contact").eq("org_id", orgId),
+    supabase.from("sellers").select("id,full_name").eq("org_id", orgId),
+    supabase.from("tasks").select("id", { count: "exact", head: true }).eq("org_id", orgId).neq("status", "done").not("due_at", "is", null).lt("due_at", nowIso),
+    supabase.from("seller_commitments").select("seller_id,title,due_date").eq("org_id", orgId).eq("status", "open").not("due_date", "is", null).lt("due_date", nowIso),
+    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_health_score,buyer_conversion_probability,buyer_readiness_score,buyer_engagement_score,buyer_financing_score,days_since_activity,current_stage").eq("org_id", orgId),
+    supabase.from("buyers").select("id,full_name,budget_min,budget_max,rooms_min,rooms_max,preferred_areas").eq("org_id", orgId),
+    supabase.from("match_intelligence_profiles").select("id,buyer_id,property_id,closing_probability,risk_score,opportunity_score,revenue_score,urgency_score,match_stage,match_status").eq("org_id", orgId),
+    supabase.from("external_listings").select("id,title,city,price,sqm,rooms,has_agent,opportunity_score,published_at").eq("org_id", orgId).eq("status", "active").is("promoted_property_id", null).order("opportunity_score", { ascending: false }).limit(60),
+    supabase.from("external_listing_history").select("listing_id").eq("org_id", orgId).eq("change_type", "price_changed").gte("created_at", priceDropSince).limit(500),
+    supabase.from("external_listing_duplicates").select("listing_id").eq("org_id", orgId).eq("status", "suspected").limit(500),
+    supabase.from("communication_followups").select("id,title,entity_type,entity_id,due_at,priority").eq("org_id", orgId).eq("status", "open").not("due_at", "is", null).lt("due_at", nowIso).order("due_at", { ascending: true }).limit(60),
+    supabase.from("communication_commitments").select("id,commitment_text,entity_type,entity_id,status,due_date").eq("org_id", orgId).in("status", ["open", "broken"]).order("due_date", { ascending: true, nullsFirst: false }).limit(60),
+    supabase.from("communication_intelligence_profiles").select("entity_type,entity_id,unanswered_messages_count,days_since_contact,sentiment_score,next_best_action").eq("org_id", orgId).limit(500),
+    supabase.from("market_area_snapshots").select("locality_id,locality_name,date,demand_score,supply_score,opportunity_score,below_average_count,price_drops_count,active_external_listings,active_buyers_count,matched_buyers_count").eq("organization_id", orgId).order("date", { ascending: false }).limit(300),
+    supabase.from("broker_match_reviews").select("listing_id,broker_id").eq("org_id", orgId).eq("status", "pending").limit(40),
+    supabase.from("external_listings").select("detected_broker_id,detected_broker_name,city").eq("org_id", orgId).not("detected_broker_id", "is", null).eq("status", "active").in("broker_detection_status", ["auto", "approved"]).limit(1000),
+    supabase.from("inventory_acquisition_profiles").select("id,acquisition_score,private_seller_score,buyer_demand_score,double_side_potential_score,next_best_action,reason_summary,acquisition_status,external_listings(title,city)").eq("organization_id", orgId).gte("acquisition_score", 55).not("acquisition_status", "in", "(not_relevant,promoted_to_crm,lost)").order("acquisition_score", { ascending: false }).limit(40),
+    supabase.from("competitor_signals").select("competitor_profile_id,signal_type,title,description,severity").eq("organization_id", orgId).in("signal_type", ["dominant_broker", "competitor_losing_inventory", "vulnerable_broker", "competitor_growing"]).order("confidence_score", { ascending: false }).limit(30),
+    supabase.from("agent_intelligence_profiles").select("user_id,agent_score,workload_score,users(full_name)").eq("organization_id", orgId).gte("agent_score", 70).lt("workload_score", 35).limit(15),
+    supabase.from("graph_signals").select("id,signal_type,title,description,impact_score").eq("organization_id", orgId).eq("status", "new").in("signal_type", ["hidden_buyer_cluster", "hidden_seller_cluster", "deal_acceleration", "locality_opportunity", "referral_opportunity"]).order("impact_score", { ascending: false }).limit(20),
+    supabase.from("deal_forecast_signals").select("id,forecast_id,signal_type,title,description,impact_score").eq("organization_id", orgId).eq("status", "new").order("impact_score", { ascending: false }).limit(30),
+    supabase.from("team_intelligence_profiles").select("user_id,performance_tier,growth_trend,workload_score,coaching_score,performance_score,ai_coaching_plan,lost_deals,users(full_name)").eq("organization_id", orgId).limit(200),
+    supabase.from("team_performance_snapshots").select("office_risk_score,territory_coverage").eq("organization_id", orgId).order("date", { ascending: false }).limit(1),
+    supabase.from("team_opportunity_leaks").select("id,leak_type,title,reason,lost_revenue_impact,severity,entity_type,entity_id").eq("organization_id", orgId).eq("status", "open").order("lost_revenue_impact", { ascending: false }).limit(15),
+    supabase.from("organization_revenue_profiles").select("revenue_gap,gap_level,revenue_gap_score,revenue_at_risk,forecast_revenue_90,ai_revenue_summary").eq("organization_id", orgId).maybeSingle(),
+    supabase.from("marketing_opportunity_signals").select("id,signal_type,title,description,impact_score,entity_type,entity_id,recommended_action").eq("organization_id", orgId).eq("status", "open").order("impact_score", { ascending: false }).limit(15),
+    supabase.from("distribution_opportunity_signals").select("id,signal_type,title,description,impact_score,property_id,community_id").eq("organization_id", orgId).eq("status", "new").order("impact_score", { ascending: false }).limit(15),
+    supabase.from("social_leads").select("id,person_name,intent,lead_quality_score,status,priority_score,recommended_next_action").eq("organization_id", orgId).in("status", ["new", "reviewed", "qualified"]).order("priority_score", { ascending: false }).limit(15),
+    supabase.from("deal_profiles").select("id,deal_stage,deal_health,deal_risk,deal_velocity,deal_probability,deal_value,commission_value,next_best_action,locality,expected_close_date").eq("organization_id", orgId).eq("status", "active").order("deal_value", { ascending: false }).limit(60),
+    supabase.from("transaction_opportunity_radar_alerts").select("id,opportunity_type,opportunity_score,confidence_score,city_name,neighborhood_name,address,gap_from_market_percent,estimated_market_value,reason_hebrew,recommended_action_hebrew").eq("organization_id", orgId).in("status", ["new", "reviewing"]).order("opportunity_score", { ascending: false }).limit(20),
   ]);
 
   const propMap = new Map((props.data ?? []).map((p) => [p.id, { title: p.title, price: p.price, status: p.status as string, seller_id: p.seller_id }]));
@@ -782,7 +782,7 @@ function buildOpportunityRows(orgId: string, d: OrgData): OppInsert[] {
 export async function recalculateOrganizationDecisionBrain(): Promise<void> {
   const orgId = await currentOrgId();
   await decisionIntelligenceRepository.ensure(orgId);
-  const d = await gatherOrgData();
+  const d = await gatherOrgData(orgId);
 
   // Entity attention (property/seller/etc) + additive INFRASTRUCTURE signals
   // (data quality, engine staleness, coverage gaps, missing operating area,

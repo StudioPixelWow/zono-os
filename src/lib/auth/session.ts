@@ -4,6 +4,7 @@
  */
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceRoleOrgContext } from "@/lib/supabase/server-context";
 import { getCurrentUserProfile, type UserProfile } from "@/lib/repositories/userRepository";
 import {
   getOrganizationById,
@@ -35,6 +36,16 @@ export async function getAuthUser(): Promise<User | null> {
  * - auth user, completed profile       → "ready" (+ organization)
  */
 export async function getSessionContext(): Promise<SessionContext> {
+  // Cron/background org context: no real auth user — synthesize a "ready"
+  // session for the target org so session-scoped code can run. Callers inside
+  // this context must scope every read by org_id (RLS is bypassed).
+  const svc = getServiceRoleOrgContext();
+  if (svc) {
+    const organization = await getOrganizationById(svc.orgId);
+    const profile = { org_id: svc.orgId, onboarding_completed: true } as unknown as UserProfile;
+    return { user: null, profile, organization, state: "ready" };
+  }
+
   const user = await getAuthUser();
   if (!user) {
     return { user: null, profile: null, organization: null, state: "unauthenticated" };

@@ -2,18 +2,24 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "./types";
 import { supabasePublicEnv, supabaseServiceRoleKey } from "./env";
+import { getServiceRoleOrgContext } from "./server-context";
 
 /**
  * Server-side Supabase client for Server Components, Route Handlers and
  * Server Actions. Reads/writes the auth cookie via Next's async `cookies()`.
  *
- * Auth is NOT wired up yet — this prepares the foundation only.
+ * Cron/background exception: inside `runWithServiceRoleOrg()` (no user session)
+ * this returns the service-role client so existing session-scoped code can run.
+ * In that mode RLS is bypassed, so callers MUST scope every query by org_id.
  *
  * @example
  *   const supabase = await createClient();
  *   const { data } = await supabase.from("properties").select("*");
  */
 export async function createClient() {
+  // Cron/background org context → use service-role (no cookies available).
+  if (getServiceRoleOrgContext()) return createServiceRoleClient();
+
   const cookieStore = await cookies();
 
   return createServerClient<Database>(

@@ -10,8 +10,9 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { syncExternalListingsForOrganization } from "@/lib/external-listings/service";
 import { refreshRecentTransactionsForOrganization } from "@/lib/transactions/service";
-import { generateMarketSnapshotsForOrganization } from "@/lib/market/service";
+import { generateMarketSnapshotsForOrganization, generateMarketSnapshotsForOrg } from "@/lib/market/service";
 import { initializeOrganizationDecisionBrain } from "@/lib/decision-intelligence/service";
+import { runWithServiceRoleOrg } from "@/lib/supabase/server-context";
 import { acquireOrchestratorLock, releaseOrchestratorLock } from "./locks";
 import { createRunRow, finalizeRunRow, msSinceLastSuccessfulRun } from "./repository";
 import { syncExternalListingsToMarketSources, emitMarketEventsAndAlerts, type BridgeResult } from "./events";
@@ -108,25 +109,23 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
     });
     steps.push(bridgeStep);
 
-    // STEP 4 — Market Snapshots (session-scoped).
-    if (sessionScoped) {
-      steps.push(await runStep("market_snapshots", false, async () => {
-        const r = await generateMarketSnapshotsForOrganization();
-        return { summary: `תמונות שוק: ${r.snapshots} אזורים` };
-      }));
-    } else {
-      steps.push(skippedStep("market_snapshots", "דורש סשן משתמש — ירוץ בטעינת הדשבורד"));
-    }
+    // STEP 4 — Market Snapshots. Session path uses the session-scoped function;
+    // cron path uses the explicit-orgId, service-role variant.
+    steps.push(await runStep("market_snapshots", false, async () => {
+      const r = sessionScoped
+        ? await generateMarketSnapshotsForOrganization()
+        : await generateMarketSnapshotsForOrg(organizationId);
+      return { summary: `תמונות שוק: ${r.snapshots} אזורים` };
+    }));
 
-    // STEP 5 — Decision Brain (session-scoped).
-    if (sessionScoped) {
-      steps.push(await runStep("decision_brain", false, async () => {
-        await initializeOrganizationDecisionBrain();
-        return { summary: "מוח החלטות עודכן" };
-      }));
-    } else {
-      steps.push(skippedStep("decision_brain", "דורש סשן משתמש — ירוץ בטעינת הדשבורד"));
-    }
+    // STEP 5 — Decision Brain. Session path runs directly; cron path runs inside
+    // the service-role org context so the (now explicitly org-scoped) reads +
+    // writes resolve to THIS org only — RLS is bypassed but every query is filtered.
+    steps.push(await runStep("decision_brain", false, async () => {
+      if (sessionScoped) await initializeOrganizationDecisionBrain();
+      else await runWithServiceRoleOrg(organizationId, () => initializeOrganizationDecisionBrain());
+      return { summary: "מוח החלטות עודכן" };
+    }));
 
     // STEP 6/7 — Events + Alerts (popups) from the bridged sources.
     if (bridgeStep.status !== "failed") {
