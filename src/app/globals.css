@@ -198,333 +198,258 @@ body {
 }
 
 /* ============================================================================
-   ZONO AUTH — futuristic "living real-estate operating system" login.
-   Fully SCOPED under .zauth so none of these dark styles leak into the app.
-   Deep navy/purple environment + glass + subtle glow. No neon overload.
-   Honors prefers-reduced-motion.
+   ZONO AUTH 2.0 — "Luxury Technology Edition" sign-in. Calm, premium, almost
+   monochrome black-purple. Real glassmorphism, soft radial light, near-invisible
+   particles + orbital arcs. Purple is an accent — never the subject. Fully
+   SCOPED under .zauth so none of these dark styles leak into the app. Honors
+   prefers-reduced-motion.
    ========================================================================== */
 .zauth {
-  --zauth-bg: #08051a;
-  --zauth-bg2: #120a2e;
-  --zauth-bg3: #1a1040;
-  --zauth-bg4: #0d0824;
-  --zauth-glow: rgba(139, 92, 246, 0.55);
-  --zauth-line: rgba(167, 139, 250, 0.16);
+  --z-accent: #7c3aed;
+  --z-text: #ece9fb;
+  --z-muted: #9d92c4;
+  --z-faint: #6b6296;
   position: fixed;
   inset: 0;
   overflow: hidden;
-  color: #ECE9FB;
-  background: linear-gradient(135deg, #08051A 0%, #120A2E 35%, #1A1040 65%, #0D0824 100%);
+  color: var(--z-text);
+  background:
+    radial-gradient(125% 120% at 50% -12%, #160f30 0%, transparent 56%),
+    radial-gradient(100% 100% at 86% 112%, #110b25 0%, transparent 60%),
+    linear-gradient(160deg, #07050f 0%, #0a0717 46%, #0b0820 72%, #050310 100%);
   font-feature-settings: "ss01";
 }
-
-/* Soft ambient glows that breathe behind everything. */
-.zauth-aura {
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(80px);
-  opacity: 0.5;
-  pointer-events: none;
-  animation: zauth-breathe 9s ease-in-out infinite;
-}
-.zauth-aura.a1 { width: 540px; height: 540px; top: -160px; inset-inline-start: -120px; background: radial-gradient(circle, rgba(124,58,237,0.55), transparent 70%); }
-.zauth-aura.a2 { width: 620px; height: 620px; bottom: -220px; inset-inline-end: -160px; background: radial-gradient(circle, rgba(91,33,182,0.5), transparent 70%); animation-delay: 2.5s; }
-.zauth-aura.a3 { width: 380px; height: 380px; top: 38%; inset-inline-start: 42%; background: radial-gradient(circle, rgba(168,85,247,0.35), transparent 70%); animation-delay: 4.5s; }
-
-@keyframes zauth-breathe {
-  0%, 100% { opacity: 0.38; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.08); }
-}
-
-/* Network SVG (digital city / property clusters / lead-flow routes). */
-.zauth-net { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.zauth-route { stroke-dasharray: 5 9; animation: zauth-dash 26s linear infinite; }
-@keyframes zauth-dash { to { stroke-dashoffset: -560; } }
-.zauth-node-pulse { transform-origin: center; animation: zauth-nodepulse 3.2s ease-in-out infinite; }
-@keyframes zauth-nodepulse {
-  0%, 100% { opacity: 0.35; r: 2.5; }
-  50% { opacity: 1; r: 4; }
-}
-/* A glowing packet that rides a route. */
-.zauth-packet { animation: zauth-ride 6s linear infinite; }
-@keyframes zauth-ride { 0% { opacity: 0; offset-distance: 0%; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { opacity: 0; offset-distance: 100%; } }
-
-/* Drifting particles. */
-.zauth-particle {
-  position: absolute;
-  width: 3px; height: 3px;
-  border-radius: 9999px;
-  background: rgba(196, 181, 253, 0.8);
-  box-shadow: 0 0 8px 1px rgba(167, 139, 250, 0.7);
-  animation: zauth-drift linear infinite;
-  opacity: 0;
-}
-@keyframes zauth-drift {
-  0% { transform: translateY(0) scale(1); opacity: 0; }
-  10% { opacity: 0.9; }
-  90% { opacity: 0.6; }
-  100% { transform: translateY(-120vh) scale(0.4); opacity: 0; }
-}
-
-/* Glass panels (login card + floating widgets) — premium glass: deeper blur,
-   reflective top highlight, inner shadow for depth. */
-.zauth-glass {
-  background: linear-gradient(160deg, rgba(30,19,72,0.74), rgba(13,8,36,0.64));
-  backdrop-filter: blur(30px) saturate(155%);
-  -webkit-backdrop-filter: blur(30px) saturate(155%);
-  border: 1px solid rgba(176, 150, 255, 0.24);
-  box-shadow:
-    0 30px 80px rgba(5, 2, 18, 0.66),
-    inset 0 1px 0 rgba(255,255,255,0.1),
-    inset 0 -1px 24px rgba(124,58,237,0.12);
-}
-/* Thin luminous border highlight + glass reflection sheen on the login card. */
-.zauth-card {
-  position: relative;
-  border-radius: 30px;
-}
-.zauth-card::after {
-  content: "";
-  position: absolute; inset: 0;
-  border-radius: 30px;
-  background: linear-gradient(160deg, rgba(255,255,255,0.08), transparent 38%);
-  pointer-events: none;
-}
-.zauth-card::before {
-  content: "";
-  position: absolute; inset: 0;
-  border-radius: 30px;
-  padding: 1px;
-  background: linear-gradient(140deg, rgba(167,139,250,0.6), rgba(124,58,237,0.1) 40%, rgba(168,85,247,0.5));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0.8;
-}
-
-/* Inputs — taller, premium focus glow + hover lift. */
-.zauth-input {
-  height: 54px;
-  width: 100%;
-  border-radius: 16px;
-  background: rgba(8, 5, 26, 0.55);
-  border: 1px solid rgba(167, 139, 250, 0.22);
-  color: #F4F2FF;
-  font-size: 15px;
-  padding: 0 16px;
-  outline: none;
-  transition: border-color 0.22s ease, box-shadow 0.28s ease, background 0.22s ease;
-}
-.zauth-input::placeholder { color: rgba(202,189,255,0.6); }
-.zauth-input:hover { border-color: rgba(167,139,250,0.4); background: rgba(10,6,30,0.62); }
-.zauth-input:focus {
-  border-color: rgba(167, 139, 250, 0.8);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25), 0 0 22px rgba(124, 58, 237, 0.35);
-  background: rgba(8, 5, 26, 0.74);
-}
-
-/* Primary button — gradient + glow + lift + slow idle reflection sweep. */
-.zauth-btn {
-  position: relative;
-  overflow: hidden;
-  height: 56px; width: 100%;
-  border-radius: 16px;
-  font-weight: 800; font-size: 15px;
-  color: #fff;
-  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 55%, #c084fc 100%);
-  box-shadow: 0 16px 38px rgba(124, 58, 237, 0.45);
-  transition: transform 0.18s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, filter 0.18s ease;
-}
-/* slow reflection sweep every ~9s */
-.zauth-btn::after {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.28) 48%, transparent 62%);
-  transform: translateX(-120%);
-  animation: zauth-btnsweep 9s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes zauth-btnsweep { 0%, 70% { transform: translateX(-120%); } 85%, 100% { transform: translateX(120%); } }
-.zauth-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.02); box-shadow: 0 22px 50px rgba(124,58,237,0.6); filter: saturate(1.08) brightness(1.04); }
-.zauth-btn:active:not(:disabled) { transform: translateY(0) scale(0.99); box-shadow: 0 10px 26px rgba(124,58,237,0.5); }
-.zauth-btn:disabled { opacity: 0.65; }
-
-/* Floating live widgets. */
-.zauth-widget {
-  position: absolute;
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 14px;
-  border-radius: 16px;
-  max-width: 260px;
-  color: #EDEAFB;
-  will-change: transform, opacity;
-  pointer-events: none;
-}
-.zauth-widget .zauth-w-ico {
-  display: grid; place-items: center;
-  width: 34px; height: 34px;
-  border-radius: 11px;
-  background: linear-gradient(135deg, rgba(124,58,237,0.35), rgba(168,85,247,0.25));
-  border: 1px solid rgba(167,139,250,0.3);
-  flex: none;
-}
-.zauth-widget .zauth-w-title { font-size: 13px; font-weight: 700; line-height: 1.15; }
-.zauth-widget .zauth-w-sub { font-size: 11px; color: rgba(196,181,253,0.7); }
-
-/* Widget lifecycle animations (run once over the widget's lifetime). */
-.zauth-anim-fade  { animation: zauth-wfade var(--life,6s) ease-in-out forwards; }
-.zauth-anim-up    { animation: zauth-wup   var(--life,6s) ease-in-out forwards; }
-.zauth-anim-left  { animation: zauth-wleft var(--life,6s) ease-out forwards; }
-.zauth-anim-right { animation: zauth-wright var(--life,6s) ease-out forwards; }
-.zauth-anim-pulse { animation: zauth-wpulse var(--life,6s) ease-in-out forwards; }
-
-@keyframes zauth-wfade {
-  0% { opacity: 0; transform: scale(0.96); }
-  12%, 82% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.98); }
-}
-@keyframes zauth-wup {
-  0% { opacity: 0; transform: translateY(26px); }
-  14%, 80% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-22px); }
-}
-@keyframes zauth-wleft {
-  0% { opacity: 0; transform: translateX(-30px); }
-  14%, 82% { opacity: 1; transform: translateX(0); }
-  100% { opacity: 0; transform: translateX(-18px); }
-}
-@keyframes zauth-wright {
-  0% { opacity: 0; transform: translateX(30px); }
-  14%, 82% { opacity: 1; transform: translateX(0); }
-  100% { opacity: 0; transform: translateX(18px); }
-}
-@keyframes zauth-wpulse {
-  0% { opacity: 0; transform: scale(0.9); }
-  14% { opacity: 1; transform: scale(1); }
-  40% { transform: scale(1.03); }
-  66% { transform: scale(1); }
-  82% { opacity: 1; }
-  100% { opacity: 0; transform: scale(0.97); }
-}
-
-/* Logo soft float. */
-.zauth-logo { animation: zauth-logofloat 6s ease-in-out infinite; }
-@keyframes zauth-logofloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-
-/* Robot mascot — anchored to the card column (.zauth-stage). Stands at the
-   card's inline-end edge (physical right in RTL) and leans in, overflowing
-   onto the form so it reads as "touching" the card. Gently breathing + glow. */
-.zauth-robot {
-  position: absolute;
-  bottom: -24px;
-  inset-inline-end: 100%;
-  margin-inline-end: -132px;         /* legs sit on the card; head + waving hand spill outside */
-  width: clamp(352px, 39vw, 632px);  /* assistant scale (≈12% smaller than hero) */
-  height: auto;
-  z-index: 20;                        /* above the card edge; pointer-events:none keeps form usable */
-  filter: drop-shadow(0 24px 58px rgba(124, 58, 237, 0.4));  /* glow −20% */
-  transform-origin: 50% 92%;
-  opacity: 0;
-  /* enters last (~1.5s), then breathes + sways forever */
-  animation:
-    zauth-robotin 0.9s ease 1.5s forwards,
-    zauth-robotfloat 7s ease-in-out 1.5s infinite,
-    zauth-robotwave 6.5s ease-in-out 1.5s infinite;
-  pointer-events: none;
-  user-select: none;
-}
-@keyframes zauth-robotin { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-.zauth-robot::after {
-  content: "";
-  position: absolute;
-  bottom: 8px; inset-inline: 16%;
-  height: 26px;
-  background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.42), transparent 70%);
-  filter: blur(7px);
-}
-/* gentle float + a very small sway that reads as a subtle "wave" — premium, not cartoon */
-@keyframes zauth-robotfloat { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-9px) rotate(0deg); } }
-@keyframes zauth-robotwave { 0%, 86%, 100% { rotate: 0deg; } 90% { rotate: 1.4deg; } 94% { rotate: -1.2deg; } }
-@media (max-width: 1100px) { .zauth-robot { display: none; } }
-
-/* Persistent signature chips (WhatsApp / property match) — premium floating
-   glass, ~15% larger, with a tiny live indicator. Subtle hover lift. */
-.zauth-chip {
-  position: absolute;
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 17px;
-  border-radius: 18px;
-  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s ease;
-  animation: zauth-chipfloat 7s ease-in-out infinite;
-}
-.zauth-chip:hover { transform: translateY(-3px); }
-.zauth-chip.c2 { animation-delay: 1.8s; }
-.zauth-chip .zauth-chip-ico {
-  display: grid; place-items: center;
-  width: 40px; height: 40px; border-radius: 13px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(168,85,247,0.18));
-  border: 1px solid rgba(167, 139, 250, 0.4);
-  color: #e2d6ff;
-  flex: none;
-}
-.zauth-chip .zauth-chip-body { display: flex; flex-direction: column; }
-.zauth-chip .zauth-chip-title { font-size: 14px; font-weight: 800; color: #fff; line-height: 1.2; }
-.zauth-chip .zauth-chip-sub { font-size: 11.5px; color: rgba(202, 189, 255, 0.74); margin-top: 1px; }
-.zauth-chip .zauth-chip-live {
-  width: 8px; height: 8px; border-radius: 9999px; flex: none;
-  background: #34d399; box-shadow: 0 0 0 0 rgba(52,211,153,0.6);
-  animation: zauth-livepulse 2.4s ease-in-out infinite;
-}
-.zauth-chip .zauth-chip-live.v { background: #c084fc; box-shadow: 0 0 0 0 rgba(192,132,252,0.6); }
-@keyframes zauth-livepulse {
-  0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.55); }
-  70% { box-shadow: 0 0 0 7px rgba(52,211,153,0); }
-  100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
-}
-@keyframes zauth-chipfloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
-@media (max-width: 1100px) { .zauth-chip { display: none; } }
-
-/* ── Background depth: vignette (darker edges) + soft light bloom behind logo ── */
+/* Darken the edges so the card floats in a pool of light (cinematic vignette). */
 .zauth::after {
   content: "";
   position: absolute; inset: 0;
   pointer-events: none; z-index: 1;
-  background: radial-gradient(120% 90% at 50% 42%, transparent 52%, rgba(5,2,16,0.55) 100%);
+  background: radial-gradient(118% 86% at 50% 44%, transparent 50%, rgba(3, 2, 10, 0.74) 100%);
 }
-.zauth-logo-wrap { position: relative; display: inline-flex; }
-.zauth-logo-wrap::before {
-  content: "";
-  position: absolute; inset: -40% -28%;
-  z-index: -1;
-  background: radial-gradient(closest-side, rgba(139,92,246,0.32), transparent 72%);
-  filter: blur(8px);
-  animation: zauth-bloom 7s ease-in-out infinite;
-}
-@keyframes zauth-bloom { 0%,100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
 
-/* ── Page-load intro: staggered reveal. Never blocks interaction. ── */
-.zauth-intro { opacity: 0; animation: zauth-rise 0.8s cubic-bezier(0.22,1,0.36,1) forwards; }
-@keyframes zauth-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-.intro-logo  { animation-delay: 0.25s; }
-.intro-sub1  { animation-delay: 0.5s; }
-.intro-sub2  { animation-delay: 0.62s; }
-.intro-card  { animation-delay: 0.78s; }
-.intro-chip1 { animation-delay: 1.15s; }
-.intro-chip2 { animation-delay: 1.32s; }
-.intro-robot { animation-delay: 1.5s; }
+/* Soft breathing light — huge, very low opacity, almost invisible. */
+.zauth-aura {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+.zauth-aura.a1 { width: 680px; height: 680px; top: -230px; inset-inline-start: -170px; background: radial-gradient(circle, rgba(124,58,237,0.28), transparent 70%); animation: zauth-breathe 14s ease-in-out infinite; }
+.zauth-aura.a2 { width: 780px; height: 780px; bottom: -300px; inset-inline-end: -220px; background: radial-gradient(circle, rgba(91,33,182,0.24), transparent 70%); animation: zauth-breathe 17s ease-in-out 3s infinite; }
+@keyframes zauth-breathe { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.78; transform: scale(1.05); } }
+
+/* Extremely faint orbital arcs, drifting very slowly. */
+.zauth-orbits { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; opacity: 0.55; }
+.zauth-orbit-spin { animation: zauth-orbit 120s linear infinite; }
+@keyframes zauth-orbit { to { transform: rotate(360deg); } }
+
+/* Near-invisible drifting particles. */
+.zauth-particles { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.zauth-dot {
+  position: absolute;
+  border-radius: 9999px;
+  background: rgba(196, 181, 253, 0.5);
+  box-shadow: 0 0 6px rgba(167, 139, 250, 0.4);
+  opacity: 0;
+  animation: zauth-drift linear infinite;
+}
+@keyframes zauth-drift {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  14% { opacity: 0.5; }
+  86% { opacity: 0.32; }
+  100% { transform: translateY(-112vh) scale(0.5); opacity: 0; }
+}
+
+/* Foreground shell — generous empty space; the card is the hero. */
+.zauth-shell {
+  position: relative; z-index: 10;
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 48px 20px;
+}
+.zauth-stage { position: relative; width: 100%; max-width: 428px; }
+
+/* Header — big elegant type with lots of breathing room. */
+.zauth-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 30px; }
+.zauth-logo-wrap { position: relative; display: inline-flex; animation: zauth-logofloat 8s ease-in-out infinite; }
+.zauth-logo-wrap::before {
+  content: ""; position: absolute; inset: -46% -32%; z-index: -1;
+  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.24), transparent 72%);
+  filter: blur(10px);
+  animation: zauth-bloom 9s ease-in-out infinite;
+}
+@keyframes zauth-logofloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes zauth-bloom { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 0.9; transform: scale(1.05); } }
+.zauth-title { margin-top: 22px; font-size: clamp(18px, 2.3vw, 22px); font-weight: 800; letter-spacing: -0.01em; line-height: 1.45; color: #f3f0ff; max-width: 23ch; }
+.zauth-sub { margin-top: 11px; font-size: 13.5px; font-weight: 500; color: var(--z-muted); }
+
+/* Real glass — light, soft, almost dissolving into the background (−20% weight). */
+.zauth-glass {
+  background: linear-gradient(160deg, rgba(26, 18, 52, 0.52), rgba(10, 7, 26, 0.40));
+  backdrop-filter: blur(34px) saturate(135%);
+  -webkit-backdrop-filter: blur(34px) saturate(135%);
+  border: 1px solid rgba(176, 150, 255, 0.15);
+  box-shadow: 0 24px 70px rgba(3, 1, 12, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.zauth-card { position: relative; border-radius: 28px; padding: 34px 30px 30px; }
+/* Thin luminous border + a soft top reflection. */
+.zauth-card::before {
+  content: ""; position: absolute; inset: 0; border-radius: 28px; padding: 1px;
+  background: linear-gradient(150deg, rgba(167, 139, 250, 0.38), rgba(124, 58, 237, 0.04) 46%, rgba(168, 85, 247, 0.28));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none; opacity: 0.7;
+}
+.zauth-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: 28px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), transparent 36%);
+  pointer-events: none;
+}
+.zauth-card-title { position: relative; text-align: center; font-size: 21px; font-weight: 900; color: #fff; }
+.zauth-card-sub { position: relative; text-align: center; margin-top: 5px; margin-bottom: 26px; font-size: 12.5px; color: var(--z-muted); }
+.zauth-err {
+  position: relative; margin-bottom: 18px; border-radius: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.28); background: rgba(239, 68, 68, 0.12);
+  padding: 10px 12px; text-align: center; font-size: 12.5px; font-weight: 600; color: #fecaca;
+}
+
+/* Fields — taller, thin borders, soft inner shadow, minimal leading icon. */
+.zauth-field { position: relative; margin-bottom: 18px; }
+.zauth-label { display: block; margin-bottom: 9px; font-size: 12.5px; font-weight: 700; color: #c6bbec; }
+.zauth-input-wrap { position: relative; }
+.zauth-input-ico { position: absolute; top: 50%; transform: translateY(-50%); inset-inline-start: 15px; color: rgba(167, 139, 250, 0.65); pointer-events: none; }
+.zauth-input {
+  height: 56px; width: 100%;
+  border-radius: 16px;
+  background: rgba(7, 5, 20, 0.40);
+  border: 1px solid rgba(167, 139, 250, 0.16);
+  color: #f4f2ff; font-size: 14.5px;
+  padding-inline-start: 46px; padding-inline-end: 16px;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.30);
+  transition: border-color 0.22s ease, box-shadow 0.3s ease, background 0.22s ease;
+}
+.zauth-input.has-trail { padding-inline-end: 46px; }
+.zauth-input::placeholder { color: rgba(176, 164, 214, 0.5); }
+.zauth-input:hover { border-color: rgba(167, 139, 250, 0.30); }
+.zauth-input:focus {
+  border-color: rgba(167, 139, 250, 0.58);
+  background: rgba(7, 5, 20, 0.58);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.30), 0 0 0 3px rgba(124, 58, 237, 0.16), 0 0 18px rgba(124, 58, 237, 0.16);
+}
+.zauth-eye {
+  position: absolute; top: 50%; transform: translateY(-50%); inset-inline-end: 11px;
+  display: grid; place-items: center; width: 32px; height: 32px;
+  border: none; background: transparent; color: rgba(167, 139, 250, 0.65);
+  cursor: pointer; border-radius: 10px;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+.zauth-eye:hover { color: #d8cdfa; background: rgba(139, 92, 246, 0.12); }
+
+/* Primary button — luxury gradient, soft top highlight, no aggressive glow. */
+.zauth-btn {
+  position: relative; overflow: hidden;
+  height: 56px; width: 100%; margin-top: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  border: none; cursor: pointer; border-radius: 16px;
+  font-weight: 800; font-size: 15px; color: #fff;
+  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 52%, #9333ea 100%);
+  box-shadow: 0 12px 30px rgba(109, 40, 217, 0.36);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease, filter 0.2s ease;
+}
+.zauth-btn::before {
+  content: ""; position: absolute; inset: 0; border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 42%);
+  pointer-events: none;
+}
+.zauth-btn:hover:not(:disabled) { transform: translateY(-1.5px); box-shadow: 0 18px 40px rgba(109, 40, 217, 0.48); filter: brightness(1.05); }
+.zauth-btn:active:not(:disabled) { transform: translateY(0) scale(0.992); box-shadow: 0 8px 20px rgba(109, 40, 217, 0.42); }
+.zauth-btn:disabled { opacity: 0.7; cursor: default; }
+.zauth-btn-arrow { position: relative; transition: transform 0.2s ease; }
+.zauth-btn:hover:not(:disabled) .zauth-btn-arrow { transform: translateX(-3px); }
+
+.zauth-alt { position: relative; margin-top: 20px; text-align: center; font-size: 12.5px; color: var(--z-muted); }
+.zauth-link { font-weight: 700; color: #c4b5fd; }
+.zauth-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.zauth-foot { margin-top: 26px; text-align: center; font-size: 11px; letter-spacing: 0.02em; color: var(--z-faint); }
+
+/* ZI assistant — secondary element, beside the card, inside a soft ambient
+   circle. Subtle breathing + float; soft shadow; no exaggerated glow. */
+.zauth-robot-wrap {
+  position: absolute; z-index: 6;
+  top: 50%; inset-inline-start: clamp(20px, 7vw, 150px);
+  transform: translateY(-50%);
+  width: clamp(150px, 13.5vw, 224px);
+  pointer-events: none;
+}
+.zauth-robot-halo {
+  position: absolute; inset: -16% -12% -8%;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 50% 42%, rgba(139, 92, 246, 0.28), rgba(124, 58, 237, 0.09) 55%, transparent 72%);
+  filter: blur(6px);
+  animation: zauth-halo 9s ease-in-out infinite;
+}
+@keyframes zauth-halo { 0%, 100% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+.zauth-robot {
+  position: relative; display: block; width: 100%; height: auto;
+  filter: drop-shadow(0 22px 30px rgba(8, 4, 22, 0.5));
+  animation: zauth-robotfloat 8s ease-in-out infinite;
+}
+@keyframes zauth-robotfloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+.zauth-robot-wrap::after {
+  content: ""; position: absolute; bottom: -2px; inset-inline: 20%;
+  height: 16px; background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.32), transparent 70%);
+  filter: blur(7px);
+}
+.zauth-bubble {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 9px 13px; border-radius: 14px 14px 14px 5px;
+  white-space: nowrap;
+}
+.zauth-bubble-t { font-size: 12px; font-weight: 800; color: #fff; }
+.zauth-bubble-s { font-size: 11px; color: rgba(202, 189, 255, 0.72); }
+@media (max-width: 1180px) { .zauth-robot-wrap { display: none; } }
+
+/* Signature chips — quiet floating glass with a tiny live indicator. */
+.zauth-chip {
+  position: absolute; z-index: 8;
+  display: flex; align-items: center; gap: 11px;
+  padding: 12px 15px; border-radius: 16px;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zauth-chip-ico {
+  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.24), rgba(168, 85, 247, 0.14));
+  border: 1px solid rgba(167, 139, 250, 0.30); color: #ddd0ff; flex: none;
+}
+.zauth-chip-body { display: flex; flex-direction: column; }
+.zauth-chip-title { font-size: 13px; font-weight: 700; color: #fff; line-height: 1.2; }
+.zauth-chip-sub { font-size: 11px; color: rgba(202, 189, 255, 0.66); margin-top: 1px; }
+.zauth-chip-live {
+  width: 7px; height: 7px; border-radius: 9999px; flex: none;
+  background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+  animation: zauth-livepulse 2.6s ease-in-out infinite;
+}
+.zauth-chip-live.v { background: #c084fc; }
+@keyframes zauth-livepulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+/* Calm float — only 2–4px of movement. */
+.zauth-float-a { animation: zauth-floaty 7s ease-in-out infinite; }
+.zauth-float-b { animation: zauth-floaty 8.5s ease-in-out 1.2s infinite; }
+@keyframes zauth-floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@media (max-width: 1180px) { .zauth-chip { display: none; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .zauth-aura, .zauth-route, .zauth-node-pulse, .zauth-packet, .zauth-particle,
-  .zauth-logo, .zauth-anim-fade, .zauth-anim-up, .zauth-anim-left,
-  .zauth-anim-right, .zauth-anim-pulse, .zauth-robot, .zauth-chip,
-  .zauth-btn::after, .zauth-chip-live, .zauth-logo-wrap::before,
-  .zauth-intro { animation: none !important; }
-  /* with motion disabled, everything must still be visible + interactive */
-  .zauth-intro { opacity: 1 !important; transform: none !important; }
-  .zauth-robot { opacity: 1 !important; }
-  .zauth-particle { opacity: 0.4; }
+  .zauth-aura, .zauth-orbit-spin, .zauth-dot, .zauth-logo-wrap, .zauth-logo-wrap::before,
+  .zauth-robot, .zauth-robot-halo, .zauth-chip-live, .zauth-float-a, .zauth-float-b {
+    animation: none !important;
+  }
+  .zauth-dot { opacity: 0.3; }
 }
 
 /* ============================================================================

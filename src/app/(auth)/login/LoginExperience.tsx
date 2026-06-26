@@ -1,219 +1,237 @@
 "use client";
 // ============================================================================
-// ZONO — login experience. A deep navy/purple "living operating system" sign-in:
-// ambient breathing glow, a digital-city intelligence network with drifting
-// particles, the ZONO robot mascot standing beside a glass login card, and two
-// signature live chips (WhatsApp + property-match). RTL Hebrew. Wired to the
-// REAL `signIn` server action. Honors reduced-motion. (Phase 19.5 visual pass.)
+// ZONO — Login Experience 2.0 ("Luxury Technology Edition").
+// A calm, premium, almost-monochrome black-purple sign-in that feels like
+// entering the operating system of the Israeli real-estate industry. Real
+// glassmorphism, near-invisible ambient light + orbital arcs, an elegant
+// type hierarchy, refined inputs, an expensive primary button, two quiet
+// signature chips, and the ZI assistant resting beside the card inside a soft
+// ambient circle. Framer-Motion orchestrated reveal + micro-interactions, RTL
+// Hebrew, accessible, honors prefers-reduced-motion. Wired to the REAL `signIn`
+// server action. The ZONO logo + brand purple are used exactly as provided.
 // ============================================================================
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
-import { MessageCircle, Home } from "lucide-react";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, MessageCircle, Home } from "lucide-react";
 import { signIn, type AuthFormState } from "@/lib/auth/actions";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
 
-// The mascot is hosted by the brand site; if hotlinking is blocked it falls back
-// to a local /zono-robot.png (drop the PNG in /public to self-host).
+// The ZI mascot is hosted by the brand site; if hotlinking is blocked it falls
+// back to a local /zono-robot.png (drop the PNG in /public to self-host).
 const ROBOT_REMOTE = "https://s-pixel.co.il/wp-content/uploads/2026/06/41a88c3f-7369-4e03-9571-65dbe5c7a470-1.png";
 const ROBOT_LOCAL = "/zono-robot.png";
 
+const EASE = [0.22, 1, 0.36, 1] as const;
+
 export function LoginExperience() {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(signIn, {});
+  const [showPw, setShowPw] = useState(false);
+  const reduce = useReducedMotion();
 
-  // Particles: generated once, stable across renders.
+  // Near-invisible drifting particles — generated once, stable across renders.
   const particles = useMemo(
-    () => Array.from({ length: 20 }, (_, i) => ({
-      left: Math.round((i * 53 + 7) % 100),
-      delay: (i * 0.7) % 9,
-      dur: 9 + (i % 6),
-      size: 2 + (i % 3),
+    () => Array.from({ length: 9 }, (_, i) => ({
+      left: Math.round((i * 41 + 9) % 100),
+      delay: (i * 1.3) % 11,
+      dur: 15 + (i % 6) * 2,
+      size: 1.5 + (i % 3) * 0.6,
     })),
     [],
   );
 
+  const container: Variants = {
+    hidden: {},
+    show: { transition: { staggerChildren: reduce ? 0 : 0.1, delayChildren: reduce ? 0 : 0.12 } },
+  };
+  const rise: Variants = {
+    hidden: reduce ? { opacity: 1 } : { opacity: 0, y: 18 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE } },
+  };
+
   return (
     <div dir="rtl" className="zauth">
-      {/* Ambient breathing glow */}
+      {/* Ambient breathing light — huge, soft, almost invisible */}
       <div className="zauth-aura a1" />
       <div className="zauth-aura a2" />
-      <div className="zauth-aura a3" />
 
-      {/* Living real-estate intelligence network */}
-      <NetworkBackground />
+      {/* Very subtle orbital arcs */}
+      <OrbitArcs />
 
-      {/* Drifting particles */}
-      <div className="pointer-events-none absolute inset-0">
+      {/* Near-invisible particles */}
+      <div className="zauth-particles" aria-hidden="true">
         {particles.map((p, i) => (
           <span
             key={i}
-            className="zauth-particle"
+            className="zauth-dot"
             style={{
-              left: `${p.left}%`, bottom: "-10px",
-              width: p.size, height: p.size,
-              animationDuration: `${p.dur}s`, animationDelay: `${p.delay}s`,
+              left: `${p.left}%`,
+              bottom: "-12px",
+              width: p.size,
+              height: p.size,
+              animationDuration: `${p.dur}s`,
+              animationDelay: `${p.delay}s`,
             }}
           />
         ))}
       </div>
 
-      {/* Signature live chips */}
-      <div className="zauth-chip zauth-glass zauth-intro intro-chip1" style={{ top: "8%", insetInlineEnd: "9%" }}>
-        <span className="zauth-chip-ico"><MessageCircle size={18} /></span>
+      {/* Signature chips — quiet, floating glass */}
+      <motion.div
+        className="zauth-chip zauth-glass zauth-float-a"
+        style={{ top: "9%", insetInlineEnd: "8%" }}
+        initial={reduce ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: reduce ? 0 : 1.05, duration: 0.6, ease: EASE }}
+      >
+        <span className="zauth-chip-ico"><MessageCircle size={16} /></span>
         <span className="zauth-chip-body">
-          <span className="zauth-chip-title block">3 שיחות WhatsApp חדשות</span>
+          <span className="zauth-chip-title">3 שיחות WhatsApp חדשות</span>
           <span className="zauth-chip-sub">ממתינות למענה</span>
         </span>
         <span className="zauth-chip-live" aria-hidden="true" />
-      </div>
-      <div className="zauth-chip c2 zauth-glass zauth-intro intro-chip2" style={{ bottom: "12%", insetInlineEnd: "7%" }}>
-        <span className="zauth-chip-ico"><Home size={18} /></span>
+      </motion.div>
+
+      <motion.div
+        className="zauth-chip zauth-glass zauth-float-b"
+        style={{ bottom: "12%", insetInlineEnd: "6.5%" }}
+        initial={reduce ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: reduce ? 0 : 1.22, duration: 0.6, ease: EASE }}
+      >
+        <span className="zauth-chip-ico"><Home size={16} /></span>
         <span className="zauth-chip-body">
-          <span className="zauth-chip-title block">נמצאה התאמת נכס</span>
+          <span className="zauth-chip-title">נמצאה התאמת נכס</span>
           <span className="zauth-chip-sub">94% התאמה</span>
         </span>
         <span className="zauth-chip-live v" aria-hidden="true" />
-      </div>
+      </motion.div>
 
-      {/* Foreground: logo + login panel */}
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-5 py-10">
-        <div className="zauth-stage relative w-full max-w-[462px]">
-          {/* Robot mascot — anchored to the card so it stands touching/overflowing it */}
-          <RobotMascot />
+      {/* ZI assistant — secondary, beside the card inside a soft ambient circle */}
+      <Robot reduce={!!reduce} />
 
-          {/* Logo hero */}
-          <div className="zauth-logo zauth-intro intro-logo mb-5 flex flex-col items-center text-center">
+      {/* Foreground: the login card is the hero */}
+      <main className="zauth-shell">
+        <motion.div className="zauth-stage" variants={container} initial="hidden" animate="show">
+          {/* Logo + headline */}
+          <motion.header className="zauth-head" variants={rise}>
             <span className="zauth-logo-wrap">
-              <ZonoLogo priority width={272} height={88} className="drop-shadow-[0_8px_34px_rgba(124,58,237,0.5)]" />
+              <ZonoLogo priority width={236} height={76} />
             </span>
-            <p className="zauth-intro intro-sub1 mt-3.5 text-[14px] font-bold tracking-wide text-[#cdbff5]">
-              הבינה שתהפוך אותך לסוכן הכי חזק בזון שלך.
-            </p>
-            <p className="zauth-intro intro-sub2 mt-1 text-[12px] font-medium text-[#9a89d4]">
-              נהל נכסים, לקוחות, עסקאות ובינה עסקית — במקום אחד.
-            </p>
-          </div>
+            <h1 className="zauth-title">הבינה שתהפוך אותך לסוכן הכי חזק בזון שלך.</h1>
+            <p className="zauth-sub">נהל נכסים, לקוחות, עסקאות ובינה עסקית — במקום אחד.</p>
+          </motion.header>
 
           {/* Glass login card */}
-          <form action={action} className="zauth-card zauth-glass zauth-intro intro-card p-8 sm:p-9">
-            <h1 className="mb-1 text-center text-xl font-black text-white">התחברות</h1>
-            <p className="mb-6 text-center text-xs text-[#a896e0]">ברוך/ה הבא/ה למרכז השליטה</p>
+          <motion.form action={action} className="zauth-card zauth-glass" variants={rise}>
+            <h2 className="zauth-card-title">התחברות</h2>
+            <p className="zauth-card-sub">ברוך/ה הבא/ה למרכז השליטה</p>
 
             {state.error && (
-              <p className="mb-4 rounded-xl border border-red-400/30 bg-red-500/15 px-3 py-2 text-center text-xs font-semibold text-red-200">
-                {state.error}
-              </p>
+              <p className="zauth-err" role="alert">{state.error}</p>
             )}
 
-            <label className="mb-4 block">
-              <span className="mb-1.5 block text-xs font-bold text-[#c9bdf0]">אימייל</span>
-              <input
-                name="email" type="email" required dir="ltr" autoComplete="email"
-                placeholder="you@agency.co.il" className="zauth-input text-sm"
-              />
-            </label>
+            <div className="zauth-field">
+              <label htmlFor="zauth-email" className="zauth-label">אימייל</label>
+              <div className="zauth-input-wrap">
+                <Mail className="zauth-input-ico" size={18} aria-hidden="true" />
+                <input
+                  id="zauth-email" name="email" type="email" required dir="ltr" autoComplete="email"
+                  placeholder="you@agency.co.il" className="zauth-input"
+                />
+              </div>
+            </div>
 
-            <label className="mb-6 block">
-              <span className="mb-1.5 block text-xs font-bold text-[#c9bdf0]">סיסמה</span>
-              <input
-                name="password" type="password" required dir="ltr" autoComplete="current-password"
-                placeholder="••••••••" className="zauth-input text-sm"
-              />
-            </label>
+            <div className="zauth-field">
+              <label htmlFor="zauth-password" className="zauth-label">סיסמה</label>
+              <div className="zauth-input-wrap">
+                <Lock className="zauth-input-ico" size={18} aria-hidden="true" />
+                <input
+                  id="zauth-password" name="password" type={showPw ? "text" : "password"} required dir="ltr"
+                  autoComplete="current-password" placeholder="••••••••" className="zauth-input has-trail"
+                />
+                <button
+                  type="button" className="zauth-eye"
+                  onClick={() => setShowPw((v) => !v)}
+                  aria-label={showPw ? "הסתר סיסמה" : "הצג סיסמה"}
+                >
+                  {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
 
-            <button type="submit" disabled={pending} className="zauth-btn text-sm">
-              {pending ? "מתחבר…" : "התחברות"}
+            <button type="submit" disabled={pending} className="zauth-btn">
+              <span>{pending ? "מתחבר…" : "התחברות"}</span>
+              {!pending && <ArrowLeft size={18} className="zauth-btn-arrow" aria-hidden="true" />}
             </button>
 
-            <p className="mt-5 text-center text-xs text-[#a896e0]">
+            <p className="zauth-alt">
               אין לך חשבון?{" "}
-              <Link href="/signup" className="font-bold text-[#c4b5fd] underline-offset-2 hover:underline">
-                הרשמה
-              </Link>
+              <Link href="/signup" className="zauth-link">הרשמה</Link>
             </p>
-          </form>
+          </motion.form>
 
-          <p className="mt-6 text-center text-[11px] text-[#6f5fa6]">
+          <motion.p className="zauth-foot" variants={rise}>
             ZONO · Real Estate Operating System
-          </p>
-        </div>
-      </div>
+          </motion.p>
+        </motion.div>
+      </main>
     </div>
   );
 }
 
-/** ZONO robot mascot. Tries the brand-hosted image (no-referrer to dodge hotlink
- *  protection), falls back to a local self-hosted copy, then hides gracefully. */
-function RobotMascot() {
+/** ZI robot mascot inside a soft ambient circle, beside the card. Tries the
+ *  brand-hosted image (no-referrer to dodge hotlink protection), falls back to a
+ *  local self-hosted copy, then hides gracefully. Pointer-events off so it never
+ *  blocks the form. */
+function Robot({ reduce }: { reduce: boolean }) {
   const [src, setSrc] = useState(ROBOT_REMOTE);
   const [hidden, setHidden] = useState(false);
   if (hidden) return null;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt="ZONO"
-      className="zauth-robot"
-      referrerPolicy="no-referrer"
-      onError={() => { if (src !== ROBOT_LOCAL) setSrc(ROBOT_LOCAL); else setHidden(true); }}
-    />
+    <motion.div
+      className="zauth-robot-wrap"
+      aria-hidden="true"
+      initial={reduce ? false : { opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: reduce ? 0 : 1.35, duration: 0.8, ease: EASE }}
+    >
+      <span className="zauth-robot-halo" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        className="zauth-robot"
+        referrerPolicy="no-referrer"
+        draggable={false}
+        onError={() => { if (src !== ROBOT_LOCAL) setSrc(ROBOT_LOCAL); else setHidden(true); }}
+      />
+      <span className="zauth-bubble zauth-glass">
+        <span className="zauth-bubble-t">שלום! אני ZI</span>
+        <span className="zauth-bubble-s">איך אפשר לעזור?</span>
+      </span>
+    </motion.div>
   );
 }
 
-/** Subtle SVG "digital city": faint streets, property-cluster nodes, lead-flow
- *  routes with animated dashes, and glowing packets riding the routes. */
-function NetworkBackground() {
+/** Extremely faint orbital arcs that drift very slowly — depth without noise. */
+function OrbitArcs() {
   return (
-    <svg className="zauth-net" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <svg className="zauth-orbits" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <defs>
-        <linearGradient id="zauth-route-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#7c3aed" stopOpacity="0.0" />
-          <stop offset="0.5" stopColor="#a855f7" stopOpacity="0.6" />
-          <stop offset="1" stopColor="#c084fc" stopOpacity="0.0" />
-        </linearGradient>
-        <radialGradient id="zauth-node-grad">
-          <stop offset="0" stopColor="#d8b4fe" stopOpacity="0.95" />
+        <radialGradient id="zauth-node">
+          <stop offset="0" stopColor="#c4b5fd" stopOpacity="0.7" />
           <stop offset="1" stopColor="#7c3aed" stopOpacity="0" />
         </radialGradient>
       </defs>
-
-      {/* faint street grid */}
-      <g stroke="rgba(167,139,250,0.07)" strokeWidth="1">
-        {Array.from({ length: 12 }).map((_, i) => (
-          <line key={`v${i}`} x1={i * 130} y1="0" x2={i * 130} y2="900" />
-        ))}
-        {Array.from({ length: 8 }).map((_, i) => (
-          <line key={`h${i}`} x1="0" y1={i * 130} x2="1440" y2={i * 130} />
-        ))}
+      <g className="zauth-orbit-spin" style={{ transformOrigin: "720px 450px" }}>
+        <ellipse cx="720" cy="450" rx="600" ry="320" fill="none" stroke="rgba(167,139,250,0.10)" strokeWidth="1" />
+        <ellipse cx="720" cy="450" rx="440" ry="520" fill="none" stroke="rgba(167,139,250,0.07)" strokeWidth="1" transform="rotate(26 720 450)" />
+        <ellipse cx="720" cy="450" rx="760" ry="430" fill="none" stroke="rgba(167,139,250,0.05)" strokeWidth="1" transform="rotate(-18 720 450)" />
+        <circle cx="120" cy="450" r="2.6" fill="url(#zauth-node)" />
+        <circle cx="1320" cy="450" r="2.6" fill="url(#zauth-node)" />
+        <circle cx="720" cy="130" r="2.2" fill="url(#zauth-node)" />
       </g>
-
-      {/* lead-flow routes */}
-      <g fill="none" stroke="url(#zauth-route-grad)" strokeWidth="2">
-        <path id="zauth-r1" className="zauth-route" d="M120,760 C360,620 520,520 760,470 S1180,360 1320,200" />
-        <path id="zauth-r2" className="zauth-route" d="M80,200 C300,300 460,360 720,400 S1160,470 1360,640" style={{ animationDelay: "1.2s" }} />
-        <path id="zauth-r3" className="zauth-route" d="M220,860 C420,760 560,700 720,560 S1080,300 1300,360" style={{ animationDelay: "2.1s" }} />
-      </g>
-
-      {/* property-cluster nodes */}
-      <g>
-        {[
-          [120, 760], [760, 470], [1320, 200], [80, 200], [720, 400], [1360, 640],
-          [220, 860], [720, 560], [1300, 360], [480, 300], [980, 520], [560, 700],
-        ].map(([x, y], i) => (
-          <g key={i}>
-            <circle cx={x} cy={y} r="16" fill="url(#zauth-node-grad)" opacity="0.5" />
-            <circle cx={x} cy={y} r="3" className="zauth-node-pulse" fill="#e9d5ff" style={{ animationDelay: `${(i % 5) * 0.4}s` }} />
-          </g>
-        ))}
-      </g>
-
-      {/* glowing packets riding the routes (native SVG motion) */}
-      {["zauth-r1", "zauth-r2", "zauth-r3"].map((rid, i) => (
-        <circle key={rid} r="3.4" fill="#f0e7ff" opacity="0.95">
-          <animateMotion dur={`${6 + i}s`} repeatCount="indefinite" rotate="auto" begin={`${i * 1.4}s`}>
-            <mpath href={`#${rid}`} />
-          </animateMotion>
-        </circle>
-      ))}
     </svg>
   );
 }
