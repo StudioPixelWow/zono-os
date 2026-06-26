@@ -4436,6 +4436,9 @@ type AgencyScoresRow = {
   growth: number | null; digital: number | null; luxury: number | null; inventory: number | null;
   coverage: number | null; projects: number | null; reputation: number | null; momentum: number | null;
   overall: number | null; updated_at: string;
+  // Phase 26.5 (additive)
+  competition_threat: number | null; data_confidence: number | null; score_breakdown: unknown;
+  period_start: string | null; period_end: string | null; calculated_at: string | null;
 };
 type AgencySignalsRow = {
   id: string; organization_id: string; agency_id: string; signal_type: string; severity: string | null;

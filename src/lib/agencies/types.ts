@@ -94,6 +94,13 @@ export interface AgencyScore {
   momentum: number | null;
   overall: number | null;
   updatedAt: string;
+  // Phase 26.5 (additive, optional so existing readers keep working)
+  competitionThreat?: number | null;
+  dataConfidence?: number | null;
+  scoreBreakdown?: Record<string, unknown>;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  calculatedAt?: string | null;
 }
 
 export type AgencySignalSeverity = "info" | "warning" | "critical";

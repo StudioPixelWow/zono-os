@@ -70,6 +70,9 @@ export function toScore(r: Obj): AgencyScore {
     growth: n("growth"), digital: n("digital"), luxury: n("luxury"), inventory: n("inventory"),
     coverage: n("coverage"), projects: n("projects"), reputation: n("reputation"), momentum: n("momentum"),
     overall: n("overall"), updatedAt: r.updated_at as string,
+    competitionThreat: n("competition_threat"), dataConfidence: n("data_confidence"),
+    scoreBreakdown: asObj(r.score_breakdown), periodStart: (r.period_start as string) ?? null,
+    periodEnd: (r.period_end as string) ?? null, calculatedAt: (r.calculated_at as string) ?? null,
   };
 }
 

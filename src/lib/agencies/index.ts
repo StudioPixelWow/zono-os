@@ -50,3 +50,12 @@ export {
 export {
   computeTerritoryStats, detectTerritoryOpportunities,
 } from "./territory/agencyTerritoryCalculator";
+// ── Scoring Engine (Phase 26.5, pure types + helpers) ────────────────────────
+export {
+  DEFAULT_SCORE_WEIGHTS, meanPresent, saturate100, clamp as scoreClamp,
+} from "./scoring/agencyScoringTypes";
+export type {
+  AgencyScoreKey, AgencyScoreInput, AgencyScoreResult,
+} from "./scoring/agencyScoringTypes";
+export { weightedOverall, dataConfidence } from "./scoring/agencyScoreBreakdown";
+export { computeAgencyScores, threatAgainstUserArea } from "./scoring/agencyScoreCalculator";
