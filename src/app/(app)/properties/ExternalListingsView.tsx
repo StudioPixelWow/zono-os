@@ -183,13 +183,13 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
         if (!plan.cities.length) { stopTimers(); setSyncing(false); setError("אין אזורי פעילות פעילים לארגון"); return; }
         setProgress((p) => p ? { ...p, hasJob: true, totalCities: plan.cities.length, provider: plan.sources.join("+"), apifyConfigured: plan.apifyConfigured } : p);
 
-        let found = 0, inserted = 0, updated = 0, completed = 0, errCount = 0;
+        let found = 0, inserted = 0, updated = 0, completed = 0, errCount = 0, firstErr = "";
         for (const city of plan.cities) {
           setProgress((p) => p ? { ...p, currentCity: city } : p);
           for (const source of plan.sources) {
             const r = await runSyncChunkAction(plan.jobId, city, source, plan.perCity);
             found += r.found; inserted += r.inserted; updated += r.updated;
-            if (r.error) errCount++;
+            if (r.error) { errCount++; if (!firstErr) firstErr = r.error; }
             setProgress((p) => p ? { ...p, found, imported: inserted, updated, currentCity: city, completedCount: completed } : p);
           }
           completed++;
@@ -209,7 +209,11 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
         } catch { /* orchestration is best-effort */ }
         stopTimers(); setSyncing(false);
         if (fin?.error) setError(fin.error);
-        else setMsg(`הסנכרון הושלם: ${inserted} מודעות חדשות, ${updated} עודכנו${errCount ? ` · ${errCount} שגיאות מקור` : ""}${orchSuffix}`);
+        else if (inserted === 0 && updated === 0 && firstErr) {
+          // Surface the real provider failure (e.g. Apify quota / token) instead
+          // of a silent "0 found", so it's clear why nothing was imported.
+          setError(`לא נמשכו מודעות — שגיאת מקור: ${firstErr}`);
+        } else setMsg(`הסנכרון הושלם: ${inserted} מודעות חדשות, ${updated} עודכנו${errCount ? ` · ${errCount} שגיאות מקור` : ""}${orchSuffix}`);
         setProgress((p) => p ? { ...p, active: false, status: errCount ? "completed_with_errors" : "completed", finishedAt: new Date().toISOString(), found, imported: inserted, updated } : p);
         router.refresh();
       } catch (e) {
