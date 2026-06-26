@@ -59,3 +59,16 @@ export type {
 } from "./scoring/agencyScoringTypes";
 export { weightedOverall, dataConfidence } from "./scoring/agencyScoreBreakdown";
 export { computeAgencyScores, threatAgainstUserArea } from "./scoring/agencyScoreCalculator";
+// ── Signals + Timeline Intelligence (Phase 26.6, pure) ───────────────────────
+export {
+  severityFor, importanceFor, isRiskSignal, SIGNAL_LABEL,
+} from "./intelligence/agencySignalTypes";
+export type {
+  AgencyIntelSignalType, AgencySignalSeverityLevel, AgencySignalStatus,
+  AgencyTerritoryLevel, AgencySnapshot, TerritorySnapshot, DetectedAgencySignal,
+} from "./intelligence/agencySignalTypes";
+export {
+  classifyScoreChange, classifyCountChange, crossedUp, crossedDown,
+} from "./intelligence/agencyChangeDetector";
+export { dedupeKey, metricKey, materiallyChanged, dedupeDetectedBatch } from "./intelligence/agencySignalDedupe";
+export { detectAgencySignals as detectAgencySignalsPure } from "./intelligence/agencySignalDetector";

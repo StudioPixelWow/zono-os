@@ -4443,10 +4443,20 @@ type AgencyScoresRow = {
 type AgencySignalsRow = {
   id: string; organization_id: string; agency_id: string; signal_type: string; severity: string | null;
   title: string; description: string | null; metadata: unknown; created_at: string;
+  // Phase 26.6 (additive)
+  entity_type: string | null; entity_id: string | null; territory_type: string | null;
+  city: string | null; neighborhood: string | null; street: string | null;
+  score_before: number | null; score_after: number | null; importance: number | null;
+  confidence: number | null; status: string; dedupe_key: string | null;
+  detected_at: string; resolved_at: string | null; expires_at: string | null;
 };
 type AgencyTimelineRow = {
   id: string; organization_id: string; agency_id: string; event_type: string; title: string;
   description: string | null; metadata: unknown; event_date: string; created_at: string;
+  // Phase 26.6 (additive)
+  entity_type: string | null; entity_id: string | null; territory_type: string | null;
+  city: string | null; neighborhood: string | null; street: string | null;
+  importance: number | null; dedupe_key: string | null;
 };
 
 // ── Phase 26.1 — Agency Identity Resolver ────────────────────────────────────
