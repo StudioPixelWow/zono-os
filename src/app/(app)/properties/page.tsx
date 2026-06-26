@@ -11,6 +11,14 @@ import { InventoryTabs } from "./InventoryTabs";
 import { ExternalListingsView } from "./ExternalListingsView";
 
 export const dynamic = "force-dynamic";
+// The "Sync Now" button triggers the external-listings sync as a SERVER ACTION
+// invoked from THIS page. In Next.js a server action's execution time is governed
+// by the page segment it runs from — NOT by the API route's config. Without this,
+// the long Apify scrape was killed on the default timeout, leaving the import job
+// stuck "running" with 0 listings pulled. Give it the Node runtime + full budget
+// (clamped to the plan max) so the sync can actually finish.
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
