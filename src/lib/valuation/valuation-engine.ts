@@ -86,30 +86,82 @@ export function computeSimilarity(input: ValuationInput, c: Comparable): number 
   return clamp(Math.round(score), 0, 100);
 }
 
-/** Weighted base price per sqm from comparables (sold weighted higher than listings). */
+/**
+ * Per-source confidence weight. SOLD evidence beats ACTIVE; official + internal
+ * sources beat portals. Mirrors the product spec: Internal SOLD 1.00, GovMap
+ * SOLD 0.95, Madlan SOLD 0.90, Madlan ACTIVE 0.80, Yad2 ACTIVE 0.70, Internal
+ * ACTIVE 0.65.
+ */
+export function sourceWeight(c: Comparable): number {
+  const sold = c.comparableType === "sold";
+  switch (c.source) {
+    case "zono": return sold ? 1.0 : 0.65;
+    case "govmap": return sold ? 0.95 : 0.7;
+    case "tax_authority": return sold ? 0.95 : 0.7;
+    case "madlan": return sold ? 0.9 : 0.8;
+    case "yad2": return sold ? 0.85 : 0.7;
+    default: return sold ? 0.85 : 0.6;
+  }
+}
+
+/** Recent evidence is worth more; decays ~2%/month after the first 3 months. */
+function recencyWeight(c: Comparable): number {
+  const d = c.saleDate ?? c.listingDate;
+  if (!d) return 0.9;
+  const months = (Date.now() - new Date(d).getTime()) / (1000 * 60 * 60 * 24 * 30);
+  if (!Number.isFinite(months) || months < 0) return 1;
+  return clamp(1 - Math.max(0, months - 3) * 0.02, 0.55, 1);
+}
+
+/** Drop price-per-sqm outliers (IQR fence), but never the majority of evidence. */
+function removeOutliers(comps: Comparable[]): Comparable[] {
+  const xs = comps.map((c) => c.pricePerSqm as number).filter((x) => x > 0).sort((a, b) => a - b);
+  if (xs.length < 6) return comps; // too few to trim safely
+  const q = (p: number) => xs[Math.floor((xs.length - 1) * p)];
+  const q1 = q(0.25), q3 = q(0.75), iqr = q3 - q1;
+  const lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
+  const kept = comps.filter((c) => { const v = c.pricePerSqm as number; return v >= lo && v <= hi; });
+  return kept.length >= Math.ceil(comps.length * 0.5) ? kept : comps;
+}
+
+/**
+ * Weighted base price per sqm from ALL priced comparables. Similarity RANKS the
+ * evidence (with a floor) — it never deletes it — so as long as a single priced
+ * comparable exists in any source, a real base is produced (never ₪0). The base
+ * blends a source/similarity/recency-weighted mean with the median for robustness.
+ */
 export function computeBasePricePerSqm(
   input: ValuationInput, comparables: Comparable[], market: MarketSnapshot | null,
 ): { basePpsqm: number | null; avgSimilarity: number; usable: Comparable[] } {
-  const usable = comparables
+  // Keep EVERY priced comparable — only similarity-rank them.
+  const scored = comparables
     .map((c) => ({ ...c, similarityScore: computeSimilarity(input, c) }))
-    .filter((c) => (c.pricePerSqm ?? 0) > 0 && (c.similarityScore ?? 0) >= 25);
+    .filter((c) => (c.pricePerSqm ?? 0) > 0);
 
-  if (usable.length === 0) {
+  if (scored.length === 0) {
+    // No priced comparable anywhere → last-resort market baseline (still real, not zero).
     const fallback = market?.medianPricePerSqm ?? market?.avgPricePerSqm ?? null;
     return { basePpsqm: fallback, avgSimilarity: 0, usable: [] };
   }
 
+  const trimmed = removeOutliers(scored);
   let wsum = 0, vsum = 0, simSum = 0;
-  for (const c of usable) {
-    const sim = (c.similarityScore ?? 0) / 100;
-    const typeW = c.comparableType === "sold" ? 1 : 0.7;
-    const w = Math.max(0.05, sim * sim * typeW); // emphasize close matches
+  for (const c of trimmed) {
+    const sim = Math.max(0.12, (c.similarityScore ?? 0) / 100); // floor: far comps still count
+    const w = Math.max(0.03, sim * sourceWeight(c) * recencyWeight(c));
     wsum += w;
     vsum += w * (c.pricePerSqm as number);
     simSum += c.similarityScore ?? 0;
   }
   const weighted = wsum > 0 ? vsum / wsum : null;
-  return { basePpsqm: weighted, avgSimilarity: Math.round(simSum / usable.length), usable };
+  const med = median(trimmed.map((c) => c.pricePerSqm as number));
+  // Blend weighted mean (65%) with median (35%) to resist skew; fall back to either.
+  const base = weighted != null && med != null
+    ? Math.round(0.65 * weighted + 0.35 * med)
+    : (weighted ?? med ?? market?.medianPricePerSqm ?? market?.avgPricePerSqm ?? null);
+
+  const usable = scored.sort((a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0));
+  return { basePpsqm: base, avgSimilarity: Math.round(simSum / trimmed.length), usable };
 }
 
 // ── Adjustments (% impacts on the built-area value) ──────────────────────────
@@ -293,7 +345,46 @@ export interface RunValuationArgs {
   market?: MarketSnapshot | null;   // optional precomputed; else derived from comparables
 }
 
-export function runValuation({ input, comparables, brokerSold, market: marketIn }: RunValuationArgs): ValuationResult {
+/**
+ * Merge the same property appearing across sources into one comparable, keeping
+ * the highest-confidence source (SOLD > ACTIVE, official/internal > portal).
+ */
+export function dedupeComparables(comparables: Comparable[]): Comparable[] {
+  const keep = new Map<string, Comparable>();
+  const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+  for (const c of comparables) {
+    // Address+geometry fingerprint (no coords on the Comparable type) catches the
+    // same property arriving from Yad2/Madlan/GovMap/internal under different ids.
+    const addrKey = `addr:${norm(c.city)}:${norm(c.neighborhood)}:${norm(c.street)}:${c.rooms ?? "?"}:${c.sqm ?? "?"}:${c.floor ?? "?"}`;
+    const key = (norm(c.street) || norm(c.neighborhood)) ? addrKey : `ext:${c.source}:${c.externalId ?? Math.random()}`;
+    const prev = keep.get(key);
+    if (!prev) { keep.set(key, c); continue; }
+    // Prefer SOLD, then higher source weight; merge missing fields from the loser.
+    const better = (c.comparableType === "sold" && prev.comparableType !== "sold")
+      || (c.comparableType === prev.comparableType && sourceWeight(c) > sourceWeight(prev));
+    const winner = better ? c : prev;
+    const loser = better ? prev : c;
+    keep.set(key, {
+      ...winner,
+      sqm: winner.sqm ?? loser.sqm, rooms: winner.rooms ?? loser.rooms,
+      floor: winner.floor ?? loser.floor, buildingYear: winner.buildingYear ?? loser.buildingYear,
+      neighborhood: winner.neighborhood ?? loser.neighborhood, street: winner.street ?? loser.street,
+      pricePerSqm: winner.pricePerSqm ?? loser.pricePerSqm, imageUrl: winner.imageUrl ?? loser.imageUrl,
+    });
+  }
+  return [...keep.values()];
+}
+
+export function runValuation({ input, comparables: rawComparables, brokerSold, market: marketIn }: RunValuationArgs): ValuationResult {
+  // Normalize: derive price-per-sqm from price/sqm when a source omitted it, so
+  // no priced comparable is wasted. Then unify ALL sources → dedupe.
+  const normalized = rawComparables.map((c) => {
+    const ppsqm = (c.pricePerSqm ?? 0) > 0
+      ? c.pricePerSqm
+      : (c.price && c.sqm && c.sqm > 0 ? Math.round(c.price / c.sqm) : c.pricePerSqm);
+    return ppsqm === c.pricePerSqm ? c : { ...c, pricePerSqm: ppsqm };
+  });
+  const comparables = dedupeComparables(normalized.filter((c) => (c.pricePerSqm ?? 0) > 0));
   const sold = comparables.filter((c) => c.comparableType === "sold");
   const listings = comparables.filter((c) => c.comparableType === "listing");
   const market = marketIn ?? buildMarketSnapshot(sold, listings);
@@ -301,6 +392,21 @@ export function runValuation({ input, comparables, brokerSold, market: marketIn 
   const { basePpsqm, avgSimilarity, usable } = computeBasePricePerSqm(input, comparables, market);
   const built = input.builtSqm ?? 0;
   const evidenceCount = usable.length || (market.transactionCount + market.activeListingCount);
+
+  // Diagnostics — why a valuation could/couldn't be produced.
+  if (typeof console !== "undefined") {
+    const priced = comparables.filter((c) => (c.pricePerSqm ?? 0) > 0);
+    const internal = priced.filter((c) => c.source === "zono").length;
+    const external = priced.length - internal;
+    const txns = priced.filter((c) => c.comparableType === "sold").length;
+    const sources = [...new Set(priced.map((c) => c.source))];
+    console.info("[valuation]", {
+      internalComparables: internal, externalComparables: external, transactions: txns,
+      sourcesUsed: sources, basePpsqm: basePpsqm ? Math.round(basePpsqm) : null,
+      avgSimilarity, evidenceCount, builtSqm: built,
+      reason: !basePpsqm ? "no_priced_comparables_and_no_market" : built <= 0 ? "missing_built_sqm" : "ok",
+    });
+  }
 
   // No usable price evidence → honest low-confidence empty result.
   if (!basePpsqm || built <= 0) {
