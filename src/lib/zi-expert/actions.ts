@@ -282,6 +282,86 @@ export async function loadDiagnosticRunsAction(): Promise<ZiResult<DiagnosticRun
   catch (e) { return { ok: false, error: e instanceof Error ? e.message : "load_failed" }; }
 }
 
+// ── ZI Interactive Learning actions (Phase 25) ───────────────────────────────
+import {
+  walkthroughsForRole, tutorialsForRole, faqForModule, GLOSSARY, LEARNING_PATHS,
+  recommendLearning, searchLearning,
+} from "./learning";
+import type {
+  Walkthrough, Tutorial, FaqItem, GlossaryTerm, LearningPath, LearningProgress,
+  LearningRecommendation, LearningSearchHit, LearningKind,
+} from "./learning/types";
+import { loadProgress, upsertProgress } from "./learning-repository";
+
+export interface LearningData {
+  progress: LearningProgress[];
+  recommendations: LearningRecommendation[];
+  walkthroughs: Walkthrough[];
+  tutorials: Tutorial[];
+  faq: FaqItem[];
+  glossary: GlossaryTerm[];
+  paths: LearningPath[];
+}
+
+/** Everything the ZI "Learn" panel needs for the current user + page. */
+export async function loadLearningAction(currentModule: string | null): Promise<ZiResult<LearningData>> {
+  try {
+    const role = asRoleKey((await getDashboardContext()).user?.roleKey ?? null);
+    const progress = await loadProgress();
+    return {
+      ok: true,
+      data: {
+        progress,
+        recommendations: recommendLearning({ role, progress, currentModule }),
+        walkthroughs: walkthroughsForRole(role),
+        tutorials: tutorialsForRole(role),
+        faq: faqForModule(currentModule, role ?? "viewer"),
+        glossary: GLOSSARY,
+        paths: LEARNING_PATHS,
+      },
+    };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "learning_load_failed" }; }
+}
+
+/** Record viewing / progress / completion / favorite for a lesson (support-only). */
+export async function markLearningAction(input: { kind: LearningKind; slug: string; status?: "viewed" | "in_progress" | "completed"; favorite?: boolean; lastStep?: number }): Promise<ZiResult<true>> {
+  try { await upsertProgress(input); return { ok: true, data: true }; }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : "learning_mark_failed" }; }
+}
+
+/** Search learning content (built-ins) + the knowledge base, unified. */
+export async function searchLearningAction(query: string): Promise<ZiResult<LearningSearchHit[]>> {
+  try {
+    const role = asRoleKey((await getDashboardContext()).user?.roleKey ?? null);
+    const builtin = searchLearning(query, role);
+    const articles = await loadKnowledgeArticles();
+    const kHits = searchKnowledge(articles, query, { roleKey: role, moduleId: null, route: null }, 6)
+      .map((h): LearningSearchHit => ({ kind: "knowledge", slug: h.article.slug, title: h.article.title, snippet: h.article.summary, module: h.article.module, score: Math.round(h.score) }));
+    const merged = [...builtin, ...kHits].sort((a, b) => b.score - a.score).slice(0, 14);
+    return { ok: true, data: merged };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "learning_search_failed" }; }
+}
+
+export interface LearningAdminData {
+  tutorials: number; walkthroughs: number; glossary: number; faq: number;
+  mostRequested: string[];
+}
+
+/** Admin overview for /admin/zi-learning (managers+). Read-only counts + gaps. */
+export async function loadLearningAdminAction(): Promise<ZiResult<LearningAdminData>> {
+  try {
+    const role = asRoleKey((await getDashboardContext()).user?.roleKey ?? null);
+    const mostRequested = await listMissingAnswerQuestions(20).catch(() => []);
+    return {
+      ok: true,
+      data: {
+        tutorials: tutorialsForRole(role).length, walkthroughs: walkthroughsForRole(role).length,
+        glossary: GLOSSARY.length, faq: faqForModule(null, role ?? "viewer").length, mostRequested,
+      },
+    };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "learning_admin_failed" }; }
+}
+
 /** Test the knowledge search from the admin page (returns titles + scores). */
 export async function testKnowledgeSearchAction(query: string): Promise<ZiResult<{ title: string; category: string; score: number; reason: string }[]>> {
   try {

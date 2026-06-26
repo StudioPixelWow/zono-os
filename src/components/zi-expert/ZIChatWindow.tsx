@@ -7,6 +7,8 @@ import { Search, Pin, Trash2, ArrowUpRight, Send, BookOpen, ThumbsUp, ThumbsDown
 import { ZIHeader } from "./ZIHeader";
 import { ZIConversation } from "./ZIConversation";
 import { ZISuggestions } from "./ZISuggestions";
+import { ZILearnPanel } from "./ZILearnPanel";
+import type { LearningKind } from "@/lib/zi-expert/learning/types";
 import { groupConversationsByRecency, searchConversations } from "@/lib/zi-expert/conversation";
 import type { ZiConversation, ZiMessage, ZiSuggestion } from "@/lib/zi-expert/types";
 import type { FeedbackRating } from "@/lib/zi-expert/knowledge-types";
@@ -34,6 +36,10 @@ export interface ZIChatWindowProps {
   answerMeta: ZiAnswerMeta | null;
   onFeedback: (rating: FeedbackRating) => void;
   onDiagnose: () => void;
+  learnOpen: boolean;
+  onToggleLearn: () => void;
+  learnModule: string | null;
+  onOpenLesson: (kind: LearningKind, slug: string, title: string) => void;
 }
 
 export function ZIChatWindow(p: ZIChatWindowProps) {
@@ -48,9 +54,11 @@ export function ZIChatWindow(p: ZIChatWindowProps) {
 
   return (
     <div className="zi-window flex h-full flex-col" dir="rtl">
-      <ZIHeader historyOpen={p.historyOpen} onToggleHistory={p.onToggleHistory} onNewChat={p.onNewChat} onClose={p.onClose} />
+      <ZIHeader historyOpen={p.historyOpen} onToggleHistory={p.onToggleHistory} onNewChat={p.onNewChat} onClose={p.onClose} learnOpen={p.learnOpen} onToggleLearn={p.onToggleLearn} />
 
-      {p.historyOpen ? (
+      {p.learnOpen ? (
+        <ZILearnPanel currentModule={p.learnModule} onOpenLesson={p.onOpenLesson} onAskGlossary={p.onSubmit} />
+      ) : p.historyOpen ? (
         <HistoryPanel
           conversations={searchConversations(p.conversations, query)}
           query={query}

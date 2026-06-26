@@ -4458,6 +4458,31 @@ type AgencyResolutionCandidatesRow = {
   resolved_at: string | null; created_at: string;
 };
 
+// ── Phase 25 — ZI Interactive Learning ───────────────────────────────────────
+type ZiLearningProgressRow = {
+  id: string; organization_id: string; user_id: string;
+  kind: "tutorial" | "walkthrough" | "glossary" | "faq" | "path"; slug: string;
+  status: "viewed" | "in_progress" | "completed"; favorite: boolean; last_step: number;
+  created_at: string; updated_at: string;
+};
+type ZiTutorialsRow = {
+  id: string; organization_id: string; slug: string; module: string | null; title: string;
+  summary: string | null; steps: unknown; role_min: string; published: boolean; created_at: string; updated_at: string;
+};
+type ZiWalkthroughsRow = {
+  id: string; organization_id: string; slug: string; module: string | null; title: string; goal: string | null;
+  estimated_minutes: number; prerequisites: unknown; steps: unknown; common_mistakes: unknown; pro_tips: unknown;
+  role_min: string; published: boolean; created_at: string; updated_at: string;
+};
+type ZiGlossaryRow = {
+  id: string; organization_id: string; slug: string; term: string; definition: string;
+  where_used: string | null; related: unknown; created_at: string; updated_at: string;
+};
+type ZiFaqRow = {
+  id: string; organization_id: string; slug: string; module: string | null; question: string; answer: string;
+  role_min: string; published: boolean; created_at: string; updated_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -4498,6 +4523,11 @@ export interface Database {
       agency_timeline: TableShape<AgencyTimelineRow, "organization_id" | "agency_id" | "event_type" | "title">;
       agency_aliases: TableShape<AgencyAliasesRow, "organization_id" | "agency_id" | "alias" | "normalized_alias">;
       agency_resolution_candidates: TableShape<AgencyResolutionCandidatesRow, "organization_id" | "raw_text">;
+      zi_learning_progress: TableShape<ZiLearningProgressRow, "organization_id" | "user_id" | "kind" | "slug">;
+      zi_tutorials: TableShape<ZiTutorialsRow, "organization_id" | "slug" | "title">;
+      zi_walkthroughs: TableShape<ZiWalkthroughsRow, "organization_id" | "slug" | "title">;
+      zi_glossary: TableShape<ZiGlossaryRow, "organization_id" | "slug" | "term" | "definition">;
+      zi_faq: TableShape<ZiFaqRow, "organization_id" | "slug" | "question" | "answer">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       property_journeys: TableShape<
         PropertyJourneysRow,

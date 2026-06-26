@@ -16,7 +16,10 @@ import type { IssueType } from "@/lib/zi-expert/diagnostic-types";
 import {
   askZiAction, deleteConversationAction, loadConversationAction, loadConversationsAction,
   pinConversationAction, rateMessageAction, submitKnowledgeFeedbackAction, runDiagnosticsAction,
+  markLearningAction,
 } from "@/lib/zi-expert/actions";
+import { walkthroughBySlug, tutorialBySlug, walkthroughAsSteps } from "@/lib/zi-expert/learning";
+import type { LearningKind } from "@/lib/zi-expert/learning/types";
 import type { ZiConversation, ZiMessage } from "@/lib/zi-expert/types";
 import type { FeedbackRating } from "@/lib/zi-expert/knowledge-types";
 
@@ -39,6 +42,7 @@ export function ZIWidget() {
 
   const [open, setOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [learnOpen, setLearnOpen] = useState(false);
   const [conversations, setConversations] = useState<ZiConversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ZiMessage[]>([]);
@@ -177,6 +181,26 @@ export function ZIWidget() {
   // Keep the forward ref pointed at the latest runDiagnostics.
   useEffect(() => { diagnoseRef.current = (it, ut) => { void runDiagnostics(it, ut); }; }, [runDiagnostics]);
 
+  /** Open a learning lesson — renders it as steps in the chat + records progress.
+   *  Support-only: ZI teaches the steps, the user performs them. */
+  const openLesson = useCallback((kind: LearningKind, slug: string, title: string) => {
+    setLearnOpen(false);
+    let content: string | null = null;
+    if (kind === "walkthrough") { const w = walkthroughBySlug(slug); content = w ? walkthroughAsSteps(w) : null; }
+    else if (kind === "tutorial") {
+      const t = tutorialBySlug(slug);
+      if (t) content = [`**${t.title}** · ⏱️ ${t.estimatedMinutes} דק׳`, t.summary, "", ...t.steps.map((s, i) => `**${i + 1}. ${s.title}**\n${s.body}`)].join("\n");
+    }
+    if (!content) content = `הנה ההסבר על „${title}". שאל/י אותי כל שאלה.`;
+    const msg: ZiMessage = {
+      id: tempId(), conversationId: conversationId ?? "pending", role: "assistant", content,
+      source: "fallback", route: client.route, moduleId: null, rating: null, createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, { id: tempId(), conversationId: conversationId ?? "pending", role: "user", content: `למד אותי: ${title}`, source: null, route: client.route, moduleId: null, rating: null, createdAt: new Date().toISOString() }]);
+    revealAnswer(msg);
+    void markLearningAction({ kind, slug, status: "completed" });
+  }, [conversationId, client, revealAnswer]);
+
   const openConversation = useCallback(async (id: string) => {
     const res = await loadConversationAction(id, { limit: 100, offset: 0 });
     if (res.ok) {
@@ -194,6 +218,7 @@ export function ZIWidget() {
     setStreaming(null);
     setThinking(false);
     setHistoryOpen(false);
+    setLearnOpen(false);
     setAnswerMeta(null);
   }, []);
 
@@ -285,6 +310,10 @@ export function ZIWidget() {
               answerMeta={streaming === null ? answerMeta : null}
               onFeedback={sendFeedback}
               onDiagnose={runDiagnostics}
+              learnOpen={learnOpen}
+              onToggleLearn={() => { setLearnOpen((v) => !v); setHistoryOpen(false); }}
+              learnModule={null}
+              onOpenLesson={openLesson}
             />
           </motion.div>
         )}
