@@ -4397,6 +4397,50 @@ type ZiDiagnosticRunsRow = {
   created_at: string;
 };
 
+// ── Phase 26.0 — Agency Foundation ───────────────────────────────────────────
+type AgenciesRow = {
+  id: string; organization_id: string; name: string; normalized_name: string;
+  legal_name: string | null; slug: string; logo_url: string | null; website: string | null;
+  description: string | null; founded_year: number | null; headquarters_city: string | null;
+  headquarters_address: string | null; google_place_id: string | null; phone: string | null;
+  email: string | null; facebook_url: string | null; instagram_url: string | null;
+  linkedin_url: string | null; youtube_url: string | null; active: boolean;
+  created_at: string; updated_at: string;
+};
+type AgencyBranchesRow = {
+  id: string; organization_id: string; agency_id: string; city: string | null;
+  neighborhood: string | null; address: string | null; phone: string | null; email: string | null;
+  latitude: number | null; longitude: number | null; created_at: string;
+};
+type AgencyAgentsRow = {
+  id: string; organization_id: string; agency_id: string; agent_id: string | null;
+  role: string | null; confidence_score: number | null; detection_method: string | null;
+  first_detected_at: string; last_verified_at: string | null;
+};
+type AgencyIdentityMatchesRow = {
+  id: string; organization_id: string; agency_id: string; source: string; source_url: string | null;
+  matched_name: string | null; confidence: number | null; evidence: unknown; created_at: string;
+};
+type AgencyProfilesRow = {
+  id: string; organization_id: string; agency_id: string; specialties: string[]; service_areas: string[];
+  languages: string[]; luxury: boolean; commercial: boolean; investments: boolean; rentals: boolean;
+  projects: boolean; notes: string | null; created_at: string; updated_at: string;
+};
+type AgencyScoresRow = {
+  id: string; organization_id: string; agency_id: string; market_strength: number | null;
+  growth: number | null; digital: number | null; luxury: number | null; inventory: number | null;
+  coverage: number | null; projects: number | null; reputation: number | null; momentum: number | null;
+  overall: number | null; updated_at: string;
+};
+type AgencySignalsRow = {
+  id: string; organization_id: string; agency_id: string; signal_type: string; severity: string | null;
+  title: string; description: string | null; metadata: unknown; created_at: string;
+};
+type AgencyTimelineRow = {
+  id: string; organization_id: string; agency_id: string; event_type: string; title: string;
+  description: string | null; metadata: unknown; event_date: string; created_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -4427,6 +4471,14 @@ export interface Database {
       zi_knowledge_sources: TableShape<ZiKnowledgeSourcesRow, "name">;
       zi_knowledge_feedback: TableShape<ZiKnowledgeFeedbackRow, "organization_id" | "user_id" | "question" | "rating">;
       zi_diagnostic_runs: TableShape<ZiDiagnosticRunsRow, "organization_id" | "correlation_id" | "issue_type" | "status">;
+      agencies: TableShape<AgenciesRow, "organization_id" | "name" | "normalized_name" | "slug">;
+      agency_branches: TableShape<AgencyBranchesRow, "organization_id" | "agency_id">;
+      agency_agents: TableShape<AgencyAgentsRow, "organization_id" | "agency_id">;
+      agency_identity_matches: TableShape<AgencyIdentityMatchesRow, "organization_id" | "agency_id" | "source">;
+      agency_profiles: TableShape<AgencyProfilesRow, "organization_id" | "agency_id">;
+      agency_scores: TableShape<AgencyScoresRow, "organization_id" | "agency_id">;
+      agency_signals: TableShape<AgencySignalsRow, "organization_id" | "agency_id" | "signal_type" | "title">;
+      agency_timeline: TableShape<AgencyTimelineRow, "organization_id" | "agency_id" | "event_type" | "title">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       property_journeys: TableShape<
         PropertyJourneysRow,
