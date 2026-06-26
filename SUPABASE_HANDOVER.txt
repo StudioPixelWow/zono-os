@@ -86,3 +86,13 @@ DB that already has some of them won't error.
 -- creates: agency_intelligence_reports (executive_summary, SWOT, recommendations,
 --   key_signals/scores, source_snapshot, data_confidence) + RLS
 --   unique (organization_id, agency_id, report_type, period_start, period_end)
+
+-- Phase 26.8 — Competition Radar UI™
+-- NO SQL REQUIRED. UI-only phase; reads the agency intelligence tables created
+-- in 26.3–26.7. Nothing to run for this phase.
+
+-- Phase 26.9 — RAIN Network / AI War Room Foundation™
+\i supabase/migrations/20260766120000_rain_network.sql
+-- creates: rain_nodes (+ indexes + RLS), rain_edges (+ indexes + RLS)
+--   rain_nodes unique  (organization_id, node_type, entity_id)
+--   rain_edges unique  (organization_id, source_node_id, target_node_id, edge_type)

@@ -4485,6 +4485,19 @@ type AgencyEntityRelationshipsRow = {
   created_at: string; updated_at: string;
 };
 
+// ── Phase 26.9 — RAIN Network / AI War Room Foundation ───────────────────────
+type RainNodesRow = {
+  id: string; organization_id: string; node_type: string; entity_id: string;
+  label: string; subtitle: string | null; city: string | null; neighborhood: string | null;
+  street: string | null; importance_score: number | null; confidence: string;
+  metadata: unknown; created_at: string; updated_at: string;
+};
+type RainEdgesRow = {
+  id: string; organization_id: string; source_node_id: string; target_node_id: string;
+  edge_type: string; strength: number | null; confidence: string; evidence: unknown;
+  active: boolean; first_seen_at: string; last_seen_at: string; created_at: string; updated_at: string;
+};
+
 // ── Phase 4 — Valuation Intelligence & Explainability ────────────────────────
 type ValuationHistoryRow = {
   id: string; organization_id: string; valuation_id: string; property_id: string | null;
@@ -4603,6 +4616,8 @@ export interface Database {
       agency_entity_relationships: TableShape<AgencyEntityRelationshipsRow, "organization_id" | "agency_id" | "entity_type" | "entity_id" | "relationship_type">;
       agency_territory_stats: TableShape<AgencyTerritoryStatsRow, "organization_id" | "agency_id" | "territory_type" | "territory_key">;
       agency_intelligence_reports: TableShape<AgencyIntelligenceReportsRow, "organization_id" | "agency_id" | "report_type">;
+      rain_nodes: TableShape<RainNodesRow, "organization_id" | "node_type" | "entity_id" | "label">;
+      rain_edges: TableShape<RainEdgesRow, "organization_id" | "source_node_id" | "target_node_id" | "edge_type">;
       valuation_history: TableShape<ValuationHistoryRow, "organization_id" | "valuation_id">;
       valuation_explanations: TableShape<ValuationExplanationsRow, "organization_id" | "valuation_id">;
       valuation_accuracy: TableShape<ValuationAccuracyRow, "organization_id">;
