@@ -110,3 +110,7 @@ DB that already has some of them won't error.
 \i supabase/migrations/20260768120000_agency_ai_feedback.sql
 -- creates: agency_ai_feedback (learning + audit log for every manual review) (+ indexes + RLS)
 -- alters agency_resolution_candidates: status check now also allows 'ignored'
+
+-- Phase 26.13 — Agency Intelligence API Layer™
+-- NO SQL REQUIRED. Unified read/composition layer over existing tables only.
+-- /competition-radar overview + top-competitors now delegate to this API.
