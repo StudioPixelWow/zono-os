@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getSyncProgress, getListingPreview, promoteExternalListing, runImport, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncProgress, type SyncSummary, type SyncMode } from "./service";
+import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getSyncProgress, getListingPreview, promoteExternalListing, runImport, startSyncJob, runSyncChunk, finishSyncJob, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncProgress, type SyncSummary, type SyncMode, type SyncPlan, type ChunkResult } from "./service";
 
 export interface ExternalActionState {
   error?: string;
@@ -36,6 +36,38 @@ export async function syncNowAction(
   mode?: SyncMode,
 ): Promise<ExternalActionState> {
   return doSync({ localityId: localityId || null, sources: source ? [source] : undefined, mode });
+}
+
+// ── Chunked sync actions (browser drives one Apify run per request) ──────────
+export async function startSyncJobAction(
+  localityId?: string | null,
+  source?: string | null,
+  mode?: SyncMode,
+): Promise<{ plan?: SyncPlan; error?: string }> {
+  try {
+    const plan = await startSyncJob({ localityId: localityId || null, sources: source ? [source] : undefined, mode });
+    return { plan };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "שגיאה בהפעלת הסנכרון" };
+  }
+}
+
+export async function runSyncChunkAction(jobId: string, city: string, source: string, perCity: number): Promise<ChunkResult> {
+  try {
+    return await runSyncChunk(jobId, city, source, perCity);
+  } catch (e) {
+    return { found: 0, inserted: 0, updated: 0, error: e instanceof Error ? e.message : "שגיאה" };
+  }
+}
+
+export async function finishSyncJobAction(jobId: string, cities: string[], errorCount = 0): Promise<ExternalActionState> {
+  try {
+    const summary = await finishSyncJob(jobId, cities, errorCount);
+    revalidatePath("/properties");
+    return { summary };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "שגיאה בסיום הסנכרון" };
+  }
 }
 
 export async function promoteExternalListingAction(listingId: string): Promise<ExternalActionState> {

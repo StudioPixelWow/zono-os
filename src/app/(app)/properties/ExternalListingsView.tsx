@@ -15,6 +15,9 @@ import {
   importYad2Action,
   promoteExternalListingAction,
   syncNowAction,
+  startSyncJobAction,
+  runSyncChunkAction,
+  finishSyncJobAction,
 } from "@/lib/external-listings/actions";
 import type { SyncProgress } from "@/lib/external-listings/service";
 import { recalcDecisionBrainAction } from "@/lib/decision-intelligence/actions";
@@ -163,22 +166,46 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
     } catch { /* keep polling */ }
   };
 
+  // Chunked sync: the browser drives ONE Apify run (city × source) per request so
+  // no single request can hit the serverless time limit. Counters fill live.
   const startSync = () => {
     setError(null); setMsg(null); setSyncing(true);
     setSyncStartTs(nowMs()); setNowTs(nowMs());
-    setProgress({ active: true, hasJob: false, status: "running", provider: "", startedAt: null, finishedAt: null, totalCities: 0, completedCount: 0, currentCity: null, found: 0, imported: 0, updated: 0, error: null, recentLogs: [], apifyConfigured: true });
-    // Fire the (long) sync — it runs to completion server-side; we poll meanwhile.
-    syncNowAction(null, null, syncMode).then((r) => {
-      stopTimers(); setSyncing(false);
-      if (r?.error) setError(r.error);
-      else if (r?.summary) setMsg(`הסנכרון הושלם: ${r.summary.inserted} מודעות חדשות, ${r.summary.updated} עודכנו${r.summary.errors.length ? ` · ${r.summary.errors.length} שגיאות` : ""}`);
-      getSyncProgressAction().then(setProgress).catch(() => {});
-      router.refresh();
-    }).catch((e) => { stopTimers(); setSyncing(false); setError(e instanceof Error ? e.message : "הסנכרון נכשל"); });
     stopTimers();
-    pollRef.current = setInterval(poll, 2500);
     clockRef.current = setInterval(() => setNowTs(nowMs()), 1000);
-    poll();
+    setProgress({ active: true, hasJob: false, status: "running", provider: "", startedAt: null, finishedAt: null, totalCities: 0, completedCount: 0, currentCity: null, found: 0, imported: 0, updated: 0, error: null, recentLogs: [], apifyConfigured: true });
+
+    (async () => {
+      try {
+        const { plan, error: planErr } = await startSyncJobAction(null, null, syncMode);
+        if (planErr || !plan) { stopTimers(); setSyncing(false); setError(planErr ?? "שגיאה בהפעלת הסנכרון"); return; }
+        if (!plan.cities.length) { stopTimers(); setSyncing(false); setError("אין אזורי פעילות פעילים לארגון"); return; }
+        setProgress((p) => p ? { ...p, hasJob: true, totalCities: plan.cities.length, provider: plan.sources.join("+"), apifyConfigured: plan.apifyConfigured } : p);
+
+        let found = 0, inserted = 0, updated = 0, completed = 0, errCount = 0;
+        for (const city of plan.cities) {
+          setProgress((p) => p ? { ...p, currentCity: city } : p);
+          for (const source of plan.sources) {
+            const r = await runSyncChunkAction(plan.jobId, city, source, plan.perCity);
+            found += r.found; inserted += r.inserted; updated += r.updated;
+            if (r.error) errCount++;
+            setProgress((p) => p ? { ...p, found, imported: inserted, updated, currentCity: city, completedCount: completed } : p);
+          }
+          completed++;
+          setProgress((p) => p ? { ...p, completedCount: completed } : p);
+        }
+
+        const fin = await finishSyncJobAction(plan.jobId, plan.cities, errCount);
+        stopTimers(); setSyncing(false);
+        if (fin?.error) setError(fin.error);
+        else setMsg(`הסנכרון הושלם: ${inserted} מודעות חדשות, ${updated} עודכנו${errCount ? ` · ${errCount} שגיאות מקור` : ""}`);
+        setProgress((p) => p ? { ...p, active: false, status: errCount ? "completed_with_errors" : "completed", finishedAt: new Date().toISOString(), found, imported: inserted, updated } : p);
+        router.refresh();
+      } catch (e) {
+        stopTimers(); setSyncing(false);
+        setError(e instanceof Error ? e.message : "הסנכרון נכשל");
+      }
+    })();
   };
 
   // Resume the live panel if a sync is already running (e.g. user navigated back).

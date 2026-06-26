@@ -383,6 +383,119 @@ export async function runImport(opts: SyncOptions = {}): Promise<SyncSummary> {
   return syncOrg(db, profile.org_id, opts, user?.id ?? null);
 }
 
+// ── CHUNKED SYNC ───────────────────────────────────────────────────────────
+// A single long sync (many cities × sources) can exceed the serverless time
+// limit (especially Vercel Hobby's hard 60s) and get killed → "unexpected
+// response". The browser instead drives the sync ONE (city × source) Apify run
+// per request — the exact profile of the admin debug tool that already works —
+// so every request finishes well within budget and counters fill live.
+
+export interface SyncPlan {
+  jobId: string;
+  cities: string[];
+  sources: string[];
+  perCity: number;
+  mode: SyncMode;
+  apifyConfigured: boolean;
+}
+export interface ChunkResult { found: number; inserted: number; updated: number; error: string | null }
+
+/** Create the import job + return the work plan (no scraping happens here). */
+export async function startSyncJob(opts: SyncOptions = {}): Promise<SyncPlan> {
+  const { user, profile } = await getSessionContext();
+  if (!profile) throw new Error("not authenticated");
+  const db = (await createClient()) as unknown as DB;
+  const orgId = profile.org_id;
+  const sources = opts.sources?.length ? opts.sources : ["yad2", "madlan"];
+  const mode = opts.mode ?? "quick";
+  const modeCfg = SYNC_MODE_LIMITS[mode] ?? SYNC_MODE_LIMITS.quick;
+  const perCity = modeCfg.perCity;
+  const maxCities = Math.min(modeCfg.maxCities, MAX_CITIES_PER_SYNC);
+  const all = await activeLocalities(db, orgId, opts.localityId);
+  const cities = all.slice(0, maxCities).map((l) => l.name);
+  const { data: job } = await db
+    .from("import_jobs")
+    .insert({
+      org_id: orgId, provider: sources.join("+"), status: "running",
+      started_at: new Date().toISOString(), created_by: user?.id ?? null,
+      params: { ...opts, mode, chunked: true, totalCities: cities.length, completedCount: 0 } as never,
+    })
+    .select("id").single();
+  const jobId = job?.id as string;
+  await db.from("import_job_logs").insert({
+    org_id: orgId, job_id: jobId, level: "info",
+    message: `התחלת סנכרון · ${cities.length} ערים · ${sources.join("+")} · עד ${perCity} מודעות לעיר`,
+  });
+  return { jobId, cities, sources, perCity, mode, apifyConfigured: isApifyConfigured() };
+}
+
+/** Scrape exactly ONE city from ONE source, upsert, bump job counters. Fast. */
+export async function runSyncChunk(jobId: string, city: string, source: string, perCity: number): Promise<ChunkResult> {
+  const { profile } = await getSessionContext();
+  if (!profile) throw new Error("not authenticated");
+  const db = (await createClient()) as unknown as DB;
+  const orgId = profile.org_id;
+  const log = (message: string, level = "info") => db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level });
+  if (!isApifyConfigured() && process.env.NODE_ENV === "production") {
+    await log("APIFY_TOKEN חסר — ייבוא חיצוני אינו זמין", "error");
+    return { found: 0, inserted: 0, updated: 0, error: "APIFY_TOKEN missing" };
+  }
+  const t0 = Date.now();
+  try {
+    const provider = getProvider(source);
+    const raws = await provider.searchListings(city, perCity);
+    const listings = raws.map((r) => provider.normalizeListing(r));
+    const r = await upsertListings(db, orgId, source, listings, jobId);
+    const ms = Date.now() - t0;
+    await log(`${source} · ${city}: ${listings.length} פריטים ב-${ms}ms (${r.inserted} חדשים, ${r.updated} עודכנו)`);
+    // Bump persisted counters (chunks run sequentially from the client).
+    try {
+      const { data: j } = await db.from("import_jobs").select("total_found,total_imported,total_updated,params").eq("id", jobId).single();
+      const params = (j?.params ?? {}) as Record<string, unknown>;
+      await db.from("import_jobs").update({
+        total_found: (j?.total_found ?? 0) + listings.length,
+        total_imported: (j?.total_imported ?? 0) + r.inserted,
+        total_updated: (j?.total_updated ?? 0) + r.updated,
+        params: { ...params, currentCity: city } as never,
+      }).eq("id", jobId);
+    } catch { /* counter bump is best-effort */ }
+    return { found: listings.length, inserted: r.inserted, updated: r.updated, error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה";
+    await log(`כשל ב-${source} · ${city} (${Date.now() - t0}ms): ${msg}`, "error");
+    return { found: 0, inserted: 0, updated: 0, error: msg };
+  }
+}
+
+/** Finalize a chunked sync: dedupe, broker detection, geocode, mark completed. */
+export async function finishSyncJob(jobId: string, cities: string[], errorCount = 0): Promise<SyncSummary> {
+  const { profile } = await getSessionContext();
+  if (!profile) throw new Error("not authenticated");
+  const db = (await createClient()) as unknown as DB;
+  const orgId = profile.org_id;
+  const log = (message: string, level = "info") => db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level });
+  for (const c of cities) { try { await detectDuplicates(db, orgId, c); } catch { /* best-effort */ } }
+  try {
+    const bd = await detectForOrg(db, orgId);
+    await log(`זיהוי מתווכים: ${bd.scanned} נסרקו · ${bd.matched} אוטומטי · ${bd.needsReview} לבדיקה`);
+  } catch (e) { console.error("[broker] detection (chunked finish) failed:", e); }
+  try {
+    const geo = await geocodeOrgExternalListings(db, orgId);
+    if (geo.attempted > 0) await log(`גיאוקודינג: ${geo.success} מוקמו · ${geo.failed} נכשלו (מתוך ${geo.attempted})`);
+  } catch (e) { console.error("[geocode] (chunked finish) failed:", e); }
+  const { data: j } = await db.from("import_jobs").select("total_found,total_imported,total_updated").eq("id", jobId).single();
+  await db.from("import_jobs").update({
+    status: errorCount ? "completed_with_errors" : "completed",
+    finished_at: new Date().toISOString(),
+    error: errorCount ? `${errorCount} שגיאות מקור` : null,
+  }).eq("id", jobId);
+  return {
+    success: errorCount === 0, organizationId: orgId, cities, sources: [],
+    inserted: j?.total_imported ?? 0, updated: j?.total_updated ?? 0,
+    errors: errorCount ? [`${errorCount} שגיאות`] : [],
+  };
+}
+
 export interface ImportDiagnostics {
   job: { id: string; provider: string; status: string; total_found: number; total_imported: number; error: string | null; started_at: string | null; finished_at: string | null } | null;
   logs: { level: string; message: string; metadata: unknown; created_at: string }[];
