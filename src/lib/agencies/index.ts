@@ -18,3 +18,9 @@ export type {
   ResolutionInput, ResolutionResult, AgencyMatch, KnownAgency, CandidateStatus,
   ResolutionCandidateRecord,
 } from "./resolver/types";
+// ── Auto-Builder + Clean Identity (Phase 26.2, pure) ─────────────────────────
+export { buildAgencyIdentityFromRawText, AUTOBUILD_CREATE_THRESHOLD } from "./identity/agencyAutoBuilder";
+export { cleanAgencyName, extractAgencyBranchAndCity, assessNameQuality } from "./identity/agencyNameCleaner";
+export { detectAgencyBrand, isListingPlatform } from "./identity/agencyBrandDetector";
+export { generateAgencyAliases } from "./identity/agencyAliasGenerator";
+export type { AgencyIdentity, AutoBuildInput, BrandDetection, BranchCity, IdentityStatus } from "./identity/agencyIdentityTypes";

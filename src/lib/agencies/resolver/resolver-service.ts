@@ -53,3 +53,28 @@ export async function resolveAndStore(input: ResolutionInput): Promise<ResolveOu
 
   return { result, candidateId: candidate.id, matchedAgencyId };
 }
+
+// ── Phase 26.2 — resolve, else auto-build ────────────────────────────────────
+import { buildAndResolveAgency } from "../identity/autobuilder-service";
+
+/**
+ * Resolve raw text to an existing agency; if none matches confidently, hand the
+ * text to the Auto-Builder (which cleans the identity, dedupes again, and
+ * creates or enriches an agency). The resolver NEVER creates agencies from raw
+ * text directly — the auto-builder owns creation.
+ */
+export async function resolveOrBuildAgency(input: ResolutionInput): Promise<{
+  matchedAgencyId: string | null;
+  builtAgencyId: string | null;
+  action: "matched" | "created" | "enriched" | "rejected";
+}> {
+  const outcome = await resolveAndStore(input);
+  if (outcome.matchedAgencyId) return { matchedAgencyId: outcome.matchedAgencyId, builtAgencyId: null, action: "matched" };
+
+  const built = await buildAndResolveAgency({ rawText: input.rawText, source: input.source, sourceRef: input.sourceRef });
+  return {
+    matchedAgencyId: null,
+    builtAgencyId: built.agency?.id ?? null,
+    action: built.action === "created" ? "created" : built.action === "enriched" ? "enriched" : "rejected",
+  };
+}

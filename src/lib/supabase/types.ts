@@ -4405,6 +4405,11 @@ type AgenciesRow = {
   headquarters_address: string | null; google_place_id: string | null; phone: string | null;
   email: string | null; facebook_url: string | null; instagram_url: string | null;
   linkedin_url: string | null; youtube_url: string | null; active: boolean;
+  // Phase 26.2 — clean identity columns (additive)
+  brand_name: string | null; franchise_name: string | null; display_name: string | null;
+  created_from: string | null; creation_confidence: number | null;
+  identity_status: "verified" | "auto_created" | "needs_review" | "merged" | "ignored";
+  identity_metadata: unknown;
   created_at: string; updated_at: string;
 };
 type AgencyBranchesRow = {
