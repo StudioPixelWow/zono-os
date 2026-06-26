@@ -71,7 +71,7 @@ After "סנכרן עכשיו" completes:
 
 ## 9. Remaining separate / honest limitations
 
-- **Snapshots + Decision Brain under cron.** `generateMarketSnapshotsForOrganization()` / `initializeOrganizationDecisionBrain()` are session‑scoped (take no orgId). Under the service‑role cron they're marked `skipped` (no fake data); they recompute on the next dashboard load for that org. *Future:* add an optional `orgId` param to run them service‑role from cron too.
+- ~~Snapshots + Decision Brain under cron skipped~~ → **RESOLVED in Phase 26.0.1** (see §11). They now run under the master cron via a server‑only service‑role org context, with the decision brain's reads explicitly org‑scoped (no RLS reliance, no cross‑tenant leak).
 - **Buyer matching / recommendations** — step returns `skipped` ("Service not wired into orchestrator yet"); not faked.
 - **Government deals** still flow through their own `refreshRecentTransactionsForOrganization` (now called inside the orchestrator for cron + manual), not merged with external_listings.
 - **Locking** is a lightweight DB lock (insert‑or‑expire), not an advisory lock; the 10‑min expiry + `force` take‑over of expired locks keeps it safe.
@@ -103,3 +103,35 @@ After "סנכרן עכשיו" completes:
 
 ### Environment variables
 `CRON_SECRET` (master cron auth), `APIFY_TOKEN` + `YAD2_ACTOR_ID` + `MADLAN_ACTOR_ID` (scrape), Supabase service‑role key (already configured). No new env vars introduced.
+
+---
+
+## 11. PHASE 26.0.1 — Cron-safe Market Snapshots & Decision Brain
+
+**Goal:** make the master cron run the FULL pipeline (incl. snapshots + decision brain) with no user session, safely.
+
+### Files changed
+- **NEW** `src/lib/supabase/server-context.ts` — `AsyncLocalStorage` impersonation context: `runWithServiceRoleOrg(orgId, fn)` + `getServiceRoleOrgContext()`. Zero imports (no cycles); server‑only.
+- `src/lib/supabase/server.ts` — `createClient()` returns the **service‑role** client when a service‑role org context is active (cron); normal cookie client otherwise.
+- `src/lib/auth/session.ts` — `getSessionContext()` returns a synthetic `ready` session for the context org when active.
+- `src/lib/decision-intelligence/service.ts` — `gatherOrgData()` → `gatherOrgData(orgId)` with **explicit org scoping on all 32 reads** (verified `org_id` vs `organization_id` per table). This is the safety guarantee: when RLS is bypassed under service‑role, every read is still filtered to one org.
+- `src/lib/orchestrator/service.ts` — under `scheduled_cron`, `market_snapshots` runs `generateMarketSnapshotsForOrg(orgId)` (service‑role) and `decision_brain` runs `initializeOrganizationDecisionBrain()` inside `runWithServiceRoleOrg(orgId, …)`.
+
+### Functions added/modified
+- Added: `runWithServiceRoleOrg`, `getServiceRoleOrgContext`. Reused existing `generateMarketSnapshotsForOrg(orgId)`.
+- Modified: `createClient`, `getSessionContext`, `gatherOrgData(orgId)`, `recalculateOrganizationDecisionBrain` (caller), orchestrator steps 4 & 5.
+
+### How cron now runs snapshots
+Orchestrator (cron) → `generateMarketSnapshotsForOrg(orgId)` → `buildSnapshots(serviceRoleDb, orgId)` (already org‑scoped via `activeLocalities(db, orgId)`) → writes `market_area_snapshots` for the org → heatmap/market refresh.
+
+### How cron now runs the decision brain
+Orchestrator (cron) → `runWithServiceRoleOrg(orgId, () => initializeOrganizationDecisionBrain())`. Inside the context: `currentOrgId()` resolves to the synthetic org, `createClient()` is service‑role, `gatherOrgData(orgId)` reads ONLY this org (explicit filters), `build*AttentionRows(orgId)` + decision repos write with explicit `org_id`. Result: `attention_items`, `opportunity_signals`, `decision_queue`, `decision_recommendations`, org scores all refresh for the org → command center updates.
+
+### Safety / RLS
+The service‑role client is created ONLY inside `runWithServiceRoleOrg` (server‑only, cron/orchestrator). It is never exposed to the client. While active, RLS is bypassed — so the one previously RLS‑reliant reader (`gatherOrgData`) is now explicitly org‑scoped. Session/dashboard flows are unchanged (context inactive → RLS client + real session).
+
+### Acceptance (26.0.1)
+✅ `zono-master-sync` runs the full pipeline with no session · ✅ `market_area_snapshots` refresh during cron · ✅ heatmap refreshes during cron · ✅ decision intelligence + command center refresh during cron · ✅ dashboard no longer needs to compensate · ✅ session/manual flows unchanged · ✅ scoped tsc passes · ✅ eslint 0 errors.
+
+### Test
+`curl -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/cron/zono-master-sync` → each org's result now shows `market_snapshots` and `decision_brain` as **success** (not skipped). Then inspect `market_area_snapshots`, `attention_items`, `decision_queue`, `decision_recommendations` for fresh rows.
