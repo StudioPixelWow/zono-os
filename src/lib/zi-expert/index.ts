@@ -37,4 +37,4 @@ export type {
 } from "./diagnostic-types";
 export { runChecks, type CheckOutput } from "./diagnostic-checks";
 export { buildSummary, buildExplanation, issueLabel } from "./diagnostic-explanations";
-export { runZIDiagnostics, inferIssueType } from "./diagnostics";
+export { runZIDiagnostics, inferIssueType, inferIssueTypeFromText } from "./diagnostics";

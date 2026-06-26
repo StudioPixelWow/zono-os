@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { loadDiagnosticRunsAction } from "@/lib/zi-expert/actions";
+import type { DiagnosticRunRow } from "@/lib/zi-expert/diagnostic-repository";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
@@ -138,6 +141,93 @@ export function SystemHealthView({ health, integrations = [] }: { health: System
           </tbody>
         </table>
       </div>
+
+      <ZiDiagnosticsPanel />
+    </div>
+  );
+}
+
+const DX_STATUS_TONE: Record<string, string> = { healthy: "bg-success-soft text-success", warning: "bg-warning-soft text-warning", critical: "bg-danger-soft text-danger", unknown: "bg-surface text-muted" };
+const DX_STATUS_LABEL: Record<string, string> = { healthy: "תקין", warning: "אזהרה", critical: "קריטי", unknown: "לא ידוע" };
+const DX_ISSUE_HE: Record<string, string> = {
+  property_radar_empty: "רדאר ריק", map_empty: "מפה ריקה", buyer_matching_zero: "אין התאמות",
+  seller_intelligence_empty: "מודיעין מוכרים ריק", journey_not_running: "מסע לא רץ", ai_unavailable: "AI לא זמין",
+  provider_sync_failed: "סנכרון נכשל", cron_not_running: "cron לא רץ", realtime_not_arriving: "זמן אמת",
+  feature_unavailable: "יכולת לא זמינה", permission_denied: "אין הרשאה", credits_exhausted: "מכסה מוצתה",
+  reports_not_generating: "דוחות", notifications_missing: "התראות", general: "כללי",
+};
+
+/** ZI Diagnostics — recent runs + aggregations (read-only). Support-only data. */
+function ZiDiagnosticsPanel() {
+  const [rows, setRows] = useState<DiagnosticRunRow[] | null>(null);
+  useEffect(() => { void loadDiagnosticRunsAction().then((r) => setRows(r.ok ? r.data : [])); }, []);
+
+  // Aggregations: common issues + modules (routes) with most warnings/critical.
+  const issueCounts: Record<string, number> = {};
+  const moduleWarn: Record<string, number> = {};
+  for (const r of rows ?? []) {
+    issueCounts[r.issueType] = (issueCounts[r.issueType] ?? 0) + 1;
+    if (r.status === "warning" || r.status === "critical") {
+      const k = r.currentRoute ?? "—";
+      moduleWarn[k] = (moduleWarn[k] ?? 0) + 1;
+    }
+  }
+  const topIssues = Object.entries(issueCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topModules = Object.entries(moduleWarn).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const unresolved = (rows ?? []).filter((r) => r.status === "critical").length;
+
+  return (
+    <div className="bg-card border-line overflow-hidden rounded-[20px] border">
+      <div className="border-line flex flex-wrap items-center justify-between gap-2 border-b p-4">
+        <div>
+          <p className="text-ink flex items-center gap-1.5 text-sm font-extrabold"><Icon name="Activity" size={16} /> ZI Diagnostics</p>
+          <p className="text-muted text-[11px]">הרצות אבחון „למה זה לא עובד” (קריאה בלבד — ZI מסביר, לא מבצע פעולות).</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {unresolved > 0 && <span className="bg-danger-soft text-danger rounded-md px-2 py-0.5 text-[11px] font-black">{unresolved} קריטיים</span>}
+          <Link href="/admin/zi-diagnostics" className="text-brand-strong text-[12px] font-bold">יומן מלא ←</Link>
+        </div>
+      </div>
+
+      {rows === null ? (
+        <p className="text-muted p-4 text-sm">טוען…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-muted p-4 text-sm">אין הרצות אבחון עדיין. כשמשתמש ילחץ „בדוק למה זה לא עובד” ב‑ZI — זה יופיע כאן.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
+          <div>
+            <p className="text-muted mb-1.5 text-[11px] font-bold">תקלות נפוצות</p>
+            <div className="flex flex-col gap-1">
+              {topIssues.map(([k, n]) => (
+                <div key={k} className="flex items-center justify-between text-[12px]">
+                  <span className="text-ink font-semibold">{DX_ISSUE_HE[k] ?? k}</span><span className="text-muted font-bold">{n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-muted mb-1.5 text-[11px] font-bold">מסכים עם הכי הרבה אזהרות</p>
+            <div className="flex flex-col gap-1">
+              {topModules.length ? topModules.map(([k, n]) => (
+                <div key={k} className="flex items-center justify-between text-[12px]">
+                  <span className="text-ink truncate font-mono text-[11px]" dir="ltr">{k}</span><span className="text-warning font-bold">{n}</span>
+                </div>
+              )) : <p className="text-success text-[12px] font-semibold">אין אזהרות ✓</p>}
+            </div>
+          </div>
+          <div>
+            <p className="text-muted mb-1.5 text-[11px] font-bold">הרצות אחרונות</p>
+            <div className="flex flex-col gap-1">
+              {rows.slice(0, 5).map((r) => (
+                <div key={r.id} className="flex items-center justify-between gap-2 text-[12px]">
+                  <span className="text-ink truncate">{DX_ISSUE_HE[r.issueType] ?? r.issueType}</span>
+                  <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-black", DX_STATUS_TONE[r.status] ?? DX_STATUS_TONE.unknown)}>{DX_STATUS_LABEL[r.status] ?? r.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

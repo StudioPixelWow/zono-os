@@ -29,6 +29,36 @@ export function inferIssueType(input: DiagnosticInput): IssueType {
   return "general";
 }
 
+// Free-text "why isn't this working?" detection. Returns the inferred issue type
+// when the question reads like a diagnostic complaint, else null (→ normal RAG).
+const DX_TRIGGERS = [
+  "לא עובד", "לא עובדת", "לא עובדים", "ריק", "ריקה", "לא מופיע", "לא מופיעים", "אין לי",
+  "למה אין", "לא נטען", "לא נטענת", "נכשל", "לא רץ", "לא רצה", "לא מגיע", "לא מגיעות",
+  "תקוע", "תקועה", "שבור", "לא נמשך", "not working", "empty", "broken",
+];
+const DX_KEYWORDS: { re: RegExp; issue: IssueType }[] = [
+  { re: /מפה|מפת|heatmap|חום/i, issue: "map_empty" },
+  { re: /רדאר|מודע|נכסים|נכס|inventory/i, issue: "property_radar_empty" },
+  { re: /התאמ|קונה|קונים|match/i, issue: "buyer_matching_zero" },
+  { re: /מוכר|בלעדי|seller/i, issue: "seller_intelligence_empty" },
+  { re: /מסע|workflow|journey/i, issue: "journey_not_running" },
+  { re: /\bai\b|בינה|קופיילוט|copilot/i, issue: "ai_unavailable" },
+  { re: /סנכרון|sync|ייבוא|import/i, issue: "provider_sync_failed" },
+  { re: /דוח|דוחות|report/i, issue: "reports_not_generating" },
+  { re: /התראה|התראות|notification/i, issue: "notifications_missing" },
+  { re: /הרשאה|הרשאות|permission|denied/i, issue: "permission_denied" },
+];
+
+/** Does this free-text question read like "why isn't X working?"; if so → issue. */
+export function inferIssueTypeFromText(text: string): IssueType | null {
+  const t = (text ?? "").toLowerCase();
+  const hasTrigger = DX_TRIGGERS.some((w) => t.includes(w.toLowerCase()))
+    || /^\s*למה\b/.test(text) || /\bwhy\b/i.test(text);
+  if (!hasTrigger) return null;
+  for (const k of DX_KEYWORDS) if (k.re.test(text)) return k.issue;
+  return "general";
+}
+
 function rid(): string {
   const s = "0123456789abcdef";
   let out = "zi-dx-";

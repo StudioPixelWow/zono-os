@@ -11,7 +11,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ZIAvatar } from "./ZIAvatar";
 import { ZIChatWindow } from "./ZIChatWindow";
 import { useZiContext } from "@/hooks/useZiContext";
-import { chunkForStream } from "@/lib/zi-expert";
+import { chunkForStream, inferIssueTypeFromText } from "@/lib/zi-expert";
+import type { IssueType } from "@/lib/zi-expert/diagnostic-types";
 import {
   askZiAction, deleteConversationAction, loadConversationAction, loadConversationsAction,
   pinConversationAction, rateMessageAction, submitKnowledgeFeedbackAction, runDiagnosticsAction,
@@ -91,9 +92,16 @@ export function ZIWidget() {
     }, 22);
   }, []);
 
+  // Forward ref so `ask` can hand off diagnostic-intent questions to the
+  // diagnostics runner (declared later) without a use-before-define cycle.
+  const diagnoseRef = useRef<(issueType?: IssueType, userText?: string) => void>(() => {});
+
   const ask = useCallback(async (text: string) => {
     const q = text.trim();
     if (!q || thinking || streaming !== null) return;
+    // Free-text "why isn't X working?" → route to the diagnostics engine.
+    const dxIssue = inferIssueTypeFromText(q);
+    if (dxIssue) { setInput(""); diagnoseRef.current(dxIssue, q); return; }
     setInput("");
     setHistoryOpen(false);
     const optimistic: ZiMessage = {
@@ -126,20 +134,22 @@ export function ZIWidget() {
     void refreshConversations();
   }, [thinking, streaming, conversationId, client, revealAnswer, refreshConversations]);
 
-  /** "בדוק למה זה לא עובד" — run ZI Diagnostics for the current page (support-only). */
-  const runDiagnostics = useCallback(async () => {
+  /** "בדוק למה זה לא עובד" — run ZI Diagnostics for the current page (support-only).
+   *  `issueType` is passed when routed from a free-text question; otherwise the
+   *  server infers it from the current route. */
+  const runDiagnostics = useCallback(async (issueType?: IssueType, userText?: string) => {
     if (thinking || streaming !== null) return;
     setHistoryOpen(false);
     setAnswerMeta(null);
     const userMsg: ZiMessage = {
-      id: tempId(), conversationId: conversationId ?? "pending", role: "user", content: "בדוק למה זה לא עובד 🔧",
+      id: tempId(), conversationId: conversationId ?? "pending", role: "user", content: userText ?? "בדוק למה זה לא עובד 🔧",
       source: null, route: client.route, moduleId: null, rating: null, createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, userMsg]);
     setThinking(true);
 
     const browser = typeof navigator !== "undefined" ? navigator.userAgent : null;
-    const res = await runDiagnosticsAction({ currentRoute: client.route, module: moduleLabel ?? null, browser });
+    const res = await runDiagnosticsAction({ currentRoute: client.route, module: moduleLabel ?? null, issueType, browser });
     setThinking(false);
 
     if (!res.ok) {
@@ -163,6 +173,9 @@ export function ZIWidget() {
       route: client.route, moduleId: null, rating: null, createdAt: new Date().toISOString(),
     });
   }, [thinking, streaming, conversationId, client, moduleLabel, revealAnswer]);
+
+  // Keep the forward ref pointed at the latest runDiagnostics.
+  useEffect(() => { diagnoseRef.current = (it, ut) => { void runDiagnostics(it, ut); }; }, [runDiagnostics]);
 
   const openConversation = useCallback(async (id: string) => {
     const res = await loadConversationAction(id, { limit: 100, offset: 0 });
