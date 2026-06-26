@@ -4493,6 +4493,16 @@ type ValuationHistoryRow = {
   sources_used: unknown; algorithm_version: string; valuation_available: boolean;
   calculated_at: string; created_at: string;
 };
+type ValuationAccuracyRow = {
+  id: string; organization_id: string; valuation_id: string | null; property_id: string | null; deal_id: string | null;
+  city: string | null; neighborhood: string | null; property_type: string | null;
+  predicted_value: number | null; actual_value: number | null; difference: number | null;
+  percentage_error: number | null; accuracy_percent: number | null; predicted_ppsqm: number | null; actual_ppsqm: number | null;
+  asking_price: number | null; final_price: number | null; negotiation_percent: number | null;
+  days_on_market: number | null; showings: number | null; offers: number | null;
+  marketing_channels: unknown; property_features: unknown; market_conditions: unknown;
+  algorithm_version: string; confidence_at_prediction: number | null; created_at: string;
+};
 type ValuationExplanationsRow = {
   id: string; organization_id: string; valuation_id: string; market_position: string | null;
   explanation: string | null; strengths: unknown; weaknesses: unknown; market_insights: unknown;
@@ -4584,6 +4594,7 @@ export interface Database {
       agency_territory_stats: TableShape<AgencyTerritoryStatsRow, "organization_id" | "agency_id" | "territory_type" | "territory_key">;
       valuation_history: TableShape<ValuationHistoryRow, "organization_id" | "valuation_id">;
       valuation_explanations: TableShape<ValuationExplanationsRow, "organization_id" | "valuation_id">;
+      valuation_accuracy: TableShape<ValuationAccuracyRow, "organization_id">;
       zi_learning_progress: TableShape<ZiLearningProgressRow, "organization_id" | "user_id" | "kind" | "slug">;
       zi_tutorials: TableShape<ZiTutorialsRow, "organization_id" | "slug" | "title">;
       zi_walkthroughs: TableShape<ZiWalkthroughsRow, "organization_id" | "slug" | "title">;

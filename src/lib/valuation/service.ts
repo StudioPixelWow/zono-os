@@ -11,7 +11,9 @@ import { gatherEvidence, getBrokerSoldProperties } from "./providers";
 import type { ProviderResult } from "./providers";
 import { runValuation as runEngine, normalizeInput } from "./valuation-engine";
 import { buildValuationIntelligence, ALGORITHM_VERSION } from "./intelligence";
-import type { ValuationIntelligence } from "./types";
+import { getCityCalibration } from "./accuracy-service";
+import { applyCalibration } from "./accuracy";
+import type { ValuationIntelligence, EstimatedAccuracy } from "./types";
 import type {
   ValuationInput, ValuationRecord, ValuationResult, Comparable, BrokerSoldProperty,
   MarketSnapshot, ValuationAdjustment,
@@ -109,6 +111,23 @@ export async function runValuationById(id: string): Promise<RunOutput> {
       : null,
   }));
 
+  // Self-learning — calibrate the estimate from this area's completed-transaction
+  // accuracy (bounded ±6%) and attach the area's estimated accuracy.
+  if ((result.valuationAvailable ?? true) && result.estimatedValue > 0) {
+    const { factor, estimatedAccuracy } = await getCityCalibration(input.city).catch(() => ({ factor: 1, estimatedAccuracy: undefined as EstimatedAccuracy | undefined }));
+    if (factor !== 1) {
+      const f = factor;
+      result.estimatedValue = applyCalibration(result.estimatedValue, f);
+      result.lowValue = applyCalibration(result.lowValue, f);
+      result.highValue = applyCalibration(result.highValue, f);
+      result.recommendedListingPrice = applyCalibration(result.recommendedListingPrice, f);
+      result.targetClosingPrice = applyCalibration(result.targetClosingPrice, f);
+      result.minimumAcceptablePrice = applyCalibration(result.minimumAcceptablePrice, f);
+      result.estimatedPricePerSqm = Math.round(result.estimatedPricePerSqm * f);
+    }
+    if (estimatedAccuracy) result.estimatedAccuracy = estimatedAccuracy;
+  }
+
   // Phase 4 — build the full AI intelligence report (pure, real data only).
   result.intelligence = buildValuationIntelligence({
     input, result, comparables: comparables.filter((c) => (c.pricePerSqm ?? 0) > 0), market: result.market, debug: result.debug,
@@ -195,6 +214,7 @@ async function persistResult(
       recommendedAction: result.recommendedAction ?? null,
       debug: result.debug ?? null,
       intelligence: result.intelligence ?? null,
+      estimatedAccuracy: result.estimatedAccuracy ?? null,
     },
   } as never).eq("id", id).eq("organization_id", orgId);
 
@@ -286,6 +306,7 @@ export async function getValuation(id: string): Promise<ValuationRecord | null> 
     recommendedAction: (meta.recommendedAction as string | null) ?? null,
     debug: (meta.debug as ValuationResult["debug"]) ?? undefined,
     intelligence: (meta.intelligence as ValuationIntelligence | null) ?? undefined,
+    estimatedAccuracy: (meta.estimatedAccuracy as EstimatedAccuracy | null) ?? undefined,
   } : null;
 
   return {

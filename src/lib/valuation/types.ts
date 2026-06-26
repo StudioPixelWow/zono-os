@@ -229,6 +229,16 @@ export interface ValuationResult {
   debug?: ValuationDebug;
   /** Full AI intelligence report (Phase 4) — strengths/weaknesses/insights/etc. */
   intelligence?: ValuationIntelligence;
+  /** Self-learning accuracy for this area (from completed transactions). */
+  estimatedAccuracy?: EstimatedAccuracy;
+}
+
+// ── Self-learning accuracy ───────────────────────────────────────────────────
+export interface EstimatedAccuracy {
+  city: string | null;
+  accuracyPercent: number | null; // 0..100 average accuracy in this area
+  sampleSize: number;             // completed transactions used
+  text: string;                   // Hebrew summary
 }
 
 /** A fully-loaded valuation as read from the DB for the result/report screens. */
