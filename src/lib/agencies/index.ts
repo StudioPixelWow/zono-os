@@ -24,3 +24,13 @@ export { cleanAgencyName, extractAgencyBranchAndCity, assessNameQuality } from "
 export { detectAgencyBrand, isListingPlatform } from "./identity/agencyBrandDetector";
 export { generateAgencyAliases } from "./identity/agencyAliasGenerator";
 export type { AgencyIdentity, AutoBuildInput, BrandDetection, BranchCity, IdentityStatus } from "./identity/agencyIdentityTypes";
+// ── Knowledge Graph (Phase 26.3, pure types + helpers) ───────────────────────
+export {
+  areaKey, relationshipKey, dedupeRelationshipInputs, mergeRelationship,
+  computeAreaFootprint, detectTimelineEvents, detectSignals,
+  AGENCY_ENTITY_TYPES, AREA_ENTITY_TYPES, ACTIVITY_SPIKE_THRESHOLD,
+} from "./graph/agencyGraphTypes";
+export type {
+  AgencyEntityType, AgencyRelationshipType, AgencyEntityRelationship,
+  RelationshipInput, AgencyAreaFootprint, GraphTimelineEvent, GraphSignal,
+} from "./graph/agencyGraphTypes";

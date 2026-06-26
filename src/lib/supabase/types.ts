@@ -4463,6 +4463,15 @@ type AgencyResolutionCandidatesRow = {
   resolved_at: string | null; created_at: string;
 };
 
+// ── Phase 26.3 — Agency Knowledge Graph ──────────────────────────────────────
+type AgencyEntityRelationshipsRow = {
+  id: string; organization_id: string; agency_id: string;
+  entity_type: string; entity_id: string; relationship_type: string;
+  confidence: number; source: string | null; evidence: unknown;
+  first_detected_at: string; last_seen_at: string; active: boolean;
+  created_at: string; updated_at: string;
+};
+
 // ── Phase 25 — ZI Interactive Learning ───────────────────────────────────────
 type ZiLearningProgressRow = {
   id: string; organization_id: string; user_id: string;
@@ -4528,6 +4537,7 @@ export interface Database {
       agency_timeline: TableShape<AgencyTimelineRow, "organization_id" | "agency_id" | "event_type" | "title">;
       agency_aliases: TableShape<AgencyAliasesRow, "organization_id" | "agency_id" | "alias" | "normalized_alias">;
       agency_resolution_candidates: TableShape<AgencyResolutionCandidatesRow, "organization_id" | "raw_text">;
+      agency_entity_relationships: TableShape<AgencyEntityRelationshipsRow, "organization_id" | "agency_id" | "entity_type" | "entity_id" | "relationship_type">;
       zi_learning_progress: TableShape<ZiLearningProgressRow, "organization_id" | "user_id" | "kind" | "slug">;
       zi_tutorials: TableShape<ZiTutorialsRow, "organization_id" | "slug" | "title">;
       zi_walkthroughs: TableShape<ZiWalkthroughsRow, "organization_id" | "slug" | "title">;
