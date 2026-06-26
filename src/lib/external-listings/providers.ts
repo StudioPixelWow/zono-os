@@ -154,6 +154,13 @@ class ApifyProvider implements PropertyProvider {
       // "for sale" maps to "buy".
       dealType: "buy",
       dealTypes: ["buy"],
+      // Ask for NEWEST-first so each run (and the nightly cron) surfaces freshly
+      // posted listings — that's how the inventory keeps discovering new ones
+      // instead of re-fetching the same top set every time.
+      sort: "date",
+      sortBy: "newest",
+      orderBy: "date_desc",
+      order: "newest",
       maxListingsPerCity: limit,
       maxItems: limit,
       maxResults: limit,
