@@ -3,7 +3,7 @@
 // page-aware suggestions and the composer.
 import { useState } from "react";
 import Link from "next/link";
-import { Search, Pin, Trash2, ArrowUpRight, Send, BookOpen, ThumbsUp, ThumbsDown, HelpCircle } from "lucide-react";
+import { Search, Pin, Trash2, ArrowUpRight, Send, BookOpen, ThumbsUp, ThumbsDown, HelpCircle, Wrench } from "lucide-react";
 import { ZIHeader } from "./ZIHeader";
 import { ZIConversation } from "./ZIConversation";
 import { ZISuggestions } from "./ZISuggestions";
@@ -33,6 +33,7 @@ export interface ZIChatWindowProps {
   onDelete: (id: string) => void;
   answerMeta: ZiAnswerMeta | null;
   onFeedback: (rating: FeedbackRating) => void;
+  onDiagnose: () => void;
 }
 
 export function ZIChatWindow(p: ZIChatWindowProps) {
@@ -110,6 +111,15 @@ export function ZIChatWindow(p: ZIChatWindowProps) {
           )}
 
           <div className="border-t border-white/10 bg-white/[0.02] px-3.5 py-3">
+            {/* Diagnostics quick-action — always available. ZI inspects + explains only. */}
+            <button
+              type="button"
+              onClick={p.onDiagnose}
+              disabled={busy}
+              className="mb-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[12px] font-bold text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-40"
+            >
+              <Wrench size={13} /> בדוק למה זה לא עובד
+            </button>
             {p.messages.length === 0 && (
               <div className="mb-2.5">
                 <p className="mb-1.5 text-[11px] font-bold text-white/40">שאלות מהירות לעמוד הזה</p>

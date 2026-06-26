@@ -48,15 +48,6 @@ export function LaunchOverlay() {
         </div>
       )}
 
-      {/* Floating feedback button */}
-      <button
-        onClick={() => setOpen(true)}
-        className="bg-brand-strong fixed bottom-5 inset-inline-start-5 z-[55] inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-bold text-white shadow-lg hover:opacity-90"
-        aria-label="שליחת משוב"
-      >
-        <Icon name="MessageCircle" size={16} /> משוב
-      </button>
-
       {open && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onClick={() => setOpen(false)}>
           <div className="bg-card border-line w-full max-w-md rounded-[20px] border p-5" onClick={(e) => e.stopPropagation()}>

@@ -55,6 +55,7 @@ export async function getDashboardContext(): Promise<DashboardContextData> {
         roleKey,
         roleLabel,
         title: profile.title,
+        avatarUrl: profile.avatar_url ?? null,
         onboardingCompleted: profile.onboarding_completed,
         propertyTypes: profile.property_types ?? [],
         dealTypes: profile.deal_types ?? [],

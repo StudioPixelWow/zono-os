@@ -11,6 +11,7 @@ export interface DashboardUser {
   roleKey: string | null;
   roleLabel: string | null;
   title: string | null;
+  avatarUrl: string | null;
   onboardingCompleted: boolean;
   propertyTypes: string[];
   dealTypes: string[];

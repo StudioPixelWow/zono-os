@@ -17,6 +17,9 @@ import {
   listKnowledgeFeedback, listMissingAnswerQuestions, type KnowledgeFeedbackRow,
 } from "./knowledge-repository";
 import { syncZIKnowledgeBase, type KnowledgeSyncResult } from "./knowledge-sync";
+import { runZIDiagnostics } from "./diagnostics";
+import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
+import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
 import type { FeedbackRating, KnowledgeArticle, KnowledgeSourceRef } from "./knowledge-types";
 import {
   appendMessageRow, createConversationRow, getMessageRows, listConversationRows,
@@ -237,6 +240,46 @@ export async function loadKnowledgeAdminAction(): Promise<ZiResult<KnowledgeAdmi
       },
     };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "load_failed" }; }
+}
+
+// ── Diagnostics Engine actions (Phase 24) ────────────────────────────────────
+
+export interface RunDiagnosticsInput {
+  currentRoute: string | null;
+  module: string | null;
+  issueType?: IssueType;
+  entityId?: string | null;
+  timeframe?: "today" | "week" | "all";
+  browser?: string | null;
+}
+
+/**
+ * Diagnose "why is this not working?" — collects a safe, org-scoped signal
+ * snapshot, runs deterministic checks, and returns a Hebrew-explained result
+ * with a REDACTED support payload. SUPPORT-ONLY: inspects + explains, no actions.
+ */
+export async function runDiagnosticsAction(input: RunDiagnosticsInput): Promise<ZiResult<DiagnosticResult>> {
+  try {
+    const { signals, orgId, userId, role } = await collectDiagnosticSignals();
+    const dxInput: DiagnosticInput = {
+      currentRoute: input.currentRoute,
+      module: input.module,
+      issueType: input.issueType,
+      entityId: input.entityId ?? null,
+      timeframe: input.timeframe,
+    };
+    const result = runZIDiagnostics(dxInput, signals, { orgId, userId, role }, input.browser ?? null);
+    await persistDiagnosticRun(dxInput, result); // best-effort; never blocks
+    return { ok: true, data: result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "diagnostics_failed" };
+  }
+}
+
+/** Recent diagnostic runs for the admin page (manager+ via RLS). */
+export async function loadDiagnosticRunsAction(): Promise<ZiResult<DiagnosticRunRow[]>> {
+  try { return { ok: true, data: await listDiagnosticRuns() }; }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : "load_failed" }; }
 }
 
 /** Test the knowledge search from the admin page (returns titles + scores). */

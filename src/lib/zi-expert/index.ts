@@ -30,3 +30,11 @@ export { searchKnowledge, canSeeArticle, type SearchContext } from "./knowledge-
 export {
   RAG_FALLBACK, buildRagMessages, deterministicRagAnswer, ragSources, ragFollowups,
 } from "./knowledge-rag";
+// ── Diagnostics Engine (Phase 24, pure / client-safe) ────────────────────────
+export type {
+  DiagnosticStatus, FindingSeverity, IssueType, DiagnosticInput, DiagnosticFinding,
+  DiagnosticResult, SupportPayload, DiagnosticSignals,
+} from "./diagnostic-types";
+export { runChecks, type CheckOutput } from "./diagnostic-checks";
+export { buildSummary, buildExplanation, issueLabel } from "./diagnostic-explanations";
+export { runZIDiagnostics, inferIssueType } from "./diagnostics";

@@ -4380,6 +4380,23 @@ type ZiKnowledgeFeedbackRow = {
   created_at: string;
 };
 
+type ZiDiagnosticRunsRow = {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  correlation_id: string;
+  issue_type: string;
+  status: "healthy" | "warning" | "critical" | "unknown";
+  current_route: string | null;
+  module: string | null;
+  summary: string;
+  likely_cause: string | null;
+  role: string | null;
+  findings: unknown;
+  support_payload: unknown;
+  created_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -4409,6 +4426,7 @@ export interface Database {
       zi_knowledge_chunks: TableShape<ZiKnowledgeChunksRow, "article_id" | "slug" | "content">;
       zi_knowledge_sources: TableShape<ZiKnowledgeSourcesRow, "name">;
       zi_knowledge_feedback: TableShape<ZiKnowledgeFeedbackRow, "organization_id" | "user_id" | "question" | "rating">;
+      zi_diagnostic_runs: TableShape<ZiDiagnosticRunsRow, "organization_id" | "correlation_id" | "issue_type" | "status">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       property_journeys: TableShape<
         PropertyJourneysRow,

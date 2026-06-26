@@ -7,6 +7,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { CreatedCelebration } from "@/components/ui/CreatedCelebration";
 import { PropertyRadarAlertProvider } from "@/components/property-radar";
 import { LaunchOverlay } from "@/components/launch/LaunchOverlay";
+import { CarouselWheelScroll } from "@/components/ui/CarouselWheelScroll";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <CreatedCelebration />
       <PropertyRadarAlertProvider />
       <LaunchOverlay />
+      <CarouselWheelScroll />
     </DashboardDataProvider>
   );
 }

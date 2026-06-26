@@ -14,7 +14,7 @@ import { useZiContext } from "@/hooks/useZiContext";
 import { chunkForStream } from "@/lib/zi-expert";
 import {
   askZiAction, deleteConversationAction, loadConversationAction, loadConversationsAction,
-  pinConversationAction, rateMessageAction, submitKnowledgeFeedbackAction,
+  pinConversationAction, rateMessageAction, submitKnowledgeFeedbackAction, runDiagnosticsAction,
 } from "@/lib/zi-expert/actions";
 import type { ZiConversation, ZiMessage } from "@/lib/zi-expert/types";
 import type { FeedbackRating } from "@/lib/zi-expert/knowledge-types";
@@ -126,6 +126,44 @@ export function ZIWidget() {
     void refreshConversations();
   }, [thinking, streaming, conversationId, client, revealAnswer, refreshConversations]);
 
+  /** "בדוק למה זה לא עובד" — run ZI Diagnostics for the current page (support-only). */
+  const runDiagnostics = useCallback(async () => {
+    if (thinking || streaming !== null) return;
+    setHistoryOpen(false);
+    setAnswerMeta(null);
+    const userMsg: ZiMessage = {
+      id: tempId(), conversationId: conversationId ?? "pending", role: "user", content: "בדוק למה זה לא עובד 🔧",
+      source: null, route: client.route, moduleId: null, rating: null, createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setThinking(true);
+
+    const browser = typeof navigator !== "undefined" ? navigator.userAgent : null;
+    const res = await runDiagnosticsAction({ currentRoute: client.route, module: moduleLabel ?? null, browser });
+    setThinking(false);
+
+    if (!res.ok) {
+      setMessages((prev) => [
+        ...prev,
+        { id: tempId(), conversationId: conversationId ?? "pending", role: "assistant", content: "לא הצלחתי להריץ אבחון כרגע. נסה/י שוב בעוד רגע.", source: "fallback", route: client.route, moduleId: null, rating: null, createdAt: new Date().toISOString() },
+      ]);
+      return;
+    }
+
+    const r = res.data;
+    const screens = r.relatedScreens.length
+      ? `\n\n🔗 מסכים קשורים: ${r.relatedScreens.map((s) => s.label).join(" · ")}`
+      : "";
+    const ticket = r.status === "critical"
+      ? `\n\nמזהה פנייה לתמיכה: ${r.supportPayload.correlationId}`
+      : "";
+    revealAnswer({
+      id: tempId(), conversationId: conversationId ?? "pending", role: "assistant",
+      content: `${r.explanation}${screens}${ticket}`, source: "fallback",
+      route: client.route, moduleId: null, rating: null, createdAt: new Date().toISOString(),
+    });
+  }, [thinking, streaming, conversationId, client, moduleLabel, revealAnswer]);
+
   const openConversation = useCallback(async (id: string) => {
     const res = await loadConversationAction(id, { limit: 100, offset: 0 });
     if (res.ok) {
@@ -196,7 +234,7 @@ export function ZIWidget() {
             aria-label="פתח את ZI — המומחה שלך ל-ZONO"
             className="zi-launcher fixed bottom-5 right-5 z-[150]"
           >
-            <ZIAvatar size={76} state="idle" bare />
+            <ZIAvatar size={155} state="idle" bare />
           </motion.button>
         )}
       </AnimatePresence>
@@ -233,6 +271,7 @@ export function ZIWidget() {
               onDelete={remove}
               answerMeta={streaming === null ? answerMeta : null}
               onFeedback={sendFeedback}
+              onDiagnose={runDiagnostics}
             />
           </motion.div>
         )}

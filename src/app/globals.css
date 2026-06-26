@@ -503,15 +503,6 @@ body {
   animation: zauth-bloom 7s ease-in-out infinite;
 }
 @keyframes zauth-bloom { 0%,100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
-/* one-time shimmer sweep across the logo on first paint */
-.zauth-logo-wrap::after {
-  content: "";
-  position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  background: linear-gradient(110deg, transparent 38%, rgba(255,255,255,0.5) 50%, transparent 62%);
-  transform: translateX(-130%);
-  animation: zauth-logoshimmer 1.4s ease-out 0.5s 1;
-}
-@keyframes zauth-logoshimmer { to { transform: translateX(130%); } }
 
 /* ── Page-load intro: staggered reveal. Never blocks interaction. ── */
 .zauth-intro { opacity: 0; animation: zauth-rise 0.8s cubic-bezier(0.22,1,0.36,1) forwards; }
@@ -528,7 +519,7 @@ body {
   .zauth-aura, .zauth-route, .zauth-node-pulse, .zauth-packet, .zauth-particle,
   .zauth-logo, .zauth-anim-fade, .zauth-anim-up, .zauth-anim-left,
   .zauth-anim-right, .zauth-anim-pulse, .zauth-robot, .zauth-chip,
-  .zauth-btn::after, .zauth-chip-live, .zauth-logo-wrap::before, .zauth-logo-wrap::after,
+  .zauth-btn::after, .zauth-chip-live, .zauth-logo-wrap::before,
   .zauth-intro { animation: none !important; }
   /* with motion disabled, everything must still be visible + interactive */
   .zauth-intro { opacity: 1 !important; transform: none !important; }
