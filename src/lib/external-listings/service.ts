@@ -234,7 +234,10 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level: "debug", metadata: metadata as never });
 
   for (const loc of localities) {
-    for (const source of sources) {
+    // Run the city's sources (Yad2 + Madlan) CONCURRENTLY — each Apify scrape can
+    // take up to ~110s, so running them in parallel roughly halves the wall-clock
+    // per city and keeps the whole sync inside the serverless time budget.
+    await Promise.all(sources.map(async (source) => {
       const t0 = Date.now();
       try {
         const provider = getProvider(source);
@@ -258,7 +261,7 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
         await log(`כשל ב-${source} · ${loc.name} (${Date.now() - t0}ms): ${msg}`, "error");
         // continue with the other source / city
       }
-    }
+    }));
     try { await detectDuplicates(db, orgId, loc.name); } catch { /* best-effort */ }
     // Cursor checkpoint: record this city as done so an interrupted backfill can
     // resume from the cities still remaining.
