@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Icon } from "./Icon";
 import { useCurrentUser } from "./DashboardDataProvider";
+import { ProfileEditPopup } from "./ProfileEditPopup";
 
 /** Top bar: search, notifications, profile. */
 export function Header() {
   const user = useCurrentUser();
+  const [editOpen, setEditOpen] = useState(false);
 
   const displayName = user?.fullName?.trim() || "משתמש";
   const roleLabel = user?.roleLabel || "סוכן";
@@ -43,8 +46,14 @@ export function Header() {
               <p className="text-ink text-sm font-bold">{displayName}</p>
               <p className="text-muted text-[11px]">{roleLabel}</p>
             </div>
-            {/* Agent avatar — circular, thin purple-gradient frame */}
-            <div className="from-brand to-brand-light h-9 w-9 rounded-full bg-gradient-to-br p-[2px]">
+            {/* Agent avatar — circular, thin purple-gradient frame. Click → edit profile. */}
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="from-brand to-brand-light h-9 w-9 rounded-full bg-gradient-to-br p-[2px] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-brand/30"
+              aria-label="עריכת פרופיל"
+              title="עריכת פרופיל"
+            >
               <div className="bg-card grid h-full w-full place-items-center overflow-hidden rounded-full">
                 {avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -59,10 +68,16 @@ export function Header() {
                   <span className="text-brand text-sm font-black">{displayName.charAt(0)}</span>
                 )}
               </div>
-            </div>
+            </button>
           </div>
         </div>
       </div>
+
+      <ProfileEditPopup
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        initial={{ fullName: displayName, title: roleLabel, avatarUrl }}
+      />
     </header>
   );
 }
