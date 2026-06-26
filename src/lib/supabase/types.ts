@@ -4505,6 +4505,24 @@ type AgencyIntelligenceJobRunsRow = {
   result: unknown; error_message: string | null; created_at: string;
 };
 
+// ── Phase 26.14 — Compliance + Data Governance Layer ─────────────────────────
+type AgencyIntelligenceSourcesRow = {
+  id: string; organization_id: string; entity_type: string; entity_id: string;
+  source_type: string; source_name: string | null; source_url: string | null;
+  collected_at: string | null; last_verified_at: string | null; confidence: number | null;
+  license_status: string; visibility_status: string; retention_until: string | null;
+  metadata: unknown; created_at: string;
+};
+type AgencyIntelligenceAuditLogRow = {
+  id: string; organization_id: string; actor_id: string | null; action: string;
+  entity_type: string; entity_id: string | null; old_value: unknown; new_value: unknown;
+  reason: string | null; created_at: string;
+};
+type AgencyIntelligencePoliciesRow = {
+  id: string; organization_id: string; policy_key: string; policy_value: unknown;
+  active: boolean; created_at: string; updated_at: string;
+};
+
 // ── Phase 26.12 — AI Resolution Center (Human-in-the-Loop) ───────────────────
 type AgencyAiFeedbackRow = {
   id: string; organization_id: string; candidate_id: string | null; agency_id: string | null;
@@ -4635,6 +4653,9 @@ export interface Database {
       rain_edges: TableShape<RainEdgesRow, "organization_id" | "source_node_id" | "target_node_id" | "edge_type">;
       agency_intelligence_job_runs: TableShape<AgencyIntelligenceJobRunsRow, "organization_id" | "job_name" | "status">;
       agency_ai_feedback: TableShape<AgencyAiFeedbackRow, "organization_id" | "action">;
+      agency_intelligence_sources: TableShape<AgencyIntelligenceSourcesRow, "organization_id" | "entity_type" | "entity_id" | "source_type">;
+      agency_intelligence_audit_log: TableShape<AgencyIntelligenceAuditLogRow, "organization_id" | "action" | "entity_type">;
+      agency_intelligence_policies: TableShape<AgencyIntelligencePoliciesRow, "organization_id" | "policy_key">;
       valuation_history: TableShape<ValuationHistoryRow, "organization_id" | "valuation_id">;
       valuation_explanations: TableShape<ValuationExplanationsRow, "organization_id" | "valuation_id">;
       valuation_accuracy: TableShape<ValuationAccuracyRow, "organization_id">;

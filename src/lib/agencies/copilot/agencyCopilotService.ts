@@ -12,6 +12,7 @@ import { detectAgencyIntent } from "./agencyCopilotRouter";
 import { buildAgencyIntelContext } from "./agencyCopilotContextBuilder";
 import { buildAgencyIntelAnswer } from "./agencyCopilotAnswerBuilder";
 import { checkAgencyCopilotGuardrails, buildGuardrailAnswer } from "./agencyCopilotGuardrails";
+import { sanitizeWording } from "../governance/agencyVisibilityGuard";
 import type {
   AgencyCopilotAnswer, AgencyCopilotContext, ParsedAgencyQuery, SuggestedQuestion, AnswerAgencyQuestionOptions,
 } from "./agencyCopilotTypes";
@@ -28,7 +29,14 @@ export async function answerAgencyIntelQuestion(organizationId: string, question
   if (!guard.allowed) return buildGuardrailAnswer(intent, guard.message ?? "");
 
   const context: AgencyCopilotContext = await buildAgencyIntelContext(organizationId, parsed, intent);
-  return buildAgencyIntelAnswer(context);
+  const answer = buildAgencyIntelAnswer(context);
+  // Governance (Phase 26.14): enforce compliant output wording.
+  return {
+    ...answer,
+    answer: sanitizeWording(answer.answer),
+    highlights: answer.highlights.map(sanitizeWording),
+    recommendations: answer.recommendations.map(sanitizeWording),
+  };
 }
 
 /** Helper kept for the documented API surface. */

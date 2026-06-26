@@ -19,6 +19,7 @@ import { calculateAgencyScoresJob } from "./calculateAgencyScoresJob";
 import { detectAgencySignalsJob } from "./detectAgencySignalsJob";
 import { generateAgencyReportsJob } from "./generateAgencyReportsJob";
 import { buildRainGraphJob } from "@/lib/rain/jobs/buildRainGraphJob";
+import { recordAudit } from "../governance/agencyGovernanceService";
 
 export interface OrchestratorOptions { maxAgencies?: number }
 
@@ -71,5 +72,6 @@ export async function runAgencyJobPipeline(organizationId: string, opts: Orchest
     onStepEnd: (r) => logStepEnd(organizationId, r.name, r.status, r.durationMs, r.error),
   });
   await finishRunRow(runId, result);
+  await recordAudit({ action: "run_intelligence_job", entityType: "agency", entityId: null, newValue: { status: result.status, steps: result.summary.stepsRun } }).catch(() => {});
   return result;
 }

@@ -22,6 +22,9 @@ import { listActiveSignals } from "../intelligence/agencySignalRepository";
 import { getLatestReport, listReports } from "../reports/agencyReportRepository";
 import { OPPORTUNITY_SIGNALS } from "../reports/agencyReportTypes";
 import { getRainAgencyNetwork } from "@/lib/rain/rainGraphService";
+import { sanitizeWording } from "../governance/agencyVisibilityGuard";
+import { getVisibleEntitySources } from "../governance/agencyGovernanceService";
+import type { IntelligenceSource } from "../governance/agencyGovernanceTypes";
 import type {
   AgencyIntelligenceOverviewDTO, AgencyIntelligenceCardDTO, AgencyCompetitiveProfileDTO,
   AgencyTerritoryProfileDTO, AgencyThreatProfileDTO, AgencySignalsProfileDTO, AgencyReportsProfileDTO,
@@ -96,7 +99,7 @@ export async function getTopCompetitors(organizationId: string, filters: AgencyI
   const topSignal = new Map<string, string>();
   for (const r of (signalRows.data as Obj[] | null) ?? []) { const id = r.agency_id as string; if (!topSignal.has(id)) topSignal.set(id, r.title as string); }
   const snippet = new Map<string, string>();
-  for (const r of (reportRows.data as Obj[] | null) ?? []) { const id = r.agency_id as string; if (!snippet.has(id) && str(r.executive_summary)) snippet.set(id, (r.executive_summary as string).slice(0, 220)); }
+  for (const r of (reportRows.data as Obj[] | null) ?? []) { const id = r.agency_id as string; if (!snippet.has(id) && str(r.executive_summary)) snippet.set(id, sanitizeWording((r.executive_summary as string).slice(0, 220))); }
 
   const cards = scores.map((s) => {
     const a = agencyById.get(s.agencyId);
@@ -164,8 +167,10 @@ export async function getAgencyReportsProfile(organizationId: string, agencyId: 
   const g = await agencyHeader(organizationId); if (!g.allowed) return null;
   const agency = await getAgencyById(agencyId); if (!agency) return null;
   const [latest, history] = await Promise.all([getLatestReport(agencyId, "full_report"), listReports(agencyId, 12)]);
+  const latestDto = toReportDTO(latest as unknown as Parameters<typeof toReportDTO>[0]);
+  if (latestDto && latestDto.executiveSummary) latestDto.executiveSummary = sanitizeWording(latestDto.executiveSummary);
   return {
-    agencyId, latest: toReportDTO(latest as unknown as Parameters<typeof toReportDTO>[0]),
+    agencyId, latest: latestDto,
     history: history.map((r) => ({ reportType: r.reportType, periodEnd: r.periodEnd || null, dataConfidence: r.dataConfidence })),
     sourceSummary: buildSourceSummary(["agency_intelligence_reports"], latest?.generatedAt ?? null, latest?.dataConfidence ?? null, latest ? [] : ["עדיין לא הופק דוח מודיעין למשרד זה"]),
   };
@@ -274,4 +279,13 @@ export async function getAgencyOpportunityFeed(organizationId: string, filters: 
     opportunities: rows.map((r) => ({ label: (r.title as string) ?? "הזדמנות", city: str(r.city), neighborhood: str(r.neighborhood), agencyCount: null, reason: str(r.description) ?? (r.signal_type as string) ?? "אות הזדמנות" })),
     sourceSummary: buildSourceSummary(["agency_signals"], latestDate(...rows.map((r) => r.detected_at as string)), null, rows.length === 0 ? ["אין כרגע אותות הזדמנות פעילים"] : []),
   };
+}
+
+// ── Governance: visibility-guarded provenance sources (Phase 26.14) ──────────
+/** Visible intelligence sources for an entity (hidden/expired excluded by the guard). */
+export async function getAgencyIntelligenceSources(organizationId: string, entityType: string, entityId: string): Promise<IntelligenceSource[]> {
+  const guard = await assertOrgAccess(organizationId);
+  if (!guard.allowed) return [];
+  const { sources } = await getVisibleEntitySources(entityType, entityId);
+  return sources;
 }

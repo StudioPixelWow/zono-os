@@ -13,6 +13,7 @@ import {
   setIdentityStatus, setAgencyIdentityFields,
 } from "./resolutionCenterRepository";
 import { recordLearning, getLearningStats, getResolutionHistory } from "./learningService";
+import { recordAudit } from "../governance/agencyGovernanceService";
 import type { CandidateDetail, ResolutionCandidate, LearningStats, FeedbackRecord } from "./resolutionCenterFormat";
 
 export interface ResolutionCenterBundle {
@@ -42,6 +43,7 @@ export async function approveCandidate(candidateId: string, reason?: string): Pr
     finalResult: detail.suggestedAgencyId, reason,
     metadata: { detected_text: detail.detectedText, normalized: detail.normalizedText, agency_name: detail.suggestedAgencyName, alias: detail.detectedText },
   });
+  await recordAudit({ action: "approve_resolution", entityType: "agency_match", entityId: candidateId, newValue: { agencyId: detail.suggestedAgencyId }, reason }).catch(() => {});
   return { agencyId: detail.suggestedAgencyId };
 }
 
@@ -53,6 +55,7 @@ export async function rejectCandidate(candidateId: string, reason?: string): Pro
     action: "reject", candidateId, previousConfidence: detail.confidence, finalResult: "rejected", reason,
     metadata: { detected_text: detail.detectedText, normalized: detail.normalizedText },
   });
+  await recordAudit({ action: "reject_resolution", entityType: "agency_match", entityId: candidateId, reason }).catch(() => {});
 }
 
 export async function ignoreCandidate(candidateId: string, reason?: string): Promise<void> {
@@ -85,6 +88,7 @@ export async function editAgency(agencyId: string, patch: EditAgencyInput, reaso
     action: "edit", agencyId, finalResult: agencyId, reason: reason ?? patch.notes ?? null,
     metadata: { agency_name: patch.displayName ?? before.name, old_value: before, new_value: patch },
   });
+  await recordAudit({ action: "edit_agency", entityType: "agency", entityId: agencyId, oldValue: { ...before }, newValue: { ...patch }, reason: reason ?? patch.notes ?? null }).catch(() => {});
 }
 
 export async function mergeAgency(primaryId: string, duplicateId: string, reason?: string): Promise<{ movedCounts: Record<string, number> }> {
@@ -99,6 +103,7 @@ export async function mergeAgency(primaryId: string, duplicateId: string, reason
     action: "merge", agencyId: primaryId, finalResult: primaryId, reason,
     metadata: { agency_name: primary.name, merged_from: dup.name, moved_counts: movedCounts },
   });
+  await recordAudit({ action: "merge_agency", entityType: "agency", entityId: primaryId, newValue: { mergedFrom: duplicateId, moved_counts: movedCounts }, reason }).catch(() => {});
   return { movedCounts };
 }
 
@@ -119,5 +124,6 @@ export async function splitAgency(sourceAgencyId: string, newName: string, selec
     action: "split", agencyId: agency.id, finalResult: agency.id, reason,
     metadata: { agency_name: newName.trim(), split_from: source.name, moved_counts: movedCounts },
   });
+  await recordAudit({ action: "split_agency", entityType: "agency", entityId: agency.id, newValue: { splitFrom: sourceAgencyId, moved_counts: movedCounts }, reason }).catch(() => {});
   return { newAgencyId: agency.id, movedCounts };
 }
