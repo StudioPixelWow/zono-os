@@ -91,6 +91,10 @@ export interface ZiAskResult {
   answer: ZiMessage;
   source: ZiSource;
   model: string | null;
+  /** Knowledge articles cited for this answer ("מקורות תשובה"). */
+  sources?: { id: string; slug: string; title: string; category: string; route: string | null }[];
+  /** Page-aware suggested follow-up questions. */
+  followups?: string[];
 }
 
 // ── Page-aware starter suggestions ───────────────────────────────────────────

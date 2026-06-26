@@ -22,3 +22,11 @@ export {
   deriveTitle, searchConversations, sortConversations, groupConversationsByRecency, orderMessages,
   type ConversationGroup,
 } from "./conversation";
+// ── Knowledge Engine (Phase 23) ──────────────────────────────────────────────
+export * from "./knowledge-types";
+export { BUILTIN_ARTICLES, BUILTIN_VERSION, builtinSlugs } from "./knowledge-docs";
+export { tokenize, buildArticleDoc, buildIndex, chunkContent, type ArticleDoc } from "./knowledge-index";
+export { searchKnowledge, canSeeArticle, type SearchContext } from "./knowledge-search";
+export {
+  RAG_FALLBACK, buildRagMessages, deterministicRagAnswer, ragSources, ragFollowups,
+} from "./knowledge-rag";

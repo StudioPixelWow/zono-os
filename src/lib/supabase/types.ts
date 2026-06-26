@@ -4323,6 +4323,63 @@ type ZiMessagesRow = {
   created_at: string;
 };
 
+// ── ZI Expert™ Knowledge Engine (Phase 23) ───────────────────────────────────
+type ZiKnowledgeArticlesRow = {
+  id: string;
+  organization_id: string | null;
+  slug: string;
+  title: string;
+  category: string;
+  module: string | null;
+  summary: string;
+  content: string;
+  keywords: string[];
+  role_visibility: string;
+  permissions: Json;
+  source_type: string;
+  source_path: string | null;
+  version: number;
+  published: boolean;
+  routes: string[];
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+type ZiKnowledgeChunksRow = {
+  id: string;
+  organization_id: string | null;
+  article_id: string;
+  slug: string;
+  ordinal: number;
+  heading: string | null;
+  content: string;
+  keywords: string[];
+  created_at: string;
+};
+type ZiKnowledgeSourcesRow = {
+  id: string;
+  organization_id: string | null;
+  name: string;
+  source_type: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+type ZiKnowledgeFeedbackRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  question: string;
+  answer: string;
+  article_ids: string[];
+  route: string | null;
+  module_id: string | null;
+  role: string | null;
+  rating: "helpful" | "not_helpful" | "missing_info";
+  comment: string | null;
+  created_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -4348,6 +4405,10 @@ export interface Database {
       org_invitations: TableShape<OrgInvitationsRow, "org_id" | "email" | "token">;
       zi_conversations: TableShape<ZiConversationsRow, "organization_id" | "user_id">;
       zi_messages: TableShape<ZiMessagesRow, "organization_id" | "conversation_id" | "user_id" | "role" | "content">;
+      zi_knowledge_articles: TableShape<ZiKnowledgeArticlesRow, "slug" | "title">;
+      zi_knowledge_chunks: TableShape<ZiKnowledgeChunksRow, "article_id" | "slug" | "content">;
+      zi_knowledge_sources: TableShape<ZiKnowledgeSourcesRow, "name">;
+      zi_knowledge_feedback: TableShape<ZiKnowledgeFeedbackRow, "organization_id" | "user_id" | "question" | "rating">;
       property_media: TableShape<PropertyMediaRow, "org_id" | "property_id" | "url">;
       property_journeys: TableShape<
         PropertyJourneysRow,

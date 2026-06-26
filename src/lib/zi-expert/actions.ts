@@ -9,6 +9,15 @@ import { getDashboardContext } from "@/lib/dashboard/context";
 import { buildZIContext, type ServerContextParts } from "./context";
 import { answerZi } from "./engine";
 import { deriveTitle } from "./conversation";
+import { searchKnowledge } from "./knowledge-search";
+import { buildRagMessages, deterministicRagAnswer, ragSources, ragFollowups } from "./knowledge-rag";
+import { runZiCompletion } from "./providers";
+import {
+  loadKnowledgeArticles, loadKnowledgeArticlesAdmin, recordKnowledgeFeedback,
+  listKnowledgeFeedback, listMissingAnswerQuestions, type KnowledgeFeedbackRow,
+} from "./knowledge-repository";
+import { syncZIKnowledgeBase, type KnowledgeSyncResult } from "./knowledge-sync";
+import type { FeedbackRating, KnowledgeArticle, KnowledgeSourceRef } from "./knowledge-types";
 import {
   appendMessageRow, createConversationRow, getMessageRows, listConversationRows,
   rateMessageRow, renameConversationRow, searchConversationRows, setArchivedRow,
@@ -77,8 +86,22 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
       conversationId, role: "user", content: question, source: null, route: ctx.route, moduleId: ctx.moduleId,
     });
 
-    // Generate the answer (AI with deterministic fallback).
-    const answer = await answerZi(ctx, question, history);
+    // ── RAG: retrieve permission-filtered, page-aware knowledge, then answer
+    // ONLY from it (with the deterministic, knowledge-grounded fallback). ──
+    const articles = await loadKnowledgeArticles();
+    const hits = searchKnowledge(articles, question, { roleKey: ctx.roleKey, moduleId: ctx.moduleId, route: ctx.route });
+    let answer: { content: string; source: "ai" | "fallback" | "cache"; model: string | null };
+    if (hits.length > 0) {
+      const messages = buildRagMessages(ctx, question, hits, history);
+      const res = await runZiCompletion(messages, deterministicRagAnswer(ctx, hits));
+      answer = { content: res.content, source: res.source, model: res.model };
+    } else {
+      // Nothing retrieved → honest fallback (engine returns the no-answer line).
+      const fb = await answerZi(ctx, question, history);
+      answer = { content: deterministicRagAnswer(ctx, []), source: fb.source === "ai" ? "fallback" : fb.source, model: null };
+    }
+    const sources: KnowledgeSourceRef[] = ragSources(hits);
+    const followups = ragFollowups(hits);
 
     // Persist the assistant's answer.
     const assistantMsg = await appendMessageRow({
@@ -91,7 +114,7 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
       ok: true,
       data: {
         conversationId, conversationTitle, question: userMsg, answer: assistantMsg,
-        source: answer.source, model: answer.model,
+        source: answer.source, model: answer.model, sources, followups,
       },
     };
   } catch (e) {
@@ -150,4 +173,78 @@ export async function searchConversationsAction(query: string): Promise<ZiResult
 export async function rateMessageAction(messageId: string, rating: "up" | "down" | null): Promise<ZiResult<true>> {
   try { await rateMessageRow(messageId, rating); return { ok: true, data: true }; }
   catch (e) { return { ok: false, error: e instanceof Error ? e.message : "rate_failed" }; }
+}
+
+// ── Knowledge Engine actions (Phase 23) ──────────────────────────────────────
+
+export interface ZiKnowledgeFeedbackInput {
+  question: string;
+  answer: string;
+  articleIds: string[];
+  route: string | null;
+  moduleId: string | null;
+  rating: FeedbackRating;
+  comment?: string | null;
+}
+
+/** Record "האם זה עזר?" feedback on a ZI answer. */
+export async function submitKnowledgeFeedbackAction(input: ZiKnowledgeFeedbackInput): Promise<ZiResult<true>> {
+  try {
+    const role = asRoleKey((await getDashboardContext()).user?.roleKey ?? null);
+    await recordKnowledgeFeedback({
+      question: input.question, answer: input.answer, articleIds: input.articleIds,
+      route: input.route, moduleId: input.moduleId, role, rating: input.rating, comment: input.comment ?? null,
+    });
+    return { ok: true, data: true };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "feedback_failed" }; }
+}
+
+/** Seed/refresh the built-in knowledge base (idempotent). Admin-triggered. */
+export async function syncKnowledgeAction(): Promise<ZiResult<KnowledgeSyncResult>> {
+  try {
+    const { profile, state } = await getSessionContext();
+    if (state !== "ready" || !profile) return { ok: false, error: "unauthorized" };
+    const res = await syncZIKnowledgeBase();
+    return res.ok ? { ok: true, data: res } : { ok: false, error: res.error ?? "sync_failed" };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "sync_failed" }; }
+}
+
+export interface KnowledgeAdminData {
+  articles: KnowledgeArticle[];
+  categories: string[];
+  modules: string[];
+  feedback: KnowledgeFeedbackRow[];
+  missingQuestions: string[];
+  unpublished: number;
+}
+
+/** Everything the /admin/zi-knowledge page needs. */
+export async function loadKnowledgeAdminAction(): Promise<ZiResult<KnowledgeAdminData>> {
+  try {
+    const articles = await loadKnowledgeArticlesAdmin();
+    const [feedback, missingQuestions] = await Promise.all([
+      listKnowledgeFeedback().catch(() => []),
+      listMissingAnswerQuestions().catch(() => []),
+    ]);
+    return {
+      ok: true,
+      data: {
+        articles,
+        categories: [...new Set(articles.map((a) => a.category))].sort(),
+        modules: [...new Set(articles.map((a) => a.module).filter((m): m is string => !!m))].sort(),
+        feedback, missingQuestions,
+        unpublished: articles.filter((a) => !a.published).length,
+      },
+    };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "load_failed" }; }
+}
+
+/** Test the knowledge search from the admin page (returns titles + scores). */
+export async function testKnowledgeSearchAction(query: string): Promise<ZiResult<{ title: string; category: string; score: number; reason: string }[]>> {
+  try {
+    const role = asRoleKey((await getDashboardContext()).user?.roleKey ?? null);
+    const articles = await loadKnowledgeArticles();
+    const hits = searchKnowledge(articles, query, { roleKey: role, moduleId: null, route: null }, 8);
+    return { ok: true, data: hits.map((h) => ({ title: h.article.title, category: h.article.category, score: Math.round(h.score * 10) / 10, reason: h.reason })) };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "search_failed" }; }
 }
