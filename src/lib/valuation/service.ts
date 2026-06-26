@@ -10,6 +10,8 @@ import { getSessionContext } from "@/lib/auth/session";
 import { gatherEvidence, getBrokerSoldProperties } from "./providers";
 import type { ProviderResult } from "./providers";
 import { runValuation as runEngine, normalizeInput } from "./valuation-engine";
+import { buildValuationIntelligence, ALGORITHM_VERSION } from "./intelligence";
+import type { ValuationIntelligence } from "./types";
 import type {
   ValuationInput, ValuationRecord, ValuationResult, Comparable, BrokerSoldProperty,
   MarketSnapshot, ValuationAdjustment,
@@ -107,6 +109,11 @@ export async function runValuationById(id: string): Promise<RunOutput> {
       : null,
   }));
 
+  // Phase 4 — build the full AI intelligence report (pure, real data only).
+  result.intelligence = buildValuationIntelligence({
+    input, result, comparables: comparables.filter((c) => (c.pricePerSqm ?? 0) > 0), market: result.market, debug: result.debug,
+  });
+
   await persistResult(db, orgId, id, input, result, comparables, brokerSold, result.market, result.adjustments);
   return { result, providers, brokerSold };
 }
@@ -187,8 +194,30 @@ async function persistResult(
       missingData: result.missingData ?? [],
       recommendedAction: result.recommendedAction ?? null,
       debug: result.debug ?? null,
+      intelligence: result.intelligence ?? null,
     },
   } as never).eq("id", id).eq("organization_id", orgId);
+
+  // ── Phase 4 — auditable history + explanation object ───────────────────────
+  const propertyId = ((await db.from(TABLE as never).select("property_id").eq("id", id).maybeSingle()).data as unknown as { property_id?: string } | null)?.property_id ?? null;
+  await db.from("valuation_history" as never).insert({
+    organization_id: orgId, valuation_id: id, property_id: propertyId,
+    estimated_value: result.estimatedValue, price_per_sqm: result.estimatedPricePerSqm,
+    confidence: result.confidenceScore, market_position: result.intelligence?.marketPosition ?? null,
+    comparable_count: result.debug?.comparableCount ?? 0, sold_comparable_count: result.debug?.soldComparableCount ?? 0,
+    sources_used: result.debug?.sourcesUsed ?? [], algorithm_version: ALGORITHM_VERSION,
+    valuation_available: result.valuationAvailable ?? true, calculated_at: new Date().toISOString(),
+  } as never).then(() => {}, () => {});
+
+  if (result.intelligence) {
+    const intel = result.intelligence;
+    await db.from("valuation_explanations" as never).upsert({
+      organization_id: orgId, valuation_id: id, market_position: intel.marketPosition,
+      explanation: intel.explanation, strengths: intel.strengths, weaknesses: intel.weaknesses,
+      market_insights: intel.marketInsights, negotiation_analysis: intel.negotiationAnalysis,
+      confidence_breakdown: intel.confidenceBreakdown, algorithm_version: ALGORITHM_VERSION,
+    } as never, { onConflict: "valuation_id" }).then(() => {}, () => {});
+  }
 }
 
 // ── read ──────────────────────────────────────────────────────────────────────
@@ -256,6 +285,7 @@ export async function getValuation(id: string): Promise<ValuationRecord | null> 
     missingData: (meta.missingData as string[]) ?? [],
     recommendedAction: (meta.recommendedAction as string | null) ?? null,
     debug: (meta.debug as ValuationResult["debug"]) ?? undefined,
+    intelligence: (meta.intelligence as ValuationIntelligence | null) ?? undefined,
   } : null;
 
   return {
@@ -263,6 +293,28 @@ export async function getValuation(id: string): Promise<ValuationRecord | null> 
     status: (r.status as ValuationRecord["status"]) ?? "draft", input: rowToInput(r), result,
     comparables, brokerSold, adjustments, market, createdAt: r.created_at as string,
   };
+}
+
+// ── Phase 4 — valuation history (audit / trend comparison) ───────────────────
+export interface ValuationHistoryItem {
+  id: string; estimatedValue: number | null; pricePerSqm: number | null; confidence: number | null;
+  marketPosition: string | null; comparableCount: number; soldComparableCount: number;
+  sourcesUsed: string[]; algorithmVersion: string; valuationAvailable: boolean; calculatedAt: string;
+}
+export async function getValuationHistory(valuationId: string, limit = 20): Promise<ValuationHistoryItem[]> {
+  const { db, orgId } = await ctx();
+  const { data } = await db.from("valuation_history" as never)
+    .select("*").eq("valuation_id", valuationId).eq("organization_id", orgId)
+    .order("created_at", { ascending: false }).limit(limit);
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: r.id as string, estimatedValue: r.estimated_value == null ? null : Number(r.estimated_value),
+    pricePerSqm: r.price_per_sqm == null ? null : Number(r.price_per_sqm),
+    confidence: r.confidence == null ? null : Number(r.confidence),
+    marketPosition: (r.market_position as string) ?? null,
+    comparableCount: Number(r.comparable_count ?? 0), soldComparableCount: Number(r.sold_comparable_count ?? 0),
+    sourcesUsed: (r.sources_used as string[]) ?? [], algorithmVersion: (r.algorithm_version as string) ?? "avm-v2",
+    valuationAvailable: Boolean(r.valuation_available), calculatedAt: r.calculated_at as string,
+  }));
 }
 
 export interface ValuationListItem {

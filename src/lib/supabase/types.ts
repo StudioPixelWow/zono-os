@@ -4475,6 +4475,21 @@ type AgencyEntityRelationshipsRow = {
   created_at: string; updated_at: string;
 };
 
+// ── Phase 4 — Valuation Intelligence & Explainability ────────────────────────
+type ValuationHistoryRow = {
+  id: string; organization_id: string; valuation_id: string; property_id: string | null;
+  estimated_value: number | null; price_per_sqm: number | null; confidence: number | null;
+  market_position: string | null; comparable_count: number; sold_comparable_count: number;
+  sources_used: unknown; algorithm_version: string; valuation_available: boolean;
+  calculated_at: string; created_at: string;
+};
+type ValuationExplanationsRow = {
+  id: string; organization_id: string; valuation_id: string; market_position: string | null;
+  explanation: string | null; strengths: unknown; weaknesses: unknown; market_insights: unknown;
+  negotiation_analysis: unknown; confidence_breakdown: unknown; algorithm_version: string;
+  created_at: string; updated_at: string;
+};
+
 // ── Phase 26.4 — Agency Territory Dominance ──────────────────────────────────
 type AgencyTerritoryStatsRow = {
   id: string; organization_id: string; agency_id: string;
@@ -4557,6 +4572,8 @@ export interface Database {
       agency_resolution_candidates: TableShape<AgencyResolutionCandidatesRow, "organization_id" | "raw_text">;
       agency_entity_relationships: TableShape<AgencyEntityRelationshipsRow, "organization_id" | "agency_id" | "entity_type" | "entity_id" | "relationship_type">;
       agency_territory_stats: TableShape<AgencyTerritoryStatsRow, "organization_id" | "agency_id" | "territory_type" | "territory_key">;
+      valuation_history: TableShape<ValuationHistoryRow, "organization_id" | "valuation_id">;
+      valuation_explanations: TableShape<ValuationExplanationsRow, "organization_id" | "valuation_id">;
       zi_learning_progress: TableShape<ZiLearningProgressRow, "organization_id" | "user_id" | "kind" | "slug">;
       zi_tutorials: TableShape<ZiTutorialsRow, "organization_id" | "slug" | "title">;
       zi_walkthroughs: TableShape<ZiWalkthroughsRow, "organization_id" | "slug" | "title">;

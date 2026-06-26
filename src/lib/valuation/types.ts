@@ -142,6 +142,57 @@ export interface WhatIfPoint {
   competitionLevel: DemandLevel;
 }
 
+// ── Phase 4 — Valuation Intelligence & Explainability ────────────────────────
+export type PricePosition =
+  | "below_market" | "fair_market" | "premium" | "luxury_segment" | "overpriced" | "very_overpriced";
+
+export interface ValuationFactor { key: string; label: string; detail: string }
+export interface MarketInsight { key: string; label: string; value: string }
+
+export interface NegotiationAnalysis {
+  recommendedAsking: number;
+  expectedSelling: number;
+  negotiationMargin: number;
+  expectedDiscountPercent: number;
+  listingStrategy: string;
+  estimatedSellingDays: number;
+  quickSalePrice: number;
+  optimalSalePrice: number;
+  premiumPrice: number;
+}
+
+export interface ConfidenceBreakdown {
+  dataFreshness: number | null;        // 0..100
+  comparableCount: number | null;
+  comparableSimilarity: number | null;
+  distance: number | null;
+  sourceReliability: number | null;
+  transactionQuality: number | null;
+  missingInformation: number | null;   // 0..100, higher = more complete
+  overall: number;                     // 0..100
+}
+
+/** The complete AI Property Intelligence report attached to a valuation. */
+export interface ValuationIntelligence {
+  marketPosition: PricePosition;
+  strengths: ValuationFactor[];
+  weaknesses: ValuationFactor[];
+  marketInsights: MarketInsight[];
+  negotiationAnalysis: NegotiationAnalysis;
+  confidenceBreakdown: ConfidenceBreakdown;
+  explanation: string; // dynamic Hebrew
+  algorithmVersion: string;
+}
+
+export const PRICE_POSITION_LABEL: Record<PricePosition, string> = {
+  below_market: "מתחת למחיר השוק",
+  fair_market: "מחיר שוק הוגן",
+  premium: "פרמיום",
+  luxury_segment: "סגמנט יוקרה",
+  overpriced: "מעל מחיר השוק",
+  very_overpriced: "גבוה משמעותית מהשוק",
+};
+
 /** The full computed valuation result (persisted across several tables). */
 export interface ValuationResult {
   estimatedValue: number;
@@ -176,6 +227,8 @@ export interface ValuationResult {
   recommendedAction?: string | null;
   /** QA metadata — comparable counts, sources, ppsqm, outliers, reason codes. */
   debug?: ValuationDebug;
+  /** Full AI intelligence report (Phase 4) — strengths/weaknesses/insights/etc. */
+  intelligence?: ValuationIntelligence;
 }
 
 /** A fully-loaded valuation as read from the DB for the result/report screens. */
