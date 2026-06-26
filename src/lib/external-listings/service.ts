@@ -17,6 +17,7 @@ import {
 } from "./providers";
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
 import { detectForOrg } from "@/lib/broker/service";
+import { reconcileListingLifecycle } from "@/lib/market-acceptance";
 import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
@@ -324,6 +325,18 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     console.error("[geocode] external listings geocode during sync failed:", e);
   }
 
+  // Market Acceptance Intelligence™ — record lifecycle evidence (best-effort,
+  // never breaks the sync). Disappearance is only asserted for cities scanned
+  // this run; "seen this run" is keyed off last_synced_at >= the sync start.
+  try {
+    await reconcileListingLifecycle(orgId, {
+      seenSince: new Date(syncStart).toISOString(),
+      scannedCities: completedCities,
+    });
+  } catch (e) {
+    console.error("[market-acceptance] lifecycle reconcile (syncOrg) failed:", e);
+  }
+
   summary.success = summary.errors.length === 0;
   await db.from("import_jobs").update({ status: summary.errors.length ? "completed_with_errors" : "completed", total_found: totalFound, total_imported: summary.inserted, total_updated: summary.updated, error: summary.errors.length ? summary.errors.slice(0, 5).join("; ") : null, finished_at: new Date().toISOString() }).eq("id", jobId);
   return summary;
@@ -483,7 +496,15 @@ export async function finishSyncJob(jobId: string, cities: string[], errorCount 
     const geo = await geocodeOrgExternalListings(db, orgId);
     if (geo.attempted > 0) await log(`גיאוקודינג: ${geo.success} מוקמו · ${geo.failed} נכשלו (מתוך ${geo.attempted})`);
   } catch (e) { console.error("[geocode] (chunked finish) failed:", e); }
-  const { data: j } = await db.from("import_jobs").select("total_found,total_imported,total_updated").eq("id", jobId).single();
+  const { data: j } = await db.from("import_jobs").select("total_found,total_imported,total_updated,started_at").eq("id", jobId).single();
+  // Market Acceptance Intelligence™ — record lifecycle evidence (best-effort).
+  // "seen this run" is keyed off the job start; disappearance only for scanned cities.
+  try {
+    await reconcileListingLifecycle(orgId, {
+      seenSince: (j?.started_at as string | undefined) ?? new Date(Date.now() - 30 * 60_000).toISOString(),
+      scannedCities: cities,
+    });
+  } catch (e) { console.error("[market-acceptance] lifecycle reconcile (finishSyncJob) failed:", e); }
   await db.from("import_jobs").update({
     status: errorCount ? "completed_with_errors" : "completed",
     finished_at: new Date().toISOString(),
