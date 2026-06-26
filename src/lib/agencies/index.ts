@@ -34,3 +34,19 @@ export type {
   AgencyEntityType, AgencyRelationshipType, AgencyEntityRelationship,
   RelationshipInput, AgencyAreaFootprint, GraphTimelineEvent, GraphSignal,
 } from "./graph/agencyGraphTypes";
+// ── Territory Dominance (Phase 26.4, pure types + helpers) ───────────────────
+export {
+  territoryKey, territoryLabel, avgOrNull, medianOrNull, shareOrNull,
+  TERRITORY_PERIODS, DEFAULT_TERRITORY_PERIOD,
+} from "./territory/agencyTerritoryTypes";
+export type {
+  TerritoryType, TerritoryTrend, TerritoryPeriodDays, AgencyTerritoryStats,
+  TerritoryListingRow, TerritoryTotals, TerritoryPreviousPeriod, TerritoryCalcInput,
+  ComputedTerritoryStats, TerritoryOpportunity,
+} from "./territory/agencyTerritoryTypes";
+export {
+  scoreDominance, scoreMomentum, scoreConfidence, saturate, DOMINANCE_WEIGHTS,
+} from "./territory/agencyDominanceScoring";
+export {
+  computeTerritoryStats, detectTerritoryOpportunities,
+} from "./territory/agencyTerritoryCalculator";

@@ -4472,6 +4472,21 @@ type AgencyEntityRelationshipsRow = {
   created_at: string; updated_at: string;
 };
 
+// ── Phase 26.4 — Agency Territory Dominance ──────────────────────────────────
+type AgencyTerritoryStatsRow = {
+  id: string; organization_id: string; agency_id: string;
+  territory_type: string; city: string | null; neighborhood: string | null; street: string | null;
+  territory_key: string; period_start: string | null; period_end: string | null; period_days: number;
+  active_listings_count: number; historical_listings_count: number; sold_count: number;
+  deals_count: number; exclusive_count: number; price_drop_count: number | null;
+  avg_price: number | null; avg_price_per_sqm: number | null; avg_days_on_market: number | null;
+  listing_velocity: number | null; sales_velocity: number | null;
+  inventory_share: number | null; sales_share: number | null; luxury_share: number | null;
+  dominance_score: number | null; momentum_score: number | null; trend: string | null;
+  confidence: number | null; metadata: unknown;
+  calculated_at: string; created_at: string; updated_at: string;
+};
+
 // ── Phase 25 — ZI Interactive Learning ───────────────────────────────────────
 type ZiLearningProgressRow = {
   id: string; organization_id: string; user_id: string;
@@ -4538,6 +4553,7 @@ export interface Database {
       agency_aliases: TableShape<AgencyAliasesRow, "organization_id" | "agency_id" | "alias" | "normalized_alias">;
       agency_resolution_candidates: TableShape<AgencyResolutionCandidatesRow, "organization_id" | "raw_text">;
       agency_entity_relationships: TableShape<AgencyEntityRelationshipsRow, "organization_id" | "agency_id" | "entity_type" | "entity_id" | "relationship_type">;
+      agency_territory_stats: TableShape<AgencyTerritoryStatsRow, "organization_id" | "agency_id" | "territory_type" | "territory_key">;
       zi_learning_progress: TableShape<ZiLearningProgressRow, "organization_id" | "user_id" | "kind" | "slug">;
       zi_tutorials: TableShape<ZiTutorialsRow, "organization_id" | "slug" | "title">;
       zi_walkthroughs: TableShape<ZiWalkthroughsRow, "organization_id" | "slug" | "title">;
