@@ -3,6 +3,10 @@
 // ZONO Orchestrator — server actions invoked from the UI.
 // ============================================================================
 import { runOrchestratorForSession } from "./triggers";
+import { getSessionContext } from "@/lib/auth/session";
+import { getSystemRefreshStatusRaw } from "./repository";
+import { buildSystemRefreshStatus, EMPTY_SYSTEM_REFRESH_STATUS } from "./status";
+import type { SystemRefreshStatusResult } from "./status";
 import type { OrchestratorResult } from "./types";
 
 export interface OrchestratorActionState {
@@ -49,4 +53,22 @@ export async function runManualSystemRefreshAction(): Promise<OrchestratorAction
     skippedReason: full.skippedReason,
     error: full.error,
   };
+}
+
+/**
+ * Lightweight, read-only status for the sticky button's freshness indicator.
+ * Reads ONLY the current organization's latest run + unread alert count, then
+ * formats the Hebrew labels. Never throws — on any failure it returns the safe
+ * empty status and logs server-side so the button silently degrades to basic.
+ */
+export async function getSystemRefreshStatusAction(): Promise<SystemRefreshStatusResult> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile) return EMPTY_SYSTEM_REFRESH_STATUS;
+    const raw = await getSystemRefreshStatusRaw(profile.org_id);
+    return buildSystemRefreshStatus(raw, Date.now());
+  } catch (e) {
+    console.error("[zono] getSystemRefreshStatusAction failed:", e);
+    return EMPTY_SYSTEM_REFRESH_STATUS;
+  }
 }

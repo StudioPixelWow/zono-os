@@ -640,21 +640,43 @@ body {
   z-index: 70; display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
 }
 .zono-sysrefresh {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 11px 16px; border: none; cursor: pointer; border-radius: 9999px;
-  font-weight: 800; font-size: 13.5px; color: #fff; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 9px 16px 9px 13px; border: none; cursor: pointer; border-radius: 9999px;
+  color: #fff; font-family: inherit; text-align: right;
   background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 52%, #9333ea 100%);
   box-shadow: 0 10px 26px rgba(109, 40, 217, 0.4), 0 0 0 1px rgba(255,255,255,0.06) inset;
   transition: transform 0.18s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, filter 0.18s ease;
 }
 .zono-sysrefresh:hover:not(:disabled) { transform: translateY(-1.5px); box-shadow: 0 16px 36px rgba(109,40,217,0.55); filter: brightness(1.05); }
 .zono-sysrefresh:active:not(:disabled) { transform: translateY(0) scale(0.98); }
-.zono-sysrefresh:disabled { opacity: 0.85; cursor: default; }
+.zono-sysrefresh:disabled { opacity: 0.9; cursor: default; }
 .zono-sysrefresh:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(196,181,253,0.85), 0 10px 26px rgba(109,40,217,0.4); }
-.zono-sysrefresh-label { white-space: nowrap; }
-.zono-sysrefresh-status { display: inline-grid; place-items: center; }
+
+/* Icon sits in a relatively-positioned wrapper so the alert badge can dock. */
+.zono-sysrefresh-icon { position: relative; display: inline-grid; place-items: center; flex: 0 0 auto; }
+.zono-sysrefresh-badge {
+  position: absolute; top: -7px; inset-inline-end: -8px; min-width: 16px; height: 16px; padding: 0 4px;
+  display: inline-grid; place-items: center; border-radius: 9999px;
+  font-size: 10px; font-weight: 800; line-height: 1; color: #2a0e0e;
+  background: #fcd34d; box-shadow: 0 0 0 2px rgba(45, 27, 78, 0.95);
+}
+
+/* Two-line text block: main label + small freshness sub-line. */
+.zono-sysrefresh-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; min-width: 0; }
+.zono-sysrefresh-label { white-space: nowrap; font-weight: 800; font-size: 13.5px; }
+.zono-sysrefresh-sub {
+  white-space: nowrap; font-weight: 600; font-size: 10.5px;
+  color: rgba(243, 240, 255, 0.78); max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+}
+.zono-sysrefresh-status { display: inline-grid; place-items: center; flex: 0 0 auto; }
 .zono-sysrefresh-spin { animation: zono-sysrefresh-rot 0.9s linear infinite; }
 @keyframes zono-sysrefresh-rot { to { transform: rotate(360deg); } }
+
+/* Subtle accent on the sub-line per indicator state (calm vs. warning vs. alerts). */
+.zono-sysrefresh-wrap[data-status="alerts"]  .zono-sysrefresh-sub { color: #fcd34d; }
+.zono-sysrefresh-wrap[data-status="partial"] .zono-sysrefresh-sub { color: #fcd34d; }
+.zono-sysrefresh-wrap[data-status="failed"]  .zono-sysrefresh-sub { color: #fca5a5; }
+.zono-sysrefresh-wrap[data-status="running"] .zono-sysrefresh-sub { color: #c4b5fd; }
 
 /* Per-phase accent on the status dot. */
 .zono-sysrefresh-wrap[data-phase="success"] .zono-sysrefresh-status { color: #6ee7b7; }
@@ -670,11 +692,13 @@ body {
 }
 @keyframes zono-sysrefresh-pop { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
 
-/* Mobile: icon-only pill so it never covers navigation. */
+/* Mobile: icon-only pill so it never covers navigation. The freshness/alert
+   status stays reachable via the button's aria-label + title (tooltip), and the
+   unread badge stays visible on the icon. */
 @media (max-width: 768px) {
   .zono-sysrefresh-wrap { left: 12px; top: auto; bottom: 86px; transform: none; }
   .zono-sysrefresh { padding: 12px; }
-  .zono-sysrefresh-label { display: none; }
+  .zono-sysrefresh-text { display: none; }
   .zono-sysrefresh-toast { max-width: 200px; }
 }
 @media (prefers-reduced-motion: reduce) {
