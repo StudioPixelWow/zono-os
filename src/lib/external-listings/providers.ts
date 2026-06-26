@@ -136,15 +136,28 @@ class ApifyProvider implements PropertyProvider {
    */
   buildInput(city: string, limit: number): Record<string, unknown> {
     return {
+      // Send the city under EVERY common key these scrapers use, so whichever
+      // field the actor reads picks it up (the actors tolerate extra keys).
       city,
+      cities: [city],
       locality: city,
       location: city,
+      area: city,
+      settlement: city,
+      searchTerm: city,
+      search: city,
+      query: city,
+      q: city,
+      text: city,
+      keywords: city,
       // The swerve Yad2/Madlan actors require dealType ∈ {"buy","rent","commercial"}.
       // "for sale" maps to "buy".
       dealType: "buy",
+      dealTypes: ["buy"],
       maxListingsPerCity: limit,
       maxItems: limit,
       maxResults: limit,
+      limit,
     };
   }
 
