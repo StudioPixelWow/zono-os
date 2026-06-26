@@ -241,3 +241,12 @@ export interface AcceptanceScoreSummary {
   returned: number;
   officialTransactionFound: number;
 }
+
+/** Summary returned by an org-wide aggregate recompute pass (MAI-4). */
+export interface AggregateRecomputeSummary {
+  totalAggregates: number;
+  windowsCalculated: number;
+  segmentsCalculated: number;
+  lowConfidenceSegments: number;
+  skippedSmallSamples: number;
+}

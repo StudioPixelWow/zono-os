@@ -7,6 +7,7 @@
 // ============================================================================
 import { SIGNAL_NAMES, type Signal, type SignalSet, type MarketAcceptanceClassification } from "./types";
 import { scoreMarketAcceptance } from "./scoring";
+import { computeMarketAcceptanceAggregates, priceBucket, type AggregateListingRecord } from "./aggregates";
 
 export interface SignalQaResult {
   ok: boolean;
@@ -109,6 +110,87 @@ export function runAcceptanceScoringQa(): { ok: boolean; cases: AcceptanceQaCase
       exit: score.marketExitConfidence, acceptance: score.marketAcceptanceConfidence, rejection: score.marketRejectionConfidence,
     };
   });
+
+  return { ok: cases.every((c) => c.ok), cases };
+}
+
+// ── MAI-4 — deterministic aggregate QA cases ────────────────────────────────
+
+function makeRecord(p: Partial<AggregateListingRecord>): AggregateListingRecord {
+  const recentScan = new Date(Date.now() - 1 * 86_400_000).toISOString(); // 1 day ago
+  return {
+    provider: "yad2", externalId: Math.random().toString(36).slice(2),
+    classification: "ACTIVE", scoreConfidence: 1, currentState: "ACTIVE",
+    daysOnMarket: 30, lastKnownPrice: 1_800_000, reductionPct: 0.03,
+    city: "קריית ביאליק", neighborhood: "צמרות", propertyType: "apartment", rooms: 4,
+    lastScanAt: recentScan, ...p,
+  };
+}
+const rep = (n: number, p: Partial<AggregateListingRecord>) => Array.from({ length: n }, () => makeRecord(p));
+
+export interface AggregateQaCase { name: string; ok: boolean; detail: string }
+
+/** Run the 8 aggregate scenarios from the MAI-4 spec. Pure — no DB. */
+export function runAggregateQa(): { ok: boolean; cases: AggregateQaCase[] } {
+  const cases: AggregateQaCase[] = [];
+  const cityAgg = (rows: ReturnType<typeof computeMarketAcceptanceAggregates>) =>
+    rows.filter((r) => r.windowDays === 30 && r.neighborhood == null && r.priceBucket == null)[0];
+
+  // 1) Empty org → no aggregates, no crash.
+  {
+    const rows = computeMarketAcceptanceAggregates([], Date.now());
+    cases.push({ name: "empty organization", ok: rows.length === 0, detail: `rows=${rows.length}` });
+  }
+  // 2) Small sample (<5) → low confidence, no absorption score.
+  {
+    const rows = computeMarketAcceptanceAggregates(rep(3, { classification: "LIKELY_ACCEPTED" }), Date.now());
+    const c = cityAgg(rows);
+    const ok = !!c && c.absorptionSpeedScore === null && c.confidence <= 25;
+    cases.push({ name: "small sample <5", ok, detail: c ? `conf=${c.confidence} absorption=${c.absorptionSpeedScore}` : "no city agg" });
+  }
+  // 3) Strong accepted segment → high acceptance rate + positive evidence.
+  {
+    const rows = computeMarketAcceptanceAggregates([...rep(18, { classification: "LIKELY_ACCEPTED", currentState: "DISAPPEARED", daysOnMarket: 20 })], Date.now());
+    const c = cityAgg(rows);
+    const ok = !!c && (c.marketAcceptanceRate ?? 0) >= 0.8 && c.evidence.some((e) => e.metric === "likely_accepted_count");
+    cases.push({ name: "strong accepted segment", ok, detail: c ? `accRate=${c.marketAcceptanceRate} absorption=${c.absorptionSpeedScore}` : "no agg" });
+  }
+  // 4) Rejected segment → high rejection rate.
+  {
+    const rows = computeMarketAcceptanceAggregates(rep(20, { classification: "LIKELY_REJECTED", daysOnMarket: 130 }), Date.now());
+    const c = cityAgg(rows);
+    const ok = !!c && (c.marketRejectionRate ?? 0) >= 0.8;
+    cases.push({ name: "rejected segment", ok, detail: c ? `rejRate=${c.marketRejectionRate}` : "no agg" });
+  }
+  // 5) Mixed segment → moderate confidence (sample 5–15 cap).
+  {
+    const recs = [...rep(4, { classification: "LIKELY_ACCEPTED" }), ...rep(4, { classification: "LIKELY_REJECTED" }), ...rep(4, { classification: "UNCERTAIN" })];
+    const rows = computeMarketAcceptanceAggregates(recs, Date.now());
+    const c = cityAgg(rows);
+    const ok = !!c && c.confidence <= 65 && c.sampleSize === 12;
+    cases.push({ name: "mixed segment", ok, detail: c ? `conf=${c.confidence} sample=${c.sampleSize}` : "no agg" });
+  }
+  // 6) Multiple windows → 7/14/30/60/90 present.
+  {
+    const rows = computeMarketAcceptanceAggregates(rep(20, {}), Date.now());
+    const ws = new Set(rows.map((r) => r.windowDays));
+    const ok = [7, 14, 30, 60, 90].every((w) => ws.has(w));
+    cases.push({ name: "multiple windows", ok, detail: `windows=${[...ws].sort((a, b) => a - b).join(",")}` });
+  }
+  // 7) Price buckets → grouped correctly.
+  {
+    const ok = priceBucket(1_200_000) === "under_1_5m" && priceBucket(1_800_000) === "1_5m_2m" &&
+      priceBucket(2_200_000) === "2m_2_5m" && priceBucket(2_700_000) === "2_5m_3m" &&
+      priceBucket(3_500_000) === "3m_4m" && priceBucket(5_000_000) === "4m_plus" && priceBucket(null) === null;
+    cases.push({ name: "price buckets", ok, detail: "bucket mapping" });
+  }
+  // 8) Null fields → null-safe, no fake values.
+  {
+    const rows = computeMarketAcceptanceAggregates(rep(6, { lastKnownPrice: null, daysOnMarket: null, reductionPct: null, neighborhood: null, propertyType: null, rooms: null }), Date.now());
+    const c = cityAgg(rows);
+    const ok = !!c && c.avgLastKnownPrice === null && c.medianDaysOnMarket === null && c.avgPriceReductionPct === null;
+    cases.push({ name: "null fields", ok, detail: c ? `price=${c.avgLastKnownPrice} dom=${c.medianDaysOnMarket}` : "no agg" });
+  }
 
   return { ok: cases.every((c) => c.ok), cases };
 }

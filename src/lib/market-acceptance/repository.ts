@@ -177,3 +177,80 @@ export async function upsertAcceptanceScoreRows(rows: Record<string, unknown>[])
     catch { /* best-effort — retried on the next sync */ }
   }
 }
+
+// ── MAI-4 — aggregate IO (join scores + lifecycle + signals + external) ─────
+const numOf = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/** Gather the joined per-listing records the aggregate engine needs. */
+export async function gatherAggregateData(organizationId: string): Promise<import("./aggregates").AggregateListingRecord[]> {
+  const db = createServiceRoleClient() as Db;
+  const k = (p: string, e: string) => `${p} ${e}`;
+
+  // Lifecycle (state + dom + last-known price/city/neighborhood + recency anchor).
+  const lc = new Map<string, { state: string | null; dom: number | null; price: number | null; city: string | null; neighborhood: string | null; lastScanAt: string | null }>();
+  {
+    const { data } = await db.from("market_listing_lifecycle" as never)
+      .select("provider,external_id,current_state,days_on_market,last_known_price,last_known_city,last_known_neighborhood,last_scan_at")
+      .eq("organization_id", organizationId).limit(20000);
+    for (const r of (data ?? []) as unknown as { provider: string; external_id: string; current_state: string | null; days_on_market: number | null; last_known_price: number | null; last_known_city: string | null; last_known_neighborhood: string | null; last_scan_at: string | null }[]) {
+      lc.set(k(r.provider, r.external_id), { state: r.current_state, dom: r.days_on_market, price: r.last_known_price, city: r.last_known_city, neighborhood: r.last_known_neighborhood, lastScanAt: r.last_scan_at });
+    }
+  }
+  // Signals (for price-reduction %).
+  const red = new Map<string, number | null>();
+  {
+    const { data } = await db.from("market_listing_signals" as never)
+      .select("provider,external_id,signals").eq("organization_id", organizationId).limit(20000);
+    for (const r of (data ?? []) as unknown as { provider: string; external_id: string; signals: Record<string, { value?: unknown }> }[]) {
+      const avgRed = numOf(r.signals?.AveragePriceReduction?.value);
+      const lastPrice = numOf(r.signals?.LastKnownPrice?.value);
+      const pct = avgRed != null && avgRed > 0 && lastPrice != null && lastPrice > 0 ? avgRed / (lastPrice + avgRed) : null;
+      red.set(k(r.provider, r.external_id), pct);
+    }
+  }
+  // External listings (property_type + rooms).
+  const ext = new Map<string, { propertyType: string | null; rooms: number | null }>();
+  {
+    const { data } = await db.from("external_listings" as never)
+      .select("source,source_id,property_type,rooms").eq("org_id", organizationId).limit(20000);
+    for (const r of (data ?? []) as unknown as { source: string; source_id: string; property_type: string | null; rooms: number | null }[]) {
+      ext.set(k(r.source, r.source_id), { propertyType: r.property_type, rooms: r.rooms });
+    }
+  }
+  // Scores drive the record set (one record per scored listing).
+  const out: import("./aggregates").AggregateListingRecord[] = [];
+  const { data: scores } = await db.from("market_acceptance_scores" as never)
+    .select("provider,external_id,classification,market_exit_confidence,market_acceptance_confidence,market_rejection_confidence")
+    .eq("organization_id", organizationId).limit(20000);
+  for (const s of (scores ?? []) as unknown as { provider: string; external_id: string; classification: string | null; market_exit_confidence: number | null; market_acceptance_confidence: number | null; market_rejection_confidence: number | null }[]) {
+    const key = k(s.provider, s.external_id);
+    const life = lc.get(key);
+    const e = ext.get(key);
+    const scoreConfidence = Math.max(s.market_exit_confidence ?? 0, s.market_acceptance_confidence ?? 0, s.market_rejection_confidence ?? 0) / 100;
+    out.push({
+      provider: s.provider, externalId: s.external_id,
+      classification: s.classification as import("./aggregates").AggregateListingRecord["classification"],
+      scoreConfidence,
+      currentState: (life?.state ?? null) as import("./aggregates").AggregateListingRecord["currentState"],
+      daysOnMarket: life?.dom ?? null,
+      lastKnownPrice: life?.price ?? null,
+      reductionPct: red.get(key) ?? null,
+      city: life?.city ?? null,
+      neighborhood: life?.neighborhood ?? null,
+      propertyType: e?.propertyType ?? null,
+      rooms: e?.rooms ?? null,
+      lastScanAt: life?.lastScanAt ?? null,
+    });
+  }
+  return out;
+}
+
+/** Upsert computed aggregate rows (conflict-keyed by the full segment+window). */
+export async function upsertAggregateRows(rows: Record<string, unknown>[]): Promise<void> {
+  if (!rows.length) return;
+  const db = createServiceRoleClient() as Db;
+  for (let i = 0; i < rows.length; i += 500) {
+    try { await db.from("market_acceptance_aggregates" as never).upsert(rows.slice(i, i + 500) as never, { onConflict: "organization_id,city,neighborhood,property_type,rooms,price_bucket,window_days,window_end" }); }
+    catch { /* best-effort — retried on the next sync */ }
+  }
+}
