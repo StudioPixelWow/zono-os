@@ -11,9 +11,9 @@
 // server action. The ZONO logo + brand purple are used exactly as provided.
 // ============================================================================
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
-import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, MessageCircle, Home } from "lucide-react";
+import { useActionState, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, MessageCircle, Home, TrendingDown, Building2, UserPlus, Star, Activity } from "lucide-react";
 import { signIn, type AuthFormState } from "@/lib/auth/actions";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
 
@@ -76,36 +76,15 @@ export function LoginExperience() {
         ))}
       </div>
 
-      {/* Signature chips — quiet, floating glass */}
-      <motion.div
-        className="zauth-chip zauth-glass zauth-float-a"
-        style={{ top: "9%", insetInlineEnd: "8%" }}
-        initial={reduce ? false : { opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: reduce ? 0 : 1.05, duration: 0.6, ease: EASE }}
-      >
-        <span className="zauth-chip-ico"><MessageCircle size={16} /></span>
-        <span className="zauth-chip-body">
-          <span className="zauth-chip-title">3 שיחות WhatsApp חדשות</span>
-          <span className="zauth-chip-sub">ממתינות למענה</span>
-        </span>
-        <span className="zauth-chip-live" aria-hidden="true" />
-      </motion.div>
-
-      <motion.div
-        className="zauth-chip zauth-glass zauth-float-b"
-        style={{ bottom: "12%", insetInlineEnd: "6.5%" }}
-        initial={reduce ? false : { opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: reduce ? 0 : 1.22, duration: 0.6, ease: EASE }}
-      >
-        <span className="zauth-chip-ico"><Home size={16} /></span>
-        <span className="zauth-chip-body">
-          <span className="zauth-chip-title">נמצאה התאמת נכס</span>
-          <span className="zauth-chip-sub">94% התאמה</span>
-        </span>
-        <span className="zauth-chip-live v" aria-hidden="true" />
-      </motion.div>
+      {/* Signature chips — quiet floating glass, cycling through live signals */}
+      <RotatingChip
+        style={{ top: "9%", insetInlineEnd: "8%" }} floatClass="zauth-float-a"
+        startIndex={0} intervalMs={4600} enterDelay={1.05} reduce={!!reduce}
+      />
+      <RotatingChip
+        style={{ bottom: "12%", insetInlineEnd: "6.5%" }} floatClass="zauth-float-b"
+        startIndex={1} intervalMs={5500} enterDelay={1.22} reduce={!!reduce}
+      />
 
       {/* ZI assistant — secondary, beside the card inside a soft ambient circle */}
       <Robot reduce={!!reduce} />
@@ -177,6 +156,62 @@ export function LoginExperience() {
         </motion.div>
       </main>
     </div>
+  );
+}
+
+// Pool of live "signals" that the floating chips cycle through — each one reads
+// like a real moment inside the operating system.
+const POPUPS = [
+  { Icon: MessageCircle, title: "3 שיחות WhatsApp חדשות", sub: "ממתינות למענה", tone: "g" },
+  { Icon: Home, title: "נמצאה התאמת נכס", sub: "94% התאמה", tone: "v" },
+  { Icon: TrendingDown, title: "ירידת מחיר באזור שלך", sub: "‎-6% בשבוע האחרון", tone: "v" },
+  { Icon: Building2, title: "עסקה חדשה נרשמה", sub: "רמת השרון · ₪2.4M", tone: "v" },
+  { Icon: UserPlus, title: "ליד חדש מהאתר", sub: "מחפש/ת 4 חדרים", tone: "g" },
+  { Icon: Star, title: "נכס בלעדי זוהה", sub: "פוטנציאל גבוה", tone: "v" },
+  { Icon: Activity, title: "השוק התחמם באזור", sub: "ביקוש עולה", tone: "v" },
+] as const;
+
+/** A floating glass chip pinned to one spot that fades between different live
+ *  signals over time (instead of showing a single fixed message). */
+function RotatingChip({
+  style, floatClass, startIndex, intervalMs, enterDelay, reduce,
+}: {
+  style: CSSProperties; floatClass: string; startIndex: number; intervalMs: number; enterDelay: number; reduce: boolean;
+}) {
+  const [i, setI] = useState(startIndex % POPUPS.length);
+  useEffect(() => {
+    if (reduce) return;
+    const t = setInterval(() => setI((p) => (p + 2) % POPUPS.length), intervalMs);
+    return () => clearInterval(t);
+  }, [reduce, intervalMs]);
+  const p = POPUPS[i];
+  const Icon = p.Icon;
+  return (
+    <motion.div
+      className={`zauth-chip zauth-glass ${floatClass}`}
+      style={style}
+      initial={reduce ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: reduce ? 0 : enterDelay, duration: 0.6, ease: EASE }}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={p.title}
+          className="zauth-chip-inner"
+          initial={reduce ? false : { opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+          transition={{ duration: 0.45, ease: EASE }}
+        >
+          <span className="zauth-chip-ico"><Icon size={16} /></span>
+          <span className="zauth-chip-body">
+            <span className="zauth-chip-title">{p.title}</span>
+            <span className="zauth-chip-sub">{p.sub}</span>
+          </span>
+          <span className={`zauth-chip-live ${p.tone === "v" ? "v" : ""}`} aria-hidden="true" />
+        </motion.span>
+      </AnimatePresence>
+    </motion.div>
   );
 }
 

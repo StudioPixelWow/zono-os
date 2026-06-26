@@ -388,9 +388,11 @@ body {
    circle. Subtle breathing + float; soft shadow; no exaggerated glow. */
 .zauth-robot-wrap {
   position: absolute; z-index: 6;
-  top: 50%; inset-inline-start: clamp(20px, 7vw, 150px);
-  transform: translateY(-50%);
-  width: clamp(150px, 13.5vw, 224px);
+  top: 50%; left: 50%;
+  /* Anchored to the centered card so it stays just to its (physical) right —
+     close to the form rather than drifting off toward the screen edge. */
+  transform: translate(clamp(230px, 21vw, 360px), -50%);
+  width: clamp(150px, 13vw, 216px);
   pointer-events: none;
 }
 .zauth-robot-halo {
@@ -425,10 +427,10 @@ body {
 /* Signature chips — quiet floating glass with a tiny live indicator. */
 .zauth-chip {
   position: absolute; z-index: 8;
-  display: flex; align-items: center; gap: 11px;
   padding: 12px 15px; border-radius: 16px;
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+.zauth-chip-inner { display: flex; align-items: center; gap: 11px; white-space: nowrap; }
 .zauth-chip-ico {
   display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px;
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.24), rgba(168, 85, 247, 0.14));
