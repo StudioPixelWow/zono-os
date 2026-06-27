@@ -73,7 +73,7 @@ export async function getSystemRefreshStatusRaw(organizationId: string): Promise
 
   // 3) Unread alerts for this org (head:true → count only, no rows).
   const { count } = await db
-    .from("property_alerts")
+    .from("property_alerts" as never)
     .select("id", { count: "exact", head: true })
     .eq("org_id", organizationId)
     .eq("status", "unread");
