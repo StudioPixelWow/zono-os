@@ -153,6 +153,14 @@ export function ZonoMap({
   const realPoints = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
   const hasKey = !!MAPS_KEY;
 
+  // Dev-only diagnostic: confirms whether the browser map key is present WITHOUT
+  // ever logging the key itself (only a boolean + length). Stripped in production.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[ZonoMap] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY present:", hasKey, hasKey ? `(length ${(MAPS_KEY as string).length})` : "(missing — map will show 'מפה לא זמינה')");
+    }
+  }, [hasKey]);
+
   useEffect(() => {
     if (!hasKey || realPoints.length === 0) return;
     let cancelled = false;
