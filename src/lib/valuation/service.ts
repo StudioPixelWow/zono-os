@@ -153,7 +153,7 @@ export async function runValuationById(id: string): Promise<RunOutput> {
         hasLocation: input.latitude != null && input.longitude != null,
         hasFeatures: input.rooms != null || input.builtSqm != null,
       },
-      segment: { city: input.city, neighborhood: input.neighborhood, propertyType: input.propertyType, rooms: input.rooms },
+      segment: { city: input.city ?? null, neighborhood: input.neighborhood ?? null, propertyType: input.propertyType ?? null, rooms: input.rooms ?? null },
     });
   } catch (e) {
     console.error("[valuation-weight] record failed (non-blocking):", e);
