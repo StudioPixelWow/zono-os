@@ -19,6 +19,7 @@ import { calculateExternalOpportunityScore, missingFields, qualityScores } from 
 import { detectForOrg } from "@/lib/broker/service";
 import { reconcileListingLifecycle, recalculateListingSignals, calculateMarketAcceptanceScoresForOrganization, calculateMarketAcceptanceAggregatesForOrganization } from "@/lib/market-acceptance";
 import { calculateBrokerMarketIntelligenceForOrganization } from "@/lib/broker-market-intelligence";
+import { calculateAreaLeaderEngineForOrganization } from "@/lib/area-leaders";
 import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
@@ -338,8 +339,9 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
     await calculateMarketAcceptanceAggregatesForOrganization(orgId); // MAI-4 market aggregates
     await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
+    await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
   } catch (e) {
-    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker reconcile (syncOrg) failed:", e);
+    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area reconcile (syncOrg) failed:", e);
   }
 
   summary.success = summary.errors.length === 0;
@@ -513,7 +515,8 @@ export async function finishSyncJob(jobId: string, cities: string[], errorCount 
     await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
     await calculateMarketAcceptanceAggregatesForOrganization(orgId); // MAI-4 market aggregates
     await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
-  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker reconcile (finishSyncJob) failed:", e); }
+    await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
+  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area reconcile (finishSyncJob) failed:", e); }
   await db.from("import_jobs").update({
     status: errorCount ? "completed_with_errors" : "completed",
     finished_at: new Date().toISOString(),
