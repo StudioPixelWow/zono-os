@@ -18,6 +18,7 @@ import {
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
 import { detectForOrg } from "@/lib/broker/service";
 import { reconcileListingLifecycle, recalculateListingSignals, calculateMarketAcceptanceScoresForOrganization, calculateMarketAcceptanceAggregatesForOrganization } from "@/lib/market-acceptance";
+import { calculateBrokerMarketIntelligenceForOrganization } from "@/lib/broker-market-intelligence";
 import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
@@ -336,8 +337,9 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     await recalculateListingSignals(orgId); // MAI-2 evidence signals (no scoring)
     await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
     await calculateMarketAcceptanceAggregatesForOrganization(orgId); // MAI-4 market aggregates
+    await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
   } catch (e) {
-    console.error("[market-acceptance] lifecycle/signals/scores/aggregates reconcile (syncOrg) failed:", e);
+    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker reconcile (syncOrg) failed:", e);
   }
 
   summary.success = summary.errors.length === 0;
@@ -510,7 +512,8 @@ export async function finishSyncJob(jobId: string, cities: string[], errorCount 
     await recalculateListingSignals(orgId); // MAI-2 evidence signals (no scoring)
     await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
     await calculateMarketAcceptanceAggregatesForOrganization(orgId); // MAI-4 market aggregates
-  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates reconcile (finishSyncJob) failed:", e); }
+    await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
+  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker reconcile (finishSyncJob) failed:", e); }
   await db.from("import_jobs").update({
     status: errorCount ? "completed_with_errors" : "completed",
     finished_at: new Date().toISOString(),
