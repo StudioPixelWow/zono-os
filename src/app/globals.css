@@ -387,13 +387,13 @@ body {
 /* ZI assistant — secondary element, beside the card, inside a soft ambient
    circle. Subtle breathing + float; soft shadow; no exaggerated glow. */
 .zauth-robot-wrap {
-  position: absolute; z-index: 6;
-  top: 50%; left: 50%;
-  /* Offset well to the (physical) right of the centered card. The min (440px)
-     guarantees it clears the card edge at every width; it scales out further on
-     wide screens. The robot NEVER overlaps the form. */
-  transform: translate(clamp(440px, 34vw, 660px), -50%);
-  width: clamp(140px, 11vw, 196px);
+  position: absolute; z-index: 12;
+  /* Anchored to the (physical) RIGHT edge of the viewport — never offset from the
+     centered card — so it is structurally impossible for it to touch the form.
+     Topmost layer, but pointer-events:none so it can never block a click. */
+  top: 50%; right: clamp(16px, 3.5vw, 72px); left: auto;
+  transform: translateY(-50%);
+  width: clamp(150px, 12vw, 200px);
   pointer-events: none;
 }
 .zauth-robot-halo {

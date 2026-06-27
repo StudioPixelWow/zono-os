@@ -76,10 +76,10 @@ export function LoginExperience() {
         ))}
       </div>
 
-      {/* Live signals — keep popping in across the left side, constantly refreshing */}
+      {/* Live signals — keep popping in across BOTH sides at random, refreshing */}
       <PopupSwarm reduce={!!reduce} />
 
-      {/* ZI assistant — secondary, beside the card inside a soft ambient circle */}
+      {/* ZI assistant — anchored to the right edge, never touching the form */}
       <Robot reduce={!!reduce} />
 
       {/* Foreground: the login card is the hero */}
@@ -164,42 +164,54 @@ const POPUPS = [
   { Icon: Activity, title: "השוק התחמם באזור", sub: "ביקוש עולה", tone: "v" },
 ] as const;
 
-// Anchor spots for the popups — all on the (physical) LEFT side / corners, so
-// they never collide with the centered card or the robot on the right.
-const POPUP_SPOTS: CSSProperties[] = [
-  { top: "8%", insetInlineEnd: "7%" },
-  { top: "29%", insetInlineEnd: "4%" },
-  { bottom: "27%", insetInlineEnd: "5%" },
-  { bottom: "9%", insetInlineEnd: "8%" },
+// Anchor spots for the popups — spread across BOTH physical sides (corners), so
+// signals pop in left AND right. Right-side spots sit in the top/bottom corners
+// to stay clear of the ZI robot (which hugs the right edge at mid-height) and
+// the centered card. `enterX` makes each chip slide in from its own edge.
+// In RTL: insetInlineEnd = physical LEFT, insetInlineStart = physical RIGHT.
+interface Spot { style: CSSProperties; enterX: number }
+const POPUP_SPOTS: Spot[] = [
+  { style: { top: "8%", insetInlineEnd: "7%" }, enterX: -26 },   // left · top
+  { style: { top: "40%", insetInlineEnd: "4%" }, enterX: -26 },  // left · mid
+  { style: { bottom: "11%", insetInlineEnd: "6%" }, enterX: -26 }, // left · bottom
+  { style: { top: "9%", insetInlineStart: "6%" }, enterX: 26 },  // right · top corner
+  { style: { bottom: "13%", insetInlineStart: "7%" }, enterX: 26 }, // right · bottom corner
 ];
-interface ActivePopup { id: number; spot: CSSProperties; popup: (typeof POPUPS)[number] }
+interface ActivePopup { id: number; spotIdx: number; popup: (typeof POPUPS)[number] }
 
 /** A living swarm of live-signal popups that keep popping in, refreshing and
- *  leaving — so the screen feels alive (instead of two static chips). */
+ *  leaving — so the screen feels alive (instead of two static chips). Spots are
+ *  picked at random across both sides; an occupancy set prevents overlaps. */
 function PopupSwarm({ reduce }: { reduce: boolean }) {
-  // Reduced motion: two static signals (set via the initializer — never in the effect).
+  // Reduced motion: two static signals — one per side (set via the initializer).
   const [active, setActive] = useState<ActivePopup[]>(() =>
     reduce
-      ? [{ id: 1, spot: POPUP_SPOTS[0], popup: POPUPS[0] }, { id: 2, spot: POPUP_SPOTS[3], popup: POPUPS[1] }]
+      ? [{ id: 1, spotIdx: 0, popup: POPUPS[0] }, { id: 2, spotIdx: 3, popup: POPUPS[1] }]
       : [],
   );
   useEffect(() => {
     if (reduce) return;
-    let id = 0, spotIdx = 0, popupIdx = 0;
+    let id = 0, popupIdx = 0;
+    const occupied = new Set<number>(); // spot indices currently shown
     const lifeTimers: ReturnType<typeof setTimeout>[] = [];
     const spawn = () => {
+      const free = POPUP_SPOTS.map((_, i) => i).filter((i) => !occupied.has(i));
+      if (!free.length) return;
+      const spotIdx = free[Math.floor(Math.random() * free.length)]; // random side + slot
       const myId = ++id;
-      const spot = POPUP_SPOTS[spotIdx % POPUP_SPOTS.length];
       const popup = POPUPS[popupIdx % POPUPS.length];
-      spotIdx++; popupIdx = (popupIdx + 3) % POPUPS.length;
-      // Replace anything already at this spot, then add the fresh one.
-      setActive((prev) => [...prev.filter((a) => a.spot !== spot), { id: myId, spot, popup }]);
-      lifeTimers.push(setTimeout(() => setActive((prev) => prev.filter((a) => a.id !== myId)), 4400));
+      popupIdx = (popupIdx + 3) % POPUPS.length;
+      occupied.add(spotIdx);
+      setActive((prev) => [...prev, { id: myId, spotIdx, popup }]);
+      lifeTimers.push(setTimeout(() => {
+        occupied.delete(spotIdx);
+        setActive((prev) => prev.filter((a) => a.id !== myId));
+      }, 4400));
     };
     // First spawns scheduled (not synchronous) so we never setState during the effect body.
     const kick0 = setTimeout(spawn, 250);
-    const kick1 = setTimeout(spawn, 1100);
-    const loop = setInterval(spawn, 2000);
+    const kick1 = setTimeout(spawn, 1000);
+    const loop = setInterval(spawn, 1700);
     return () => { clearInterval(loop); clearTimeout(kick0); clearTimeout(kick1); lifeTimers.forEach(clearTimeout); };
   }, [reduce]);
 
@@ -207,12 +219,13 @@ function PopupSwarm({ reduce }: { reduce: boolean }) {
     <AnimatePresence>
       {active.map((a) => {
         const Icon = a.popup.Icon;
+        const spot = POPUP_SPOTS[a.spotIdx];
         return (
           <motion.div
-            key={a.id} className="zauth-chip zauth-glass" style={a.spot} aria-hidden="true"
-            initial={reduce ? false : { opacity: 0, x: -24, scale: 0.88 }}
+            key={a.id} className="zauth-chip zauth-glass" style={spot.style} aria-hidden="true"
+            initial={reduce ? false : { opacity: 0, x: spot.enterX, scale: 0.88 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, x: -16, scale: 0.95 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, x: spot.enterX * 0.6, scale: 0.95 }}
             transition={{ duration: 0.5, ease: EASE }}
           >
             <span className="zauth-chip-inner">
