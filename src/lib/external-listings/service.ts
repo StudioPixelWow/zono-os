@@ -22,6 +22,7 @@ import { calculateBrokerMarketIntelligenceForOrganization } from "@/lib/broker-m
 import { calculateAreaLeaderEngineForOrganization } from "@/lib/area-leaders";
 import { calculateBrokerCompetitiveIntelligenceForOrganization } from "@/lib/broker-competitive";
 import { calculateBrokerWinningDNAForOrganization } from "@/lib/winning-dna";
+import { calculateBrokerGapAnalysisForOrganization } from "@/lib/gap-analysis";
 import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
@@ -344,8 +345,9 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
     await calculateBrokerCompetitiveIntelligenceForOrganization(orgId); // MAI-8 broker competitive intelligence
     await calculateBrokerWinningDNAForOrganization(orgId); // MAI-9 broker winning DNA
+    await calculateBrokerGapAnalysisForOrganization(orgId); // MAI-10 broker gap analysis & zone dominance
   } catch (e) {
-    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna reconcile (syncOrg) failed:", e);
+    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap reconcile (syncOrg) failed:", e);
   }
 
   summary.success = summary.errors.length === 0;
@@ -522,7 +524,8 @@ export async function finishSyncJob(jobId: string, cities: string[], errorCount 
     await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
     await calculateBrokerCompetitiveIntelligenceForOrganization(orgId); // MAI-8 broker competitive intelligence
     await calculateBrokerWinningDNAForOrganization(orgId); // MAI-9 broker winning DNA
-  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna reconcile (finishSyncJob) failed:", e); }
+    await calculateBrokerGapAnalysisForOrganization(orgId); // MAI-10 broker gap analysis & zone dominance
+  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap reconcile (finishSyncJob) failed:", e); }
   await db.from("import_jobs").update({
     status: errorCount ? "completed_with_errors" : "completed",
     finished_at: new Date().toISOString(),
