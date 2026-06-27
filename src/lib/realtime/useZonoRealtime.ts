@@ -48,8 +48,7 @@ export function useZonoRealtime(
     const channel = supabase.channel(opts.channelName);
     for (const s of subs) {
       channel.on(
-        // @ts-expect-error supabase realtime overloads are loose for postgres_changes
-        "postgres_changes",
+        "postgres_changes" as never,
         { event: s.event ?? "*", schema: "public", table: s.table, filter: `${s.orgColumn}=eq.${orgId}` },
         (payload: { eventType?: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
           cbRef.current({ table: s.table, eventType: payload.eventType ?? "*", row: payload.new ?? payload.old ?? null });
