@@ -96,7 +96,9 @@ function loadGoogleMaps(key: string): Promise<void> {
     w.gm_authFailure = () => { mapsAuthFailed = true; mapsPromise = null; reject(new Error("maps_auth_failed")); };
     const s = document.createElement("script");
     // `visualization` adds the real HeatmapLayer (density of real points).
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=visualization`;
+    // `loading=async` follows Google's best-practice loader (clears the console
+    // perf warning); `v=weekly` pins a stable channel.
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=visualization&loading=async&v=weekly`;
     s.async = true; s.defer = true;
     s.onload = () => resolve();
     s.onerror = () => { mapsPromise = null; reject(new Error("maps_load_failed")); };
