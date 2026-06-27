@@ -21,6 +21,7 @@ import { reconcileListingLifecycle, recalculateListingSignals, calculateMarketAc
 import { calculateBrokerMarketIntelligenceForOrganization } from "@/lib/broker-market-intelligence";
 import { calculateAreaLeaderEngineForOrganization } from "@/lib/area-leaders";
 import { calculateBrokerCompetitiveIntelligenceForOrganization } from "@/lib/broker-competitive";
+import { calculateBrokerWinningDNAForOrganization } from "@/lib/winning-dna";
 import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
@@ -342,8 +343,9 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
     await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
     await calculateBrokerCompetitiveIntelligenceForOrganization(orgId); // MAI-8 broker competitive intelligence
+    await calculateBrokerWinningDNAForOrganization(orgId); // MAI-9 broker winning DNA
   } catch (e) {
-    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive reconcile (syncOrg) failed:", e);
+    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna reconcile (syncOrg) failed:", e);
   }
 
   summary.success = summary.errors.length === 0;
@@ -519,7 +521,8 @@ export async function finishSyncJob(jobId: string, cities: string[], errorCount 
     await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
     await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
     await calculateBrokerCompetitiveIntelligenceForOrganization(orgId); // MAI-8 broker competitive intelligence
-  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive reconcile (finishSyncJob) failed:", e); }
+    await calculateBrokerWinningDNAForOrganization(orgId); // MAI-9 broker winning DNA
+  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna reconcile (finishSyncJob) failed:", e); }
   await db.from("import_jobs").update({
     status: errorCount ? "completed_with_errors" : "completed",
     finished_at: new Date().toISOString(),
