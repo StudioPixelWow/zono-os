@@ -59,6 +59,70 @@ export const ZONO_MAP_STYLE: Array<Record<string, unknown>> = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#6d28d9" }] },
 ];
 
+// ============================================================================
+// MapLibre GL / OSM rendering (Phase: OSM migration).
+// ----------------------------------------------------------------------------
+// ZONO renders maps with MapLibre GL over OpenStreetMap tiles — NO Google Maps.
+// The tile source is configurable via env so production can point at a proper
+// provider; with no env a safe OSM raster dev fallback is used (documented as
+// dev-only in docs/maps/OSM_MIGRATION_REPORT.md). The ZONO dark-purple look is
+// achieved natively in the GL style (deep background + raster paint tint), so
+// it stays consistent with the dashboard without any external styling service.
+// ============================================================================
+import type { StyleSpecification } from "maplibre-gl";
+
+/** Public, client-safe map env (all optional). */
+export const MAP_ENV = {
+  /** Raster XYZ tile template, e.g. https://tiles.example/{z}/{x}/{y}.png */
+  tileUrl: process.env.NEXT_PUBLIC_MAP_TILE_URL || "",
+  /** A full MapLibre/vector style URL (overrides the raster style entirely). */
+  styleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL || "",
+  /** Attribution string shown on the map (required by most tile providers). */
+  attribution: process.env.NEXT_PUBLIC_MAP_ATTRIBUTION || "",
+} as const;
+
+/** Dev-only OSM raster fallback (light traffic only — production must set env). */
+const DEV_OSM_TILES = ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png", "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"];
+const DEV_OSM_ATTRIBUTION = "© OpenStreetMap contributors";
+
+/** True when the dev OSM fallback is in use (no tile/style env configured). */
+export const MAP_USING_DEV_FALLBACK = !MAP_ENV.styleUrl && !MAP_ENV.tileUrl;
+
+/**
+ * Build the ZONO MapLibre style. Raster OSM (env tile URL or dev fallback) with
+ * a deep-purple background and a paint tint that darkens + shifts the tiles into
+ * the ZONO palette — so an OSM map looks native to the dashboard, never a plain
+ * OSM widget. If `NEXT_PUBLIC_MAP_STYLE_URL` is set the caller uses that instead.
+ */
+export function buildZonoMapStyle(): StyleSpecification {
+  const tiles = MAP_ENV.tileUrl ? [MAP_ENV.tileUrl] : DEV_OSM_TILES;
+  const attribution = MAP_ENV.attribution || DEV_OSM_ATTRIBUTION;
+  return {
+    version: 8,
+    sources: {
+      osm: { type: "raster", tiles, tileSize: 256, attribution, maxzoom: 19 },
+    },
+    layers: [
+      // Deep ZONO background shows through the tinted (semi-opaque) tiles.
+      { id: "zono-bg", type: "background", paint: { "background-color": MAP_BRAND.bgDeep } },
+      {
+        id: "osm",
+        type: "raster",
+        source: "osm",
+        paint: {
+          // Darken + desaturate + shift hue toward ZONO violet (no green/yellow).
+          "raster-opacity": 0.92,
+          "raster-brightness-min": 0,
+          "raster-brightness-max": 0.5,
+          "raster-saturation": -0.12,
+          "raster-contrast": 0.08,
+          "raster-hue-rotate": 232,
+        },
+      },
+    ],
+  };
+}
+
 /** Tone → color used by branded markers/clusters. */
 export type MapTone = "brand" | "success" | "warning" | "danger";
 export const TONE_COLOR: Record<MapTone, string> = {

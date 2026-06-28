@@ -130,7 +130,7 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
     fromHealth("database", "Database"),
     { key: "rls", label: "RLS / Tenancy", status: "pass", detail: "org-scoped RLS (current_org_id/has_min_role)" },
     fromHealth("providers", "Providers (Apify)"),
-    { key: "maps", label: "Maps", status: envSet("GOOGLE_MAPS_API_KEY", "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY") ? "pass" : "unknown", detail: "מפתח Google Maps" },
+    { key: "maps", label: "Maps", status: "pass", detail: envSet("NEXT_PUBLIC_MAP_STYLE_URL", "NEXT_PUBLIC_MAP_TILE_URL") ? "MapLibre/OSM — ספק אריחים מוגדר" : "MapLibre/OSM (fallback לפיתוח; הגדר NEXT_PUBLIC_MAP_TILE_URL לפרודקשן)" },
     fromHealth("ai", "AI"),
     fromHealth("realtime", "Realtime"),
     fromHealth("storage", "Storage"),

@@ -104,15 +104,19 @@ export function getIntegrationStatus(): IntegrationStatus[] {
     },
     {
       key: "maps",
-      label: "Google Maps (תצוגת מפה)",
-      configured: has(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
-      note: "ללא מפתח ציבורי — המפות מציגות מצב “מפה לא זמינה” (ללא מפה מזויפת).",
+      label: "מפות (OSM / MapLibre)",
+      // Rendering uses MapLibre GL over OSM — always available (dev fallback).
+      // A tile/style env just upgrades the dev fallback to a production provider.
+      configured: true,
+      note: has(process.env.NEXT_PUBLIC_MAP_STYLE_URL) || has(process.env.NEXT_PUBLIC_MAP_TILE_URL)
+        ? "ספק אריחים מוגדר (MapLibre/OSM)."
+        : "משתמש ב‑OSM fallback (לפיתוח). לפרודקשן הגדר NEXT_PUBLIC_MAP_TILE_URL או NEXT_PUBLIC_MAP_STYLE_URL. אין צורך במפתח Google.",
     },
     {
       key: "geocoding",
-      label: "Google Geocoding (השלמת קואורדינטות)",
+      label: "גיאוקודינג (השלמת קואורדינטות)",
       configured: has(process.env.GOOGLE_MAPS_GEOCODE_API_KEY) || has(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
-      note: "ללא מפתח — גאוקודינג מחזיר כישלון כן; לא ממציא קואורדינטות.",
+      note: "השלמת קואורדינטות בשרת (Google Geocoding, אופציונלי). לבחירת מיקום ידנית משתמשים ב‑OSM Nominatim ללא מפתח. ללא מפתח — לא ממציא קואורדינטות.",
     },
   ];
 }

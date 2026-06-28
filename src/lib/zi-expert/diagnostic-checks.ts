@@ -86,15 +86,15 @@ export function runChecks(issueType: IssueType, s: DiagnosticSignals): CheckOutp
       break;
     }
     case "map_empty": {
-      if (!s.hasMapsBrowserKey) findings.push(f("no_maps_key", "critical", "מפתח המפה חסר", "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY לא מוגדר — המפה לא נטענת.", "הגדר את מפתח הדפדפן ועשה Redeploy."));
-      else findings.push(f("maps_key_ok", "ok", "מפתח המפה מוגדר", "קיים מפתח להצגת המפה.", undefined));
+      // Rendering uses MapLibre GL over OSM — no Google browser key required.
+      findings.push(f("maps_engine_ok", "ok", "מנוע מפות OSM/MapLibre", "המפות נטענות ב‑MapLibre מעל OpenStreetMap — אין צורך במפתח Google.", undefined));
       const coords = s.externalWithCoords + s.internalWithCoords;
       if (coords === 0) findings.push(f("no_coords", "warning", "אין נכסים עם קואורדינטות", "המפה מציגה רק מיקומים אמיתיים — אין כאלה כעת.", "הרץ 'גאוקד חוסרים' ב‑/admin/geocoding."));
       else findings.push(f("coords_ok", "ok", `${coords} נקודות עם מיקום`, "קיימות קואורדינטות להצגה.", undefined));
-      if (!s.hasGeocodeKey) findings.push(f("no_geocode_key", "warning", "מפתח גיאוקודינג חסר", "GOOGLE_MAPS_GEOCODE_API_KEY חסר — לא ניתן להשלים מיקומים.", "הגדר מפתח שרת לגיאוקודינג."));
-      likelyCause = !s.hasMapsBrowserKey ? "מפתח המפה (דפדפן) חסר או נדחה." : (coords === 0 ? "אין נכסים עם קואורדינטות — חסר גיאוקודינג." : null);
+      if (!s.hasGeocodeKey) findings.push(f("no_geocode_key", "warning", "מפתח גיאוקודינג חסר", "GOOGLE_MAPS_GEOCODE_API_KEY חסר — השלמת מיקומים בשרת מוגבלת (בחירה ידנית עובדת דרך OSM Nominatim).", "הגדר מפתח שרת לגיאוקודינג (אופציונלי)."));
+      likelyCause = coords === 0 ? "אין נכסים עם קואורדינטות — חסר גיאוקודינג." : null;
       userNextSteps.push("רענן את העמוד.", "בדוק את הסינונים הפעילים על המפה.");
-      adminNextSteps.push("ודא ש‑Maps JavaScript API מופעל ושה‑referrers כוללים את הדומיין.", "הרץ גיאוקודינג למודעות חסרות ב‑/admin/geocoding.");
+      adminNextSteps.push("לפרודקשן הגדר ספק אריחים (NEXT_PUBLIC_MAP_TILE_URL/STYLE_URL).", "הרץ גיאוקודינג למודעות חסרות ב‑/admin/geocoding.");
       relatedScreens.push({ label: "גיאוקודינג", route: "/admin/geocoding" });
       break;
     }

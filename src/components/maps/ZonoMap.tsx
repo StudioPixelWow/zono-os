@@ -1,34 +1,43 @@
 "use client";
 // ============================================================================
-// ZONO — Shared real map (Google Maps JS), styled in the ZONO design language.
+// ZONO — Shared real map (MapLibre GL over OpenStreetMap), in the ZONO design
+// language. NO Google Maps.
 // ----------------------------------------------------------------------------
-// HARD RULES (Phase 24):
-//   • REAL data only — render markers ONLY for points that carry real lat/lng.
-//   • NO mock fallback, NO random pins, NO invented coordinates.
-//   • If the API key is missing → honest "map unavailable" state.
-//   • If there are no real points → honest empty state (caller-supplied copy).
-//   • Visuals inherit ZONO: dark-purple custom style, branded markers/clusters,
-//     branded info windows, soft glow, rounded card, RTL-safe.
-// The map JS key is the PUBLIC key (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) by design —
-// the server-side geocoding key stays server-only (see src/lib/maps/geocoding.ts).
+// HARD RULES:
+//   • REAL data only — render markers/heat ONLY for points that carry real
+//     lat/lng. NO mock fallback, NO random pins, NO invented coordinates.
+//   • If there are no real points (and no polygons) → honest empty state.
+//   • Visuals inherit ZONO: dark-purple OSM style, branded markers/clusters,
+//     branded popovers, soft glow, rounded card, RTL-safe overlays.
+//   • Tile source is env-configurable (NEXT_PUBLIC_MAP_TILE_URL / _STYLE_URL);
+//     with no env a documented OSM dev fallback is used. No API key required.
 // ============================================================================
 import { useEffect, useRef, useState } from "react";
+import type { Map as MLMap, Marker as MLMarker, Popup as MLPopup } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { cn } from "@/lib/utils";
 import {
-  ZONO_MAP_STYLE, ISRAEL_CENTER, brandedMarkerSvg, MAP_BRAND, type MapTone,
+  buildZonoMapStyle, MAP_ENV, ISRAEL_CENTER, brandedMarkerSvg, MAP_BRAND, TONE_COLOR, type MapTone,
 } from "@/lib/maps/map-style";
-
-const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 export interface ZonoMapPoint {
   id: string;
   lat: number;
   lng: number;
   title?: string;
-  /** Lines of secondary text shown in the branded info window. */
+  /** Lines of secondary text shown in the branded popover. */
   details?: string[];
   tone?: MapTone;
   href?: string;
+}
+
+/** An optional area polygon (e.g. broker expertise area / neighborhood). */
+export interface ZonoMapPolygon {
+  id: string;
+  /** Ring of real coordinates (no fake geometry — empty rings are ignored). */
+  positions: Array<{ lat: number; lng: number }>;
+  tone?: MapTone;
+  title?: string;
 }
 
 export interface ZonoMapProps {
@@ -40,77 +49,23 @@ export interface ZonoMapProps {
   /** Cluster when more than this many points are present. */
   clusterThreshold?: number;
   initialZoom?: number;
-  /** Render a real density heat overlay (HeatmapLayer) instead of markers. The
-   *  heat reflects the density of REAL points — no fake heat is ever drawn. */
+  /** Render a real density heat overlay instead of markers. The heat reflects
+   *  the density of REAL points only — no fake heat is ever drawn. */
   heatmap?: boolean;
+  /** Optional real area polygons (broker expertise / neighborhoods). */
+  polygons?: ZonoMapPolygon[];
 }
 
-// ── Minimal typed surface for the Google Maps JS API we use ──────────────────
-interface GLatLng { lat(): number; lng(): number }
-interface GMarker {
-  setMap(map: GMap | null): void;
-  addListener(ev: string, cb: () => void): void;
-  getPosition(): GLatLng | null;
-}
-interface GInfoWindow { setContent(c: string): void; open(map: GMap, anchor?: GMarker): void; close(): void }
-interface GBounds { extend(p: { lat: number; lng: number }): void; isEmpty(): boolean }
-interface GMap {
-  fitBounds(b: GBounds, padding?: number): void;
-  setCenter(p: { lat: number; lng: number }): void;
-  setZoom(z: number): void;
-  getZoom(): number | undefined;
-  addListener(ev: string, cb: () => void): void;
-}
-interface GHeatmap { setMap(map: GMap | null): void; setData(data: unknown[]): void; setOptions(o: Record<string, unknown>): void }
-interface GVisualization { HeatmapLayer: new (opts: Record<string, unknown>) => GHeatmap }
-interface GMaps {
-  Map: new (el: HTMLElement, opts: Record<string, unknown>) => GMap;
-  Marker: new (opts: Record<string, unknown>) => GMarker;
-  InfoWindow: new (opts?: Record<string, unknown>) => GInfoWindow;
-  LatLngBounds: new () => GBounds;
-  LatLng: new (lat: number, lng: number) => unknown;
-  Size: new (w: number, h: number) => unknown;
-  Point: new (x: number, y: number) => unknown;
-  visualization?: GVisualization;
-}
-interface GoogleNS { maps: GMaps }
-
-// ZONO-purple heat gradient (transparent → lavender → purple → deep violet).
-const ZONO_HEAT_GRADIENT = [
-  "rgba(124,58,237,0)", "rgba(167,139,250,0.55)", "rgba(139,92,246,0.78)",
-  "rgba(124,58,237,0.9)", "rgba(91,33,182,0.96)", "rgba(67,20,140,1)",
+// ZONO-purple heat ramp (transparent → lavender → violet → deep purple).
+const HEAT_COLOR: [number, string][] = [
+  [0, "rgba(124,58,237,0)"], [0.2, "rgba(167,139,250,0.55)"], [0.4, "rgba(139,92,246,0.78)"],
+  [0.6, "rgba(124,58,237,0.9)"], [0.8, "rgba(91,33,182,0.96)"], [1, "rgba(67,20,140,1)"],
 ];
-
-let mapsPromise: Promise<void> | null = null;
-/** Reason the Maps JS API rejected the key (Google calls window.gm_authFailure
- *  on invalid key / referer-not-allowed / API-not-activated). Surfaced so the
- *  on-screen error is actionable instead of generic. */
-export let mapsAuthFailed = false;
-function loadGoogleMaps(key: string): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  const w = window as unknown as { google?: GoogleNS; gm_authFailure?: () => void };
-  if (w.google?.maps) return Promise.resolve();
-  if (mapsPromise) return mapsPromise;
-  mapsPromise = new Promise<void>((resolve, reject) => {
-    // Google invokes this when the key is rejected (auth/referrer/API disabled).
-    w.gm_authFailure = () => { mapsAuthFailed = true; mapsPromise = null; reject(new Error("maps_auth_failed")); };
-    const s = document.createElement("script");
-    // `visualization` adds the real HeatmapLayer (density of real points).
-    // `loading=async` follows Google's best-practice loader (clears the console
-    // perf warning); `v=weekly` pins a stable channel.
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=visualization&loading=async&v=weekly`;
-    s.async = true; s.defer = true;
-    s.onload = () => resolve();
-    s.onerror = () => { mapsPromise = null; reject(new Error("maps_load_failed")); };
-    document.head.appendChild(s);
-  });
-  return mapsPromise;
-}
 
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
-/** Branded, ZONO-styled info-window HTML (dark panel, lavender text, glow). */
+/** Branded, ZONO-styled popover HTML (dark panel, lavender text, glow). */
 function infoHtml(p: ZonoMapPoint): string {
   const details = (p.details ?? []).filter(Boolean).map((d) => `<div style="color:${MAP_BRAND.muted};font-size:12px;line-height:1.5">${esc(d)}</div>`).join("");
   const link = p.href
@@ -124,8 +79,7 @@ function infoHtml(p: ZonoMapPoint): string {
 
 /** Grid-cluster points by current zoom; returns clusters (count>1) + singles. */
 function clusterPoints(points: ZonoMapPoint[], zoom: number): Array<{ lat: number; lng: number; items: ZonoMapPoint[] }> {
-  // Cell size shrinks as you zoom in → fewer merges at high zoom.
-  const cell = 360 / Math.pow(2, Math.max(1, zoom)) * 6;
+  const cell = (360 / Math.pow(2, Math.max(1, zoom))) * 6; // shrinks as you zoom in
   const grid = new Map<string, { lat: number; lng: number; items: ZonoMapPoint[] }>();
   for (const p of points) {
     const key = `${Math.round(p.lat / cell)}:${Math.round(p.lng / cell)}`;
@@ -136,6 +90,9 @@ function clusterPoints(points: ZonoMapPoint[], zoom: number): Array<{ lat: numbe
   return [...grid.values()];
 }
 
+const polyRing = (poly: ZonoMapPolygon) =>
+  poly.positions.filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+
 export function ZonoMap({
   points,
   className,
@@ -144,124 +101,149 @@ export function ZonoMap({
   clusterThreshold = 60,
   initialZoom = 11,
   heatmap = false,
+  polygons = [],
 }: ZonoMapProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<GMap | null>(null);
-  const infoRef = useRef<GInfoWindow | null>(null);
-  const markersRef = useRef<GMarker[]>([]);
-  const heatRef = useRef<GHeatmap | null>(null);
+  const mapRef = useRef<MLMap | null>(null);
+  const popupRef = useRef<MLPopup | null>(null);
+  const markersRef = useRef<MLMarker[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
   const realPoints = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
-  const hasKey = !!MAPS_KEY;
+  const realPolys = polygons.map(polyRing).filter((r) => r.length >= 3);
+  const hasGeo = realPoints.length > 0 || realPolys.length > 0;
 
-  // Dev-only diagnostic: confirms whether the browser map key is present WITHOUT
-  // ever logging the key itself (only a boolean + length). Stripped in production.
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "production") {
-      console.info("[ZonoMap] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY present:", hasKey, hasKey ? `(length ${(MAPS_KEY as string).length})` : "(missing — map will show 'מפה לא זמינה')");
-    }
-  }, [hasKey]);
+  // Stable geometry signatures so the map only rebuilds when real data changes.
+  const pointsSig = realPoints.map((p) => p.id + p.lat + p.lng + (p.tone ?? "")).join("|");
+  const polysSig = realPolys.map((r) => r.length).join("|");
 
   useEffect(() => {
-    if (!hasKey || realPoints.length === 0) return;
+    if (!hasGeo || !ref.current) return;
     let cancelled = false;
-    loadGoogleMaps(MAPS_KEY as string)
-      .then(() => {
-        if (cancelled || !ref.current) return;
-        const maps = (window as unknown as { google?: GoogleNS }).google?.maps;
-        if (!maps) { setState("error"); return; }
+    let map: MLMap | null = null;
 
-        const map = mapRef.current ?? new maps.Map(ref.current, {
-          center: ISRAEL_CENTER, zoom: initialZoom, styles: ZONO_MAP_STYLE,
-          disableDefaultUI: true, zoomControl: true, gestureHandling: "greedy",
-          backgroundColor: MAP_BRAND.bgDeep,
-        });
-        mapRef.current = map;
-        infoRef.current = infoRef.current ?? new maps.InfoWindow();
+    (async () => {
+      const maplibregl = (await import("maplibre-gl")).default;
+      if (cancelled || !ref.current) return;
 
-        const canHeat = heatmap && !!maps.visualization?.HeatmapLayer;
+      map = new maplibregl.Map({
+        container: ref.current,
+        style: MAP_ENV.styleUrl || buildZonoMapStyle(),
+        center: realPoints[0] ? [realPoints[0].lng, realPoints[0].lat] : [ISRAEL_CENTER.lng, ISRAEL_CENTER.lat],
+        zoom: initialZoom,
+        attributionControl: { compact: true },
+        cooperativeGestures: false,
+      });
+      mapRef.current = map;
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+      map.on("error", () => { if (!cancelled) setState("error"); });
 
-        const draw = () => {
-          markersRef.current.forEach((m) => m.setMap(null));
-          markersRef.current = [];
+      const drawMarkers = () => {
+        if (!map) return;
+        markersRef.current.forEach((m) => m.remove());
+        markersRef.current = [];
+        if (heatmap || realPoints.length === 0) return; // heat mode → no markers
 
-          // Real density heat overlay (built once, reused on idle). The heat is a
-          // function of REAL point density only — no synthetic heat is added.
-          if (canHeat) {
-            if (!heatRef.current) {
-              heatRef.current = new maps.visualization!.HeatmapLayer({
-                data: realPoints.map((p) => new maps.LatLng(p.lat, p.lng)),
-                radius: 26, opacity: 0.75, maxIntensity: Math.max(4, Math.round(realPoints.length / 8)),
-                gradient: ZONO_HEAT_GRADIENT, dissipating: true,
-              });
-              heatRef.current.setMap(map);
-            }
-            return; // heat mode → no markers
+        const zoom = map.getZoom() ?? initialZoom;
+        const groups = realPoints.length > clusterThreshold
+          ? clusterPoints(realPoints, zoom)
+          : realPoints.map((p) => ({ lat: p.lat, lng: p.lng, items: [p] }));
+
+        for (const g of groups) {
+          if (g.items.length > 1) {
+            const size = Math.min(54, 30 + g.items.length);
+            const el = document.createElement("div");
+            el.style.cssText = `width:${size}px;height:${size}px;border-radius:9999px;background:${MAP_BRAND.purple}ed;border:2px solid ${MAP_BRAND.lavender};color:${MAP_BRAND.ink};font:700 12px/1 inherit;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px rgba(109,40,217,0.45)`;
+            el.textContent = String(g.items.length);
+            el.addEventListener("click", () => { map?.easeTo({ center: [g.lng, g.lat], zoom: Math.min(18, zoom + 2) }); });
+            markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([g.lng, g.lat]).addTo(map));
+          } else {
+            const p = g.items[0];
+            const el = document.createElement("img");
+            el.src = brandedMarkerSvg(p.tone ?? "brand");
+            el.width = 30; el.height = 39; el.style.cursor = "pointer";
+            el.addEventListener("click", () => {
+              popupRef.current?.remove();
+              popupRef.current = new maplibregl.Popup({ closeButton: true, offset: 26, maxWidth: "260px" })
+                .setLngLat([p.lng, p.lat]).setHTML(infoHtml(p)).addTo(map!);
+            });
+            markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([p.lng, p.lat]).addTo(map));
           }
-          if (heatRef.current) { heatRef.current.setMap(null); heatRef.current = null; }
-
-          const zoom = map.getZoom() ?? initialZoom;
-          const groups = realPoints.length > clusterThreshold
-            ? clusterPoints(realPoints, zoom)
-            : realPoints.map((p) => ({ lat: p.lat, lng: p.lng, items: [p] }));
-
-          for (const g of groups) {
-            if (g.items.length > 1) {
-              const size = Math.min(54, 30 + g.items.length);
-              const bubble = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 2}" fill="${MAP_BRAND.purple}" fill-opacity="0.92" stroke="${MAP_BRAND.lavender}" stroke-width="2"/></svg>`;
-              const marker = new maps.Marker({
-                position: { lat: g.lat, lng: g.lng }, map,
-                icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(bubble)}`, scaledSize: new maps.Size(size, size), anchor: new maps.Point(size / 2, size / 2) },
-                label: { text: String(g.items.length), color: MAP_BRAND.ink, fontSize: "12px", fontWeight: "700" },
-              });
-              marker.addListener("click", () => { map.setCenter({ lat: g.lat, lng: g.lng }); map.setZoom(Math.min(18, (map.getZoom() ?? zoom) + 2)); });
-              markersRef.current.push(marker);
-            } else {
-              const p = g.items[0];
-              const marker = new maps.Marker({
-                position: { lat: p.lat, lng: p.lng }, map,
-                icon: { url: brandedMarkerSvg(p.tone ?? "brand"), scaledSize: new maps.Size(34, 44), anchor: new maps.Point(17, 43) },
-                title: p.title,
-              });
-              marker.addListener("click", () => { infoRef.current?.setContent(infoHtml(p)); infoRef.current?.open(map, marker); });
-              markersRef.current.push(marker);
-            }
-          }
-        };
-
-        // Fit to all real points.
-        const bounds = new maps.LatLngBounds();
-        realPoints.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-        if (!bounds.isEmpty()) {
-          if (realPoints.length === 1) { map.setCenter({ lat: realPoints[0].lat, lng: realPoints[0].lng }); map.setZoom(15); }
-          else map.fitBounds(bounds, 48);
         }
-        draw();
-        map.addListener("idle", draw);
-        setState("ready");
-      })
-      .catch(() => { if (!cancelled) setState("error"); });
-    return () => { cancelled = true; if (heatRef.current) { heatRef.current.setMap(null); heatRef.current = null; } };
+      };
+
+      map.on("load", () => {
+        if (!map || cancelled) return;
+
+        // ── Polygons (real area geometry only) ────────────────────────────────
+        if (realPolys.length) {
+          map.addSource("zono-polys", {
+            type: "geojson",
+            data: {
+              type: "FeatureCollection",
+              features: realPolys.map((ring, i) => ({
+                type: "Feature" as const,
+                properties: { color: TONE_COLOR[polygons[i]?.tone ?? "brand"] },
+                geometry: { type: "Polygon" as const, coordinates: [[...ring, ring[0]].map((c) => [c.lng, c.lat])] },
+              })),
+            },
+          });
+          map.addLayer({ id: "zono-poly-fill", type: "fill", source: "zono-polys", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.16 } });
+          map.addLayer({ id: "zono-poly-line", type: "line", source: "zono-polys", paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": 0.85 } });
+        }
+
+        // ── Heatmap (real point density only) ─────────────────────────────────
+        if (heatmap && realPoints.length) {
+          map.addSource("zono-heat", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: realPoints.map((p) => ({ type: "Feature" as const, properties: {}, geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] } })) },
+          });
+          map.addLayer({
+            id: "zono-heat-layer",
+            type: "heatmap",
+            source: "zono-heat",
+            paint: {
+              "heatmap-weight": 1,
+              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 16, 2.4],
+              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 8, 16, 34],
+              "heatmap-opacity": 0.78,
+              "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], ...HEAT_COLOR.flat()],
+            },
+          });
+        }
+
+        drawMarkers();
+        map.on("moveend", drawMarkers);
+
+        // Fit to all real geometry.
+        const coords: [number, number][] = [
+          ...realPoints.map((p) => [p.lng, p.lat] as [number, number]),
+          ...realPolys.flatMap((r) => r.map((c) => [c.lng, c.lat] as [number, number])),
+        ];
+        if (coords.length === 1) { map.jumpTo({ center: coords[0], zoom: 15 }); }
+        else if (coords.length > 1) {
+          const b = coords.reduce((acc, c) => acc.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+          map.fitBounds(b, { padding: 48, maxZoom: 16, duration: 0 });
+        }
+        if (!cancelled) setState("ready");
+      });
+    })().catch(() => { if (!cancelled) setState("error"); });
+
+    return () => {
+      cancelled = true;
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+      popupRef.current?.remove();
+      mapRef.current?.remove();
+      mapRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(realPoints.map((p) => p.id + p.lat + p.lng)), hasKey, heatmap]);
+  }, [pointsSig, polysSig, heatmap, clusterThreshold, initialZoom]);
 
   const shell = "border-line bg-card relative w-full overflow-hidden rounded-card border shadow-card";
 
-  // No public map key → honest unavailable state (never a fake map).
-  if (!hasKey) {
-    return (
-      <div className={cn(shell, heightClass, "grid place-items-center text-center", className)}>
-        <div className="px-6">
-          <p className="text-ink text-sm font-bold">מפה לא זמינה</p>
-          <p className="text-muted mt-1 text-xs">להצגת מפה אמיתית יש להגדיר את המפתח NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.</p>
-        </div>
-      </div>
-    );
-  }
-
-  // No real coordinates → honest empty state (never invented pins).
-  if (realPoints.length === 0) {
+  // No real coordinates (and no polygons) → honest empty state (never invented).
+  if (!hasGeo) {
     return (
       <div className={cn(shell, heightClass, "grid place-items-center text-center", className)}>
         <p className="text-muted px-6 text-sm">{emptyMessage}</p>
@@ -280,13 +262,8 @@ export function ZonoMap({
       {state === "error" && (
         <div className="bg-card/90 absolute inset-0 grid place-items-center text-center">
           <div className="px-6">
-            <p className="text-danger text-xs font-bold">שירות המפות נדחה על ידי Google.</p>
-            <p className="text-muted mt-1.5 text-[11px] leading-relaxed">
-              {mapsAuthFailed
-                ? "המפתח (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) נדחה. בדוק 3 דברים: (1) Maps JavaScript API מופעל על המפתח; (2) הגבלת ה‑HTTP referrers כוללת את הדומיין הזה; (3) חיוב פעיל. אחרי תיקון — Redeploy."
-                : "המפה לא נטענה. בדוק חיבור אינטרנט והמפתח NEXT_PUBLIC_GOOGLE_MAPS_API_KEY."}
-            </p>
-            <p className="text-muted mt-1.5 text-[10px]">לסיבה המדויקת: F12 → Console (חפש &quot;…MapError&quot;).</p>
+            <p className="text-danger text-xs font-bold">שירות המפות לא זמין כעת.</p>
+            <p className="text-muted mt-1.5 text-[11px] leading-relaxed">המפה לא נטענה. בדוק/י חיבור אינטרנט. בפרודקשן יש להגדיר ספק אריחים דרך NEXT_PUBLIC_MAP_TILE_URL או NEXT_PUBLIC_MAP_STYLE_URL.</p>
           </div>
         </div>
       )}
