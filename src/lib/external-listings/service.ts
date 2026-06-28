@@ -25,6 +25,7 @@ import { calculateBrokerWinningDNAForOrganization } from "@/lib/winning-dna";
 import { calculateBrokerGapAnalysisForOrganization } from "@/lib/gap-analysis";
 import { generateBrokerCoachForOrganization } from "@/lib/broker-coach";
 import { generateBrokerGrowthStrategy } from "@/lib/broker-strategy";
+import { evaluateMAIModelsForOrganization } from "@/lib/mai-calibration";
 import { geocodeAddress, buildQuery } from "@/lib/maps/geocoding";
 import {
   buildAiFields,
@@ -350,8 +351,9 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     await calculateBrokerGapAnalysisForOrganization(orgId); // MAI-10 broker gap analysis & zone dominance
     await generateBrokerCoachForOrganization(orgId); // MAI-11 evidence-based broker coach
     await generateBrokerGrowthStrategy(orgId); // MAI-12 autonomous growth strategy
+    await evaluateMAIModelsForOrganization(orgId); // MAI-13 self-learning & model calibration (measures only)
   } catch (e) {
-    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap/coach/strategy reconcile (syncOrg) failed:", e);
+    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap/coach/strategy/calibration reconcile (syncOrg) failed:", e);
   }
 
   summary.success = summary.errors.length === 0;
@@ -531,7 +533,8 @@ export async function finishSyncJob(jobId: string, cities: string[], errorCount 
     await calculateBrokerGapAnalysisForOrganization(orgId); // MAI-10 broker gap analysis & zone dominance
     await generateBrokerCoachForOrganization(orgId); // MAI-11 evidence-based broker coach
     await generateBrokerGrowthStrategy(orgId); // MAI-12 autonomous growth strategy
-  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap/coach/strategy reconcile (finishSyncJob) failed:", e); }
+    await evaluateMAIModelsForOrganization(orgId); // MAI-13 self-learning & model calibration (measures only)
+  } catch (e) { console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap/coach/strategy/calibration reconcile (finishSyncJob) failed:", e); }
   await db.from("import_jobs").update({
     status: errorCount ? "completed_with_errors" : "completed",
     finished_at: new Date().toISOString(),
