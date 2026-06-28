@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buildMarketAnalysis, createAcquisitionTask, getExternalListingDetail, getImportDiagnostics, getSyncProgress, getListingPreview, promoteExternalListing, runImport, startSyncJob, runSyncChunk, finishSyncJob, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncProgress, type SyncSummary, type SyncMode, type SyncPlan, type ChunkResult } from "./service";
+import { buildMarketAnalysis, createAcquisitionTask, geocodeBacklogForSessionOrg, getExternalListingDetail, getImportDiagnostics, getSyncProgress, getListingPreview, promoteExternalListing, runImport, startSyncJob, runSyncChunk, finishSyncJob, type ExternalListingDetail, type ImportDiagnostics, type ListingPreview, type SyncProgress, type SyncSummary, type SyncMode, type SyncPlan, type ChunkResult } from "./service";
 
 export interface ExternalActionState {
   error?: string;
@@ -84,6 +84,24 @@ export async function promoteExternalListingAction(listingId: string): Promise<E
 
 export async function getImportDiagnosticsAction(): Promise<ImportDiagnostics> {
   return getImportDiagnostics();
+}
+
+export interface GeocodeBacklogState {
+  result?: { attempted: number; success: number; failed: number; skipped: number };
+  error?: string;
+}
+/** Manually drain the geocode backlog for this org (so scraped listings get
+ *  coordinates and appear on the map without waiting for the hourly cron). */
+export async function geocodeBacklogNowAction(): Promise<GeocodeBacklogState> {
+  try {
+    const result = await geocodeBacklogForSessionOrg();
+    revalidatePath("/properties");
+    return { result };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
+    console.error("[external] manual geocode failed:", e);
+    return { error: `גיאוקודינג נכשל: ${msg}` };
+  }
 }
 
 /** Lightweight live progress for the running sync — polled by the UI. */

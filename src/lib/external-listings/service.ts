@@ -456,6 +456,14 @@ export async function geocodeBacklogForAllOrganizations(
   return out;
 }
 
+/** Manually drain the geocode backlog for the CURRENT session's org (admin button).
+ *  Time-boxed short so the request returns quickly; the hourly cron does the rest. */
+export async function geocodeBacklogForSessionOrg(opts: { budgetMs?: number; batch?: number } = {}): Promise<GeocodeBatchStats> {
+  const { profile } = await getSessionContext();
+  if (!profile) throw new Error("not authenticated");
+  return geocodeBacklogForOrganization(profile.org_id, { budgetMs: opts.budgetMs ?? 45_000, batch: opts.batch ?? 40 });
+}
+
 /** User-triggered import (RLS, session org). Used by the API routes. */
 export async function runImport(opts: SyncOptions = {}): Promise<SyncSummary> {
   const { user, profile } = await getSessionContext();

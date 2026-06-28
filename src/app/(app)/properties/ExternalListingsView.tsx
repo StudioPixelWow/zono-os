@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { SmartPropertyGrid, type MatchSummary } from "@/components/listings/SmartListings";
 import {
   buildMarketAnalysisAction,
+  geocodeBacklogNowAction,
   getImportDiagnosticsAction,
   getSyncProgressAction,
   importMadlanAction,
@@ -265,6 +266,20 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
     });
   };
   const analyze = () => { setError(null); start(async () => { const r = await buildMarketAnalysisAction(); if (r.error) setError(r.error); else setAnalysis(r.text ?? ""); }); };
+  const geocodeNow = () => {
+    setError(null); setMsg(null);
+    start(async () => {
+      const r = await geocodeBacklogNowAction();
+      if (r.error) setError(r.error);
+      else if (r.result) {
+        const { success, attempted, failed } = r.result;
+        setMsg(attempted === 0
+          ? "כל הנכסים החיצוניים כבר ממוקמים — אין מה לגאוקד ✓"
+          : `גיאוקודינג: ${success} נכסים מוקמו${failed ? ` · ${failed} נכשלו` : ""} (מתוך ${attempted}). ייתכן שנותרו עוד — לחץ שוב או המתן לריצה האוטומטית.`);
+        router.refresh();
+      }
+    });
+  };
   const recalcBrain = () => { setError(null); setMsg(null); start(async () => { const r = await recalcDecisionBrainAction(); if (r?.error) setError(r.error); else setMsg("מרכז הפיקוד חושב מחדש — המודעות החיצוניות עודכנו בו ✓"); }); };
   const loadDiag = () => { setError(null); start(async () => { setDiag(await getImportDiagnosticsAction()); }); };
   const bk = (fn: () => Promise<{ error?: string; message?: string }>) => { setError(null); setMsg(null); start(async () => { const r = await fn(); if (r?.error) setError(r.error); else { if (r?.message) setMsg(r.message); router.refresh(); } }); };
@@ -355,6 +370,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
             {isAdmin && <option value="backfill">סנכרון מתקדם (1000/עיר)</option>}
           </select>
           <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Sparkles" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
+          <Button size="sm" variant="ghost" onClick={geocodeNow} disabled={pending} leadingIcon={<Icon name="MapPin" size={15} />}>גאוקד עכשיו</Button>
           <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
           <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
           <Link href="/broker-intelligence"><Button size="sm" variant="ghost">מודיעין מתווכים</Button></Link>
