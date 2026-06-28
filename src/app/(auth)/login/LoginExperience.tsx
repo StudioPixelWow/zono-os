@@ -79,12 +79,16 @@ export function LoginExperience() {
       {/* Live signals — keep popping in across BOTH sides at random, refreshing */}
       <PopupSwarm reduce={!!reduce} />
 
-      {/* ZI assistant — anchored to the right edge, never touching the form */}
-      <Robot reduce={!!reduce} />
-
       {/* Foreground: the login card is the hero */}
       <main className="zauth-shell">
-        <motion.div className="zauth-stage" variants={container} initial="hidden" animate="show">
+        {/* Shared composition container: the login card and the ZI robot are
+            SIBLINGS aligned horizontally with a fixed gap. The robot is NEVER
+            positioned from the page edge — it belongs to this row, so it can
+            never overlap the card. (Mandatory login layout rule.) */}
+        <div className="zauth-composition">
+          {/* ZI assistant — sibling of the card, fixed gap, never touching it. */}
+          <Robot reduce={!!reduce} />
+          <motion.div className="zauth-stage" variants={container} initial="hidden" animate="show">
           {/* Logo + headline */}
           <motion.header className="zauth-head" variants={rise}>
             <span className="zauth-logo-wrap">
@@ -146,7 +150,8 @@ export function LoginExperience() {
           <motion.p className="zauth-foot" variants={rise}>
             ZONO · Real Estate Operating System
           </motion.p>
-        </motion.div>
+          </motion.div>
+        </div>
       </main>
     </div>
   );

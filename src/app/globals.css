@@ -268,7 +268,7 @@ body {
   display: flex; align-items: center; justify-content: center;
   padding: 48px 20px;
 }
-.zauth-stage { position: relative; width: 100%; max-width: 428px; }
+.zauth-stage { position: relative; width: 100%; max-width: 428px; flex: 0 1 428px; }
 
 /* Header — big elegant type with lots of breathing room. */
 .zauth-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 30px; }
@@ -384,15 +384,23 @@ body {
 .zauth-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .zauth-foot { margin-top: 26px; text-align: center; font-size: 11px; letter-spacing: 0.02em; color: var(--z-faint); }
 
-/* ZI assistant — secondary element, beside the card, inside a soft ambient
-   circle. Subtle breathing + float; soft shadow; no exaggerated glow. */
+/* Shared composition — the login CARD and the ZI ROBOT are flex SIBLINGS aligned
+   horizontally with a fixed gap. The robot is NEVER positioned from the page
+   edge; it belongs to this row, so it can never overlap the card. The robot is
+   the first DOM child → in RTL it sits on the physical right of the card.
+   (Mandatory ZONO login layout rule — do not change to edge-anchoring.) */
+.zauth-composition {
+  display: flex; align-items: center; justify-content: center;
+  gap: clamp(48px, 5vw, 64px);
+  width: 100%;
+}
+
+/* ZI assistant — sibling BESIDE the card (not page-edge anchored). Vertically
+   centered against the card; width-driven so it stays shorter than the card.
+   pointer-events:none so it can never block a click on the form. */
 .zauth-robot-wrap {
-  position: absolute; z-index: 12;
-  /* Anchored to the (physical) RIGHT edge of the viewport — never offset from the
-     centered card — so it is structurally impossible for it to touch the form.
-     Topmost layer, but pointer-events:none so it can never block a click. */
-  top: 50%; right: clamp(16px, 3.5vw, 72px); left: auto;
-  transform: translateY(-50%);
+  position: relative; z-index: 12;
+  flex: 0 0 auto; align-self: center;
   width: clamp(150px, 12vw, 200px);
   pointer-events: none;
 }
@@ -423,7 +431,18 @@ body {
 }
 .zauth-bubble-t { font-size: 12px; font-weight: 800; color: #fff; }
 .zauth-bubble-s { font-size: 11px; color: rgba(202, 189, 255, 0.72); }
-@media (max-width: 1180px) { .zauth-robot-wrap { display: none; } }
+/* Responsive priority: keep the FORM readable, then keep the robot visible.
+   Tablet → shrink the robot (~65%) + tighten the gap; mobile → hide it. The
+   robot is NEVER moved over the form — it only shrinks, then disappears. */
+@media (max-width: 1024px) {
+  .zauth-composition { gap: clamp(28px, 3.5vw, 44px); }
+  .zauth-robot-wrap { width: clamp(108px, 16vw, 140px); } /* ≈65% */
+  .zauth-bubble { display: none; } /* keep the area around the form clean */
+}
+@media (max-width: 768px) {
+  .zauth-robot-wrap { display: none; } /* mobile → form only */
+  .zauth-composition { gap: 0; }
+}
 
 /* Signature chips — quiet floating glass with a tiny live indicator. */
 .zauth-chip {
