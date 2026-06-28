@@ -52,6 +52,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "competitor-intelligence", label: "מודיעין מתחרים", route: "/competitor-intelligence", icon: "Activity", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "Competitor Intelligence™ — פעילות מתחרים, ירידות מחיר, אזורים מתחממים ונתח שוק מוערך מנתוני מודעות ציבוריים" },
   { id: "competition-radar", label: "רדאר מתחרים", route: "/competition-radar", icon: "Radar", category: "שוק ועסקאות", roleMin: "manager", sidebar: true, searchable: true, description: "רדאר מתחרים™ — מודיעין תחרותי על משרדי תיווך: ציוני איום, שליטה אזורית, אותות שוק, ניתוח SWOT והמלצות פעולה" },
   { id: "broker-intelligence", label: "מודיעין מתווכים", route: "/broker-intelligence", icon: "Users", category: "שוק ועסקאות", roleMin: "manager", sidebar: false, searchable: true },
+  { id: "brokerage-data", label: "דאטה משרדי תיווך", route: "/brokerage-data", icon: "Building2", category: "שוק ועסקאות", roleMin: "manager", sidebar: true, searchable: true, description: "דאטה משרדי תיווך™ — שכבת ליבה לאומית של משרדי תיווך וסוכנים, זיהוי זהויות (Broker Identity Resolution) של מודעות חיצוניות, קישורים, קונפליקטים ורענון נתונים" },
   { id: "ai-resolution-center", label: "מרכז אימות AI", route: "/ai-resolution-center", icon: "Sparkles", category: "שוק ועסקאות", roleMin: "manager", sidebar: true, searchable: true, description: "מרכז אימות AI™ — סקירה אנושית של זיהויי משרדים: אישור, דחייה, מיזוג, פיצול ועריכה. כל החלטה משפרת את מנוע המודיעין" },
 
   // ── צמיחה ──
