@@ -11,9 +11,9 @@
 // server action. The ZONO logo + brand purple are used exactly as provided.
 // ============================================================================
 import Link from "next/link";
-import { useActionState, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, MessageCircle, Home, TrendingDown, Building2, UserPlus, Star, Activity } from "lucide-react";
+import { useActionState, useMemo, useState, type CSSProperties } from "react";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, MessageCircle, Building2, Activity } from "lucide-react";
 import { signIn, type AuthFormState } from "@/lib/auth/actions";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
 
@@ -58,6 +58,9 @@ export function LoginExperience() {
       {/* Very subtle orbital arcs */}
       <OrbitArcs />
 
+      {/* Minimal, almost-invisible futuristic skyline on the far side */}
+      <Skyline />
+
       {/* Near-invisible particles */}
       <div className="zauth-particles" aria-hidden="true">
         {particles.map((p, i) => (
@@ -92,7 +95,7 @@ export function LoginExperience() {
           {/* Logo + headline */}
           <motion.header className="zauth-head" variants={rise}>
             <span className="zauth-logo-wrap">
-              <ZonoLogo priority width={236} height={76} />
+              <ZonoLogo priority width={283} height={91} />
             </span>
             <h1 className="zauth-title">הבינה שתהפוך אותך לסוכן הכי חזק בזון שלך.</h1>
             <p className="zauth-sub">נהל נכסים, לקוחות, עסקאות ובינה עסקית — במקום אחד.</p>
@@ -157,94 +160,50 @@ export function LoginExperience() {
   );
 }
 
-// Pool of live "signals" that the floating chips cycle through — each one reads
-// like a real moment inside the operating system.
+// Exactly THREE quiet floating widgets — each reads like a real moment inside
+// the operating system. Calm, glassy, never flashy (premium light edition).
 const POPUPS = [
   { Icon: MessageCircle, title: "3 שיחות WhatsApp חדשות", sub: "ממתינות למענה", tone: "g" },
-  { Icon: Home, title: "נמצאה התאמת נכס", sub: "94% התאמה", tone: "v" },
-  { Icon: TrendingDown, title: "ירידת מחיר באזור שלך", sub: "‎-6% בשבוע האחרון", tone: "v" },
-  { Icon: Building2, title: "עסקה חדשה נרשמה", sub: "רמת השרון · ₪2.4M", tone: "v" },
-  { Icon: UserPlus, title: "ליד חדש מהאתר", sub: "מחפש/ת 4 חדרים", tone: "g" },
-  { Icon: Star, title: "נכס בלעדי זוהה", sub: "פוטנציאל גבוה", tone: "v" },
+  { Icon: Building2, title: "עסקה חדשה נרשמה", sub: "דירת 4 חדרים · ₪2.4M", tone: "v" },
   { Icon: Activity, title: "השוק התחמם באזור", sub: "ביקוש עולה", tone: "v" },
 ] as const;
 
-// Anchor spots for the popups — spread across BOTH physical sides (corners), so
-// signals pop in left AND right. Right-side spots sit in the top/bottom corners
-// to stay clear of the ZI robot (which hugs the right edge at mid-height) and
-// the centered card. `enterX` makes each chip slide in from its own edge.
-// In RTL: insetInlineEnd = physical LEFT, insetInlineStart = physical RIGHT.
+// Three fixed corners. In RTL: insetInlineStart = physical RIGHT, insetInlineEnd
+// = physical LEFT. Right-side spots sit in the corners, clear of the robot/card.
 interface Spot { style: CSSProperties; enterX: number }
 const POPUP_SPOTS: Spot[] = [
-  { style: { top: "8%", insetInlineEnd: "7%" }, enterX: -26 },   // left · top
-  { style: { top: "40%", insetInlineEnd: "4%" }, enterX: -26 },  // left · mid
-  { style: { bottom: "11%", insetInlineEnd: "6%" }, enterX: -26 }, // left · bottom
-  { style: { top: "9%", insetInlineStart: "6%" }, enterX: 26 },  // right · top corner
-  { style: { bottom: "13%", insetInlineStart: "7%" }, enterX: 26 }, // right · bottom corner
+  { style: { top: "9%", insetInlineStart: "6%" }, enterX: 26 },    // physical right · top
+  { style: { bottom: "13%", insetInlineStart: "7%" }, enterX: 26 }, // physical right · bottom
+  { style: { bottom: "12%", insetInlineEnd: "7%" }, enterX: -26 },  // physical left · bottom
 ];
-interface ActivePopup { id: number; spotIdx: number; popup: (typeof POPUPS)[number] }
 
-/** A living swarm of live-signal popups that keep popping in, refreshing and
- *  leaving — so the screen feels alive (instead of two static chips). Spots are
- *  picked at random across both sides; an occupancy set prevents overlaps. */
+/** Three calm glass widgets that fade in one after another. Static (no cycling)
+ *  so the premium light composition stays quiet and uncluttered. */
 function PopupSwarm({ reduce }: { reduce: boolean }) {
-  // Reduced motion: two static signals — one per side (set via the initializer).
-  const [active, setActive] = useState<ActivePopup[]>(() =>
-    reduce
-      ? [{ id: 1, spotIdx: 0, popup: POPUPS[0] }, { id: 2, spotIdx: 3, popup: POPUPS[1] }]
-      : [],
-  );
-  useEffect(() => {
-    if (reduce) return;
-    let id = 0, popupIdx = 0;
-    const occupied = new Set<number>(); // spot indices currently shown
-    const lifeTimers: ReturnType<typeof setTimeout>[] = [];
-    const spawn = () => {
-      const free = POPUP_SPOTS.map((_, i) => i).filter((i) => !occupied.has(i));
-      if (!free.length) return;
-      const spotIdx = free[Math.floor(Math.random() * free.length)]; // random side + slot
-      const myId = ++id;
-      const popup = POPUPS[popupIdx % POPUPS.length];
-      popupIdx = (popupIdx + 3) % POPUPS.length;
-      occupied.add(spotIdx);
-      setActive((prev) => [...prev, { id: myId, spotIdx, popup }]);
-      lifeTimers.push(setTimeout(() => {
-        occupied.delete(spotIdx);
-        setActive((prev) => prev.filter((a) => a.id !== myId));
-      }, 4400));
-    };
-    // First spawns scheduled (not synchronous) so we never setState during the effect body.
-    const kick0 = setTimeout(spawn, 250);
-    const kick1 = setTimeout(spawn, 1000);
-    const loop = setInterval(spawn, 1700);
-    return () => { clearInterval(loop); clearTimeout(kick0); clearTimeout(kick1); lifeTimers.forEach(clearTimeout); };
-  }, [reduce]);
-
   return (
-    <AnimatePresence>
-      {active.map((a) => {
-        const Icon = a.popup.Icon;
-        const spot = POPUP_SPOTS[a.spotIdx];
+    <>
+      {POPUPS.map((popup, i) => {
+        const Icon = popup.Icon;
+        const spot = POPUP_SPOTS[i];
         return (
           <motion.div
-            key={a.id} className="zauth-chip zauth-glass" style={spot.style} aria-hidden="true"
-            initial={reduce ? false : { opacity: 0, x: spot.enterX, scale: 0.88 }}
+            key={i} className={`zauth-chip zauth-glass ${i % 2 ? "zauth-float-b" : "zauth-float-a"}`} style={spot.style} aria-hidden="true"
+            initial={reduce ? false : { opacity: 0, x: spot.enterX, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, x: spot.enterX * 0.6, scale: 0.95 }}
-            transition={{ duration: 0.5, ease: EASE }}
+            transition={{ delay: reduce ? 0 : 1.4 + i * 0.45, duration: 0.6, ease: EASE }}
           >
             <span className="zauth-chip-inner">
               <span className="zauth-chip-ico"><Icon size={16} /></span>
               <span className="zauth-chip-body">
-                <span className="zauth-chip-title">{a.popup.title}</span>
-                <span className="zauth-chip-sub">{a.popup.sub}</span>
+                <span className="zauth-chip-title">{popup.title}</span>
+                <span className="zauth-chip-sub">{popup.sub}</span>
               </span>
-              <span className={`zauth-chip-live ${a.popup.tone === "v" ? "v" : ""}`} />
+              <span className={`zauth-chip-live ${popup.tone === "v" ? "v" : ""}`} />
             </span>
           </motion.div>
         );
       })}
-    </AnimatePresence>
+    </>
   );
 }
 
@@ -264,6 +223,15 @@ function Robot({ reduce }: { reduce: boolean }) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: reduce ? 0 : 1.35, duration: 0.8, ease: EASE }}
     >
+      {/* Concentric orbital rings behind the robot — faint, premium. */}
+      <svg className="zauth-robot-rings" viewBox="0 0 400 400" aria-hidden="true">
+        {[80, 130, 180].map((r, i) => (
+          <circle key={r} cx="200" cy="200" r={r} fill="none" stroke="rgba(139,92,246,0.16)" strokeWidth="1" strokeDasharray={i === 1 ? "3 7" : undefined} />
+        ))}
+        <circle cx="200" cy="20" r="3" fill="#8b5cf6" opacity="0.5" />
+        <circle cx="372" cy="230" r="2.4" fill="#8b5cf6" opacity="0.4" />
+        <circle cx="40" cy="250" r="2.2" fill="#8b5cf6" opacity="0.35" />
+      </svg>
       <span className="zauth-robot-halo" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -300,6 +268,28 @@ function OrbitArcs() {
         <circle cx="1320" cy="450" r="2.6" fill="url(#zauth-node)" />
         <circle cx="720" cy="130" r="2.2" fill="url(#zauth-node)" />
       </g>
+    </svg>
+  );
+}
+
+/** Minimal, almost-invisible futuristic skyline on the far (physical-left) side —
+ *  only noticeable on a careful look. Hidden on small screens. */
+function Skyline() {
+  const towers = [
+    { x: 8, w: 26, h: 150 }, { x: 38, w: 34, h: 232 }, { x: 76, w: 22, h: 120 },
+    { x: 102, w: 40, h: 286 }, { x: 146, w: 28, h: 196 }, { x: 178, w: 32, h: 250 },
+    { x: 214, w: 24, h: 138 }, { x: 242, w: 38, h: 210 }, { x: 284, w: 26, h: 168 },
+  ];
+  return (
+    <svg className="zauth-skyline" viewBox="0 0 320 320" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      {towers.map((t, i) => (
+        <g key={i}>
+          <rect x={t.x} y={320 - t.h} width={t.w} height={t.h} rx="3" fill="rgba(124,58,237,0.05)" stroke="rgba(124,58,237,0.10)" strokeWidth="1" />
+          {Array.from({ length: Math.floor(t.h / 26) }).map((_, r) => (
+            <rect key={r} x={t.x + 5} y={320 - t.h + 12 + r * 24} width={t.w - 10} height="3" rx="1" fill="rgba(124,58,237,0.07)" />
+          ))}
+        </g>
+      ))}
     </svg>
   );
 }
