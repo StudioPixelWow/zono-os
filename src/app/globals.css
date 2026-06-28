@@ -241,6 +241,18 @@ body {
 .zauth-aura.a2 { width: 820px; height: 820px; bottom: -340px; inset-inline-end: -260px; background: radial-gradient(circle, rgba(109,63,242,0.12), transparent 70%); animation: zauth-breathe 17s ease-in-out 3s infinite; }
 @keyframes zauth-breathe { 0%, 100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.05); } }
 
+/* ZONO map popover — strip MapLibre's default white bubble so our dark property
+   card is the popover itself (not a card pasted inside a white box). */
+.zono-pop .maplibregl-popup-content {
+  background: transparent; padding: 0; box-shadow: none; border-radius: 16px;
+}
+.zono-pop .maplibregl-popup-tip { border-top-color: #171034; border-bottom-color: #171034; }
+.zono-pop .maplibregl-popup-close-button {
+  inset-inline-end: 6px; top: 6px; width: 22px; height: 22px; border-radius: 9999px;
+  color: #ede9fe; background: rgba(14, 10, 31, 0.55); font-size: 15px; line-height: 1;
+}
+.zono-pop .maplibregl-popup-close-button:hover { background: rgba(124, 58, 237, 0.6); }
+
 /* Minimal futuristic skyline — far physical-left, almost invisible. */
 .zauth-skyline {
   position: absolute; bottom: 0; inset-inline-end: 0; /* RTL: physical LEFT */
@@ -407,12 +419,12 @@ body {
 .zauth-robot-wrap {
   position: absolute; z-index: 1;
   top: 50%; left: 50%;
-  /* Anchored a controlled distance to the physical-right of the CENTRED card —
-     so it stays close to the form and never pinned to the screen edge. The
-     offset scales with viewport but is capped so wide screens don't fling it
-     to the corner. pointer-events:none → never affects/blocks the form. */
-  transform: translate(calc(-50% + clamp(330px, 24vw, 470px)), -50%);
-  width: clamp(180px, 14vw, 250px);
+  /* Sits clearly to the physical-right of the CENTRED card. The card half-width
+     is ~214px; this offset keeps the robot fully BESIDE the card (never behind
+     it) with a comfortable gap, and is capped so it never flies to the edge.
+     pointer-events:none → never affects/blocks the form. */
+  transform: translate(calc(-50% + clamp(360px, 30vw, 520px)), -50%);
+  width: clamp(150px, 11vw, 200px);
   pointer-events: none;
 }
 /* Concentric orbital rings behind the robot (premium, faint). */
@@ -451,12 +463,11 @@ body {
 .zauth-bubble-s { font-size: 11px; color: #686d82; }
 /* Responsive: the decorative robot never affects the centred form. Tablet →
    shrink it (~65%) and tuck it toward the edge; mobile → hide it entirely. */
-@media (max-width: 1024px) {
-  .zauth-robot-wrap { width: clamp(120px, 17vw, 160px); transform: translate(calc(-50% + clamp(220px, 28vw, 300px)), -50%); } /* ≈65%, kept near the form */
-  .zauth-bubble { display: none; } /* keep the area around the form clean */
-}
-@media (max-width: 768px) {
-  .zauth-robot-wrap { display: none; } /* mobile → form only, perfectly centred */
+/* Below ~1100px there isn't room for the centred card AND a side robot without
+   crowding → hide the robot so the form stays clean and centred. */
+@media (max-width: 1100px) {
+  .zauth-robot-wrap { display: none; }
+  .zauth-bubble { display: none; }
 }
 
 /* Signature chips — quiet floating glass with a tiny live indicator. */

@@ -44,6 +44,7 @@ export function HomeHeatmapSection() {
   const points: ZonoMapPoint[] = (data?.points ?? []).map((p) => ({
     id: p.id, lat: p.lat, lng: p.lng, title: p.title, details: p.details,
     tone: p.origin === "internal" ? "brand" : "success", href: p.href ?? undefined,
+    imageUrl: p.imageUrl ?? undefined,
   }));
 
   const noKey = data && !data.hasGoogleKey;

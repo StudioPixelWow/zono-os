@@ -29,6 +29,8 @@ export interface ZonoMapPoint {
   details?: string[];
   tone?: MapTone;
   href?: string;
+  /** Optional real cover image shown at the top of the popover (no placeholder). */
+  imageUrl?: string | null;
 }
 
 /** An optional area polygon (e.g. broker expertise area / neighborhood). */
@@ -65,15 +67,25 @@ const HEAT_COLOR: [number, string][] = [
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
-/** Branded, ZONO-styled popover HTML (dark panel, lavender text, glow). */
+/** Branded, ZONO-styled property card popover (real image header when present,
+ *  clean dark card, no placeholder image). */
 function infoHtml(p: ZonoMapPoint): string {
-  const details = (p.details ?? []).filter(Boolean).map((d) => `<div style="color:${MAP_BRAND.muted};font-size:12px;line-height:1.5">${esc(d)}</div>`).join("");
+  const lines = (p.details ?? []).filter(Boolean);
+  const sub = lines[0] ? `<div style="color:${MAP_BRAND.muted};font-size:11.5px;font-weight:600">${esc(lines[0])}</div>` : "";
+  const price = lines[1] ? `<div style="color:${MAP_BRAND.ink};font-size:14px;font-weight:800;margin-top:3px">${esc(lines[1])}</div>` : "";
+  const meta = lines[2] ? `<div style="color:${MAP_BRAND.muted};font-size:11px;margin-top:5px;opacity:.85">${esc(lines[2])}</div>` : "";
+  const img = p.imageUrl
+    ? `<div style="height:118px;background:#0e0a1f center/cover no-repeat url('${esc(p.imageUrl)}')"></div>`
+    : `<div style="height:6px;background:linear-gradient(90deg,${MAP_BRAND.brand},${MAP_BRAND.violet})"></div>`;
   const link = p.href
-    ? `<a href="${esc(p.href)}" style="color:${MAP_BRAND.lavender};font-size:12px;font-weight:700;text-decoration:none">פתח ←</a>`
+    ? `<a href="${esc(p.href)}" style="display:inline-flex;align-items:center;gap:5px;margin-top:11px;color:#fff;background:linear-gradient(135deg,${MAP_BRAND.violet},${MAP_BRAND.purple});font-size:12px;font-weight:800;text-decoration:none;padding:7px 13px;border-radius:10px">פתח ←</a>`
     : "";
-  return `<div dir="rtl" style="background:${MAP_BRAND.bgPanel};border:1px solid #2c2056;border-radius:14px;padding:10px 12px;min-width:160px;box-shadow:0 12px 32px rgba(109,40,217,0.45);font-family:inherit">
-    <div style="color:${MAP_BRAND.ink};font-size:13px;font-weight:800;margin-bottom:4px">${esc(p.title ?? "מיקום")}</div>
-    ${details}${link ? `<div style="margin-top:6px">${link}</div>` : ""}
+  return `<div dir="rtl" style="width:230px;overflow:hidden;border-radius:16px;background:${MAP_BRAND.bgPanel};border:1px solid #2c2056;box-shadow:0 18px 44px rgba(8,4,22,.5);font-family:inherit">
+    ${img}
+    <div style="padding:12px 14px 14px">
+      <div style="color:#fff;font-size:14px;font-weight:800;line-height:1.3">${esc(p.title ?? "מיקום")}</div>
+      ${sub}${price}${meta}${link}
+    </div>
   </div>`;
 }
 
@@ -172,7 +184,7 @@ export function ZonoMap({
             el.addEventListener("click", (e) => {
               e.stopPropagation(); // don't let the map receive it (would close the popup)
               popupRef.current?.remove();
-              popupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 26, maxWidth: "260px" })
+              popupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 28, maxWidth: "240px", className: "zono-pop" })
                 .setLngLat([p.lng, p.lat]).setHTML(infoHtml(p)).addTo(map!);
             });
             markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([p.lng, p.lat]).addTo(map));

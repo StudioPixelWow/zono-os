@@ -12,7 +12,7 @@
 // ============================================================================
 import "server-only";
 
-export type GeocodeProvider = "google";
+export type GeocodeProvider = "google" | "nominatim";
 
 export interface GeocodeInput {
   address?: string | null;
@@ -99,12 +99,43 @@ interface GoogleGeocodeResponse {
   error_message?: string;
 }
 
-/** Geocode one address. Returns null-equivalent (ok:false) on any failure. */
+// ── OSM Nominatim fallback (keyless) ────────────────────────────────────────
+// Used automatically when no Google key is configured (the default after the OSM
+// migration), so external listings still get REAL coordinates from their address.
+// Nominatim's usage policy caps requests at ~1/sec → we throttle globally.
+let lastNominatimAt = 0;
+async function geocodeViaNominatim(query: string, region: string): Promise<GeocodeOutcome> {
+  const wait = 1100 - (Date.now() - lastNominatimAt);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastNominatimAt = Date.now();
+  const url = "https://nominatim.openstreetmap.org/search?" + new URLSearchParams({
+    format: "json", limit: "1", countrycodes: region || "il", "accept-language": "he", q: query,
+  }).toString();
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": "ZONO-RealEstate/1.0 (maps)", "Accept-Language": "he" } });
+    if (!res.ok) return { ok: false, reason: "error", message: `Nominatim ${res.status}` };
+    const data = (await res.json()) as Array<{ lat: string; lon: string; display_name?: string; importance?: number }>;
+    if (!data.length) return { ok: false, reason: "not_found", message: "לא נמצאו תוצאות לכתובת (OSM)." };
+    const lat = Number(data[0].lat), lng = Number(data[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { ok: false, reason: "error", message: "תוצאת OSM לא תקינה." };
+    const imp = typeof data[0].importance === "number" ? data[0].importance : 0.4;
+    return { ok: true, result: { lat, lng, formattedAddress: data[0].display_name ?? query, provider: "nominatim", confidence: Math.max(0.4, Math.min(0.9, imp)) } };
+  } catch {
+    return { ok: false, reason: "error", message: "שגיאת רשת בגאוקודינג (OSM)." };
+  }
+}
+
+/** Geocode one address. Tries Google when a key is configured, otherwise (or on
+ *  a denied/config Google error) falls back to keyless OSM Nominatim — so every
+ *  scraped listing can get REAL coordinates. Returns ok:false on any failure;
+ *  NEVER invents coordinates. */
 export async function geocodeAddress(input: GeocodeInput): Promise<GeocodeOutcome> {
-  const key = geocodeKey();
-  if (!key) return { ok: false, reason: "config", message: "מפתח Geocoding אינו מוגדר בשרת." };
   const query = buildQuery(input);
   if (!query) return { ok: false, reason: "no_query", message: "אין כתובת לגאוקודינג." };
+  const key = geocodeKey();
+
+  // No Google key → go straight to the keyless OSM fallback.
+  if (!key) return geocodeViaNominatim(query, input.region ?? "il");
 
   const url = "https://maps.googleapis.com/maps/api/geocode/json?" + new URLSearchParams({
     address: query, region: input.region ?? "il", language: "iw", key,
@@ -115,7 +146,7 @@ export async function geocodeAddress(input: GeocodeInput): Promise<GeocodeOutcom
     const res = await fetch(url, { method: "GET" });
     json = (await res.json()) as GoogleGeocodeResponse;
   } catch {
-    return { ok: false, reason: "error", message: "שגיאת רשת בגאוקודינג." };
+    return geocodeViaNominatim(query, input.region ?? "il"); // network error → OSM
   }
 
   if (json.status === "OK" && json.results && json.results[0]) {
@@ -134,7 +165,8 @@ export async function geocodeAddress(input: GeocodeInput): Promise<GeocodeOutcom
     }
   }
   if (json.status === "ZERO_RESULTS") return { ok: false, reason: "not_found", message: "לא נמצאו תוצאות לכתובת." };
-  if (json.status === "REQUEST_DENIED") return { ok: false, reason: "denied", message: json.error_message ?? "Geocoding API חסום (בדוק מפתח/Billing)." };
+  // A rejected/blocked Google key shouldn't kill the pipeline → fall back to OSM.
+  if (json.status === "REQUEST_DENIED" || json.status === "OVER_QUERY_LIMIT") return geocodeViaNominatim(query, input.region ?? "il");
   return { ok: false, reason: "error", message: json.error_message ?? `שגיאת גאוקודינג (${json.status}).` };
 }
 

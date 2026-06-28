@@ -68,7 +68,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   if (wantInternal && !filters.privateOnly) { // privateOnly is an external-only concept
     try {
       let q = db.from("properties" as never)
-        .select("id,title,city,neighborhood,price,monthly_rent,latitude,longitude,listing_kind,type,created_at")
+        .select("id,title,city,neighborhood,price,monthly_rent,latitude,longitude,listing_kind,type,created_at,primary_image_url")
         .eq("org_id", orgId)
         .not("latitude", "is", null).not("longitude", "is", null)
         .limit(600);
@@ -93,6 +93,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
             "נכס פנימי (מהמשרד)",
           ],
           href: `/properties/${String(r.id)}`,
+          imageUrl: typeof r.primary_image_url === "string" && r.primary_image_url ? r.primary_image_url : null,
         });
         internalCount++;
       }
@@ -103,7 +104,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   if (wantExternal) {
     try {
       let q = db.from("external_listings" as never)
-        .select("id,title,city,neighborhood,price,property_type,deal_type,source,lat,lng,has_agent,first_seen_at,listing_url,status")
+        .select("id,title,city,neighborhood,price,property_type,deal_type,source,lat,lng,has_agent,first_seen_at,listing_url,status,images")
         .eq("org_id", orgId).eq("status", "active")
         .not("lat", "is", null).not("lng", "is", null)
         .limit(1000);
@@ -136,6 +137,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
             `מקור: ${src}${r.has_agent === false ? " · בעל בית פרטי" : ""}`,
           ],
           href: r.listing_url ? String(r.listing_url) : null,
+          imageUrl: (() => { const im = Array.isArray(r.images) ? r.images : []; const first = im[0]; return typeof first === "string" ? first : (first && typeof first === "object" && typeof (first as { url?: string }).url === "string" ? (first as { url: string }).url : null); })(),
         });
         externalCount++;
       }

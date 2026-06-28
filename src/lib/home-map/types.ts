@@ -35,6 +35,7 @@ export interface HomeMapPoint {
   origin: "internal" | "external";
   source: string | null;   // yad2 / madlan / manual / internal
   href: string | null;
+  imageUrl: string | null; // real cover image URL (no placeholder)
 }
 
 export interface HomeMapData {
