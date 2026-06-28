@@ -46,6 +46,7 @@ export const MODULES: ModuleEntry[] = [
 
   // ── שוק ועסקאות ──
   { id: "market-intelligence", label: "🌍 מודיעין שוק", route: "/market-intelligence", icon: "Map", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "מרכז מודיעין שוק חיצוני — מודעות חדשות, ירידות מחיר, רדאר, מפת חום ותובנות. אינו CRM" },
+  { id: "intelligence-explorer", label: "🔎 חיפוש מודיעין", route: "/intelligence-explorer", icon: "Search", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "Intelligence Explorer™ — מנוע גילוי: חיפוש גלובלי, מדריך מתווכים, מדריך משרדים, חוקר שכונות והזדמנויות שוק" },
   { id: "live-market-map", label: "🗺️ מפת שוק חיה", route: "/market-intelligence/map", icon: "MapPin", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "מפת שוק חיה — בפיתוח (מבנה בלבד)" },
   { id: "market", label: "מפת חום שוק", route: "/market", icon: "Map", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "transactions", label: "עסקאות שוק", route: "/transactions", icon: "Building2", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },

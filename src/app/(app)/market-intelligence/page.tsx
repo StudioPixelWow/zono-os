@@ -20,6 +20,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MARKET_LINKS: WorkspaceLink[] = [
+  { href: "/intelligence-explorer", emoji: "🔎", label: "חיפוש מודיעין", hint: "Intelligence Explorer" },
   { href: "/property-radar", emoji: "📡", label: "רדאר נכסים — חי", hint: "Property Radar" },
   { href: "/market", emoji: "🔥", label: "מפת חום שוק", hint: "Heatmap" },
   { href: "/transactions", emoji: "🏛️", label: "עסקאות שוק", hint: "Market deals" },

@@ -9,6 +9,7 @@ import {
   TerminalSection, Metric, MetricGrid, BarMeter, StatusBadge, Pill, TerminalEmpty, SourceLine, val, pct01, type StatusTone,
 } from "@/components/intelligence/terminal";
 import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
+import { RelatedIntelligence } from "@/components/intelligence/RelatedIntelligence";
 import type { AgencyIntelligenceAgencyDTO } from "@/lib/agencies/api/agencyIntelligenceApiTypes";
 
 const PRIORITY_TONE: Record<string, StatusTone> = { high: "warn", medium: "contender", low: "neutral" };
@@ -27,6 +28,11 @@ export function OfficeIntelligenceProfileView({ dto }: { dto: AgencyIntelligence
   const topTerritory = territory.territories.slice().sort((a, b) => (b.dominance ?? 0) - (a.dominance ?? 0))[0] ?? null;
   const brokers = dto.graph.nodes.filter((n) => n.nodeType === "broker" || n.nodeType === "agent").sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0)).slice(0, 8);
   const report = reports.latest;
+  // Related intelligence — from EXISTING relations only (graph + territory + signals).
+  const relatedBrokers = brokers.map((b) => ({ id: b.id, name: b.label }));
+  const relatedOffices = dto.graph.nodes.filter((n) => n.nodeType === "office" && n.id !== dto.agencyId).map((n) => ({ id: n.id, name: n.label }));
+  const nearbyNeighborhoods = territory.territories.filter((t) => t.neighborhood).map((t) => ({ city: t.city, neighborhood: t.neighborhood as string }));
+  const relatedOpps = signals.signals.slice(0, 6).map((sg) => ({ label: sg.title, neighborhood: null as string | null }));
 
   return (
     <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-4 p-4 sm:p-6">
@@ -188,6 +194,8 @@ export function OfficeIntelligenceProfileView({ dto }: { dto: AgencyIntelligence
         ) : <TerminalEmpty text="אין היסטוריה מאוחסנת עדיין." />}
         <SourceLine confidence={card.dataConfidence} lastCalculated={dto.sourceSummary.lastCalculated} missing={dto.sourceSummary.missingData} />
       </TerminalSection>
+
+      <RelatedIntelligence brokers={relatedBrokers} offices={relatedOffices} neighborhoods={nearbyNeighborhoods} opportunities={relatedOpps} />
     </div>
   );
 }
