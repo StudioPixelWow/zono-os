@@ -13,6 +13,10 @@
       "schedule": "15 * * * *"
     },
     {
+      "path": "/api/cron/brokerage-knowledge",
+      "schedule": "40 4 * * *"
+    },
+    {
       "path": "/api/cron/transactions-refresh",
       "schedule": "0 3 * * *"
     },
