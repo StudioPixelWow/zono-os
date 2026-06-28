@@ -1,5 +1,6 @@
 import { getBrokerageCommandCenter, type BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import { BrokerageDataView } from "./BrokerageDataView";
+import { KnowledgeView } from "./KnowledgeView";
 
 export const dynamic = "force-dynamic";
 
@@ -20,5 +21,10 @@ export default async function BrokerageDataPage() {
     );
   }
 
-  return <BrokerageDataView cc={cc} />;
+  return (
+    <div className="flex flex-col gap-8">
+      <BrokerageDataView cc={cc} />
+      <KnowledgeView />
+    </div>
+  );
 }
