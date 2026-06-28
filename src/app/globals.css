@@ -282,7 +282,7 @@ body {
   position: relative; z-index: 10;
   min-height: 100vh; min-height: 100dvh;
   display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
-  padding: 48px 24px;
+  padding: 48px 40px;
 }
 .zauth-stage { position: relative; width: 100%; max-width: 428px; }
 
@@ -406,8 +406,12 @@ body {
    card, so it can never push the centred login column. pointer-events:none. */
 .zauth-robot-wrap {
   position: absolute; z-index: 1;
-  top: 50%; inset-inline-start: clamp(24px, 6vw, 130px); /* RTL: physical right */
-  transform: translateY(-50%);
+  top: 50%; left: 50%;
+  /* Anchored a controlled distance to the physical-right of the CENTRED card —
+     so it stays close to the form and never pinned to the screen edge. The
+     offset scales with viewport but is capped so wide screens don't fling it
+     to the corner. pointer-events:none → never affects/blocks the form. */
+  transform: translate(calc(-50% + clamp(330px, 24vw, 470px)), -50%);
   width: clamp(180px, 14vw, 250px);
   pointer-events: none;
 }
@@ -448,7 +452,7 @@ body {
 /* Responsive: the decorative robot never affects the centred form. Tablet →
    shrink it (~65%) and tuck it toward the edge; mobile → hide it entirely. */
 @media (max-width: 1024px) {
-  .zauth-robot-wrap { width: clamp(120px, 17vw, 160px); inset-inline-start: clamp(8px, 3vw, 40px); } /* ≈65% */
+  .zauth-robot-wrap { width: clamp(120px, 17vw, 160px); transform: translate(calc(-50% + clamp(220px, 28vw, 300px)), -50%); } /* ≈65%, kept near the form */
   .zauth-bubble { display: none; } /* keep the area around the form clean */
 }
 @media (max-width: 768px) {
