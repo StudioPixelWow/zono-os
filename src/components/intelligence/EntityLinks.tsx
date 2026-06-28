@@ -23,9 +23,9 @@ export function BrokerLink({ id, name, className }: { id?: string | null; name: 
   );
 }
 
-/** Office → Office Intelligence. Carries the office name as an informational hint. */
+/** Office → Office Intelligence Profile (per-office). Falls back to the hub. */
 export function OfficeLink({ id, name, className }: { id?: string | null; name: string; className?: string }) {
-  const href = id ? `/office-intelligence?office=${encodeURIComponent(id)}` : "/office-intelligence";
+  const href = id ? `/office-intelligence/${encodeURIComponent(id)}` : "/office-intelligence";
   return (
     <Link href={href} className={className ?? linkCls} title={`פרופיל מודיעין משרד — ${name}`} prefetch={false}>
       {name}
@@ -33,14 +33,16 @@ export function OfficeLink({ id, name, className }: { id?: string | null; name: 
   );
 }
 
-/** Neighborhood → Market / Neighborhood Intelligence (city + neighborhood scope). */
+/** Build the neighborhood-intelligence id: "city|neighborhood" (or just city). */
+export function neighborhoodId(city: string | null | undefined, neighborhood: string | null | undefined): string {
+  return [city ?? "", neighborhood ?? ""].join("|");
+}
+
+/** Neighborhood → Neighborhood Intelligence Profile. */
 export function NeighborhoodLink({ city, neighborhood, className }: { city?: string | null; neighborhood: string; className?: string }) {
-  const params = new URLSearchParams();
-  if (city) params.set("city", city);
-  if (neighborhood) params.set("neighborhood", neighborhood);
-  const qs = params.toString();
+  const id = encodeURIComponent(neighborhoodId(city, neighborhood));
   return (
-    <Link href={`/market${qs ? `?${qs}` : ""}`} className={className ?? linkCls} title={`מודיעין שכונה — ${neighborhood}`} prefetch={false}>
+    <Link href={`/neighborhood-intelligence/${id}`} className={className ?? linkCls} title={`מודיעין שכונה — ${neighborhood}`} prefetch={false}>
       {neighborhood}
     </Link>
   );

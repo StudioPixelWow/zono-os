@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { SmartPropertyGrid } from "@/components/listings/SmartListings";
 import { enrichBrokerAction, markBrokerCompetitorAction, uploadBrokerLogoAction, verifyBrokerAction } from "@/lib/broker/actions";
 import type { BrokerDetail } from "@/lib/broker/service";
+import { Metric, MetricGrid } from "@/components/intelligence/terminal";
+import { WhyButton } from "@/components/explainability/WhyButton";
+import { OfficeLink, NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 
 const SOCIALS: { key: keyof BrokerDetail["profile"]; label: string }[] = [
   { key: "website", label: "אתר" }, { key: "google_business_url", label: "Google" },
@@ -34,6 +37,9 @@ export function BrokerProfileView({ detail }: { detail: BrokerDetail }) {
   const hasEvidence = detail.sources.length > 0;
   const socialLinks = SOCIALS.map((s) => ({ ...s, url: p[s.key] as string | null })).filter((s) => s.url);
   const candidateSources = detail.sources.filter((s) => s.source_type === "enrichment:candidate");
+  // Recent listings grouped by lifecycle (existing status only — no recompute).
+  const activeListings = detail.externalListings.filter((l) => (l.status ?? "active") === "active");
+  const exitedListings = detail.externalListings.filter((l) => (l.status ?? "active") !== "active");
 
   const run = (fn: () => Promise<{ error?: string; message?: string }>) => { setError(null); setMsg(null); start(async () => { const r = await fn(); if (r?.error) setError(r.error); else { if (r?.message) setMsg(r.message); router.refresh(); } }); };
   const verify = () => run(() => verifyBrokerAction(p.id));
@@ -89,6 +95,23 @@ export function BrokerProfileView({ detail }: { detail: BrokerDetail }) {
         {p.ai_summary && <div className="bg-surface mt-3 rounded-xl p-3"><p className="text-ink text-xs font-bold">סיכום (מוכן ל-AI)</p><p className="text-muted mt-1 text-[11px]">{p.ai_summary}</p></div>}
       </div>
 
+      {/* Intelligence Summary — existing metrics only, explainable. */}
+      <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]" dir="rtl">
+        <div className="mb-3 flex items-center gap-2">
+          <h3 className="text-ink text-sm font-extrabold">תקציר מודיעין</h3>
+          <WhyButton reasons={[`ביטחון נתונים ${p.confidence_score}`, `${detail.sources.length} מקורות ראיה`, `סטטוס אימות: ${v.t}`]} source="Broker Intelligence Engine" />
+        </div>
+        <MetricGrid>
+          <Metric label="ביטחון נתונים" value={String(p.confidence_score)} accent />
+          <Metric label="מודעות מקושרות" value={String(detail.externalListings.length)} />
+          <Metric label="אזורי שירות" value={String(detail.serviceAreas.length)} />
+          <Metric label="מקורות ראיה" value={String(detail.sources.length)} />
+          <Metric label="סטטוס אימות" value={v.t} />
+          <Metric label="סוג" value={TYPE_LABEL[p.broker_type] ?? p.broker_type} />
+        </MetricGrid>
+        {p.agency_name && <p className="text-muted mt-3 text-xs">משרד: <OfficeLink name={p.agency_name} /></p>}
+      </div>
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Section title="כינויים ומזהים" icon="Tag">
           {detail.aliases.length === 0 ? <p className="text-muted text-sm">אין כינויים</p> : (
@@ -97,7 +120,7 @@ export function BrokerProfileView({ detail }: { detail: BrokerDetail }) {
         </Section>
         <Section title="אזורי שירות" icon="MapPin">
           {detail.serviceAreas.length === 0 ? <p className="text-muted text-sm">לא הוגדרו אזורים</p> : (
-            <div className="flex flex-wrap gap-1.5">{detail.serviceAreas.map((s) => <span key={s.id} className="bg-surface text-ink rounded-full px-2.5 py-1 text-[11px] font-bold">{s.city_name}</span>)}</div>
+            <div className="flex flex-wrap gap-1.5">{detail.serviceAreas.map((s) => <span key={s.id} className="bg-surface rounded-full px-2.5 py-1 text-[11px] font-bold"><NeighborhoodLink city={s.city_name} neighborhood={s.city_name} /></span>)}</div>
           )}
         </Section>
         <Section title="מקורות / ראיות" icon="Shield">
@@ -127,10 +150,25 @@ export function BrokerProfileView({ detail }: { detail: BrokerDetail }) {
         </Section>
       </div>
 
-      <div>
-        <h3 className="text-ink mb-3 text-sm font-extrabold">מודעות חיצוניות מקושרות ({detail.externalListings.length})</h3>
-        {detail.externalListings.length === 0 ? <p className="text-muted bg-card border-line rounded-[22px] border p-5 text-sm">אין מודעות מקושרות</p> : (
-          <SmartPropertyGrid listings={detail.externalListings} matches={{}} />
+      <div dir="rtl" className="flex flex-col gap-5">
+        <h3 className="text-ink text-sm font-extrabold">מודעות אחרונות ({detail.externalListings.length})</h3>
+        {detail.externalListings.length === 0 ? (
+          <p className="text-muted bg-card border-line rounded-[22px] border p-5 text-sm">אין מודעות מקושרות</p>
+        ) : (
+          <>
+            {activeListings.length > 0 && (
+              <div>
+                <p className="text-ink mb-2 text-xs font-extrabold">פעילות בשוק ({activeListings.length})</p>
+                <SmartPropertyGrid listings={activeListings} matches={{}} />
+              </div>
+            )}
+            {exitedListings.length > 0 && (
+              <div>
+                <p className="text-muted mb-2 text-xs font-extrabold">יצאו מהשוק / לא פעילות ({exitedListings.length})</p>
+                <SmartPropertyGrid listings={exitedListings} matches={{}} />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
