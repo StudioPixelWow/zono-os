@@ -30,10 +30,36 @@ function ils(n: number | null): string { return n == null ? "מחיר לא יד�
 function normCity(s: unknown): string {
   return String(s ?? "")
     .replace(/קריית/g, "קרית")
-    .replace(/["'`.,־-]/g, " ")
+    .replace(/["'`.,־\-/]/g, " ")
     .replace(/^ה(?=[א-ת])/, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Significant tokens of a normalized city name. We drop tiny connector words
+// ("של","על"…) and 1-letter fragments so "תל אביב יפו" ≈ "תל אביב".
+const CITY_STOPWORDS = new Set(["של", "על", "ה", "the"]);
+function cityTokens(s: unknown): string[] {
+  return normCity(s)
+    .split(" ")
+    .filter((t) => t.length > 1 && !CITY_STOPWORDS.has(t));
+}
+
+// Two Israeli city names refer to the SAME city when one's significant tokens are
+// a subset of the other's — so "תל אביב" matches "תל אביב יפו", "מודיעין" matches
+// "מודיעין מכבים רעות", etc. — without the false positives a raw substring match
+// would create ("רמת גן" vs "רמת השרון" share only one token → no match).
+function sameCity(listingCity: unknown, allowedTokenSets: string[][]): boolean {
+  const lt = cityTokens(listingCity);
+  if (!lt.length) return false;
+  const ls = new Set(lt);
+  for (const at of allowedTokenSets) {
+    if (!at.length) continue;
+    const allowedInListing = at.every((t) => ls.has(t)); // operating ⊆ listing
+    const listingInAllowed = lt.every((t) => at.includes(t)); // listing ⊆ operating
+    if (allowedInListing || listingInAllowed) return true;
+  }
+  return false;
 }
 
 export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_FILTERS): Promise<HomeMapData> {
@@ -135,12 +161,13 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
         q = q.or(tokens.map((t) => `property_type.ilike.%${t}%`).join(","));
       }
       const { data } = await q;
-      // Normalized operating-area city scope (empty ⇒ no city restriction).
-      const allowCities = cityFilter.length ? new Set(cityFilter.map(normCity)) : null;
+      // Operating-area city scope via token-subset matching (empty ⇒ no restriction)
+      // so "תל אביב יפו" ↔ "תל אביב" and similar variants are treated as one city.
+      const allowedTokenSets = cityFilter.length ? cityFilter.map(cityTokens).filter((t) => t.length) : null;
       for (const r of (data ?? []) as Record<string, unknown>[]) {
         const lat = num(r.lat), lng = num(r.lng);
         if (lat == null || lng == null) continue;
-        if (allowCities && !allowCities.has(normCity(r.city))) { externalDiag.cityDropped++; continue; } // city-scope (normalized)
+        if (allowedTokenSets && !sameCity(r.city, allowedTokenSets)) { externalDiag.cityDropped++; continue; } // city-scope (token-subset)
         const src = String(r.source ?? "external");
         points.push({
           id: `ext_${String(r.id)}`, lat, lng, origin: "external", source: src,
