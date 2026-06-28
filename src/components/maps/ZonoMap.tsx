@@ -161,16 +161,18 @@ export function ZonoMap({
             const el = document.createElement("div");
             el.style.cssText = `width:${size}px;height:${size}px;border-radius:9999px;background:${MAP_BRAND.purple}ed;border:2px solid ${MAP_BRAND.lavender};color:${MAP_BRAND.ink};font:700 12px/1 inherit;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px rgba(109,40,217,0.45)`;
             el.textContent = String(g.items.length);
-            el.addEventListener("click", () => { map?.easeTo({ center: [g.lng, g.lat], zoom: Math.min(18, zoom + 2) }); });
+            el.addEventListener("click", (e) => { e.stopPropagation(); map?.easeTo({ center: [g.lng, g.lat], zoom: Math.min(18, zoom + 2) }); });
             markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([g.lng, g.lat]).addTo(map));
           } else {
             const p = g.items[0];
-            const el = document.createElement("img");
-            el.src = brandedMarkerSvg(p.tone ?? "brand");
-            el.width = 30; el.height = 39; el.style.cursor = "pointer";
-            el.addEventListener("click", () => {
+            // A <div> (NOT an <img>) so the browser's native image drag can never
+            // swallow the click. The marker SVG is a background image.
+            const el = document.createElement("div");
+            el.style.cssText = `width:30px;height:39px;cursor:pointer;background:center/contain no-repeat url("${brandedMarkerSvg(p.tone ?? "brand")}")`;
+            el.addEventListener("click", (e) => {
+              e.stopPropagation(); // don't let the map receive it (would close the popup)
               popupRef.current?.remove();
-              popupRef.current = new maplibregl.Popup({ closeButton: true, offset: 26, maxWidth: "260px" })
+              popupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 26, maxWidth: "260px" })
                 .setLngLat([p.lng, p.lat]).setHTML(infoHtml(p)).addTo(map!);
             });
             markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([p.lng, p.lat]).addTo(map));
