@@ -7,16 +7,27 @@ export type ExternalListingRow = DB["external_listings"]["Row"];
 export type ImportJobRow = DB["import_jobs"]["Row"];
 
 export const externalListingRepository = {
-  async listForOrg(limit = 100): Promise<ExternalListingRow[]> {
+  /** All active external listings for the org — paginated so we return EVERYTHING
+   *  scanned (PostgREST caps a single request at ~1000 rows). `max` is a generous
+   *  safety ceiling, not a display cap. */
+  async listForOrg(max = 5000): Promise<ExternalListingRow[]> {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from("external_listings")
-      .select("*")
-      .neq("status", "removed")
-      .order("opportunity_score", { ascending: false })
-      .order("imported_at", { ascending: false })
-      .limit(limit);
-    return data ?? [];
+    const pageSize = 1000;
+    const out: ExternalListingRow[] = [];
+    for (let from = 0; from < max; from += pageSize) {
+      const to = Math.min(from + pageSize, max) - 1;
+      const { data, error } = await supabase
+        .from("external_listings")
+        .select("*")
+        .neq("status", "removed")
+        .order("opportunity_score", { ascending: false })
+        .order("imported_at", { ascending: false })
+        .range(from, to);
+      if (error || !data || data.length === 0) break;
+      out.push(...(data as ExternalListingRow[]));
+      if (data.length < to - from + 1) break; // last page
+    }
+    return out;
   },
   /** Counts that need sibling tables (price drops + duplicate candidates). */
   async marketStats(): Promise<{ priceDrops: number; duplicateCandidates: number }> {
