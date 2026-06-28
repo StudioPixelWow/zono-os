@@ -134,13 +134,22 @@ function warnDevTilesInProduction(): void {
   console.warn("[ZonoMap] Using OSM public tiles (dev fallback). They are NOT for production traffic — set NEXT_PUBLIC_MAP_STYLE_URL (preferred) or NEXT_PUBLIC_MAP_TILE_URL to a real tile/style provider.");
 }
 
+let warnedStyleFallback = false;
+/** Warn (once) that the configured vector style failed and we fell back to OSM. */
+function warnStyleFallback(styleUrl: string, reason: string): void {
+  if (warnedStyleFallback || typeof console === "undefined") return;
+  warnedStyleFallback = true;
+  console.warn(`[ZonoMap] NEXT_PUBLIC_MAP_STYLE_URL could not be loaded (${reason}) — falling back to OSM raster so the map still renders. Check the provider key/URL: ${styleUrl}`);
+}
+
 /** Fetch an external vector style, resolve its relative asset URLs, and rebrand
- *  it into the ZONO look. Falls back to the raw URL string on any failure so a
- *  map always renders. */
+ *  it into the ZONO look. If it can't be loaded (e.g. a rejected provider key
+ *  → 403), fall back to the working OSM raster style so the map ALWAYS renders
+ *  rather than handing MapLibre a broken URL. */
 async function loadBrandedVectorStyle(styleUrl: string): Promise<string | StyleSpecification> {
   try {
     const res = await fetch(styleUrl, { credentials: "omit" });
-    if (!res.ok) return styleUrl;
+    if (!res.ok) { warnStyleFallback(styleUrl, `HTTP ${res.status}`); return buildZonoMapStyle(); }
     const base = (await res.json()) as StyleSpecification;
     const abs = (u: string) => { try { return new URL(u, styleUrl).toString(); } catch { return u; } };
     // Resolve relative sprite/glyphs against the style URL (MapLibre would do
@@ -153,7 +162,9 @@ async function loadBrandedVectorStyle(styleUrl: string): Promise<string | StyleS
     }
     return buildZonoVectorStyle(base);
   } catch {
-    return styleUrl; // network/parse failure → let MapLibre load the URL as-is
+    // Network/CORS/parse failure → OSM raster fallback (never a broken URL).
+    warnStyleFallback(styleUrl, "fetch failed");
+    return buildZonoMapStyle();
   }
 }
 

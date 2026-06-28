@@ -139,7 +139,10 @@ export function ZonoMap({
       });
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
-      map.on("error", () => { if (!cancelled) setState("error"); });
+      // Only surface the error overlay if the map never finished loading. Once
+      // it's up, ignore transient per-tile errors so a hiccup never blanks it.
+      let ready = false;
+      map.on("error", () => { if (!cancelled && !ready) setState("error"); });
 
       const drawMarkers = () => {
         if (!map) return;
@@ -228,6 +231,7 @@ export function ZonoMap({
           const b = coords.reduce((acc, c) => acc.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
           map.fitBounds(b, { padding: 48, maxZoom: 16, duration: 0 });
         }
+        ready = true;
         if (!cancelled) setState("ready");
       });
     })().catch(() => { if (!cancelled) setState("error"); });
