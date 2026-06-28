@@ -294,12 +294,16 @@ body {
   position: relative; z-index: 10;
   min-height: 100vh; min-height: 100dvh;
   display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
-  padding: 48px 40px;
+  /* Generous, asymmetric block padding guarantees the card never touches the
+     viewport bottom edge; overflow-y:auto lets a tall column scroll instead of
+     clipping on short screens. */
+  padding: 40px 40px 72px;
+  overflow-y: auto;
 }
 .zauth-stage { position: relative; width: 100%; max-width: 428px; }
 
 /* Header — elegant type; tightened spacing so the column feels balanced. */
-.zauth-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 22px; }
+.zauth-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 18px; }
 .zauth-logo-wrap { position: relative; display: inline-flex; animation: zauth-logofloat 8s ease-in-out infinite; }
 .zauth-logo-wrap::before {
   content: ""; position: absolute; inset: -46% -32%; z-index: -1;
@@ -321,7 +325,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.8);
   box-shadow: 0 30px 80px rgba(70, 40, 160, 0.08);
 }
-.zauth-card { position: relative; border-radius: 32px; padding: 40px 34px 34px; }
+.zauth-card { position: relative; border-radius: 32px; padding: 34px 32px 30px; }
 /* Hairline luminous edge + a soft top reflection. */
 .zauth-card::before {
   content: ""; position: absolute; inset: 0; border-radius: 32px; padding: 1px;
@@ -418,13 +422,16 @@ body {
    card, so it can never push the centred login column. pointer-events:none. */
 .zauth-robot-wrap {
   position: absolute; z-index: 1;
-  top: 50%; left: 50%;
-  /* Sits clearly to the physical-right of the CENTRED card. The card half-width
-     is ~214px; this offset keeps the robot fully BESIDE the card (never behind
-     it) with a comfortable gap, and is capped so it never flies to the edge.
-     pointer-events:none → never affects/blocks the form. */
-  transform: translate(calc(-50% + clamp(360px, 30vw, 520px)), -50%);
-  width: clamp(150px, 11vw, 200px);
+  /* Anchored to the EMPTY right-side gap of the viewport (not offset from the
+     centred card), so it can NEVER sit behind the form. The card is centred and
+     ≤428px wide, so the area right of `right: clamp(...)` is always clear.
+     `top:58%` aligns the robot with the card's vertical centre (the column —
+     logo + headline + card — sits below the geometric centre), not the headline. */
+  top: 58%;
+  right: clamp(28px, 7vw, 150px);
+  left: auto;
+  transform: translateY(-50%);
+  width: clamp(150px, 11vw, 196px);
   pointer-events: none;
 }
 /* Concentric orbital rings behind the robot (premium, faint). */
