@@ -9,7 +9,7 @@
 /** The official ZONO logo URL (provided by the brand owner). To self-host,
  *  save the file to `public/zono-logo.png` and set this to "/zono-logo.png". */
 export const ZONO_LOGO_SRC =
-  "https://s-pixel.co.il/wp-content/uploads/2026/06/6e81441e-b248-45dd-8ab9-68dfe0b32902.png";
+  "https://s-pixel.co.il/wp-content/uploads/2026/06/ec4379f4-0405-4d23-8d4c-54808e1464ea.png";
 
 export function ZonoLogo({
   className = "",

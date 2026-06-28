@@ -51,47 +51,48 @@ export function LoginExperience() {
 
   return (
     <div dir="rtl" className="zauth">
-      {/* Ambient breathing light — huge, soft, almost invisible */}
-      <div className="zauth-aura a1" />
-      <div className="zauth-aura a2" />
+      {/* ── Decorative layer — ALL background/robot/widgets live here. It is
+            absolute + pointer-events:none and sits BELOW the form, so nothing
+            here can shift the form away from the true viewport centre. ── */}
+      <div className="zauth-decor" aria-hidden="true">
+        {/* Ambient breathing light — huge, soft, almost invisible */}
+        <div className="zauth-aura a1" />
+        <div className="zauth-aura a2" />
 
-      {/* Very subtle orbital arcs */}
-      <OrbitArcs />
+        {/* Very subtle orbital arcs */}
+        <OrbitArcs />
 
-      {/* Minimal, almost-invisible futuristic skyline on the far side */}
-      <Skyline />
+        {/* Minimal, almost-invisible futuristic skyline on the far side */}
+        <Skyline />
 
-      {/* Near-invisible particles */}
-      <div className="zauth-particles" aria-hidden="true">
-        {particles.map((p, i) => (
-          <span
-            key={i}
-            className="zauth-dot"
-            style={{
-              left: `${p.left}%`,
-              bottom: "-12px",
-              width: p.size,
-              height: p.size,
-              animationDuration: `${p.dur}s`,
-              animationDelay: `${p.delay}s`,
-            }}
-          />
-        ))}
+        {/* Near-invisible particles */}
+        <div className="zauth-particles">
+          {particles.map((p, i) => (
+            <span
+              key={i}
+              className="zauth-dot"
+              style={{
+                left: `${p.left}%`,
+                bottom: "-12px",
+                width: p.size,
+                height: p.size,
+                animationDuration: `${p.dur}s`,
+                animationDelay: `${p.delay}s`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Live signal widgets — decorative only */}
+        <PopupSwarm reduce={!!reduce} />
+
+        {/* ZI assistant — decorative only, never affects the form centring */}
+        <Robot reduce={!!reduce} />
       </div>
 
-      {/* Live signals — keep popping in across BOTH sides at random, refreshing */}
-      <PopupSwarm reduce={!!reduce} />
-
-      {/* Foreground: the login card is the hero */}
+      {/* Foreground: the login column, perfectly centred in the viewport */}
       <main className="zauth-shell">
-        {/* Shared composition container: the login card and the ZI robot are
-            SIBLINGS aligned horizontally with a fixed gap. The robot is NEVER
-            positioned from the page edge — it belongs to this row, so it can
-            never overlap the card. (Mandatory login layout rule.) */}
-        <div className="zauth-composition">
-          {/* ZI assistant — sibling of the card, fixed gap, never touching it. */}
-          <Robot reduce={!!reduce} />
-          <motion.div className="zauth-stage" variants={container} initial="hidden" animate="show">
+        <motion.div className="zauth-stage" variants={container} initial="hidden" animate="show">
           {/* Logo + headline */}
           <motion.header className="zauth-head" variants={rise}>
             <span className="zauth-logo-wrap">
@@ -153,8 +154,7 @@ export function LoginExperience() {
           <motion.p className="zauth-foot" variants={rise}>
             ZONO · Real Estate Operating System
           </motion.p>
-          </motion.div>
-        </div>
+        </motion.div>
       </main>
     </div>
   );

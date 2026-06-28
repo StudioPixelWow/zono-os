@@ -274,16 +274,20 @@ body {
 }
 
 /* Foreground shell — generous empty space; the card is the hero. */
+/* Decorative layer — ALL background/robot/widgets live here. Absolute, below the
+   form, pointer-events:none, so it can never shift the centred login column. */
+.zauth-decor { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
 .zauth-shell {
   position: relative; z-index: 10;
   min-height: 100vh; min-height: 100dvh;
-  display: flex; align-items: center; justify-content: center;
-  padding: 60px 24px; /* +25% breathing room */
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  padding: 48px 24px;
 }
-.zauth-stage { position: relative; width: 100%; max-width: 428px; flex: 0 1 428px; }
+.zauth-stage { position: relative; width: 100%; max-width: 428px; }
 
-/* Header — big elegant type with lots of breathing room. */
-.zauth-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 30px; }
+/* Header — elegant type; tightened spacing so the column feels balanced. */
+.zauth-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 22px; }
 .zauth-logo-wrap { position: relative; display: inline-flex; animation: zauth-logofloat 8s ease-in-out infinite; }
 .zauth-logo-wrap::before {
   content: ""; position: absolute; inset: -46% -32%; z-index: -1;
@@ -293,9 +297,9 @@ body {
 }
 @keyframes zauth-logofloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes zauth-bloom { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 0.9; transform: scale(1.05); } }
-.zauth-title { margin-top: 26px; font-size: clamp(19px, 2.4vw, 23px); font-weight: 800; letter-spacing: -0.015em; line-height: 1.45; color: #1f2233; max-width: 23ch; }
+.zauth-title { margin-top: 16px; font-size: clamp(19px, 2.4vw, 23px); font-weight: 800; letter-spacing: -0.015em; line-height: 1.4; color: #1f2233; max-width: 23ch; }
 .zauth-title b, .zauth-title strong { color: var(--z-accent); }
-.zauth-sub { margin-top: 12px; font-size: 14px; font-weight: 500; color: var(--z-muted); }
+.zauth-sub { margin-top: 9px; font-size: 14px; font-weight: 500; color: var(--z-muted); }
 
 /* Premium glassmorphism — frosted white, almost floating. */
 .zauth-glass {
@@ -397,26 +401,14 @@ body {
 .zauth-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .zauth-foot { margin-top: 28px; text-align: center; font-size: 11px; letter-spacing: 0.02em; color: var(--z-faint); }
 
-/* Shared composition — the login CARD and the ZI ROBOT are flex SIBLINGS aligned
-   horizontally with a fixed gap. The robot is NEVER positioned from the page
-   edge; it belongs to this row, so it can never overlap the card. The robot is
-   the first DOM child → in RTL it sits on the physical right of the card.
-   (Mandatory ZONO login layout rule — do not change to edge-anchoring.) */
-.zauth-composition {
-  display: flex; align-items: center; justify-content: center;
-  /* Robot sits ~100px closer to the card than before — part of the composition,
-     but a positive gap guarantees it never touches/overlaps the card. */
-  gap: clamp(8px, 1.6vw, 28px);
-  width: 100%;
-}
-
-/* ZI assistant — sibling BESIDE the card (not page-edge anchored). Vertically
-   centered against the card; width-driven so it stays shorter than the card.
-   pointer-events:none so it can never block a click on the form. */
+/* ZI assistant — DECORATIVE only (inside .zauth-decor). Absolutely placed on the
+   physical-right side, vertically centred. It is NOT a layout sibling of the
+   card, so it can never push the centred login column. pointer-events:none. */
 .zauth-robot-wrap {
-  position: relative; z-index: 12;
-  flex: 0 0 auto; align-self: center;
-  width: clamp(190px, 15vw, 260px); /* ≈80% of card height */
+  position: absolute; z-index: 1;
+  top: 50%; inset-inline-start: clamp(24px, 6vw, 130px); /* RTL: physical right */
+  transform: translateY(-50%);
+  width: clamp(180px, 14vw, 250px);
   pointer-events: none;
 }
 /* Concentric orbital rings behind the robot (premium, faint). */
@@ -453,17 +445,14 @@ body {
 }
 .zauth-bubble-t { font-size: 12px; font-weight: 800; color: #1f2233; }
 .zauth-bubble-s { font-size: 11px; color: #686d82; }
-/* Responsive priority: keep the FORM readable, then keep the robot visible.
-   Tablet → shrink the robot (~65%) + tighten the gap; mobile → hide it. The
-   robot is NEVER moved over the form — it only shrinks, then disappears. */
+/* Responsive: the decorative robot never affects the centred form. Tablet →
+   shrink it (~65%) and tuck it toward the edge; mobile → hide it entirely. */
 @media (max-width: 1024px) {
-  .zauth-composition { gap: clamp(28px, 3.5vw, 44px); }
-  .zauth-robot-wrap { width: clamp(108px, 16vw, 140px); } /* ≈65% */
+  .zauth-robot-wrap { width: clamp(120px, 17vw, 160px); inset-inline-start: clamp(8px, 3vw, 40px); } /* ≈65% */
   .zauth-bubble { display: none; } /* keep the area around the form clean */
 }
 @media (max-width: 768px) {
-  .zauth-robot-wrap { display: none; } /* mobile → form only */
-  .zauth-composition { gap: 0; }
+  .zauth-robot-wrap { display: none; } /* mobile → form only, perfectly centred */
 }
 
 /* Signature chips — quiet floating glass with a tiny live indicator. */
