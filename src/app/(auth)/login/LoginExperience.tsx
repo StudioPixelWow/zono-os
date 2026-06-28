@@ -59,6 +59,10 @@ export function LoginExperience() {
         <div className="zauth-aura a1" />
         <div className="zauth-aura a2" />
 
+        {/* Premium real-estate / AI / mapping ambience — purely additive, sits
+            behind every other decorative element. Pure CSS + SVG, no assets. */}
+        <RealEstateAmbient />
+
         {/* Very subtle orbital arcs */}
         <OrbitArcs />
 
@@ -290,6 +294,144 @@ function Skyline() {
           ))}
         </g>
       ))}
+    </svg>
+  );
+}
+
+/**
+ * Premium real-estate / AI / mapping ambience for the login background. Purely
+ * additive and decorative — pure CSS + SVG, no bitmap assets. Communicates luxury
+ * real estate, AI intelligence, data, mapping and market insight without ever
+ * competing with the centred login card. Everything is extremely faint, slow and
+ * positioned toward the edges/corners; honors prefers-reduced-motion via CSS.
+ */
+function RealEstateAmbient() {
+  return (
+    <div className="zauth-amb">
+      {/* Dashboard dotted grid — faded everywhere, denser toward the top. */}
+      <div className="zauth-amb-grid" />
+
+      {/* Large blurred translucent geometric shapes — depth only. */}
+      <span className="zauth-amb-blob b1" />
+      <span className="zauth-amb-blob b2" />
+      <span className="zauth-amb-blob b3" />
+
+      {/* Topographic contour lines — top-right, like a premium map. */}
+      <svg className="zauth-amb-topo" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        {[40, 78, 120, 166, 216, 270, 328].map((r, i) => (
+          <ellipse key={r} cx="470" cy="120" rx={r * 1.35} ry={r} fill="none"
+            stroke="rgba(124,58,237,0.07)" strokeWidth="1" transform={`rotate(${-18 + i} 470 120)`} />
+        ))}
+      </svg>
+
+      {/* Street-map geometry — roads, intersections, districts, location nodes &
+          property clusters, anchored to the bottom band (behind the skyline). */}
+      <svg className="zauth-amb-map" viewBox="0 0 1440 500" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+        <g stroke="rgba(124,58,237,0.08)" strokeWidth="1.2" fill="none">
+          {/* primary roads */}
+          <path d="M-20 360 L1460 300" />
+          <path d="M-20 440 L1460 410" />
+          <path d="M120 500 L260 180" />
+          <path d="M460 500 L560 160" />
+          <path d="M880 160 L980 500" />
+          <path d="M1180 200 L1240 500" />
+          {/* district connectors */}
+          <path d="M180 320 L520 300 L900 330 L1280 310" strokeWidth="1" stroke="rgba(99,102,241,0.07)" />
+        </g>
+        {/* district blocks */}
+        <g fill="rgba(124,58,237,0.035)" stroke="rgba(124,58,237,0.07)" strokeWidth="0.8">
+          <rect x="230" y="330" width="120" height="80" rx="6" />
+          <rect x="600" y="345" width="150" height="70" rx="6" />
+          <rect x="1010" y="335" width="130" height="85" rx="6" />
+        </g>
+        {/* property clusters + location nodes */}
+        <g>
+          {[[300, 300], [560, 285], [905, 320], [1230, 300]].map(([cx, cy], i) => (
+            <g key={i}>
+              <circle cx={cx} cy={cy} r="3.2" fill="rgba(139,92,246,0.5)" />
+              <circle cx={cx} cy={cy} r="9" fill="none" stroke="rgba(139,92,246,0.18)" strokeWidth="1" />
+              <circle className={`zauth-amb-scan s${i % 3}`} cx={cx} cy={cy} r="9" fill="none" stroke="rgba(139,92,246,0.22)" strokeWidth="1.2" />
+            </g>
+          ))}
+        </g>
+      </svg>
+
+      {/* Architectural line-art — abstract modern residential silhouettes rising
+          softly from the bottom corners. Thin vector strokes only. */}
+      <svg className="zauth-amb-arch left" viewBox="0 0 360 280" preserveAspectRatio="xMinYMax meet" aria-hidden="true">
+        <g fill="none" stroke="rgba(124,58,237,0.10)" strokeWidth="1.1">
+          <path d="M20 280 L20 120 L80 92 L80 280 Z" />
+          <path d="M80 280 L80 60 L150 60 L150 280" />
+          <path d="M150 280 L150 150 L210 150 L210 280" />
+          <path d="M30 140 H70 M30 168 H70 M30 196 H70 M30 224 H70" stroke="rgba(124,58,237,0.07)" />
+          <path d="M95 86 H140 M95 120 H140 M95 154 H140 M95 188 H140 M95 222 H140" stroke="rgba(124,58,237,0.07)" />
+          <path d="M165 176 H200 M165 208 H200 M165 240 H200" stroke="rgba(124,58,237,0.07)" />
+        </g>
+      </svg>
+      <svg className="zauth-amb-arch right" viewBox="0 0 360 280" preserveAspectRatio="xMaxYMax meet" aria-hidden="true">
+        <g fill="none" stroke="rgba(109,63,242,0.10)" strokeWidth="1.1">
+          <path d="M340 280 L340 100 L270 76 L270 280 Z" />
+          <path d="M270 280 L270 46 L196 46 L196 280" />
+          <path d="M196 280 L196 168 L140 168 L140 280" />
+          <path d="M286 100 H330 M286 134 H330 M286 168 H330 M286 202 H330 M286 236 H330" stroke="rgba(109,63,242,0.07)" />
+          <path d="M210 70 H258 M210 104 H258 M210 138 H258 M210 172 H258 M210 206 H258 M210 240 H258" stroke="rgba(109,63,242,0.07)" />
+        </g>
+      </svg>
+
+      {/* AI network overlay — connected nodes, flowing routing lines, orbit
+          circles and glowing connection points. Slow, almost-still. */}
+      <svg className="zauth-amb-ai" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <radialGradient id="zauth-amb-glow">
+            <stop offset="0" stopColor="#a78bfa" stopOpacity="0.8" />
+            <stop offset="1" stopColor="#7c3aed" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <g className="zauth-amb-ai-lines" stroke="rgba(139,92,246,0.10)" strokeWidth="1" fill="none">
+          <path d="M210 230 L430 330 L300 520 L120 430 Z" />
+          <path d="M430 330 L760 250 L980 360" />
+          <path d="M980 360 L1180 250 L1300 470" />
+          <path d="M760 250 L820 470 L640 560" />
+          <path d="M300 520 L640 560 L900 640" />
+        </g>
+        <g className="zauth-amb-orbits" fill="none" stroke="rgba(99,102,241,0.10)" strokeWidth="1">
+          <circle cx="430" cy="330" r="46" strokeDasharray="3 8" />
+          <circle cx="980" cy="360" r="58" strokeDasharray="3 10" />
+          <circle cx="760" cy="250" r="38" strokeDasharray="2 9" />
+        </g>
+        {[[210, 230], [430, 330], [300, 520], [760, 250], [980, 360], [1180, 250], [1300, 470], [820, 470], [640, 560], [900, 640], [120, 430]].map(([cx, cy], i) => (
+          <g key={i} className="zauth-amb-node" style={{ animationDelay: `${(i % 6) * 1.7}s` }}>
+            <circle cx={cx} cy={cy} r="18" fill="url(#zauth-amb-glow)" opacity="0.5" />
+            <circle cx={cx} cy={cy} r="2.6" fill="rgba(139,92,246,0.7)" />
+          </g>
+        ))}
+      </svg>
+
+      {/* Soft glowing particles drifting along gentle curved paths. */}
+      <span className="zauth-amb-spark p1" />
+      <span className="zauth-amb-spark p2" />
+      <span className="zauth-amb-spark p3" />
+      <span className="zauth-amb-spark p4" />
+
+      {/* Property-management HUD — tiny icon-only glass chips at the far edges,
+          suggesting listings / analytics / deals / notifications. No content. */}
+      <div className="zauth-amb-hud h1"><HudIcon kind="home" /></div>
+      <div className="zauth-amb-hud h2"><HudIcon kind="chart" /></div>
+      <div className="zauth-amb-hud h3"><HudIcon kind="pin" /></div>
+      <div className="zauth-amb-hud h4"><HudIcon kind="bell" /></div>
+    </div>
+  );
+}
+
+/** Minimal single-glyph icons for the icon-only HUD chips (no readable text). */
+function HudIcon({ kind }: { kind: "home" | "chart" | "pin" | "bell" }) {
+  const common = { fill: "none", stroke: "rgba(124,58,237,0.55)", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+      {kind === "home" && <path {...common} d="M4 11 L12 5 L20 11 M6 10 V19 H18 V10" />}
+      {kind === "chart" && <path {...common} d="M5 19 V12 M10 19 V8 M15 19 V14 M20 19 V6" />}
+      {kind === "pin" && <path {...common} d="M12 21 C12 21 18 14.5 18 10 A6 6 0 1 0 6 10 C6 14.5 12 21 12 21 Z M12 10 h0" />}
+      {kind === "bell" && <path {...common} d="M7 17 V11 a5 5 0 0 1 10 0 V17 l1.5 2 H5.5 Z M10 21 h4" />}
     </svg>
   );
 }

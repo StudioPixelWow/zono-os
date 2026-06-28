@@ -290,6 +290,85 @@ body {
    form, pointer-events:none, so it can never shift the centred login column. */
 .zauth-decor { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
 
+/* ── Premium real-estate / AI / mapping ambience (purely additive) ──────────
+   The deepest decorative layer. Extremely faint, slow and edge-anchored so the
+   centred login card always stays the focal point. Pure CSS + SVG, no assets. */
+.zauth-amb { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+
+/* Dashboard dotted grid — fades out toward the centre + bottom. */
+.zauth-amb-grid {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(124, 58, 237, 0.12) 1px, transparent 1.4px);
+  background-size: 30px 30px;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 8%, #000 0%, transparent 62%);
+  mask-image: radial-gradient(120% 90% at 50% 8%, #000 0%, transparent 62%);
+  opacity: 0.5;
+}
+
+/* Large blurred translucent geometric shapes — depth only. */
+.zauth-amb-blob { position: absolute; border-radius: 38% 62% 58% 42% / 42% 40% 60% 58%; filter: blur(46px); opacity: 0.5; }
+.zauth-amb-blob.b1 { width: 460px; height: 460px; top: -160px; inset-inline-end: -120px; background: radial-gradient(circle at 40% 40%, rgba(139, 92, 246, 0.16), transparent 70%); animation: zauth-amb-drift 26s ease-in-out infinite; }
+.zauth-amb-blob.b2 { width: 520px; height: 520px; bottom: -200px; inset-inline-start: -160px; background: radial-gradient(circle at 60% 50%, rgba(109, 63, 242, 0.13), transparent 70%); animation: zauth-amb-drift 32s ease-in-out infinite reverse; }
+.zauth-amb-blob.b3 { width: 360px; height: 360px; top: 30%; inset-inline-start: 8%; border-radius: 46% 54% 50% 50%; background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.10), transparent 72%); animation: zauth-amb-drift 38s ease-in-out infinite; }
+@keyframes zauth-amb-drift { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(2.5%, -2%) scale(1.06); } }
+
+/* Topographic contour lines — top-right corner. */
+.zauth-amb-topo { position: absolute; top: -8%; inset-inline-end: -6%; width: 46vw; max-width: 760px; height: auto; opacity: 0.7; }
+
+/* Street-map geometry — bottom band, full width, behind the skyline. */
+.zauth-amb-map { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 42vh; opacity: 0.85; }
+.zauth-amb-scan { transform-origin: center; transform-box: fill-box; animation: zauth-amb-ring 6.5s ease-out infinite; }
+.zauth-amb-scan.s1 { animation-delay: 2.2s; }
+.zauth-amb-scan.s2 { animation-delay: 4.1s; }
+@keyframes zauth-amb-ring { 0% { transform: scale(1); opacity: 0.5; } 80% { transform: scale(3.4); opacity: 0; } 100% { transform: scale(3.4); opacity: 0; } }
+
+/* Architectural line-art rising from the bottom corners. */
+.zauth-amb-arch { position: absolute; bottom: 0; width: 26vw; max-width: 380px; height: auto; opacity: 0.8; }
+.zauth-amb-arch.left  { inset-inline-start: 1%; }
+.zauth-amb-arch.right { inset-inline-end: 1%; }
+
+/* AI network overlay — slow, almost-still. */
+.zauth-amb-ai { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.85; }
+.zauth-amb-ai-lines { animation: zauth-amb-fade 14s ease-in-out infinite; }
+.zauth-amb-orbits { transform-origin: 50% 50%; animation: zauth-amb-spin 120s linear infinite; }
+.zauth-amb-node { animation: zauth-amb-pulse 7s ease-in-out infinite; }
+@keyframes zauth-amb-fade { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+@keyframes zauth-amb-spin { to { transform: rotate(360deg); } }
+@keyframes zauth-amb-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+/* Soft glowing particles drifting along gentle curved paths. */
+.zauth-amb-spark { position: absolute; width: 4px; height: 4px; border-radius: 9999px; background: radial-gradient(circle, rgba(167, 139, 250, 0.9), rgba(124, 58, 237, 0)); }
+.zauth-amb-spark.p1 { top: 30%; inset-inline-start: 22%; animation: zauth-amb-path-a 22s ease-in-out infinite; }
+.zauth-amb-spark.p2 { top: 62%; inset-inline-start: 68%; animation: zauth-amb-path-b 28s ease-in-out infinite; }
+.zauth-amb-spark.p3 { top: 24%; inset-inline-start: 74%; animation: zauth-amb-path-a 26s ease-in-out infinite reverse; }
+.zauth-amb-spark.p4 { top: 70%; inset-inline-start: 28%; animation: zauth-amb-path-b 24s ease-in-out infinite reverse; }
+@keyframes zauth-amb-path-a { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: 0.9; } 50% { transform: translate(70px, -52px); } 85% { opacity: 0.9; } 100% { transform: translate(150px, 20px); opacity: 0; } }
+@keyframes zauth-amb-path-b { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: 0.8; } 50% { transform: translate(-80px, 44px); } 85% { opacity: 0.8; } 100% { transform: translate(-170px, -16px); opacity: 0; } }
+
+/* Property-management HUD — tiny icon-only glass chips at the far edges. */
+.zauth-amb-hud {
+  position: absolute; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 26px rgba(70, 40, 160, 0.07); backdrop-filter: blur(8px);
+  opacity: 0.55; animation: zauth-amb-float 11s ease-in-out infinite;
+}
+.zauth-amb-hud.h1 { top: 16%; inset-inline-start: 12%; }
+.zauth-amb-hud.h2 { top: 70%; inset-inline-start: 16%; animation-delay: 2.5s; }
+.zauth-amb-hud.h3 { top: 22%; inset-inline-end: 13%; animation-delay: 1.4s; }
+.zauth-amb-hud.h4 { top: 64%; inset-inline-end: 15%; animation-delay: 3.6s; }
+@keyframes zauth-amb-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+
+/* On smaller screens, trim the busiest edge elements so the card stays clean. */
+@media (max-width: 1100px) {
+  .zauth-amb-arch, .zauth-amb-hud, .zauth-amb-topo { display: none; }
+  .zauth-amb-map { height: 32vh; opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zauth-amb-blob, .zauth-amb-scan, .zauth-amb-ai-lines, .zauth-amb-orbits,
+  .zauth-amb-node, .zauth-amb-spark, .zauth-amb-hud { animation: none !important; }
+}
+
 .zauth-shell {
   position: relative; z-index: 10;
   min-height: 100vh; min-height: 100dvh;
