@@ -333,6 +333,17 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     console.error("[geocode] external listings geocode during sync failed:", e);
   }
 
+  // Broker Identity Resolution against the national Brokerage Data layer — link
+  // each external listing to a known agent/office (auto/review/candidate). Core
+  // data enrichment; best-effort, never overwrites human-confirmed links.
+  try {
+    const { resolveBrokerageLinksForOrg } = await import("@/lib/brokerage-data/service");
+    const r = await resolveBrokerageLinksForOrg(orgId);
+    if (r.scanned > 0) await log(`זיהוי משרדי תיווך: ${r.linked} קושרו · ${r.review} לבדיקה · ${r.candidates} מועמדים (מתוך ${r.scanned})`);
+  } catch (e) {
+    console.error("[brokerage-data] identity resolution during sync failed:", e);
+  }
+
   // Market Acceptance Intelligence™ — record lifecycle evidence (best-effort,
   // never breaks the sync). Disappearance is only asserted for cities scanned
   // this run; "seen this run" is keyed off last_synced_at >= the sync start.
