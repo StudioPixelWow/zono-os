@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Map as MLMap, Marker as MLMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { buildZonoMapStyle, MAP_ENV, ISRAEL_METRO } from "@/lib/maps/map-style";
+import { resolveZonoMapStyle, ISRAEL_METRO } from "@/lib/maps/map-style";
 
 const field =
   "bg-surface border-line text-ink focus:border-brand-light h-11 w-full rounded-xl border px-3 text-sm outline-none transition";
@@ -62,13 +62,16 @@ function MapPicker({
     let cancelled = false;
     let map: MLMap | null = null;
     (async () => {
-      const maplibregl = (await import("maplibre-gl")).default;
+      const [maplibregl, style] = await Promise.all([
+        import("maplibre-gl").then((m) => m.default),
+        resolveZonoMapStyle(),
+      ]);
       if (cancelled || !ref.current) return;
       const hasCoords = latitude != null && longitude != null;
       const center: [number, number] = hasCoords ? [longitude as number, latitude as number] : [ISRAEL_METRO.lng, ISRAEL_METRO.lat];
       map = new maplibregl.Map({
         container: ref.current,
-        style: MAP_ENV.styleUrl || buildZonoMapStyle(),
+        style,
         center,
         zoom: hasCoords ? 15 : 8,
         attributionControl: { compact: true },

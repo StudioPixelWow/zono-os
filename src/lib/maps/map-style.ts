@@ -70,6 +70,7 @@ export const ZONO_MAP_STYLE: Array<Record<string, unknown>> = [
 // it stays consistent with the dashboard without any external styling service.
 // ============================================================================
 import type { StyleSpecification } from "maplibre-gl";
+import { buildZonoVectorStyle, type ZonoMapThemeName } from "./zono-map-theme";
 
 /** Public, client-safe map env (all optional). */
 export const MAP_ENV = {
@@ -79,6 +80,8 @@ export const MAP_ENV = {
   styleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL || "",
   /** Attribution string shown on the map (required by most tile providers). */
   attribution: process.env.NEXT_PUBLIC_MAP_ATTRIBUTION || "",
+  /** Branded base-map theme. Only "dark-purple" today; default "dark-purple". */
+  theme: (process.env.NEXT_PUBLIC_ZONO_MAP_THEME || "dark-purple") as ZonoMapThemeName,
 } as const;
 
 /** Dev-only OSM raster fallback (light traffic only — production must set env). */
@@ -121,6 +124,50 @@ export function buildZonoMapStyle(): StyleSpecification {
       },
     ],
   };
+}
+
+let warnedDevTiles = false;
+/** One-time production warning that the OSM public tiles are dev-only. */
+function warnDevTilesInProduction(): void {
+  if (warnedDevTiles || process.env.NODE_ENV !== "production" || typeof console === "undefined") return;
+  warnedDevTiles = true;
+  console.warn("[ZonoMap] Using OSM public tiles (dev fallback). They are NOT for production traffic — set NEXT_PUBLIC_MAP_STYLE_URL (preferred) or NEXT_PUBLIC_MAP_TILE_URL to a real tile/style provider.");
+}
+
+/** Fetch an external vector style, resolve its relative asset URLs, and rebrand
+ *  it into the ZONO look. Falls back to the raw URL string on any failure so a
+ *  map always renders. */
+async function loadBrandedVectorStyle(styleUrl: string): Promise<string | StyleSpecification> {
+  try {
+    const res = await fetch(styleUrl, { credentials: "omit" });
+    if (!res.ok) return styleUrl;
+    const base = (await res.json()) as StyleSpecification;
+    const abs = (u: string) => { try { return new URL(u, styleUrl).toString(); } catch { return u; } };
+    // Resolve relative sprite/glyphs against the style URL (MapLibre would do
+    // this on a URL load; we do it manually because we pass an object).
+    if (typeof base.sprite === "string" && !/^https?:/i.test(base.sprite)) base.sprite = abs(base.sprite);
+    if (typeof base.glyphs === "string" && !/^https?:/i.test(base.glyphs) && !base.glyphs.startsWith("{")) base.glyphs = abs(base.glyphs);
+    for (const src of Object.values(base.sources ?? {}) as Record<string, unknown>[]) {
+      if (typeof src.url === "string" && !/^https?:/i.test(src.url) && !String(src.url).startsWith("mapbox:")) src.url = abs(src.url);
+      if (Array.isArray(src.tiles)) src.tiles = (src.tiles as string[]).map((t) => (/^https?:/i.test(t) ? t : abs(t)));
+    }
+    return buildZonoVectorStyle(base);
+  } catch {
+    return styleUrl; // network/parse failure → let MapLibre load the URL as-is
+  }
+}
+
+/**
+ * Resolve the style ZonoMap should hand to MapLibre, honouring the env contract:
+ *   • NEXT_PUBLIC_MAP_STYLE_URL → load that vector style, rebrand it (ZONO look).
+ *   • NEXT_PUBLIC_MAP_TILE_URL  → raster mode with the ZONO raster tint.
+ *   • neither                   → OSM raster dev fallback (+ production warning).
+ */
+export async function resolveZonoMapStyle(): Promise<string | StyleSpecification> {
+  if (MAP_ENV.styleUrl) return loadBrandedVectorStyle(MAP_ENV.styleUrl);
+  if (MAP_ENV.tileUrl) return buildZonoMapStyle();
+  warnDevTilesInProduction();
+  return buildZonoMapStyle();
 }
 
 /** Tone → color used by branded markers/clusters. */

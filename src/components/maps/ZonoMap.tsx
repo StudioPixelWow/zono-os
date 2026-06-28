@@ -17,7 +17,7 @@ import type { Map as MLMap, Marker as MLMarker, Popup as MLPopup } from "maplibr
 import "maplibre-gl/dist/maplibre-gl.css";
 import { cn } from "@/lib/utils";
 import {
-  buildZonoMapStyle, MAP_ENV, ISRAEL_CENTER, brandedMarkerSvg, MAP_BRAND, TONE_COLOR, type MapTone,
+  resolveZonoMapStyle, ISRAEL_CENTER, brandedMarkerSvg, MAP_BRAND, TONE_COLOR, type MapTone,
 } from "@/lib/maps/map-style";
 
 export interface ZonoMapPoint {
@@ -123,12 +123,15 @@ export function ZonoMap({
     let map: MLMap | null = null;
 
     (async () => {
-      const maplibregl = (await import("maplibre-gl")).default;
+      const [maplibregl, style] = await Promise.all([
+        import("maplibre-gl").then((m) => m.default),
+        resolveZonoMapStyle(),
+      ]);
       if (cancelled || !ref.current) return;
 
       map = new maplibregl.Map({
         container: ref.current,
-        style: MAP_ENV.styleUrl || buildZonoMapStyle(),
+        style,
         center: realPoints[0] ? [realPoints[0].lng, realPoints[0].lat] : [ISRAEL_CENTER.lng, ISRAEL_CENTER.lat],
         zoom: initialZoom,
         attributionControl: { compact: true },
