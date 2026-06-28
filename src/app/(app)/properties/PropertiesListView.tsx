@@ -57,12 +57,16 @@ export function PropertiesListView({
   error,
   currentUserId = null,
   covers = {},
+  eyebrow = "CRM נכסים",
+  title = "הנכסים שלך",
 }: {
   properties: PropertyRow[];
   filters: Filters;
   error?: boolean;
   currentUserId?: string | null;
   covers?: Record<string, string>;
+  eyebrow?: string;
+  title?: string;
 }) {
   const [view, setView] = useState<"cards" | "table">("cards");
 
@@ -71,8 +75,8 @@ export function PropertiesListView({
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-brand text-xs font-bold tracking-wide">CRM נכסים</p>
-          <h1 className="text-ink text-2xl font-black">הנכסים שלך</h1>
+          <p className="text-brand text-xs font-bold tracking-wide">{eyebrow}</p>
+          <h1 className="text-ink text-2xl font-black">{title}</h1>
         </div>
         <div className="flex items-center gap-2">
           <div className="bg-card border-line flex overflow-hidden rounded-xl border">

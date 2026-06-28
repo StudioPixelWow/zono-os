@@ -25,7 +25,9 @@ export const MODULES: ModuleEntry[] = [
   { id: "property-radar-live", label: "רדאר נכסים — חי", route: "/property-radar", icon: "Activity", category: "ראשי", roleMin: "agent", sidebar: true, searchable: true, description: "מרכז פיקוד שוק בזמן אמת — נכסים חדשים, ירידות מחיר, עסקאות חמות, התאמות קונים" },
 
   // ── מכירות ──
-  { id: "properties", label: "נכסים", route: "/properties", icon: "Building", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
+  // Three independent property worlds (presentation IA) — never mixed:
+  { id: "my-properties", label: "🏠 הנכסים שלי", route: "/my-properties", icon: "Building", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "ה-CRM האישי שלי — המלאי, הבלעדיות, המוכרים והקונים שלי" },
+  { id: "office-inventory", label: "🏢 מלאי המשרד", route: "/office-inventory", icon: "Building2", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "מלאי המשרד והבלעדיות — סוכן משויך, זמינות ושיתופי פעולה" },
   { id: "buyers", label: "קונים", route: "/buyers", icon: "Users", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "sellers", label: "מוכרים", route: "/sellers", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "exclusive-opportunities", label: "הזדמנויות בלעדיות", route: "/exclusive-opportunities", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "Seller Intelligence™ — מי הכי קרוב לחתום בלעדיות ואת מי לפנות קודם" },
@@ -43,7 +45,9 @@ export const MODULES: ModuleEntry[] = [
   { id: "demand", label: "ביקוש קונים", route: "/demand", icon: "Flame", category: "מודיעין", roleMin: "agent", sidebar: true, searchable: true, description: "מודיעין ביקוש — מה חסר במלאי והזדמנויות גיוס" },
 
   // ── שוק ועסקאות ──
-  { id: "market", label: "מודיעין שוק", route: "/market", icon: "Map", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
+  { id: "market-intelligence", label: "🌍 מודיעין שוק", route: "/market-intelligence", icon: "Map", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "מרכז מודיעין שוק חיצוני — מודעות חדשות, ירידות מחיר, רדאר, מפת חום ותובנות. אינו CRM" },
+  { id: "live-market-map", label: "🗺️ מפת שוק חיה", route: "/market-intelligence/map", icon: "MapPin", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true, description: "מפת שוק חיה — בפיתוח (מבנה בלבד)" },
+  { id: "market", label: "מפת חום שוק", route: "/market", icon: "Map", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "transactions", label: "עסקאות שוק", route: "/transactions", icon: "Building2", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "transactions-streets", label: "רחובות", route: "/transactions/streets", icon: "Route", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "transactions-radar", label: "רדאר הזדמנויות", route: "/transactions/radar", icon: "Flame", category: "שוק ועסקאות", roleMin: "agent", sidebar: true, searchable: true },
