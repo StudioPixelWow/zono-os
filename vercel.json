@@ -9,6 +9,10 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/cron/external-listings-geocode",
+      "schedule": "15 * * * *"
+    },
+    {
       "path": "/api/cron/transactions-refresh",
       "schedule": "0 3 * * *"
     },

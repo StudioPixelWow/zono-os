@@ -377,6 +377,9 @@ async function geocodeOrgExternalListings(db: DB, orgId: string, limit = 80): Pr
     .eq("org_id", orgId)
     .eq("status", "active")
     .is("lat", null)
+    // Never-attempted rows (geocode_status null) first, so the backlog drainer
+    // makes forward progress before re-trying previously-failed addresses.
+    .order("geocode_status", { ascending: true, nullsFirst: true })
     .limit(limit);
   const rows = (data ?? []) as unknown as { id: string; address: string | null; street: string | null; street_number: string | null; neighborhood: string | null; city: string | null }[];
 
@@ -405,6 +408,52 @@ async function geocodeOrgExternalListings(db: DB, orgId: string, limit = 80): Pr
     await new Promise((res) => setTimeout(res, 120)); // gentle rate limit
   }
   return stats;
+}
+
+/**
+ * Drain the geocoding backlog for ONE org within a wall-clock budget. The per-sync
+ * geocode is capped (serverless time) so a large first scrape leaves a backlog;
+ * this processes it in batches until it's empty or the budget runs out. Stops as
+ * soon as a batch makes no forward progress (remaining rows are un-geocodable),
+ * so it never spins on permanently-failing addresses. Real coordinates only.
+ */
+export async function geocodeBacklogForOrganization(
+  orgId: string,
+  opts: { budgetMs?: number; batch?: number } = {},
+): Promise<GeocodeBatchStats> {
+  const db = createServiceRoleClient() as unknown as DB;
+  const budgetMs = opts.budgetMs ?? 220_000; // under maxDuration=300s
+  const batch = opts.batch ?? 60;
+  const total: GeocodeBatchStats = { attempted: 0, success: 0, failed: 0, skipped: 0 };
+  const start = Date.now();
+  while (Date.now() - start < budgetMs) {
+    const s = await geocodeOrgExternalListings(db, orgId, batch);
+    total.attempted += s.attempted; total.success += s.success; total.failed += s.failed; total.skipped += s.skipped;
+    if (s.attempted === 0) break;            // nothing left to geocode
+    if (s.success === 0 && s.skipped === 0) break; // batch made no progress (all failing) → stop
+  }
+  return total;
+}
+
+/** Drain the geocode backlog across all orgs that have active operating localities. */
+export async function geocodeBacklogForAllOrganizations(
+  opts: { totalBudgetMs?: number; batch?: number } = {},
+): Promise<{ orgId: string; stats: GeocodeBatchStats }[]> {
+  const totalBudgetMs = opts.totalBudgetMs ?? 250_000;
+  const start = Date.now();
+  const orgs = await organizationsWithActiveLocalities();
+  const out: { orgId: string; stats: GeocodeBatchStats }[] = [];
+  for (const orgId of orgs) {
+    if (Date.now() - start > totalBudgetMs) break;
+    const remaining = totalBudgetMs - (Date.now() - start);
+    try {
+      const stats = await geocodeBacklogForOrganization(orgId, { budgetMs: remaining, batch: opts.batch });
+      out.push({ orgId, stats });
+    } catch (e) {
+      console.error("[geocode-backlog] org failed:", orgId, e);
+    }
+  }
+  return out;
 }
 
 /** User-triggered import (RLS, session org). Used by the API routes. */
