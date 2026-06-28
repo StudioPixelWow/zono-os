@@ -45,19 +45,27 @@ function cityTokens(s: unknown): string[] {
     .filter((t) => t.length > 1 && !CITY_STOPWORDS.has(t));
 }
 
-// Two Israeli city names refer to the SAME city when one's significant tokens are
-// a subset of the other's — so "תל אביב" matches "תל אביב יפו", "מודיעין" matches
-// "מודיעין מכבים רעות", etc. — without the false positives a raw substring match
-// would create ("רמת גן" vs "רמת השרון" share only one token → no match).
-function sameCity(listingCity: unknown, allowedTokenSets: string[][]): boolean {
-  const lt = cityTokens(listingCity);
-  if (!lt.length) return false;
-  const ls = new Set(lt);
+// Decide whether a listing belongs to one of the operating-area cities. Robust to
+// real-world data: the city may live in the `city` field OR only in the
+// neighborhood/address/title text, and may carry extra words.
+//   1) Strict (city field): token-subset either direction — "תל אביב" ↔ "תל אביב יפו",
+//      "מודיעין" ↔ "מודיעין מכבים רעות" — without raw-substring false positives
+//      ("רמת גן" vs "רמת השרון" share only one token → no match).
+//   2) Fallback (full location text): ALL of an operating city's tokens appear
+//      somewhere in city+neighborhood+address+title — so a listing whose `city` is
+//      null/odd but is clearly "קרית ביאליק" in its address still matches.
+function sameCity(locationParts: unknown[], allowedTokenSets: string[][]): boolean {
+  const cityTok = cityTokens(locationParts[0]);          // the city field specifically
+  const cs = new Set(cityTok);
+  const hay = new Set(locationParts.flatMap(cityTokens)); // every location field combined
   for (const at of allowedTokenSets) {
     if (!at.length) continue;
-    const allowedInListing = at.every((t) => ls.has(t)); // operating ⊆ listing
-    const listingInAllowed = lt.every((t) => at.includes(t)); // listing ⊆ operating
-    if (allowedInListing || listingInAllowed) return true;
+    if (cityTok.length) {
+      const allowedInCity = at.every((t) => cs.has(t));     // operating ⊆ city field
+      const cityInAllowed = cityTok.every((t) => at.includes(t)); // city field ⊆ operating
+      if (allowedInCity || cityInAllowed) return true;
+    }
+    if (at.every((t) => hay.has(t))) return true;           // all operating tokens anywhere
   }
   return false;
 }
@@ -144,7 +152,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   if (wantExternal) {
     try {
       let q = db.from("external_listings" as never)
-        .select("id,title,city,neighborhood,price,property_type,deal_type,source,lat,lng,has_agent,first_seen_at,listing_url,status,images")
+        .select("id,title,city,neighborhood,address,price,property_type,deal_type,source,lat,lng,has_agent,first_seen_at,listing_url,status,images")
         .eq("org_id", orgId).eq("status", "active")
         .not("lat", "is", null).not("lng", "is", null)
         .limit(1000);
@@ -167,7 +175,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
       for (const r of (data ?? []) as Record<string, unknown>[]) {
         const lat = num(r.lat), lng = num(r.lng);
         if (lat == null || lng == null) continue;
-        if (allowedTokenSets && !sameCity(r.city, allowedTokenSets)) { externalDiag.cityDropped++; continue; } // city-scope (token-subset)
+        if (allowedTokenSets && !sameCity([r.city, r.neighborhood, r.address, r.title], allowedTokenSets)) { externalDiag.cityDropped++; continue; } // city-scope (token-subset + location-text fallback)
         const src = String(r.source ?? "external");
         points.push({
           id: `ext_${String(r.id)}`, lat, lng, origin: "external", source: src,
