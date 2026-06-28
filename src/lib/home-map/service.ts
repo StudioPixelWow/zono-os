@@ -10,7 +10,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { getMyOperatingAreas } from "@/lib/operating-areas/service";
-import { DEFAULT_HOME_MAP_FILTERS, type HomeMapData, type HomeMapFilters, type HomeMapPoint } from "./types";
+import { DEFAULT_HOME_MAP_FILTERS, type ExternalMapDiag, type HomeMapData, type HomeMapFilters, type HomeMapPoint } from "./types";
 
 const NEW_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -41,7 +41,8 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   const { profile } = await getSessionContext();
   const orgId = profile?.org_id ?? null;
 
-  const empty: HomeMapData = { points: [], internalCount: 0, externalCount: 0, total: 0, hasGoogleKey, hasOperatingArea: false, areaCities: [], areaLabel: null };
+  const emptyDiag: ExternalMapDiag = { rawActive: 0, withCoords: 0, missingCoords: 0, cityDropped: 0, shown: 0 };
+  const empty: HomeMapData = { points: [], internalCount: 0, externalCount: 0, total: 0, hasGoogleKey, hasOperatingArea: false, areaCities: [], areaLabel: null, externalDiag: emptyDiag };
   if (!orgId) return empty;
 
   const db = createServiceRoleClient();
@@ -63,6 +64,19 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   const points: HomeMapPoint[] = [];
   let internalCount = 0;
   let externalCount = 0;
+  const externalDiag: ExternalMapDiag = { rawActive: 0, withCoords: 0, missingCoords: 0, cityDropped: 0, shown: 0 };
+
+  // Honest pipeline counts for external listings — independent of filters/scope —
+  // so the UI can explain WHY external is 0 (not scraped vs no coords vs city-scoped).
+  try {
+    const [{ count: rawActive }, { count: withCoords }] = await Promise.all([
+      db.from("external_listings" as never).select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "active"),
+      db.from("external_listings" as never).select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "active").not("lat", "is", null).not("lng", "is", null),
+    ]);
+    externalDiag.rawActive = rawActive ?? 0;
+    externalDiag.withCoords = withCoords ?? 0;
+    externalDiag.missingCoords = Math.max(0, (rawActive ?? 0) - (withCoords ?? 0));
+  } catch { /* diagnostics are best-effort */ }
 
   // ── Internal properties (org inventory) ─────────────────────────────────────
   if (wantInternal && !filters.privateOnly) { // privateOnly is an external-only concept
@@ -126,7 +140,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
       for (const r of (data ?? []) as Record<string, unknown>[]) {
         const lat = num(r.lat), lng = num(r.lng);
         if (lat == null || lng == null) continue;
-        if (allowCities && !allowCities.has(normCity(r.city))) continue; // city-scope (normalized)
+        if (allowCities && !allowCities.has(normCity(r.city))) { externalDiag.cityDropped++; continue; } // city-scope (normalized)
         const src = String(r.source ?? "external");
         points.push({
           id: `ext_${String(r.id)}`, lat, lng, origin: "external", source: src,
@@ -144,5 +158,6 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
     } catch { /* external best-effort */ }
   }
 
-  return { points, internalCount, externalCount, total: points.length, hasGoogleKey, hasOperatingArea, areaCities, areaLabel };
+  externalDiag.shown = externalCount;
+  return { points, internalCount, externalCount, total: points.length, hasGoogleKey, hasOperatingArea, areaCities, areaLabel, externalDiag };
 }

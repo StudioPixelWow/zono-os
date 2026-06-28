@@ -120,7 +120,17 @@ export function HomeHeatmapSection() {
       <div className="relative mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-white/45">
         {data?.areaLabel && <span>אזור התמחות: {data.areaLabel}</span>}
         {view === "heat" && <span>עוצמת החום משקפת צפיפות מודעות אמיתית — חזק יותר היכן שיש יותר נכסים.</span>}
-        {data && data.externalCount === 0 && <span>נכסים חיצוניים יוצגו לאחר סנכרון מקורות כמו Yad2 / Madlan.</span>}
+        {data && data.externalCount === 0 && (() => {
+          const d = data.externalDiag;
+          // Pinpoint EXACTLY where external listings are lost so "חיצוני 0" is never a mystery.
+          if (d.rawActive === 0) return <span className="text-amber-300/80">אין נכסים חיצוניים שמורים — הרץ סנכרון (Yad2 / Madlan) במסך הנכסים החיצוניים.</span>;
+          if (d.withCoords === 0) return <span className="text-amber-300/80">{d.rawActive} נכסים חיצוניים נסרקו אך אף אחד לא עבר גיאוקודינג (אין קואורדינטות) — יושלם בסנכרון הבא.</span>;
+          if (d.cityDropped > 0) return <span className="text-amber-300/80">{d.withCoords} נכסים חיצוניים עם מיקום קיימים, אך מחוץ לאזור ההתמחות ({d.cityDropped} סוננו) — הוסף את הערים שלהם באזורי ההתמחות.</span>;
+          return <span>נכסים חיצוניים יוצגו לאחר סנכרון מקורות כמו Yad2 / Madlan.</span>;
+        })()}
+        {data && data.externalCount === 0 && data.externalDiag.missingCoords > 0 && data.externalDiag.withCoords > 0 && (
+          <span className="text-white/40">({data.externalDiag.missingCoords} עדיין ממתינים לגיאוקודינג)</span>
+        )}
         <span>מבוסס מיקום אמיתי בלבד — נכסים ללא קואורדינטות אינם מוצגים.</span>
       </div>
     </section>

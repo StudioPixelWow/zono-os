@@ -47,4 +47,15 @@ export interface HomeMapData {
   hasOperatingArea: boolean;
   areaCities: string[];     // operating-area cities (for the locality filter)
   areaLabel: string | null; // short label, e.g. "תל אביב, רמת גן"
+  /** Honest pipeline diagnostics for external listings — pinpoints WHERE rows
+   *  are lost so "חיצוני 0" is never a mystery. All counts are for the org. */
+  externalDiag: ExternalMapDiag;
+}
+
+export interface ExternalMapDiag {
+  rawActive: number;     // active external_listings rows for the org (any coords/city)
+  withCoords: number;    // …of those, how many have real lat/lng (geocoded)
+  missingCoords: number; // active rows still awaiting geocoding (lat/lng null)
+  cityDropped: number;   // rows WITH coords dropped by operating-area city scope
+  shown: number;         // rows that actually became map points
 }
