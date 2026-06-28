@@ -17,6 +17,10 @@
       "schedule": "40 4 * * *"
     },
     {
+      "path": "/api/cron/brokerage-evolution",
+      "schedule": "50 4 * * *"
+    },
+    {
       "path": "/api/cron/transactions-refresh",
       "schedule": "0 3 * * *"
     },
