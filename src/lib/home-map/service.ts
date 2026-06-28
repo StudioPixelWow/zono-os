@@ -25,6 +25,17 @@ const TYPE_MAP: Record<string, { internal: string[]; tokens: string[] }> = {
 function num(v: unknown): number | null { const n = typeof v === "string" ? parseFloat(v) : (v as number); return Number.isFinite(n) ? (n as number) : null; }
 function ils(n: number | null): string { return n == null ? "מחיר לא ידוע" : `₪${Math.round(n).toLocaleString("he-IL")}`; }
 
+// Normalize an Israeli city name so an operating-area city matches a scraped one
+// even when the spelling differs (קריית↔קרית, leading ה, punctuation, spacing).
+function normCity(s: unknown): string {
+  return String(s ?? "")
+    .replace(/קריית/g, "קרית")
+    .replace(/["'`.,־-]/g, " ")
+    .replace(/^ה(?=[א-ת])/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_FILTERS): Promise<HomeMapData> {
   const hasGoogleKey = !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const { profile } = await getSessionContext();
@@ -96,7 +107,8 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
         .eq("org_id", orgId).eq("status", "active")
         .not("lat", "is", null).not("lng", "is", null)
         .limit(1000);
-      if (cityFilter.length > 0) q = q.in("city", cityFilter);
+      // City scoping is applied in JS with normalized comparison (below) so
+      // spelling variants like קריית/קרית don't drop real listings.
       if (filters.deal !== "all") q = q.eq("deal_type", filters.deal);
       if (filters.source !== "all") q = q.eq("source", filters.source);
       if (filters.privateOnly) q = q.eq("has_agent", false);
@@ -108,9 +120,12 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
         q = q.or(tokens.map((t) => `property_type.ilike.%${t}%`).join(","));
       }
       const { data } = await q;
+      // Normalized operating-area city scope (empty ⇒ no city restriction).
+      const allowCities = cityFilter.length ? new Set(cityFilter.map(normCity)) : null;
       for (const r of (data ?? []) as Record<string, unknown>[]) {
         const lat = num(r.lat), lng = num(r.lng);
         if (lat == null || lng == null) continue;
+        if (allowCities && !allowCities.has(normCity(r.city))) continue; // city-scope (normalized)
         const src = String(r.source ?? "external");
         points.push({
           id: `ext_${String(r.id)}`, lat, lng, origin: "external", source: src,
