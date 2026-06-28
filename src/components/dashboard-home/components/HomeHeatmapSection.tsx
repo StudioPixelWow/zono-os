@@ -128,8 +128,10 @@ export function HomeHeatmapSection() {
           if (d.cityDropped > 0) return <span className="text-amber-300/80">{d.withCoords} נכסים חיצוניים עם מיקום קיימים, אך מחוץ לאזור ההתמחות ({d.cityDropped} סוננו){d.droppedCitySamples.length ? ` · ערים שנמצאו: ${d.droppedCitySamples.join(" · ")}` : ""} — הוסף את הערים שלהם באזורי ההתמחות.</span>;
           return <span>נכסים חיצוניים יוצגו לאחר סנכרון מקורות כמו Yad2 / Madlan.</span>;
         })()}
-        {data && data.externalCount === 0 && data.externalDiag.missingCoords > 0 && data.externalDiag.withCoords > 0 && (
-          <span className="text-white/40">({data.externalDiag.missingCoords} עדיין ממתינים לגיאוקודינג)</span>
+        {/* Backlog note — shown even when some external listings ARE on the map, so a
+            large ungeocoded backlog (often Yad2) is never silently hidden. */}
+        {data && data.externalDiag.missingCoords > 0 && (
+          <span className="text-amber-300/70">{data.externalDiag.missingCoords} נכסים חיצוניים נוספים ממתינים לגיאוקודינג — יתווספו למפה אוטומטית (או לחץ &quot;גאוקד עכשיו&quot; במסך הנכסים החיצוניים).</span>
         )}
         <span>מבוסס מיקום אמיתי בלבד — נכסים ללא קואורדינטות אינם מוצגים.</span>
       </div>
