@@ -125,7 +125,7 @@ export function HomeHeatmapSection() {
           // Pinpoint EXACTLY where external listings are lost so "חיצוני 0" is never a mystery.
           if (d.rawActive === 0) return <span className="text-amber-300/80">אין נכסים חיצוניים שמורים — הרץ סנכרון (Yad2 / Madlan) במסך הנכסים החיצוניים.</span>;
           if (d.withCoords === 0) return <span className="text-amber-300/80">{d.rawActive} נכסים חיצוניים נסרקו אך אף אחד לא עבר גיאוקודינג (אין קואורדינטות) — יושלם בסנכרון הבא.</span>;
-          if (d.cityDropped > 0) return <span className="text-amber-300/80">{d.withCoords} נכסים חיצוניים עם מיקום קיימים, אך מחוץ לאזור ההתמחות ({d.cityDropped} סוננו) — הוסף את הערים שלהם באזורי ההתמחות.</span>;
+          if (d.cityDropped > 0) return <span className="text-amber-300/80">{d.withCoords} נכסים חיצוניים עם מיקום קיימים, אך מחוץ לאזור ההתמחות ({d.cityDropped} סוננו){d.droppedCitySamples.length ? ` · ערים שנמצאו: ${d.droppedCitySamples.join(" · ")}` : ""} — הוסף את הערים שלהם באזורי ההתמחות.</span>;
           return <span>נכסים חיצוניים יוצגו לאחר סנכרון מקורות כמו Yad2 / Madlan.</span>;
         })()}
         {data && data.externalCount === 0 && data.externalDiag.missingCoords > 0 && data.externalDiag.withCoords > 0 && (

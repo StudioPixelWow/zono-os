@@ -58,4 +58,5 @@ export interface ExternalMapDiag {
   missingCoords: number; // active rows still awaiting geocoding (lat/lng null)
   cityDropped: number;   // rows WITH coords dropped by operating-area city scope
   shown: number;         // rows that actually became map points
+  droppedCitySamples: string[]; // distinct raw city values of dropped rows (for diagnosis)
 }

@@ -75,7 +75,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   const { profile } = await getSessionContext();
   const orgId = profile?.org_id ?? null;
 
-  const emptyDiag: ExternalMapDiag = { rawActive: 0, withCoords: 0, missingCoords: 0, cityDropped: 0, shown: 0 };
+  const emptyDiag: ExternalMapDiag = { rawActive: 0, withCoords: 0, missingCoords: 0, cityDropped: 0, shown: 0, droppedCitySamples: [] };
   const empty: HomeMapData = { points: [], internalCount: 0, externalCount: 0, total: 0, hasGoogleKey, hasOperatingArea: false, areaCities: [], areaLabel: null, externalDiag: emptyDiag };
   if (!orgId) return empty;
 
@@ -98,7 +98,8 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   const points: HomeMapPoint[] = [];
   let internalCount = 0;
   let externalCount = 0;
-  const externalDiag: ExternalMapDiag = { rawActive: 0, withCoords: 0, missingCoords: 0, cityDropped: 0, shown: 0 };
+  const externalDiag: ExternalMapDiag = { rawActive: 0, withCoords: 0, missingCoords: 0, cityDropped: 0, shown: 0, droppedCitySamples: [] };
+  const droppedCitySet = new Set<string>();
 
   // Honest pipeline counts for external listings — independent of filters/scope —
   // so the UI can explain WHY external is 0 (not scraped vs no coords vs city-scoped).
@@ -175,7 +176,16 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
       for (const r of (data ?? []) as Record<string, unknown>[]) {
         const lat = num(r.lat), lng = num(r.lng);
         if (lat == null || lng == null) continue;
-        if (allowedTokenSets && !sameCity([r.city, r.neighborhood, r.address, r.title], allowedTokenSets)) { externalDiag.cityDropped++; continue; } // city-scope (token-subset + location-text fallback)
+        if (allowedTokenSets && !sameCity([r.city, r.neighborhood, r.address, r.title], allowedTokenSets)) {
+          externalDiag.cityDropped++;
+          // Capture the actual stored city (or first non-empty location field) so the
+          // UI can show WHAT value failed to match — turns a mismatch into a fact.
+          if (droppedCitySet.size < 6) {
+            const raw = [r.city, r.neighborhood, r.address].map((v) => String(v ?? "").trim()).find(Boolean);
+            if (raw) droppedCitySet.add(raw);
+          }
+          continue; // city-scope (token-subset + location-text fallback)
+        }
         const src = String(r.source ?? "external");
         points.push({
           id: `ext_${String(r.id)}`, lat, lng, origin: "external", source: src,
@@ -194,5 +204,6 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
   }
 
   externalDiag.shown = externalCount;
+  externalDiag.droppedCitySamples = [...droppedCitySet];
   return { points, internalCount, externalCount, total: points.length, hasGoogleKey, hasOperatingArea, areaCities, areaLabel, externalDiag };
 }
