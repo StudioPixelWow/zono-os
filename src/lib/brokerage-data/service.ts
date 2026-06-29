@@ -58,7 +58,8 @@ export interface ResolveStats { scanned: number; linked: number; review: number;
  * national brokerage data and persist links. Service-role; safe to call after a
  * sync. Returns counts. Never overwrites confirmed/rejected human decisions.
  */
-export async function resolveBrokerageLinksForOrg(orgId: string): Promise<ResolveStats> {
+export async function resolveBrokerageLinksForOrg(orgId: string, opts: { recordAudit?: boolean } = {}): Promise<ResolveStats> {
+  const recordAudit = opts.recordAudit ?? true;
   const out: ResolveStats = { scanned: 0, linked: 0, review: 0, candidates: 0, skippedLocked: 0 };
   const db = createServiceRoleClient();
 
@@ -113,16 +114,94 @@ export async function resolveBrokerageLinksForOrg(orgId: string): Promise<Resolv
     else out.candidates++;
   }
 
-  // Audit: record a lightweight refresh run for this resolution pass.
-  try {
-    await db.from("brokerage_refresh_runs" as never).insert({
-      run_type: "source", status: "completed", parameters: { mode: "identity_resolution", org_id: orgId } as never,
-      started_at: new Date().toISOString(), finished_at: new Date().toISOString(),
-      updated_records: out.linked + out.review + out.candidates,
-    } as never);
-  } catch { /* audit is best-effort */ }
+  // Audit: record a lightweight refresh run for this resolution pass (skipped
+  // when invoked by startBrokerageDataRefresh, which owns its own run row).
+  if (recordAudit) {
+    try {
+      await db.from("brokerage_refresh_runs" as never).insert({
+        run_type: "source", status: "completed", parameters: { mode: "identity_resolution", org_id: orgId } as never,
+        started_at: new Date().toISOString(), finished_at: new Date().toISOString(),
+        updated_records: out.linked + out.review + out.candidates,
+      } as never);
+    } catch { /* audit is best-effort */ }
+  }
 
   return out;
+}
+
+/** Result of starting a brokerage data scan/refresh. */
+export interface StartRefreshResult {
+  ok: boolean;
+  runId: string | null;
+  status: "pending" | "running" | "completed" | "failed" | "partial";
+  message?: string;
+  error?: string;
+  alreadyRunning?: boolean;
+}
+
+/**
+ * Start an initial scan / refresh of brokerage intelligence. Reuses the EXISTING
+ * synchronous identity-resolution flow (resolveBrokerageLinksForOrg) — no new
+ * engine. Persists a real brokerage_refresh_runs row (running → completed/failed)
+ * with who/when + counts, and is idempotent per org (a running scan is reused).
+ */
+export async function startBrokerageDataRefresh(
+  orgId: string, userId: string | null, params: Record<string, unknown>,
+): Promise<StartRefreshResult> {
+  const db = createServiceRoleClient();
+  const runType = (params.runType as string) ?? "full_country";
+
+  // 1) Idempotency — reuse any pending/running scan for this org (double-click safe).
+  const { data: active } = await db.from("brokerage_refresh_runs" as never)
+    .select("id,status,parameters").in("status", ["pending", "running"]).order("created_at", { ascending: false }).limit(20);
+  const existing = ((active ?? []) as { id: string; parameters?: { org_id?: string } }[])
+    .find((r) => r.parameters?.org_id === orgId);
+  if (existing) {
+    return { ok: true, runId: String(existing.id), status: "running", message: "סריקה כבר מתבצעת.", alreadyRunning: true };
+  }
+
+  // 2) Create a running run row (who/when/params).
+  const { data: ins, error: insErr } = await db.from("brokerage_refresh_runs" as never)
+    .insert({ run_type: runType, status: "running", requested_by: userId, parameters: { ...params, org_id: orgId } as never, started_at: new Date().toISOString() } as never)
+    .select("id").maybeSingle();
+  if (insErr || !ins) {
+    console.error("[brokerage-data] failed to create refresh run:", insErr?.message);
+    return { ok: false, runId: null, status: "failed", error: "create-run-failed" };
+  }
+  const runId = String((ins as { id: string }).id);
+  console.info(`[brokerage-data] scan run created id=${runId} org=${orgId} user=${userId ?? "?"} type=${runType}`);
+
+  // 3) Run the existing synchronous scan + finalize the run row with real counts.
+  try {
+    const stats = await resolveBrokerageLinksForOrg(orgId, { recordAudit: false });
+    const updated = stats.linked + stats.review + stats.candidates;
+    await db.from("brokerage_refresh_runs" as never).update({
+      status: "completed", finished_at: new Date().toISOString(), updated_records: updated, errors_count: 0,
+      log: [{ scanned: stats.scanned, linked: stats.linked, review: stats.review, candidates: stats.candidates, skippedLocked: stats.skippedLocked }] as never,
+    } as never).eq("id", runId);
+    console.info(`[brokerage-data] scan finished id=${runId} scanned=${stats.scanned} linked=${stats.linked} review=${stats.review} candidates=${stats.candidates}`);
+    const message = stats.scanned === 0
+      ? "הסריקה הסתיימה — אין עדיין מודעות חיצוניות לסריקה. סנכרן נכסי שוק תחילה."
+      : updated === 0
+        ? "הסריקה הסתיימה אך לא נמצאו משרדים/סוכנים. נסה לבחור עיר אחרת או להריץ סריקה עמוקה."
+        : `הסריקה הסתיימה ✓ — ${stats.linked} קושרו · ${stats.review} לבדיקה · ${stats.candidates} מועמדים (מתוך ${stats.scanned} מודעות).`;
+    return { ok: true, runId, status: "completed", message };
+  } catch (e) {
+    console.error(`[brokerage-data] scan failed id=${runId}:`, e);
+    await db.from("brokerage_refresh_runs" as never).update({
+      status: "failed", finished_at: new Date().toISOString(), errors_count: 1, log: [{ error: e instanceof Error ? e.message : String(e) }] as never,
+    } as never).eq("id", runId);
+    return { ok: false, runId, status: "failed", error: "scan-failed" };
+  }
+}
+
+/** Poll a refresh run's current status (for the UI). */
+export async function getRefreshRunStatus(runId: string): Promise<{ status: string; updatedRecords: number } | null> {
+  const db = createServiceRoleClient();
+  const { data } = await db.from("brokerage_refresh_runs" as never).select("status,updated_records").eq("id", runId).maybeSingle();
+  if (!data) return null;
+  const d = data as { status?: string; updated_records?: number };
+  return { status: d.status ?? "pending", updatedRecords: Number(d.updated_records ?? 0) };
 }
 
 /** Owner action — record a manual refresh run row (the heavy scrape would be a

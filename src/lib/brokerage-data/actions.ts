@@ -9,6 +9,7 @@ import { requireOwner } from "./permissions";
 import {
   getBrokerageCommandCenter, resolveBrokerageLinksForOrg, reviewIdentityMatch,
   resolveDataConflict, decideListingLink, recordRefreshRequest,
+  startBrokerageDataRefresh, getRefreshRunStatus,
   type BrokerageCommandCenter, type ResolveStats,
 } from "./service";
 
@@ -56,6 +57,38 @@ export async function requestBrokerageRefreshAction(params: Record<string, unkno
     console.error("[brokerage-data] refresh request failed:", e);
     return { error: "הסריקה לא התחילה. נסה שוב בעוד רגע." };
   }
+}
+
+export interface StartRefreshActionState { ok: boolean; runId: string | null; status: string; message?: string; error?: string }
+
+/**
+ * Start the brokerage data scan / initial intelligence scan. Wires the button to
+ * the REAL synchronous identity-resolution flow (no new engine), persists a
+ * brokerage_refresh_runs row (running → completed/failed) and returns a typed
+ * result the UI can render. Idempotent per org (a running scan is reused).
+ *
+ * TODO before launch: restrict this action to owner/admin only. During QA /
+ * pre-launch testing it is intentionally open to any authenticated org user.
+ */
+export async function startBrokerageDataRefreshAction(params: Record<string, unknown> = {}): Promise<StartRefreshActionState> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, runId: null, status: "failed", error: "יש להתחבר כדי להפעיל סריקה." };
+    console.info(`[brokerage-data] scan button pressed user=${profile.id ?? "?"} org=${profile.org_id}`);
+    const r = await startBrokerageDataRefresh(profile.org_id, profile.id ?? null, params);
+    revalidatePath("/brokerage-data");
+    if (!r.ok) return { ok: false, runId: r.runId, status: r.status, error: "הסריקה לא התחילה. בדוק חיבור או נסה שוב." };
+    return { ok: true, runId: r.runId, status: r.status, message: r.message };
+  } catch (e) {
+    console.error("[brokerage-data] start refresh failed:", e);
+    return { ok: false, runId: null, status: "failed", error: "הסריקה לא התחילה. בדוק חיבור או נסה שוב." };
+  }
+}
+
+/** Poll a refresh run's status (client never sees service-role). */
+export async function getBrokerageRefreshStatusAction(runId: string): Promise<{ status: string; updatedRecords: number } | null> {
+  try { return await getRefreshRunStatus(runId); }
+  catch (e) { console.error("[brokerage-data] refresh status failed:", e); return null; }
 }
 
 export async function reviewMatchAction(matchId: string, decision: "approve" | "reject"): Promise<BrokerageActionState> {
