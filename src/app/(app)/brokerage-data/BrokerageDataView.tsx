@@ -87,6 +87,8 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
   };
 
   const [agentFilter, setAgentFilter] = useState<"all" | "resolved" | "unresolved" | "review" | "high">("all");
+  const [agentSort, setAgentSort] = useState<"listings" | "confidence" | "lastSeen">("listings");
+  const [cityFilter, setCityFilter] = useState<string>("");
   const [dnaTarget, setDnaTarget] = useState<DnaTarget | null>(null);
 
   const q = search.trim().toLowerCase();
@@ -102,14 +104,29 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
     return m;
   }, [cc.agentListingCounts]);
 
-  const agents = useMemo(() => cc.agents.filter((a) => {
-    if (q && !(a.fullName.toLowerCase().includes(q) || (a.city ?? "").toLowerCase().includes(q))) return false;
-    if (agentFilter === "resolved") return !!a.officeId;
-    if (agentFilter === "unresolved") return !a.officeId;
-    if (agentFilter === "review") return a.confidenceScore < 70 || a.status === "unverified";
-    if (agentFilter === "high") return a.confidenceScore >= 90;
-    return true;
-  }), [cc.agents, q, agentFilter]);
+  const brokerCities = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of cc.agents) if (a.city) set.add(a.city);
+    return Array.from(set).sort((x, y) => x.localeCompare(y, "he"));
+  }, [cc.agents]);
+
+  const agents = useMemo(() => {
+    const filtered = cc.agents.filter((a) => {
+      if (q && !(a.fullName.toLowerCase().includes(q) || (a.city ?? "").toLowerCase().includes(q))) return false;
+      if (cityFilter && a.city !== cityFilter) return false;
+      if (agentFilter === "resolved") return !!a.officeId;
+      if (agentFilter === "unresolved") return !a.officeId;
+      if (agentFilter === "review") return a.confidenceScore < 70 || a.status === "unverified";
+      if (agentFilter === "high") return a.confidenceScore >= 90;
+      return true;
+    });
+    const byCount = (id: string) => cc.agentListingCounts[id] ?? 0;
+    return [...filtered].sort((a, b) => {
+      if (agentSort === "listings") return byCount(b.id) - byCount(a.id);
+      if (agentSort === "confidence") return b.confidenceScore - a.confidenceScore;
+      return (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? ""); // last seen
+    });
+  }, [cc.agents, cc.agentListingCounts, q, cityFilter, agentFilter, agentSort]);
 
   // Top brokers by REAL linked-listing count (server aggregation) — proves the
   // resolution pipeline and powers the overview intelligence widget.
@@ -302,6 +319,19 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
                 {label}
               </button>
             ))}
+            <div className="ms-auto flex flex-wrap items-center gap-2">
+              <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}
+                className="rounded-full border border-line bg-surface px-3 py-1 text-xs font-bold text-ink">
+                <option value="">כל הערים</option>
+                {brokerCities.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select value={agentSort} onChange={(e) => setAgentSort(e.target.value as typeof agentSort)}
+                className="rounded-full border border-line bg-surface px-3 py-1 text-xs font-bold text-ink">
+                <option value="listings">מיון: מודעות</option>
+                <option value="confidence">מיון: ביטחון</option>
+                <option value="lastSeen">מיון: נראה לאחרונה</option>
+              </select>
+            </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {agents.length === 0 && <Empty text="אין סוכנים להצגה בסינון הנוכחי." />}
