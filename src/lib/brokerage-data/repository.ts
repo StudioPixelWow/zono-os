@@ -135,6 +135,32 @@ export const brokerageRepository = {
       .eq("agent_id", agentId).order("created_at", { ascending: false }).limit(limit);
     return ((data ?? []) as Row[]).map(mapLink);
   },
+  /** Accurate per-agent / per-office linked-listing counts across ALL links (RLS-
+   *  scoped). Reads only the two id columns so it scales past the display cap that
+   *  truncates listLinks(). Counts DISTINCT listings per entity (no double count). */
+  async linkCounts(): Promise<{ byAgent: Map<string, number>; byOffice: Map<string, number> }> {
+    const db = await createClient();
+    const { data } = await db.from("brokerage_external_listing_links" as never)
+      .select("external_listing_id,agent_id,office_id").limit(50000);
+    const byAgent = new Map<string, number>();
+    const byOffice = new Map<string, number>();
+    const seenAgent = new Set<string>();
+    const seenOffice = new Set<string>();
+    for (const r of (data ?? []) as Row[]) {
+      const listingId = s(r.external_listing_id) ?? "";
+      const agentId = s(r.agent_id);
+      const officeId = s(r.office_id);
+      if (agentId) {
+        const k = `${agentId}|${listingId}`;
+        if (!seenAgent.has(k)) { seenAgent.add(k); byAgent.set(agentId, (byAgent.get(agentId) ?? 0) + 1); }
+      }
+      if (officeId) {
+        const k = `${officeId}|${listingId}`;
+        if (!seenOffice.has(k)) { seenOffice.add(k); byOffice.set(officeId, (byOffice.get(officeId) ?? 0) + 1); }
+      }
+    }
+    return { byAgent, byOffice };
+  },
   // Owner-only reads (RLS already restricts these tables to owners).
   async listConflicts(limit = 200): Promise<BrokerageDataConflict[]> {
     const db = await createClient();

@@ -89,13 +89,15 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
   const q = search.trim().toLowerCase();
   const offices = useMemo(() => cc.offices.filter((o) => !q || o.name.toLowerCase().includes(q) || (o.city ?? "").toLowerCase().includes(q)), [cc.offices, q]);
 
-  // Office name lookup + per-broker linked-listing counts (from observed links only).
+  // Office name lookup + per-broker linked-listing counts. Counts come from the
+  // SERVER aggregation across ALL links (cc.agentListingCounts) — not the capped
+  // cc.links display list, which previously made every broker read as 0.
   const officeNameById = useMemo(() => { const m = new Map<string, string>(); for (const o of cc.offices) m.set(o.id, o.name); return m; }, [cc.offices]);
   const listingsByAgent = useMemo(() => {
     const m = new Map<string, number>();
-    for (const l of cc.links) if (l.agentId) m.set(l.agentId, (m.get(l.agentId) ?? 0) + 1);
+    for (const [id, n] of Object.entries(cc.agentListingCounts)) m.set(id, n);
     return m;
-  }, [cc.links]);
+  }, [cc.agentListingCounts]);
 
   const agents = useMemo(() => cc.agents.filter((a) => {
     if (q && !(a.fullName.toLowerCase().includes(q) || (a.city ?? "").toLowerCase().includes(q))) return false;

@@ -13,6 +13,7 @@ import { brokerageRepository } from "./repository";
 import { getBrokerageAccess } from "./permissions";
 import { resolveIdentity, type ListingContact } from "./identity";
 import { buildOfficeDna, buildBrokerDna, type BrokerageDna } from "./dna";
+import { discoverBrokeragePublishers } from "./discovery";
 import type {
   BrokerageAccess, BrokerageOffice, BrokerageAgent, BrokerageDataConflict, BrokerageIdentityMatch,
   BrokerageExternalListingLink, BrokerageRefreshRun, BrokerageDataSource, BrokerageDataStats, LinkStatus,
@@ -28,6 +29,9 @@ export interface BrokerageCommandCenter {
   matches: BrokerageIdentityMatch[];     // owner only
   runs: BrokerageRefreshRun[];           // owner only
   sources: BrokerageDataSource[];        // owner only
+  /** Accurate linked-listing counts (across ALL links, not the display cap). */
+  agentListingCounts: Record<string, number>;
+  officeListingCounts: Record<string, number>;
 }
 
 /** Compose the /brokerage-data command center (RLS scopes every read). */
@@ -35,7 +39,7 @@ export async function getBrokerageCommandCenter(opts: { city?: string | null; se
   const access = await getBrokerageAccess();
   if (!access) return null;
   const owner = access.isOwner;
-  const [stats, offices, agents, links, conflicts, matches, runs, sources] = await Promise.all([
+  const [stats, offices, agents, links, conflicts, matches, runs, sources, counts] = await Promise.all([
     brokerageRepository.stats(),
     brokerageRepository.listOffices({ city: opts.city ?? undefined, search: opts.search ?? undefined, limit: 300 }),
     brokerageRepository.listAgents({ city: opts.city ?? undefined, search: opts.search ?? undefined, limit: 300 }),
@@ -44,8 +48,13 @@ export async function getBrokerageCommandCenter(opts: { city?: string | null; se
     owner ? brokerageRepository.listMatches(100) : Promise.resolve([]),
     owner ? brokerageRepository.listRefreshRuns(20) : Promise.resolve([]),
     owner ? brokerageRepository.listSources() : Promise.resolve([]),
+    brokerageRepository.linkCounts(),
   ]);
-  return { access, stats, offices, agents, links, conflicts, matches, runs, sources };
+  return {
+    access, stats, offices, agents, links, conflicts, matches, runs, sources,
+    agentListingCounts: Object.fromEntries(counts.byAgent),
+    officeListingCounts: Object.fromEntries(counts.byOffice),
+  };
 }
 
 // ── Brokerage DNA™ — deterministic identity profile (no AI, RLS-scoped reads) ──
@@ -218,21 +227,32 @@ export async function startBrokerageDataRefresh(
   const runId = String((ins as { id: string }).id);
   console.info(`[brokerage-data] scan run created id=${runId} org=${orgId} user=${userId ?? "?"} type=${runType}`);
 
-  // 3) Run the existing synchronous scan + finalize the run row with real counts.
+  // 3) Run the full pipeline: (a) DISCOVER brokers from the org's own listings so
+  //    resolution has real brokers to link to (fixes the chicken-and-egg where an
+  //    empty brokerage_agents table meant every listing resolved to nothing), then
+  //    (b) RESOLVE + LINK listings → brokers. Finalize the run row with real counts.
   try {
+    let newBrokers = 0;
+    try {
+      const disc = await discoverBrokeragePublishers(orgId, userId);
+      newBrokers = disc.newAgents;
+      console.info(`[brokerage-data] discovery before resolve id=${runId} newBrokers=${newBrokers} candidates=${disc.candidatesFound}`);
+    } catch (e) {
+      console.error("[brokerage-data] discovery step failed (continuing to resolve):", e);
+    }
     const stats = await resolveBrokerageLinksForOrg(orgId, { recordAudit: false });
     const updated = stats.linked + stats.review + stats.candidates;
     await db.from("brokerage_refresh_runs" as never).update({
       status: "completed", finished_at: new Date().toISOString(), updated_records: updated, errors_count: 0,
-      offices_found: stats.officesMatched, agents_found: stats.agentsMatched,
-      log: [{ scanned: stats.scanned, linked: stats.linked, review: stats.review, candidates: stats.candidates, skippedLocked: stats.skippedLocked, officesMatched: stats.officesMatched, agentsMatched: stats.agentsMatched }] as never,
+      offices_found: stats.officesMatched, agents_found: stats.agentsMatched, new_agents: newBrokers,
+      log: [{ newBrokers, scanned: stats.scanned, linked: stats.linked, review: stats.review, candidates: stats.candidates, skippedLocked: stats.skippedLocked, officesMatched: stats.officesMatched, agentsMatched: stats.agentsMatched }] as never,
     } as never).eq("id", runId);
     console.info(`[brokerage-data] scan finished id=${runId} scanned=${stats.scanned} linked=${stats.linked} review=${stats.review} candidates=${stats.candidates}`);
     const message = stats.scanned === 0
       ? "הסריקה הסתיימה — אין עדיין מודעות חיצוניות לסריקה. סנכרן נכסי שוק תחילה."
       : updated === 0
         ? "הסריקה הסתיימה אך לא נמצאו משרדים/סוכנים. נסה לבחור עיר אחרת או להריץ סריקה עמוקה."
-        : `הסריקה הסתיימה ✓ — ${stats.linked} קושרו · ${stats.review} לבדיקה · ${stats.candidates} מועמדים (מתוך ${stats.scanned} מודעות).`;
+        : `הסריקה הסתיימה ✓ — ${newBrokers} מתווכים חדשים · ${stats.linked} קושרו · ${stats.review} לבדיקה · ${stats.candidates} מועמדים (מתוך ${stats.scanned} מודעות).`;
     return { ok: true, runId, status: "completed", message };
   } catch (e) {
     console.error(`[brokerage-data] scan failed id=${runId}:`, e);
