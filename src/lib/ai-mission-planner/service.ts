@@ -12,6 +12,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { answerWithZonoAI } from "@/lib/ai-reasoning/service";
 import { planFromReasoning, planFromAlert, applyStatusTransition } from "./planner";
 import { findActiveDuplicate, getDraftById, insertMissionDraft, listMissionDrafts, updateDraftStatus } from "./repository";
+import { convertApprovedMissionDraftToTask, type ConversionResult } from "./conversion";
 import type { MissionCategory, MissionDraft, PlanSkip } from "./types";
 import type { AlertDescriptor } from "./evidence";
 import type { ContextType } from "@/lib/context-engine/types";
@@ -90,4 +91,18 @@ export async function approveMissionDraftAction(id: string): Promise<{ ok: boole
 
 export async function rejectMissionDraftAction(id: string): Promise<{ ok: boolean; draft?: MissionDraft; reason?: string }> {
   return review(id, "reject");
+}
+
+/**
+ * Convert an APPROVED draft into a real CRM task. The ONLY side effect is task
+ * creation — no messages, calendar, CRM changes, workflows, or AI calls.
+ * Requires an explicit user click; idempotent (duplicate clicks return the same task).
+ */
+export async function convertMissionDraftToTaskAction(draftId: string): Promise<ConversionResult> {
+  const orgId = await currentSessionOrgId();
+  if (!orgId) return { ok: false, reason: "no organization in session" };
+  const session = await getSessionContext().catch(() => null);
+  const userId = session?.user?.id ?? null;
+  if (!userId) return { ok: false, reason: "not authenticated" };
+  return convertApprovedMissionDraftToTask({ organizationId: orgId, userId, draftId });
 }

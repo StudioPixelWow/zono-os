@@ -9,7 +9,7 @@
 import { useEffect, useState, useTransition } from "react";
 import {
   listMissionDraftsAction, createMissionDraftFromReasoningAction,
-  approveMissionDraftAction, rejectMissionDraftAction,
+  approveMissionDraftAction, rejectMissionDraftAction, convertMissionDraftToTaskAction,
 } from "@/lib/ai-mission-planner/service";
 import type { MissionDraft, MissionPriority, MissionStatus } from "@/lib/ai-mission-planner/types";
 
@@ -24,6 +24,7 @@ const GROUPS: { key: MissionStatus; label: string }[] = [
   { key: "ready_for_review", label: "לבדיקה" },
   { key: "draft", label: "טיוטות" },
   { key: "approved", label: "אושרו" },
+  { key: "converted", label: "הומרו למשימה" },
   { key: "rejected", label: "נדחו" },
 ];
 
@@ -51,6 +52,12 @@ export function MissionPlannerPanel() {
   const act = (id: string, action: "approve" | "reject") => start(async () => {
     const res = action === "approve" ? await approveMissionDraftAction(id) : await rejectMissionDraftAction(id);
     if (!res.ok) setNote(res.reason ?? "הפעולה נכשלה."); else setNote(null);
+    setDrafts(await listMissionDraftsAction());
+  });
+
+  const convert = (id: string) => start(async () => {
+    const res = await convertMissionDraftToTaskAction(id);
+    setNote(res.ok ? (res.alreadyConverted ? "המשימה כבר נוצרה." : "המשימה נוצרה.") : (res.reason ?? "ההמרה נכשלה."));
     setDrafts(await listMissionDraftsAction());
   });
 
@@ -107,6 +114,16 @@ export function MissionPlannerPanel() {
                         className="border-line bg-surface text-ink hover:border-rose-300 rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50">דחה</button>
                       <span className="text-muted text-[11px]">לא עכשיו — נשאר כטיוטה</span>
                     </div>
+                  )}
+                  {d.status === "approved" && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <button type="button" onClick={() => convert(d.id)} disabled={pending}
+                        className="bg-brand hover:bg-brand-strong rounded-lg px-3 py-1.5 text-xs font-bold text-white transition disabled:opacity-50">צור משימה</button>
+                      <span className="text-muted text-[11px]">יוצר משימת CRM רגילה · ללא ביצוע פעולה</span>
+                    </div>
+                  )}
+                  {d.status === "converted" && (
+                    <p className="mt-3 text-xs font-bold text-emerald-700">✓ משימה נוצרה</p>
                   )}
                 </div>
               ))}

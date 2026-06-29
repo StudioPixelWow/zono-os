@@ -4,8 +4,9 @@
 // ============================================================================
 import { planFromReasoning, planFromAlert, applyStatusTransition } from "./planner";
 import { dedupeKey, validateMissionDraft } from "./mission-schema";
+import { evaluateConversion, buildTaskFromDraft } from "./task-mapping";
 import type { AIReasoningResponse } from "@/lib/ai-reasoning/types";
-import type { MissionDraftInput } from "./types";
+import type { MissionDraft, MissionDraftInput } from "./types";
 
 export interface QaCheck { name: string; ok: boolean; detail: string }
 export interface QaResult { passed: boolean; checks: QaCheck[] }
@@ -77,6 +78,25 @@ export function runSelfCheck(): QaResult {
 
   // invalid transition guard
   add("13-no-approve-after-rejected", applyStatusTransition("rejected", "approve") === null);
+
+  // ── Phase 27.5 — Mission-to-Task conversion (pure logic) ──
+  const persisted = (status: MissionDraft["status"], convertedTaskId: string | null = null): MissionDraft => ({
+    ...d, id: "d1", status, userId: "u1", reviewedAt: null, reviewedBy: null, convertedTaskId, createdAt: "", updatedAt: "",
+  });
+
+  add("14-approved-converts", evaluateConversion(persisted("approved")).ok === true);
+  add("15-not-approved-blocked", evaluateConversion(persisted("ready_for_review")).reason === "not_approved");
+  add("16-rejected-blocked", evaluateConversion(persisted("rejected")).reason === "not_approved");
+  add("17-already-converted", evaluateConversion(persisted("converted", "task-1")).reason === "already_converted");
+  add("18-missing-evidence-blocked", evaluateConversion({ status: "approved", convertedTaskId: null, evidence: [] }).reason === "no_evidence");
+
+  const task = buildTaskFromDraft(persisted("approved"), new Date("2026-01-01T00:00:00Z"));
+  add("19-task-has-evidence-summary", task.description.includes("ראיות") && task.description.includes("רי/מקס כרמל"));
+  add("20-task-has-disclaimer", task.description.includes("לא בוצעה פעולה אוטומטית"));
+  add("21-priority-and-status", task.priority === d.priority && task.status === "todo");
+  add("22-due-date-present", typeof task.due_at === "string" && task.due_at.length > 0);
+  // entity id "o1" is not a UUID → no CRM FK set (only text entity fields kept)
+  add("23-no-fk-for-non-uuid", task.property_id === undefined && task.entity_id === "o1");
 
   return { passed: checks.every((c) => c.ok), checks };
 }

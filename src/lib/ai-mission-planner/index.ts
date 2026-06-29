@@ -6,8 +6,10 @@
 export {
   createMissionDraftFromReasoningAction, createMissionDraftFromAlertAction,
   listMissionDraftsAction, approveMissionDraftAction, rejectMissionDraftAction,
+  convertMissionDraftToTaskAction,
 } from "./service";
 export { planFromReasoning, planFromAlert, applyStatusTransition } from "./planner";
+export { evaluateConversion, buildTaskFromDraft, buildTaskDescription, mapDueDate } from "./task-mapping";
 export { MISSION_KINDS, MISSION_CONFIDENCE_MIN, validateMissionDraft, dedupeKey } from "./mission-schema";
 export { runSelfCheck } from "./qa";
 export { MISSION_PLANNER_VERSION } from "./types";

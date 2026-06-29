@@ -89,6 +89,17 @@ export async function insertMissionDraft(orgId: string, userId: string | null, i
   } catch (e) { console.error("[mission-planner] insert error:", e); return null; }
 }
 
+export async function markConverted(id: string, taskId: string, metadata: Record<string, unknown>): Promise<MissionDraft | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.from("ai_mission_drafts")
+      .update({ status: "converted", converted_task_id: taskId, metadata: metadata as unknown as Json, updated_at: new Date().toISOString() })
+      .eq("id", id).select("*").single();
+    if (error) { console.error("[mission-planner] mark converted failed:", error.message); return null; }
+    return data ? rowToDraft(data as Row) : null;
+  } catch (e) { console.error("[mission-planner] mark converted error:", e); return null; }
+}
+
 export async function updateDraftStatus(id: string, status: MissionStatus, reviewerId: string | null): Promise<MissionDraft | null> {
   try {
     const supabase = await createClient();
