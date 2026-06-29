@@ -5,10 +5,11 @@
 // Phase 26.9.6 (deferred slice).
 // ============================================================================
 import { useEffect, useState, useTransition } from "react";
-import { getOfficeDnaAction, getBrokerDnaAction, reasonBrokerageDnaAction, reasonBrokerOfficeAction } from "@/lib/brokerage-data/actions";
+import { getOfficeDnaAction, getBrokerDnaAction, reasonBrokerageDnaAction, reasonBrokerOfficeAction, getProfileExtrasAction } from "@/lib/brokerage-data/actions";
 import type { BrokerageDna, DnaSignal } from "@/lib/brokerage-data/dna";
 import type { AIReasoningResponse } from "@/lib/ai-reasoning/types";
 import type { BrokerOfficeReasonResult } from "@/lib/brokerage-data/office-reasoning";
+import type { ProfileExtras } from "@/lib/brokerage-data/profile-data";
 
 export interface DnaTarget { type: "office" | "broker"; id: string; name: string }
 
@@ -36,9 +37,10 @@ function SignalRow({ s }: { s: DnaSignal }) {
   );
 }
 
-export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClose: () => void }) {
+export function DnaDrawer({ target, onClose, onOpen }: { target: DnaTarget | null; onClose: () => void; onOpen?: (t: DnaTarget) => void }) {
   const [loading, setLoading] = useState(false);
   const [dna, setDna] = useState<BrokerageDna | null>(null);
+  const [extras, setExtras] = useState<ProfileExtras | null>(null);
   const [ai, setAi] = useState<AIReasoningResponse | null>(null);
   const [aiPending, startAi] = useTransition();
   const [office, setOffice] = useState<BrokerOfficeReasonResult | null>(null);
@@ -52,10 +54,12 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
       setDna(null);
       setAi(null);
       setOffice(null);
-      const data = target.type === "office"
-        ? await getOfficeDnaAction(target.id)
-        : await getBrokerDnaAction(target.id);
-      if (alive) { setDna(data); setLoading(false); }
+      setExtras(null);
+      const [data, ex] = await Promise.all([
+        target.type === "office" ? getOfficeDnaAction(target.id) : getBrokerDnaAction(target.id),
+        getProfileExtrasAction(target.type, target.id),
+      ]);
+      if (alive) { setDna(data); setExtras(ex); setLoading(false); }
     })();
     return () => { alive = false; };
   }, [target]);
@@ -143,6 +147,41 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
               <section>
                 <h3 className="mb-2 text-sm font-black text-ink">עובדות</h3>
                 <div className="flex flex-col gap-2">{facts.map((s, i) => <SignalRow key={i} s={s} />)}</div>
+              </section>
+            )}
+
+            {/* Office profile — detected brokers (clickable → broker profile) */}
+            {extras?.kind === "office" && extras.brokers.length > 0 && (
+              <section>
+                <h3 className="mb-2 text-sm font-black text-ink">מתווכים במשרד ({extras.brokerCount})</h3>
+                <div className="flex flex-col gap-2">
+                  {extras.brokers.slice(0, 12).map((b) => (
+                    <button key={b.id} type="button" onClick={() => onOpen?.({ type: "broker", id: b.id, name: b.fullName })}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-right transition hover:border-brand">
+                      <span className="min-w-0"><span className="block truncate text-sm font-bold text-ink">{b.fullName}</span>{b.city && <span className="block truncate text-[11px] text-muted">{b.city}</span>}</span>
+                      <span className="shrink-0 text-[11px] text-muted">{Math.round(b.confidenceScore)}%</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Linked listings (broker + office) — click opens the listing */}
+            {extras && extras.listings.length > 0 && (
+              <section>
+                <h3 className="mb-2 text-sm font-black text-ink">מודעות מקושרות אחרונות{extras.listingCount > extras.listings.length ? ` (${extras.listings.length} מתוך ${extras.listingCount})` : ` (${extras.listingCount})`}</h3>
+                <div className="flex flex-col gap-2">
+                  {extras.listings.map((l) => (
+                    <a key={l.id} href={`/external-listings/${l.id}`} className="block rounded-xl border border-line bg-surface px-3 py-2 transition hover:border-brand">
+                      <div className="truncate text-sm font-bold text-ink">{l.title || "מודעה חיצונית"}</div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted">
+                        {l.city && <span>{l.city}</span>}
+                        {l.price != null && <span dir="ltr">₪{l.price.toLocaleString("he-IL")}</span>}
+                        {l.source && <span>· {l.source}</span>}
+                      </div>
+                    </a>
+                  ))}
+                </div>
               </section>
             )}
 

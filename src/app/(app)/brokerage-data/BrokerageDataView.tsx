@@ -483,7 +483,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
 
       <p className="text-[11px] text-muted/70">מידע ציבורי/עסקי בלבד · אין מחיקה אוטומטית · כל שינוי מתועד עם מקור ורמת ביטחון.</p>
 
-      <DnaDrawer target={dnaTarget} onClose={() => setDnaTarget(null)} />
+      <DnaDrawer target={dnaTarget} onClose={() => setDnaTarget(null)} onOpen={(t) => setDnaTarget(t)} />
     </div>
   );
 }

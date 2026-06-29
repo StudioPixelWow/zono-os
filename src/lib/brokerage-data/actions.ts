@@ -17,6 +17,7 @@ import { reasonBrokerageDna, type DnaReasonResult } from "./dna-reasoning";
 import { getBrokerageAccess } from "./permissions";
 import { discoverBrokeragePublishers, type DiscoveryResult } from "./discovery";
 import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReasonResult } from "./office-reasoning";
+import { getProfileExtras, type ProfileExtras } from "./profile-data";
 
 export async function getBrokerageCommandCenterAction(opts: { city?: string | null; search?: string | null } = {}): Promise<BrokerageCommandCenter | null> {
   try { return await getBrokerageCommandCenter(opts); }
@@ -174,6 +175,15 @@ export async function reasonBrokerOfficeAction(agentId: string): Promise<BrokerO
       userName: p.full_name ?? null, isManager: access?.isOwner ?? false,
     });
   } catch (e) { console.error("[brokerage-data] office reasoning failed:", e); return null; }
+}
+
+/** Profile extras for the broker/office drawer (linked listings, office brokers). */
+export async function getProfileExtrasAction(kind: "broker" | "office", id: string): Promise<ProfileExtras | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await getProfileExtras(kind, id);
+  } catch (e) { console.error("[brokerage-data] profile extras failed:", e); return null; }
 }
 
 /** Deterministic office evidence only (no AI) — RLS-scoped. */
