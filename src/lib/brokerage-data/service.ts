@@ -51,7 +51,7 @@ const tierToLinkStatus: Record<string, LinkStatus> = {
   auto_link: "auto_linked", pending_review: "pending_review", candidate: "candidate",
 };
 
-export interface ResolveStats { scanned: number; linked: number; review: number; candidates: number; skippedLocked: number }
+export interface ResolveStats { scanned: number; linked: number; review: number; candidates: number; skippedLocked: number; officesMatched: number; agentsMatched: number }
 
 /**
  * Resolve every active external listing (with a contact) for an org against the
@@ -60,7 +60,9 @@ export interface ResolveStats { scanned: number; linked: number; review: number;
  */
 export async function resolveBrokerageLinksForOrg(orgId: string, opts: { recordAudit?: boolean } = {}): Promise<ResolveStats> {
   const recordAudit = opts.recordAudit ?? true;
-  const out: ResolveStats = { scanned: 0, linked: 0, review: 0, candidates: 0, skippedLocked: 0 };
+  const out: ResolveStats = { scanned: 0, linked: 0, review: 0, candidates: 0, skippedLocked: 0, officesMatched: 0, agentsMatched: 0 };
+  const officeSet = new Set<string>();
+  const agentSet = new Set<string>();
   const db = createServiceRoleClient();
 
   const { data: listingRows } = await db
@@ -109,10 +111,14 @@ export async function resolveBrokerageLinksForOrg(orgId: string, opts: { recordA
       confidence_score: res.confidence, match_reasons: res.reasons as never, status,
     } as never);
 
+    if (res.officeId) officeSet.add(res.officeId);
+    if (res.agentId) agentSet.add(res.agentId);
     if (status === "auto_linked") out.linked++;
     else if (status === "pending_review") out.review++;
     else out.candidates++;
   }
+  out.officesMatched = officeSet.size;
+  out.agentsMatched = agentSet.size;
 
   // Audit: record a lightweight refresh run for this resolution pass (skipped
   // when invoked by startBrokerageDataRefresh, which owns its own run row).
@@ -194,7 +200,8 @@ export async function startBrokerageDataRefresh(
     const updated = stats.linked + stats.review + stats.candidates;
     await db.from("brokerage_refresh_runs" as never).update({
       status: "completed", finished_at: new Date().toISOString(), updated_records: updated, errors_count: 0,
-      log: [{ scanned: stats.scanned, linked: stats.linked, review: stats.review, candidates: stats.candidates, skippedLocked: stats.skippedLocked }] as never,
+      offices_found: stats.officesMatched, agents_found: stats.agentsMatched,
+      log: [{ scanned: stats.scanned, linked: stats.linked, review: stats.review, candidates: stats.candidates, skippedLocked: stats.skippedLocked, officesMatched: stats.officesMatched, agentsMatched: stats.agentsMatched }] as never,
     } as never).eq("id", runId);
     console.info(`[brokerage-data] scan finished id=${runId} scanned=${stats.scanned} linked=${stats.linked} review=${stats.review} candidates=${stats.candidates}`);
     const message = stats.scanned === 0

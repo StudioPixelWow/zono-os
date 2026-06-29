@@ -82,9 +82,27 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
     });
   };
 
+  const [agentFilter, setAgentFilter] = useState<"all" | "resolved" | "unresolved" | "review" | "high">("all");
+
   const q = search.trim().toLowerCase();
   const offices = useMemo(() => cc.offices.filter((o) => !q || o.name.toLowerCase().includes(q) || (o.city ?? "").toLowerCase().includes(q)), [cc.offices, q]);
-  const agents = useMemo(() => cc.agents.filter((a) => !q || a.fullName.toLowerCase().includes(q) || (a.city ?? "").toLowerCase().includes(q)), [cc.agents, q]);
+
+  // Office name lookup + per-broker linked-listing counts (from observed links only).
+  const officeNameById = useMemo(() => { const m = new Map<string, string>(); for (const o of cc.offices) m.set(o.id, o.name); return m; }, [cc.offices]);
+  const listingsByAgent = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of cc.links) if (l.agentId) m.set(l.agentId, (m.get(l.agentId) ?? 0) + 1);
+    return m;
+  }, [cc.links]);
+
+  const agents = useMemo(() => cc.agents.filter((a) => {
+    if (q && !(a.fullName.toLowerCase().includes(q) || (a.city ?? "").toLowerCase().includes(q))) return false;
+    if (agentFilter === "resolved") return !!a.officeId;
+    if (agentFilter === "unresolved") return !a.officeId;
+    if (agentFilter === "review") return a.confidenceScore < 70 || a.status === "unverified";
+    if (agentFilter === "high") return a.confidenceScore >= 90;
+    return true;
+  }), [cc.agents, q, agentFilter]);
 
   const tabs: { id: Tab; label: string; owner?: boolean }[] = [
     { id: "overview", label: "סקירה" },
@@ -196,23 +214,56 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
 
       {/* ── Agents ── */}
       {tab === "agents" && (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {agents.length === 0 && <Empty text="אין סוכנים להצגה בערי ההתמחות שלך." />}
-          {agents.map((a) => (
-            <div key={a.id} className="rounded-2xl border border-line bg-surface p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-sm font-black text-ink">{a.fullName}</div>
-                  <div className="text-xs text-muted">{[a.city, a.roleTitle].filter(Boolean).join(" · ") || "—"}</div>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["all", "הכל"],
+              ["resolved", "משויכים למשרד"],
+              ["unresolved", "ללא משרד"],
+              ["review", "לבדיקה"],
+              ["high", "ביטחון גבוה ≥90%"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setAgentFilter(key)}
+                className={`rounded-full border px-3 py-1 text-xs font-bold transition ${
+                  agentFilter === key
+                    ? "border-brand bg-brand-soft text-brand-strong"
+                    : "border-line bg-surface text-muted hover:text-ink"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {agents.length === 0 && <Empty text="אין סוכנים להצגה בסינון הנוכחי." />}
+            {agents.map((a) => {
+              const officeName = a.officeId ? officeNameById.get(a.officeId) ?? null : null;
+              const listings = listingsByAgent.get(a.id) ?? 0;
+              return (
+                <div key={a.id} className="rounded-2xl border border-line bg-surface p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-black text-ink">{a.fullName}</div>
+                      <div className="text-xs text-muted">{[a.city, a.roleTitle].filter(Boolean).join(" · ") || "—"}</div>
+                    </div>
+                    <Badge tone={confTone(a.confidenceScore)}>{Math.round(a.confidenceScore)}%</Badge>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                    {officeName
+                      ? <Badge tone="green">🏢 {officeName}</Badge>
+                      : <Badge tone="amber">משרד טרם זוהה</Badge>}
+                    {listings > 0 && <span className="rounded-full bg-violet-50 px-2 py-0.5 font-bold text-violet-700">{listings} מודעות מקושרות</span>}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+                    <Badge>{statusHe(a.status)}</Badge>
+                    {a.primaryPhone && <span dir="ltr">{a.primaryPhone}</span>}
+                  </div>
                 </div>
-                <Badge tone={confTone(a.confidenceScore)}>{Math.round(a.confidenceScore)}%</Badge>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
-                <Badge>{statusHe(a.status)}</Badge>
-                {a.primaryPhone && <span dir="ltr">{a.primaryPhone}</span>}
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       )}
 
