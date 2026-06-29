@@ -25,19 +25,19 @@ const statusHe = (s: string) => STATUS_HE[s] ?? s;
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className={`text-2xl font-black ${tone ?? "text-white"}`}>{value.toLocaleString("he-IL")}</div>
-      <div className="mt-1 text-xs font-bold text-white/55">{label}</div>
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <div className={`text-2xl font-black ${tone ?? "text-ink"}`}>{value.toLocaleString("he-IL")}</div>
+      <div className="mt-1 text-xs font-bold text-muted">{label}</div>
     </div>
   );
 }
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${active ? "bg-brand-strong text-white" : "border border-white/10 bg-white/5 text-white/60 hover:text-white"}`}>{children}</button>
+    <button onClick={onClick} className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${active ? "bg-brand-strong text-ink" : "border border-line bg-surface text-muted hover:text-ink"}`}>{children}</button>
   );
 }
 function Badge({ children, tone = "white" }: { children: React.ReactNode; tone?: "white" | "green" | "amber" | "red" }) {
-  const c = tone === "green" ? "bg-emerald-500/15 text-emerald-300" : tone === "amber" ? "bg-amber-500/15 text-amber-300" : tone === "red" ? "bg-rose-500/15 text-rose-300" : "bg-white/10 text-white/70";
+  const c = tone === "green" ? "bg-emerald-50 text-emerald-700" : tone === "amber" ? "bg-amber-50 text-amber-700" : tone === "red" ? "bg-rose-50 text-rose-700" : "bg-surface text-muted";
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${c}`}>{children}</span>;
 }
 function confTone(n: number): "green" | "amber" | "red" { return n >= 95 ? "green" : n >= 70 ? "amber" : "red"; }
@@ -73,13 +73,13 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
   return (
     <div dir="rtl" className="flex flex-col gap-5">
       {/* Header */}
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1a1033] via-[#241246] to-[#150a2b] p-4 sm:p-5">
-        <div className="pointer-events-none absolute -top-24 -start-24 h-56 w-56 rounded-full bg-purple-600/30 blur-3xl" />
+      <section className="relative overflow-hidden rounded-2xl border border-line bg-card p-4 sm:p-5">
+        <div className="pointer-events-none absolute -top-24 -start-24 h-56 w-56 rounded-full bg-brand-soft/50 blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-black tracking-wide text-purple-300">BROKERAGE INTELLIGENCE</p>
-            <h1 className="text-2xl font-black text-white sm:text-3xl">מודיעין משרדי תיווך</h1>
-            <p className="mt-1 max-w-2xl text-sm text-white/60">בניית גרף מודיעין מלא של משרדי תיווך, סוכנים, טריטוריות וקשרי שוק. כל סריקת מודעות חיצונית עוברת זיהוי זהויות מול שכבת הליבה הזו — מידע ציבורי/עסקי בלבד, ללא מחיקה אוטומטית.</p>
+            <p className="text-[11px] font-black tracking-wide text-brand">BROKERAGE INTELLIGENCE</p>
+            <h1 className="text-2xl font-black text-ink sm:text-3xl">מודיעין משרדי תיווך</h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted">בניית גרף מודיעין מלא של משרדי תיווך, סוכנים, טריטוריות וקשרי שוק. כל סריקת מודעות חיצונית עוברת זיהוי זהויות מול שכבת הליבה הזו — מידע ציבורי/עסקי בלבד, ללא מחיקה אוטומטית.</p>
             <div className="mt-2">
               {owner
                 ? <Badge tone="green">בעלים — גישה לאומית מלאה</Badge>
@@ -93,25 +93,25 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
             </div>
           )}
         </div>
-        {(msg || err) && <p className={`relative mt-3 text-sm font-bold ${err ? "text-rose-300" : "text-emerald-300"}`}>{err ?? msg}</p>}
+        {(msg || err) && <p className={`relative mt-3 text-sm font-bold ${err ? "text-rose-700" : "text-emerald-700"}`}>{err ?? msg}</p>}
       </section>
 
       {/* First-run onboarding — shown only when the brokerage graph is still empty. */}
       {cc.stats.offices === 0 && cc.stats.agents === 0 && cc.runs.length === 0 && (
-        <section dir="rtl" className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center sm:p-6">
-          <span className="mx-auto mb-2.5 grid h-12 w-12 place-items-center rounded-2xl bg-purple-500/15 text-2xl">🏢</span>
-          <h2 className="text-lg font-black text-white sm:text-xl">עדיין לא זוהו משרדי תיווך</h2>
-          <p className="mx-auto mt-1.5 max-w-xl text-sm text-white/60">
+        <section dir="rtl" className="relative overflow-hidden rounded-2xl border border-line bg-surface p-5 text-center sm:p-6">
+          <span className="mx-auto mb-2.5 grid h-12 w-12 place-items-center rounded-2xl bg-brand-soft text-2xl">🏢</span>
+          <h2 className="text-lg font-black text-ink sm:text-xl">עדיין לא זוהו משרדי תיווך</h2>
+          <p className="mx-auto mt-1.5 max-w-xl text-sm text-muted">
             הפעל סריקה ראשונית כדי לבנות את גרף המודיעין של השוק. הסריקה תאסוף מודעות, תזהה משרדים וסוכנים, ותקשר ביניהם — ממידע ציבורי בלבד.
           </p>
-          <p className="text-white/45 mt-1.5 text-xs">⏱ משך משוער: 1–3 דקות · מתעדכן אוטומטית ברקע</p>
+          <p className="text-muted mt-1.5 text-xs">⏱ משך משוער: 1–3 דקות · מתעדכן אוטומטית ברקע</p>
           <div className="mt-5 flex flex-col items-center gap-2">
             <Button className="!min-w-[320px]" onClick={() => run(() => requestBrokerageRefreshAction({ runType: "full_country" }))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={18} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
             <Button variant="ghost" onClick={() => run(resolveBrokerageNowAction)} disabled={pending}>⚙ זהה מתוך נתונים קיימים</Button>
           </div>
-          <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-right">
-            <p className="mb-2 text-xs font-black text-white/80">מה יקרה אחרי הסריקה:</p>
-            <ul className="flex flex-col gap-1.5 text-sm text-white/60">
+          <div className="mx-auto mt-6 max-w-md rounded-2xl border border-line bg-surface p-4 text-right">
+            <p className="mb-2 text-xs font-black text-ink">מה יקרה אחרי הסריקה:</p>
+            <ul className="flex flex-col gap-1.5 text-sm text-muted">
               <li>✓ משרדי תיווך יזוהו וימופו</li>
               <li>✓ סוכנים יותאמו למשרדים</li>
               <li>✓ טריטוריות ואזורי שליטה יחושבו</li>
@@ -128,7 +128,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
       </div>
 
       {(tab === "offices" || tab === "agents") && (
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חיפוש לפי שם או עיר…" className="w-full max-w-md rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80" />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חיפוש לפי שם או עיר…" className="w-full max-w-md rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink" />
       )}
 
       {/* ── Overview ── */}
@@ -136,12 +136,12 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="משרדים" value={cc.stats.offices} />
           <Stat label="סוכנים" value={cc.stats.agents} />
-          <Stat label="משרדים מאומתים" value={cc.stats.verifiedOffices} tone="text-emerald-300" />
-          <Stat label="סוכנים מאומתים" value={cc.stats.verifiedAgents} tone="text-emerald-300" />
-          <Stat label="מועמדים לאימות" value={cc.stats.candidates} tone="text-amber-300" />
-          <Stat label="מודעות מקושרות" value={cc.stats.linkedListings} tone="text-violet-300" />
-          {owner && <Stat label="קונפליקטים פתוחים" value={cc.stats.openConflicts} tone="text-rose-300" />}
-          {owner && <Stat label="התאמות לבדיקה" value={cc.stats.pendingMatches} tone="text-amber-300" />}
+          <Stat label="משרדים מאומתים" value={cc.stats.verifiedOffices} tone="text-emerald-700" />
+          <Stat label="סוכנים מאומתים" value={cc.stats.verifiedAgents} tone="text-emerald-700" />
+          <Stat label="מועמדים לאימות" value={cc.stats.candidates} tone="text-amber-700" />
+          <Stat label="מודעות מקושרות" value={cc.stats.linkedListings} tone="text-violet-700" />
+          {owner && <Stat label="קונפליקטים פתוחים" value={cc.stats.openConflicts} tone="text-rose-700" />}
+          {owner && <Stat label="התאמות לבדיקה" value={cc.stats.pendingMatches} tone="text-amber-700" />}
         </div>
       )}
 
@@ -150,15 +150,15 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="grid gap-3 md:grid-cols-2">
           {offices.length === 0 && <Empty text="אין משרדים להצגה בערי ההתמחות שלך." />}
           {offices.map((o) => (
-            <div key={o.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div key={o.id} className="rounded-2xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-base font-black text-white">{o.name}</div>
-                  <div className="text-xs text-white/55">{[o.city, o.brandNetwork].filter(Boolean).join(" · ") || "—"}</div>
+                  <div className="text-base font-black text-ink">{o.name}</div>
+                  <div className="text-xs text-muted">{[o.city, o.brandNetwork].filter(Boolean).join(" · ") || "—"}</div>
                 </div>
                 <Badge tone={confTone(o.confidenceScore)}>{Math.round(o.confidenceScore)}%</Badge>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/55">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                 <Badge>{statusHe(o.status)}</Badge>
                 {o.primaryPhone && <span dir="ltr">{o.primaryPhone}</span>}
                 {o.googleRating != null && <span>★ {o.googleRating}{o.googleReviewsCount ? ` (${o.googleReviewsCount})` : ""}</span>}
@@ -173,15 +173,15 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {agents.length === 0 && <Empty text="אין סוכנים להצגה בערי ההתמחות שלך." />}
           {agents.map((a) => (
-            <div key={a.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div key={a.id} className="rounded-2xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-sm font-black text-white">{a.fullName}</div>
-                  <div className="text-xs text-white/55">{[a.city, a.roleTitle].filter(Boolean).join(" · ") || "—"}</div>
+                  <div className="text-sm font-black text-ink">{a.fullName}</div>
+                  <div className="text-xs text-muted">{[a.city, a.roleTitle].filter(Boolean).join(" · ") || "—"}</div>
                 </div>
                 <Badge tone={confTone(a.confidenceScore)}>{Math.round(a.confidenceScore)}%</Badge>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/55">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                 <Badge>{statusHe(a.status)}</Badge>
                 {a.primaryPhone && <span dir="ltr">{a.primaryPhone}</span>}
               </div>
@@ -195,15 +195,15 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="grid gap-3 md:grid-cols-2">
           {cc.links.length === 0 && <Empty text="עדיין אין קישורים. הרץ סנכרון נכסים חיצוניים או 'זהה עכשיו'." />}
           {cc.links.map((l) => (
-            <div key={l.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div key={l.id} className="rounded-2xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-sm font-black text-white">{l.matchedName || l.matchedPhone || "מודעה חיצונית"}</div>
-                  <div className="text-xs text-white/55">{[l.city, l.matchedSource].filter(Boolean).join(" · ") || "—"}</div>
+                  <div className="text-sm font-black text-ink">{l.matchedName || l.matchedPhone || "מודעה חיצונית"}</div>
+                  <div className="text-xs text-muted">{[l.city, l.matchedSource].filter(Boolean).join(" · ") || "—"}</div>
                 </div>
                 <Badge tone={confTone(l.confidenceScore)}>{Math.round(l.confidenceScore)}%</Badge>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/55">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                 <Badge tone={l.status === "confirmed" ? "green" : l.status === "rejected" ? "red" : "amber"}>{statusHe(l.status)}</Badge>
                 {l.matchReasons.slice(0, 3).map((r, i) => <span key={i}>· {r}</span>)}
               </div>
@@ -223,13 +223,13 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="grid gap-3">
           {cc.conflicts.length === 0 && <Empty text="אין קונפליקטים פתוחים." />}
           {cc.conflicts.map((c) => (
-            <div key={c.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="text-sm font-black text-white">{c.conflictType}{c.fieldName ? ` · ${c.fieldName}` : ""}</div>
-              <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-white/60">
-                <div className="rounded-lg bg-white/5 p-2">A: {c.valueA ?? "—"}{c.confidenceA != null ? ` (${Math.round(c.confidenceA)}%)` : ""}</div>
-                <div className="rounded-lg bg-white/5 p-2">B: {c.valueB ?? "—"}{c.confidenceB != null ? ` (${Math.round(c.confidenceB)}%)` : ""}</div>
+            <div key={c.id} className="rounded-2xl border border-line bg-surface p-4">
+              <div className="text-sm font-black text-ink">{c.conflictType}{c.fieldName ? ` · ${c.fieldName}` : ""}</div>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-muted">
+                <div className="rounded-lg bg-surface p-2">A: {c.valueA ?? "—"}{c.confidenceA != null ? ` (${Math.round(c.confidenceA)}%)` : ""}</div>
+                <div className="rounded-lg bg-surface p-2">B: {c.valueB ?? "—"}{c.confidenceB != null ? ` (${Math.round(c.confidenceB)}%)` : ""}</div>
               </div>
-              {c.aiRecommendation && <p className="mt-2 text-xs text-violet-300">המלצת AI: {c.aiRecommendation}</p>}
+              {c.aiRecommendation && <p className="mt-2 text-xs text-violet-700">המלצת AI: {c.aiRecommendation}</p>}
               <div className="mt-3 flex gap-2">
                 <Button size="sm" onClick={() => run(() => resolveConflictAction(c.id, "resolved"))} disabled={pending}>פתור</Button>
                 <Button size="sm" variant="ghost" onClick={() => run(() => resolveConflictAction(c.id, "ignored"))} disabled={pending}>התעלם</Button>
@@ -244,12 +244,12 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="grid gap-3 md:grid-cols-2">
           {cc.matches.length === 0 && <Empty text="אין התאמות הממתינות לבדיקה." />}
           {cc.matches.map((m) => (
-            <div key={m.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div key={m.id} className="rounded-2xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-2">
-                <div className="text-sm font-black text-white">{m.matchType}</div>
+                <div className="text-sm font-black text-ink">{m.matchType}</div>
                 <Badge tone={confTone(m.confidenceScore)}>{Math.round(m.confidenceScore)}%</Badge>
               </div>
-              <div className="mt-1 text-xs text-white/55">{m.matchReasons.slice(0, 4).join(" · ") || "—"}</div>
+              <div className="mt-1 text-xs text-muted">{m.matchReasons.slice(0, 4).join(" · ") || "—"}</div>
               <div className="mt-3 flex gap-2">
                 <Button size="sm" onClick={() => run(() => reviewMatchAction(m.id, "approve"))} disabled={pending}>אשר</Button>
                 <Button size="sm" variant="ghost" onClick={() => run(() => reviewMatchAction(m.id, "reject"))} disabled={pending}>דחה</Button>
@@ -263,27 +263,27 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
       {tab === "sources" && owner && (
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-sm font-black text-white/80">מקורות נתונים</h3>
+            <h3 className="mb-2 text-sm font-black text-ink">מקורות נתונים</h3>
             <div className="grid gap-2">
               {cc.sources.map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                  <span className="font-bold text-white/80">{s.name}</span>
-                  <span className="flex items-center gap-2 text-xs text-white/50"><Badge tone={s.isActive ? "green" : "red"}>{s.isActive ? "פעיל" : "כבוי"}</Badge>אמינות {s.reliabilityScore}</span>
+                <div key={s.id} className="flex items-center justify-between rounded-xl border border-line bg-surface px-3 py-2 text-sm">
+                  <span className="font-bold text-ink">{s.name}</span>
+                  <span className="flex items-center gap-2 text-xs text-muted"><Badge tone={s.isActive ? "green" : "red"}>{s.isActive ? "פעיל" : "כבוי"}</Badge>אמינות {s.reliabilityScore}</span>
                 </div>
               ))}
             </div>
           </div>
           <div>
-            <h3 className="mb-2 text-sm font-black text-white/80">היסטוריית רענון</h3>
+            <h3 className="mb-2 text-sm font-black text-ink">היסטוריית רענון</h3>
             <div className="grid gap-2">
               {cc.runs.length === 0 && <Empty text="עדיין לא בוצעו רענונים." />}
               {cc.runs.map((r) => (
-                <div key={r.id} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                <div key={r.id} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-white/80">{r.runType}</span>
+                    <span className="font-bold text-ink">{r.runType}</span>
                     <Badge tone={r.status === "completed" ? "green" : r.status === "failed" ? "red" : "amber"}>{r.status}</Badge>
                   </div>
-                  <div className="mt-1 text-xs text-white/50">חדשים: {r.newOffices}/{r.newAgents} · עודכנו: {r.updatedRecords} · קונפליקטים: {r.conflictsCreated}</div>
+                  <div className="mt-1 text-xs text-muted">חדשים: {r.newOffices}/{r.newAgents} · עודכנו: {r.updatedRecords} · קונפליקטים: {r.conflictsCreated}</div>
                 </div>
               ))}
             </div>
@@ -291,11 +291,11 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         </div>
       )}
 
-      <p className="text-[11px] text-white/35">מידע ציבורי/עסקי בלבד · אין מחיקה אוטומטית · כל שינוי מתועד עם מקור ורמת ביטחון.</p>
+      <p className="text-[11px] text-muted/70">מידע ציבורי/עסקי בלבד · אין מחיקה אוטומטית · כל שינוי מתועד עם מקור ורמת ביטחון.</p>
     </div>
   );
 }
 
 function Empty({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-6 text-center text-sm text-white/50">{text}</div>;
+  return <div className="rounded-2xl border border-dashed border-line bg-surface p-6 text-center text-sm text-muted">{text}</div>;
 }
