@@ -14,7 +14,7 @@ export type ContactType =
   | "phone" | "email" | "whatsapp" | "website" | "facebook" | "instagram" | "linkedin";
 export type SourceType =
   | "google" | "yad2" | "madlan" | "website" | "facebook" | "easy" | "b144" | "manual" | "other";
-export type RefreshRunType = "full_country" | "city" | "region" | "source" | "office" | "agent";
+export type RefreshRunType = "full_country" | "city" | "region" | "source" | "office" | "agent" | "discovery";
 export type RefreshStatus = "pending" | "running" | "completed" | "failed" | "partial";
 export type ChangeType = "created" | "updated" | "enriched" | "conflict" | "merged" | "marked_inactive";
 export type MatchType =

@@ -15,6 +15,7 @@ import {
 import type { BrokerageDna } from "./dna";
 import { reasonBrokerageDna, type DnaReasonResult } from "./dna-reasoning";
 import { getBrokerageAccess } from "./permissions";
+import { discoverBrokeragePublishers, type DiscoveryResult } from "./discovery";
 
 export async function getBrokerageCommandCenterAction(opts: { city?: string | null; search?: string | null } = {}): Promise<BrokerageCommandCenter | null> {
   try { return await getBrokerageCommandCenter(opts); }
@@ -127,6 +128,31 @@ export async function startBrokerageDataRefreshAction(params: Record<string, unk
   } catch (e) {
     console.error("[brokerage-data] start refresh failed:", e);
     return { ok: false, runId: null, status: "failed", error: "הסריקה לא התחילה. בדוק חיבור או נסה שוב." };
+  }
+}
+
+export interface DiscoveryActionState { ok: boolean; result?: DiscoveryResult; error?: string }
+
+/**
+ * Discover broker/agent publishers from the org's already-ingested external
+ * listings (lawful `listing_publishers` provider — no web scraping). New brokers
+ * are persisted as candidates and deduped. Owner/admin only (writes national
+ * candidate data). Friendly Hebrew errors.
+ */
+export async function discoverBrokeragePublishersAction(): Promise<DiscoveryActionState> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר כדי להפעיל גילוי." };
+    const access = await getBrokerageAccess();
+    if (!access?.isOwner) return { ok: false, error: "גילוי מפרסמים זמין למנהל הסוכנות בלבד." };
+    const p = profile as { id?: string | null };
+    console.info(`[brokerage-data] publisher discovery by user=${p.id ?? "?"} org=${profile.org_id}`);
+    const result = await discoverBrokeragePublishers(profile.org_id, p.id ?? null);
+    revalidatePath("/brokerage-data");
+    return result.ran ? { ok: true, result } : { ok: false, error: result.message };
+  } catch (e) {
+    console.error("[brokerage-data] discovery action failed:", e);
+    return { ok: false, error: "הגילוי לא התחיל. נסה שוב בעוד רגע." };
   }
 }
 

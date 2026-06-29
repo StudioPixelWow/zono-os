@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import type { BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import {
   resolveBrokerageNowAction, startBrokerageDataRefreshAction, getBrokerageRefreshStatusAction,
-  reviewMatchAction, resolveConflictAction, decideLinkAction,
+  reviewMatchAction, resolveConflictAction, decideLinkAction, discoverBrokeragePublishersAction,
 } from "@/lib/brokerage-data/actions";
 import { DnaDrawer, type DnaTarget } from "./DnaDrawer";
 
@@ -342,7 +342,21 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
 
       {/* ── Refresh runs + sources (owner) ── */}
       {tab === "sources" && owner && (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="flex flex-col gap-5">
+          <div className="rounded-2xl border border-brand/30 bg-brand-soft/40 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black text-brand-strong">🔎 גילוי מפרסמים</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                  מאתר מתווכים חדשים מתוך מודעות שכבר נסרקו לארגון שלך (מקור ציבורי בלבד, ללא סריקת אינטרנט). מתווכים חדשים נשמרים כ&quot;מועמדים&quot; ומסוננים מול הקיימים.
+                </p>
+              </div>
+              <Button size="sm" onClick={() => run(() => discoverBrokeragePublishersAction().then((r) => r.ok ? { message: r.result?.message } : { error: r.error }))} disabled={pending}>
+                גלה מפרסמים
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-sm font-black text-ink">מקורות נתונים</h3>
             <div className="grid gap-2">
@@ -368,6 +382,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
                 </div>
               ))}
             </div>
+          </div>
           </div>
         </div>
       )}
