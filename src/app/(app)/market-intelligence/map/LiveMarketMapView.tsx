@@ -9,6 +9,11 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ZonoMap, type ZonoMapPoint } from "@/components/maps/ZonoMap";
 import { TerminalSection, Metric, MetricGrid, StatusBadge, Pill, TerminalEmpty, val, pct01, type StatusTone } from "@/components/intelligence/terminal";
+import {
+  IntelligencePage, IntelligenceHeader, IntelligenceActionBar, IntelligenceActionLink,
+  IntelligenceSidebar, IntelligenceDrawer, IntelligenceEmptyState,
+} from "@/components/intelligence/framework";
+import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
 import { getZoneIntelligenceAction } from "@/lib/intelligence-explorer/zone-actions";
 import type { MapIntelligenceDTO, MapLayer, MapZone } from "@/lib/intelligence-explorer/map";
 import type { TerritoryIntelligenceDTO } from "@/lib/agencies/api/agencyIntelligenceApiTypes";
@@ -45,26 +50,35 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
     start(async () => { setZoneData(await getZoneIntelligenceAction(z.city || null, z.neighborhood)); });
   };
 
-  return (
-    <div dir="rtl" className="mx-auto flex max-w-[1400px] flex-col gap-4 p-3 sm:p-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <span className="bg-brand-soft text-brand-strong grid h-12 w-12 place-items-center rounded-2xl text-2xl">🗺️</span>
-          <div>
-            <p className="text-brand text-[11px] font-black tracking-wide">LIVE MARKET INTELLIGENCE MAP™</p>
-            <h1 className="text-ink text-2xl font-black sm:text-3xl">מפת מודיעין שוק חיה</h1>
-            <p className="text-muted mt-0.5 text-sm">{data.points.length} מיקומים · {data.zones.length} שכונות · מודיעין קיים בלבד.</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/market-intelligence/listings" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">🌍 מודעות שוק</Link>
-          <Link href="/market-intelligence/dashboard" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">📊 דשבורד שוק</Link>
-        </div>
-      </header>
+  const hasPoints = data.points.length > 0;
 
-      <div className="grid gap-4 lg:grid-cols-[260px_1fr_300px]">
-        {/* Layer panel + zones */}
-        <aside className="flex flex-col gap-4">
+  return (
+    <IntelligencePage wide>
+      <MarketIntelNav active="map" crumbs={[{ label: "מפת שוק חיה" }]} />
+
+      <IntelligenceHeader
+        emoji="🗺️"
+        eyebrow="LIVE MARKET MAP"
+        title="מפת שוק חיה"
+        subtitle="שכבות מודיעין על נכסי שוק, הזדמנויות, ירידות מחיר ואזורים פעילים."
+        actions={
+          <IntelligenceActionBar>
+            <IntelligenceActionLink href="/market-intelligence/listings">🌍 נכסי השוק</IntelligenceActionLink>
+            <IntelligenceActionLink href="/market-intelligence/dashboard">📊 דשבורד מודיעין</IntelligenceActionLink>
+            <IntelligenceActionLink href="/property-radar">📡 רדאר נכסים</IntelligenceActionLink>
+          </IntelligenceActionBar>
+        }
+      />
+
+      {!hasPoints ? (
+        <IntelligenceEmptyState
+          title="עדיין אין מספיק נכסים עם מיקום להצגת מפה"
+          steps={["סנכרן נכסים חיצוניים כדי להתחיל", "רענן מערכת", "חזור למפה לאחר הסנכרון"]}
+        />
+      ) : (
+      <div className="grid gap-4 lg:grid-cols-[240px_1fr_280px]">
+        {/* Layer panel + zones (compact) */}
+        <IntelligenceSidebar>
           <TerminalSection title="שכבות מפה" subtitle="הפעל/כבה עצמאית">
             <div className="flex flex-col gap-1.5">
               {LAYERS.map((l) => {
@@ -86,7 +100,7 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
             </div>
           </TerminalSection>
 
-          <TerminalSection title="Zone Explorer™" subtitle="בחר שכונה לפתיחת מודיעין">
+          <TerminalSection title="סייר אזורים" subtitle="בחר שכונה לפתיחת מודיעין">
             {data.zones.length ? (
               <div className="flex max-h-[40vh] flex-col gap-1 overflow-y-auto">
                 {data.zones.slice(0, 40).map((z) => (
@@ -98,16 +112,16 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
               </div>
             ) : <TerminalEmpty text="אין שכונות גאוקודדות עדיין." />}
           </TerminalSection>
-        </aside>
+        </IntelligenceSidebar>
 
-        {/* Map */}
+        {/* Map — visually dominant */}
         <div className="min-w-0">
-          <ZonoMap points={points} heatmap={heatmap} heightClass="h-[72vh]" emptyMessage="אין מיקומים גאוקודדים לשכבות שנבחרו." clusterThreshold={80} />
+          <ZonoMap points={points} heatmap={heatmap} heightClass="h-[74vh]" emptyMessage="אין מיקומים גאוקודדים לשכבות שנבחרו." clusterThreshold={80} />
         </div>
 
-        {/* Live feed */}
+        {/* Live feed — secondary */}
         <aside>
-          <TerminalSection title="Live Feed™" subtitle="כרונולוגי — אירועים קיימים">
+          <TerminalSection title="פיד שוק חי" subtitle="כרונולוגי — אירועים קיימים">
             {data.feed.length ? (
               <div className="flex max-h-[64vh] flex-col overflow-y-auto">
                 {data.feed.map((f) => (
@@ -125,33 +139,29 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
           </TerminalSection>
         </aside>
       </div>
+      )}
 
-      {/* Zone Explorer drawer */}
-      {zone && (
-        <div className="fixed inset-0 z-50 flex justify-start" onClick={() => setZone(null)}>
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <div dir="rtl" className="bg-card border-line relative ms-0 h-full w-full max-w-md overflow-y-auto border-e p-5 shadow-[var(--shadow-lift)] sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-brand text-[11px] font-black tracking-wide">ZONE EXPLORER™</p>
-                <h2 className="text-ink text-xl font-black">{zone.neighborhood}</h2>
-                <p className="text-muted text-sm">{zone.city || "—"}</p>
-              </div>
-              <button onClick={() => setZone(null)} className="text-muted hover:text-ink text-xl font-black">✕</button>
-            </div>
-
+      {/* Zone drawer — one reusable Intelligence drawer (Phase 26.8) */}
+      <IntelligenceDrawer
+        open={!!zone}
+        onClose={() => setZone(null)}
+        eyebrow="אזור שנבחר"
+        title={zone?.neighborhood ?? ""}
+        subtitle={zone?.city || "—"}
+      >
+        {zone && (
+          <>
             <MetricGrid>
               <Metric label="מודעות באזור" value={String(zone.listings)} accent />
               <Metric label="ללא מתווך" value={String(zone.privateListings)} />
             </MetricGrid>
-
             <div className="mt-4">
               {pending && !zoneData ? <TerminalEmpty text="טוען מודיעין אזור…" /> : zoneData ? <ZoneIntel dto={zoneData} /> : <TerminalEmpty text="אין מודיעין מפורט לאזור זה עדיין." />}
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+          </>
+        )}
+      </IntelligenceDrawer>
+    </IntelligencePage>
   );
 }
 

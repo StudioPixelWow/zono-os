@@ -10,6 +10,7 @@ import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 import { MorningBrief } from "@/components/intelligence/MorningBrief";
 import { countSince, topAreas, type IntelligenceDashboardDTO } from "@/lib/intelligence-explorer/dashboard-shared";
 import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
+import { IntelligencePage, IntelligenceHeader } from "@/components/intelligence/framework";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
@@ -20,17 +21,15 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
   const feed = [...explorer.listings].filter((l) => l.firstSeenAt).sort((a, b) => new Date(b.firstSeenAt!).getTime() - new Date(a.firstSeenAt!).getTime()).slice(0, 16);
 
   return (
-    <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-4 p-4 sm:p-6">
-      <header className="flex items-start gap-3">
-        <span className="bg-brand-soft text-brand-strong grid h-12 w-12 place-items-center rounded-2xl text-2xl">🌍</span>
-        <div>
-          <p className="text-brand text-[11px] font-black tracking-wide">MARKET INTELLIGENCE™</p>
-          <h1 className="text-ink text-2xl font-black sm:text-3xl">דשבורד מודיעין שוק</h1>
-          <p className="text-muted mt-0.5 text-sm">מה השתנה · מה דורש תשומת לב · היכן ההזדמנויות.</p>
-        </div>
-      </header>
+    <IntelligencePage>
+      <MarketIntelNav active="dashboard" crumbs={[{ label: "דשבורד מודיעין" }]} />
 
-      <MarketIntelNav active="dashboard" crumbs={[{ label: "דשבורד" }]} />
+      <IntelligenceHeader
+        emoji="🌍"
+        eyebrow="MARKET INTELLIGENCE"
+        title="דשבורד מודיעין שוק"
+        subtitle="מה השתנה · מה דורש תשומת לב · היכן ההזדמנויות."
+      />
 
       {/* Quick access — direct one-click entry to all external market listings. */}
       <Link href="/market-intelligence/listings" className="border-brand-light bg-brand-soft hover:bg-brand-soft/70 flex items-center justify-between gap-3 rounded-2xl border p-4 transition">
@@ -119,6 +118,6 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
           </div>
         ) : <TerminalEmpty text="אין אירועים אחרונים." />}
       </TerminalSection>
-    </div>
+    </IntelligencePage>
   );
 }

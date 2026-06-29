@@ -19,6 +19,9 @@ const HREFS: Record<string, string> = {
   "office-dashboard": "/office-intelligence/dashboard", "intelligence-explorer": "/intelligence-explorer",
   "live-market-map": "/market-intelligence/map", "action-center": "/action-center",
   "mission-control": "/mission-control",
+  // Phase 26.7.3 — clear grouped intelligence navigation:
+  "property-radar": "/property-radar", "neighborhood-dashboard": "/neighborhood-intelligence/dashboard",
+  "brokerage-data": "/brokerage-data", "ai-memory": "/mission-control", "ai-missions": "/mission-control",
   properties: "/properties", buyers: "/buyers", sellers: "/sellers", matches: "/matches",
   deals: "/deals", transactions: "/transactions", forecast: "/forecast", revenue: "/revenue",
   acquisition: "/acquisition", competitors: "/competitors", marketing: "/marketing",
@@ -52,8 +55,8 @@ interface NavGroup { key: string; label: string; icon: string; managerOnly?: boo
 const NAV_GROUPS: NavGroup[] = [
   { key: "main", label: "ראשי", icon: "Home", items: [
     { id: "home", label: "דף הבית", icon: "Home", tier: "v1" },
+    { id: "mission-control", label: "Mission Control", icon: "Sparkles", tier: "v1" },
     { id: "action-center", label: "מרכז הפעולות", icon: "Flame", tier: "v1" },
-    { id: "mission-control", label: "בקרת AI", icon: "Sparkles", tier: "v1" },
     { id: "notifications", label: "התראות", icon: "Bell", tier: "v1" },
     { id: "ai-office", label: "מוח המשרד", icon: "Sparkles", tier: "advanced" },
     { id: "command", label: "מרכז פיקוד", icon: "Flame", tier: "advanced" },
@@ -67,22 +70,31 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "communication", label: "תקשורת", icon: "MessageCircle", tier: "advanced" },
     { id: "journeys", label: "מסעות", icon: "Route", tier: "advanced" },
   ]},
-  { key: "intel", label: "מודיעין", icon: "BarChart3", items: [
-    { id: "market-listings", label: "מודעות שוק", icon: "Globe", tier: "v1" },
+  { key: "market", label: "מודיעין שוק", icon: "Globe", items: [
+    { id: "market-listings", label: "נכסי השוק", icon: "Globe", tier: "v1" },
     { id: "market-dashboard", label: "מודיעין שוק", icon: "Map", tier: "v1" },
-    { id: "intelligence-explorer", label: "חיפוש מודיעין", icon: "Search", tier: "v1" },
     { id: "live-market-map", label: "מפת שוק חיה", icon: "MapPin", tier: "v1" },
-    { id: "broker-dashboard", label: "מודיעין סוכנים", icon: "Users", tier: "v1" },
-    { id: "office-dashboard", label: "מודיעין משרדים", icon: "Building2", tier: "v1" },
-    { id: "recommendations", label: "המלצות", icon: "Sparkles", tier: "v1" },
-    { id: "matches", label: "התאמות", icon: "Sparkles", tier: "v1" },
-    { id: "forecast", label: "תחזית", icon: "TrendingUp", tier: "advanced" },
-    { id: "revenue", label: "הכנסות", icon: "BarChart3", tier: "advanced" },
-    { id: "territories", label: "טריטוריות", icon: "Map", tier: "advanced" },
+    { id: "intelligence-explorer", label: "חיפוש מודיעין", icon: "Search", tier: "v1" },
+    { id: "property-radar", label: "רדאר נכסים", icon: "MapPin", tier: "v1" },
+    { id: "matches", label: "התאמות", icon: "Sparkles", tier: "advanced" },
     { id: "transactions", label: "שוק ועסקאות", icon: "Landmark", tier: "advanced" },
     { id: "competitors", label: "מתחרים", icon: "BarChart3", tier: "advanced" },
     { id: "acquisition", label: "גיוס נכסים", icon: "Building", tier: "advanced" },
+    { id: "forecast", label: "תחזית", icon: "TrendingUp", tier: "advanced" },
+    { id: "revenue", label: "הכנסות", icon: "BarChart3", tier: "advanced" },
+    { id: "territories", label: "טריטוריות", icon: "Map", tier: "advanced" },
+  ]},
+  { key: "broker", label: "מודיעין מתווכים", icon: "BarChart3", items: [
+    { id: "broker-dashboard", label: "מודיעין סוכנים", icon: "Users", tier: "v1" },
+    { id: "office-dashboard", label: "מודיעין משרדים", icon: "Building2", tier: "v1" },
+    { id: "neighborhood-dashboard", label: "מודיעין שכונות", icon: "Map", tier: "v1" },
+    { id: "brokerage-data", label: "דאטה משרדי תיווך", icon: "Database", tier: "v1" },
     { id: "graph", label: "קשרים עסקיים", icon: "Sparkles", tier: "hidden" },
+  ]},
+  { key: "ai-growth", label: "AI וצמיחה", icon: "Sparkles", items: [
+    { id: "recommendations", label: "המלצות", icon: "Sparkles", tier: "v1" },
+    { id: "ai-memory", label: "AI Memory", icon: "Sparkles", tier: "v1" },
+    { id: "ai-missions", label: "משימות AI", icon: "ListChecks", tier: "v1" },
   ]},
   { key: "marketing", label: "שיווק", icon: "Megaphone", items: [
     { id: "creative-studio", label: "ZONO קריאייטיב", icon: "Presentation", tier: "v1" },
@@ -120,12 +132,19 @@ const NAV_GROUPS: NavGroup[] = [
   ]},
 ];
 
-/** Standard-mode flat order — the 12 V1 surfaces a brokerage learns in one day. */
+/** Standard-mode flat order — clear grouped V1 surfaces (Phase 26.7.3). */
 const V1_FLAT_ORDER = [
-  "home", "action-center",
-  "my-properties", "office-inventory", "buyers", "sellers", "deals", "matches",
-  "market-listings", "market-dashboard", "intelligence-explorer", "live-market-map", "broker-dashboard", "office-dashboard",
-  "creative-studio", "marketing", "recommendations", "team", "documents", "settings",
+  // Main
+  "home", "mission-control", "action-center",
+  // CRM
+  "my-properties", "office-inventory", "buyers", "sellers", "deals",
+  // Market Intelligence
+  "market-listings", "market-dashboard", "live-market-map", "intelligence-explorer", "property-radar",
+  // Broker Intelligence
+  "broker-dashboard", "office-dashboard", "neighborhood-dashboard", "brokerage-data",
+  // AI / Growth + core
+  "recommendations", "ai-memory", "ai-missions",
+  "creative-studio", "marketing", "team", "documents", "settings",
 ];
 
 const MANAGER_ROLES = new Set(["owner", "manager", "branch_manager", "admin"]);

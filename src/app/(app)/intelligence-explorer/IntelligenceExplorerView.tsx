@@ -10,6 +10,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { TerminalSection, Metric, StatusBadge, Pill, TerminalEmpty, val, type StatusTone } from "@/components/intelligence/terminal";
+import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
 import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 import type { IntelligenceExplorerDTO, ExplorerBroker, ExplorerOffice, ExplorerNeighborhood, ExplorerListing } from "@/lib/intelligence-explorer/types";
 
@@ -44,6 +45,7 @@ export function IntelligenceExplorerView({ data }: { data: IntelligenceExplorerD
 
   return (
     <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-4 p-4 sm:p-6">
+      <MarketIntelNav active="explorer" crumbs={[{ label: "חיפוש מודיעין" }]} />
       <header className="border-line bg-card rounded-2xl border p-5 sm:p-6">
         <div className="flex items-start gap-3">
           <span className="bg-brand-soft text-brand-strong grid h-12 w-12 place-items-center rounded-2xl text-2xl">🌍</span>

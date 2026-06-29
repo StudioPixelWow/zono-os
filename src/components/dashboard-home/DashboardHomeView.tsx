@@ -31,6 +31,20 @@ import {
   type CompetitorThreat,
 } from "./components/ReferenceSections";
 
+// Phase 26.7.3 — clear primary quick links to every key workspace + intelligence
+// surface. Navigation only (existing routes).
+const QUICK_LINKS: { label: string; icon: string; href: string }[] = [
+  { label: "הנכסים שלי", icon: "Building", href: "/my-properties" },
+  { label: "מלאי המשרד", icon: "Building2", href: "/office-inventory" },
+  { label: "נכסי השוק", icon: "Globe", href: "/market-intelligence/listings" },
+  { label: "מודיעין שוק", icon: "Map", href: "/market-intelligence/dashboard" },
+  { label: "מפת שוק חיה", icon: "MapPin", href: "/market-intelligence/map" },
+  { label: "מודיעין סוכנים", icon: "Users", href: "/broker-intelligence/dashboard" },
+  { label: "מודיעין משרדים", icon: "Building2", href: "/office-intelligence/dashboard" },
+  { label: "מרכז הפעולות", icon: "Flame", href: "/action-center" },
+  { label: "Mission Control", icon: "Sparkles", href: "/mission-control" },
+];
+
 const FAB_ACTIONS: { l: string; i: string; h: string }[] = [
   { l: "aiActions.findSellers", i: "Home", h: "/sellers" },
   { l: "aiActions.findBuyers", i: "Users", h: "/buyers" },
@@ -63,6 +77,18 @@ export function DashboardHomeView({
           <DashboardHero t={t} data={data} />
           <DashboardKpiStrip t={t} kpis={data.kpis} />
         </div>
+      </Reveal>
+
+      {/* Quick links — one-click access to every workspace + intelligence surface */}
+      <Reveal>
+        <nav dir="rtl" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {QUICK_LINKS.map((q) => (
+            <Link key={q.href + q.label} href={q.href} className="border-line bg-card hover:border-brand-light group flex items-center gap-2.5 rounded-2xl border p-3 transition">
+              <span className="bg-brand-soft text-brand-strong grid h-9 w-9 shrink-0 place-items-center rounded-xl"><Icon name={q.icon} size={17} /></span>
+              <span className="text-ink group-hover:text-brand-strong truncate text-sm font-bold transition">{q.label}</span>
+            </Link>
+          ))}
+        </nav>
       </Reveal>
 
       {/* 2 — Daily Attention Center · מה דורש טיפול היום? */}
