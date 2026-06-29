@@ -9,12 +9,14 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
 import { brokerageRepository } from "./repository";
 import { getBrokerageAccess } from "./permissions";
 import { resolveIdentity, type ListingContact } from "./identity";
 import { buildOfficeDna, buildBrokerDna, type BrokerageDna } from "./dna";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
 import { resolveBrokerOfficesForOrg } from "./office-resolution";
+import { getBrokerageDataOverview, type BrokerageDataOverview } from "./overview";
 import type {
   BrokerageAccess, BrokerageOffice, BrokerageAgent, BrokerageDataConflict, BrokerageIdentityMatch,
   BrokerageExternalListingLink, BrokerageRefreshRun, BrokerageDataSource, BrokerageDataStats, LinkStatus,
@@ -33,6 +35,8 @@ export interface BrokerageCommandCenter {
   /** Accurate linked-listing counts (across ALL links, not the display cap). */
   agentListingCounts: Record<string, number>;
   officeListingCounts: Record<string, number>;
+  /** CANONICAL counters — the single source of truth (service-role, RLS-independent). */
+  overview: BrokerageDataOverview;
 }
 
 /** Compose the /brokerage-data command center (RLS scopes every read). */
@@ -40,7 +44,9 @@ export async function getBrokerageCommandCenter(opts: { city?: string | null; se
   const access = await getBrokerageAccess();
   if (!access) return null;
   const owner = access.isOwner;
-  const [stats, offices, agents, links, conflicts, matches, runs, sources, counts] = await Promise.all([
+  const { profile } = await getSessionContext();
+  const orgId = profile?.org_id ?? null;
+  const [stats, offices, agents, links, conflicts, matches, runs, sources, counts, overview] = await Promise.all([
     brokerageRepository.stats(),
     brokerageRepository.listOffices({ city: opts.city ?? undefined, search: opts.search ?? undefined, limit: 300 }),
     brokerageRepository.listAgents({ city: opts.city ?? undefined, search: opts.search ?? undefined, limit: 300 }),
@@ -50,9 +56,10 @@ export async function getBrokerageCommandCenter(opts: { city?: string | null; se
     owner ? brokerageRepository.listRefreshRuns(20) : Promise.resolve([]),
     owner ? brokerageRepository.listSources() : Promise.resolve([]),
     brokerageRepository.linkCounts(),
+    getBrokerageDataOverview(orgId),
   ]);
   return {
-    access, stats, offices, agents, links, conflicts, matches, runs, sources,
+    access, stats, offices, agents, links, conflicts, matches, runs, sources, overview,
     agentListingCounts: Object.fromEntries(counts.byAgent),
     officeListingCounts: Object.fromEntries(counts.byOffice),
   };

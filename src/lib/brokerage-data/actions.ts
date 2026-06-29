@@ -18,10 +18,36 @@ import { getBrokerageAccess } from "./permissions";
 import { discoverBrokeragePublishers, type DiscoveryResult } from "./discovery";
 import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReasonResult } from "./office-reasoning";
 import { getProfileExtras, type ProfileExtras } from "./profile-data";
+import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 
 export async function getBrokerageCommandCenterAction(opts: { city?: string | null; search?: string | null } = {}): Promise<BrokerageCommandCenter | null> {
   try { return await getBrokerageCommandCenter(opts); }
   catch (e) { console.error("[brokerage-data] command center failed:", e); return null; }
+}
+
+/** CANONICAL brokerage counters — the single source of truth (RLS-independent,
+ *  matches the manual verification SQL). Gated by an authenticated org user with
+ *  brokerage access. Returns an empty (all-zero) overview when not visible. */
+export async function getBrokerageDataOverviewAction(): Promise<BrokerageDataOverview> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return EMPTY_BROKERAGE_OVERVIEW;
+    const access = await getBrokerageAccess();
+    if (!access) return EMPTY_BROKERAGE_OVERVIEW;
+    return await getBrokerageDataOverview(profile.org_id);
+  } catch (e) { console.error("[brokerage-data] overview failed:", e); return EMPTY_BROKERAGE_OVERVIEW; }
+}
+
+/** Real Broker Directory rows (canonical: brokerage_agents + links). Gated by an
+ *  authenticated org user with brokerage access. Null when not visible. */
+export async function getBrokerDirectoryAction(): Promise<BrokerDirectory | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    const access = await getBrokerageAccess();
+    if (!access) return null;
+    return await getBrokerDirectory();
+  } catch (e) { console.error("[brokerage-data] directory failed:", e); return null; }
 }
 
 /** Deterministic DNA profile for an office (RLS-scoped; null if not visible). */

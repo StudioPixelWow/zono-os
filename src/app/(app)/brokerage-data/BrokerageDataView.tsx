@@ -5,7 +5,7 @@
 // offices/agents/links only (RLS already returns nothing for owner-only tables).
 // ============================================================================
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import type { BrokerageCommandCenter } from "@/lib/brokerage-data/service";
@@ -89,7 +89,14 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
   const [agentFilter, setAgentFilter] = useState<"all" | "resolved" | "unresolved" | "review" | "high">("all");
   const [agentSort, setAgentSort] = useState<"listings" | "confidence" | "lastSeen">("listings");
   const [cityFilter, setCityFilter] = useState<string>("");
-  const [dnaTarget, setDnaTarget] = useState<DnaTarget | null>(null);
+  // Deep-link: open a broker's DNA profile drawer when arriving from the Broker
+  // Directory (/brokerage-data?broker=<id>&name=<name>) — the canonical profile.
+  // Computed in the lazy initializer (no setState-in-effect).
+  const searchParams = useSearchParams();
+  const [dnaTarget, setDnaTarget] = useState<DnaTarget | null>(() => {
+    const brokerId = searchParams.get("broker");
+    return brokerId ? { type: "broker", id: brokerId, name: searchParams.get("name") ?? "מתווך" } : null;
+  });
 
   const q = search.trim().toLowerCase();
   const offices = useMemo(() => cc.offices.filter((o) => !q || o.name.toLowerCase().includes(q) || (o.city ?? "").toLowerCase().includes(q)), [cc.offices, q]);
@@ -128,28 +135,17 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
     });
   }, [cc.agents, cc.agentListingCounts, q, cityFilter, agentFilter, agentSort]);
 
-  // Top brokers by REAL linked-listing count (server aggregation) — proves the
-  // resolution pipeline and powers the overview intelligence widget.
-  const topBrokers = useMemo(() =>
-    cc.agents
-      .map((a) => ({ a, count: cc.agentListingCounts[a.id] ?? 0 }))
-      .filter((x) => x.count > 0)
-      .sort((x, y) => y.count - x.count)
-      .slice(0, 8),
-  [cc.agents, cc.agentListingCounts]);
-
-  const totalLinkedToBrokers = useMemo(
-    () => Object.values(cc.agentListingCounts).reduce((s, n) => s + n, 0),
-    [cc.agentListingCounts],
-  );
+  // CANONICAL counters — the single source of truth across the whole page (hero,
+  // tabs, KPI cards, integrity section). Service-role aggregation, RLS-independent.
+  const ov = cc.overview;
 
   const tabs: { id: Tab; label: string; owner?: boolean }[] = [
     { id: "overview", label: "סקירה" },
-    { id: "offices", label: `משרדים (${cc.stats.offices})` },
-    { id: "agents", label: `סוכנים (${cc.stats.agents})` },
-    { id: "links", label: `קישורים (${cc.stats.linkedListings})` },
+    { id: "offices", label: `משרדים (${ov.officesTotal})` },
+    { id: "agents", label: `סוכנים (${ov.agentsTotal})` },
+    { id: "links", label: `קישורים (${ov.listingLinksTotal})` },
     { id: "conflicts", label: `קונפליקטים (${cc.stats.openConflicts})`, owner: true },
-    { id: "matches", label: `התאמות (${cc.stats.pendingMatches})`, owner: true },
+    { id: "matches", label: `התאמות (${ov.pendingOfficeMatches})`, owner: true },
     { id: "sources", label: "רענון ומקורות", owner: true },
   ];
 
@@ -182,8 +178,9 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         {(msg || err) && <p className={`relative mt-3 text-sm font-bold ${err ? "text-rose-700" : "text-emerald-700"}`}>{err ?? msg}</p>}
       </section>
 
-      {/* First-run onboarding — shown only when the brokerage graph is still empty. */}
-      {cc.stats.offices === 0 && cc.stats.agents === 0 && cc.runs.length === 0 && (
+      {/* First-run onboarding — shown only when the brokerage graph is truly empty
+          (canonical counters, RLS-independent — never a false "empty" from RLS). */}
+      {ov.agentsTotal === 0 && ov.officesTotal === 0 && ov.listingLinksTotal === 0 && (
         <section dir="rtl" className="relative overflow-hidden rounded-2xl border border-line bg-surface p-5 text-center sm:p-6">
           <span className="mx-auto mb-2.5 grid h-12 w-12 place-items-center rounded-2xl bg-brand-soft text-2xl">🏢</span>
           <h2 className="text-lg font-black text-ink sm:text-xl">עדיין לא זוהו משרדי תיווך</h2>
@@ -221,37 +218,82 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
       {tab === "overview" && (
         <div className="flex flex-col gap-5">
           <IntelligenceKpiGrid>
-            <IntelligenceKpi label="משרדי תיווך" value={cc.stats.offices.toLocaleString("he-IL")} hint={`${cc.stats.verifiedOffices} מאומתים`} accent />
-            <IntelligenceKpi label="מתווכים" value={cc.stats.agents.toLocaleString("he-IL")} hint={`${cc.stats.verifiedAgents} מאומתים`} accent />
-            <IntelligenceKpi label="מודעות מקושרות" value={cc.stats.linkedListings.toLocaleString("he-IL")} hint={`${totalLinkedToBrokers.toLocaleString("he-IL")} למתווכים`} />
-            <IntelligenceKpi label="מועמדים לאימות" value={cc.stats.candidates.toLocaleString("he-IL")} hint="זוהו, ממתינים לאישור" />
-            {owner && <IntelligenceKpi label="קונפליקטים פתוחים" value={cc.stats.openConflicts.toLocaleString("he-IL")} hint="לפתרון" />}
-            {owner && <IntelligenceKpi label="התאמות לבדיקה" value={cc.stats.pendingMatches.toLocaleString("he-IL")} hint="ממתינות לאישור" />}
+            <IntelligenceKpi label="מתווכים" value={ov.agentsTotal.toLocaleString("he-IL")} hint={`${ov.agentsWithOffice.toLocaleString("he-IL")} משויכים למשרד`} accent />
+            <IntelligenceKpi label="משרדי תיווך" value={ov.officesTotal.toLocaleString("he-IL")} hint={ov.officesTotal === 0 ? "טרם זוהו" : `${cc.stats.verifiedOffices} מאומתים`} accent />
+            <IntelligenceKpi label="קישורי מודעות" value={ov.listingLinksTotal.toLocaleString("he-IL")} hint={`${ov.listingLinksWithAgent.toLocaleString("he-IL")} עם מתווך`} />
+            <IntelligenceKpi label="מתווכים ללא משרד" value={ov.agentsWithoutOffice.toLocaleString("he-IL")} hint="ממתינים לשיוך משרד" />
+            <IntelligenceKpi label="איכות נתונים" value={`${ov.dataQuality.score}%`} hint={ov.dataQuality.label} />
+            {owner && <IntelligenceKpi label="התאמות לבדיקה" value={ov.pendingOfficeMatches.toLocaleString("he-IL")} hint="ממתינות לאישור" />}
           </IntelligenceKpiGrid>
+
+          {/* ── Data Integrity — diagnostic, user-friendly, single source of truth ── */}
+          <IntelligenceSection title="תקינות נתונים" subtitle="מצב צינור הנתונים: מודעה ← מתווך ← משרד (נתוני אמת מאומתים)">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              <IntegrityStat label="מודעות עם מתווך" value={ov.refreshMetrics?.externalListingsWithAgent ?? ov.listingLinksWithAgent} />
+              <IntegrityStat label="מתווכים שזוהו" value={ov.agentsTotal} />
+              <IntegrityStat label="קישורי מודעות שנוצרו" value={ov.listingLinksTotal} />
+              <IntegrityStat label="קישורים עם מתווך" value={ov.listingLinksWithAgent} tone={ov.listingLinksWithAgent > 0 ? "green" : undefined} />
+              <IntegrityStat label="משרדים שזוהו" value={ov.officesTotal} tone={ov.officesTotal === 0 ? "amber" : "green"} />
+              <IntegrityStat label="מתווכים משויכים למשרד" value={ov.agentsWithOffice} />
+              <IntegrityStat label="מתווכים ללא משרד" value={ov.agentsWithoutOffice} />
+              <IntegrityStat label="כיסוי קישורים" value={`${ov.dataQuality.linkCoverage}%`} />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+              {ov.latestRefreshRun ? (
+                <>
+                  <span>סריקה אחרונה:</span>
+                  <Badge tone={ov.latestRefreshRun.status === "completed" ? "green" : ov.latestRefreshRun.status === "failed" ? "red" : "amber"}>{statusHe(ov.latestRefreshRun.status)}</Badge>
+                  {ov.latestRefreshRun.finishedAt && <span dir="ltr">{new Date(ov.latestRefreshRun.finishedAt).toLocaleString("he-IL")}</span>}
+                  {ov.refreshMetrics && (
+                    <span>· {ov.refreshMetrics.agentsCreated} מתווכים חדשים · {ov.refreshMetrics.listingLinksCreated} קישורים נוצרו</span>
+                  )}
+                </>
+              ) : <span>טרם בוצעה סריקה.</span>}
+            </div>
+            {ov.refreshMetrics && ov.refreshMetrics.skippedSources.length > 0 && (
+              <p className="mt-2 text-[11px] text-amber-700">הערות: {ov.refreshMetrics.skippedSources.join(" · ")}</p>
+            )}
+          </IntelligenceSection>
+
+          {/* ── Office Discovery status — honest. Brokers exist but no offices yet. ── */}
+          {ov.agentsTotal > 0 && ov.officesTotal === 0 && (
+            <section dir="rtl" className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 sm:p-5">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-100 text-xl">🏢</span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-black text-ink">עדיין לא זוהו משרדי תיווך</h3>
+                  <p className="mt-1 text-sm text-muted">
+                    כרגע המערכת זיהתה מתווכים ומודעות, אך עדיין לא נמצאה ראיה מספקת לשיוך מתווכים למשרדים.
+                    שיוך משרד נוצר רק מראיות אמת (למשל קו טלפון משותף לכמה מתווכים) — לעולם לא משם מומצא.
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-amber-800">
+                    להפעלת מחקר משרדים ממקורות ציבוריים נדרש שלב Office Discovery (שלב הבא).
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <IntelligenceSection title="מתווכים מובילים" subtitle="לפי מספר מודעות מקושרות (נתוני אמת)">
-              {topBrokers.length === 0
+              {ov.topAgentsByListings.length === 0
                 ? <IntelligenceEmptyInline text="עדיין אין מתווכים עם מודעות מקושרות. הפעל סריקה כדי לבנות את הגרף." />
                 : (
                   <div className="flex flex-col gap-2">
-                    {topBrokers.map(({ a, count }, i) => {
-                      const officeName = a.officeId ? officeNameById.get(a.officeId) ?? null : null;
-                      return (
-                        <button key={a.id} type="button" onClick={() => setDnaTarget({ type: "broker", id: a.id, name: a.fullName })}
-                          className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-right transition hover:border-brand">
-                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-black text-brand-strong">{i + 1}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-black text-ink">{a.fullName}</span>
-                            <span className="block truncate text-[11px] text-muted">{officeName ?? "משרד טרם זוהה"}{a.city ? ` · ${a.city}` : ""}</span>
-                          </span>
-                          <span className="shrink-0 text-left">
-                            <span className="block text-base font-black tabular-nums text-violet-700">{count}</span>
-                            <span className="block text-[10px] text-muted">מודעות</span>
-                          </span>
-                        </button>
-                      );
-                    })}
+                    {ov.topAgentsByListings.slice(0, 8).map((a, i) => (
+                      <button key={a.id} type="button" onClick={() => setDnaTarget({ type: "broker", id: a.id, name: a.fullName })}
+                        className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-right transition hover:border-brand">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-black text-brand-strong">{i + 1}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-black text-ink">{a.fullName}</span>
+                          <span className="block truncate text-[11px] text-muted">{a.officeName ?? "משרד טרם זוהה"}{a.city ? ` · ${a.city}` : ""}</span>
+                        </span>
+                        <span className="shrink-0 text-left">
+                          <span className="block text-base font-black tabular-nums text-violet-700">{a.listingCount}</span>
+                          <span className="block text-[10px] text-muted">מודעות</span>
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
             </IntelligenceSection>
@@ -490,4 +532,14 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
 
 function Empty({ text }: { text: string }) {
   return <div className="rounded-2xl border border-dashed border-line bg-surface p-6 text-center text-sm text-muted">{text}</div>;
+}
+
+function IntegrityStat({ label, value, tone }: { label: string; value: number | string; tone?: "green" | "amber" }) {
+  const valColor = tone === "green" ? "text-emerald-700" : tone === "amber" ? "text-amber-700" : "text-ink";
+  return (
+    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+      <div className={`text-lg font-black tabular-nums ${valColor}`}>{typeof value === "number" ? value.toLocaleString("he-IL") : value}</div>
+      <div className="mt-0.5 text-[11px] leading-tight text-muted">{label}</div>
+    </div>
+  );
 }

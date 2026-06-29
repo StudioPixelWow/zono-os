@@ -120,3 +120,55 @@ export function gatherDeterministicOfficeEvidence(ctx: OfficeEvidenceContext): O
 export function hasUsableOfficeEvidence(evidences: OfficeEvidence[]): boolean {
   return evidences.some((e) => e.items.length > 0 && e.confidence > 0);
 }
+
+// ============================================================================
+// 🧭 OFFICE DISCOVERY READINESS (Phase 26.9.8, Part 7).
+// ----------------------------------------------------------------------------
+// The architecture for the NEXT phase (public office discovery). The provider
+// abstraction already exists above; this descriptor names the canonical
+// providers and reports which are wired vs. skipped, WITHOUT implementing any
+// public web discovery or OpenAI office reasoning yet. Nothing here fabricates
+// an office.
+//
+// TODO (next phase): implement public office discovery (PublicSearchProvider)
+// and OpenAI evidence reasoning (OpenAIReasoningProvider). Both must remain
+// evidence-only — they may never invent an office name/phone/email/website.
+// ============================================================================
+
+export type OfficeDiscoveryProviderId =
+  | "observed_listing_evidence"   // ExternalListingEvidenceProvider (live, deterministic)
+  | "shared_phone_evidence"       // SharedPhoneEvidenceProvider (live, deterministic — zono_observed)
+  | "public_search"               // PublicSearchProvider (not configured yet)
+  | "openai_reasoning";           // OpenAIReasoningProvider (evidence-only, on-demand)
+
+export interface OfficeDiscoveryProviderStatus {
+  id: OfficeDiscoveryProviderId;
+  label: string;
+  kind: "deterministic" | "public_search" | "ai_reasoning";
+  enabled: boolean;
+  skippedReason: string | null;
+}
+
+export interface OfficeDiscoveryReadiness {
+  providers: OfficeDiscoveryProviderStatus[];
+  /** True once at least one provider can actually produce office evidence. */
+  ready: boolean;
+  nextPhase: string;
+}
+
+/** Report which office-discovery providers are wired vs. skipped. Pure. */
+export function getOfficeDiscoveryReadiness(): OfficeDiscoveryReadiness {
+  const publicSearchEnabled = !!process.env.ZONO_PUBLIC_SEARCH_ENABLED;
+  const openaiEnabled = !!process.env.OPENAI_API_KEY;
+  const providers: OfficeDiscoveryProviderStatus[] = [
+    { id: "shared_phone_evidence", label: "ראיות קו טלפון משותף", kind: "deterministic", enabled: true, skippedReason: null },
+    { id: "observed_listing_evidence", label: "ראיות משדות מודעות", kind: "deterministic", enabled: true, skippedReason: null },
+    { id: "public_search", label: "חיפוש ציבורי", kind: "public_search", enabled: publicSearchEnabled, skippedReason: publicSearchEnabled ? null : "public_search_not_configured" },
+    { id: "openai_reasoning", label: "הסקת OpenAI על ראיות", kind: "ai_reasoning", enabled: openaiEnabled, skippedReason: openaiEnabled ? null : "openai_not_configured" },
+  ];
+  return {
+    providers,
+    ready: providers.some((p) => p.enabled && p.kind === "deterministic"),
+    nextPhase: "Next phase: implement public office discovery and OpenAI evidence reasoning (evidence-only — never invent an office).",
+  };
+}
