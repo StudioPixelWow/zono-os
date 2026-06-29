@@ -13,6 +13,10 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export { IntelligenceDrawer } from "./IntelligenceDrawer";
+export {
+  IntelligenceFirstRun, IntelligenceProgress, IntelligenceScanStatus, IntelligenceModuleIntro,
+  type ScanStage, type ScanStageStatus, type FirstRunSecondary,
+} from "./first-run";
 
 export interface Crumb { label: string; href?: string }
 

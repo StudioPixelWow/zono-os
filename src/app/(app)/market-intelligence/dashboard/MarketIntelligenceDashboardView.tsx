@@ -10,7 +10,7 @@ import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 import { MorningBrief } from "@/components/intelligence/MorningBrief";
 import { countSince, topAreas, type IntelligenceDashboardDTO } from "@/lib/intelligence-explorer/dashboard-shared";
 import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
-import { IntelligencePage, IntelligenceHeader } from "@/components/intelligence/framework";
+import { IntelligencePage, IntelligenceHeader, IntelligenceFirstRun } from "@/components/intelligence/framework";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
@@ -19,6 +19,7 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
   const areas = topAreas(explorer);
   const likelyExit = explorer.opportunitySignals.filter((o) => /יציאה|יורד|exit|הסר|delist/i.test(`${o.label} ${o.reason}`)).length;
   const feed = [...explorer.listings].filter((l) => l.firstSeenAt).sort((a, b) => new Date(b.firstSeenAt!).getTime() - new Date(a.firstSeenAt!).getTime()).slice(0, 16);
+  const hasData = explorer.listings.length > 0;
 
   return (
     <IntelligencePage>
@@ -31,6 +32,23 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
         subtitle="מה השתנה · מה דורש תשומת לב · היכן ההזדמנויות."
       />
 
+      {!hasData ? (
+        <IntelligenceFirstRun
+          emoji="🌍"
+          title="עדיין אין מודיעין שוק"
+          subtitle="כדי לבנות את דשבורד מודיעין השוק צריך קודם לסרוק נכסים חיצוניים מהשוק. הסריקה תאסוף מודעות, תזהה הזדמנויות ותחשב מגמות."
+          primaryLabel="🚀 התחל סריקת שוק"
+          primaryHref="/market-intelligence/listings"
+          secondary={[{ label: "🗺️ מפת שוק חיה", href: "/market-intelligence/map" }, { label: "⚙️ רענן מערכת", href: "/admin/system-health" }]}
+          whatNext={[
+            "מודעות חיצוניות מיד2, מדלן ומקורות נוספים ייאספו",
+            "הזדמנויות וירידות מחיר יזוהו אוטומטית",
+            "שכונות וערים מובילות ידורגו לפי נפח",
+            "מגמות שוק ומומנטום יחושבו",
+          ]}
+        />
+      ) : (
+      <>
       {/* Quick access — direct one-click entry to all external market listings. */}
       <Link href="/market-intelligence/listings" className="border-brand-light bg-brand-soft hover:bg-brand-soft/70 flex items-center justify-between gap-3 rounded-2xl border p-4 transition">
         <span className="flex items-center gap-3">
@@ -118,6 +136,8 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
           </div>
         ) : <TerminalEmpty text="אין אירועים אחרונים." />}
       </TerminalSection>
+      </>
+      )}
     </IntelligencePage>
   );
 }

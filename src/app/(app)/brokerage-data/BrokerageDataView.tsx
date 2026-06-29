@@ -77,8 +77,9 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="pointer-events-none absolute -top-24 -start-24 h-64 w-64 rounded-full bg-purple-600/30 blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-black text-white sm:text-3xl">דאטה משרדי תיווך</h1>
-            <p className="mt-1 max-w-2xl text-sm text-white/60">שכבת ליבה לאומית של משרדי תיווך וסוכנים. כל סריקת מודעות חיצונית עוברת זיהוי זהויות מול הדאטה הזו — מידע ציבורי/עסקי בלבד, ללא מחיקה אוטומטית.</p>
+            <p className="text-[11px] font-black tracking-wide text-purple-300">BROKERAGE INTELLIGENCE</p>
+            <h1 className="text-2xl font-black text-white sm:text-3xl">מודיעין משרדי תיווך</h1>
+            <p className="mt-1 max-w-2xl text-sm text-white/60">בניית גרף מודיעין מלא של משרדי תיווך, סוכנים, טריטוריות וקשרי שוק. כל סריקת מודעות חיצונית עוברת זיהוי זהויות מול שכבת הליבה הזו — מידע ציבורי/עסקי בלבד, ללא מחיקה אוטומטית.</p>
             <div className="mt-2">
               {owner
                 ? <Badge tone="green">בעלים — גישה לאומית מלאה</Badge>
@@ -94,6 +95,35 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         </div>
         {(msg || err) && <p className={`relative mt-3 text-sm font-bold ${err ? "text-rose-300" : "text-emerald-300"}`}>{err ?? msg}</p>}
       </section>
+
+      {/* First-run onboarding — shown only when the brokerage graph is still empty. */}
+      {cc.stats.offices === 0 && cc.stats.agents === 0 && cc.runs.length === 0 && (
+        <section dir="rtl" className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-center sm:p-8">
+          <span className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-3xl bg-purple-500/15 text-3xl">🏢</span>
+          <h2 className="text-xl font-black text-white sm:text-2xl">עדיין לא זוהו משרדי תיווך</h2>
+          <p className="mx-auto mt-1.5 max-w-xl text-sm text-white/60">
+            הפעל סריקה ראשונית כדי לבנות את גרף המודיעין של השוק. הסריקה תאסוף מודעות, תזהה משרדים וסוכנים, ותקשר ביניהם — ממידע ציבורי בלבד.
+          </p>
+          {owner ? (
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+              <Button onClick={() => run(() => requestBrokerageRefreshAction({ runType: "full_country" }))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>🚀 התחל סריקה ראשונית</Button>
+              <Button variant="ghost" onClick={() => run(resolveBrokerageNowAction)} disabled={pending}>⚙ זהה מתוך נתונים קיימים</Button>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-white/50">הסריקה הראשונית מופעלת על־ידי בעל המשרד. לאחר מכן המודיעין יופיע כאן אוטומטית.</p>
+          )}
+          <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-right">
+            <p className="mb-2 text-xs font-black text-white/80">מה יקרה אחרי הסריקה:</p>
+            <ul className="flex flex-col gap-1.5 text-sm text-white/60">
+              <li>✓ משרדי תיווך יזוהו וימופו</li>
+              <li>✓ סוכנים יותאמו למשרדים</li>
+              <li>✓ טריטוריות ואזורי שליטה יחושבו</li>
+              <li>✓ גרף תחרות וקשרים ייבנה</li>
+              <li>✓ דשבורדי מודיעין שוק ייפתחו</li>
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2">
