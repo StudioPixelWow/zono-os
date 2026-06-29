@@ -13,6 +13,7 @@ import {
   resolveBrokerageNowAction, startBrokerageDataRefreshAction, getBrokerageRefreshStatusAction,
   reviewMatchAction, resolveConflictAction, decideLinkAction,
 } from "@/lib/brokerage-data/actions";
+import { DnaDrawer, type DnaTarget } from "./DnaDrawer";
 
 type Tab = "overview" | "offices" | "agents" | "links" | "conflicts" | "matches" | "sources";
 
@@ -83,6 +84,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
   };
 
   const [agentFilter, setAgentFilter] = useState<"all" | "resolved" | "unresolved" | "review" | "high">("all");
+  const [dnaTarget, setDnaTarget] = useState<DnaTarget | null>(null);
 
   const q = search.trim().toLowerCase();
   const offices = useMemo(() => cc.offices.filter((o) => !q || o.name.toLowerCase().includes(q) || (o.city ?? "").toLowerCase().includes(q)), [cc.offices, q]);
@@ -194,7 +196,8 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="grid gap-3 md:grid-cols-2">
           {offices.length === 0 && <Empty text="אין משרדים להצגה בערי ההתמחות שלך." />}
           {offices.map((o) => (
-            <div key={o.id} className="rounded-2xl border border-line bg-surface p-4">
+            <button key={o.id} type="button" onClick={() => setDnaTarget({ type: "office", id: o.id, name: o.name })}
+              className="rounded-2xl border border-line bg-surface p-4 text-right transition hover:border-brand hover:shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-base font-black text-ink">{o.name}</div>
@@ -207,7 +210,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
                 {o.primaryPhone && <span dir="ltr">{o.primaryPhone}</span>}
                 {o.googleRating != null && <span>★ {o.googleRating}{o.googleReviewsCount ? ` (${o.googleReviewsCount})` : ""}</span>}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -242,7 +245,8 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
               const officeName = a.officeId ? officeNameById.get(a.officeId) ?? null : null;
               const listings = listingsByAgent.get(a.id) ?? 0;
               return (
-                <div key={a.id} className="rounded-2xl border border-line bg-surface p-4">
+                <button key={a.id} type="button" onClick={() => setDnaTarget({ type: "broker", id: a.id, name: a.fullName })}
+                  className="rounded-2xl border border-line bg-surface p-4 text-right transition hover:border-brand hover:shadow-sm">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-black text-ink">{a.fullName}</div>
@@ -260,7 +264,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
                     <Badge>{statusHe(a.status)}</Badge>
                     {a.primaryPhone && <span dir="ltr">{a.primaryPhone}</span>}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -369,6 +373,8 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
       )}
 
       <p className="text-[11px] text-muted/70">מידע ציבורי/עסקי בלבד · אין מחיקה אוטומטית · כל שינוי מתועד עם מקור ורמת ביטחון.</p>
+
+      <DnaDrawer target={dnaTarget} onClose={() => setDnaTarget(null)} />
     </div>
   );
 }

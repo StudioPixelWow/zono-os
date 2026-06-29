@@ -9,13 +9,32 @@ import { requireOwner } from "./permissions";
 import {
   getBrokerageCommandCenter, resolveBrokerageLinksForOrg, reviewIdentityMatch,
   resolveDataConflict, decideListingLink, recordRefreshRequest,
-  startBrokerageDataRefresh, getRefreshRunStatus,
+  startBrokerageDataRefresh, getRefreshRunStatus, getOfficeDna, getBrokerDna,
   type BrokerageCommandCenter, type ResolveStats,
 } from "./service";
+import type { BrokerageDna } from "./dna";
 
 export async function getBrokerageCommandCenterAction(opts: { city?: string | null; search?: string | null } = {}): Promise<BrokerageCommandCenter | null> {
   try { return await getBrokerageCommandCenter(opts); }
   catch (e) { console.error("[brokerage-data] command center failed:", e); return null; }
+}
+
+/** Deterministic DNA profile for an office (RLS-scoped; null if not visible). */
+export async function getOfficeDnaAction(officeId: string): Promise<BrokerageDna | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await getOfficeDna(officeId);
+  } catch (e) { console.error("[brokerage-data] office DNA failed:", e); return null; }
+}
+
+/** Deterministic DNA profile for a broker (RLS-scoped; null if not visible). */
+export async function getBrokerDnaAction(agentId: string): Promise<BrokerageDna | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await getBrokerDna(agentId);
+  } catch (e) { console.error("[brokerage-data] broker DNA failed:", e); return null; }
 }
 
 export interface BrokerageActionState { error?: string; message?: string; stats?: ResolveStats }

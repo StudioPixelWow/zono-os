@@ -12,6 +12,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { brokerageRepository } from "./repository";
 import { getBrokerageAccess } from "./permissions";
 import { resolveIdentity, type ListingContact } from "./identity";
+import { buildOfficeDna, buildBrokerDna, type BrokerageDna } from "./dna";
 import type {
   BrokerageAccess, BrokerageOffice, BrokerageAgent, BrokerageDataConflict, BrokerageIdentityMatch,
   BrokerageExternalListingLink, BrokerageRefreshRun, BrokerageDataSource, BrokerageDataStats, LinkStatus,
@@ -45,6 +46,29 @@ export async function getBrokerageCommandCenter(opts: { city?: string | null; se
     owner ? brokerageRepository.listSources() : Promise.resolve([]),
   ]);
   return { access, stats, offices, agents, links, conflicts, matches, runs, sources };
+}
+
+// ── Brokerage DNA™ — deterministic identity profile (no AI, RLS-scoped reads) ──
+/** Compose the deterministic DNA profile for one office, or null if not visible. */
+export async function getOfficeDna(officeId: string): Promise<BrokerageDna | null> {
+  const office = await brokerageRepository.officeById(officeId);
+  if (!office) return null;
+  const [agents, links] = await Promise.all([
+    brokerageRepository.listAgents({ officeId, limit: 500 }),
+    brokerageRepository.linksByOffice(officeId, 500),
+  ]);
+  return buildOfficeDna(office, agents, links);
+}
+
+/** Compose the deterministic DNA profile for one broker, or null if not visible. */
+export async function getBrokerDna(agentId: string): Promise<BrokerageDna | null> {
+  const agent = await brokerageRepository.agentById(agentId);
+  if (!agent) return null;
+  const [office, links] = await Promise.all([
+    agent.officeId ? brokerageRepository.officeById(agent.officeId) : Promise.resolve(null),
+    brokerageRepository.linksByAgent(agentId, 500),
+  ]);
+  return buildBrokerDna(agent, office, links);
 }
 
 const tierToLinkStatus: Record<string, LinkStatus> = {

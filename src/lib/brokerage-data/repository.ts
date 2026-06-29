@@ -112,6 +112,29 @@ export const brokerageRepository = {
       .order("created_at", { ascending: false }).limit(limit);
     return ((data ?? []) as Row[]).map(mapLink);
   },
+  // ── Single-entity reads (for DNA profiles) — RLS-scoped ────────────────────
+  async officeById(id: string): Promise<BrokerageOffice | null> {
+    const db = await createClient();
+    const { data } = await db.from("brokerage_offices" as never).select("*").eq("id", id).maybeSingle();
+    return data ? mapOffice(data as Row) : null;
+  },
+  async agentById(id: string): Promise<BrokerageAgent | null> {
+    const db = await createClient();
+    const { data } = await db.from("brokerage_agents" as never).select("*").eq("id", id).maybeSingle();
+    return data ? mapAgent(data as Row) : null;
+  },
+  async linksByOffice(officeId: string, limit = 500): Promise<BrokerageExternalListingLink[]> {
+    const db = await createClient();
+    const { data } = await db.from("brokerage_external_listing_links" as never).select("*")
+      .eq("office_id", officeId).order("created_at", { ascending: false }).limit(limit);
+    return ((data ?? []) as Row[]).map(mapLink);
+  },
+  async linksByAgent(agentId: string, limit = 500): Promise<BrokerageExternalListingLink[]> {
+    const db = await createClient();
+    const { data } = await db.from("brokerage_external_listing_links" as never).select("*")
+      .eq("agent_id", agentId).order("created_at", { ascending: false }).limit(limit);
+    return ((data ?? []) as Row[]).map(mapLink);
+  },
   // Owner-only reads (RLS already restricts these tables to owners).
   async listConflicts(limit = 200): Promise<BrokerageDataConflict[]> {
     const db = await createClient();
