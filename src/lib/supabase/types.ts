@@ -2243,6 +2243,28 @@ type RevenueLeakageEventsRow = {
   created_at: string;
 };
 
+type AiMemoryRow = {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  memory_type: string;
+  title: string;
+  summary: string | null;
+  memory_value: Json;
+  source_type: string;
+  source_id: string | null;
+  confidence: number;
+  visibility: string;
+  status: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  usage_count: number;
+  pinned: boolean;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 type AiMissionDraftsRow = {
   id: string;
   organization_id: string;
@@ -4896,6 +4918,10 @@ export interface Database {
       ai_mission_drafts: TableShape<
         AiMissionDraftsRow,
         "organization_id" | "source_type" | "category" | "title"
+      >;
+      ai_memory: TableShape<
+        AiMemoryRow,
+        "organization_id" | "memory_type" | "title" | "source_type"
       >;
       community_profiles: TableShape<
         CommunityProfilesRow,

@@ -14,6 +14,7 @@ import { bucketRecommendations } from "@/lib/intelligence-explorer/action-center
 import { AiReasoningPanel } from "./AiReasoningPanel";
 import { MissionPlannerPanel } from "./MissionPlannerPanel";
 import { DailyBrief } from "./DailyBrief";
+import { AiMemoryPanel } from "./AiMemoryPanel";
 import type { MissionControlDTO } from "@/lib/mission-control/types";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
@@ -145,14 +146,8 @@ export function MissionControlView({ data }: { data: MissionControlDTO }) {
             <p className="text-muted mt-2 text-[11px]">נכס / ליד / מסע פעיל — ייטענו אוטומטית כשתיכנס לישות מתוך ZONO.</p>
           </TerminalSection>
 
-          {/* AI Memory — placeholder timeline */}
-          <TerminalSection title="זיכרון AI" subtitle="ציר הזמן של הזיכרון — בקרוב">
-            <div className="border-line bg-surface flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed p-6 text-center">
-              <span className="text-2xl">🗂️</span>
-              <p className="text-ink text-sm font-bold">ציר הזמן של זיכרון ה-AI יוצג כאן</p>
-              <p className="text-muted text-xs">החלטות, תובנות והקשר מצטבר — בפיתוח.</p>
-            </div>
-          </TerminalSection>
+          {/* AI Memory — persistent, user-controlled memory (Phase 27.7). */}
+          <AiMemoryPanel />
 
           {/* Pipeline snapshot from existing recommendations (no recompute) */}
           {actionCenter.recommendations && (
