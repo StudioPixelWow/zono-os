@@ -13,6 +13,7 @@ import { MorningBrief } from "@/components/intelligence/MorningBrief";
 import { bucketRecommendations } from "@/lib/intelligence-explorer/action-center-shared";
 import { AiReasoningPanel } from "./AiReasoningPanel";
 import { MissionPlannerPanel } from "./MissionPlannerPanel";
+import { DailyBrief } from "./DailyBrief";
 import type { MissionControlDTO } from "@/lib/mission-control/types";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
@@ -52,6 +53,9 @@ export function MissionControlView({ data }: { data: MissionControlDTO }) {
           המקום שממנו ינוהל כל יכולת AI עתידית ב-ZONO. כרגע מוצג המודיעין הקיים בלבד — מה המערכת כבר יודעת ומה לעשות היום.
         </p>
       </header>
+
+      {/* Daily Brief — the first screen (Phase 27.6). Existing intelligence only. */}
+      <DailyBrief data={data} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* ── Main column ── */}
@@ -98,9 +102,11 @@ export function MissionControlView({ data }: { data: MissionControlDTO }) {
           </TerminalSection>
 
           {/* AI Workspace — one-shot reasoning (Phase 27.3). Context-only, no memory/actions. */}
-          <TerminalSection title="סביבת עבודת AI" subtitle="שאלה חד-פעמית · תשובה מבוססת הקשר בלבד">
-            <AiReasoningPanel />
-          </TerminalSection>
+          <div id="ai-workspace" className="scroll-mt-4">
+            <TerminalSection title="סביבת עבודת AI" subtitle="שאלה חד-פעמית · תשובה מבוססת הקשר בלבד">
+              <AiReasoningPanel />
+            </TerminalSection>
+          </div>
 
           {/* Mission Planner — reviewable draft missions (Phase 27.4). No execution. */}
           <TerminalSection title="מתכנן המשימות" subtitle="טיוטות מבוססות ראיות · אישור/דחייה · ללא ביצוע">
