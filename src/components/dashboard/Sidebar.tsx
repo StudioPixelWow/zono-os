@@ -14,6 +14,7 @@ const HREFS: Record<string, string> = {
   home: "/", "ai-office": "/ai-office", command: "/command", map: "/market",
   // Phase 26.7.1 — clear access to the three workspaces + intelligence surfaces:
   "my-properties": "/my-properties", "office-inventory": "/office-inventory",
+  "market-listings": "/market-intelligence/listings",
   "market-dashboard": "/market-intelligence/dashboard", "broker-dashboard": "/broker-intelligence/dashboard",
   "office-dashboard": "/office-intelligence/dashboard", "intelligence-explorer": "/intelligence-explorer",
   "live-market-map": "/market-intelligence/map", "action-center": "/action-center",
@@ -67,6 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "journeys", label: "מסעות", icon: "Route", tier: "advanced" },
   ]},
   { key: "intel", label: "מודיעין", icon: "BarChart3", items: [
+    { id: "market-listings", label: "מודעות שוק", icon: "Globe", tier: "v1" },
     { id: "market-dashboard", label: "מודיעין שוק", icon: "Map", tier: "v1" },
     { id: "intelligence-explorer", label: "חיפוש מודיעין", icon: "Search", tier: "v1" },
     { id: "live-market-map", label: "מפת שוק חיה", icon: "MapPin", tier: "v1" },
@@ -122,7 +124,7 @@ const NAV_GROUPS: NavGroup[] = [
 const V1_FLAT_ORDER = [
   "home", "action-center",
   "my-properties", "office-inventory", "buyers", "sellers", "deals", "matches",
-  "market-dashboard", "intelligence-explorer", "live-market-map", "broker-dashboard", "office-dashboard",
+  "market-listings", "market-dashboard", "intelligence-explorer", "live-market-map", "broker-dashboard", "office-dashboard",
   "creative-studio", "marketing", "recommendations", "team", "documents", "settings",
 ];
 

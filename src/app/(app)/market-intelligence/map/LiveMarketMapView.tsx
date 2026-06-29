@@ -56,7 +56,10 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
             <p className="text-muted mt-0.5 text-sm">{data.points.length} מיקומים · {data.zones.length} שכונות · מודיעין קיים בלבד.</p>
           </div>
         </div>
-        <Link href="/market-intelligence/dashboard" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">📊 דשבורד שוק</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/market-intelligence/listings" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">🌍 מודעות שוק</Link>
+          <Link href="/market-intelligence/dashboard" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">📊 דשבורד שוק</Link>
+        </div>
       </header>
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr_300px]">

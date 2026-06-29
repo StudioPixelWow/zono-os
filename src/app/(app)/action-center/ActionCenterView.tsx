@@ -98,7 +98,7 @@ export function ActionCenterView({ data }: { data: ActionCenterDTO }) {
       </TerminalSection>
 
       {/* Opportunity Queue */}
-      <TerminalSection title="תור הזדמנויות" subtitle="מקובץ לפי דחיפות — מהפיד הקיים">
+      <TerminalSection title="תור הזדמנויות" subtitle="מקובץ לפי דחיפות — מהפיד הקיים" action={<Link href="/market-intelligence/listings" prefetch={false} className="text-brand text-xs font-bold">🌍 צפה במודעות שוק ←</Link>}>
         <OppGroup title="פוטנציאל גבוה" tone="rising" rows={highOpp} pin={pin} unpin={unpin} pinned={pinned} />
         <OppGroup title="ללא מתווך / אוף-מרקט" tone="contender" rows={offMarket} pin={pin} unpin={unpin} pinned={pinned} />
         <OppGroup title="מודעות חדשות" tone="neutral" rows={newest} pin={pin} unpin={unpin} pinned={pinned} />

@@ -9,6 +9,7 @@ import { TerminalSection, Metric, MetricGrid, TerminalEmpty } from "@/components
 import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 import { MorningBrief } from "@/components/intelligence/MorningBrief";
 import { countSince, topAreas, type IntelligenceDashboardDTO } from "@/lib/intelligence-explorer/dashboard-shared";
+import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
@@ -29,6 +30,20 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
         </div>
       </header>
 
+      <MarketIntelNav active="dashboard" crumbs={[{ label: "דשבורד" }]} />
+
+      {/* Quick access — direct one-click entry to all external market listings. */}
+      <Link href="/market-intelligence/listings" className="border-brand-light bg-brand-soft hover:bg-brand-soft/70 flex items-center justify-between gap-3 rounded-2xl border p-4 transition">
+        <span className="flex items-center gap-3">
+          <span className="text-2xl" aria-hidden>🌍</span>
+          <span>
+            <span className="text-brand-strong block text-sm font-black">עיין במודעות השוק</span>
+            <span className="text-muted block text-xs">כל המודעות החיצוניות — נקודת כניסה ישירה</span>
+          </span>
+        </span>
+        <span className="text-brand-strong text-sm font-bold">פתח ←</span>
+      </Link>
+
       <MorningBrief listings={explorer.listings} priceDrops={marketStats.priceDrops} activeSignals={overview?.activeSignals ?? 0} />
 
       {/* Today's Overview */}
@@ -41,7 +56,7 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
         </MetricGrid>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link href="/transactions" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">🏛️ עסקאות רשמיות ↗</Link>
-          <Link href="/market-intelligence" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">🌍 כל המודעות החיצוניות ↗</Link>
+          <Link href="/market-intelligence/listings" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">🌍 כל המודעות החיצוניות ↗</Link>
         </div>
       </TerminalSection>
 

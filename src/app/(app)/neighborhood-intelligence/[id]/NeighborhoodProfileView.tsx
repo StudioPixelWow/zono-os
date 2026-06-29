@@ -33,6 +33,9 @@ export function NeighborhoodProfileView({ dto, title }: { dto: TerritoryIntellig
           </div>
           <StatusBadge label={COMP_HE[comp]} tone={COMP_TONE[comp] ?? "neutral"} />
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/market-intelligence/listings" prefetch={false} className="border-line bg-surface text-ink hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">🌍 צפה במודעות שוק ↗</Link>
+        </div>
       </header>
 
       <TerminalSection title="תקציר שכונה" why={[`רמת תחרות: ${COMP_HE[comp]}`, `${dto.agencies.length} משרדים פעילים`]} whySource="Territory Intelligence">

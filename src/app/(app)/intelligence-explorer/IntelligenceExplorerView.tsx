@@ -56,6 +56,9 @@ export function IntelligenceExplorerView({ data }: { data: IntelligenceExplorerD
         <div className="mt-4">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חפש מתווך · משרד · שכונה · עיר · מודעה…" className={`${field} w-full`} />
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/market-intelligence/listings" className="border-line bg-card hover:border-brand-light rounded-xl border px-3 py-2 text-sm font-bold transition">🌍 צפה במודעות שוק ↗</Link>
+        </div>
       </header>
 
       {results ? (
