@@ -16,6 +16,7 @@ import type { BrokerageDna } from "./dna";
 import { reasonBrokerageDna, type DnaReasonResult } from "./dna-reasoning";
 import { getBrokerageAccess } from "./permissions";
 import { discoverBrokeragePublishers, type DiscoveryResult } from "./discovery";
+import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReasonResult } from "./office-reasoning";
 
 export async function getBrokerageCommandCenterAction(opts: { city?: string | null; search?: string | null } = {}): Promise<BrokerageCommandCenter | null> {
   try { return await getBrokerageCommandCenter(opts); }
@@ -155,6 +156,33 @@ export async function discoverBrokeragePublishersAction(): Promise<DiscoveryActi
     console.error("[brokerage-data] discovery action failed:", e);
     return { ok: false, error: "הגילוי לא התחיל. נסה שוב בעוד רגע." };
   }
+}
+
+/**
+ * On-demand Broker→Office evidence + (optional) evidence-only OpenAI reasoning.
+ * Deterministic evidence always returned; AI reasons over it only when usable
+ * evidence exists and a key is configured (graceful otherwise). RLS-scoped.
+ */
+export async function reasonBrokerOfficeAction(agentId: string): Promise<BrokerOfficeReasonResult | null> {
+  try {
+    const { profile, organization } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    const access = await getBrokerageAccess();
+    const p = profile as { id?: string | null; full_name?: string | null };
+    return await reasonBrokerOffice(agentId, {
+      orgId: profile.org_id, userId: p.id ?? null, orgName: organization?.name ?? null,
+      userName: p.full_name ?? null, isManager: access?.isOwner ?? false,
+    });
+  } catch (e) { console.error("[brokerage-data] office reasoning failed:", e); return null; }
+}
+
+/** Deterministic office evidence only (no AI) — RLS-scoped. */
+export async function getBrokerOfficeEvidenceAction(agentId: string) {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await gatherBrokerOfficeEvidence(agentId);
+  } catch (e) { console.error("[brokerage-data] office evidence failed:", e); return null; }
 }
 
 /** Poll a refresh run's status (client never sees service-role). */

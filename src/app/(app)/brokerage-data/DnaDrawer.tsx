@@ -5,9 +5,10 @@
 // Phase 26.9.6 (deferred slice).
 // ============================================================================
 import { useEffect, useState, useTransition } from "react";
-import { getOfficeDnaAction, getBrokerDnaAction, reasonBrokerageDnaAction } from "@/lib/brokerage-data/actions";
+import { getOfficeDnaAction, getBrokerDnaAction, reasonBrokerageDnaAction, reasonBrokerOfficeAction } from "@/lib/brokerage-data/actions";
 import type { BrokerageDna, DnaSignal } from "@/lib/brokerage-data/dna";
 import type { AIReasoningResponse } from "@/lib/ai-reasoning/types";
+import type { BrokerOfficeReasonResult } from "@/lib/brokerage-data/office-reasoning";
 
 export interface DnaTarget { type: "office" | "broker"; id: string; name: string }
 
@@ -40,6 +41,8 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
   const [dna, setDna] = useState<BrokerageDna | null>(null);
   const [ai, setAi] = useState<AIReasoningResponse | null>(null);
   const [aiPending, startAi] = useTransition();
+  const [office, setOffice] = useState<BrokerOfficeReasonResult | null>(null);
+  const [officePending, startOffice] = useTransition();
 
   useEffect(() => {
     if (!target) return;
@@ -48,6 +51,7 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
       setLoading(true);
       setDna(null);
       setAi(null);
+      setOffice(null);
       const data = target.type === "office"
         ? await getOfficeDnaAction(target.id)
         : await getBrokerDnaAction(target.id);
@@ -61,6 +65,14 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
     startAi(async () => {
       const res = await reasonBrokerageDnaAction({ type: target.type, id: target.id });
       setAi(res.answer);
+    });
+  }
+
+  function runOffice() {
+    if (!target || target.type !== "broker") return;
+    startOffice(async () => {
+      const res = await reasonBrokerOfficeAction(target.id);
+      setOffice(res);
     });
   }
 
@@ -160,6 +172,42 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
                 </div>
               )}
             </section>
+
+            {/* Broker → Office evidence + evidence-only AI (Phase 26.9.7 Part 3) */}
+            {target.type === "broker" && (
+              <section className="rounded-2xl border border-line bg-surface p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-black text-ink">🏢 שיוך משרד — ראיות</h3>
+                  <button onClick={runOffice} disabled={officePending}
+                    className="rounded-full border border-brand bg-brand-soft px-3 py-1 text-xs font-bold text-brand-strong disabled:opacity-60">
+                    {officePending ? "אוסף…" : office ? "רענן" : "אסוף ראיות + AI"}
+                  </button>
+                </div>
+                {!office && !officePending && (
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted">אוסף ראיות דטרמיניסטיות (טלפון משותף, מודעות, מקורות) ומנמק עליהן עם AI — ללא המצאת שם משרד.</p>
+                )}
+                {office && (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {office.evidence.flatMap((e) => e.items).length === 0 && (
+                      <p className="text-[11px] text-amber-700">אין מספיק ראיות לשיוך משרד — המתווך נשאר ללא שיוך.</p>
+                    )}
+                    {office.evidence.flatMap((e) => e.items).map((it, i) => (
+                      <div key={i} className="flex items-start gap-2 rounded-xl border border-line bg-card px-3 py-2">
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand" />
+                        <div className="min-w-0"><div className="text-sm font-bold text-ink">{it.label}</div><div className="truncate text-[11px] text-muted" dir="ltr">{it.value}</div></div>
+                      </div>
+                    ))}
+                    {office.answer && (
+                      <div className="mt-1 rounded-xl border border-brand/30 bg-brand-soft/40 p-3">
+                        <div className="mb-1 text-[11px] font-black text-brand-strong">✨ ניתוח AI מעל הראיות</div>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{office.answer.answer}</p>
+                        {office.answer.status === "answered" && <div className="mt-1 text-[11px] text-muted">רמת ביטחון: {office.answer.confidence}%</div>}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             <p className="text-[11px] leading-relaxed text-muted">
               פרופיל ה-DNA נבנה באופן דטרמיניסטי מתוך הנתונים הקיימים במערכת בלבד (זהות, מתווכים, מודעות מקושרות). שום ערך אינו מומצא.
