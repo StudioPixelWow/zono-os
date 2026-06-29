@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -207,7 +207,14 @@ export function Sidebar() {
     .filter((g) => g.items.length > 0);
 
   return (
-    <aside className="bg-card/80 border-line sticky top-0 hidden h-screen w-[92px] shrink-0 flex-col items-center border-s py-6 backdrop-blur-xl lg:flex">
+    // --chatbot-safe-space: reserved bottom area so the floating chatbot + any
+    // bottom-floating buttons never cover the nav. The nav scrolls internally and
+    // the last item / mode toggle always stop above the chatbot. RTL-safe; the
+    // sidebar itself never makes the page scroll (it stays h-screen).
+    <aside
+      style={{ "--chatbot-safe-space": "140px" } as CSSProperties}
+      className="bg-card/80 border-line sticky top-0 hidden h-screen w-[92px] shrink-0 flex-col items-center border-s pt-6 pb-[var(--chatbot-safe-space)] backdrop-blur-xl lg:flex"
+    >
       <Link href="/" aria-label="ZONO" className="mb-3 grid h-11 w-11 place-items-center rounded-2xl">
         <ZonoLogo width={44} height={44} className="!h-11 !w-11 object-contain" />
       </Link>
