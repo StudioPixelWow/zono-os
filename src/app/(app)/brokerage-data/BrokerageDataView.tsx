@@ -104,8 +104,9 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
           <p className="mx-auto mt-1.5 max-w-xl text-sm text-white/60">
             הפעל סריקה ראשונית כדי לבנות את גרף המודיעין של השוק. הסריקה תאסוף מודעות, תזהה משרדים וסוכנים, ותקשר ביניהם — ממידע ציבורי בלבד.
           </p>
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            <Button onClick={() => run(() => requestBrokerageRefreshAction({ runType: "full_country" }))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
+          <p className="text-white/45 mt-1.5 text-xs">⏱ משך משוער: 1–3 דקות · מתעדכן אוטומטית ברקע</p>
+          <div className="mt-5 flex flex-col items-center gap-2">
+            <Button className="!min-w-[320px]" onClick={() => run(() => requestBrokerageRefreshAction({ runType: "full_country" }))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={18} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
             <Button variant="ghost" onClick={() => run(resolveBrokerageNowAction)} disabled={pending}>⚙ זהה מתוך נתונים קיימים</Button>
           </div>
           <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-right">

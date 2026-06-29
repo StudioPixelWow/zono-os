@@ -19,12 +19,15 @@ export async function getBrokerageCommandCenterAction(opts: { city?: string | nu
 
 export interface BrokerageActionState { error?: string; message?: string; stats?: ResolveStats }
 
-/** Run Broker Identity Resolution across the org's external listings now. */
+/** Run Broker Identity Resolution across the org's external listings now.
+ *  TODO before launch: restrict this action to owner/admin only. During QA /
+ *  pre-launch testing it is intentionally open to any authenticated org user. */
 export async function resolveBrokerageNowAction(): Promise<BrokerageActionState> {
   try {
-    await requireOwner();
     const { profile } = await getSessionContext();
-    if (!profile?.org_id) return { error: "not authenticated" };
+    if (!profile?.org_id) return { error: "יש להתחבר כדי להפעיל סריקה." };
+    // Audit: record who started the scan (no service-role on the client).
+    console.info(`[brokerage-data] identity scan started by user=${profile.id ?? "?"} org=${profile.org_id}`);
     const stats = await resolveBrokerageLinksForOrg(profile.org_id);
     revalidatePath("/brokerage-data");
     return {
@@ -32,17 +35,27 @@ export async function resolveBrokerageNowAction(): Promise<BrokerageActionState>
       message: `זוהו ${stats.linked} קישורים אוטומטיים · ${stats.review} לבדיקה · ${stats.candidates} מועמדים (מתוך ${stats.scanned} מודעות).`,
     };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "שגיאה בזיהוי" };
+    console.error("[brokerage-data] resolve scan failed:", e);
+    return { error: "הסריקה לא התחילה. נסה שוב בעוד רגע." };
   }
 }
 
+/** Queue a brokerage intelligence refresh / initial scan.
+ *  TODO before launch: restrict this action to owner/admin only. During QA /
+ *  pre-launch testing it is intentionally open to any authenticated org user. */
 export async function requestBrokerageRefreshAction(params: Record<string, unknown>): Promise<BrokerageActionState> {
   try {
-    await requireOwner();
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { error: "יש להתחבר כדי להפעיל סריקה." };
+    // Audit: recordRefreshRequest persists the request row (who/when) already.
+    console.info(`[brokerage-data] refresh requested by user=${profile.id ?? "?"} org=${profile.org_id}`);
     await recordRefreshRequest(params);
     revalidatePath("/brokerage-data");
-    return { message: "בקשת רענון נרשמה ✓" };
-  } catch (e) { return { error: e instanceof Error ? e.message : "שגיאה" }; }
+    return { message: "בקשת הסריקה נרשמה ✓ — המודיעין יתעדכן ברקע." };
+  } catch (e) {
+    console.error("[brokerage-data] refresh request failed:", e);
+    return { error: "הסריקה לא התחילה. נסה שוב בעוד רגע." };
+  }
 }
 
 export async function reviewMatchAction(matchId: string, decision: "approve" | "reject"): Promise<BrokerageActionState> {
