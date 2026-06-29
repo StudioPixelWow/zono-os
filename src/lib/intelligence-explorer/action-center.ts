@@ -8,13 +8,14 @@
 // Never generates advice.
 // ============================================================================
 import "server-only";
-import { getRecommendationCommandCenter, type RecommendationCommandCenter, type RecommendationView } from "@/lib/recommendations/service";
-import { getIntelligenceDashboard, type IntelligenceDashboardDTO } from "./dashboard";
+import { getRecommendationCommandCenter } from "@/lib/recommendations/service";
+import { getIntelligenceDashboard } from "./dashboard";
+import type { ActionCenterDTO } from "./action-center-shared";
 
-export interface ActionCenterDTO {
-  recommendations: RecommendationCommandCenter | null;
-  dashboard: IntelligenceDashboardDTO;
-}
+// Public API preserved: type + pure bucketing helper now live in the client-safe
+// shared module (no "server-only"); re-exported here so existing imports work.
+export type { ActionCenterDTO, RecBucket } from "./action-center-shared";
+export { bucketRecommendations } from "./action-center-shared";
 
 export async function getActionCenter(): Promise<ActionCenterDTO> {
   const [recommendations, dashboard] = await Promise.all([
@@ -22,19 +23,4 @@ export async function getActionCenter(): Promise<ActionCenterDTO> {
     getIntelligenceDashboard(),
   ]);
   return { recommendations, dashboard };
-}
-
-// ── Pure bucketing helpers (no new logic — grouping existing values) ─────────
-export type RecBucket = "today" | "week" | "monitor" | "completed";
-export function bucketRecommendations(rc: RecommendationCommandCenter | null): Record<RecBucket, RecommendationView[]> {
-  const out: Record<RecBucket, RecommendationView[]> = { today: [], week: [], monitor: [], completed: [] };
-  if (!rc) return out;
-  out.completed = rc.recentlyConverted ?? [];
-  for (const r of rc.top ?? []) {
-    if (r.status === "converted") continue;
-    if (r.urgency_score >= 70) out.today.push(r);
-    else if (r.urgency_score >= 40) out.week.push(r);
-    else out.monitor.push(r);
-  }
-  return out;
 }

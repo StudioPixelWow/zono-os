@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { TerminalSection, Metric, MetricGrid, Pill, TerminalEmpty, val, type StatusTone } from "@/components/intelligence/terminal";
 import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
-import { bucketRecommendations, type ActionCenterDTO, type RecBucket } from "@/lib/intelligence-explorer/action-center";
+import { bucketRecommendations, type ActionCenterDTO, type RecBucket } from "@/lib/intelligence-explorer/action-center-shared";
 import type { RecommendationView } from "@/lib/recommendations/service";
 import type { ExplorerListing, ExplorerOffice } from "@/lib/intelligence-explorer/types";
 

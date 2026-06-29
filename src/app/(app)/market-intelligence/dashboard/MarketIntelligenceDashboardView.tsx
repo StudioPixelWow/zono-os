@@ -8,7 +8,7 @@ import Link from "next/link";
 import { TerminalSection, Metric, MetricGrid, TerminalEmpty } from "@/components/intelligence/terminal";
 import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 import { MorningBrief } from "@/components/intelligence/MorningBrief";
-import { countSince, topAreas, type IntelligenceDashboardDTO } from "@/lib/intelligence-explorer/dashboard";
+import { countSince, topAreas, type IntelligenceDashboardDTO } from "@/lib/intelligence-explorer/dashboard-shared";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
