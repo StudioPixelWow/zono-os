@@ -14,6 +14,7 @@ import { getBrokerageAccess } from "./permissions";
 import { resolveIdentity, type ListingContact } from "./identity";
 import { buildOfficeDna, buildBrokerDna, type BrokerageDna } from "./dna";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
+import { resolveBrokerOfficesForOrg } from "./office-resolution";
 import type {
   BrokerageAccess, BrokerageOffice, BrokerageAgent, BrokerageDataConflict, BrokerageIdentityMatch,
   BrokerageExternalListingLink, BrokerageRefreshRun, BrokerageDataSource, BrokerageDataStats, LinkStatus,
@@ -356,6 +357,10 @@ export async function startBrokerageDataRefresh(
   //    broker listings existed but nothing was created/linked.
   try {
     const stats = await resolveBrokerageLinksForOrg(orgId, { recordAudit: false });
+    // Stage 4: resolve brokers → offices from real evidence (additive, no AI).
+    let office: Awaited<ReturnType<typeof resolveBrokerOfficesForOrg>> | null = null;
+    try { office = await resolveBrokerOfficesForOrg(orgId); }
+    catch (e) { console.error("[brokerage-data] office resolution failed (continuing):", e); }
     const stalled = stats.listingsWithAgent > 0 && stats.linksCreated === 0;
     const diag = {
       external_listings_with_agent: stats.listingsWithAgent, agents_created: stats.agentsCreated,
@@ -363,19 +368,28 @@ export async function startBrokerageDataRefresh(
       existing_agents_before: stats.existingAgentsBefore, skipped_reason: stats.skippedReason,
       scanned: stats.scanned, linked: stats.linked, review: stats.review, candidates: stats.candidates,
       skippedLocked: stats.skippedLocked,
+      // Office resolution stage metrics.
+      offices_detected: office?.officesDetected ?? 0, office_candidates_created: office?.officeCandidatesCreated ?? 0,
+      brokers_resolved_to_office: office?.brokersResolvedToOffice ?? 0, brokers_pending_review: office?.brokersPendingReview ?? 0,
+      brokers_unresolved: office?.brokersUnresolved ?? 0, office_links_created: office?.officeLinksCreated ?? 0,
+      conflicts_created: office?.conflictsCreated ?? 0, office_skipped_reason: office?.skippedReason ?? null,
     };
     await db.from("brokerage_refresh_runs" as never).update({
       status: stalled ? "partial" : "completed", finished_at: new Date().toISOString(),
       updated_records: stats.linksCreated, errors_count: stalled ? 1 : 0,
-      offices_found: stats.officesMatched, agents_found: stats.agentsMatched, new_agents: stats.agentsCreated,
+      offices_found: office?.officeCandidatesCreated ?? stats.officesMatched, agents_found: stats.agentsMatched, new_agents: stats.agentsCreated,
+      conflicts_created: office?.conflictsCreated ?? 0,
       log: [diag] as never,
     } as never).eq("id", runId);
     console.info(`[brokerage-data] scan finished id=${runId}`, diag);
+    const officeMsg = office && (office.brokersResolvedToOffice > 0 || office.officeCandidatesCreated > 0)
+      ? ` · ${office.brokersResolvedToOffice} שויכו למשרד · ${office.officeCandidatesCreated} משרדים זוהו`
+      : "";
     const message = stats.listingsWithAgent === 0
       ? `הסריקה הסתיימה — אין מודעות שפורסמו ע"י מתווכים (has_agent) לארגון. סנכרן נכסי שוק תחילה.${stats.skippedReason ? ` (${stats.skippedReason})` : ""}`
       : stalled
         ? `הסריקה לא יצרה קישורים למרות ${stats.listingsWithAgent} מודעות מתווכים. סיבה: ${stats.skippedReason ?? "לא ידועה"}.`
-        : `הסריקה הסתיימה ✓ — ${stats.agentsCreated} מתווכים חדשים · ${stats.linksWithAgent} קישורים למתווכים (מתוך ${stats.listingsWithAgent} מודעות מתווכים).`;
+        : `הסריקה הסתיימה ✓ — ${stats.agentsCreated} מתווכים חדשים · ${stats.linksWithAgent} קישורים למתווכים (מתוך ${stats.listingsWithAgent} מודעות מתווכים)${officeMsg}.`;
     return { ok: !stalled, runId, status: stalled ? "partial" : "completed", message, error: stalled ? "pipeline-stalled" : undefined };
   } catch (e) {
     console.error(`[brokerage-data] scan failed id=${runId}:`, e);
