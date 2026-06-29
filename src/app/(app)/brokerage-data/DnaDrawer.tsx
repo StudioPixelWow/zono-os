@@ -4,9 +4,10 @@
 // Lazy-loads the DNA via a server action (RLS-scoped). Read-only, light theme.
 // Phase 26.9.6 (deferred slice).
 // ============================================================================
-import { useEffect, useState } from "react";
-import { getOfficeDnaAction, getBrokerDnaAction } from "@/lib/brokerage-data/actions";
+import { useEffect, useState, useTransition } from "react";
+import { getOfficeDnaAction, getBrokerDnaAction, reasonBrokerageDnaAction } from "@/lib/brokerage-data/actions";
 import type { BrokerageDna, DnaSignal } from "@/lib/brokerage-data/dna";
+import type { AIReasoningResponse } from "@/lib/ai-reasoning/types";
 
 export interface DnaTarget { type: "office" | "broker"; id: string; name: string }
 
@@ -37,6 +38,8 @@ function SignalRow({ s }: { s: DnaSignal }) {
 export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [dna, setDna] = useState<BrokerageDna | null>(null);
+  const [ai, setAi] = useState<AIReasoningResponse | null>(null);
+  const [aiPending, startAi] = useTransition();
 
   useEffect(() => {
     if (!target) return;
@@ -44,6 +47,7 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
     (async () => {
       setLoading(true);
       setDna(null);
+      setAi(null);
       const data = target.type === "office"
         ? await getOfficeDnaAction(target.id)
         : await getBrokerDnaAction(target.id);
@@ -51,6 +55,14 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
     })();
     return () => { alive = false; };
   }, [target]);
+
+  function runAi() {
+    if (!target) return;
+    startAi(async () => {
+      const res = await reasonBrokerageDnaAction({ type: target.type, id: target.id });
+      setAi(res.answer);
+    });
+  }
 
   if (!target) return null;
 
@@ -121,6 +133,33 @@ export function DnaDrawer({ target, onClose }: { target: DnaTarget | null; onClo
                 <div className="flex flex-col gap-2">{facts.map((s, i) => <SignalRow key={i} s={s} />)}</div>
               </section>
             )}
+
+            {/* AI reasoning over the deterministic DNA evidence (never source of truth) */}
+            <section className="rounded-2xl border border-brand/30 bg-brand-soft/40 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-black text-brand-strong">✨ ניתוח ZONO AI</h3>
+                <button onClick={runAi} disabled={aiPending}
+                  className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white disabled:opacity-60">
+                  {aiPending ? "מנתח…" : ai ? "נתח שוב" : "נתח DNA"}
+                </button>
+              </div>
+              {!ai && !aiPending && (
+                <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                  ה-AI מנמק מעל ראיות ה-DNA בלבד — אינו מקור אמת ואינו ממציא נתונים. דורש מפתח OpenAI מוגדר.
+                </p>
+              )}
+              {ai && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{ai.answer}</p>
+                  {ai.status === "answered" && (
+                    <div className="text-[11px] text-muted">רמת ביטחון: {ai.confidence}%{ai.provider ? ` · ${ai.provider}` : ""}</div>
+                  )}
+                  {ai.limitations.length > 0 && (
+                    <div className="text-[11px] text-amber-700">מגבלות: {ai.limitations.join(" · ")}</div>
+                  )}
+                </div>
+              )}
+            </section>
 
             <p className="text-[11px] leading-relaxed text-muted">
               פרופיל ה-DNA נבנה באופן דטרמיניסטי מתוך הנתונים הקיימים במערכת בלבד (זהות, מתווכים, מודעות מקושרות). שום ערך אינו מומצא.

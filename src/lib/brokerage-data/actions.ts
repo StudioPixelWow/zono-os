@@ -13,6 +13,8 @@ import {
   type BrokerageCommandCenter, type ResolveStats,
 } from "./service";
 import type { BrokerageDna } from "./dna";
+import { reasonBrokerageDna, type DnaReasonResult } from "./dna-reasoning";
+import { getBrokerageAccess } from "./permissions";
 
 export async function getBrokerageCommandCenterAction(opts: { city?: string | null; search?: string | null } = {}): Promise<BrokerageCommandCenter | null> {
   try { return await getBrokerageCommandCenter(opts); }
@@ -35,6 +37,30 @@ export async function getBrokerDnaAction(agentId: string): Promise<BrokerageDna 
     if (!profile?.org_id) return null;
     return await getBrokerDna(agentId);
   } catch (e) { console.error("[brokerage-data] broker DNA failed:", e); return null; }
+}
+
+/**
+ * AI reasoning over an office/broker DNA. OpenAI reasons over the deterministic
+ * DNA evidence only (never the source of truth) via the official gateway, and
+ * gracefully returns a config message when no OpenAI key is configured. Nothing
+ * is persisted. RLS-scoped (null DNA when the entity isn't visible).
+ */
+export async function reasonBrokerageDnaAction(target: { type: "office" | "broker"; id: string }): Promise<DnaReasonResult> {
+  try {
+    const { profile, organization } = await getSessionContext();
+    if (!profile?.org_id) return { dna: null, answer: null };
+    const access = await getBrokerageAccess();
+    const p = profile as { id?: string | null; full_name?: string | null };
+    return await reasonBrokerageDna({
+      type: target.type, id: target.id,
+      orgId: profile.org_id, userId: p.id ?? null,
+      orgName: organization?.name ?? null, userName: p.full_name ?? null,
+      isManager: access?.isOwner ?? false,
+    });
+  } catch (e) {
+    console.error("[brokerage-data] DNA reasoning failed:", e);
+    return { dna: null, answer: null };
+  }
 }
 
 export interface BrokerageActionState { error?: string; message?: string; stats?: ResolveStats }
