@@ -98,6 +98,34 @@ export interface ResolveStats {
 
 const rstr = (v: unknown): string => (typeof v === "string" ? v : "");
 
+/** Finalize a resolution pass: roll up matched sets + (optionally) write an audit
+ *  run row with the full per-stage diagnostics and an honest status. */
+async function finalizeResolve(
+  db: ReturnType<typeof createServiceRoleClient>, orgId: string, out: ResolveStats,
+  officeSet: Set<string>, agentSet: Set<string>, recordAudit: boolean,
+): Promise<ResolveStats> {
+  out.officesMatched = officeSet.size;
+  out.agentsMatched = agentSet.size;
+  if (recordAudit) {
+    const stalled = out.listingsWithAgent > 0 && out.linksCreated === 0;
+    try {
+      await db.from("brokerage_refresh_runs" as never).insert({
+        run_type: "source", status: stalled ? "partial" : "completed",
+        parameters: { mode: "identity_resolution", org_id: orgId } as never,
+        started_at: new Date().toISOString(), finished_at: new Date().toISOString(),
+        agents_found: out.agentsMatched, new_agents: out.agentsCreated,
+        updated_records: out.linksCreated, errors_count: stalled ? 1 : 0,
+        log: [{
+          external_listings_with_agent: out.listingsWithAgent, agents_created: out.agentsCreated,
+          listing_links_created: out.linksCreated, links_with_agent_id: out.linksWithAgent,
+          existing_agents_before: out.existingAgentsBefore, skipped_reason: out.skippedReason,
+        }] as never,
+      } as never);
+    } catch { /* audit is best-effort */ }
+  }
+  return out;
+}
+
 /**
  * THE Listing→Broker pipeline. For every broker-published external listing
  * (has_agent=true with a contact), resolve it against known brokers/offices; if
@@ -143,24 +171,42 @@ export async function resolveBrokerageLinksForOrg(orgId: string, opts: { recordA
 
   // Index existing brokers by normalized phone / name so a seeded broker created
   // for one listing is reused for that broker's other listings (no duplicates).
-  const agentByKey = new Map<string, { id: string }>();
+  const agentByKey = new Map<string, string>(); // key → agentId
   for (const a of agents) {
     const np = normalizePhoneNumber(a.primaryPhone ?? "");
     const nn = a.normalizedName ?? normalizeHebrewName(a.fullName);
-    if (np) agentByKey.set(np, { id: a.id });
-    else if (nn) agentByKey.set(nn, { id: a.id });
+    if (np) agentByKey.set(np, a.id);
+    else if (nn) agentByKey.set(nn, a.id);
   }
+
+  // Prefetch ALL existing links for these listings in chunked reads (not 1/row)
+  // so we know which are human-locked and which need replacing — fast at scale.
+  const listingIds = brokerListings.map((r) => String(r.id));
+  const lockedListings = new Set<string>();
+  const linkedListings = new Set<string>();
+  for (let i = 0; i < listingIds.length; i += 300) {
+    const chunk = listingIds.slice(i, i + 300);
+    const { data } = await db.from("brokerage_external_listing_links" as never)
+      .select("external_listing_id,status").in("external_listing_id", chunk);
+    for (const row of (data ?? []) as { external_listing_id: string; status: string }[]) {
+      linkedListings.add(row.external_listing_id);
+      if (row.status === "confirmed" || row.status === "rejected") lockedListings.add(row.external_listing_id);
+    }
+  }
+
+  // ── Build everything IN MEMORY (agent ids generated client-side so links can
+  //    reference them before insert), then write in a handful of batched calls. ──
+  const nowIso = new Date().toISOString();
+  type AgentRow = Record<string, unknown>;
+  type LinkRow = Record<string, unknown>;
+  const newAgents: AgentRow[] = [];
+  const newLinks: LinkRow[] = [];
+  const replaceListingIds: string[] = [];
 
   for (const r of brokerListings) {
     out.scanned++;
     const listingId = String(r.id);
-
-    // Respect locked human decisions.
-    const { data: existing } = await db
-      .from("brokerage_external_listing_links" as never)
-      .select("id,status").eq("external_listing_id", listingId);
-    const rows = (existing ?? []) as { id: string; status: string }[];
-    if (rows.some((x) => x.status === "confirmed" || x.status === "rejected")) { out.skippedLocked++; continue; }
+    if (lockedListings.has(listingId)) { out.skippedLocked++; continue; }
 
     const name = rstr(r.contact_name);
     const phone = rstr(r.contact_phone);
@@ -170,85 +216,79 @@ export async function resolveBrokerageLinksForOrg(orgId: string, opts: { recordA
     const key = np || nn;
     if (!key) continue; // no stable identity to seed/match on
 
-    // Office (and any existing-broker) match via the pure engine.
     const contact: ListingContact = { name: name || null, phone: phone || null, city };
     const res = resolveIdentity(contact, agents, offices);
     let agentId: string | null = res.agentId;
     const officeId: string | null = res.officeId;
-    const seeded = { value: false };
+    let seeded = false;
 
     if (!agentId) {
       const found = agentByKey.get(key);
       if (found) {
-        agentId = found.id;
+        agentId = found;
       } else {
         // SELF-SEED a candidate broker from this listing's real contact data.
-        const nowIso = new Date().toISOString();
-        const { data: ins, error: insErr } = await db.from("brokerage_agents" as never).insert({
-          full_name: (name || phone).trim(), normalized_name: nn || normalizeHebrewName(name),
-          status: "candidate", city, primary_phone: phone || null, specialties: [] as never,
+        // Generate the id here so the link below can reference it without a
+        // round-trip per broker (the FK is satisfied — agents inserted first).
+        agentId = globalThis.crypto.randomUUID();
+        agentByKey.set(key, agentId);
+        agents.push({ id: agentId, fullName: (name || phone).trim(), normalizedName: nn || null, primaryPhone: phone || null, whatsappPhone: null, city, officeId });
+        newAgents.push({
+          id: agentId, full_name: (name || phone).trim(), normalized_name: nn || normalizeHebrewName(name),
+          status: "candidate", city, primary_phone: phone || null, specialties: [],
           confidence_score: 60, data_quality_score: phone ? 55 : 35,
-          metadata: { seeded_from: "external_listing", org_id: orgId, source: rstr(r.source) } as never,
+          metadata: { seeded_from: "external_listing", org_id: orgId, source: rstr(r.source) },
           first_seen_at: nowIso, last_seen_at: nowIso,
-        } as never).select("id").maybeSingle();
-        if (insErr || !ins) {
-          if (!out.skippedReason) out.skippedReason = `brokerage_agents insert failed: ${insErr?.message ?? "no row returned"}`;
-        } else {
-          agentId = String((ins as { id: string }).id);
-          agents.push({ id: agentId, fullName: (name || phone).trim(), normalizedName: nn || null, primaryPhone: phone || null, whatsappPhone: null, city, officeId });
-          agentByKey.set(key, { id: agentId });
-          out.agentsCreated++;
-          seeded.value = true;
-        }
+        });
+        out.agentsCreated++;
+        seeded = true;
       }
     }
 
     if (!agentId && !officeId) continue;
+    if (linkedListings.has(listingId)) replaceListingIds.push(listingId);
 
-    // Replace prior non-human links for this listing with the fresh resolution.
-    if (rows.length) await db.from("brokerage_external_listing_links" as never).delete().eq("external_listing_id", listingId);
     const status: LinkStatus = agentId ? "auto_linked" : (tierToLinkStatus[res.tier] ?? "candidate");
-    const reasons = seeded.value ? ["מתווך זוהה מהמודעה", ...res.reasons] : res.reasons;
-    const { error: linkErr } = await db.from("brokerage_external_listing_links" as never).insert({
+    const reasons = seeded ? ["מתווך זוהה מהמודעה", ...res.reasons] : res.reasons;
+    newLinks.push({
       external_listing_id: listingId, organization_id: orgId, agent_id: agentId, office_id: officeId,
       city, matched_phone: np || res.matchedPhone, matched_name: nn || res.matchedName,
       matched_source: rstr(r.source) || null,
-      confidence_score: agentId ? Math.max(res.confidence, 75) : res.confidence, match_reasons: reasons as never, status,
-    } as never);
-    if (linkErr) { if (!out.skippedReason) out.skippedReason = `link insert failed: ${linkErr.message}`; continue; }
+      confidence_score: agentId ? Math.max(res.confidence, 75) : res.confidence, match_reasons: reasons, status,
+    });
 
-    out.linksCreated++;
-    if (agentId) { out.linksWithAgent++; agentSet.add(agentId); }
+    if (agentId) agentSet.add(agentId);
     if (officeId) officeSet.add(officeId);
     if (status === "auto_linked") out.linked++;
     else if (status === "pending_review") out.review++;
     else out.candidates++;
   }
-  out.officesMatched = officeSet.size;
-  out.agentsMatched = agentSet.size;
 
-  // Audit (only for direct resolve calls; startBrokerageDataRefresh owns its own
-  // run row). Honest status: if broker listings existed but nothing was created
-  // or linked, mark the pass "partial" with the explicit reason.
-  if (recordAudit) {
-    const stalled = out.listingsWithAgent > 0 && out.linksCreated === 0;
-    try {
-      await db.from("brokerage_refresh_runs" as never).insert({
-        run_type: "source", status: stalled ? "partial" : "completed",
-        parameters: { mode: "identity_resolution", org_id: orgId } as never,
-        started_at: new Date().toISOString(), finished_at: new Date().toISOString(),
-        agents_found: out.agentsMatched, new_agents: out.agentsCreated,
-        updated_records: out.linksCreated, errors_count: stalled ? 1 : 0,
-        log: [{
-          external_listings_with_agent: out.listingsWithAgent, agents_created: out.agentsCreated,
-          listing_links_created: out.linksCreated, links_with_agent_id: out.linksWithAgent,
-          existing_agents_before: out.existingAgentsBefore, skipped_reason: out.skippedReason,
-        }] as never,
-      } as never);
-    } catch { /* audit is best-effort */ }
+  // ── Batched writes. Agents FIRST (links FK → brokerage_agents). If the agent
+  //    insert fails, capture the real DB error and abort before writing links. ──
+  for (let i = 0; i < newAgents.length; i += 500) {
+    const chunk = newAgents.slice(i, i + 500);
+    const { error: aErr } = await db.from("brokerage_agents" as never).insert(chunk as never);
+    if (aErr) {
+      out.skippedReason = `brokerage_agents insert failed: ${aErr.message}`;
+      out.agentsCreated = Math.min(out.agentsCreated, i); // only the chunks that succeeded
+      return finalizeResolve(db, orgId, out, officeSet, agentSet, recordAudit);
+    }
   }
-
-  return out;
+  // Replace prior non-human links for re-scanned listings (chunked delete).
+  for (let i = 0; i < replaceListingIds.length; i += 300) {
+    const chunk = replaceListingIds.slice(i, i + 300);
+    await db.from("brokerage_external_listing_links" as never).delete().in("external_listing_id", chunk);
+  }
+  // Links in chunks.
+  for (let i = 0; i < newLinks.length; i += 500) {
+    const chunk = newLinks.slice(i, i + 500);
+    const { error: lErr } = await db.from("brokerage_external_listing_links" as never).insert(chunk as never);
+    if (lErr) { if (!out.skippedReason) out.skippedReason = `link insert failed: ${lErr.message}`; continue; }
+    out.linksCreated += chunk.length;
+    out.linksWithAgent += chunk.filter((l) => !!(l as { agent_id?: string }).agent_id).length;
+  }
+  return finalizeResolve(db, orgId, out, officeSet, agentSet, recordAudit);
 }
 
 /** Result of starting a brokerage data scan/refresh. */

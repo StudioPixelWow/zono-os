@@ -10,7 +10,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import type { BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import {
-  resolveBrokerageNowAction, startBrokerageDataRefreshAction, getBrokerageRefreshStatusAction,
+  resolveBrokerageNowAction, startBrokerageDataRefreshAction,
   reviewMatchAction, resolveConflictAction, decideLinkAction, discoverBrokeragePublishersAction,
 } from "@/lib/brokerage-data/actions";
 import { DnaDrawer, type DnaTarget } from "./DnaDrawer";
@@ -65,23 +65,24 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
   const startScan = (params: Record<string, unknown>) => {
     setMsg(null); setErr(null);
     start(async () => {
-      const r = await startBrokerageDataRefreshAction(params);
-      if (!r.ok || !r.runId) { setErr(r.error ?? "הסריקה לא התחילה. בדוק חיבור או נסה שוב."); return; }
-      if (r.message) setMsg(r.message);
-      router.refresh();
-      if (r.status === "completed" || r.status === "failed" || r.status === "partial") return;
-      // Poll up to ~30s for an async run to finish.
-      const deadline = Date.now() + 30_000;
-      for (;;) {
-        await new Promise((res) => setTimeout(res, 4000));
-        const s = await getBrokerageRefreshStatusAction(r.runId);
-        if (s && (s.status === "completed" || s.status === "failed" || s.status === "partial")) {
-          setMsg(s.status === "failed" ? "הסריקה נכשלה. נסה שוב בעוד רגע." : `הסריקה הסתיימה ✓ (${s.updatedRecords} עדכונים).`);
-          router.refresh();
-          return;
-        }
-        if (Date.now() > deadline) { setMsg("הסריקה ממתינה לעיבוד. אם זה נמשך, בדוק את הגדרות ה-worker."); return; }
+      // 30s client-side timeout fallback so the button NEVER stays stuck even if
+      // the server action hangs (the run still finalizes server-side; refresh shows it).
+      const TIMEOUT = Symbol("timeout");
+      let r: Awaited<ReturnType<typeof startBrokerageDataRefreshAction>> | typeof TIMEOUT;
+      try {
+        r = await Promise.race([
+          startBrokerageDataRefreshAction(params),
+          new Promise<typeof TIMEOUT>((res) => setTimeout(() => res(TIMEOUT), 30_000)),
+        ]);
+      } catch {
+        setErr("הסריקה לא התחילה. נסה שוב או בדוק לוגים.");
+        return;
       }
+      if (r === TIMEOUT) { setErr("הסריקה לא התחילה. נסה שוב או בדוק לוגים."); router.refresh(); return; }
+      router.refresh();
+      // The server processes synchronously and returns a terminal status + message.
+      if (!r.ok) { setErr(r.error ?? r.message ?? "הסריקה נכשלה. נסה שוב או בדוק לוגים."); return; }
+      setMsg(r.message ?? "הסריקה הושלמה ✓");
     });
   };
 
