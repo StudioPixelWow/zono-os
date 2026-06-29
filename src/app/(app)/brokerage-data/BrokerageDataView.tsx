@@ -14,6 +14,9 @@ import {
   reviewMatchAction, resolveConflictAction, decideLinkAction, discoverBrokeragePublishersAction,
 } from "@/lib/brokerage-data/actions";
 import { DnaDrawer, type DnaTarget } from "./DnaDrawer";
+import {
+  IntelligenceKpiGrid, IntelligenceKpi, IntelligenceSection, IntelligenceFeed, IntelligenceEmptyInline,
+} from "@/components/intelligence/framework";
 
 type Tab = "overview" | "offices" | "agents" | "links" | "conflicts" | "matches" | "sources";
 
@@ -21,20 +24,19 @@ const STATUS_HE: Record<string, string> = {
   active: "פעיל", verified: "מאומת", unverified: "לא מאומת", candidate: "מועמד",
   inactive: "לא פעיל", not_found_recently: "לא נמצא לאחרונה", conflict: "קונפליקט",
   auto_linked: "קושר אוטומטית", pending_review: "לבדיקה", confirmed: "אושר", rejected: "נדחה",
+  completed: "הושלם", failed: "נכשל", running: "פועל", partial: "חלקי", pending: "ממתין",
 };
 const statusHe = (s: string) => STATUS_HE[s] ?? s;
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-4">
-      <div className={`text-2xl font-black ${tone ?? "text-ink"}`}>{value.toLocaleString("he-IL")}</div>
-      <div className="mt-1 text-xs font-bold text-muted">{label}</div>
-    </div>
-  );
-}
+const RUN_TYPE_HE: Record<string, string> = {
+  full_country: "סריקה לאומית", city: "סריקת עיר", region: "סריקת אזור",
+  source: "זיהוי זהויות", office: "סריקת משרד", agent: "סריקת מתווך", discovery: "גילוי מפרסמים",
+};
+const runTypeHe = (s: string) => RUN_TYPE_HE[s] ?? s;
+
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${active ? "bg-brand-strong text-ink" : "border border-line bg-surface text-muted hover:text-ink"}`}>{children}</button>
+    <button onClick={onClick} className={`rounded-xl px-3 py-1.5 text-sm font-bold whitespace-nowrap transition ${active ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-surface hover:text-ink"}`}>{children}</button>
   );
 }
 function Badge({ children, tone = "white" }: { children: React.ReactNode; tone?: "white" | "green" | "amber" | "red" }) {
@@ -108,6 +110,21 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
     return true;
   }), [cc.agents, q, agentFilter]);
 
+  // Top brokers by REAL linked-listing count (server aggregation) — proves the
+  // resolution pipeline and powers the overview intelligence widget.
+  const topBrokers = useMemo(() =>
+    cc.agents
+      .map((a) => ({ a, count: cc.agentListingCounts[a.id] ?? 0 }))
+      .filter((x) => x.count > 0)
+      .sort((x, y) => y.count - x.count)
+      .slice(0, 8),
+  [cc.agents, cc.agentListingCounts]);
+
+  const totalLinkedToBrokers = useMemo(
+    () => Object.values(cc.agentListingCounts).reduce((s, n) => s + n, 0),
+    [cc.agentListingCounts],
+  );
+
   const tabs: { id: Tab; label: string; owner?: boolean }[] = [
     { id: "overview", label: "סקירה" },
     { id: "offices", label: `משרדים (${cc.stats.offices})` },
@@ -124,7 +141,9 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
       <section className="relative overflow-hidden rounded-2xl border border-line bg-card p-4 sm:p-5">
         <div className="pointer-events-none absolute -top-24 -start-24 h-56 w-56 rounded-full bg-brand-soft/50 blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="flex items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-soft text-2xl text-brand-strong">🏢</span>
+            <div className="min-w-0">
             <p className="text-[11px] font-black tracking-wide text-brand">BROKERAGE INTELLIGENCE</p>
             <h1 className="text-2xl font-black text-ink sm:text-3xl">מודיעין משרדי תיווך</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted">בניית גרף מודיעין מלא של משרדי תיווך, סוכנים, טריטוריות וקשרי שוק. כל סריקת מודעות חיצונית עוברת זיהוי זהויות מול שכבת הליבה הזו — מידע ציבורי/עסקי בלבד, ללא מחיקה אוטומטית.</p>
@@ -132,6 +151,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
               {owner
                 ? <Badge tone="green">בעלים — גישה לאומית מלאה</Badge>
                 : <Badge tone="amber">גישה מוגבלת לערי ההתמחות{cc.access.allowedCities.length ? `: ${cc.access.allowedCities.slice(0, 4).join(", ")}` : ""}</Badge>}
+            </div>
             </div>
           </div>
           {owner && (
@@ -171,7 +191,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
       )}
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1 rounded-2xl border border-line bg-card p-1.5">
         {tabs.filter((t) => !t.owner || owner).map((t) => <Chip key={t.id} active={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</Chip>)}
       </div>
 
@@ -179,17 +199,58 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חיפוש לפי שם או עיר…" className="w-full max-w-md rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink" />
       )}
 
-      {/* ── Overview ── */}
+      {/* ── Overview — premium KPI grid + intelligence widgets ── */}
       {tab === "overview" && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="משרדים" value={cc.stats.offices} />
-          <Stat label="סוכנים" value={cc.stats.agents} />
-          <Stat label="משרדים מאומתים" value={cc.stats.verifiedOffices} tone="text-emerald-700" />
-          <Stat label="סוכנים מאומתים" value={cc.stats.verifiedAgents} tone="text-emerald-700" />
-          <Stat label="מועמדים לאימות" value={cc.stats.candidates} tone="text-amber-700" />
-          <Stat label="מודעות מקושרות" value={cc.stats.linkedListings} tone="text-violet-700" />
-          {owner && <Stat label="קונפליקטים פתוחים" value={cc.stats.openConflicts} tone="text-rose-700" />}
-          {owner && <Stat label="התאמות לבדיקה" value={cc.stats.pendingMatches} tone="text-amber-700" />}
+        <div className="flex flex-col gap-5">
+          <IntelligenceKpiGrid>
+            <IntelligenceKpi label="משרדי תיווך" value={cc.stats.offices.toLocaleString("he-IL")} hint={`${cc.stats.verifiedOffices} מאומתים`} accent />
+            <IntelligenceKpi label="מתווכים" value={cc.stats.agents.toLocaleString("he-IL")} hint={`${cc.stats.verifiedAgents} מאומתים`} accent />
+            <IntelligenceKpi label="מודעות מקושרות" value={cc.stats.linkedListings.toLocaleString("he-IL")} hint={`${totalLinkedToBrokers.toLocaleString("he-IL")} למתווכים`} />
+            <IntelligenceKpi label="מועמדים לאימות" value={cc.stats.candidates.toLocaleString("he-IL")} hint="זוהו, ממתינים לאישור" />
+            {owner && <IntelligenceKpi label="קונפליקטים פתוחים" value={cc.stats.openConflicts.toLocaleString("he-IL")} hint="לפתרון" />}
+            {owner && <IntelligenceKpi label="התאמות לבדיקה" value={cc.stats.pendingMatches.toLocaleString("he-IL")} hint="ממתינות לאישור" />}
+          </IntelligenceKpiGrid>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <IntelligenceSection title="מתווכים מובילים" subtitle="לפי מספר מודעות מקושרות (נתוני אמת)">
+              {topBrokers.length === 0
+                ? <IntelligenceEmptyInline text="עדיין אין מתווכים עם מודעות מקושרות. הפעל סריקה כדי לבנות את הגרף." />
+                : (
+                  <div className="flex flex-col gap-2">
+                    {topBrokers.map(({ a, count }, i) => {
+                      const officeName = a.officeId ? officeNameById.get(a.officeId) ?? null : null;
+                      return (
+                        <button key={a.id} type="button" onClick={() => setDnaTarget({ type: "broker", id: a.id, name: a.fullName })}
+                          className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-right transition hover:border-brand">
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-black text-brand-strong">{i + 1}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-black text-ink">{a.fullName}</span>
+                            <span className="block truncate text-[11px] text-muted">{officeName ?? "משרד טרם זוהה"}{a.city ? ` · ${a.city}` : ""}</span>
+                          </span>
+                          <span className="shrink-0 text-left">
+                            <span className="block text-base font-black tabular-nums text-violet-700">{count}</span>
+                            <span className="block text-[10px] text-muted">מודעות</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+            </IntelligenceSection>
+
+            <IntelligenceSection title="פעילות אחרונה" subtitle="סריקות, גילוי וזיהוי זהויות">
+              <IntelligenceFeed
+                emptyText="עדיין לא בוצעו סריקות."
+                items={cc.runs.slice(0, 8).map((r) => ({
+                  id: r.id,
+                  title: runTypeHe(r.runType),
+                  detail: `${r.newAgents ? `${r.newAgents} מתווכים חדשים · ` : ""}${r.updatedRecords} עדכונים`,
+                  meta: r.finishedAt ? new Date(r.finishedAt).toLocaleDateString("he-IL") : "",
+                  badge: <Badge tone={r.status === "completed" ? "green" : r.status === "failed" ? "red" : "amber"}>{statusHe(r.status)}</Badge>,
+                }))}
+              />
+            </IntelligenceSection>
+          </div>
         </div>
       )}
 
@@ -199,7 +260,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
           {offices.length === 0 && <Empty text="אין משרדים להצגה בערי ההתמחות שלך." />}
           {offices.map((o) => (
             <button key={o.id} type="button" onClick={() => setDnaTarget({ type: "office", id: o.id, name: o.name })}
-              className="rounded-2xl border border-line bg-surface p-4 text-right transition hover:border-brand hover:shadow-sm">
+              className="rounded-2xl border border-line bg-card p-4 text-right transition hover:border-brand hover:shadow-md">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-base font-black text-ink">{o.name}</div>
@@ -248,7 +309,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
               const listings = listingsByAgent.get(a.id) ?? 0;
               return (
                 <button key={a.id} type="button" onClick={() => setDnaTarget({ type: "broker", id: a.id, name: a.fullName })}
-                  className="rounded-2xl border border-line bg-surface p-4 text-right transition hover:border-brand hover:shadow-sm">
+                  className="rounded-2xl border border-line bg-card p-4 text-right transition hover:border-brand hover:shadow-md">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-black text-ink">{a.fullName}</div>
