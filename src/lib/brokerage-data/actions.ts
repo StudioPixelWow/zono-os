@@ -123,7 +123,8 @@ export async function startBrokerageDataRefreshAction(params: Record<string, unk
     console.info(`[brokerage-data] scan button pressed user=${profile.id ?? "?"} org=${profile.org_id}`);
     const r = await startBrokerageDataRefresh(profile.org_id, profile.id ?? null, params);
     revalidatePath("/brokerage-data");
-    if (!r.ok) return { ok: false, runId: r.runId, status: r.status, error: "הסריקה לא התחילה. בדוק חיבור או נסה שוב." };
+    // Surface the REAL reason (e.g. a stalled/partial pipeline) instead of a generic error.
+    if (!r.ok) return { ok: false, runId: r.runId, status: r.status, error: r.message ?? "הסריקה לא התחילה. בדוק חיבור או נסה שוב." };
     return { ok: true, runId: r.runId, status: r.status, message: r.message };
   } catch (e) {
     console.error("[brokerage-data] start refresh failed:", e);
