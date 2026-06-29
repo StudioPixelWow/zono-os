@@ -12,6 +12,12 @@ import { ZonoLogo } from "@/components/brand/ZonoLogo";
 /** Routes wired so far. Items without a route stay visual-only for now. */
 const HREFS: Record<string, string> = {
   home: "/", "ai-office": "/ai-office", command: "/command", map: "/market",
+  // Phase 26.7.1 — clear access to the three workspaces + intelligence surfaces:
+  "my-properties": "/my-properties", "office-inventory": "/office-inventory",
+  "market-dashboard": "/market-intelligence/dashboard", "broker-dashboard": "/broker-intelligence/dashboard",
+  "office-dashboard": "/office-intelligence/dashboard", "intelligence-explorer": "/intelligence-explorer",
+  "live-market-map": "/market-intelligence/map", "action-center": "/action-center",
+  "mission-control": "/mission-control",
   properties: "/properties", buyers: "/buyers", sellers: "/sellers", matches: "/matches",
   deals: "/deals", transactions: "/transactions", forecast: "/forecast", revenue: "/revenue",
   acquisition: "/acquisition", competitors: "/competitors", marketing: "/marketing",
@@ -45,12 +51,15 @@ interface NavGroup { key: string; label: string; icon: string; managerOnly?: boo
 const NAV_GROUPS: NavGroup[] = [
   { key: "main", label: "ראשי", icon: "Home", items: [
     { id: "home", label: "דף הבית", icon: "Home", tier: "v1" },
+    { id: "action-center", label: "מרכז הפעולות", icon: "Flame", tier: "v1" },
+    { id: "mission-control", label: "בקרת AI", icon: "Sparkles", tier: "v1" },
     { id: "notifications", label: "התראות", icon: "Bell", tier: "v1" },
     { id: "ai-office", label: "מוח המשרד", icon: "Sparkles", tier: "advanced" },
     { id: "command", label: "מרכז פיקוד", icon: "Flame", tier: "advanced" },
   ]},
   { key: "crm", label: "CRM", icon: "Users", items: [
-    { id: "properties", label: "נכסים", icon: "Building2", tier: "v1" },
+    { id: "my-properties", label: "הנכסים שלי", icon: "Building", tier: "v1" },
+    { id: "office-inventory", label: "מלאי המשרד", icon: "Building2", tier: "v1" },
     { id: "buyers", label: "קונים", icon: "Users", tier: "v1" },
     { id: "sellers", label: "מוכרים", icon: "UserCheck", tier: "v1" },
     { id: "deals", label: "עסקאות", icon: "Handshake", tier: "v1" },
@@ -58,13 +67,17 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "journeys", label: "מסעות", icon: "Route", tier: "advanced" },
   ]},
   { key: "intel", label: "מודיעין", icon: "BarChart3", items: [
+    { id: "market-dashboard", label: "מודיעין שוק", icon: "Map", tier: "v1" },
+    { id: "intelligence-explorer", label: "חיפוש מודיעין", icon: "Search", tier: "v1" },
+    { id: "live-market-map", label: "מפת שוק חיה", icon: "MapPin", tier: "v1" },
+    { id: "broker-dashboard", label: "מודיעין סוכנים", icon: "Users", tier: "v1" },
+    { id: "office-dashboard", label: "מודיעין משרדים", icon: "Building2", tier: "v1" },
     { id: "recommendations", label: "המלצות", icon: "Sparkles", tier: "v1" },
     { id: "matches", label: "התאמות", icon: "Sparkles", tier: "v1" },
     { id: "forecast", label: "תחזית", icon: "TrendingUp", tier: "advanced" },
     { id: "revenue", label: "הכנסות", icon: "BarChart3", tier: "advanced" },
     { id: "territories", label: "טריטוריות", icon: "Map", tier: "advanced" },
     { id: "transactions", label: "שוק ועסקאות", icon: "Landmark", tier: "advanced" },
-    { id: "map", label: "מודיעין שוק", icon: "Map", tier: "advanced" },
     { id: "competitors", label: "מתחרים", icon: "BarChart3", tier: "advanced" },
     { id: "acquisition", label: "גיוס נכסים", icon: "Building", tier: "advanced" },
     { id: "graph", label: "קשרים עסקיים", icon: "Sparkles", tier: "hidden" },
@@ -107,7 +120,9 @@ const NAV_GROUPS: NavGroup[] = [
 
 /** Standard-mode flat order — the 12 V1 surfaces a brokerage learns in one day. */
 const V1_FLAT_ORDER = [
-  "home", "properties", "buyers", "sellers", "deals", "matches",
+  "home", "action-center",
+  "my-properties", "office-inventory", "buyers", "sellers", "deals", "matches",
+  "market-dashboard", "intelligence-explorer", "live-market-map", "broker-dashboard", "office-dashboard",
   "creative-studio", "marketing", "recommendations", "team", "documents", "settings",
 ];
 

@@ -6,6 +6,8 @@
 // ============================================================================
 import Link from "next/link";
 import { TerminalSection, Metric, MetricGrid, TerminalEmpty, val } from "@/components/intelligence/terminal";
+import { WorkspaceLinks, type WorkspaceLink } from "@/components/workspace/WorkspaceHeader";
+import { EmptyGuidance } from "@/components/intelligence/EmptyGuidance";
 import type { ExplorerOffice } from "@/lib/intelligence-explorer/types";
 
 function Row({ o, metric }: { o: ExplorerOffice; metric: string }) {
@@ -28,6 +30,14 @@ const top = (offices: ExplorerOffice[], key: keyof ExplorerOffice) => [...office
 export function OfficeIntelligenceDashboardView({ offices }: { offices: ExplorerOffice[] }) {
   const scored = offices.filter((o) => o.overall != null).length;
   const avg = offices.length ? Math.round(offices.reduce((s, o) => s + (o.overall ?? 0), 0) / offices.length) : 0;
+  const topOffice = top(offices, "overall")[0] ?? null;
+
+  const ACCESS_LINKS: WorkspaceLink[] = [
+    { href: "/intelligence-explorer", emoji: "🔎", label: "חיפוש משרד", hint: "Intelligence Explorer" },
+    { href: "/office-intelligence", emoji: "🏢", label: "כל המשרדים", hint: "Office Intelligence" },
+    { href: topOffice ? `/office-intelligence/${encodeURIComponent(topOffice.id)}` : "/intelligence-explorer", emoji: "🏬", label: "פרופיל משרד", hint: topOffice ? topOffice.name : "בחר משרד" },
+    { href: "/brokerage-data", emoji: "🗂️", label: "דאטה משרדי תיווך", hint: "Brokerage Data Platform" },
+  ];
 
   return (
     <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-4 p-4 sm:p-6">
@@ -40,20 +50,28 @@ export function OfficeIntelligenceDashboardView({ offices }: { offices: Explorer
         </div>
       </header>
 
-      <TerminalSection title="סקירה" subtitle="מדדים ממנוע ה-BIE">
-        <MetricGrid>
-          <Metric label="משרדים" value={String(offices.length)} accent />
-          <Metric label="עם ציון" value={String(scored)} />
-          <Metric label="ביצועים ממוצע" value={val(avg)} />
-        </MetricGrid>
-      </TerminalSection>
+      <WorkspaceLinks links={ACCESS_LINKS} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Board title="המשרדים המובילים" subtitle="אינדקס ביצועים" rows={top(offices, "overall").map((o) => ({ o, metric: val(o.overall) }))} />
-        <Board title="הצומחים ביותר" subtitle="צמיחה" rows={top(offices, "growth").map((o) => ({ o, metric: val(o.growth) }))} />
-        <Board title="המומנטום החזק ביותר" subtitle="מומנטום" rows={top(offices, "momentum").map((o) => ({ o, metric: val(o.momentum) }))} />
-        <Board title="שינויי איום" subtitle="ציון איום תחרותי" rows={top(offices, "threat").map((o) => ({ o, metric: val(o.threat) }))} />
-      </div>
+      {offices.length === 0 ? (
+        <EmptyGuidance />
+      ) : (
+        <>
+          <TerminalSection title="סקירה" subtitle="מדדים ממנוע ה-BIE">
+            <MetricGrid>
+              <Metric label="משרדים" value={String(offices.length)} accent />
+              <Metric label="עם ציון" value={String(scored)} />
+              <Metric label="ביצועים ממוצע" value={val(avg)} />
+            </MetricGrid>
+          </TerminalSection>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Board title="המשרדים המובילים" subtitle="אינדקס ביצועים" rows={top(offices, "overall").map((o) => ({ o, metric: val(o.overall) }))} />
+            <Board title="הצומחים ביותר" subtitle="צמיחה" rows={top(offices, "growth").map((o) => ({ o, metric: val(o.growth) }))} />
+            <Board title="המומנטום החזק ביותר" subtitle="מומנטום" rows={top(offices, "momentum").map((o) => ({ o, metric: val(o.momentum) }))} />
+            <Board title="שינויי איום" subtitle="ציון איום תחרותי" rows={top(offices, "threat").map((o) => ({ o, metric: val(o.threat) }))} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

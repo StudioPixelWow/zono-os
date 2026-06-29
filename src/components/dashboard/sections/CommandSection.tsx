@@ -19,6 +19,17 @@ function actionHref(label: string): string {
   return "/command";
 }
 
+// Phase 26.7.1 — explicit access to every intelligence/workspace area.
+const INTEL_QUICK_LINKS: { label: string; href: string; icon: string }[] = [
+  { label: "הנכסים שלי", href: "/my-properties", icon: "Building" },
+  { label: "מלאי המשרד", href: "/office-inventory", icon: "Building2" },
+  { label: "נכסים חיצוניים", href: "/market-intelligence", icon: "Globe" },
+  { label: "מודיעין סוכנים", href: "/broker-intelligence/dashboard", icon: "Users" },
+  { label: "מודיעין משרדים", href: "/office-intelligence/dashboard", icon: "Building2" },
+  { label: "מפת שוק חיה", href: "/market-intelligence/map", icon: "MapPin" },
+  { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
+];
+
 export function CommandSection() {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -74,6 +85,21 @@ export function CommandSection() {
                 >
                   <Icon name={a.icon} size={15} strokeWidth={2} />
                   {a.label}
+                </Link>
+              ))}
+            </div>
+
+            {/* intelligence & workspace access (Phase 26.7.1) */}
+            <p className="mt-5 text-[11px] font-black tracking-wide text-white/70">גישה מהירה למודיעין</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {INTEL_QUICK_LINKS.map((l) => (
+                <Link
+                  key={l.href + l.label}
+                  href={l.href}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/5 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  <Icon name={l.icon} size={15} strokeWidth={2} />
+                  {l.label}
                 </Link>
               ))}
             </div>
