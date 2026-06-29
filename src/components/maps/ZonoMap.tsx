@@ -89,9 +89,15 @@ function infoHtml(p: ZonoMapPoint): string {
   </div>`;
 }
 
-/** Grid-cluster points by current zoom; returns clusters (count>1) + singles. */
+/** Grid-cluster points by current zoom; returns clusters (count>1) + singles.
+ *  The cell is sized in SCREEN SPACE (~a fixed pixel grid), so clusters break
+ *  apart into individual points as you zoom in. Previously the cell was a coarse
+ *  fraction of the whole world (≈km even at high zoom), so an entire neighborhood
+ *  collapsed into a single cluster and never expanded. */
 function clusterPoints(points: ZonoMapPoint[], zoom: number): Array<{ lat: number; lng: number; items: ZonoMapPoint[] }> {
-  const cell = (360 / Math.pow(2, Math.max(1, zoom))) * 6; // shrinks as you zoom in
+  // degrees-per-pixel at this zoom × ~a 64px cluster radius.
+  const degPerPx = 360 / (256 * Math.pow(2, Math.max(1, zoom)));
+  const cell = Math.max(degPerPx * 64, 1e-6);
   const grid = new Map<string, { lat: number; lng: number; items: ZonoMapPoint[] }>();
   for (const p of points) {
     const key = `${Math.round(p.lat / cell)}:${Math.round(p.lng / cell)}`;
