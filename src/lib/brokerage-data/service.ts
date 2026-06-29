@@ -150,14 +150,31 @@ export async function startBrokerageDataRefresh(
 ): Promise<StartRefreshResult> {
   const db = createServiceRoleClient();
   const runType = (params.runType as string) ?? "full_country";
+  const STALE_MS = 10 * 60 * 1000; // a pending/running run older than this is stale.
 
-  // 1) Idempotency — reuse any pending/running scan for this org (double-click safe).
+  // 1) Idempotency — reuse a RECENT pending/running scan for this org (double-click
+  //    safe). Stale rows (incl. legacy "pending" rows that never had a processor)
+  //    are marked failed so they stop blocking new scans forever.
   const { data: active } = await db.from("brokerage_refresh_runs" as never)
-    .select("id,status,parameters").in("status", ["pending", "running"]).order("created_at", { ascending: false }).limit(20);
-  const existing = ((active ?? []) as { id: string; parameters?: { org_id?: string } }[])
-    .find((r) => r.parameters?.org_id === orgId);
-  if (existing) {
-    return { ok: true, runId: String(existing.id), status: "running", message: "סריקה כבר מתבצעת.", alreadyRunning: true };
+    .select("id,status,parameters,created_at,started_at").in("status", ["pending", "running"]).order("created_at", { ascending: false }).limit(50);
+  const mine = ((active ?? []) as { id: string; parameters?: { org_id?: string }; created_at?: string; started_at?: string | null }[])
+    .filter((r) => r.parameters?.org_id === orgId);
+  const now = Date.now();
+  let liveRun: { id: string } | null = null;
+  for (const r of mine) {
+    const ts = Date.parse(r.started_at ?? r.created_at ?? "") || 0;
+    if (now - ts > STALE_MS) {
+      await db.from("brokerage_refresh_runs" as never).update({
+        status: "failed", finished_at: new Date().toISOString(), errors_count: 1,
+        log: [{ error: "stale-run-expired", note: "pending/running for >10m without completion" }] as never,
+      } as never).eq("id", r.id);
+      console.info(`[brokerage-data] expired stale run id=${r.id} org=${orgId}`);
+    } else if (!liveRun) {
+      liveRun = { id: String(r.id) };
+    }
+  }
+  if (liveRun) {
+    return { ok: true, runId: liveRun.id, status: "running", message: "סריקה כבר מתבצעת.", alreadyRunning: true };
   }
 
   // 2) Create a running run row (who/when/params).

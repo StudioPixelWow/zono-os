@@ -10,8 +10,8 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import type { BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import {
-  resolveBrokerageNowAction, startBrokerageDataRefreshAction, reviewMatchAction,
-  resolveConflictAction, decideLinkAction,
+  resolveBrokerageNowAction, startBrokerageDataRefreshAction, getBrokerageRefreshStatusAction,
+  reviewMatchAction, resolveConflictAction, decideLinkAction,
 } from "@/lib/brokerage-data/actions";
 
 type Tab = "overview" | "offices" | "agents" | "links" | "conflicts" | "matches" | "sources";
@@ -56,6 +56,32 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
     start(async () => { const r = await fn(); if (r?.error) setErr(r.error); else { if (r?.message) setMsg(r.message); router.refresh(); } });
   };
 
+  // Start a brokerage scan, then poll the run until it reaches a terminal status.
+  // (The current processor is synchronous, so it usually returns completed already;
+  // polling is a safety net if a future async worker leaves it running.)
+  const startScan = (params: Record<string, unknown>) => {
+    setMsg(null); setErr(null);
+    start(async () => {
+      const r = await startBrokerageDataRefreshAction(params);
+      if (!r.ok || !r.runId) { setErr(r.error ?? "הסריקה לא התחילה. בדוק חיבור או נסה שוב."); return; }
+      if (r.message) setMsg(r.message);
+      router.refresh();
+      if (r.status === "completed" || r.status === "failed" || r.status === "partial") return;
+      // Poll up to ~30s for an async run to finish.
+      const deadline = Date.now() + 30_000;
+      for (;;) {
+        await new Promise((res) => setTimeout(res, 4000));
+        const s = await getBrokerageRefreshStatusAction(r.runId);
+        if (s && (s.status === "completed" || s.status === "failed" || s.status === "partial")) {
+          setMsg(s.status === "failed" ? "הסריקה נכשלה. נסה שוב בעוד רגע." : `הסריקה הסתיימה ✓ (${s.updatedRecords} עדכונים).`);
+          router.refresh();
+          return;
+        }
+        if (Date.now() > deadline) { setMsg("הסריקה ממתינה לעיבוד. אם זה נמשך, בדוק את הגדרות ה-worker."); return; }
+      }
+    });
+  };
+
   const q = search.trim().toLowerCase();
   const offices = useMemo(() => cc.offices.filter((o) => !q || o.name.toLowerCase().includes(q) || (o.city ?? "").toLowerCase().includes(q)), [cc.offices, q]);
   const agents = useMemo(() => cc.agents.filter((a) => !q || a.fullName.toLowerCase().includes(q) || (a.city ?? "").toLowerCase().includes(q)), [cc.agents, q]);
@@ -89,7 +115,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
           {owner && (
             <div className="flex flex-wrap gap-2">
               <Button size="sm" onClick={() => run(resolveBrokerageNowAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>זהה עכשיו</Button>
-              <Button size="sm" variant="ghost" onClick={() => run(() => startBrokerageDataRefreshAction({ runType: "full_country" }))} disabled={pending}>בקש רענון לאומי</Button>
+              <Button size="sm" variant="ghost" onClick={() => startScan({ runType: "full_country" })} disabled={pending}>בקש רענון לאומי</Button>
             </div>
           )}
         </div>
@@ -106,7 +132,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
           </p>
           <p className="text-muted mt-1.5 text-xs">⏱ משך משוער: 1–3 דקות · מתעדכן אוטומטית ברקע</p>
           <div className="mt-5 flex flex-col items-center gap-2">
-            <Button className="!min-w-[320px]" onClick={() => run(() => startBrokerageDataRefreshAction({ runType: "full_country" }))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={18} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
+            <Button className="!min-w-[320px]" onClick={() => startScan({ runType: "full_country" })} disabled={pending} leadingIcon={<Icon name="Sparkles" size={18} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
             <Button variant="ghost" onClick={() => run(resolveBrokerageNowAction)} disabled={pending}>⚙ זהה מתוך נתונים קיימים</Button>
           </div>
           <div className="mx-auto mt-6 max-w-md rounded-2xl border border-line bg-surface p-4 text-right">
