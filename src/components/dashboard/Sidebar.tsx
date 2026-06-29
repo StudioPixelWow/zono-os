@@ -21,7 +21,7 @@ const HREFS: Record<string, string> = {
   "mission-control": "/mission-control",
   // Phase 26.7.3 — clear grouped intelligence navigation:
   "property-radar": "/property-radar", "neighborhood-dashboard": "/neighborhood-intelligence/dashboard",
-  "brokerage-data": "/brokerage-data", "ai-memory": "/mission-control", "ai-missions": "/mission-control",
+  "brokerage-data": "/brokerage-data", "ai-memory": "/mission-control#memory", "ai-missions": "/mission-control#mission-planner",
   properties: "/properties", buyers: "/buyers", sellers: "/sellers", matches: "/matches",
   deals: "/deals", transactions: "/transactions", forecast: "/forecast", revenue: "/revenue",
   acquisition: "/acquisition", competitors: "/competitors", marketing: "/marketing",
@@ -84,11 +84,11 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "revenue", label: "הכנסות", icon: "BarChart3", tier: "advanced" },
     { id: "territories", label: "טריטוריות", icon: "Map", tier: "advanced" },
   ]},
-  { key: "broker", label: "מודיעין מתווכים", icon: "BarChart3", items: [
+  { key: "broker", label: "מודיעין תיווך", icon: "BarChart3", items: [
+    { id: "brokerage-data", label: "דאטה משרדי תיווך", icon: "Database", tier: "v1" },
     { id: "broker-dashboard", label: "מודיעין סוכנים", icon: "Users", tier: "v1" },
     { id: "office-dashboard", label: "מודיעין משרדים", icon: "Building2", tier: "v1" },
     { id: "neighborhood-dashboard", label: "מודיעין שכונות", icon: "Map", tier: "v1" },
-    { id: "brokerage-data", label: "דאטה משרדי תיווך", icon: "Database", tier: "v1" },
     { id: "graph", label: "קשרים עסקיים", icon: "Sparkles", tier: "hidden" },
   ]},
   { key: "ai-growth", label: "AI וצמיחה", icon: "Sparkles", items: [
@@ -140,8 +140,8 @@ const V1_FLAT_ORDER = [
   "my-properties", "office-inventory", "buyers", "sellers", "deals",
   // Market Intelligence
   "market-listings", "market-dashboard", "live-market-map", "intelligence-explorer", "property-radar",
-  // Broker Intelligence
-  "broker-dashboard", "office-dashboard", "neighborhood-dashboard", "brokerage-data",
+  // Brokerage Intelligence
+  "brokerage-data", "broker-dashboard", "office-dashboard", "neighborhood-dashboard",
   // AI / Growth + core
   "recommendations", "ai-memory", "ai-missions",
   "creative-studio", "marketing", "team", "documents", "settings",

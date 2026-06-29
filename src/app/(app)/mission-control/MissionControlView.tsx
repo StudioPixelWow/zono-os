@@ -110,9 +110,11 @@ export function MissionControlView({ data }: { data: MissionControlDTO }) {
           </div>
 
           {/* Mission Planner — reviewable draft missions (Phase 27.4). No execution. */}
-          <TerminalSection title="מתכנן המשימות" subtitle="טיוטות מבוססות ראיות · אישור/דחייה · ללא ביצוע">
-            <MissionPlannerPanel />
-          </TerminalSection>
+          <div id="mission-planner" className="scroll-mt-4">
+            <TerminalSection title="מתכנן המשימות" subtitle="טיוטות מבוססות ראיות · אישור/דחייה · ללא ביצוע">
+              <MissionPlannerPanel />
+            </TerminalSection>
+          </div>
         </div>
 
         {/* ── Side column ── */}
