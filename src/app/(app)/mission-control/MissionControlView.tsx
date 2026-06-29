@@ -12,6 +12,7 @@ import { TerminalSection, Metric, MetricGrid, Pill, TerminalEmpty } from "@/comp
 import { MorningBrief } from "@/components/intelligence/MorningBrief";
 import { bucketRecommendations } from "@/lib/intelligence-explorer/action-center-shared";
 import { AiReasoningPanel } from "./AiReasoningPanel";
+import { MissionPlannerPanel } from "./MissionPlannerPanel";
 import type { MissionControlDTO } from "@/lib/mission-control/types";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
@@ -99,6 +100,11 @@ export function MissionControlView({ data }: { data: MissionControlDTO }) {
           {/* AI Workspace — one-shot reasoning (Phase 27.3). Context-only, no memory/actions. */}
           <TerminalSection title="סביבת עבודת AI" subtitle="שאלה חד-פעמית · תשובה מבוססת הקשר בלבד">
             <AiReasoningPanel />
+          </TerminalSection>
+
+          {/* Mission Planner — reviewable draft missions (Phase 27.4). No execution. */}
+          <TerminalSection title="מתכנן המשימות" subtitle="טיוטות מבוססות ראיות · אישור/דחייה · ללא ביצוע">
+            <MissionPlannerPanel />
           </TerminalSection>
         </div>
 

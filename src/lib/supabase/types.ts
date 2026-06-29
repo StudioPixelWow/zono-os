@@ -2243,6 +2243,35 @@ type RevenueLeakageEventsRow = {
   created_at: string;
 };
 
+type AiMissionDraftsRow = {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  broker_id: string | null;
+  source_type: string;
+  source_id: string | null;
+  status: string;
+  priority: string;
+  category: string;
+  title: string;
+  summary: string | null;
+  recommended_action: string | null;
+  expected_outcome: string | null;
+  estimated_impact: number | null;
+  confidence: number;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  evidence: Json;
+  generated_from: Json;
+  blocked_by: Json;
+  metadata: Json;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  converted_task_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type TeamPerformanceSnapshotsRow = {
   id: string;
   organization_id: string;
@@ -4863,6 +4892,10 @@ export interface Database {
       revenue_leakage_events: TableShape<
         RevenueLeakageEventsRow,
         "organization_id" | "source" | "title"
+      >;
+      ai_mission_drafts: TableShape<
+        AiMissionDraftsRow,
+        "organization_id" | "source_type" | "category" | "title"
       >;
       community_profiles: TableShape<
         CommunityProfilesRow,

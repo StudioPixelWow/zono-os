@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { TerminalSection, Metric, MetricGrid, Pill, TerminalEmpty, val, type StatusTone } from "@/components/intelligence/terminal";
+import { MissionDraftsMini } from "./MissionDraftsMini";
 import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 import { bucketRecommendations, type ActionCenterDTO, type RecBucket } from "@/lib/intelligence-explorer/action-center-shared";
 import type { RecommendationView } from "@/lib/recommendations/service";
@@ -64,6 +65,8 @@ export function ActionCenterView({ data }: { data: ActionCenterDTO }) {
           <p className="text-muted mt-0.5 text-sm">מה לעשות היום — מהמודיעין הקיים, מאורגן לעבודה.</p>
         </div>
       </header>
+
+      <MissionDraftsMini />
 
       {/* Recommended Actions (existing AI Coach) */}
       <TerminalSection title="פעולות מומלצות" subtitle="AI Coach קיים בלבד — לא נוצרות חדשות" action={
