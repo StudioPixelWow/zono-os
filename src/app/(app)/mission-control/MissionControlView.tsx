@@ -11,17 +11,10 @@ import Link from "next/link";
 import { TerminalSection, Metric, MetricGrid, Pill, TerminalEmpty } from "@/components/intelligence/terminal";
 import { MorningBrief } from "@/components/intelligence/MorningBrief";
 import { bucketRecommendations } from "@/lib/intelligence-explorer/action-center-shared";
+import { AiReasoningPanel } from "./AiReasoningPanel";
 import type { MissionControlDTO } from "@/lib/mission-control/types";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
-
-// Static placeholders — no AI yet (Phase 27.1). Purely illustrative chips.
-const SUGGESTED_QUESTIONS = [
-  "מה השתנה היום?",
-  "הצג הזדמנויות",
-  "מי המתחרים החזקים ביותר?",
-  "הסבר את הערכת השווי",
-];
 
 function recHref(t: string, id: string | null): string | null {
   if (!id) return null;
@@ -103,18 +96,9 @@ export function MissionControlView({ data }: { data: MissionControlDTO }) {
             ) : <TerminalEmpty text="אין אותות שוק פעילים." />}
           </TerminalSection>
 
-          {/* AI Workspace — placeholder (no prompts, no AI) */}
-          <TerminalSection title="סביבת עבודת AI" subtitle="שיחה — בקרוב">
-            <div className="border-line bg-surface flex min-h-[120px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-6 text-center">
-              <span className="text-2xl">💬</span>
-              <p className="text-ink text-sm font-bold">סביבת השיחה תיפתח כאן</p>
-              <p className="text-muted text-xs">בשלב זה זוהי שכבת תזמור בלבד — ללא תשובות AI.</p>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {SUGGESTED_QUESTIONS.map((q) => (
-                <span key={q} className="border-line bg-surface text-muted cursor-default rounded-full border px-3 py-1 text-[11px] font-bold" aria-disabled="true" title="בקרוב">{q}</span>
-              ))}
-            </div>
+          {/* AI Workspace — one-shot reasoning (Phase 27.3). Context-only, no memory/actions. */}
+          <TerminalSection title="סביבת עבודת AI" subtitle="שאלה חד-פעמית · תשובה מבוססת הקשר בלבד">
+            <AiReasoningPanel />
           </TerminalSection>
         </div>
 
