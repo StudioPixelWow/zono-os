@@ -50,19 +50,19 @@ export function IntelligenceHeader({
   emoji?: string; eyebrow?: string; title: string; subtitle?: string; actions?: ReactNode; status?: ReactNode; hero?: boolean;
 }) {
   return (
-    <header dir="rtl" className={cn("border-line relative overflow-hidden rounded-3xl border p-5 sm:p-6", hero ? "bg-card bg-gradient-to-bl from-brand-soft/50 to-transparent" : "bg-card")}>
-      <div className="relative flex flex-wrap items-start justify-between gap-4">
+    <header dir="rtl" className={cn("border-line relative overflow-hidden rounded-2xl border p-4 sm:p-5", hero ? "bg-card bg-gradient-to-bl from-brand-soft/50 to-transparent" : "bg-card")}>
+      <div className="relative flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          {emoji && <span className="bg-brand-soft text-brand-strong grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl">{emoji}</span>}
+          {emoji && <span className="bg-brand-soft text-brand-strong grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-xl">{emoji}</span>}
           <div className="min-w-0">
             {eyebrow && <p className="text-brand text-[11px] font-black tracking-wide">{eyebrow}</p>}
-            <h1 className="text-ink text-2xl font-black sm:text-3xl">{title}</h1>
-            {subtitle && <p className="text-muted mt-1 max-w-2xl text-sm">{subtitle}</p>}
+            <h1 className="text-ink text-xl font-black sm:text-2xl">{title}</h1>
+            {subtitle && <p className="text-muted mt-0.5 max-w-2xl text-sm">{subtitle}</p>}
           </div>
         </div>
         {status}
       </div>
-      {actions && <div className="relative mt-4">{actions}</div>}
+      {actions && <div className="relative mt-3">{actions}</div>}
     </header>
   );
 }

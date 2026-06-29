@@ -83,13 +83,13 @@ export function IntelligenceFirstRun({
   };
 
   return (
-    <div dir="rtl" className="border-line bg-card bg-gradient-to-bl from-brand-soft/40 rounded-3xl border to-transparent p-6 sm:p-8">
+    <div dir="rtl" className="border-line bg-card bg-gradient-to-bl from-brand-soft/40 rounded-2xl border to-transparent p-5 sm:p-6">
       <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-        <span className="bg-brand-soft text-brand-strong mb-3 grid h-16 w-16 place-items-center rounded-3xl text-3xl">{emoji}</span>
-        <h2 className="text-ink text-xl font-black sm:text-2xl">{title}</h2>
-        <p className="text-muted mt-1.5 max-w-xl text-sm">{subtitle}</p>
+        <span className="bg-brand-soft text-brand-strong mb-2.5 grid h-12 w-12 place-items-center rounded-2xl text-2xl">{emoji}</span>
+        <h2 className="text-ink text-lg font-black sm:text-xl">{title}</h2>
+        <p className="text-muted mt-1 max-w-xl text-sm">{subtitle}</p>
 
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           {primaryHref ? (
             <Link href={primaryHref} className="bg-brand hover:bg-brand-strong inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-black text-white transition">{primaryLabel}</Link>
           ) : primaryAction ? (

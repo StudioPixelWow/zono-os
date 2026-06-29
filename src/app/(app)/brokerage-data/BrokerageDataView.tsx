@@ -73,8 +73,8 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
   return (
     <div dir="rtl" className="flex flex-col gap-5">
       {/* Header */}
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a1033] via-[#241246] to-[#150a2b] p-6">
-        <div className="pointer-events-none absolute -top-24 -start-24 h-64 w-64 rounded-full bg-purple-600/30 blur-3xl" />
+      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1a1033] via-[#241246] to-[#150a2b] p-4 sm:p-5">
+        <div className="pointer-events-none absolute -top-24 -start-24 h-56 w-56 rounded-full bg-purple-600/30 blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-black tracking-wide text-purple-300">BROKERAGE INTELLIGENCE</p>
@@ -98,20 +98,16 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
 
       {/* First-run onboarding — shown only when the brokerage graph is still empty. */}
       {cc.stats.offices === 0 && cc.stats.agents === 0 && cc.runs.length === 0 && (
-        <section dir="rtl" className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-center sm:p-8">
-          <span className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-3xl bg-purple-500/15 text-3xl">🏢</span>
-          <h2 className="text-xl font-black text-white sm:text-2xl">עדיין לא זוהו משרדי תיווך</h2>
+        <section dir="rtl" className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center sm:p-6">
+          <span className="mx-auto mb-2.5 grid h-12 w-12 place-items-center rounded-2xl bg-purple-500/15 text-2xl">🏢</span>
+          <h2 className="text-lg font-black text-white sm:text-xl">עדיין לא זוהו משרדי תיווך</h2>
           <p className="mx-auto mt-1.5 max-w-xl text-sm text-white/60">
             הפעל סריקה ראשונית כדי לבנות את גרף המודיעין של השוק. הסריקה תאסוף מודעות, תזהה משרדים וסוכנים, ותקשר ביניהם — ממידע ציבורי בלבד.
           </p>
-          {owner ? (
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-              <Button onClick={() => run(() => requestBrokerageRefreshAction({ runType: "full_country" }))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>🚀 התחל סריקה ראשונית</Button>
-              <Button variant="ghost" onClick={() => run(resolveBrokerageNowAction)} disabled={pending}>⚙ זהה מתוך נתונים קיימים</Button>
-            </div>
-          ) : (
-            <p className="mt-4 text-sm text-white/50">הסריקה הראשונית מופעלת על־ידי בעל המשרד. לאחר מכן המודיעין יופיע כאן אוטומטית.</p>
-          )}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            <Button onClick={() => run(() => requestBrokerageRefreshAction({ runType: "full_country" }))} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
+            <Button variant="ghost" onClick={() => run(resolveBrokerageNowAction)} disabled={pending}>⚙ זהה מתוך נתונים קיימים</Button>
+          </div>
           <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-right">
             <p className="mb-2 text-xs font-black text-white/80">מה יקרה אחרי הסריקה:</p>
             <ul className="flex flex-col gap-1.5 text-sm text-white/60">
