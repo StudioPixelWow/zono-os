@@ -133,13 +133,25 @@ export function RegistryView() {
 
       {/* Post-run summary (from the run result itself) */}
       {rm && (
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat label="מועמדים נוצרו" value={rm.officeCandidatesCreated} />
-          <Stat label="מועמדים אומתו" value={rm.candidatesVerified} tone="green" />
-          <Stat label="משרדים נוצרו" value={rm.officesCreated} tone="green" />
-          <Stat label="מתווכים שויכו" value={rm.brokersResolved} />
-          <Stat label="ממתינים לאישור" value={rm.brokersPendingReview} tone="amber" />
-          <Stat label="מתווכים ללא משרד" value={rm.brokersUnresolved} />
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Stat label="מועמדים נוצרו" value={rm.officeCandidatesCreated} />
+            <Stat label="מועמדים אומתו" value={rm.candidatesVerified} tone="green" />
+            <Stat label="משרדים נוצרו" value={rm.officesCreated} tone="green" />
+            <Stat label="מתווכים שויכו" value={rm.brokersResolved} />
+            <Stat label="ממתינים לאישור" value={rm.brokersPendingReview} tone="amber" />
+            <Stat label="מתווכים ללא משרד" value={rm.brokersUnresolved} />
+          </div>
+          {/* Diagnostics — always explain WHY (especially when candidates = 0). */}
+          <div className="border-line bg-surface grid grid-cols-2 gap-2 rounded-2xl border p-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Stat label="מתווכים שעובדו" value={rm.agentsProcessed} />
+            <Stat label="עם ראיה ציבורית" value={rm.agentsWithPublicEvidence} />
+            <Stat label="עם שם משרד שזוהה" value={rm.agentsWithOfficeHint} tone={rm.agentsWithOfficeHint === 0 ? "amber" : undefined} />
+            <Stat label="ללא ראיה ציבורית" value={rm.noPublicEvidence} tone="amber" />
+            <Stat label="בקשות AI" value={rm.aiRequests} />
+            <Stat label="מועמדי AI" value={rm.aiCandidatesCreated} />
+          </div>
+          {!rm.aiConfigured && <p className="text-amber-700 text-[11px] font-bold">⚠ OpenAI אינו מוגדר (OPENAI_API_KEY) — שלב הסקת ה‑AI דילג. מקורות אינטרנט ציבוריים (Google/Facebook/LinkedIn/Yad2/Madlan) אינם מחוברים.</p>}
         </div>
       )}
 
