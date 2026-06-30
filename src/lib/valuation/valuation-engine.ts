@@ -364,13 +364,18 @@ function buildExplanation(
     parts.push("לא נמצאו מספיק עסקאות ומודעות להשוואה ישירה — ההערכה אינדיקטיבית בלבד ורמת הביטחון נמוכה.");
   }
   if (m.medianPricePerSqm) parts.push(`מחיר חציוני למ"ר באזור: ${fmt(m.medianPricePerSqm)}.`);
-  parts.push(`שווי מוערך לנכס: ${fmt(result.estimatedValue)} (${fmt(result.estimatedPricePerSqm)} למ"ר).`);
+  // Never state a ₪0 price in prose — only describe a value when one exists.
+  if (result.estimatedValue > 0) {
+    parts.push(`שווי מוערך לנכס: ${fmt(result.estimatedValue)} (${fmt(result.estimatedPricePerSqm)} למ"ר).`);
+  }
   const pos = result.adjustments.filter((a) => a.direction === "positive").slice(0, 3).map((a) => a.label);
   const neg = result.adjustments.filter((a) => a.direction === "negative").slice(0, 3).map((a) => a.label);
   if (pos.length) parts.push(`גורמים מעלי ערך: ${pos.join(", ")}.`);
   if (neg.length) parts.push(`גורמים מורידי ערך: ${neg.join(", ")}.`);
   if (brokerSold.length > 0) parts.push(`נמצאו ${brokerSold.length} עסקאות שלך באזור — חיזוק לאמינות ההערכה.`);
-  parts.push(`מחיר מומלץ לפרסום: ${fmt(result.recommendedListingPrice)}, יעד סגירה: ${fmt(result.targetClosingPrice)}.`);
+  if (result.estimatedValue > 0) {
+    parts.push(`מחיר מומלץ לפרסום: ${fmt(result.recommendedListingPrice)}, יעד סגירה: ${fmt(result.targetClosingPrice)}.`);
+  }
   return parts.join(" ");
 }
 

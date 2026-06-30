@@ -253,7 +253,7 @@ th{color:#6b6385;font-weight:700;font-size:12px}
   ${v.brokerSold.length ? section("נכסים שמכרתי באזור", `<table><thead><tr><th>כתובת</th><th>מחיר מכירה</th><th>למ"ר</th><th>תאריך</th><th>מול השוק</th></tr></thead><tbody>${brokerRows}</tbody></table>`) : ""}
 
   <!-- 7. AI explanation + methodology -->
-  ${section("הסבר ההערכה", `<p style="font-size:14px">${esc(r?.explanation || "—")}</p>
+  ${section("הסבר ההערכה", `<p style="font-size:14px">${available ? esc(r?.explanation || "—") : esc(r?.unavailableReason || "לא נמצאו מספיק נתונים להפקת הערכת שווי.")}</p>
     ${available ? `<div class="method">
       <div class="method-h">איך חושבה ההערכה</div>
       <ul>
