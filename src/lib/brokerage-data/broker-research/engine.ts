@@ -12,6 +12,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { normalizeHebrewName } from "../normalize";
 import { detectFranchise } from "../franchise";
+import { isAcceptableOfficeName } from "../office-name-guard";
 import { runReasoningGateway, selectProvider } from "@/lib/ai-reasoning/gateway";
 import { CONTEXT_ENGINE_VERSION, type ContextPackage } from "@/lib/context-engine/types";
 import { resolveBrokerIdentity } from "../broker-identity/engine";
@@ -120,6 +121,7 @@ export async function researchBroker(agentId: string, opts: { apply?: boolean } 
       const fr = detectFranchise(o.officeName);
       const normalizedName = normalizeHebrewName(o.officeName);
       if (!normalizedName || normalizedName === dossier.normalizedName) continue; // STEP 7
+      if (!isAcceptableOfficeName(o.officeName)) continue; // GUARD 26.13c: never a person-name office
       const { error } = await db.from("brokerage_office_candidates" as never).insert({
         office_name: o.officeName, normalized_name: normalizedName, brand_network: o.brandNetwork, normalized_brand: fr.normalizedBrand,
         city: dossier.city, suggested_by: o.sources.includes("web_search") ? "public_source" : "zono_listings",

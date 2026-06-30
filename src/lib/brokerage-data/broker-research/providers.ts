@@ -10,6 +10,7 @@
 import "server-only";
 import { normalizeHebrewName } from "../normalize";
 import { detectFranchise } from "../franchise";
+import { isAcceptableOfficeName } from "../office-name-guard";
 import type { ResearchEvidence, ProviderStatus } from "./types";
 
 export interface ResearchListing {
@@ -179,6 +180,7 @@ export function derivePossibleOffices(evidence: ResearchEvidence[], normalizedBr
     const name = e.extractedOfficeName?.trim();
     if (!name) continue;
     if (normalizeHebrewName(name) === normalizedBrokerName) continue; // STEP 7
+    if (!isAcceptableOfficeName(name)) continue; // GUARD 26.13c: require brand/office keyword
     const key = normalizeHebrewName(name);
     const fr = detectFranchise(name);
     let c = byName.get(key);

@@ -15,6 +15,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { brokerageRepository } from "./repository";
 import { scoreOffice } from "./identity";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
+import { isAcceptableOfficeName } from "./office-name-guard";
 
 export interface OfficeResolutionMetrics {
   brokersDetected: number;
@@ -99,8 +100,12 @@ export async function resolveBrokerOfficesForOrg(orgId: string): Promise<OfficeR
     if (distinctNames.size < 2) continue; // a single broker on a phone is not office evidence
     const count = distinctNames.size;
     const confidence = count >= 4 ? 96 : count === 3 ? 88 : 80; // stronger with more brokers on one line
-    const officeId = globalThis.crypto.randomUUID();
     const officeName = mostCommon(group.map((g) => g.fullName)) || s(phone); // real observed name, not invented
+    // GUARD (26.13c): a shared phone line is office evidence, but if the only
+    // name we have is an individual broker's name (no brand/office keyword) we
+    // must NOT create an office from it. Leave the brokers unresolved instead.
+    if (!isAcceptableOfficeName(officeName)) continue;
+    const officeId = globalThis.crypto.randomUUID();
     const city = mostCommon(group.map((g) => g.city ?? "")) || null;
     newOffices.push({
       id: officeId, name: officeName.trim(), normalized_name: normalizeHebrewName(officeName),

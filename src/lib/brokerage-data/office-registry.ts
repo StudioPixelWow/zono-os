@@ -28,6 +28,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { resolveBrokerOfficesForOrg, type OfficeResolutionMetrics } from "./office-resolution";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
 import { detectFranchise } from "./franchise";
+import { isAcceptableOfficeName } from "./office-name-guard";
 import { getOfficeDiscoveryReadiness } from "./office-evidence";
 import { runReasoningGateway, selectProvider } from "@/lib/ai-reasoning/gateway";
 import { CONTEXT_ENGINE_VERSION, type ContextPackage } from "@/lib/context-engine/types";
@@ -54,6 +55,7 @@ export interface RegistryMetrics {
   agentsWithPublicEvidence: number;
   agentsWithOfficeHint: number;
   noPublicEvidence: number;
+  personNameCandidatesBlocked: number;
   aiConfigured: boolean;
   aiRequests: number;
   aiCandidatesCreated: number;
@@ -97,7 +99,7 @@ export async function runNationalOfficeRegistry(
     officeCandidatesCreated: 0, candidatesVerified: 0, officesCreated: 0, duplicateCandidates: 0,
     brokersResolved: 0, brokersPendingReview: 0, brokersUnresolved: 0, edgesCreated: 0,
     agentsProcessed: 0, agentsWithPublicEvidence: 0, agentsWithOfficeHint: 0, noPublicEvidence: 0,
-    aiConfigured: aiReady, aiRequests: 0, aiCandidatesCreated: 0, verifiedCandidates: 0, rejectedCandidates: 0,
+    personNameCandidatesBlocked: 0, aiConfigured: aiReady, aiRequests: 0, aiCandidatesCreated: 0, verifiedCandidates: 0, rejectedCandidates: 0,
     // external web providers (Google/FB/LinkedIn/Yad2/Madlan/site) are all unconfigured here.
     publicSourcesSkipped: readiness.providers.filter((p) => p.kind === "public_search" && !p.enabled).length || 1,
     errors: [],
@@ -179,6 +181,9 @@ export async function runNationalOfficeRegistry(
     const addHint = (rawName: string, city: string | null, brokerId: string, opts2: { phone?: string | null; domain?: string | null; source?: string | null; by: string; aiConf?: number }) => {
       const name = (rawName ?? "").trim();
       if (name.length < 2) return;
+      // GUARD (26.13c): never form an office from an individual broker name —
+      // require brand/office-keyword evidence. Blocks "נדב רייזר", "אייל שמול", …
+      if (!isAcceptableOfficeName(name)) { m.personNameCandidatesBlocked++; return; }
       const fr = detectFranchise(name);
       const officeName = fr.matched ? `${fr.brandNetwork}${city ? ` ${city}` : ""}` : name;
       const normalizedName = normalizeHebrewName(officeName);
@@ -302,6 +307,7 @@ export async function runNationalOfficeRegistry(
     const nowIso = new Date().toISOString();
     for (const key of verifyKeys) {
       const a = agg.get(key)!;
+      if (!isAcceptableOfficeName(a.officeName)) continue;  // GUARD: never verify a person-name office
       const officeId = globalThis.crypto.randomUUID();
       const phone = [...a.phones][0] ?? null;
       const conf = a.brokerIds.size >= 4 ? 96 : a.brokerIds.size >= 3 ? 90 : 85;
