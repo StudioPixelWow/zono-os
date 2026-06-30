@@ -12,6 +12,7 @@ import type { BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import {
   resolveBrokerageNowAction, startBrokerageDataRefreshAction,
   reviewMatchAction, resolveConflictAction, decideLinkAction, discoverBrokeragePublishersAction,
+  runNationalBrokerageDiscoveryAction,
 } from "@/lib/brokerage-data/actions";
 import { DnaDrawer, type DnaTarget } from "./DnaDrawer";
 import {
@@ -479,6 +480,19 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Refresh runs + sources (owner) ── */}
       {tab === "sources" && owner && (
         <div className="flex flex-col gap-5">
+          <div className="rounded-2xl border border-brand/40 bg-brand-soft/50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black text-brand-strong">🛰️ גילוי משרדי תיווך לאומי</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                  בונה את גרף המשרדים מראיות בלבד: מודעות שנצפו · קווי טלפון/דומיין משותפים · הסקת AI על הראיות (אם מוגדר). משרד נוצר רק מעל סף ראיות — לעולם לא מומצא. כל פריט ראיה נשמר עם מקור, ביטחון ונימוק.
+                </p>
+              </div>
+              <Button size="sm" onClick={() => run(() => runNationalBrokerageDiscoveryAction().then((r) => r.ok ? { message: r.result?.message } : { error: r.error }))} disabled={pending}>
+                הפעל גילוי משרדים
+              </Button>
+            </div>
+          </div>
           <div className="rounded-2xl border border-brand/30 bg-brand-soft/40 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

@@ -19,6 +19,32 @@ import { discoverBrokeragePublishers, type DiscoveryResult } from "./discovery";
 import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReasonResult } from "./office-reasoning";
 import { getProfileExtras, type ProfileExtras } from "./profile-data";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
+import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
+
+export interface NationalDiscoveryActionState { ok: boolean; result?: BrokerageDiscoveryResult; error?: string }
+
+/**
+ * Run the National Brokerage Discovery Engine™ (Phase 26.10). Builds the office
+ * graph from evidence (observed listings, shared contact, gated AI). Owner-only
+ * (writes national office data). Never fabricates an office. Returns the full
+ * breakdown for the UI.
+ */
+export async function runNationalBrokerageDiscoveryAction(): Promise<NationalDiscoveryActionState> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר כדי להפעיל גילוי." };
+    const access = await getBrokerageAccess();
+    if (!access?.isOwner) return { ok: false, error: "גילוי משרדים לאומי זמין למנהל הסוכנות בלבד." };
+    const p = profile as { id?: string | null };
+    console.info(`[brokerage-data] national office discovery by user=${p.id ?? "?"} org=${profile.org_id}`);
+    const result = await runNationalBrokerageDiscovery(profile.org_id, p.id ?? null, {});
+    revalidatePath("/brokerage-data");
+    return result.ok ? { ok: true, result } : { ok: false, error: result.skippedReason ?? result.message };
+  } catch (e) {
+    console.error("[brokerage-data] national discovery failed:", e);
+    return { ok: false, error: "הגילוי לא התחיל. נסה שוב בעוד רגע." };
+  }
+}
 
 export async function getBrokerageCommandCenterAction(opts: { city?: string | null; search?: string | null } = {}): Promise<BrokerageCommandCenter | null> {
   try { return await getBrokerageCommandCenter(opts); }
