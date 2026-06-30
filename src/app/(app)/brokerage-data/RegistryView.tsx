@@ -122,6 +122,7 @@ export function RegistryView() {
               {snap.lastRun.finishedAt ? ` · ${new Date(snap.lastRun.finishedAt).toLocaleString("he-IL")}` : ""} · {snap.lastRun.candidatesCreated} מועמדים · {snap.lastRun.candidatesVerified} אומתו · {snap.lastRun.officesCreated} משרדים
             </p>
           )}
+          <Link href="/brokerage-data/offices" className="text-brand-strong mt-2 inline-block text-[12px] font-bold hover:underline">🗂️ צפה בכל המשרדים ←</Link>
         </div>
         <Button onClick={runRegistry} disabled={pending} className="!min-w-[220px] shrink-0">
           {pending ? "⏳ מריץ מרשם לאומי…" : "🚀 הפעל מרשם לאומי"}
