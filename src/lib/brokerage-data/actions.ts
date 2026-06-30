@@ -21,6 +21,7 @@ import { getProfileExtras, type ProfileExtras } from "./profile-data";
 import { getBrokerageOfficesIndex, type OfficesIndex } from "./office-profile";
 import { getCityDiscoveryAudit, type CityDiscoveryAudit } from "./brokerage-discovery-audit";
 import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./brokerage-pipeline-audit";
+import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDiscoveryOptions } from "./city-discovery";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
@@ -28,6 +29,17 @@ import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, t
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
 import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** City-first office discovery — discovers offices for a city, then matches brokers. Writes candidates/offices/links. */
+export async function discoverBrokerageOfficesForCityAction(city: string, opts?: CityDiscoveryOptions): Promise<{ ok: boolean; result?: CityDiscoveryResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    const result = await discoverBrokerageOfficesForCity(profile.org_id, city, opts ?? {});
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[city-discovery] failed:", e); return { ok: false, error: "הגילוי נכשל." }; }
+}
 
 /** READ-ONLY forensic pipeline audit — measures every discovery stage + cross-checks repos. */
 export async function auditBrokerageDiscoveryPipelineAction(): Promise<BrokeragePipelineAudit | null> {

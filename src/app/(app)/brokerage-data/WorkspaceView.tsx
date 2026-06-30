@@ -15,9 +15,11 @@ import type { OfficesIndex, OfficeIndexItem } from "@/lib/brokerage-data/office-
 import type { ResearchSnapshot } from "@/lib/brokerage-data/broker-research/engine";
 import type { CityDiscoveryAudit } from "@/lib/brokerage-data/brokerage-discovery-audit";
 import type { BrokeragePipelineAudit } from "@/lib/brokerage-data/brokerage-pipeline-audit";
+import type { CityDiscoveryResult } from "@/lib/brokerage-data/city-discovery";
 import {
   getBrokerageOfficesIndexAction, getResearchSnapshotAction,
-  getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction, runBrokerResearchAction,
+  getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction,
+  discoverBrokerageOfficesForCityAction, runBrokerResearchAction,
 } from "@/lib/brokerage-data/actions";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -310,11 +312,86 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
           <PipelineAuditPanel />
           <CityAuditPanel cities={index?.cities ?? []} />
         </div>
       )}
     </div>
+  );
+}
+
+// ── City-first office discovery panel (writes candidates/offices) ────────────
+function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged: () => Promise<void> }) {
+  const [city, setCity] = useState("קריית ביאליק");
+  const [depth, setDepth] = useState<"quick" | "deep">("quick");
+  const [publicResearch, setPublicResearch] = useState(true);
+  const [rematch, setRematch] = useState(true);
+  const [data, setData] = useState<CityDiscoveryResult | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setPending(true); setErr(null);
+    try {
+      const r = await discoverBrokerageOfficesForCityAction(city, { depth, includePublicResearch: publicResearch, includeBrokerRematch: rematch });
+      if (r.ok) { setData(r.result ?? null); await onChanged().catch(() => {}); } else setErr(r.error ?? "נכשל");
+    } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setPending(false); }
+  };
+
+  return (
+    <section className="border-brand/40 bg-brand-soft/30 rounded-3xl border p-5 sm:p-6">
+      <h2 className="text-brand-strong text-lg font-black">🔍 גלה משרדי תיווך בעיר</h2>
+      <p className="text-muted mt-1 text-[12px]">גישה עיר-תחילה: קודם מגלים את המשרדים בעיר (גם לפני שיוך מתווכים), אחר כך משייכים מתווכים. משרד נוצר ממקור חזק אחד — ללא דרישת 2 מתווכים. ללא טלפון/אתר/לוגו מומצאים.</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input value={city} onChange={(e) => setCity(e.target.value)} list="disc-city-list" placeholder="עיר (למשל קריית ביאליק)"
+          className="border-line bg-surface text-ink min-w-[200px] rounded-full border px-3 py-1.5 text-sm" />
+        <datalist id="disc-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+        <select value={depth} onChange={(e) => setDepth(e.target.value as "quick" | "deep")} className="border-line bg-surface text-ink rounded-full border px-3 py-1.5 text-xs font-bold">
+          <option value="quick">מהיר</option><option value="deep">מעמיק</option>
+        </select>
+        <label className="text-muted flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" checked={publicResearch} onChange={(e) => setPublicResearch(e.target.checked)} /> מחקר ציבורי</label>
+        <label className="text-muted flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" checked={rematch} onChange={(e) => setRematch(e.target.checked)} /> שיוך מתווכים</label>
+        <button onClick={run} disabled={pending || !city.trim()} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מגלה…" : "גלה משרדים"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            <Mini label="משרדים שהתגלו" value={fmt(data.officesDiscovered)} tone="green" />
+            <Mini label="מועמדים נוצרו" value={fmt(data.officeCandidatesCreated)} />
+            <Mini label="מאומתים" value={fmt(data.verifiedOffices)} tone="green" />
+            <Mini label="במחקר" value={fmt(data.researchingOffices)} tone="amber" />
+            <Mini label="מתווכים שויכו" value={fmt(data.brokersMatched)} />
+            <Mini label="מתווכים במחקר" value={fmt(data.brokersResearching)} tone="amber" />
+          </div>
+          <div className="text-muted">
+            עיר מנורמלת: <b>{data.cityNormalized}</b>{data.cityVariants.length > 1 ? ` · איותים: ${data.cityVariants.join(" / ")}` : ""} · מקורות: {data.sourcesUsed.join(", ") || "—"} · מחקר ציבורי: {data.publicResearch.enabled ? `${data.publicResearch.queriesRun} שאילתות / ${data.publicResearch.resultsFound} תוצאות` : (data.publicResearch.reason ?? "כבוי")}
+          </div>
+          {data.discoveredOffices.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <b>משרדים שהתגלו (עם ראיות):</b>
+              {data.discoveredOffices.slice(0, 20).map((o, i) => (
+                <div key={i} className="border-line bg-surface rounded-xl border px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ink font-bold">{o.name}</span>
+                    <span className="flex items-center gap-2 text-[11px]">
+                      <span className={cn("rounded-full px-2 py-0.5 font-bold", o.status === "verified" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{o.status === "verified" ? "מאומת" : "במחקר"}</span>
+                      <span className="text-muted tabular-nums">{o.confidence}%</span>
+                      <span className="text-muted">{fmt(o.brokerCount)} מתווכים</span>
+                    </span>
+                  </div>
+                  <div className="text-muted mt-1 text-[11px]">{o.evidence.join(" · ")}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+        </div>
+      )}
+    </section>
   );
 }
 
