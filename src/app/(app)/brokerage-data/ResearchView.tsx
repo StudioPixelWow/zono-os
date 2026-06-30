@@ -42,17 +42,28 @@ export function ResearchView() {
 
   const runBatch = () => start(async () => {
     setMsg(null);
-    const r = await runBrokerResearchAction();
-    setMsg(r.ok ? (r.note ?? `מחקר הסתיים — ${r.diagnostics?.brokersProcessed ?? 0} מתווכים · ${r.diagnostics?.publicResultsFound ?? 0} תוצאות · ${r.diagnostics?.candidatesCreated ?? 0} מועמדים`) : (r.error ?? "נכשל"));
-    const v = await getResearchSnapshotAction(); setSnap(v); router.refresh();
+    try {
+      const r = await runBrokerResearchAction();
+      setMsg(r.ok ? (r.note ?? `מחקר הסתיים — ${r.diagnostics?.brokersProcessed ?? 0} מתווכים · ${r.diagnostics?.publicResultsFound ?? 0} תוצאות · ${r.diagnostics?.candidatesCreated ?? 0} מועמדים`) : (r.error ?? "נכשל"));
+      const v = await getResearchSnapshotAction(); setSnap(v); router.refresh();
+    } catch (e) {
+      // Guarantees the spinner clears even if the server action rejects (e.g. a
+      // platform request timeout) — otherwise the button looks stuck forever.
+      setMsg(e instanceof Error ? `ההרצה נכשלה: ${e.message}` : "ההרצה נכשלה (שגיאת רשת/שרת).");
+    }
   });
 
   const runTest = (apply: boolean) => startTest(async () => {
     setTestErr(null);
-    const r = await researchSingleBrokerAction(ref.trim(), apply);
-    if (!r.ok) { setTestErr(r.error ?? "נכשל"); return; }
-    setReport(r.report ?? null);
-    if (apply) { const v = await getResearchSnapshotAction(); setSnap(v); router.refresh(); }
+    try {
+      const r = await researchSingleBrokerAction(ref.trim(), apply);
+      if (!r.ok) { setTestErr(r.error ?? "נכשל"); return; }
+      setReport(r.report ?? null);
+      if (apply) { const v = await getResearchSnapshotAction(); setSnap(v); router.refresh(); }
+    } catch (e) {
+      // Never let the "חוקר…" spinner hang: surface any thrown/rejected error.
+      setTestErr(e instanceof Error ? `המחקר נכשל: ${e.message}` : "המחקר נכשל (שגיאת רשת/שרת — נסה שוב).");
+    }
   });
 
   if (loading) return <section className="border-line bg-surface text-muted rounded-2xl border p-4 text-center text-sm">טוען מחקר…</section>;
