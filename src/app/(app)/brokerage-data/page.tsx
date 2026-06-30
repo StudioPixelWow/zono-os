@@ -1,5 +1,6 @@
 import { getBrokerageCommandCenter, type BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import { BrokerageDataView } from "./BrokerageDataView";
+import { RegistryView } from "./RegistryView";
 import { KnowledgeView } from "./KnowledgeView";
 import { EvolutionView } from "./EvolutionView";
 
@@ -25,6 +26,7 @@ export default async function BrokerageDataPage() {
   return (
     <div className="flex flex-col gap-8">
       <BrokerageDataView cc={cc} />
+      {cc.access.isOwner && <RegistryView />}
       <KnowledgeView />
       <EvolutionView />
     </div>

@@ -20,6 +20,43 @@ import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReason
 import { getProfileExtras, type ProfileExtras } from "./profile-data";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
+import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
+
+export interface RegistryRunActionState { ok: boolean; result?: RegistryRunResult; error?: string }
+
+/**
+ * Run the National Brokerage Registry™ (Phase 26.11): candidate discovery →
+ * evidence verification → office creation → merge suggestions → broker resolution
+ * → knowledge edges. Owner-only (writes national data). AI suggests candidates
+ * only; verification is evidence-based; no fabricated offices.
+ */
+export async function runNationalOfficeRegistryAction(): Promise<RegistryRunActionState> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר כדי להפעיל את המרשם." };
+    const access = await getBrokerageAccess();
+    if (!access?.isOwner) return { ok: false, error: "המרשם הלאומי זמין למנהל הסוכנות בלבד." };
+    const p = profile as { id?: string | null };
+    console.info(`[brokerage-data] national registry by user=${p.id ?? "?"} org=${profile.org_id}`);
+    const result = await runNationalOfficeRegistry(profile.org_id, p.id ?? null, {});
+    revalidatePath("/brokerage-data");
+    return result.ok ? { ok: true, result } : { ok: false, error: result.message };
+  } catch (e) {
+    console.error("[brokerage-data] registry run failed:", e);
+    return { ok: false, error: "המרשם לא התחיל. נסה שוב בעוד רגע." };
+  }
+}
+
+/** Owner-gated read of the registry snapshot (candidates/verified/merges/etc). */
+export async function getOfficeRegistrySnapshotAction(): Promise<OfficeRegistrySnapshot | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    const access = await getBrokerageAccess();
+    if (!access?.isOwner) return null;
+    return await getOfficeRegistrySnapshot();
+  } catch (e) { console.error("[brokerage-data] registry snapshot failed:", e); return null; }
+}
 
 export interface NationalDiscoveryActionState { ok: boolean; result?: BrokerageDiscoveryResult; error?: string }
 
