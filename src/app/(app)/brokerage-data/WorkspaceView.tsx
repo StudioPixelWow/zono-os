@@ -368,6 +368,21 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
             <Mini label="מתווכים במחקר" value={fmt(data.brokersResearching)} tone="amber" />
             <Mini label="מודעות קושרו" value={fmt(data.listingsLinked)} />
           </div>
+          {/* Persistent knowledge-base accounting (Part 7) */}
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="rounded-xl border border-line bg-surface px-3 py-2">
+              <div className="text-ink font-bold">🧠 ידע קיים לפני ההרצה</div>
+              <div className="text-muted mt-0.5 text-[11px]">{fmt(data.knownBefore.offices)} משרדים · {fmt(data.knownBefore.brokersLinked)}/{fmt(data.knownBefore.brokers)} מתווכים משויכים · {fmt(data.knownBefore.candidates)} מועמדים · {fmt(data.knownBefore.listingsLinked)} מודעות מקושרות</div>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2">
+              <div className="text-emerald-800 font-bold">✨ נלמד בהרצה זו</div>
+              <div className="text-emerald-700 mt-0.5 text-[11px]">{fmt(data.newlyLearned.offices)} משרדים חדשים · {fmt(data.newlyLearned.brokers)} מתווכים שויכו · {fmt(data.newlyLearned.listings)} מודעות קושרו · {fmt(data.newlyLearned.candidates)} מועמדים</div>
+            </div>
+            <div className="rounded-xl border border-violet-200 bg-violet-50/50 px-3 py-2">
+              <div className="text-violet-900 font-bold">♻ מחקר שנחסך</div>
+              <div className="text-violet-800 mt-0.5 text-[11px]">{fmt(data.researchAvoided.officesReused)} משרדים מהידע · {fmt(data.researchAvoided.brokersFromKnowledge)} מתווכים שויכו מהידע · {fmt(data.researchAvoided.listingsFromKnowledge)} מודעות מהידע</div>
+            </div>
+          </div>
           {data.aiAnalysis && (
             <div className="rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2 text-violet-900">
               <b>ניתוח AI (על הראיות בלבד — אינו קובע שיוך):</b>
@@ -385,6 +400,7 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-ink font-bold">{o.name}</span>
                     <span className="flex items-center gap-2 text-[11px]">
+                      <span className={cn("rounded-full px-2 py-0.5 font-bold", o.matchedFrom === "knowledge_base" ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-600")}>{o.matchedFrom === "knowledge_base" ? "מהידע הקיים" : "סריקה נוכחית"}</span>
                       <span className={cn("rounded-full px-2 py-0.5 font-bold", o.status === "verified" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{o.status === "verified" ? "מאומת" : "במחקר"}</span>
                       <span className="text-muted tabular-nums">{o.confidence}%</span>
                       <span className="text-muted">{fmt(o.brokerCount)} מתווכים</span>

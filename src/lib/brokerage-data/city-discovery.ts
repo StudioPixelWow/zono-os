@@ -1,10 +1,11 @@
 // ============================================================================
-// 🏙️ City-First National Brokerage Discovery Engine™ (Phase 26.4.6). Server-only.
-// Strategy: City → discover OFFICES → enrich → match brokers → research unmatched
-// → relink listings → report. Offices are discovered BEFORE brokers and a single
-// strong source is enough (no ≥2-broker requirement). Reuses the franchise
-// detector, office-name guard, normalization, and the configured web-search
-// provider. Never fabricates phone/website/logo; every candidate stores evidence.
+// 🏙️ City-First Discovery on the Persistent Brokerage Knowledge Base™ (26.4.6 +
+// 26.4.8). Server-only. Brokerage intelligence is SYSTEM data: before any
+// expensive research, the engine loads everything the org already KNOWS about the
+// city and reuses it. It matches brokers and relinks listings against ALL known
+// offices (not just the current run), researches only the gaps, and writes back
+// improved knowledge that every future user benefits from. Never overwrites
+// stronger evidence with weaker; never fabricates phone/website/logo.
 // Does NOT touch BIE / MAI / valuation / confidence formulas / schema.
 // ============================================================================
 import "server-only";
@@ -13,13 +14,13 @@ import { detectFranchise } from "./franchise";
 import { isAcceptableOfficeName } from "./office-name-guard";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
 import { activeSearchVendor } from "./broker-research/providers";
+import { getBrokerageKnowledgeForCity, officeKey, type CityKnowledge } from "./brokerage-knowledge";
 import { runReasoningGateway, selectProvider } from "@/lib/ai-reasoning/gateway";
 import { CONTEXT_ENGINE_VERSION, type ContextPackage } from "@/lib/context-engine/types";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
 
-// Correct Hebrew city fold (matches the 26.4.5 hotfix): קריית → קרית.
 const HEB_FINALS: Record<string, string> = { "ך": "כ", "ם": "מ", "ן": "נ", "ף": "פ", "ץ": "צ" };
 function normCity(raw: string | null | undefined): string {
   return (raw ?? "").trim().replace(/[׳״"'`]/g, "").replace(/[-־–—_]/g, " ")
@@ -38,6 +39,7 @@ export interface CityDiscoveryOptions {
 export interface DiscoveredOffice {
   name: string; brandNetwork: string | null; status: string; confidence: number;
   brokerCount: number; phone: string | null; domain: string | null; evidence: string[]; sources: string[];
+  matchedFrom: "knowledge_base" | "current_scan";   // explainability (Part 6)
 }
 export interface CityDiscoveryResult {
   city: string; cityNormalized: string; cityVariants: string[];
@@ -48,7 +50,11 @@ export interface CityDiscoveryResult {
   sourcesUsed: string[];
   discoveredOffices: DiscoveredOffice[];
   publicResearch: { enabled: boolean; queriesRun: number; resultsFound: number; reason: string | null };
-  aiAnalysis: string | null;     // OpenAI analysis of the evidence — NEVER used for assignment
+  aiAnalysis: string | null;
+  // ── Persistent knowledge-base accounting (Part 7) ──
+  knownBefore: { offices: number; brokers: number; brokersLinked: number; candidates: number; listingsLinked: number };
+  newlyLearned: { offices: number; brokers: number; listings: number; candidates: number };
+  researchAvoided: { officesReused: number; brokersFromKnowledge: number; listingsFromKnowledge: number };
   notes: string[];
 }
 
@@ -57,8 +63,12 @@ interface OfficeAgg {
   brokerIds: Set<string>; phones: Set<string>; domains: Set<string>; sources: Set<string>;
   observations: number; brandMatched: boolean; evidence: string[];
 }
+interface OfficeTarget {
+  officeId: string; officeName: string; key: string; normalizedBrand: string;
+  brandNetwork: string | null; phones: Set<string>; domains: Set<string>; fromKnowledgeBase: boolean;
+}
 
-/** City-first office discovery. Best-effort, resumable, no-throw on sub-steps. */
+/** City-first discovery on the persistent KB. Best-effort, resumable, no-throw. */
 export async function discoverBrokerageOfficesForCity(
   orgId: string, cityRaw: string, opts: CityDiscoveryOptions = {},
 ): Promise<CityDiscoveryResult> {
@@ -71,21 +81,35 @@ export async function discoverBrokerageOfficesForCity(
   const notes: string[] = [];
   const depth = opts.depth ?? "quick";
 
-  // ── 1) Load internal data (city-scoped) ────────────────────────────────────
-  const [agentRes, officeRes, candRes, listingRes] = await Promise.all([
+  // ── 0) REUSE BEFORE RESEARCH — load the persistent knowledge base first ─────
+  const knowledge: CityKnowledge = await getBrokerageKnowledgeForCity(orgId, cityRaw);
+  const knownBefore = {
+    offices: knowledge.verifiedOffices.length, brokers: knowledge.brokers.length,
+    brokersLinked: knowledge.brokersWithOffice, candidates: knowledge.candidateOffices.length,
+    listingsLinked: knowledge.listingsLinked,
+  };
+  // Unified set of office targets = KNOWN offices (reused) + any created this run.
+  const cityOffices = new Map<string, OfficeTarget>();
+  for (const o of knowledge.verifiedOffices) {
+    cityOffices.set(o.key, {
+      officeId: o.id, officeName: o.name, key: o.key, normalizedBrand: detectFranchise(o.name).normalizedBrand,
+      brandNetwork: o.brandNetwork, phones: new Set(o.phones), domains: new Set(o.domains), fromKnowledgeBase: true,
+    });
+  }
+  const officesReusedKeys = new Set<string>(cityOffices.keys());
+
+  // ── 1) Load city-scoped raw data (agents + listings + candidate keys) ───────
+  const [agentRes, candRes, listingRes] = await Promise.all([
     db.from("brokerage_agents" as never).select("id,full_name,normalized_name,primary_phone,whatsapp_phone,primary_email,city,office_id").limit(20000),
-    db.from("brokerage_offices" as never).select("id,name,normalized_name,brand_network,city,status,primary_phone").limit(20000),
-    db.from("brokerage_office_candidates" as never).select("normalized_brand,normalized_name,city,status").limit(20000),
+    db.from("brokerage_office_candidates" as never).select("normalized_brand,normalized_name,city").limit(20000),
     db.from("external_listings" as never).select("id,detected_broker_name,contact_name,contact_phone,source,listing_url,city").ilike("city", `%${stem}%`).limit(20000),
   ]);
   const agents = ((agentRes.data ?? []) as Row[]).filter((r) => inCity(r.city));
-  const offices = ((officeRes.data ?? []) as Row[]).filter((r) => inCity(r.city));
   const existingCandKeys = new Set(((candRes.data ?? []) as Row[]).filter((r) => inCity(r.city))
     .map((r) => `${s(r.normalized_brand)}|${s(r.normalized_name)}|${cityNorm}`));
   const listings = ((listingRes.data ?? []) as Row[]).filter((r) => inCity(r.city));
-  const cityVariants = [...new Set([...agents, ...offices, ...listings].map((r) => s(r.city)).filter(Boolean))].slice(0, 8);
 
-  // ── 2) Build office-name evidence map (city-first) ──────────────────────────
+  // ── 2) Build office-name evidence map (only the GAPS get researched) ────────
   const agg = new Map<string, OfficeAgg>();
   const add = (rawName: string, opt: { brokerId?: string; phone?: string | null; domain?: string | null; source: string }) => {
     const name = (rawName ?? "").trim();
@@ -103,12 +127,9 @@ export async function discoverBrokerageOfficesForCity(
     if (opt.phone) { const np = normalizePhoneNumber(opt.phone); if (np) a.phones.add(np); }
     if (opt.domain) a.domains.add(opt.domain);
   };
-
-  // 2a) From brokers whose own name carries a brand (brand + city office).
   for (const b of agents) {
     if (detectFranchise(s(b.full_name)).matched) add(s(b.full_name), { brokerId: s(b.id), phone: s(b.primary_phone) || s(b.whatsapp_phone), source: "broker_name" });
   }
-  // 2b) From listing evidence (the scraper's observed office / agency name).
   for (const l of listings) {
     const src = s(l.source) ? `listing:${s(l.source)}` : "listing";
     const dom = s(l.listing_url) ? urlDomain(s(l.listing_url)) : null;
@@ -117,7 +138,7 @@ export async function discoverBrokerageOfficesForCity(
     }
   }
 
-  // ── 3) Optional public web research (city-level) ────────────────────────────
+  // ── 3) Public web research only for gaps (offices not already known) ────────
   const vendor = opts.includePublicResearch !== false ? activeSearchVendor() : null;
   const research = { enabled: !!vendor, queriesRun: 0, resultsFound: 0, reason: null as string | null };
   if (opts.includePublicResearch !== false && !vendor) research.reason = "ספק חיפוש ציבורי אינו מוגדר";
@@ -139,16 +160,17 @@ export async function discoverBrokerageOfficesForCity(
     }
   }
 
-  // ── 4) Create office candidates (1 strong source is enough) ─────────────────
-  let officeCandidatesCreated = 0, verifiedOffices = 0, researchingOffices = 0, brokersMatched = 0;
-  const conflicts = 0; // city-discovery never auto-resolves conflicts (manual only)
+  // ── 4) Reuse-or-create offices + candidates (append/improve, never overwrite) ─
+  let officeCandidatesCreated = 0, verifiedOffices = 0, researchingOffices = 0;
+  let newOfficesCreated = 0;
+  const conflicts = 0;
   const discoveredOffices: DiscoveredOffice[] = [];
   const nowIso = new Date().toISOString();
-  const officeIdByKey = new Map<string, OfficeAgg & { officeId: string }>();   // for the listing relink pass
 
   for (const [aggKey, a] of agg) {
     const strongBusiness = a.sources.has("public_web") || a.domains.size > 0;
-    const verified = a.brokerIds.size >= 2 || strongBusiness || a.observations >= 3 || (a.brandMatched && (a.phones.size >= 1 || a.brokerIds.size >= 1));
+    const knownAlready = cityOffices.has(aggKey);
+    const verified = knownAlready || a.brokerIds.size >= 2 || strongBusiness || a.observations >= 3 || (a.brandMatched && (a.phones.size >= 1 || a.brokerIds.size >= 1));
     const status = verified ? "verified" : "candidate_pending_verification";
     const confidence = Math.min(95,
       45 + Math.min(30, a.brokerIds.size * 12) + (a.brandMatched ? 10 : 0)
@@ -157,6 +179,7 @@ export async function discoverBrokerageOfficesForCity(
     const domain = [...a.domains][0] ?? null;
 
     a.evidence = [
+      knownAlready ? "ידע קיים: המשרד כבר היה מוכר בעיר" : null,
       a.brandMatched ? `מותג מזוהה: ${a.brandNetwork}` : null,
       a.brokerIds.size ? `${a.brokerIds.size} מתווכים מקושרים` : null,
       a.observations ? `${a.observations} צפיות בראיות` : null,
@@ -165,7 +188,7 @@ export async function discoverBrokerageOfficesForCity(
       `מקורות: ${[...a.sources].join(", ")}`,
     ].filter(Boolean) as string[];
 
-    // Insert candidate (dedupe by brand|name|city) — never overwrite existing.
+    // Candidate (dedupe by brand|name|city) — never overwrite an existing one.
     const candKey = `${a.normalizedBrand}|${a.normalizedName}|${cityNorm}`;
     if (!existingCandKeys.has(candKey)) {
       const { error } = await db.from("brokerage_office_candidates" as never).insert({
@@ -178,69 +201,91 @@ export async function discoverBrokerageOfficesForCity(
       if (!error) { officeCandidatesCreated++; existingCandKeys.add(candKey); }
       else if (!/duplicate key/i.test(error.message)) notes.push(`יצירת מועמד נכשלה: ${error.message}`);
     }
-
     if (verified) verifiedOffices++; else researchingOffices++;
 
-    // Promote verified → find-or-create active office + link city brokers.
-    let officeId: string | null = null;
+    // Reuse-or-create the office entity; merge new contact points into the target.
     if (verified) {
-      officeId = await findOrCreateOffice(db, a, cityLabel, phone, confidence, nowIso);
-      if (officeId) officeIdByKey.set(aggKey, { ...a, officeId });
-      if (officeId && opts.includeBrokerRematch !== false) {
-        brokersMatched += await linkBrokers(db, agents, a, officeId, nowIso);
+      const found = await findOrCreateOffice(db, a, cityLabel, phone, confidence, nowIso);
+      if (found) {
+        if (found.created) newOfficesCreated++;
+        const existing = cityOffices.get(aggKey);
+        if (existing) { for (const p of a.phones) existing.phones.add(p); for (const d of a.domains) existing.domains.add(d); }
+        else cityOffices.set(aggKey, { officeId: found.officeId, officeName: a.officeName, key: aggKey, normalizedBrand: a.normalizedBrand, brandNetwork: a.brandMatched ? a.brandNetwork : null, phones: new Set(a.phones), domains: new Set(a.domains), fromKnowledgeBase: !found.created });
+        if (!found.created) await db.from("brokerage_offices" as never).update({ last_seen_at: nowIso } as never).eq("id", found.officeId); // continuous learning
       }
     }
-    const brokerCount = officeId ? agents.filter((b) => s(b.office_id) === officeId).length : a.brokerIds.size;
-    discoveredOffices.push({ name: a.officeName, brandNetwork: a.brandMatched ? a.brandNetwork : null, status, confidence, brokerCount, phone, domain, evidence: a.evidence, sources: [...a.sources] });
+    discoveredOffices.push({
+      name: a.officeName, brandNetwork: a.brandMatched ? a.brandNetwork : null, status, confidence,
+      brokerCount: a.brokerIds.size, phone, domain, evidence: a.evidence, sources: [...a.sources],
+      matchedFrom: knownAlready ? "knowledge_base" : "current_scan",
+    });
+  }
+
+  // ── 5) Broker matching against ALL known offices (KB + new) ─────────────────
+  let brokersMatched = 0, brokersFromKnowledge = 0;
+  if (opts.includeBrokerRematch !== false) {
+    for (const b of agents) {
+      if (s(b.office_id)) continue;
+      const phone = normalizePhoneNumber(s(b.primary_phone) || s(b.whatsapp_phone));
+      const brand = detectFranchise(s(b.full_name)).normalizedBrand;
+      let target: OfficeTarget | null = null;
+      for (const o of cityOffices.values()) {
+        if ((phone && o.phones.has(phone)) || (o.normalizedBrand !== "independent" && o.normalizedBrand === brand)) { target = o; break; }
+      }
+      if (!target) continue;
+      const { error } = await db.from("brokerage_agents" as never)
+        .update({ office_id: target.officeId, last_seen_at: nowIso } as never).eq("id", s(b.id)).is("office_id", null);
+      if (!error) { (b as Row).office_id = target.officeId; brokersMatched++; if (target.fromKnowledgeBase) brokersFromKnowledge++; }
+    }
+  }
+  // Backfill broker counts on the discovered offices.
+  for (const o of discoveredOffices) { const t = [...cityOffices.values()].find((x) => x.officeName === o.name); if (t) o.brokerCount = agents.filter((b) => s(b.office_id) === t.officeId).length; }
+
+  // ── 6) Listing relink against ALL known offices in the city (Part 3) ────────
+  let listingsLinked = 0, listingsFromKnowledge = 0;
+  if (opts.includeListingRelink !== false && cityOffices.size > 0) {
+    const targetByKey = new Map<string, OfficeTarget>(); for (const o of cityOffices.values()) targetByKey.set(o.key, o);
+    const keyOf = (rawName: string): string | null => {
+      const name = (rawName ?? "").trim();
+      if (name.length < 2 || !isAcceptableOfficeName(name)) return null;
+      const k = officeKey(detectFranchise(name).matched ? `${detectFranchise(name).brandNetwork} ${cityLabel}` : name);
+      return targetByKey.has(k) ? k : null;
+    };
+    const listingIds = listings.map((l) => s(l.id)).filter(Boolean);
+    const { data: existingLinks } = await db.from("brokerage_external_listing_links" as never)
+      .select("external_listing_id,office_id").in("external_listing_id", listingIds).limit(50000);
+    const linkedPair = new Set(((existingLinks ?? []) as Row[]).map((r) => `${s(r.external_listing_id)}|${s(r.office_id)}`));
+    const newLinks: { row: Row; fromKb: boolean }[] = [];
+    for (const l of listings) {
+      const lid = s(l.id); if (!lid) continue;
+      let key = keyOf(s(l.detected_broker_name)) ?? keyOf(s(l.contact_name));
+      if (!key) { const lp = normalizePhoneNumber(s(l.contact_phone)); if (lp) for (const o of cityOffices.values()) if (o.phones.has(lp)) { key = o.key; break; } }
+      if (!key) continue;
+      const office = targetByKey.get(key)!;
+      const pair = `${lid}|${office.officeId}`;
+      if (linkedPair.has(pair)) continue;
+      linkedPair.add(pair);
+      newLinks.push({ fromKb: office.fromKnowledgeBase, row: {
+        external_listing_id: lid, organization_id: orgId, agent_id: null, office_id: office.officeId,
+        city: cityLabel, matched_phone: normalizePhoneNumber(s(l.contact_phone)) || null,
+        matched_name: office.officeName, matched_source: s(l.source) || null,
+        confidence_score: 80, status: "auto_linked",
+        match_reasons: ["city_discovery_relink", office.fromKnowledgeBase ? "from_knowledge_base" : "current_scan", `office:${office.officeName}`, s(l.source) ? `source:${s(l.source)}` : "listing"] as never,
+      } });
+    }
+    for (let i = 0; i < newLinks.length; i += 500) {
+      const chunk = newLinks.slice(i, i + 500);
+      const { error } = await db.from("brokerage_external_listing_links" as never).insert(chunk.map((x) => x.row) as never);
+      if (!error) { listingsLinked += chunk.length; listingsFromKnowledge += chunk.filter((x) => x.fromKb).length; }
+      else if (!/duplicate key/i.test(error.message)) notes.push(`קישור מודעות נכשל: ${error.message}`);
+    }
   }
 
   discoveredOffices.sort((x, y) => y.confidence - x.confidence);
   const brokersInCity = agents.length;
   const brokersResearching = Math.max(0, brokersInCity - agents.filter((b) => s(b.office_id)).length);
   const officesDiscovered = discoveredOffices.length;
-
-  if (officesDiscovered === 0) notes.push("לא נמצאו ראיות לשמות משרד בעיר זו — נדרש מחקר ציבורי (Tavily) או ייבוא מודעות עם detected_broker_name.");
-
-  // ── 6) Listing → office relink (only to offices discovered in THIS run) ──────
-  let listingsLinked = 0;
-  if (opts.includeListingRelink !== false && officeIdByKey.size > 0) {
-    const officeKeyOf = (rawName: string): string | null => {
-      const name = (rawName ?? "").trim();
-      if (name.length < 2 || !isAcceptableOfficeName(name)) return null;
-      const fr = detectFranchise(name);
-      const officeName = fr.matched ? `${fr.brandNetwork} ${cityLabel}` : name;
-      const key = `${fr.normalizedBrand}|${normalizeHebrewName(officeName)}`;
-      return officeIdByKey.has(key) ? key : null;
-    };
-    const listingIds = listings.map((l) => s(l.id)).filter(Boolean);
-    const { data: existingLinks } = await db.from("brokerage_external_listing_links" as never)
-      .select("external_listing_id,office_id").in("external_listing_id", listingIds).limit(50000);
-    const linkedPair = new Set(((existingLinks ?? []) as Row[]).map((r) => `${s(r.external_listing_id)}|${s(r.office_id)}`));
-    const newLinks: Row[] = [];
-    for (const l of listings) {
-      const lid = s(l.id); if (!lid) continue;
-      let key = officeKeyOf(s(l.detected_broker_name)) ?? officeKeyOf(s(l.contact_name));
-      if (!key) { const lp = normalizePhoneNumber(s(l.contact_phone)); if (lp) for (const [k, o] of officeIdByKey) if (o.phones.has(lp)) { key = k; break; } }
-      if (!key) continue;
-      const office = officeIdByKey.get(key)!;
-      const pair = `${lid}|${office.officeId}`;
-      if (linkedPair.has(pair)) continue;
-      linkedPair.add(pair);
-      newLinks.push({
-        external_listing_id: lid, organization_id: orgId, agent_id: null, office_id: office.officeId,
-        city: cityLabel, matched_phone: normalizePhoneNumber(s(l.contact_phone)) || null,
-        matched_name: office.officeName, matched_source: s(l.source) || null,
-        confidence_score: 80, status: "auto_linked",
-        match_reasons: ["city_discovery_relink", `office:${office.officeName}`, s(l.source) ? `source:${s(l.source)}` : "listing"].filter(Boolean) as never,
-      });
-    }
-    for (let i = 0; i < newLinks.length; i += 500) {
-      const chunk = newLinks.slice(i, i + 500);
-      const { error } = await db.from("brokerage_external_listing_links" as never).insert(chunk as never);
-      if (!error) listingsLinked += chunk.length;
-      else if (!/duplicate key/i.test(error.message)) notes.push(`קישור מודעות נכשל: ${error.message}`);
-    }
-  }
+  if (officesDiscovered === 0 && knownBefore.offices === 0) notes.push("לא נמצאו ראיות לשמות משרד בעיר זו — נדרש מחקר ציבורי (Tavily) או ייבוא מודעות עם detected_broker_name.");
 
   // ── 7) OpenAI evidence ANALYSIS (never assignment) — best-effort, bounded ────
   let aiAnalysis: string | null = null;
@@ -249,12 +294,16 @@ export async function discoverBrokerageOfficesForCity(
   }
 
   return {
-    city: cityLabel, cityNormalized: cityNorm, cityVariants,
+    city: cityLabel, cityNormalized: cityNorm, cityVariants: knowledge.cityVariants,
     officesDiscovered, officeCandidatesCreated, verifiedOffices, researchingOffices,
     brokersInCity, brokersMatched, brokersResearching,
     listingsLinked, conflicts,
     sourcesUsed: [...sourcesUsed], discoveredOffices,
-    publicResearch: research, aiAnalysis, notes,
+    publicResearch: research, aiAnalysis,
+    knownBefore,
+    newlyLearned: { offices: newOfficesCreated, brokers: brokersMatched, listings: listingsLinked, candidates: officeCandidatesCreated },
+    researchAvoided: { officesReused: officesReusedKeys.size, brokersFromKnowledge, listingsFromKnowledge },
+    notes,
   };
 }
 
@@ -289,12 +338,12 @@ async function analyzeEvidence(city: string, offices: DiscoveredOffice[], orgId:
 async function findOrCreateOffice(
   db: ReturnType<typeof createServiceRoleClient>, a: OfficeAgg, city: string,
   phone: string | null, confidence: number, nowIso: string,
-): Promise<string | null> {
+): Promise<{ officeId: string; created: boolean } | null> {
   if (!isAcceptableOfficeName(a.officeName)) return null;
   const { data: existing } = await db.from("brokerage_offices" as never)
     .select("id,city,status").eq("normalized_name", a.normalizedName).limit(50);
   const match = ((existing ?? []) as Row[]).find((r) => s(r.status) !== "rejected" && (!city || !s(r.city) || normCity(s(r.city)) === normCity(city)));
-  if (match) return s((match as Row).id);
+  if (match) return { officeId: s((match as Row).id), created: false };
   const officeId = globalThis.crypto.randomUUID();
   const { error } = await db.from("brokerage_offices" as never).insert({
     id: officeId, name: a.officeName, normalized_name: a.normalizedName,
@@ -303,23 +352,5 @@ async function findOrCreateOffice(
     metadata: { derived_from: "city_discovery", sources: [...a.sources] } as never,
     first_seen_at: nowIso, last_seen_at: nowIso, last_verified_at: nowIso,
   } as never);
-  return error ? null : officeId;
-}
-
-/** Auto-link city brokers to a discovered office by phone or brand. Never overwrites. */
-async function linkBrokers(
-  db: ReturnType<typeof createServiceRoleClient>, agents: Row[], a: OfficeAgg, officeId: string, nowIso: string,
-): Promise<number> {
-  let linked = 0;
-  for (const b of agents) {
-    if (s(b.office_id)) continue;
-    const phone = normalizePhoneNumber(s(b.primary_phone) || s(b.whatsapp_phone));
-    const phoneMatch = !!phone && a.phones.has(phone);
-    const brandMatch = a.brandMatched && detectFranchise(s(b.full_name)).normalizedBrand === a.normalizedBrand;
-    if (!phoneMatch && !brandMatch) continue;
-    const { error } = await db.from("brokerage_agents" as never)
-      .update({ office_id: officeId, last_seen_at: nowIso } as never).eq("id", s(b.id)).is("office_id", null);
-    if (!error) { (b as Row).office_id = officeId; linked++; }
-  }
-  return linked;
+  return error ? null : { officeId, created: true };
 }

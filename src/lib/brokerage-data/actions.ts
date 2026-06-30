@@ -22,6 +22,7 @@ import { getBrokerageOfficesIndex, type OfficesIndex } from "./office-profile";
 import { getCityDiscoveryAudit, type CityDiscoveryAudit } from "./brokerage-discovery-audit";
 import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./brokerage-pipeline-audit";
 import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDiscoveryOptions } from "./city-discovery";
+import { getBrokerageKnowledgeForCity, type CityKnowledge } from "./brokerage-knowledge";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
@@ -29,6 +30,15 @@ import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, t
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
 import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** READ-ONLY persistent knowledge base for a city — what the org already knows. */
+export async function getBrokerageKnowledgeForCityAction(city: string): Promise<CityKnowledge | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return null;
+    return await getBrokerageKnowledgeForCity(profile.org_id, city);
+  } catch (e) { console.error("[brokerage-knowledge] failed:", e); return null; }
+}
 
 /** City-first office discovery — discovers offices for a city, then matches brokers. Writes candidates/offices/links. */
 export async function discoverBrokerageOfficesForCityAction(city: string, opts?: CityDiscoveryOptions): Promise<{ ok: boolean; result?: CityDiscoveryResult; error?: string }> {
