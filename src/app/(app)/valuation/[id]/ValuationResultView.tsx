@@ -15,7 +15,10 @@ import {
   getValuationEvidenceSearchAction,
 } from "@/lib/valuation/actions";
 import type { ValuationEvidenceDiagnosis } from "@/lib/valuation/diagnostics";
-import { FAILURE_MODE_HE, MATCH_LEVEL_HE, type EvidencePackage } from "@/lib/evidence-search";
+// Import from the PURE submodules — NOT the barrel — so the server-only engine/
+// service/repository never get pulled into this client bundle.
+import { FAILURE_MODE_HE, MATCH_LEVEL_HE } from "@/lib/evidence-search/explain";
+import type { EvidencePackage } from "@/lib/evidence-search/types";
 import { computeWhatIf } from "@/lib/valuation/valuation-engine";
 import {
   type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
