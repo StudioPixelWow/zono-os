@@ -35,6 +35,15 @@ const now = () => new Date().toISOString();
 const ON = () => !!process.env.ZONO_PUBLIC_SEARCH_ENABLED;
 const phoneRe = /0\d{1,2}[-\s]?\d{3}[-\s]?\d{4}/;
 
+// Every external call MUST be bounded — a hanging vendor request would otherwise
+// freeze the whole research server action (the UI stays on "חוקר…" forever).
+async function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 8000): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try { return await globalThis.fetch(url, { ...init, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
+}
+
 // ── Real web-search provider (PART 2 + update). Supports multiple vendors; uses
 //    whichever is configured. Returns live results with citations. If NONE is
 //    configured it reports not_configured (the UI shows the explicit message).
@@ -44,33 +53,33 @@ type SearchVendor = { name: string; key: string | undefined; run: (q: string) =>
 function searchVendors(): SearchVendor[] {
   return [
     { name: "tavily", key: process.env.TAVILY_API_KEY, run: async (q) => {
-      const r = await fetch("https://api.tavily.com/search", { method: "POST", headers: { "content-type": "application/json" },
+      const r = await fetchWithTimeout("https://api.tavily.com/search", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: q, max_results: 5, search_depth: "basic" }) });
       if (!r.ok) throw new Error(`tavily ${r.status}`);
       const j = await r.json() as { results?: { title?: string; url?: string; content?: string }[] };
       return (j.results ?? []).map((x) => ({ title: x.title ?? null, url: x.url ?? null, snippet: x.content ?? null }));
     } },
     { name: "serpapi", key: process.env.SERPAPI_API_KEY, run: async (q) => {
-      const r = await fetch(`https://serpapi.com/search.json?engine=google&num=5&q=${encodeURIComponent(q)}&api_key=${process.env.SERPAPI_API_KEY}`);
+      const r = await fetchWithTimeout(`https://serpapi.com/search.json?engine=google&num=5&q=${encodeURIComponent(q)}&api_key=${process.env.SERPAPI_API_KEY}`);
       if (!r.ok) throw new Error(`serpapi ${r.status}`);
       const j = await r.json() as { organic_results?: { title?: string; link?: string; snippet?: string }[] };
       return (j.organic_results ?? []).map((x) => ({ title: x.title ?? null, url: x.link ?? null, snippet: x.snippet ?? null }));
     } },
     { name: "exa", key: process.env.EXA_API_KEY, run: async (q) => {
-      const r = await fetch("https://api.exa.ai/search", { method: "POST", headers: { "content-type": "application/json", "x-api-key": process.env.EXA_API_KEY ?? "" },
+      const r = await fetchWithTimeout("https://api.exa.ai/search", { method: "POST", headers: { "content-type": "application/json", "x-api-key": process.env.EXA_API_KEY ?? "" },
         body: JSON.stringify({ query: q, numResults: 5, contents: { text: true } }) });
       if (!r.ok) throw new Error(`exa ${r.status}`);
       const j = await r.json() as { results?: { title?: string; url?: string; text?: string }[] };
       return (j.results ?? []).map((x) => ({ title: x.title ?? null, url: x.url ?? null, snippet: (x.text ?? "").slice(0, 300) || null }));
     } },
     { name: "bing", key: process.env.BING_SEARCH_KEY, run: async (q) => {
-      const r = await fetch(`https://api.bing.microsoft.com/v7.0/search?count=5&q=${encodeURIComponent(q)}`, { headers: { "Ocp-Apim-Subscription-Key": process.env.BING_SEARCH_KEY ?? "" } });
+      const r = await fetchWithTimeout(`https://api.bing.microsoft.com/v7.0/search?count=5&q=${encodeURIComponent(q)}`, { headers: { "Ocp-Apim-Subscription-Key": process.env.BING_SEARCH_KEY ?? "" } });
       if (!r.ok) throw new Error(`bing ${r.status}`);
       const j = await r.json() as { webPages?: { value?: { name?: string; url?: string; snippet?: string }[] } };
       return (j.webPages?.value ?? []).map((x) => ({ title: x.name ?? null, url: x.url ?? null, snippet: x.snippet ?? null }));
     } },
     { name: "google_cse", key: process.env.GOOGLE_CSE_KEY && process.env.GOOGLE_CSE_CX ? "1" : undefined, run: async (q) => {
-      const r = await fetch(`https://www.googleapis.com/customsearch/v1?num=5&key=${process.env.GOOGLE_CSE_KEY}&cx=${process.env.GOOGLE_CSE_CX}&q=${encodeURIComponent(q)}`);
+      const r = await fetchWithTimeout(`https://www.googleapis.com/customsearch/v1?num=5&key=${process.env.GOOGLE_CSE_KEY}&cx=${process.env.GOOGLE_CSE_CX}&q=${encodeURIComponent(q)}`);
       if (!r.ok) throw new Error(`google_cse ${r.status}`);
       const j = await r.json() as { items?: { title?: string; link?: string; snippet?: string }[] };
       return (j.items ?? []).map((x) => ({ title: x.title ?? null, url: x.link ?? null, snippet: x.snippet ?? null }));

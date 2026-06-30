@@ -243,7 +243,13 @@ async function reasonOverSources(brokerName: string, city: string | null, eviden
       cacheKey: `research:${brokerName}:${city ?? ""}`,
     };
     const QUESTION = "בהתבסס אך ורק על המקורות המצורפים, לאיזה משרד תיווך שייך המתווך? צטט את המקורות שעליהם הסתמכת (לפי idx). שם זהה לשם המתווך אינו משרד. אל תמציא פרטים שאינם במקורות. אם אין ראיה ברורה החזר insufficient_evidence.";
-    const res = await runReasoningGateway({ question: QUESTION, context, mode: "answer", language: "he", userId: null, organizationId: null });
+    // Bound the AI call — a hanging gateway/provider request must never freeze the
+    // research action. On timeout we degrade to evidence-only (aiSummary = null).
+    const res = await Promise.race([
+      runReasoningGateway({ question: QUESTION, context, mode: "answer", language: "he", userId: null, organizationId: null }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000)),
+    ]);
+    if (!res) { console.error("[research] AI over sources timed out"); return null; }
     return res.status === "answered" ? (res.answer ?? null) : (res.answer || null);
   } catch (e) { console.error("[research] AI over sources failed:", e); return null; }
 }
