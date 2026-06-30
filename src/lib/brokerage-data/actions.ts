@@ -22,6 +22,7 @@ import { getBrokerageOfficesIndex, type OfficesIndex } from "./office-profile";
 import { getCityDiscoveryAudit, type CityDiscoveryAudit } from "./brokerage-discovery-audit";
 import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./brokerage-pipeline-audit";
 import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDiscoveryOptions } from "./city-discovery";
+import { seedBrokerageOfficeCandidatesWithAI, type AICandidateSeedSummary } from "./ai-candidate-seeding";
 import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, getCityKnowledgeStatus, type CityKnowledge, type CityBrokerageCensus, type CityKnowledgeStatus } from "./brokerage-knowledge";
 import { ensureCityBrokerageKnowledge, type EnsureCityResult } from "./city-lazy-learning";
 import { triggerCityLearning, type CityLearningReason, type CityLearningOutcome } from "./city-learning-trigger";
@@ -86,6 +87,18 @@ export async function discoverBrokerageOfficesForCityAction(city: string, opts?:
     revalidatePath("/brokerage-data");
     return { ok: true, result };
   } catch (e) { console.error("[city-discovery] failed:", e); return { ok: false, error: "הגילוי נכשל." }; }
+}
+
+/** Phase 26.4.11 — AI proposes candidate office names, then each is verified by
+ *  public sources. AI never verifies; unproven candidates stay "researching". */
+export async function seedCityAICandidatesAction(city: string): Promise<{ ok: boolean; result?: AICandidateSeedSummary; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    const result = await seedBrokerageOfficeCandidatesWithAI(profile.org_id, city);
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[ai-seeding] failed:", e); return { ok: false, error: "זריעת מועמדי AI נכשלה." }; }
 }
 
 /** READ-ONLY forensic pipeline audit — measures every discovery stage + cross-checks repos. */

@@ -16,6 +16,7 @@ import type { ResearchSnapshot } from "@/lib/brokerage-data/broker-research/engi
 import type { CityDiscoveryAudit } from "@/lib/brokerage-data/brokerage-discovery-audit";
 import type { BrokeragePipelineAudit } from "@/lib/brokerage-data/brokerage-pipeline-audit";
 import type { CityDiscoveryResult } from "@/lib/brokerage-data/city-discovery";
+import type { AICandidateSeedSummary } from "@/lib/brokerage-data/ai-candidate-seeding";
 import type { CityBrokerageCensus, CityKnowledgeStatus } from "@/lib/brokerage-data/brokerage-knowledge";
 import type { EnsureCityResult } from "@/lib/brokerage-data/city-lazy-learning";
 import {
@@ -23,6 +24,7 @@ import {
   getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction,
   discoverBrokerageOfficesForCityAction, getCityBrokerageCensusAction,
   getCityKnowledgeStatusAction, ensureCityBrokerageKnowledgeAction, runBrokerResearchAction,
+  seedCityAICandidatesAction,
 } from "@/lib/brokerage-data/actions";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -472,6 +474,10 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
   const [data, setData] = useState<CityDiscoveryResult | null>(null);
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Phase 26.4.11 — AI candidate seeding (AI proposes, public sources verify).
+  const [seed, setSeed] = useState<AICandidateSeedSummary | null>(null);
+  const [seedPending, setSeedPending] = useState(false);
+  const [seedErr, setSeedErr] = useState<string | null>(null);
 
   const run = async () => {
     setPending(true); setErr(null);
@@ -480,6 +486,15 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
       if (r.ok) { setData(r.result ?? null); await onChanged().catch(() => {}); } else setErr(r.error ?? "נכשל");
     } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); }
     finally { setPending(false); }
+  };
+
+  const runSeed = async () => {
+    setSeedPending(true); setSeedErr(null);
+    try {
+      const r = await seedCityAICandidatesAction(city);
+      if (r.ok) { setSeed(r.result ?? null); await onChanged().catch(() => {}); } else setSeedErr(r.error ?? "נכשל");
+    } catch (e) { setSeedErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setSeedPending(false); }
   };
 
   return (
@@ -496,8 +511,54 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
         <label className="text-muted flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" checked={publicResearch} onChange={(e) => setPublicResearch(e.target.checked)} /> מחקר ציבורי</label>
         <label className="text-muted flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" checked={rematch} onChange={(e) => setRematch(e.target.checked)} /> שיוך מתווכים</label>
         <button onClick={run} disabled={pending || !city.trim()} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מגלה…" : "גלה משרדים"}</button>
+        <button onClick={runSeed} disabled={seedPending || !city.trim()} className="rounded-xl border border-violet-300 bg-violet-50 px-4 py-1.5 text-sm font-bold text-violet-800 disabled:opacity-60">{seedPending ? "מציע…" : "✨ הצע מועמדים עם AI"}</button>
       </div>
+      <p className="text-muted mt-1 text-[11px]">זריעת AI: ה-AI מציע <b>שמות מועמדים בלבד</b>. כל מועמד נחקר במקורות ציבוריים — ומקבל סטטוס &quot;מאומת&quot; <b>רק</b> עם ראיה ציבורית אמיתית. ללא ראיה הוא נשאר &quot;במחקר&quot;. ה-AI לעולם אינו מאמת בעצמו.</p>
       {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {seedErr && <p className="mt-2 font-semibold text-rose-700">{seedErr}</p>}
+
+      {seed && (
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-violet-200 bg-violet-50/40 p-3 text-[12px]">
+          <div className="text-violet-900 font-black">✨ זריעת מועמדי AI — {seed.city}</div>
+          {!seed.aiConfigured && <p className="font-semibold text-rose-700">מנוע ה-AI אינו מוגדר (חסר OPENAI_API_KEY).</p>}
+          {seed.aiConfigured && !seed.searchConfigured && <p className="font-semibold text-amber-700">⚠ אין ספק חיפוש ציבורי — כל המועמדים יישארו &quot;במחקר&quot; עד שיתווסף מקור אימות.</p>}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Mini label="הוצעו ע״י AI" value={fmt(seed.candidatesGenerated)} />
+            <Mini label="ייחודיים" value={fmt(seed.candidatesAfterDedup)} />
+            <Mini label="נוצרו" value={fmt(seed.candidatesCreated)} />
+            <Mini label="אומתו" value={fmt(seed.candidatesVerified)} tone="green" />
+            <Mini label="במחקר" value={fmt(seed.candidatesResearching)} tone="amber" />
+            <Mini label="נדחו" value={fmt(seed.candidatesRejected)} tone="red" />
+          </div>
+          <div className="text-muted">ראיות ציבוריות שנמצאו: <b>{fmt(seed.evidenceFound)}</b></div>
+          {seed.candidates.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {seed.candidates.slice(0, 30).map((c, i) => (
+                <div key={i} className="border-line bg-surface rounded-xl border px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ink font-bold">{c.officeName}</span>
+                    <span className="flex items-center gap-2 text-[11px]">
+                      {c.status === "verified"
+                        ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">מאומת · ראיה ציבורית</span>
+                        : c.status === "rejected"
+                          ? <span className="rounded-full bg-rose-50 px-2 py-0.5 font-bold text-rose-700">נדחה</span>
+                          : <span className="rounded-full bg-violet-100 px-2 py-0.5 font-bold text-violet-700">AI suggested · researching</span>}
+                      <span className="text-muted tabular-nums" title="ביטחון מערכת (מבוסס ראיות)">מערכת {c.systemConfidence}%</span>
+                      <span className="text-violet-500 tabular-nums" title="ביטחון ה-AI — ללא סמכות">AI {c.aiConfidence}%</span>
+                    </span>
+                  </div>
+                  {c.aiReason && <div className="text-muted mt-1 text-[11px]"><b>סיבת ה-AI:</b> {c.aiReason}</div>}
+                  <div className="text-muted mt-0.5 text-[11px]"><b>מקורות שנבדקו:</b> {c.sourcesChecked.join(" · ") || "—"}</div>
+                  {c.evidenceFound.length > 0 && <div className="mt-0.5 text-[11px] text-emerald-700"><b>ראיות שנמצאו:</b> {c.evidenceFound.join(" · ")}</div>}
+                  {c.evidenceMissing.length > 0 && <div className="mt-0.5 text-[11px] text-amber-700"><b>ראיות חסרות:</b> {c.evidenceMissing.join(" · ")}</div>}
+                  <div className="text-muted mt-0.5 text-[11px] italic">{c.verdictReason}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {seed.notes.length > 0 && <ul className="text-muted list-disc pr-5">{seed.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+        </div>
+      )}
 
       {data && (
         <div className="mt-4 flex flex-col gap-3 text-[12px]">
