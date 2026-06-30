@@ -9,13 +9,15 @@
 // ============================================================================
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import type { BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import type { OfficesIndex, OfficeIndexItem } from "@/lib/brokerage-data/office-profile";
 import type { ResearchSnapshot } from "@/lib/brokerage-data/broker-research/engine";
 import type { CityDiscoveryAudit } from "@/lib/brokerage-data/brokerage-discovery-audit";
+import type { BrokeragePipelineAudit } from "@/lib/brokerage-data/brokerage-pipeline-audit";
 import {
   getBrokerageOfficesIndexAction, getResearchSnapshotAction,
-  getCityDiscoveryAuditAction, runBrokerResearchAction,
+  getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction, runBrokerResearchAction,
 } from "@/lib/brokerage-data/actions";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -305,9 +307,99 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         </section>
       )}
 
-      {/* ── Sources & coverage tab — city discovery audit ── */}
-      {tab === "sources" && <CityAuditPanel cities={index?.cities ?? []} />}
+      {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
+      {tab === "sources" && (
+        <div className="flex flex-col gap-4">
+          <PipelineAuditPanel />
+          <CityAuditPanel cities={index?.cities ?? []} />
+        </div>
+      )}
     </div>
+  );
+}
+
+// ── Forensic pipeline audit panel (read-only) ────────────────────────────────
+const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
+  OFFICE_EXTRACTION_FAILURE: "כשל חילוץ שמות משרד",
+  OFFICE_CREATION_FAILURE: "כשל יצירת משרדים",
+  OFFICE_VERIFICATION_TOO_STRICT: "סף אימות מחמיר מדי",
+  CITY_NORMALIZATION_FAILURE: "כשל נרמול עיר",
+  REPOSITORY_MISMATCH: "אי-התאמה בין מאגרים",
+  UI_SHOWING_INCOMPLETE_DATA: "הממשק מציג נתונים חלקיים",
+  MULTIPLE_PIPELINE_FAILURES: "כשלים מרובים בצינור",
+};
+
+function PipelineAuditPanel() {
+  const [data, setData] = useState<BrokeragePipelineAudit | null>(null);
+  const [pending, setPending] = useState(false);
+  const run = async () => { setPending(true); try { setData(await auditBrokerageDiscoveryPipelineAction()); } finally { setPending(false); } };
+
+  return (
+    <section className="border-line bg-card rounded-3xl border p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div><h2 className="text-ink text-lg font-black">🧪 Pipeline Audit™ (פורנזי · קריאה בלבד)</h2>
+          <p className="text-muted mt-1 text-[12px]">מודד כל שלב בצינור הגילוי ומצליב מאגרים — לאיתור היכן נאבדים הנתונים.</p></div>
+        <button onClick={run} disabled={pending} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "הרץ אבחון צינור"}</button>
+      </div>
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 font-bold text-rose-800">פסק דין: {VERDICT_HE[data.verdict]} · החוליה החלשה: {data.weakestStage}</div>
+          {/* Stage trace */}
+          <div className="flex flex-col gap-1.5">
+            {data.stages.map((st) => (
+              <div key={st.name} className="flex items-center gap-2">
+                <span className="text-ink w-44 shrink-0 font-bold">{st.name}</span>
+                <div className="bg-surface h-3 flex-1 overflow-hidden rounded-full">
+                  <div className={`h-full rounded-full ${st.healthPct < 20 ? "bg-rose-500" : st.healthPct < 50 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${st.healthPct}%` }} />
+                </div>
+                <span className="text-muted w-32 shrink-0 text-left tabular-nums">{fmt(st.output)} ({st.healthPct}%)</span>
+              </div>
+            ))}
+          </div>
+          {/* Repository cross-check */}
+          <div><b>הצלבת מאגרים:</b>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {data.repositories.map((r) => (
+                <span key={r.table} className={cn("rounded-full px-2 py-0.5 font-bold", r.error ? "bg-rose-50 text-rose-700" : "bg-surface text-muted")} title={r.error ?? r.table}>
+                  {r.table}: {r.error ? "שגיאה" : fmt(r.rows ?? 0)}
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* Link breakdown */}
+          <div><b>מתווכים משויכים לפי משרד ({fmt(data.linkedBrokersInOfficeCount)} משרדים, {fmt(data.totals.linkedBrokers)} מתווכים):</b>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {data.linkByOffice.slice(0, 15).map((o) => (
+                <span key={o.officeId} className={cn("rounded-full px-2 py-0.5 font-bold", o.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{o.office}: {fmt(o.brokers)}{o.status !== "active" ? ` (${o.status})` : ""}</span>
+              ))}
+            </div>
+          </div>
+          {/* Normalization duplicates */}
+          {data.cityNormalizationDuplicates.length > 0 && (
+            <div><b>איותי עיר כפולים (לא ממוזגים):</b>
+              <ul className="text-muted mt-1 list-disc pr-5">{data.cityNormalizationDuplicates.slice(0, 8).map((d) => <li key={d.normalized}>{d.spellings.join(" / ")} ({fmt(d.rows)} שורות)</li>)}</ul>
+            </div>
+          )}
+          {data.officeNameDuplicates.length > 0 && (
+            <div><b>איותי שם-משרד כפולים:</b>
+              <ul className="text-muted mt-1 list-disc pr-5">{data.officeNameDuplicates.slice(0, 6).map((d) => <li key={d.normalized}>{d.spellings.join(" / ")}</li>)}</ul>
+            </div>
+          )}
+          {/* City coverage */}
+          <div className="overflow-x-auto">
+            <b>כיסוי לפי עיר:</b>
+            <table className="mt-1 w-full text-[11px]">
+              <thead className="text-muted"><tr><th className="text-right">עיר</th><th>מתווכים</th><th>משרדים</th><th>מועמדים</th></tr></thead>
+              <tbody>{data.cityCoverage.slice(0, 15).map((c) => (
+                <tr key={c.city} className="border-line border-b"><td className="py-1 font-bold">{c.city}</td><td className="text-center tabular-nums">{fmt(c.brokersScanned)}</td><td className="text-center tabular-nums">{fmt(c.offices)}</td><td className="text-center tabular-nums">{fmt(c.candidates)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+          {data.contradictions.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800"><b>סתירות:</b><ul className="mt-1 list-disc pr-5">{data.contradictions.map((c, i) => <li key={i}>{c}</li>)}</ul></div>}
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+        </div>
+      )}
+    </section>
   );
 }
 

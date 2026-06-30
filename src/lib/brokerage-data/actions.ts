@@ -20,6 +20,7 @@ import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReason
 import { getProfileExtras, type ProfileExtras } from "./profile-data";
 import { getBrokerageOfficesIndex, type OfficesIndex } from "./office-profile";
 import { getCityDiscoveryAudit, type CityDiscoveryAudit } from "./brokerage-discovery-audit";
+import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./brokerage-pipeline-audit";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
@@ -27,6 +28,15 @@ import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, t
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
 import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** READ-ONLY forensic pipeline audit — measures every discovery stage + cross-checks repos. */
+export async function auditBrokerageDiscoveryPipelineAction(): Promise<BrokeragePipelineAudit | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await auditBrokerageDiscoveryPipeline();
+  } catch (e) { console.error("[pipeline-audit] failed:", e); return null; }
+}
 
 /** READ-ONLY city discovery audit — explains why a city has few offices. */
 export async function getCityDiscoveryAuditAction(city: string): Promise<CityDiscoveryAudit | null> {
