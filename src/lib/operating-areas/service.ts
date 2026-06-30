@@ -172,6 +172,13 @@ export async function addOperatingArea(localityId: string, opts: AddAreaOptions 
     await ensureNationalNeighborhoods([cityName]);
   } catch (e) { console.error("[operating-areas] neighborhood discovery skipped:", e); }
 
+  // Fire-and-forget: learn this city's brokerage market (offices/brokers/listings)
+  // if it's new/weak/stale. Never awaited → adding the area is never blocked.
+  try {
+    const { triggerCityLearning } = await import("@/lib/brokerage-data/city-learning-trigger");
+    void triggerCityLearning(orgId, cityName, opts.isPrimary ? "onboarding_primary_city" : "broker_created").catch(() => {});
+  } catch (e) { console.error("[operating-areas] city learning trigger skipped:", e); }
+
   return { areaId, cityName };
 }
 

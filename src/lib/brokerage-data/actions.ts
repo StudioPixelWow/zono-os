@@ -24,6 +24,7 @@ import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./
 import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDiscoveryOptions } from "./city-discovery";
 import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, getCityKnowledgeStatus, type CityKnowledge, type CityBrokerageCensus, type CityKnowledgeStatus } from "./brokerage-knowledge";
 import { ensureCityBrokerageKnowledge, type EnsureCityResult } from "./city-lazy-learning";
+import { triggerCityLearning, type CityLearningReason, type CityLearningOutcome } from "./city-learning-trigger";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
@@ -31,6 +32,12 @@ import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, t
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
 import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** Fire-and-forget city-learning trigger for product events (best-effort, throttled). */
+export async function triggerCityLearningAction(city: string, reason: CityLearningReason): Promise<CityLearningOutcome> {
+  const { profile } = await getSessionContext().catch(() => ({ profile: null }));
+  return triggerCityLearning(profile?.org_id ?? null, city, reason);
+}
 
 /** READ-ONLY city knowledge status — bootstrap / refresh / reuse recommendation. */
 export async function getCityKnowledgeStatusAction(city: string): Promise<CityKnowledgeStatus | null> {

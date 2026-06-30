@@ -64,6 +64,15 @@ export async function finishSyncJobAction(jobId: string, cities: string[], error
   try {
     const summary = await finishSyncJob(jobId, cities, errorCount);
     revalidatePath("/properties");
+    // Fire-and-forget: learn the brokerage market for each synced city if it's
+    // new/weak/stale. Never awaited; throttled/deduped; never fails the sync.
+    try {
+      const { getSessionContext } = await import("@/lib/auth/session");
+      const { triggerCityLearning } = await import("@/lib/brokerage-data/city-learning-trigger");
+      const { profile } = await getSessionContext().catch(() => ({ profile: null as { org_id?: string } | null }));
+      const orgId = profile?.org_id ?? null;
+      for (const city of [...new Set(cities)].slice(0, 20)) void triggerCityLearning(orgId, city, "external_listing_city_detected").catch(() => {});
+    } catch (e) { console.error("[external-listings] city learning trigger skipped:", e); }
     return { summary };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "שגיאה בסיום הסנכרון" };

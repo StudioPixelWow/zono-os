@@ -9,6 +9,7 @@
  */
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { triggerCityLearning } from "@/lib/brokerage-data/city-learning-trigger";
 import type { Database, PropertyStatus } from "@/lib/supabase/types";
 import type { PropertyFilters, PropertyInput } from "./types";
 
@@ -129,6 +130,9 @@ export async function createProperty(input: PropertyInput): Promise<PropertyRow>
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+  // Fire-and-forget: learn the city's brokerage market if it's new/weak/stale.
+  // Never awaited → property creation is never blocked or failed by learning.
+  void triggerCityLearning(profile.org_id, (data as { city?: string | null }).city, "property_created").catch(() => {});
   return data;
 }
 
