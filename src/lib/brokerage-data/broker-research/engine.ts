@@ -23,7 +23,13 @@ import type { BrokerResearchDossier, ResearchEvidence, ResearchRunDiagnostics } 
 type Row = Record<string, unknown>;
 const s = (v: unknown): string => (typeof v === "string" ? v : "");
 
-export interface ResearchReport { dossier: BrokerResearchDossier; applied: boolean; searchConfigured: boolean; note: string | null }
+export interface ResearchReport { dossier: BrokerResearchDossier; applied: boolean; searchConfigured: boolean; note: string | null; autoLinked: boolean; linkedOfficeName: string | null }
+
+// A broker is auto-linked to an office only when the evidence is overwhelming:
+// confidence ≥ this AND a recognized/keyword office name backed by corroborating
+// sources (the confidence already encodes multi-domain agreement). Never AI-only,
+// never overwrites an existing link.
+const AUTO_LINK_MIN_CONFIDENCE = 95;
 
 /** Build a broker's research dossier. READ-ONLY (no writes) — safe for preview. */
 export async function buildResearchDossier(agentId: string): Promise<BrokerResearchDossier | null> {
@@ -101,6 +107,8 @@ export async function researchBroker(agentId: string, opts: { apply?: boolean } 
   const note = !searchConfigured ? "חיפוש ציבורי אינו מוגדר — מחקר מתווך←משרד מבוסס-אינטרנט אינו פעיל. מוגדר רק מקור המודעות (Yad2/Madlan)." : null;
 
   let applied = false;
+  let autoLinked = false;
+  let linkedOfficeName: string | null = null;
   if (opts.apply) {
     const db = createServiceRoleClient();
     const nowIso = new Date().toISOString();
@@ -131,11 +139,55 @@ export async function researchBroker(agentId: string, opts: { apply?: boolean } 
       if (error && !/duplicate key/i.test(error.message)) console.error("[research] candidate insert:", error.message);
     }
 
+    // AUTO-LINK — overwhelming, evidence-backed match links the broker directly.
+    // Requires ≥95% (which already encodes multi-source corroboration) and a real
+    // office name; reuses an existing office if one matches; never overwrites an
+    // existing broker→office link.
+    const top = dossier.possibleOffices[0];
+    if (top && top.confidence >= AUTO_LINK_MIN_CONFIDENCE && isAcceptableOfficeName(top.officeName)) {
+      try {
+        const officeId = await findOrCreateVerifiedOffice(db, top, dossier.city, nowIso);
+        if (officeId) {
+          const { error, count } = await db.from("brokerage_agents" as never)
+            .update({ office_id: officeId, last_seen_at: nowIso } as never, { count: "exact" })
+            .eq("id", agentId).is("office_id", null);
+          if (!error && (count ?? 0) > 0) { autoLinked = true; linkedOfficeName = top.officeName; }
+        }
+      } catch (e) { console.error("[research] auto-link failed:", e); }
+    }
+
     // PART 6 — verification hook: the existing identity engine (thresholds intact).
     try { await resolveBrokerIdentity(agentId, { useAI: true }); } catch (e) { console.error("[research] verification hook failed:", e); }
     applied = true;
   }
-  return { dossier, applied, searchConfigured, note };
+  return { dossier, applied, searchConfigured, note, autoLinked, linkedOfficeName };
+}
+
+/** Find an existing active office for this name/city, else create a verified one.
+ *  Returns the office id, or null. Evidence-backed only (caller gates on score). */
+async function findOrCreateVerifiedOffice(
+  db: ReturnType<typeof createServiceRoleClient>,
+  office: { officeName: string; brandNetwork: string | null },
+  city: string | null, nowIso: string,
+): Promise<string | null> {
+  const normalized = normalizeHebrewName(office.officeName);
+  if (!normalized || !isAcceptableOfficeName(office.officeName)) return null;
+  // Reuse an existing non-rejected office with the same normalized name (and a
+  // compatible city) — never create a duplicate.
+  const { data: existing } = await db.from("brokerage_offices" as never)
+    .select("id,city,status").eq("normalized_name", normalized).limit(50);
+  const match = ((existing ?? []) as Row[]).find((r) => s(r.status) !== "rejected" && (!city || !s(r.city) || s(r.city) === city));
+  if (match) return String((match as Row).id);
+  const fr = detectFranchise(office.officeName);
+  const officeId = globalThis.crypto.randomUUID();
+  const { error } = await db.from("brokerage_offices" as never).insert({
+    id: officeId, name: office.officeName, normalized_name: normalized,
+    brand_network: office.brandNetwork ?? (fr.matched ? fr.brandNetwork : null), office_type: "unknown",
+    status: "active", city, confidence_score: 96, data_quality_score: 60,
+    metadata: { derived_from: "broker_research_autolink" } as never,
+    first_seen_at: nowIso, last_seen_at: nowIso, last_verified_at: nowIso,
+  } as never);
+  return error ? null : officeId;
 }
 
 /** Batch research with diagnostics (PART 9). Capped + resumable (research newest first). */

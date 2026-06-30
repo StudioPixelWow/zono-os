@@ -126,6 +126,7 @@ export function ResearchView() {
               <span className="text-muted">{report.dossier.city ?? "—"}</span>
               <span className="rounded-full bg-surface px-2 py-0.5 font-bold">{STATUS_HE[report.dossier.status] ?? report.dossier.status}</span>
               {report.applied && <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">הוחל ✓</span>}
+              {report.autoLinked && <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">🔗 שויך אוטומטית: {report.linkedOfficeName}</span>}
             </div>
 
             <Block title={`שאילתות (${report.dossier.queries.length})`}>{report.dossier.queries.map((q, i) => <div key={i} className="text-muted">• {q}</div>)}</Block>
