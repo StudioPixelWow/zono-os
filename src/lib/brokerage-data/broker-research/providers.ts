@@ -53,7 +53,10 @@ type SearchVendor = { name: string; key: string | undefined; run: (q: string) =>
 function searchVendors(): SearchVendor[] {
   return [
     { name: "tavily", key: process.env.TAVILY_API_KEY, run: async (q) => {
-      const r = await fetchWithTimeout("https://api.tavily.com/search", { method: "POST", headers: { "content-type": "application/json" },
+      // Modern Tavily auth is the Bearer header; we also keep api_key in the body
+      // for backward compatibility with older keys/endpoints.
+      const r = await fetchWithTimeout("https://api.tavily.com/search", { method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${process.env.TAVILY_API_KEY ?? ""}` },
         body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: q, max_results: 5, search_depth: "basic" }) });
       if (!r.ok) throw new Error(`tavily ${r.status}`);
       const j = await r.json() as { results?: { title?: string; url?: string; content?: string }[] };
@@ -97,10 +100,15 @@ const webSearchProvider: BrokerageResearchProvider = {
   async research(ctx) {
     const vendor = activeSearchVendor();
     if (!vendor) return [];
+    // Run the queries CONCURRENTLY (was sequential → up to 4× slower and felt
+    // "stuck"). Each call is already bounded by fetchWithTimeout.
+    const queries = ctx.queries.slice(0, 4);
+    const perQuery = await Promise.all(queries.map(async (q) => {
+      try { return { q, hits: await vendor.run(q) }; }
+      catch (e) { console.error("[research] web search failed", q, e); return { q, hits: [] as SearchHit[] }; }
+    }));
     const out: ResearchEvidence[] = [];
-    for (const q of ctx.queries.slice(0, 4)) {                 // rate-limit: cap queries
-      let hits: SearchHit[] = [];
-      try { hits = await vendor.run(q); } catch (e) { console.error("[research] web search failed", q, e); continue; }
+    for (const { q, hits } of perQuery) {
       for (const h of hits.slice(0, 5)) {
         const text = `${h.title ?? ""} ${h.snippet ?? ""}`.trim();
         const fr = detectFranchise(text);
