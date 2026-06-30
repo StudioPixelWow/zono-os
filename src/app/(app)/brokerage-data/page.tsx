@@ -1,6 +1,7 @@
 import { getBrokerageCommandCenter, type BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import { BrokerageDataView } from "./BrokerageDataView";
 import { RegistryView } from "./RegistryView";
+import { ResearchView } from "./ResearchView";
 import { KnowledgeView } from "./KnowledgeView";
 import { EvolutionView } from "./EvolutionView";
 
@@ -29,6 +30,9 @@ export default async function BrokerageDataPage() {
       {/* National Registry — mounted for ALL authenticated org users (dev/QA).
           TODO before launch: restrict to owner/admin. */}
       <RegistryView />
+      {/* National Research — discovers evidence via real search providers (when
+          configured) then feeds the Broker Identity Engine. Dev/QA: all users. */}
+      <ResearchView />
       <KnowledgeView />
       <EvolutionView />
     </div>

@@ -23,6 +23,41 @@ import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
 import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, type IdentityRunResult } from "./broker-identity/engine";
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
+import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot } from "./broker-research/engine";
+import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** National Research snapshot for the UI (provider status, queue, recent). */
+export async function getResearchSnapshotAction(): Promise<ResearchSnapshot | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await getResearchSnapshot();
+  } catch (e) { console.error("[research] snapshot failed:", e); return null; }
+}
+
+/** PART 8 — single-broker research by id or name. apply=false → preview only. */
+export async function researchSingleBrokerAction(idOrName: string, apply = false): Promise<{ ok: boolean; report?: ResearchReport; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const agentId = await resolveBrokerRef(idOrName);
+    if (!agentId) return { ok: false, error: `מתווך לא נמצא: ${idOrName}` };
+    const report = await researchBroker(agentId, { apply });
+    if (apply) revalidatePath("/brokerage-data");
+    return report ? { ok: true, report } : { ok: false, error: "מתווך לא נמצא." };
+  } catch (e) { console.error("[research] single failed:", e); return { ok: false, error: "המחקר נכשל." }; }
+}
+
+/** Batch research (auth-only dev/QA). Writes dossiers + candidates + runs verification hook. */
+export async function runBrokerResearchAction(): Promise<{ ok: boolean; diagnostics?: ResearchRunDiagnostics; note?: string | null; searchConfigured?: boolean; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const r = await researchAllBrokers(profile.org_id, {});
+    revalidatePath("/brokerage-data");
+    return { ok: true, diagnostics: r.diagnostics, note: r.note, searchConfigured: r.searchConfigured };
+  } catch (e) { console.error("[research] batch failed:", e); return { ok: false, error: "ההרצה נכשלה." }; }
+}
 
 export interface BrokerIdentityView { pkg: BrokerIdentityPackage | null; stored: BrokerResolution | null }
 
