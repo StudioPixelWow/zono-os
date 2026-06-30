@@ -16,6 +16,7 @@ import {
 } from "./report-service";
 import { getBrokerSoldProperties } from "./providers";
 import { diagnoseValuationEvidence, type ValuationEvidenceDiagnosis } from "./diagnostics";
+import { getPropertyEvidence, type EvidencePackage } from "@/lib/evidence-search";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { normalizeInput } from "./valuation-engine";
@@ -118,5 +119,11 @@ export async function createSellerFollowupFromValuationAction(id: string): Promi
 /** READ-ONLY evidence diagnostic — why a valuation has no evidence. No writes. */
 export async function diagnoseValuationEvidenceAction(id: string): Promise<Result<ValuationEvidenceDiagnosis | null>> {
   try { return { ok: true, data: await diagnoseValuationEvidence(id) }; }
+  catch (e) { return fail(e); }
+}
+
+/** READ-ONLY Evidence Search™ — progressive evidence retrieval for a valuation. */
+export async function getValuationEvidenceSearchAction(id: string, allowNearbyCities = false): Promise<Result<EvidencePackage>> {
+  try { return { ok: true, data: await getPropertyEvidence({ valuationId: id, allowNearbyCities }) }; }
   catch (e) { return fail(e); }
 }

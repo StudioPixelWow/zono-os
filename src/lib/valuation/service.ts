@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { gatherEvidence, getBrokerSoldProperties } from "./providers";
 import type { ProviderResult } from "./providers";
+import { getPropertyEvidence } from "@/lib/evidence-search";
 import { runValuation as runEngine, normalizeInput } from "./valuation-engine";
 import { buildValuationIntelligence, ALGORITHM_VERSION } from "./intelligence";
 import { getCityCalibration } from "./accuracy-service";
@@ -96,10 +97,23 @@ export async function runValuationById(id: string): Promise<RunOutput> {
   await db.from(TABLE as never).update({ status: "computing" } as never).eq("id", id).eq("organization_id", orgId);
 
   const providerCtx = { db, orgId, input, limit: PROVIDER_LIMIT };
-  const [{ comparables, providers }, brokerSoldRaw] = await Promise.all([
+  const [evidenceBundle, brokerSoldRaw] = await Promise.all([
     gatherEvidence(providerCtx),
     getBrokerSoldProperties(db, orgId, input),
   ]);
+  const providers = evidenceBundle.providers;
+  let comparables = evidenceBundle.comparables;
+
+  // Evidence Search™ fallback — ONLY when the live providers found NO priced
+  // comparable (the failing case). Adds normalized-city / radius /
+  // market_property_sources evidence the exact-city providers miss. The AVM
+  // formula is unchanged; this only widens evidence retrieval before the engine.
+  if (comparables.filter((c) => (c.pricePerSqm ?? 0) > 0).length === 0) {
+    try {
+      const pkg = await getPropertyEvidence({ valuationId: id });
+      if (pkg.comparablesForValuation.length > 0) comparables = pkg.comparablesForValuation;
+    } catch (e) { console.error("[valuation] evidence-search fallback failed:", e); }
+  }
 
   const result = runEngine({ input, comparables, brokerSold: brokerSoldRaw });
 

@@ -12,8 +12,10 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import {
   runValuationAction, generateValuationReportAction, sendValuationReportAsPdfAction,
   createSellerFollowupFromValuationAction, diagnoseValuationEvidenceAction,
+  getValuationEvidenceSearchAction,
 } from "@/lib/valuation/actions";
 import type { ValuationEvidenceDiagnosis } from "@/lib/valuation/diagnostics";
+import { FAILURE_MODE_HE, MATCH_LEVEL_HE, type EvidencePackage } from "@/lib/evidence-search";
 import { computeWhatIf } from "@/lib/valuation/valuation-engine";
 import {
   type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
@@ -228,6 +230,7 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
 
       {/* Read-only evidence diagnostic (QA/admin) — collapsed by default. */}
       <EvidenceDiagnostic valuationId={record.id} />
+      <EvidenceSearchPanel valuationId={record.id} />
 
       {sendOpen && <SendModal valuationId={record.id} hasReport={!!reportToken} onClose={() => setSendOpen(false)} onGenerated={(t) => setReportToken(t)} />}
     </main>
@@ -243,6 +246,65 @@ const CONCLUSION_HE: Record<ValuationEvidenceDiagnosis["conclusion"], string> = 
   PROVIDER_NOT_WIRED: "תקלת ספק/חיווט — הנתונים קיימים אך הספק לא קורא אותם",
   UNKNOWN: "לא ודאי — ראה הערות",
 };
+
+function EvidenceSearchPanel({ valuationId }: { valuationId: string }) {
+  const [data, setData] = useState<EvidencePackage | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [nearby, setNearby] = useState(false);
+
+  const run = async () => {
+    setPending(true); setErr(null);
+    try { const r = await getValuationEvidenceSearchAction(valuationId, nearby); if (r.ok) setData(r.data); else setErr(r.error); }
+    catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setPending(false); }
+  };
+
+  return (
+    <details className="border-line bg-card mt-4 rounded-card border p-4 text-sm">
+      <summary className="text-muted cursor-pointer font-bold">🔍 Evidence Search™ (חיפוש ראיות מתקדם · קריאה בלבד)</summary>
+      <div className="mt-3 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={run} disabled={pending} className="btn-zono-primary inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-bold disabled:opacity-60">{pending ? "מחפש…" : "הרץ חיפוש ראיות"}</button>
+          <label className="text-muted flex items-center gap-1.5 text-[12px] font-bold"><input type="checkbox" checked={nearby} onChange={(e) => setNearby(e.target.checked)} /> כלול ערים סמוכות (ראיה חלשה)</label>
+        </div>
+        {err && <p className="font-semibold text-red-600">{err}</p>}
+        {data && (
+          <div className="flex flex-col gap-3 text-[12px]">
+            <div className="text-muted border-line bg-surface rounded-lg border px-3 py-2">
+              <b>כתובת מנורמלת:</b> {data.resolvedAddress.city ?? "—"}{data.resolvedAddress.neighborhood ? ` · ${data.resolvedAddress.neighborhood}` : ""}{data.resolvedAddress.street ? ` · ${data.resolvedAddress.street}` : ""} · קואורד׳: {data.coordinatesStatus === "present" ? "יש" : "אין"} · ערים סמוכות: {data.allowNearbyCities ? "מופעל" : "כבוי"}
+            </div>
+            <div className={cn("rounded-lg border px-3 py-2 font-bold", data.failureMode ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
+              {data.failureMode ? `מצב: ${FAILURE_MODE_HE[data.failureMode]} · צעד מומלץ: ${data.recommendedNextStep}` : `✓ נמצאו ${data.counts.usable} ראיות שמישות להערכה`}
+            </div>
+            <div><b>רמות קרבה בשימוש:</b> {data.matchLevelsUsed.length ? data.matchLevelsUsed.map((l) => MATCH_LEVEL_HE[l]).join(" · ") : "—"}</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead className="text-muted text-[11px]"><tr><th className="text-right">מקור</th><th>חובר</th><th>גולמי</th><th>שמיש</th><th>מתומחר</th><th>עיר מדויקת</th><th>עיר מנורמלת</th><th>רדיוס</th><th>נדחו</th></tr></thead>
+                <tbody>
+                  {data.sources.map((src) => (
+                    <tr key={src.source} className="border-line border-b">
+                      <td className="py-1.5 font-bold">{src.source}{!src.wired && <span className="text-amber-600"> (לא מחובר)</span>}</td>
+                      <td className="text-center">{src.error ? <span className="text-red-600" title={src.error}>שגיאה</span> : "✓"}</td>
+                      <td className="text-center tabular-nums">{src.rawCount}</td>
+                      <td className="text-center tabular-nums">{src.usableCount}</td>
+                      <td className="text-center tabular-nums">{src.pricedCount}</td>
+                      <td className="text-center tabular-nums">{src.exactCityCount}</td>
+                      <td className="text-center tabular-nums">{src.normalizedCityCount}</td>
+                      <td className="text-center tabular-nums">{src.radiusCount ?? "—"}</td>
+                      <td className="text-center tabular-nums">{src.rejectedCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-muted">סה״כ {data.counts.totalRows} ראיות · {data.counts.usable} שמישות · {data.counts.sameCity} עיר מדויקת · {data.counts.normalizedCity} עיר מנורמלת · {data.counts.radius} ברדיוס · קומפרבלים להערכה: {data.comparablesForValuation.length}</div>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
 
 function DiagSrcRow({ label, s }: { label: string; s: ValuationEvidenceDiagnosis["sources"]["propertyTransactions"] }) {
   return (
