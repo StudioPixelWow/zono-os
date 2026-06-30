@@ -23,7 +23,7 @@ import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
 import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, type IdentityRunResult } from "./broker-identity/engine";
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
-import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot } from "./broker-research/engine";
+import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
 
 /** National Research snapshot for the UI (provider status, queue, recent). */
@@ -48,14 +48,15 @@ export async function researchSingleBrokerAction(idOrName: string, apply = false
   } catch (e) { console.error("[research] single failed:", e); return { ok: false, error: "המחקר נכשל." }; }
 }
 
-/** Batch research (auth-only dev/QA). Writes dossiers + candidates + runs verification hook. */
-export async function runBrokerResearchAction(): Promise<{ ok: boolean; diagnostics?: ResearchRunDiagnostics; note?: string | null; searchConfigured?: boolean; error?: string }> {
+/** RESUMABLE batch research — processes ONE small chunk and reports progress so
+ *  the UI can auto-continue until done. Writes dossiers + candidates + auto-links. */
+export async function runBrokerResearchAction(cap?: number): Promise<{ ok: boolean; diagnostics?: ResearchRunDiagnostics; progress?: BatchResearchProgress; note?: string | null; searchConfigured?: boolean; error?: string }> {
   try {
     const { profile } = await getSessionContext();
     if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
-    const r = await researchAllBrokers(profile.org_id, {});
+    const r = await researchAllBrokers(profile.org_id, typeof cap === "number" ? { cap } : {});
     revalidatePath("/brokerage-data");
-    return { ok: true, diagnostics: r.diagnostics, note: r.note, searchConfigured: r.searchConfigured };
+    return { ok: true, diagnostics: r.diagnostics, progress: r.progress, note: r.note, searchConfigured: r.searchConfigured };
   } catch (e) { console.error("[research] batch failed:", e); return { ok: false, error: "ההרצה נכשלה." }; }
 }
 

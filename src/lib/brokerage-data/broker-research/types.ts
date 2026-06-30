@@ -64,6 +64,7 @@ export interface ResearchRunDiagnostics {
   aiCalls: number;
   aiResolved: number;
   candidatesCreated: number;
+  autoLinked: number;
   needsReview: number;
   insufficientEvidence: number;
   errors: string[];

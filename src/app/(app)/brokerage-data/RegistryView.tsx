@@ -8,6 +8,7 @@
 // ============================================================================
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { getOfficeRegistrySnapshotAction, runNationalOfficeRegistryAction } from "@/lib/brokerage-data/actions";
 import type { OfficeRegistrySnapshot, RegistryRunResult } from "@/lib/brokerage-data/office-registry";
@@ -217,7 +218,8 @@ export function RegistryView() {
           {verifiedOffices.length === 0 ? <Empty text="עדיין אין משרדים מאומתים. הפעל את המרשם לאחר סריקה." /> : (
             <div className="flex flex-col gap-2">
               {verifiedOffices.slice(0, 60).map((o) => (
-                <div key={o.id} className="border-line bg-surface flex items-center justify-between gap-2 rounded-xl border px-3 py-2">
+                <Link key={o.id} href={`/brokerage-data/office/${o.id}`}
+                  className="border-line bg-surface hover:border-brand/40 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-colors">
                   <div className="min-w-0">
                     <div className="text-ink truncate text-sm font-bold">{o.name}</div>
                     <div className="text-muted truncate text-[11px]">{[o.brandNetwork, o.city, `${o.brokerCount} מתווכים`].filter(Boolean).join(" · ")}</div>
@@ -226,7 +228,7 @@ export function RegistryView() {
                     <Pill tone="green">מאומת</Pill>
                     <span className="text-muted text-[11px] tabular-nums">{Math.round(o.confidence)}%</span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

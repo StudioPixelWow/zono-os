@@ -31,8 +31,10 @@ export interface ResearchReport { dossier: BrokerResearchDossier; applied: boole
 // never overwrites an existing link.
 const AUTO_LINK_MIN_CONFIDENCE = 95;
 
-/** Build a broker's research dossier. READ-ONLY (no writes) — safe for preview. */
-export async function buildResearchDossier(agentId: string): Promise<BrokerResearchDossier | null> {
+/** Build a broker's research dossier. READ-ONLY (no writes) — safe for preview.
+ *  opts.skipAI skips the AI summary (used by the batch scan for speed — auto-link
+ *  depends on web/listing corroboration, not on the AI text). */
+export async function buildResearchDossier(agentId: string, opts: { skipAI?: boolean } = {}): Promise<BrokerResearchDossier | null> {
   const db = createServiceRoleClient();
   const { data: agent } = await db.from("brokerage_agents" as never)
     .select("id,full_name,normalized_name,primary_phone,whatsapp_phone,city").eq("id", agentId).maybeSingle();
@@ -69,9 +71,9 @@ export async function buildResearchDossier(agentId: string): Promise<BrokerResea
     priorStatus = bi ? s((bi as Row).status) : null;
   } catch { /* 26.12 not applied */ }
 
-  // STEP 4 — AI reasons over ONLY the collected sources.
+  // STEP 4 — AI reasons over ONLY the collected sources (skipped in batch mode).
   let aiSummary: string | null = null;
-  if (selectProvider() && evidence.length) {
+  if (selectProvider() && evidence.length && !opts.skipAI) {
     aiSummary = await reasonOverSources(fullName, city, evidence);
   }
 
@@ -100,8 +102,8 @@ function computeMissing(providers: BrokerResearchDossier["providers"], offices: 
 
 /** Research one broker. apply=false → preview only (no writes). apply=true →
  *  persist dossier + create candidates + run the identity verification hook. */
-export async function researchBroker(agentId: string, opts: { apply?: boolean } = {}): Promise<ResearchReport | null> {
-  const dossier = await buildResearchDossier(agentId);
+export async function researchBroker(agentId: string, opts: { apply?: boolean; skipAI?: boolean } = {}): Promise<ResearchReport | null> {
+  const dossier = await buildResearchDossier(agentId, { skipAI: opts.skipAI });
   if (!dossier) return null;
   const searchConfigured = !!activeSearchVendor() && !!process.env.ZONO_PUBLIC_SEARCH_ENABLED;
   const note = !searchConfigured ? "חיפוש ציבורי אינו מוגדר — מחקר מתווך←משרד מבוסס-אינטרנט אינו פעיל. מוגדר רק מקור המודעות (Yad2/Madlan)." : null;
@@ -190,38 +192,56 @@ async function findOrCreateVerifiedOffice(
   return error ? null : officeId;
 }
 
-/** Batch research with diagnostics (PART 9). Capped + resumable (research newest first). */
-export async function researchAllBrokers(orgId: string, opts: { cap?: number; apply?: boolean } = {}): Promise<{ diagnostics: ResearchRunDiagnostics; searchConfigured: boolean; note: string | null }> {
+export interface BatchResearchProgress { processedThisRun: number; remaining: number; total: number; researchedTotal: number; done: boolean }
+export interface BatchResearchResult { diagnostics: ResearchRunDiagnostics; searchConfigured: boolean; note: string | null; progress: BatchResearchProgress }
+
+/** RESUMABLE batch research (PART 9, v2). Each call processes a SMALL chunk of
+ *  brokers NOT yet researched (so the client can auto-continue, chunk by chunk,
+ *  until done, without ever exceeding the platform request timeout). Skips the AI
+ *  text by default (auto-link relies on web/listing corroboration, not AI). */
+export async function researchAllBrokers(orgId: string, opts: { cap?: number; apply?: boolean; skipAI?: boolean } = {}): Promise<BatchResearchResult> {
   const db = createServiceRoleClient();
-  const cap = Math.max(1, Math.min(opts.cap ?? 50, 200));
+  const cap = Math.max(1, Math.min(opts.cap ?? 5, 25));   // small per-run chunk for resumable auto-continue
   const apply = opts.apply ?? true;
+  const skipAI = opts.skipAI ?? true;
   const searchConfigured = !!activeSearchVendor() && !!process.env.ZONO_PUBLIC_SEARCH_ENABLED;
   const d: ResearchRunDiagnostics = {
     brokersProcessed: 0, providersConfigured: 0, providersSkipped: 0, queriesGenerated: 0, publicResultsFound: 0,
-    evidenceItemsCreated: 0, aiCalls: 0, aiResolved: 0, candidatesCreated: 0, needsReview: 0, insufficientEvidence: 0, errors: [],
+    evidenceItemsCreated: 0, aiCalls: 0, aiResolved: 0, candidatesCreated: 0, autoLinked: 0, needsReview: 0, insufficientEvidence: 0, errors: [],
   };
-  const { data: agents } = await db.from("brokerage_agents" as never).select("id").order("confidence_score", { ascending: false }).limit(cap);
-  for (const a of (agents ?? []) as Row[]) {
+
+  // Resumable: brokers that already have a research dossier are skipped.
+  const { data: doneRows } = await db.from("brokerage_research_dossier" as never).select("agent_id").limit(50000);
+  const researched = new Set(((doneRows ?? []) as Row[]).map((r) => s(r.agent_id)).filter(Boolean));
+  const { data: agentRows } = await db.from("brokerage_agents" as never).select("id").order("confidence_score", { ascending: false }).limit(20000);
+  const allIds = ((agentRows ?? []) as Row[]).map((r) => s(r.id)).filter(Boolean);
+  const total = allIds.length;
+  const queue = allIds.filter((id) => !researched.has(id)).slice(0, cap);
+
+  for (const id of queue) {
     try {
-      const r = await researchBroker(s(a.id), { apply });
+      const r = await researchBroker(id, { apply, skipAI });
       if (!r) continue;
       d.brokersProcessed++;
       d.queriesGenerated += r.dossier.queries.length;
       d.publicResultsFound += r.dossier.evidence.length;
       d.evidenceItemsCreated += r.dossier.evidence.length;
       d.candidatesCreated += r.dossier.possibleOffices.length;
+      if (r.autoLinked) d.autoLinked++;
       if (r.dossier.aiSummary) d.aiCalls++;
       if (r.dossier.status === "needs_review") d.needsReview++; else d.insufficientEvidence++;
     } catch (e) { d.errors.push(e instanceof Error ? e.message : String(e)); }
   }
-  // Provider config snapshot (from a representative run isn't needed — count vendors).
+
   const providers = (await gatherResearchEvidence({ broker: { name: "", normalizedName: "", city: null, phones: [] }, listings: [], queries: [] })).providers;
   d.providersConfigured = providers.filter((p) => p.configured).length;
   d.providersSkipped = providers.filter((p) => !p.configured).length;
+  const researchedTotal = researched.size + d.brokersProcessed;
+  const remaining = Math.max(0, total - researchedTotal);
   const note = !searchConfigured
     ? "Public web search is not configured, so broker-office research cannot run. הגדר ספק חיפוש (SerpAPI / Tavily / Exa / Google CSE / Bing) + ZONO_PUBLIC_SEARCH_ENABLED."
     : null;
-  return { diagnostics: d, searchConfigured, note };
+  return { diagnostics: d, searchConfigured, note, progress: { processedThisRun: d.brokersProcessed, remaining, total, researchedTotal, done: remaining === 0 } };
 }
 
 /** Resolve a broker reference (UUID or name) → agent id (for the test action). */

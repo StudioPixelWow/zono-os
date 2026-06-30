@@ -6,6 +6,9 @@ import { KnowledgeView } from "./KnowledgeView";
 import { EvolutionView } from "./EvolutionView";
 
 export const dynamic = "force-dynamic";
+// The resumable broker scan runs as a server action from this page and makes
+// outbound search calls; allow up to 60s per chunk where the hosting plan permits.
+export const maxDuration = 60;
 
 export default async function BrokerageDataPage() {
   let cc: BrokerageCommandCenter | null = null;

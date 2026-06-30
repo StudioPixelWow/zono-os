@@ -5,7 +5,7 @@
 // בודד") with preview + Apply gating. Honestly shows when public web search is
 // not configured (research can't run). Read-only until you press Apply.
 // ============================================================================
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { getResearchSnapshotAction, researchSingleBrokerAction, runBrokerResearchAction } from "@/lib/brokerage-data/actions";
@@ -26,7 +26,6 @@ export function ResearchView() {
   const router = useRouter();
   const [snap, setSnap] = useState<ResearchSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
 
   const [ref, setRef] = useState("");
@@ -34,24 +33,42 @@ export function ResearchView() {
   const [testPending, startTest] = useTransition();
   const [testErr, setTestErr] = useState<string | null>(null);
 
+  // Resumable "scan all" auto-continue loop.
+  const [scanning, setScanning] = useState(false);
+  const [scanInfo, setScanInfo] = useState<{ researchedTotal: number; total: number; autoLinked: number; done: boolean } | null>(null);
+  const scanStop = useRef(false);
+
   useEffect(() => {
     let alive = true;
     (async () => { setLoading(true); const v = await getResearchSnapshotAction(); if (alive) { setSnap(v); setLoading(false); } })();
     return () => { alive = false; };
   }, []);
 
-  const runBatch = () => start(async () => {
-    setMsg(null);
+  // Scan EVERY broker, chunk by chunk, until done. Resumable: already-researched
+  // brokers are skipped, so stopping/erroring loses nothing — press again to continue.
+  const runScanAll = async () => {
+    if (scanning) { scanStop.current = true; return; }   // second click = stop
+    setScanning(true); scanStop.current = false; setMsg(null);
+    let autoLinked = 0;
     try {
-      const r = await runBrokerResearchAction();
-      setMsg(r.ok ? (r.note ?? `מחקר הסתיים — ${r.diagnostics?.brokersProcessed ?? 0} מתווכים · ${r.diagnostics?.publicResultsFound ?? 0} תוצאות · ${r.diagnostics?.candidatesCreated ?? 0} מועמדים`) : (r.error ?? "נכשל"));
-      const v = await getResearchSnapshotAction(); setSnap(v); router.refresh();
+      for (let i = 0; i < 2000; i++) {
+        if (scanStop.current) { setMsg("הסריקה נעצרה. אפשר להמשיך בכל עת — מתווכים שכבר נסרקו לא יעובדו שוב."); break; }
+        const r = await runBrokerResearchAction();
+        if (!r.ok) { setMsg(r.error ?? "ההרצה נכשלה."); break; }
+        autoLinked += r.diagnostics?.autoLinked ?? 0;
+        const p = r.progress;
+        if (p) setScanInfo({ researchedTotal: p.researchedTotal, total: p.total, autoLinked, done: p.done });
+        const v = await getResearchSnapshotAction(); setSnap(v);
+        if (!p || p.done || p.processedThisRun === 0) {
+          setMsg(p?.done ? `✅ הסריקה הושלמה — ${p.total} מתווכים נסרקו · ${autoLinked} שויכו אוטומטית.` : "הסריקה הסתיימה.");
+          break;
+        }
+      }
+      router.refresh();
     } catch (e) {
-      // Guarantees the spinner clears even if the server action rejects (e.g. a
-      // platform request timeout) — otherwise the button looks stuck forever.
-      setMsg(e instanceof Error ? `ההרצה נכשלה: ${e.message}` : "ההרצה נכשלה (שגיאת רשת/שרת).");
-    }
-  });
+      setMsg(e instanceof Error ? `הסריקה נעצרה: ${e.message} — אפשר להמשיך שוב.` : "הסריקה נעצרה (שגיאת רשת/שרת). אפשר להמשיך שוב — מתווכים שכבר נסרקו לא יעובדו מחדש.");
+    } finally { setScanning(false); }
+  };
 
   const runTest = (apply: boolean) => startTest(async () => {
     setTestErr(null);
@@ -76,8 +93,25 @@ export function ResearchView() {
           <h2 className="text-brand-strong text-lg font-black">🔬 מחקר מתווכים לאומי</h2>
           <p className="text-muted mt-1 max-w-2xl text-[11px] leading-relaxed">מחקר תחילה ← ראיות ← הסקת AI ← שיוך. שאילתות חיפוש בטוחות נשלחות לספק חיפוש אמיתי; רק המקורות שנאספו נשלחים ל‑AI עם ציטוטים. OpenAI אינו מנוע חיפוש.</p>
         </div>
-        <Button onClick={runBatch} disabled={pending || !snap.searchConfigured} className="!min-w-[200px] shrink-0">{pending ? "מריץ…" : "🚀 הפעל מחקר לאומי"}</Button>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Button onClick={runScanAll} disabled={!snap.searchConfigured} className="!min-w-[220px]">
+            {scanning ? "⏸ עצור סריקה" : "🔁 סרוק את כל המתווכים"}
+          </Button>
+          {scanInfo && <span className="text-muted text-[11px] tabular-nums">{fmt(scanInfo.researchedTotal)}/{fmt(scanInfo.total)} נסרקו · {fmt(scanInfo.autoLinked)} שויכו אוטומטית</span>}
+        </div>
       </section>
+
+      {scanning && scanInfo && scanInfo.total > 0 && (
+        <div className="border-brand/30 bg-brand-soft/30 flex items-center gap-3 rounded-2xl border p-3">
+          <span className="border-brand-strong/30 border-t-brand-strong h-4 w-4 animate-spin rounded-full border-2" />
+          <div className="flex-1">
+            <div className="bg-surface h-2 w-full overflow-hidden rounded-full">
+              <div className="bg-brand-strong h-full rounded-full transition-all" style={{ width: `${Math.min(100, Math.round((scanInfo.researchedTotal / scanInfo.total) * 100))}%` }} />
+            </div>
+            <p className="text-muted mt-1 text-[11px] font-bold">סורק את כל המתווכים… {fmt(scanInfo.researchedTotal)}/{fmt(scanInfo.total)} · {fmt(scanInfo.autoLinked)} שויכו אוטומטית. אפשר לעצור בכל רגע — ממשיכים מהנקודה שנעצרה.</p>
+          </div>
+        </div>
+      )}
 
       {!snap.searchConfigured && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-4 text-sm font-bold text-amber-900">
