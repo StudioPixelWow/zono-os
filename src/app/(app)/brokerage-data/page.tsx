@@ -1,4 +1,5 @@
 import { getBrokerageCommandCenter, type BrokerageCommandCenter } from "@/lib/brokerage-data/service";
+import { WorkspaceView } from "./WorkspaceView";
 import { BrokerageDataView } from "./BrokerageDataView";
 import { RegistryView } from "./RegistryView";
 import { ResearchView } from "./ResearchView";
@@ -29,15 +30,26 @@ export default async function BrokerageDataPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <BrokerageDataView cc={cc} />
-      {/* National Registry — mounted for ALL authenticated org users (dev/QA).
-          TODO before launch: restrict to owner/admin. */}
-      <RegistryView />
-      {/* National Research — discovers evidence via real search providers (when
-          configured) then feeds the Broker Identity Engine. Dev/QA: all users. */}
-      <ResearchView />
-      <KnowledgeView />
-      <EvolutionView />
+      {/* 🏢 Brokerage Intelligence Workspace™ — office-first operational center. */}
+      <WorkspaceView cc={cc} />
+
+      {/* Broker Investigation Workspace™ — per-broker public-source research, reused
+          as the investigation surface the workspace links into. */}
+      <section id="research-workspace" className="scroll-mt-24">
+        <ResearchView />
+      </section>
+
+      {/* Advanced / raw intelligence tools — fully reused, kept secondary so the
+          primary experience is office-first and never feels like a debug screen. */}
+      <details className="border-line bg-card rounded-3xl border p-2">
+        <summary className="text-muted cursor-pointer px-3 py-2 text-sm font-black">כלים מתקדמים ונתוני גלם</summary>
+        <div className="mt-3 flex flex-col gap-8">
+          <BrokerageDataView cc={cc} />
+          <RegistryView />
+          <KnowledgeView />
+          <EvolutionView />
+        </div>
+      </details>
     </div>
   );
 }

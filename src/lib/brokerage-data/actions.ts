@@ -18,6 +18,7 @@ import { getBrokerageAccess } from "./permissions";
 import { discoverBrokeragePublishers, type DiscoveryResult } from "./discovery";
 import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReasonResult } from "./office-reasoning";
 import { getProfileExtras, type ProfileExtras } from "./profile-data";
+import { getBrokerageOfficesIndex, type OfficesIndex } from "./office-profile";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
@@ -25,6 +26,15 @@ import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, t
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
 import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** Office directory (active, evidence-backed offices + agent/listing counts). Read-only. */
+export async function getBrokerageOfficesIndexAction(): Promise<OfficesIndex | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await getBrokerageOfficesIndex();
+  } catch (e) { console.error("[offices-index] failed:", e); return null; }
+}
 
 /** National Research snapshot for the UI (provider status, queue, recent). */
 export async function getResearchSnapshotAction(): Promise<ResearchSnapshot | null> {
