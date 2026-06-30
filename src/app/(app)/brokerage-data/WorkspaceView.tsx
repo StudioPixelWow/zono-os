@@ -16,10 +16,11 @@ import type { ResearchSnapshot } from "@/lib/brokerage-data/broker-research/engi
 import type { CityDiscoveryAudit } from "@/lib/brokerage-data/brokerage-discovery-audit";
 import type { BrokeragePipelineAudit } from "@/lib/brokerage-data/brokerage-pipeline-audit";
 import type { CityDiscoveryResult } from "@/lib/brokerage-data/city-discovery";
+import type { CityBrokerageCensus } from "@/lib/brokerage-data/brokerage-knowledge";
 import {
   getBrokerageOfficesIndexAction, getResearchSnapshotAction,
   getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction,
-  discoverBrokerageOfficesForCityAction, runBrokerResearchAction,
+  discoverBrokerageOfficesForCityAction, getCityBrokerageCensusAction, runBrokerResearchAction,
 } from "@/lib/brokerage-data/actions";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -312,12 +313,73 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <CityCensusPanel cities={index?.cities ?? []} />
           <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
           <PipelineAuditPanel />
           <CityAuditPanel cities={index?.cities ?? []} />
         </div>
       )}
     </div>
+  );
+}
+
+// ── National Brokerage Census panel (read-only coverage metrics) ─────────────
+function CityCensusPanel({ cities }: { cities: string[] }) {
+  const [city, setCity] = useState("קריית ביאליק");
+  const [data, setData] = useState<CityBrokerageCensus | null>(null);
+  const [pending, setPending] = useState(false);
+  const run = async () => { setPending(true); try { setData(await getCityBrokerageCensusAction(city)); } finally { setPending(false); } };
+
+  return (
+    <section className="border-line bg-card rounded-3xl border p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">🗺️ מפקד משרדי תיווך לאומי — כיסוי עירוני</h2>
+          <p className="text-muted mt-1 text-[12px]">כמה מהשוק כבר ממופה? מספרים מבוססי-ראיות בלבד (ללא המצאת גודל שוק).</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={city} onChange={(e) => setCity(e.target.value)} list="census-city-list" placeholder="עיר"
+            className="border-line bg-surface text-ink min-w-[180px] rounded-full border px-3 py-1.5 text-sm" />
+          <datalist id="census-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+          <button onClick={run} disabled={pending || !city.trim()} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "טוען…" : "הצג מפקד"}</button>
+        </div>
+      </div>
+
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="border-brand/30 bg-brand-soft/30 rounded-2xl border p-3 text-center">
+            <div className="text-muted text-[11px] font-bold">{data.city} · כיסוי שוק</div>
+            <div className="text-brand-strong text-3xl font-black tabular-nums">{data.marketCoveragePct}%</div>
+            <div className="text-muted text-[11px]">אומדן משרדים פעילים (מבוסס-ראיות): <b>{fmt(data.estimatedActiveOffices)}</b> · מאומתים <b>{fmt(data.verifiedOffices)}</b> · במחקר <b>{fmt(data.researchingOffices)}</b></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Mini label="כיסוי משרדים" value={`${data.officeCoveragePct}%`} tone="green" />
+            <Mini label="כיסוי מתווכים" value={`${data.brokerCoveragePct}%`} />
+            <Mini label="כיסוי מודעות" value={`${data.listingCoveragePct}%`} />
+            <Mini label="מתווכים ללא משרד" value={fmt(data.brokersUnmatched)} tone="amber" />
+            <Mini label="מודעות ללא משרד" value={fmt(data.listingsUnlinked)} tone="amber" />
+            <Mini label="ביטחון ממוצע" value={`${data.avgOfficeConfidence}%`} />
+          </div>
+          <div className="text-muted">מחקר אחרון: {data.lastResearchAt ? new Date(data.lastResearchAt).toLocaleDateString("he-IL") : "—"}{data.cityVariants.length > 1 ? ` · איותים: ${data.cityVariants.join(" / ")}` : ""}</div>
+          {data.offices.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <b>משרדים מאומתים (הסבר):</b>
+              {data.offices.slice(0, 20).map((o) => (
+                <Link key={o.id} href={`/brokerage-data/office/${o.id}`} className="border-line bg-surface hover:border-brand/40 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-colors">
+                  <span className="text-ink truncate font-bold">{o.name}<span className="text-muted font-normal">{o.brand ? ` · ${o.brand}` : ""}{o.phones[0] ? ` · ${o.phones[0]}` : ""}{o.website ? ` · ${o.website}` : ""}</span></span>
+                  <span className="flex shrink-0 items-center gap-2 text-[11px]">
+                    <span className="text-muted">{fmt(o.brokerCount)} מתווכים</span>
+                    <span className="bg-surface rounded-full px-2 py-0.5 font-bold tabular-nums">{Math.round(o.confidence)}%</span>
+                    <span className="text-muted">{o.lastVerifiedAt || o.lastSeenAt ? new Date((o.lastVerifiedAt || o.lastSeenAt)!).toLocaleDateString("he-IL") : "—"}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+        </div>
+      )}
+    </section>
   );
 }
 

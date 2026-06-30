@@ -42,6 +42,7 @@ export interface CityKnowledge {
   brokersWithOffice: number;
   brokerOfficeLinks: number;
   contactPoints: { phones: string[]; domains: string[] };
+  listingsInCity: number;
   listingsLinked: number;
   knownAliases: string[];                  // distinct office-name spellings seen
 }
@@ -117,7 +118,62 @@ export async function getBrokerageKnowledgeForCity(orgId: string, cityRaw: strin
     verifiedOffices, candidateOffices, brokers, brokersWithOffice,
     brokerOfficeLinks: brokersWithOffice,
     contactPoints: { phones: [...phonesAll].filter(Boolean).slice(0, 50), domains: [...domainsAll].filter(Boolean).slice(0, 50) },
+    listingsInCity: cityListingIds.size,
     listingsLinked: linkedSet.size,
     knownAliases: [...aliases].slice(0, 50),
+  };
+}
+
+// ── National Brokerage Census (Phase 26.5) — coverage metrics, EVIDENCE-ONLY ──
+export interface CityBrokerageCensus {
+  city: string; cityNormalized: string; cityVariants: string[];
+  estimatedActiveOffices: number;          // evidence-backed: verified + researching
+  verifiedOffices: number; researchingOffices: number; avgOfficeConfidence: number;
+  brokersTotal: number; brokersMatched: number; brokersUnmatched: number; brokerCoveragePct: number;
+  listingsTotal: number; listingsLinked: number; listingsUnlinked: number; listingCoveragePct: number;
+  officeCoveragePct: number; marketCoveragePct: number;
+  lastResearchAt: string | null;
+  missingKnowledge: { unmatchedBrokers: number; unlinkedListings: number; unverifiedCandidates: number };
+  offices: { id: string; name: string; brand: string | null; status: string; confidence: number; brokerCount: number; lastSeenAt: string | null; lastVerifiedAt: string | null; phones: string[]; website: string | null }[];
+  unknownEstimable: false;                  // we NEVER fabricate total market size
+  notes: string[];
+}
+
+/** Per-city census: how much of the brokerage market is covered, from real evidence. */
+export async function getCityBrokerageCensus(orgId: string, city: string): Promise<CityBrokerageCensus> {
+  const kb = await getBrokerageKnowledgeForCity(orgId, city);
+  const verifiedOffices = kb.verifiedOffices.length;
+  const researchingOffices = kb.candidateOffices.filter((c) => c.status !== "verified" && c.status !== "rejected").length;
+  const estimatedActiveOffices = verifiedOffices + researchingOffices;
+  const avgOfficeConfidence = verifiedOffices ? Math.round(kb.verifiedOffices.reduce((n, o) => n + o.confidence, 0) / verifiedOffices) : 0;
+  const brokersTotal = kb.brokers.length;
+  const brokersMatched = kb.brokersWithOffice;
+  const brokersUnmatched = Math.max(0, brokersTotal - brokersMatched);
+  const brokerCoveragePct = brokersTotal ? Math.round((brokersMatched / brokersTotal) * 100) : 0;
+  const listingsTotal = kb.listingsInCity;
+  const listingsLinked = kb.listingsLinked;
+  const listingsUnlinked = Math.max(0, listingsTotal - listingsLinked);
+  const listingCoveragePct = listingsTotal ? Math.round((listingsLinked / listingsTotal) * 100) : 0;
+  const officeCoveragePct = estimatedActiveOffices ? Math.round((verifiedOffices / estimatedActiveOffices) * 100) : 0;
+  // Composite market coverage = mean of the three evidence-based coverages present.
+  const parts = [officeCoveragePct, brokerCoveragePct, listingCoveragePct].filter((_, i) => [estimatedActiveOffices, brokersTotal, listingsTotal][i] > 0);
+  const marketCoveragePct = parts.length ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : 0;
+  const lastResearchAt = kb.verifiedOffices.map((o) => o.lastVerifiedAt || o.lastSeenAt).filter(Boolean).sort().pop() ?? null;
+
+  const notes: string[] = [];
+  notes.push("המספרים מבוססי-ראיות בלבד. סך השוק האמיתי ('לא ידוע') אינו ניתן לאמידה ללא מרשם חיצוני — ולכן אינו מומצא.");
+  if (brokersUnmatched > 0) notes.push(`${brokersUnmatched} מתווכים בעיר עדיין ללא שיוך משרד.`);
+  if (listingsUnlinked > 0) notes.push(`${listingsUnlinked} מודעות בעיר עדיין ללא שיוך משרד.`);
+
+  return {
+    city: kb.city, cityNormalized: kb.cityNormalized, cityVariants: kb.cityVariants,
+    estimatedActiveOffices, verifiedOffices, researchingOffices, avgOfficeConfidence,
+    brokersTotal, brokersMatched, brokersUnmatched, brokerCoveragePct,
+    listingsTotal, listingsLinked, listingsUnlinked, listingCoveragePct,
+    officeCoveragePct, marketCoveragePct, lastResearchAt,
+    missingKnowledge: { unmatchedBrokers: brokersUnmatched, unlinkedListings: listingsUnlinked, unverifiedCandidates: researchingOffices },
+    offices: kb.verifiedOffices.map((o) => ({ id: o.id, name: o.name, brand: o.brandNetwork, status: o.status, confidence: o.confidence, brokerCount: o.brokerCount, lastSeenAt: o.lastSeenAt, lastVerifiedAt: o.lastVerifiedAt, phones: o.phones, website: o.website })).sort((a, b) => b.brokerCount - a.brokerCount),
+    unknownEstimable: false,
+    notes,
   };
 }
