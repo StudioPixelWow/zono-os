@@ -190,9 +190,14 @@ export async function gatherResearchEvidence(ctx: ResearchContext): Promise<{ ev
   return { evidence, providers, publicResults: evidence.length };
 }
 
-/** Group evidence into possible offices (excluding self-name). Pure-ish helper. */
+/** Group evidence into possible offices (excluding self-name). Pure-ish helper.
+ *  Confidence reflects CORROBORATION: a single fixed-score hit stays modest, but
+ *  multiple INDEPENDENT domains naming the same office (e.g. madlan + refamily +
+ *  yad2 + remax-israel all saying "RE/MAX Family") should be near-certain. A
+ *  recognized franchise brand adds trust. This is why a name observed across
+ *  many sources is no longer stuck at the per-hit 65%. */
 export function derivePossibleOffices(evidence: ResearchEvidence[], normalizedBrokerName: string): { officeName: string; brandNetwork: string | null; confidence: number; sources: string[] }[] {
-  const byName = new Map<string, { officeName: string; brandNetwork: string | null; confidence: number; sources: Set<string> }>();
+  const byName = new Map<string, { officeName: string; brandNetwork: string | null; base: number; providers: Set<string>; domains: Set<string>; hits: number }>();
   for (const e of evidence) {
     const name = e.extractedOfficeName?.trim();
     if (!name) continue;
@@ -201,10 +206,23 @@ export function derivePossibleOffices(evidence: ResearchEvidence[], normalizedBr
     const key = normalizeHebrewName(name);
     const fr = detectFranchise(name);
     let c = byName.get(key);
-    if (!c) { c = { officeName: fr.matched ? fr.brandNetwork : name, brandNetwork: fr.matched ? fr.brandNetwork : null, confidence: 0, sources: new Set() }; byName.set(key, c); }
-    c.sources.add(e.provider);
-    c.confidence = Math.max(c.confidence, e.confidence);
+    if (!c) { c = { officeName: fr.matched ? fr.brandNetwork : name, brandNetwork: fr.matched ? fr.brandNetwork : null, base: 0, providers: new Set(), domains: new Set(), hits: 0 }; byName.set(key, c); }
+    c.providers.add(e.provider);
+    if (e.extractedWebsite) c.domains.add(e.extractedWebsite.toLowerCase());
+    c.hits++;
+    c.base = Math.max(c.base, e.confidence);
   }
-  return [...byName.values()].map((c) => ({ officeName: c.officeName, brandNetwork: c.brandNetwork, confidence: c.confidence, sources: [...c.sources] }))
-    .sort((a, b) => b.confidence - a.confidence);
+  return [...byName.values()].map((c) => {
+    // Each INDEPENDENT corroborating domain beyond the first lifts confidence;
+    // agreement across different provider types (web + listing sources) adds a
+    // little more; a recognized franchise brand is high-trust.
+    const distinctDomains = c.domains.size;
+    const distinctProviders = c.providers.size;
+    let confidence = c.base;
+    confidence += Math.min(28, Math.max(0, distinctDomains - 1) * 9);   // corroborating domains
+    confidence += Math.min(8, Math.max(0, distinctProviders - 1) * 4);  // cross-provider agreement
+    if (c.brandNetwork) confidence += 8;                                 // known franchise
+    confidence = Math.min(98, Math.round(confidence));
+    return { officeName: c.officeName, brandNetwork: c.brandNetwork, confidence, sources: [...c.providers] };
+  }).sort((a, b) => b.confidence - a.confidence);
 }
