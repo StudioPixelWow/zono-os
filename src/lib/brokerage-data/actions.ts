@@ -19,6 +19,7 @@ import { discoverBrokeragePublishers, type DiscoveryResult } from "./discovery";
 import { gatherBrokerOfficeEvidence, reasonBrokerOffice, type BrokerOfficeReasonResult } from "./office-reasoning";
 import { getProfileExtras, type ProfileExtras } from "./profile-data";
 import { getBrokerageOfficesIndex, type OfficesIndex } from "./office-profile";
+import { getCityDiscoveryAudit, type CityDiscoveryAudit } from "./brokerage-discovery-audit";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
@@ -26,6 +27,15 @@ import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, t
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
 import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** READ-ONLY city discovery audit — explains why a city has few offices. */
+export async function getCityDiscoveryAuditAction(city: string): Promise<CityDiscoveryAudit | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return null;
+    return await getCityDiscoveryAudit(city);
+  } catch (e) { console.error("[city-discovery-audit] failed:", e); return null; }
+}
 
 /** Office directory (active, evidence-backed offices + agent/listing counts). Read-only. */
 export async function getBrokerageOfficesIndexAction(): Promise<OfficesIndex | null> {

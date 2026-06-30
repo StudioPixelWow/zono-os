@@ -25,9 +25,10 @@ export interface OfficeProfile {
   id: string; name: string; brandNetwork: string | null; city: string | null;
   phone: string | null; email: string | null; website: string | null; status: string;
   confidenceScore: number; dataQualityScore: number;
+  lastSeenAt: string | null; lastVerifiedAt: string | null; derivedFrom: string | null;
   agents: OfficeProfileAgent[];
   listings: OfficeProfileListing[];
-  stats: { agentCount: number; listingCount: number; cities: string[]; sources: string[] };
+  stats: { agentCount: number; listingCount: number; cities: string[]; sources: string[]; neighborhoods: string[] };
 }
 
 /** Full office profile, or null when the office doesn't exist / is rejected. */
@@ -77,14 +78,19 @@ export async function getBrokerageOfficeProfile(officeId: string): Promise<Offic
   const cities = Array.from(new Set([s(o.city), ...agents.map((a) => a.city), ...listings.map((l) => l.city)].filter(Boolean) as string[]))
     .sort((a, b) => a.localeCompare(b, "he"));
   const sources = Array.from(new Set(listings.map((l) => l.source).filter(Boolean) as string[])).sort();
+  const neighborhoods = Array.from(new Set(listings.map((l) => l.neighborhood).filter(Boolean) as string[]))
+    .sort((a, b) => a.localeCompare(b, "he")).slice(0, 30);
+  const meta = (o.metadata ?? {}) as Record<string, unknown>;
 
   return {
     id: s(o.id), name: s(o.name), brandNetwork: s(o.brand_network) || null, city: s(o.city) || null,
     phone: s(o.primary_phone) || null, email: s(o.email) || null, website: s(o.website) || null,
     status: s(o.status) || "active",
     confidenceScore: Number(o.confidence_score ?? 0), dataQualityScore: Number(o.data_quality_score ?? 0),
+    lastSeenAt: s(o.last_seen_at) || null, lastVerifiedAt: s(o.last_verified_at) || null,
+    derivedFrom: s(meta.derived_from) || null,
     agents, listings,
-    stats: { agentCount: agents.length, listingCount: listingIds.length, cities, sources },
+    stats: { agentCount: agents.length, listingCount: listingIds.length, cities, sources, neighborhoods },
   };
 }
 
