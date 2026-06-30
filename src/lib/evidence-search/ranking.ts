@@ -7,7 +7,7 @@ import type { MatchLevel, EvidenceSourceId } from "./types";
 
 const LEVEL_BASE: Record<MatchLevel, number> = {
   building: 100, street: 88, neighborhood: 76,
-  r300: 72, r700: 64, r1000: 56, r2000: 46,
+  r300: 72, r700: 64, r1500: 54, r3000: 44, r4000: 36,
   city: 40, nearby_city: 22,
 };
 export function matchLevelBase(level: MatchLevel): number { return LEVEL_BASE[level]; }

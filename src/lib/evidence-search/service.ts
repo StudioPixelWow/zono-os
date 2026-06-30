@@ -10,6 +10,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { normalizeCity, normalizeNeighborhood, normalizeStreet, normalizeHouseNumber, strOf, numOf } from "./normalizers";
 import { runEvidenceSearch, type EvidenceSubject } from "./engine";
 import type { EvidenceSearchInput, EvidencePackage, ResolvedAddress } from "./types";
+import { MIN_TOTAL_COMPARABLES } from "./types";
 
 type Row = Record<string, unknown>;
 const pick = <T>(...vals: (T | null | undefined)[]): T | null => { for (const v of vals) if (v != null && v !== "") return v; return null; };
@@ -51,5 +52,19 @@ export async function getPropertyEvidence(input: EvidenceSearchInput): Promise<E
   };
   const subject: EvidenceSubject = { propertyType, rooms, sqm };
 
-  return runEvidenceSearch(db, orgId, resolvedAddress, subject, { allowNearbyCities: input.allowNearbyCities === true });
+  // Market-radius mode: caller may force conservative/expanded; otherwise the
+  // engine starts at "standard" (3km) and only widens when evidence is thin.
+  const requested = input.marketRadiusMode ?? "standard";
+  let pkg = await runEvidenceSearch(db, orgId, resolvedAddress, subject, {
+    allowNearbyCities: input.allowNearbyCities === true, marketRadiusMode: requested,
+  });
+  // Auto-escalate to the expanded 4km band ONLY when the standard search did not
+  // reach the minimum usable evidence — never to inflate, only to fill a gap.
+  if (requested === "standard" && pkg.comparablesForValuation.length < MIN_TOTAL_COMPARABLES) {
+    const widened = await runEvidenceSearch(db, orgId, resolvedAddress, subject, {
+      allowNearbyCities: input.allowNearbyCities === true, marketRadiusMode: "expanded",
+    });
+    if (widened.comparablesForValuation.length > pkg.comparablesForValuation.length) pkg = widened;
+  }
+  return pkg;
 }

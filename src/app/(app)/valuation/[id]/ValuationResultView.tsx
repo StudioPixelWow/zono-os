@@ -18,7 +18,13 @@ import type { ValuationEvidenceDiagnosis } from "@/lib/valuation/diagnostics";
 // Import from the PURE submodules — NOT the barrel — so the server-only engine/
 // service/repository never get pulled into this client bundle.
 import { FAILURE_MODE_HE, MATCH_LEVEL_HE } from "@/lib/evidence-search/explain";
-import type { EvidencePackage } from "@/lib/evidence-search/types";
+import type { EvidencePackage, MarketRadiusMode } from "@/lib/evidence-search/types";
+
+const RADIUS_MODE_HE: Record<MarketRadiusMode, string> = {
+  conservative: "שמרני (עד 1.5 ק״מ)",
+  standard: "סטנדרטי (עד 3 ק״מ)",
+  expanded: "מורחב (עד 4 ק״מ)",
+};
 import { computeWhatIf } from "@/lib/valuation/valuation-engine";
 import {
   type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
@@ -280,6 +286,32 @@ function EvidenceSearchPanel({ valuationId }: { valuationId: string }) {
               {data.failureMode ? `מצב: ${FAILURE_MODE_HE[data.failureMode]} · צעד מומלץ: ${data.recommendedNextStep}` : `✓ נמצאו ${data.counts.usable} ראיות שמישות להערכה`}
             </div>
             <div><b>רמות קרבה בשימוש:</b> {data.matchLevelsUsed.length ? data.matchLevelsUsed.map((l) => MATCH_LEVEL_HE[l]).join(" · ") : "—"}</div>
+
+            {/* ── Market Radius Comparable Search™ (VAL-QA-9) ───────────────── */}
+            <div className="rounded-lg border border-line bg-surface px-3 py-2 space-y-1">
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                <span><b>מצב רדיוס שוק:</b> {RADIUS_MODE_HE[data.radius.mode]}</span>
+                <span><b>רדיוס מקסימלי בשימוש:</b> {data.radius.maxRadiusUsedM > 0 ? `${(data.radius.maxRadiusUsedM / 1000).toLocaleString("he-IL")} ק״מ` : "ללא רדיוס (התאמת טקסט)"}</span>
+                <span><b>ראיות חזקות:</b> {data.radius.strongUsable}/{data.radius.totalUsable}</span>
+              </div>
+              <div className="text-muted">
+                <b>ספירה לפי רדיוס:</b>{" "}
+                {data.radius.perLevel.length
+                  ? data.radius.perLevel.map((p) => `${MATCH_LEVEL_HE[p.level]}: ${p.usable}/${p.found}`).join(" · ")
+                  : "—"}
+              </div>
+              {data.radius.expandedBeyondDefault && (
+                <div className="text-amber-700">
+                  המערכת הרחיבה את החיפוש לרדיוס {(data.radius.maxRadiusUsedM / 1000).toLocaleString("he-IL")} ק״מ כי לא נמצאו מספיק ראיות קרובות.
+                </div>
+              )}
+              {data.radius.weakDueToDistance && (
+                <div className="font-bold text-rose-700">
+                  ⚠ אזהרה: הראיות מבוססות בעיקר על נכסים מרוחקים — ודאו את רלוונטיותם לפני הסתמכות.
+                </div>
+              )}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
                 <thead className="text-muted text-[11px]"><tr><th className="text-right">מקור</th><th>חובר</th><th>גולמי</th><th>שמיש</th><th>מתומחר</th><th>עיר מדויקת</th><th>עיר מנורמלת</th><th>רדיוס</th><th>נדחו</th></tr></thead>

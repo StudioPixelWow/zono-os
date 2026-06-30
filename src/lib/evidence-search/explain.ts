@@ -52,7 +52,7 @@ export function recommendedStep(mode: FailureMode | null): string {
 
 export const MATCH_LEVEL_HE: Record<MatchLevel, string> = {
   building: "אותו בניין", street: "אותו רחוב", neighborhood: "אותה שכונה",
-  r300: "רדיוס 300מ׳", r700: "רדיוס 700מ׳", r1000: "רדיוס 1ק״מ", r2000: "רדיוס 2ק״מ",
+  r300: "רדיוס 300מ׳", r700: "רדיוס 700מ׳", r1500: "רדיוס 1.5ק״מ", r3000: "רדיוס 3ק״מ", r4000: "רדיוס 4ק״מ",
   city: "אותה עיר", nearby_city: "עיר סמוכה (ראיה חלשה)",
 };
 
