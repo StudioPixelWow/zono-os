@@ -19,7 +19,7 @@ const HEB_FINALS: Record<string, string> = { "ך": "כ", "ם": "מ", "ן": "נ",
 function normCity(raw: string | null | undefined): string {
   return (raw ?? "")
     .trim().replace(/[׳״"'`]/g, "").replace(/[-־–—_]/g, " ")
-    .replace(/קירי/g, "קרי")                      // קריית → קרית
+    .replace(/קריי/g, "קרי")                      // קריית → קרית
     .replace(/[ךםןףץ]/g, (c) => HEB_FINALS[c] ?? c)
     .replace(/\s+/g, " ").trim().toLowerCase();
 }

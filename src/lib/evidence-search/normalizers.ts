@@ -18,7 +18,7 @@ function base(raw: string | null | undefined): string {
 
 /** Normalized city — also folds קריית→קרית and lowercases for matching. */
 export function normalizeCity(raw: string | null | undefined): string {
-  return base(raw).replace(/קירי/g, "קרי").toLowerCase();
+  return base(raw).replace(/קריי/g, "קרי").toLowerCase();
 }
 
 /** Normalized neighborhood. */

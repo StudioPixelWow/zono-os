@@ -38,7 +38,7 @@ export function normalizeCity(raw: string | null | undefined): string {
     .trim()
     .replace(/[׳״"'`]/g, "")          // gershayim / quotes
     .replace(/[-־–—_]/g, " ")          // hyphen / maqaf variants → space
-    .replace(/קירי/g, "קרי")           // קריית → קרית normalization
+    .replace(/קריי/g, "קרי")           // קריית → קרית normalization
     .replace(/[ךםןףץ]/g, (c) => HEB_FINALS[c] ?? c) // final letters → base form
     .replace(/\s+/g, " ")
     .trim()
