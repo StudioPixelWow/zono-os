@@ -11,7 +11,8 @@
 -- Adds:
 --   1) brokerage_office_candidates  — the national candidate registry.
 --   2) brokerage_office_merge_suggestions — pending duplicate merges (no auto-merge).
---   3) brokerage_graph_edges — evidence-based brokerage knowledge edges.
+--   3) brokerage_office_graph_edges — evidence-based office/broker edges
+--      (distinct from the protected BKG brokerage_graph_edges table).
 --   4) registry metric columns on brokerage_office_discovery_runs (additive).
 -- Reuses existing RLS helpers (is_zono_owner / brokerage_city_visible).
 -- ============================================================================
@@ -65,8 +66,9 @@ create table if not exists public.brokerage_office_merge_suggestions (
 );
 create index if not exists boms_status_idx on public.brokerage_office_merge_suggestions (status);
 
--- ── 3) Evidence-based brokerage knowledge edges (additive; not the BKG engine) ─
-create table if not exists public.brokerage_graph_edges (
+-- ── 3) Evidence-based office graph edges (additive; NOT the protected BKG
+--     brokerage_graph_edges table — distinct name to avoid any collision). ─────
+create table if not exists public.brokerage_office_graph_edges (
   id           uuid primary key default gen_random_uuid(),
   edge_type    text not null,   -- office_broker | office_city | office_neighborhood | office_brand | broker_office | broker_city | broker_listing | office_listing
   source_type  text not null,
@@ -79,9 +81,9 @@ create table if not exists public.brokerage_graph_edges (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
-create unique index if not exists bge_unique_idx on public.brokerage_graph_edges (edge_type, source_id, target_id);
-create index if not exists bge_source_idx on public.brokerage_graph_edges (source_type, source_id);
-create index if not exists bge_target_idx on public.brokerage_graph_edges (target_type, target_id);
+create unique index if not exists boge_unique_idx on public.brokerage_office_graph_edges (edge_type, source_id, target_id);
+create index if not exists boge_source_idx on public.brokerage_office_graph_edges (source_type, source_id);
+create index if not exists boge_target_idx on public.brokerage_office_graph_edges (target_type, target_id);
 
 -- ── 4) Registry metrics on the discovery run log (additive columns) ───────────
 alter table public.brokerage_office_discovery_runs
@@ -96,7 +98,7 @@ alter table public.brokerage_office_discovery_runs
 -- ── RLS ──────────────────────────────────────────────────────────────────────
 alter table public.brokerage_office_candidates       enable row level security;
 alter table public.brokerage_office_merge_suggestions enable row level security;
-alter table public.brokerage_graph_edges             enable row level security;
+alter table public.brokerage_office_graph_edges      enable row level security;
 
 drop policy if exists boc_select on public.brokerage_office_candidates;
 create policy boc_select on public.brokerage_office_candidates for select to authenticated
@@ -106,9 +108,9 @@ drop policy if exists boms_select on public.brokerage_office_merge_suggestions;
 create policy boms_select on public.brokerage_office_merge_suggestions for select to authenticated
   using (public.is_zono_owner());
 
-drop policy if exists bge_select on public.brokerage_graph_edges;
-create policy bge_select on public.brokerage_graph_edges for select to authenticated
+drop policy if exists boge_select on public.brokerage_office_graph_edges;
+create policy boge_select on public.brokerage_office_graph_edges for select to authenticated
   using (public.is_zono_owner());
 
-grant select on public.brokerage_office_candidates, public.brokerage_office_merge_suggestions, public.brokerage_graph_edges to authenticated;
-grant all on public.brokerage_office_candidates, public.brokerage_office_merge_suggestions, public.brokerage_graph_edges to service_role;
+grant select on public.brokerage_office_candidates, public.brokerage_office_merge_suggestions, public.brokerage_office_graph_edges to authenticated;
+grant all on public.brokerage_office_candidates, public.brokerage_office_merge_suggestions, public.brokerage_office_graph_edges to service_role;

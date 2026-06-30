@@ -313,7 +313,7 @@ async function buildGraphEdges(db: ReturnType<typeof createServiceRoleClient>): 
   let created = 0;
   for (let i = 0; i < edges.length; i += 500) {
     const chunk = edges.slice(i, i + 500);
-    const { error } = await db.from("brokerage_graph_edges" as never).upsert(chunk as never, { onConflict: "edge_type,source_id,target_id" } as never);
+    const { error } = await db.from("brokerage_office_graph_edges" as never).upsert(chunk as never, { onConflict: "edge_type,source_id,target_id" } as never);
     if (!error) created += chunk.length;
   }
   return created;
