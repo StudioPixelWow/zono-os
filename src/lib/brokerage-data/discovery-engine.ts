@@ -396,7 +396,7 @@ async function askAiForOffice(
       cacheKey: `discovery-office:${b.id}`,
     };
     const QUESTION =
-      "בהתבסס אך ורק על הראיות והמשרדים המועמדים המצורפים, לאיזה משרד שייך המתווך? בחר רק מתוך רשימת המשרדים המועמדים — אל תמציא שם/מזהה/טלפון/אתר. ציין רמת ביטחון ונמק. אם אין ראיה מספקת החזר insufficient_evidence.";
+      "בהתבסס אך ורק על הראיות והמשרדים המועמדים המצורפים, לאיזה משרד שייך המתווך? בחר רק מתוך רשימת המשרדים המועמדים — אל תמציא שם או מזהה שאינם מופיעים בראיות. ציין רמת ביטחון ונמק. אם אין ראיה מספקת החזר insufficient_evidence.";
     const res = await runReasoningGateway({ question: QUESTION, context, mode: "answer", language: "he", userId: idn.userId, organizationId: idn.orgId });
     return { status: res.status, answer: res.answer, confidence: res.confidence, provider: res.provider, evidence: res.evidence, limitations: res.limitations };
   } catch (e) {

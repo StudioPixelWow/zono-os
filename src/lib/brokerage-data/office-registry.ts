@@ -366,7 +366,7 @@ async function aiReasonOffice(
       cacheKey: `office-discovery:${b.id}`,
     };
     const QUESTION =
-      "בהתבסס אך ורק על הראיות המצורפות (שמות משרד שנצפו, מודעות, מותגים), מהו שם המשרד הסביר ביותר של המתווך? בחר רק שם שמופיע בראיות או ברשימת המשרדים המועמדים — אל תמציא שם/טלפון/אתר/כתובת. השב בשורה הראשונה: שם המשרד או 'insufficient_evidence'. ציין ביטחון ונמק קצרות.";
+      "בהתבסס אך ורק על הראיות המצורפות (שמות משרד שנצפו, מודעות, מותגים), מהו שם המשרד הסביר ביותר של המתווך? בחר רק שם שמופיע בראיות או ברשימת המשרדים המועמדים — אל תמציא פרטים שאינם מופיעים בראיות. השב בשורה הראשונה: שם המשרד או 'insufficient_evidence'. ציין ביטחון ונמק קצרות.";
     const res = await runReasoningGateway({ question: QUESTION, context, mode: "answer", language: "he", userId: idn.userId, organizationId: idn.orgId });
     const firstLine = (res.answer ?? "").split(/[\n]/)[0]?.replace(/^[\s\d.)\-–:]+/, "").trim() ?? "";
     const office = /insufficient/i.test(firstLine) ? "" : firstLine.slice(0, 80);
