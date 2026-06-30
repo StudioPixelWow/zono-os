@@ -491,15 +491,27 @@ export async function getOfficeRegistrySnapshot(): Promise<OfficeRegistrySnapsho
   for (const a of agents) { const oid = s(a.office_id); if (oid) brokerCount.set(oid, (brokerCount.get(oid) ?? 0) + 1); }
 
   const offices: RegistryOffice[] = ((offRes.data ?? []) as Row[]).map((r) => {
-    officeNameById.set(String(r.id), s(r.name));
-    return { id: String(r.id), name: s(r.name), brandNetwork: s(r.brand_network) || null, city: s(r.city) || null, confidence: Number(r.confidence_score ?? 0), status: s(r.status) || "active", brokerCount: brokerCount.get(String(r.id)) ?? 0 };
+    const name = s(r.name);
+    officeNameById.set(String(r.id), name);
+    // GUARD (26.13c, read-time): an office whose name is an individual broker's
+    // name (no brand/office keyword) is NEVER verified — surface it as rejected
+    // regardless of the stored status, so a missed/not-yet-run purge can't leak a
+    // person name into the "verified offices" list. e.g. "נדב רייזר", "אייל שמול".
+    const stored = s(r.status) || "active";
+    const status = !isAcceptableOfficeName(name) ? "rejected" : stored;
+    return { id: String(r.id), name, brandNetwork: s(r.brand_network) || null, city: s(r.city) || null, confidence: Number(r.confidence_score ?? 0), status, brokerCount: brokerCount.get(String(r.id)) ?? 0 };
   });
   const brokerNameById = new Map<string, string>(agents.map((a) => [String(a.id), s(a.full_name)]));
 
-  const candidates: RegistryCandidate[] = ((candRes.data ?? []) as Row[]).map((r) => ({
-    id: String(r.id), officeName: s(r.office_name), brandNetwork: s(r.brand_network) || null, city: s(r.city) || null, area: s(r.area) || null,
-    suggestedBy: s(r.suggested_by) || "zono_listings", confidence: Number(r.confidence ?? 0), status: s(r.status) || "candidate_pending_verification", phone: s(r.phone) || null,
-  }));
+  const candidates: RegistryCandidate[] = ((candRes.data ?? []) as Row[]).map((r) => {
+    const officeName = s(r.office_name);
+    // Same read-time guard: a person-name candidate is never verified/pending.
+    const status = !isAcceptableOfficeName(officeName) ? "rejected" : (s(r.status) || "candidate_pending_verification");
+    return {
+      id: String(r.id), officeName, brandNetwork: s(r.brand_network) || null, city: s(r.city) || null, area: s(r.area) || null,
+      suggestedBy: s(r.suggested_by) || "zono_listings", confidence: Number(r.confidence ?? 0), status, phone: s(r.phone) || null,
+    };
+  });
   const mergeSuggestions: RegistryMerge[] = ((mergeRes.data ?? []) as Row[]).map((r) => ({
     id: String(r.id), primaryName: officeNameById.get(s(r.primary_office_id)) ?? "משרד", duplicateName: officeNameById.get(s(r.duplicate_office_id)) ?? "משרד", reason: s(r.reason), confidence: Number(r.confidence ?? 0),
   }));
@@ -519,7 +531,7 @@ export async function getOfficeRegistrySnapshot(): Promise<OfficeRegistrySnapsho
       candidatesPending: candidates.filter((c) => c.status === "candidate_pending_verification").length,
       needsReview: candidates.filter((c) => c.status === "needs_review").length,
       verified: candidates.filter((c) => c.status === "verified").length,
-      offices: offices.length, duplicates: mergeSuggestions.length, unresolved: unresolvedBrokers.length,
+      offices: offices.filter((o) => o.status === "active").length, duplicates: mergeSuggestions.length, unresolved: unresolvedBrokers.length,
       aiCandidates: candidates.filter((c) => c.suggestedBy === "ai").length,
     },
     lastRun: run ? { status: s(run.status), finishedAt: s(run.finished_at) || null, candidatesCreated: Number(run.candidates_created ?? 0), candidatesVerified: Number(run.candidates_verified ?? 0), officesCreated: Number(run.offices_created ?? 0) } : null,

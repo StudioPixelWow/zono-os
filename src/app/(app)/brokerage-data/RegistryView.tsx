@@ -91,13 +91,18 @@ export function RegistryView() {
   const candidates = useMemo(() => {
     const list = snap?.candidates ?? [];
     return list.filter((c) =>
+      // Hide rejected (incl. person-name) candidates unless the user explicitly
+      // filters for that status — they are not real office candidates.
+      (status ? c.status === status : c.status !== "rejected") &&
       (!city || c.city === city) && (!brand || c.brandNetwork === brand) &&
-      (!status || c.status === status) && (!source || c.suggestedBy === source) && c.confidence >= minConf);
+      (!source || c.suggestedBy === source) && c.confidence >= minConf);
   }, [snap, city, brand, status, source, minConf]);
 
   // The header + run button render UNCONDITIONALLY (no permission/loading/null
   // gate) so the primary action is always visible in Brokerage Data.
-  const verifiedOffices = (snap?.offices ?? []).filter((o) => (!city || o.city === city) && (!brand || o.brandNetwork === brand) && o.confidence >= minConf);
+  // Verified section: ONLY genuinely active offices — a rejected/person-name
+  // office (e.g. "נדב רייזר") must never appear here as "מאומת".
+  const verifiedOffices = (snap?.offices ?? []).filter((o) => o.status === "active" && (!city || o.city === city) && (!brand || o.brandNetwork === brand) && o.confidence >= minConf);
   const needsReview = (snap?.candidates ?? []).filter((x) => x.status === "needs_review");
   const rm = lastResult?.metrics;
 
