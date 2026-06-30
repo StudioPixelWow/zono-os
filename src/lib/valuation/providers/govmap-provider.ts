@@ -64,6 +64,7 @@ export async function govmapProvider(ctx: ProviderContext): Promise<ProviderResu
       price: price && price > 0 ? price : null,
       pricePerSqm: ppsqm,
       saleDate: r.deal_date ?? r.transaction_date ?? null,
+      sourceTable: "property_transactions",
       isDemo: false,
     };
   });

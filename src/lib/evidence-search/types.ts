@@ -53,7 +53,11 @@ export interface ResolvedAddress {
 
 export interface EvidenceRow {
   source: EvidenceSourceId;
-  externalId: string | null;
+  sourceTable: string;           // real DB table the row came from
+  externalId: string | null;     // real row id
+  originalUrl: string | null;    // real public URL when available
+  imageUrl: string | null;       // real image when available
+  isTraceable: boolean;          // false → UNTRACEABLE_EVIDENCE, never used
   matchLevel: MatchLevel;
   distanceMeters: number | null;
   city: string | null; neighborhood: string | null; street: string | null;

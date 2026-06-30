@@ -20,9 +20,15 @@ import type {
   ValuationInput, ValuationRecord, ValuationResult, Comparable, BrokerSoldProperty,
   MarketSnapshot, ValuationAdjustment,
 } from "./types";
+import { isTraceableComparable } from "./types";
 
 const TABLE = "property_valuations";
 const PROVIDER_LIMIT = 60;
+/** Persisted comparable.source → its real DB table (for traceability display). */
+const SOURCE_TABLE: Record<string, string> = {
+  govmap: "property_transactions", tax_authority: "property_transactions",
+  madlan: "external_listings", yad2: "external_listings", zono: "properties",
+};
 
 async function ctx() {
   const { profile, user } = await getSessionContext();
@@ -115,6 +121,14 @@ export async function runValuationById(id: string): Promise<RunOutput> {
     } catch (e) { console.error("[valuation] evidence-search fallback failed:", e); }
   }
 
+  // ── Anti-fake HARD BLOCK (Phase VAL-QA-6) — only comparables that trace to a
+  //    real persisted row (source table + source id + raw price + raw sqm) may
+  //    feed the AVM. Untraceable evidence is rejected, never used or rendered.
+  const beforeBlock = comparables.length;
+  comparables = comparables.filter(isTraceableComparable);
+  const untraceableRejected = beforeBlock - comparables.length;
+  if (untraceableRejected > 0) console.info(`[valuation] hard-block rejected ${untraceableRejected} untraceable comparable(s)`);
+
   const result = runEngine({ input, comparables, brokerSold: brokerSoldRaw });
 
   // Annotate broker-sold performance vs the REAL market median ppsqm.
@@ -201,7 +215,7 @@ async function persistResult(
       price: c.price ?? null, price_per_sqm: c.pricePerSqm ?? null, sale_date: c.saleDate ?? null,
       listing_date: c.listingDate ?? null, similarity_score: c.similarityScore ?? null,
       adjustment_score: c.adjustmentScore ?? null, adjustment_reason: c.adjustmentReason ?? null,
-      image_url: c.imageUrl ?? null, is_demo: c.isDemo ?? false,
+      image_url: c.imageUrl ?? null, listing_url: c.originalUrl ?? null, is_demo: c.isDemo ?? false,
     })) as never);
   }
 
@@ -302,6 +316,9 @@ export async function getValuation(id: string): Promise<ValuationRecord | null> 
     price: num(c.price), pricePerSqm: num(c.price_per_sqm), saleDate: c.sale_date as string,
     listingDate: c.listing_date as string, similarityScore: num(c.similarity_score) ?? 0,
     adjustmentReason: c.adjustment_reason as string, imageUrl: c.image_url as string, isDemo: Boolean(c.is_demo),
+    // Traceability for the result-view cards (no fake clickable listings).
+    originalUrl: (c.listing_url as string) ?? null, sourceTable: SOURCE_TABLE[c.source as string] ?? null,
+    isTraceable: !!c.external_id && num(c.price) != null && num(c.sqm) != null,
   }));
   const brokerSold: BrokerSoldProperty[] = ((broker ?? []) as Record<string, unknown>[]).map((b) => ({
     propertyId: b.property_id as string, dealId: b.deal_id as string, address: b.address as string,

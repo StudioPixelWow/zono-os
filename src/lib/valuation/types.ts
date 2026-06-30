@@ -79,6 +79,27 @@ export interface Comparable {
   imageUrl?: string | null;
   isDemo?: boolean;
   rawPayload?: Record<string, unknown> | null;
+  // ── Anti-fake traceability (Phase VAL-QA-6) — every comparable must trace to a
+  //    real persisted row. Untraceable comparables are hard-blocked from valuation.
+  originalUrl?: string | null;     // real public listing URL when available
+  sourceTable?: string | null;     // the DB table the row came from
+  isTraceable?: boolean;           // false → UNTRACEABLE_EVIDENCE, never used
+}
+
+/** Traceability contract — proves a comparable came from a real persisted row. */
+export interface ComparableTraceability {
+  sourceTable: string;
+  sourceId: string;
+  provider: string;
+  originalUrl: string | null;
+  imageUrl: string | null;
+  isTraceable: boolean;
+}
+
+/** A comparable is usable as evidence ONLY when it traces to a real row with raw
+ *  price + raw sqm. Mirrors the spec's HARD BLOCK (UNTRACEABLE_EVIDENCE). */
+export function isTraceableComparable(c: Comparable): boolean {
+  return !!c.externalId && !!c.sourceTable && (c.price ?? 0) > 0 && (c.sqm ?? 0) > 0;
 }
 
 /** Broker's own sold property nearby (trust evidence). */

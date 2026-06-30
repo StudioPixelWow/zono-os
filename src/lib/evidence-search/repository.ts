@@ -33,6 +33,8 @@ export interface SourceSpec {
   saleDateFields: string[];
   listingDateFields: string[];
   sourceField: string[];          // when comparableSource === "from_row"
+  urlFields: string[];            // real public listing URL
+  imageFields: string[];          // real image URL / image array
   activeFilter?: { col: string; val: boolean };
 }
 
@@ -45,6 +47,7 @@ export const SOURCE_SPECS: SourceSpec[] = [
     priceFields: ["deal_amount", "price"], ppsqmFields: ["price_per_sqm"],
     latFields: ["lat", "latitude"], lngFields: ["lng", "longitude"], idFields: ["id"],
     typeFields: ["property_type"], saleDateFields: ["deal_date", "transaction_date"], listingDateFields: [], sourceField: [],
+    urlFields: ["listing_url", "url"], imageFields: [],
   },
   {
     id: "external_listings", table: "external_listings", orgCols: ["org_id", "organization_id"],
@@ -54,7 +57,8 @@ export const SOURCE_SPECS: SourceSpec[] = [
     priceFields: ["price", "asking_price"], ppsqmFields: ["price_per_sqm"],
     latFields: ["lat", "latitude"], lngFields: ["lng", "longitude"], idFields: ["external_id", "id"],
     typeFields: ["property_type"], saleDateFields: [], listingDateFields: ["published_at", "first_seen_at"],
-    sourceField: ["source", "provider"], activeFilter: { col: "is_active", val: true },
+    sourceField: ["source", "provider"], urlFields: ["listing_url", "url"], imageFields: ["image_url", "images"],
+    activeFilter: { col: "is_active", val: true },
   },
   {
     id: "properties", table: "properties", orgCols: ["org_id", "organization_id"],
@@ -64,6 +68,7 @@ export const SOURCE_SPECS: SourceSpec[] = [
     priceFields: ["price", "asking_price"], ppsqmFields: ["price_per_sqm"],
     latFields: ["latitude", "lat"], lngFields: ["longitude", "lng"], idFields: ["id"],
     typeFields: ["property_type"], saleDateFields: [], listingDateFields: ["listed_at", "updated_at"], sourceField: [],
+    urlFields: ["listing_url", "url"], imageFields: ["primary_image_url", "image_url"],
   },
   {
     id: "market_property_sources", table: "market_property_sources", orgCols: ["org_id", "organization_id"],
@@ -73,7 +78,7 @@ export const SOURCE_SPECS: SourceSpec[] = [
     priceFields: ["price", "asking_price", "amount"], ppsqmFields: ["price_per_sqm"],
     latFields: ["lat", "latitude"], lngFields: ["lng", "longitude"], idFields: ["external_id", "id"],
     typeFields: ["property_type"], saleDateFields: ["sold_at", "deal_date"], listingDateFields: ["published_at", "created_at"],
-    sourceField: ["source", "provider"],
+    sourceField: ["source", "provider"], urlFields: ["listing_url", "url", "source_url"], imageFields: ["image_url", "images"],
   },
 ];
 

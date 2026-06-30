@@ -302,6 +302,27 @@ function EvidenceSearchPanel({ valuationId }: { valuationId: string }) {
               </table>
             </div>
             <div className="text-muted">סה״כ {data.counts.totalRows} ראיות · {data.counts.usable} שמישות · {data.counts.sameCity} עיר מדויקת · {data.counts.normalizedCity} עיר מנורמלת · {data.counts.radius} ברדיוס · קומפרבלים להערכה: {data.comparablesForValuation.length}</div>
+            {/* Per-comparable traceability (anti-fake proof) */}
+            <div className="overflow-x-auto">
+              <b>עקיבות ראיות (הוכחה למקור אמיתי):</b>
+              <table className="mt-1 w-full text-[11px]">
+                <thead className="text-muted"><tr><th className="text-right">טבלת מקור</th><th>מזהה שורה</th><th>ספק</th><th>URL</th><th>תמונה</th><th>מחיר/מ״ר</th><th>שמיש</th><th>סיבת דחייה</th></tr></thead>
+                <tbody>
+                  {data.evidence.slice(0, 20).map((e, i) => (
+                    <tr key={i} className={cn("border-line border-b", !e.isTraceable && "bg-rose-50/50")}>
+                      <td className="py-1 font-bold">{e.sourceTable}</td>
+                      <td className="max-w-[90px] truncate" title={e.externalId ?? ""}>{e.externalId ?? "—"}</td>
+                      <td>{e.source}</td>
+                      <td className="text-center">{e.originalUrl && /^https?:\/\//.test(e.originalUrl) ? "✓" : "—"}</td>
+                      <td className="text-center">{e.imageUrl ? "✓" : "—"}</td>
+                      <td className="text-center">{(e.price ?? 0) > 0 && (e.sqm ?? 0) > 0 ? "✓" : "—"}</td>
+                      <td className="text-center">{e.usableForValuation ? "✓" : "✗"}</td>
+                      <td className="text-rose-700">{e.rejectionReason ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -479,8 +500,9 @@ function Comparables({ record }: { record: ValuationRecord }) {
       {comps.slice(0, 16).map((c, idx) => (
         <div key={idx} className="border-line bg-card w-60 shrink-0 overflow-hidden rounded-card border shadow-card">
           <div className="relative h-28 w-full bg-line/40">
-            {c.imageUrl ? <img src={c.imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-muted"><Icon name="Building2" size={24} /></div>}
-            <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">{SOURCE_LABEL[c.source] ?? c.source}{c.isDemo ? " · דמו" : ""}</span>
+            {/* Image ONLY if a real image_url exists — never a fabricated property photo. */}
+            {c.imageUrl ? <img src={c.imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="text-muted/70 grid h-full place-items-center gap-1 text-center"><Icon name="Building2" size={20} /><span className="text-[10px]">אין תמונה מקורית</span></div>}
+            <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">{SOURCE_LABEL[c.source] ?? c.source}</span>
             <span className="absolute left-2 top-2 rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-white">{c.comparableType === "sold" ? "עסקה" : "מודעה"}</span>
           </div>
           <div className="p-3">
@@ -499,6 +521,12 @@ function Comparables({ record }: { record: ValuationRecord }) {
                 <div className="bg-line/50 mt-0.5 h-1 w-full overflow-hidden rounded-full"><div className="bg-brand h-1 rounded-full" style={{ width: `${c.similarityScore}%` }} /></div>
               </div>
             )}
+            {/* Clickable ONLY when a real public URL exists; otherwise honest label. */}
+            <div className="mt-2 text-[11px]">
+              {c.originalUrl && /^https?:\/\//.test(c.originalUrl)
+                ? <a href={c.originalUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold hover:underline">פתח מודעה ↗</a>
+                : <span className="text-muted/70">מקור פנימי · אין קישור ציבורי</span>}
+            </div>
           </div>
         </div>
       ))}

@@ -52,6 +52,7 @@ export async function zonoInternalProvider(ctx: ProviderContext): Promise<Provid
       saleDate: sold ? r.updated_at?.slice(0, 10) ?? null : null,
       listingDate: !sold ? (r.listed_at ?? r.updated_at)?.slice(0, 10) ?? null : null,
       imageUrl: r.primary_image_url ?? null,
+      sourceTable: "properties",
       isDemo: false,
     };
   });

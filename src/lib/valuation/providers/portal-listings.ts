@@ -12,7 +12,7 @@ interface ListingRow {
   id?: string; external_id?: string; city?: string; neighborhood?: string; street?: string;
   rooms?: number; sqm?: number; area_sqm?: number; floor?: number; property_type?: string;
   price?: number; images?: unknown; lat?: number; lng?: number; published_at?: string;
-  first_seen_at?: string; source?: string; provider?: string;
+  first_seen_at?: string; source?: string; provider?: string; listing_url?: string;
 }
 
 function firstImage(images: unknown): string | null {
@@ -30,7 +30,7 @@ export async function readPortalListings(
   const { db, orgId, input, limit } = ctx;
   let q = db
     .from("external_listings" as never)
-    .select("id,external_id,city,neighborhood,street,rooms,sqm,area_sqm,floor,property_type,price,images,lat,lng,published_at,first_seen_at,source,provider")
+    .select("id,external_id,city,neighborhood,street,rooms,sqm,area_sqm,floor,property_type,price,images,lat,lng,published_at,first_seen_at,source,provider,listing_url")
     .eq("org_id", orgId)
     .eq("is_active", true)
     .or(match.map((m) => `source.eq.${m},provider.eq.${m}`).join(","))
@@ -63,6 +63,8 @@ export async function readPortalListings(
       pricePerSqm: ppsqm,
       listingDate: r.published_at ?? r.first_seen_at ?? null,
       imageUrl: firstImage(r.images),
+      originalUrl: r.listing_url ?? null,
+      sourceTable: "external_listings",
       isDemo: false,
     };
   });
