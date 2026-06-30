@@ -46,7 +46,7 @@ function inputToRow(i: ValuationInput): Record<string, unknown> {
   };
 }
 
-function rowToInput(r: Record<string, unknown>): ValuationInput {
+export function rowToInput(r: Record<string, unknown>): ValuationInput {
   const n = (x: unknown) => (x == null ? null : Number(x));
   const b = (x: unknown) => (x == null ? null : Boolean(x));
   return {

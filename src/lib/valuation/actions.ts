@@ -15,6 +15,7 @@ import {
   type GeneratedReport, type SendReportInput, type SendReportResult,
 } from "./report-service";
 import { getBrokerSoldProperties } from "./providers";
+import { diagnoseValuationEvidence, type ValuationEvidenceDiagnosis } from "./diagnostics";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { normalizeInput } from "./valuation-engine";
@@ -111,5 +112,11 @@ export async function saveValuationToPropertyAction(id: string, propertyId: stri
 
 export async function createSellerFollowupFromValuationAction(id: string): Promise<Result<{ taskId: string | null }>> {
   try { return { ok: true, data: await createSellerFollowupFromValuation(id) }; }
+  catch (e) { return fail(e); }
+}
+
+/** READ-ONLY evidence diagnostic — why a valuation has no evidence. No writes. */
+export async function diagnoseValuationEvidenceAction(id: string): Promise<Result<ValuationEvidenceDiagnosis | null>> {
+  try { return { ok: true, data: await diagnoseValuationEvidence(id) }; }
   catch (e) { return fail(e); }
 }

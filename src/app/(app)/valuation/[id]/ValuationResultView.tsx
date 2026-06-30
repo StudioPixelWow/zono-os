@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import {
   runValuationAction, generateValuationReportAction, sendValuationReportAsPdfAction,
-  createSellerFollowupFromValuationAction,
+  createSellerFollowupFromValuationAction, diagnoseValuationEvidenceAction,
 } from "@/lib/valuation/actions";
+import type { ValuationEvidenceDiagnosis } from "@/lib/valuation/diagnostics";
 import { computeWhatIf } from "@/lib/valuation/valuation-engine";
 import {
   type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
@@ -225,8 +226,101 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
         </div>
       </Section>
 
+      {/* Read-only evidence diagnostic (QA/admin) — collapsed by default. */}
+      <EvidenceDiagnostic valuationId={record.id} />
+
       {sendOpen && <SendModal valuationId={record.id} hasReport={!!reportToken} onClose={() => setSendOpen(false)} onGenerated={(t) => setReportToken(t)} />}
     </main>
+  );
+}
+
+// ── Read-only evidence diagnostic panel (no writes; proves data-gap vs mismatch) ─
+const CONCLUSION_HE: Record<ValuationEvidenceDiagnosis["conclusion"], string> = {
+  DATA_GAP: "פער נתונים אמיתי — אין עסקאות/מודעות לאזור",
+  CITY_NORMALIZATION_MISMATCH: "אי-התאמת שם עיר — קיימים נתונים תחת איות שונה",
+  MISSING_PRICE_OR_SQM: 'קיימות שורות אך ללא מחיר/שטח שמיש',
+  PROVIDER_NOT_WIRED: "תקלת ספק/סכמה — הספק לא מצליח לקרוא את הנתונים",
+  UNKNOWN: "לא ודאי — ראה הערות",
+};
+
+function DiagSrcRow({ label, s }: { label: string; s: ValuationEvidenceDiagnosis["sources"]["propertyTransactions"] }) {
+  return (
+    <tr className="border-line border-b">
+      <td className="py-1.5 font-bold">{label}</td>
+      <td className="text-center tabular-nums">{s.exactCityCount}</td>
+      <td className="text-center tabular-nums">{s.exactCityUsableCount}</td>
+      <td className="text-center tabular-nums">{s.nearCityMatches}</td>
+      <td className="text-center tabular-nums">{s.usableNearCityMatches}</td>
+      <td className="text-center text-[11px]">{s.queryError ? <span className="text-red-600" title={s.queryError}>שגיאה</span> : s.rowsScanned}</td>
+    </tr>
+  );
+}
+
+function EvidenceDiagnostic({ valuationId }: { valuationId: string }) {
+  const [data, setData] = useState<ValuationEvidenceDiagnosis | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setPending(true); setErr(null);
+    try {
+      const res = await diagnoseValuationEvidenceAction(valuationId);
+      if (res.ok) setData(res.data); else setErr(res.error);
+    } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setPending(false); }
+  };
+
+  return (
+    <details className="border-line bg-card mt-8 rounded-card border p-4 text-sm">
+      <summary className="text-muted cursor-pointer font-bold">🛠 אבחון ראיות (קריאה בלבד · QA)</summary>
+      <div className="mt-3">
+        <button onClick={run} disabled={pending} className="btn-zono-primary inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-bold disabled:opacity-60">
+          {pending ? "מאבחן…" : "הרץ אבחון"}
+        </button>
+        {err && <p className="mt-2 font-semibold text-red-600">{err}</p>}
+        {data && (
+          <div className="mt-3 flex flex-col gap-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 font-bold text-amber-800">
+              מסקנה: {CONCLUSION_HE[data.conclusion]} · צעד מומלץ: <code>{data.recommendedNextStep}</code>
+            </div>
+            <div className="text-muted text-[12px]">
+              עיר: <b>{data.input.city ?? "—"}</b> (מנורמל: {data.input.cityNormalized || "—"}) · שכונה: {data.input.neighborhood ?? "—"} · חדרים: {data.input.rooms ?? "—"} · מ״ר: {data.input.sqm ?? "—"} · קואורד׳: {data.input.latitude != null && data.input.longitude != null ? "יש" : "אין"}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead className="text-muted text-[11px]">
+                  <tr><th className="text-right">מקור</th><th>עיר מדויקת</th><th>שמיש מדויק</th><th>עיר דומה</th><th>שמיש דומה</th><th>נסרקו</th></tr>
+                </thead>
+                <tbody>
+                  <DiagSrcRow label="עסקאות (property_transactions)" s={data.sources.propertyTransactions} />
+                  <DiagSrcRow label="מודעות (external_listings)" s={data.sources.externalListings} />
+                  <DiagSrcRow label="מלאי פנימי (properties)" s={data.sources.properties} />
+                </tbody>
+              </table>
+            </div>
+            <div className="text-[12px]">
+              <b>סטטוס ספקים:</b>{" "}
+              {data.providerRun.map((p) => (
+                <span key={p.source} className={cn("mr-1 inline-block rounded-full px-2 py-0.5 font-bold", p.status === "ok" ? "bg-emerald-50 text-emerald-700" : p.status === "error" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-500")} title={p.message ?? ""}>
+                  {p.source}: {p.status} ({p.usableCount})
+                </span>
+              ))}
+              <span className="bg-slate-100 mr-1 inline-block rounded-full px-2 py-0.5 font-bold text-slate-600">broker_sold: {data.sources.brokerSold.usableCount}</span>
+            </div>
+            {data.cityNormalization.likelyCityMismatches.length > 0 && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-[12px] text-orange-800">
+                <b>איותי עיר חשודים (קיימים נתונים תחתיהם):</b> {data.cityNormalization.likelyCityMismatches.join(" · ")}
+              </div>
+            )}
+            {data.notes.length > 0 && (
+              <ul className="text-muted list-disc space-y-1 pr-5 text-[12px]">
+                {data.notes.map((n, idx) => <li key={idx}>{n}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+    </details>
   );
 }
 
