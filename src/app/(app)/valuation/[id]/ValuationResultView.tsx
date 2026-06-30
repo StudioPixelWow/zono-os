@@ -238,8 +238,9 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
 const CONCLUSION_HE: Record<ValuationEvidenceDiagnosis["conclusion"], string> = {
   DATA_GAP: "פער נתונים אמיתי — אין עסקאות/מודעות לאזור",
   CITY_NORMALIZATION_MISMATCH: "אי-התאמת שם עיר — קיימים נתונים תחת איות שונה",
+  ADDRESS_RESOLUTION_MISMATCH: "אי-התאמת כתובת — קיימים נתונים סמוכים/באיות שונה שמסנן העיר מחריג",
   MISSING_PRICE_OR_SQM: 'קיימות שורות אך ללא מחיר/שטח שמיש',
-  PROVIDER_NOT_WIRED: "תקלת ספק/סכמה — הספק לא מצליח לקרוא את הנתונים",
+  PROVIDER_NOT_WIRED: "תקלת ספק/חיווט — הנתונים קיימים אך הספק לא קורא אותם",
   UNKNOWN: "לא ודאי — ראה הערות",
 };
 
@@ -251,6 +252,8 @@ function DiagSrcRow({ label, s }: { label: string; s: ValuationEvidenceDiagnosis
       <td className="text-center tabular-nums">{s.exactCityUsableCount}</td>
       <td className="text-center tabular-nums">{s.nearCityMatches}</td>
       <td className="text-center tabular-nums">{s.usableNearCityMatches}</td>
+      <td className="text-center tabular-nums">{s.nearbyRadiusCount}</td>
+      <td className="text-center tabular-nums">{s.usableNearbyRadiusCount}</td>
       <td className="text-center text-[11px]">{s.queryError ? <span className="text-red-600" title={s.queryError}>שגיאה</span> : s.rowsScanned}</td>
     </tr>
   );
@@ -286,17 +289,31 @@ function EvidenceDiagnostic({ valuationId }: { valuationId: string }) {
             <div className="text-muted text-[12px]">
               עיר: <b>{data.input.city ?? "—"}</b> (מנורמל: {data.input.cityNormalized || "—"}) · שכונה: {data.input.neighborhood ?? "—"} · חדרים: {data.input.rooms ?? "—"} · מ״ר: {data.input.sqm ?? "—"} · קואורד׳: {data.input.latitude != null && data.input.longitude != null ? "יש" : "אין"}
             </div>
+            <div className="text-muted rounded-lg border border-line bg-surface px-3 py-2 text-[12px]">
+              <b>כתובת:</b> {data.address.rawAddress ?? data.address.street ?? "—"}{data.address.houseNumber ? ` ${data.address.houseNumber}` : ""} · קואורד׳: {data.address.hasCoordinates ? `${data.address.latitude}, ${data.address.longitude}` : "אין"} · רדיוס: {data.address.matchability.canRadius ? "זמין" : "לא זמין"} · גיאוקוד: {data.address.geocodeSource ?? "—"}{data.address.geocodeConfidence != null ? ` (${data.address.geocodeConfidence})` : ""} · נכס מקושר: {data.address.linkedPropertyId ? "כן" : "לא"}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
                 <thead className="text-muted text-[11px]">
-                  <tr><th className="text-right">מקור</th><th>עיר מדויקת</th><th>שמיש מדויק</th><th>עיר דומה</th><th>שמיש דומה</th><th>נסרקו</th></tr>
+                  <tr><th className="text-right">מקור</th><th>עיר מדויקת</th><th>שמיש מדויק</th><th>עיר דומה</th><th>שמיש דומה</th><th>רדיוס</th><th>שמיש רדיוס</th><th>נסרקו</th></tr>
                 </thead>
                 <tbody>
                   <DiagSrcRow label="עסקאות (property_transactions)" s={data.sources.propertyTransactions} />
                   <DiagSrcRow label="מודעות (external_listings)" s={data.sources.externalListings} />
                   <DiagSrcRow label="מלאי פנימי (properties)" s={data.sources.properties} />
+                  <DiagSrcRow label="מקורות שוק (market_property_sources)" s={data.sources.marketPropertySources} />
                 </tbody>
               </table>
+            </div>
+            <div className="text-[12px]">
+              <b>חיווט מקורות להערכה:</b>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {data.wiringMap.map((w) => (
+                  <span key={w.table} className={cn("rounded-full px-2 py-0.5 font-bold", w.wired ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")} title={w.note}>
+                    {w.source}: {w.wired ? "מחובר ✓" : "לא מחובר"}
+                  </span>
+                ))}
+              </div>
             </div>
             <div className="text-[12px]">
               <b>סטטוס ספקים:</b>{" "}
