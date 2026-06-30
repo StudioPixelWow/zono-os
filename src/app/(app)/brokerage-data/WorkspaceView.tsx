@@ -16,11 +16,13 @@ import type { ResearchSnapshot } from "@/lib/brokerage-data/broker-research/engi
 import type { CityDiscoveryAudit } from "@/lib/brokerage-data/brokerage-discovery-audit";
 import type { BrokeragePipelineAudit } from "@/lib/brokerage-data/brokerage-pipeline-audit";
 import type { CityDiscoveryResult } from "@/lib/brokerage-data/city-discovery";
-import type { CityBrokerageCensus } from "@/lib/brokerage-data/brokerage-knowledge";
+import type { CityBrokerageCensus, CityKnowledgeStatus } from "@/lib/brokerage-data/brokerage-knowledge";
+import type { EnsureCityResult } from "@/lib/brokerage-data/city-lazy-learning";
 import {
   getBrokerageOfficesIndexAction, getResearchSnapshotAction,
   getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction,
-  discoverBrokerageOfficesForCityAction, getCityBrokerageCensusAction, runBrokerResearchAction,
+  discoverBrokerageOfficesForCityAction, getCityBrokerageCensusAction,
+  getCityKnowledgeStatusAction, ensureCityBrokerageKnowledgeAction, runBrokerResearchAction,
 } from "@/lib/brokerage-data/actions";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -313,6 +315,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <CityKnowledgeStatusPanel cities={index?.cities ?? []} onChanged={reload} />
           <CityCensusPanel cities={index?.cities ?? []} />
           <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
           <PipelineAuditPanel />
@@ -320,6 +323,83 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Lazy City Learning — knowledge status + bootstrap/refresh/reuse ──────────
+const CITY_ACTION_HE: Record<CityKnowledgeStatus["recommendedAction"], string> = {
+  BOOTSTRAP_CITY: "ללמוד את העיר", REFRESH_CITY: "לרענן ידע",
+  REUSE_KNOWLEDGE: "להשתמש בידע קיים", INSUFFICIENT_DATA: "אין מספיק נתונים",
+};
+function CityKnowledgeStatusPanel({ cities, onChanged }: { cities: string[]; onChanged: () => Promise<void> }) {
+  const [city, setCity] = useState("קריית ביאליק");
+  const [status, setStatus] = useState<CityKnowledgeStatus | null>(null);
+  const [ensure, setEnsure] = useState<EnsureCityResult | null>(null);
+  const [pending, setPending] = useState<null | "status" | "learn">(null);
+
+  const loadStatus = async () => { setPending("status"); setEnsure(null); try { setStatus(await getCityKnowledgeStatusAction(city)); } finally { setPending(null); } };
+  const run = async (force?: "bootstrap" | "refresh" | "reuse") => {
+    setPending("learn");
+    try {
+      const r = await ensureCityBrokerageKnowledgeAction(city, "פעולה ידנית מהפאנל", force);
+      if (r.ok) { setEnsure(r.result ?? null); await onChanged().catch(() => {}); setStatus(await getCityKnowledgeStatusAction(city)); }
+    } finally { setPending(null); }
+  };
+
+  return (
+    <section className="border-brand/40 bg-brand-soft/30 rounded-3xl border p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-brand-strong text-lg font-black">🪄 למידת עיר לפי דרישה</h2>
+          <p className="text-muted mt-1 text-[12px]">ZONO לומדת עיר רק כשהיא רלוונטית (משתמש/מתווך/מודעה חדשים, או ידע חסר/חלש/ישן). אין סריקה ארצית מראש.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={city} onChange={(e) => setCity(e.target.value)} list="status-city-list" placeholder="עיר"
+            className="border-line bg-surface text-ink min-w-[180px] rounded-full border px-3 py-1.5 text-sm" />
+          <datalist id="status-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+          <button onClick={loadStatus} disabled={pending != null || !city.trim()} className="border-line bg-card text-ink rounded-xl border px-4 py-1.5 text-sm font-bold disabled:opacity-60">{pending === "status" ? "בודק…" : "בדוק סטטוס"}</button>
+        </div>
+      </div>
+
+      {pending === "learn" && <p className="text-brand-strong mt-3 text-[12px] font-bold">ZONO לומדת את העיר ברקע — המידע ישתפר בהדרגה. אפשר להמשיך לעבוד.</p>}
+
+      {status && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn("rounded-full px-2.5 py-1 font-bold", status.existsInKnowledgeBase ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{status.existsInKnowledgeBase ? "מוכרת למערכת" : "עיר חדשה"}</span>
+            <span className="bg-surface text-muted rounded-full px-2.5 py-1 font-bold">פעולה מומלצת: {CITY_ACTION_HE[status.recommendedAction]}</span>
+            {status.stalenessReason && <span className="text-muted">· {status.stalenessReason}</span>}
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            <Mini label="כיסוי ידע" value={`${status.coverageScore}%`} tone={status.coverageScore >= 60 ? "green" : "amber"} />
+            <Mini label="רמת אמינות" value={`${status.confidenceScore}%`} tone={status.confidenceScore >= 70 ? "green" : "amber"} />
+            <Mini label="רעננות" value={`${status.freshnessScore}%`} tone={status.freshnessScore >= 70 ? "green" : "amber"} />
+            <Mini label="משרדים ידועים" value={fmt(status.verifiedOffices)} />
+            <Mini label="מתווכים ידועים" value={fmt(status.knownBrokers)} />
+            <Mini label="מחקר אחרון" value={status.lastResearchAt ? new Date(status.lastResearchAt).toLocaleDateString("he-IL") : "—"} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => run("bootstrap")} disabled={pending != null} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">למד עיר עכשיו</button>
+            <button onClick={() => run("refresh")} disabled={pending != null} className="border-brand/40 bg-card text-brand-strong rounded-xl border px-4 py-1.5 text-sm font-bold disabled:opacity-60">רענן ידע</button>
+            <button onClick={() => run("reuse")} disabled={pending != null} className="border-line bg-card text-muted rounded-xl border px-4 py-1.5 text-sm font-bold disabled:opacity-60">השתמש בידע קיים</button>
+          </div>
+        </div>
+      )}
+
+      {ensure && (
+        <div className="mt-3 rounded-xl border border-line bg-surface px-3 py-2 text-[12px]">
+          <b>תוצאה: {ensure.decision === "bootstrapped" ? "נלמדה (Bootstrap)" : ensure.decision === "refreshed" ? "רועננה" : ensure.decision === "reused" ? "שימוש חוזר" : "אין מספיק נתונים"}</b>
+          <ul className="text-muted mt-1 flex flex-col gap-0.5">
+            <li>למה רץ: {ensure.explanation.whyRan}</li>
+            <li>ידע קודם: {ensure.explanation.knownBefore}</li>
+            <li>נלמד עכשיו: {ensure.explanation.newlyLearned}</li>
+            <li>מחקר שנחסך: {ensure.explanation.researchAvoided}</li>
+            <li>נותר לא ידוע: {ensure.explanation.remainingUnknown}</li>
+            <li>רענון הבא: {ensure.explanation.nextRefresh}</li>
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

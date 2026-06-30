@@ -10,6 +10,15 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { detectFranchise } from "./franchise";
 import { isAcceptableOfficeName } from "./office-name-guard";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
+import { activeSearchVendor } from "./broker-research/providers";
+
+// ── Lazy-learning freshness thresholds (Phase 26.4.9) — constants, not magic ──
+export const CITY_FRESHNESS = {
+  minCoverage: 60,        // coverageScore below → bootstrap / deep refresh
+  minConfidence: 70,      // confidenceScore below → refresh
+  researchStaleDays: 60,  // lastResearchAt older → refresh
+  refreshStaleDays: 30,   // lastRefreshAt older → light refresh
+} as const;
 
 type Row = Record<string, unknown>;
 const s = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
@@ -132,6 +141,7 @@ export interface CityBrokerageCensus {
   brokersTotal: number; brokersMatched: number; brokersUnmatched: number; brokerCoveragePct: number;
   listingsTotal: number; listingsLinked: number; listingsUnlinked: number; listingCoveragePct: number;
   officeCoveragePct: number; marketCoveragePct: number;
+  contactPoints: number;
   lastResearchAt: string | null;
   missingKnowledge: { unmatchedBrokers: number; unlinkedListings: number; unverifiedCandidates: number };
   offices: { id: string; name: string; brand: string | null; status: string; confidence: number; brokerCount: number; lastSeenAt: string | null; lastVerifiedAt: string | null; phones: string[]; website: string | null }[];
@@ -170,10 +180,71 @@ export async function getCityBrokerageCensus(orgId: string, city: string): Promi
     estimatedActiveOffices, verifiedOffices, researchingOffices, avgOfficeConfidence,
     brokersTotal, brokersMatched, brokersUnmatched, brokerCoveragePct,
     listingsTotal, listingsLinked, listingsUnlinked, listingCoveragePct,
-    officeCoveragePct, marketCoveragePct, lastResearchAt,
+    officeCoveragePct, marketCoveragePct,
+    contactPoints: kb.contactPoints.phones.length + kb.contactPoints.domains.length,
+    lastResearchAt,
     missingKnowledge: { unmatchedBrokers: brokersUnmatched, unlinkedListings: listingsUnlinked, unverifiedCandidates: researchingOffices },
     offices: kb.verifiedOffices.map((o) => ({ id: o.id, name: o.name, brand: o.brandNetwork, status: o.status, confidence: o.confidence, brokerCount: o.brokerCount, lastSeenAt: o.lastSeenAt, lastVerifiedAt: o.lastVerifiedAt, phones: o.phones, website: o.website })).sort((a, b) => b.brokerCount - a.brokerCount),
     unknownEstimable: false,
     notes,
+  };
+}
+
+// ── Lazy City Learning status (Phase 26.4.9) — READ-ONLY evaluator ───────────
+export type CityRecommendedAction = "BOOTSTRAP_CITY" | "REFRESH_CITY" | "REUSE_KNOWLEDGE" | "INSUFFICIENT_DATA";
+export interface CityKnowledgeStatus {
+  city: string; normalizedCity: string;
+  existsInKnowledgeBase: boolean;
+  verifiedOffices: number; researchingOffices: number;
+  knownBrokers: number; knownListings: number; linkedListings: number; contactPoints: number;
+  lastResearchAt: string | null; lastRefreshAt: string | null;
+  coverageScore: number; confidenceScore: number; freshnessScore: number;
+  stalenessReason: string | null;
+  shouldBootstrap: boolean; shouldRefresh: boolean;
+  recommendedAction: CityRecommendedAction;
+  estimatedActiveOffices: number | null;   // total market size is UNKNOWN → null, never faked
+}
+
+/** Decide whether a city needs bootstrap, refresh, or can reuse existing knowledge. */
+export async function getCityKnowledgeStatus(orgId: string, city: string): Promise<CityKnowledgeStatus> {
+  const c = await getCityBrokerageCensus(orgId, city);
+  const existsInKnowledgeBase = c.verifiedOffices > 0 || c.researchingOffices > 0 || c.brokersTotal > 0;
+  const coverageScore = c.marketCoveragePct;
+  const confidenceScore = c.avgOfficeConfidence;
+  const ageDays = c.lastResearchAt ? (Date.now() - new Date(c.lastResearchAt).getTime()) / 86400000 : null;
+  const freshnessScore = ageDays == null ? 0
+    : ageDays <= CITY_FRESHNESS.refreshStaleDays ? 100
+      : ageDays >= CITY_FRESHNESS.researchStaleDays ? 30
+        : Math.round(100 - ((ageDays - CITY_FRESHNESS.refreshStaleDays) / (CITY_FRESHNESS.researchStaleDays - CITY_FRESHNESS.refreshStaleDays)) * 70);
+
+  let stalenessReason: string | null = null;
+  if (!existsInKnowledgeBase) stalenessReason = "העיר אינה מוכרת למערכת";
+  else if (coverageScore < CITY_FRESHNESS.minCoverage) stalenessReason = `כיסוי נמוך (${coverageScore}%)`;
+  else if (confidenceScore < CITY_FRESHNESS.minConfidence) stalenessReason = `אמינות נמוכה (${confidenceScore}%)`;
+  else if (ageDays != null && ageDays > CITY_FRESHNESS.researchStaleDays) stalenessReason = `מחקר אחרון לפני ${Math.round(ageDays)} ימים`;
+  else if (c.brokersUnmatched > 0 || c.listingsUnlinked > 0) stalenessReason = `${c.brokersUnmatched} מתווכים / ${c.listingsUnlinked} מודעות ללא שיוך`;
+
+  const shouldBootstrap = !existsInKnowledgeBase || coverageScore < CITY_FRESHNESS.minCoverage;
+  const shouldRefresh = !shouldBootstrap && (
+    confidenceScore < CITY_FRESHNESS.minConfidence ||
+    (ageDays != null && ageDays > CITY_FRESHNESS.researchStaleDays) || ageDays == null ||
+    c.brokersUnmatched > 0 || c.listingsUnlinked > 0
+  );
+  const hasSignal = c.brokersTotal > 0 || c.listingsTotal > 0 || !!activeSearchVendor();
+
+  let recommendedAction: CityRecommendedAction;
+  if (shouldBootstrap) recommendedAction = hasSignal ? "BOOTSTRAP_CITY" : "INSUFFICIENT_DATA";
+  else if (shouldRefresh) recommendedAction = "REFRESH_CITY";
+  else recommendedAction = "REUSE_KNOWLEDGE";
+
+  return {
+    city: c.city, normalizedCity: c.cityNormalized,
+    existsInKnowledgeBase,
+    verifiedOffices: c.verifiedOffices, researchingOffices: c.researchingOffices,
+    knownBrokers: c.brokersTotal, knownListings: c.listingsTotal, linkedListings: c.listingsLinked, contactPoints: c.contactPoints,
+    lastResearchAt: c.lastResearchAt, lastRefreshAt: c.lastResearchAt,
+    coverageScore, confidenceScore, freshnessScore, stalenessReason,
+    shouldBootstrap, shouldRefresh, recommendedAction,
+    estimatedActiveOffices: null,
   };
 }

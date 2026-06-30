@@ -22,7 +22,8 @@ import { getBrokerageOfficesIndex, type OfficesIndex } from "./office-profile";
 import { getCityDiscoveryAudit, type CityDiscoveryAudit } from "./brokerage-discovery-audit";
 import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./brokerage-pipeline-audit";
 import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDiscoveryOptions } from "./city-discovery";
-import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, type CityKnowledge, type CityBrokerageCensus } from "./brokerage-knowledge";
+import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, getCityKnowledgeStatus, type CityKnowledge, type CityBrokerageCensus, type CityKnowledgeStatus } from "./brokerage-knowledge";
+import { ensureCityBrokerageKnowledge, type EnsureCityResult } from "./city-lazy-learning";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
@@ -30,6 +31,26 @@ import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, t
 import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
 import { researchBroker, researchAllBrokers, getResearchSnapshot, resolveBrokerRef, type ResearchReport, type ResearchSnapshot, type BatchResearchProgress } from "./broker-research/engine";
 import type { ResearchRunDiagnostics } from "./broker-research/types";
+
+/** READ-ONLY city knowledge status — bootstrap / refresh / reuse recommendation. */
+export async function getCityKnowledgeStatusAction(city: string): Promise<CityKnowledgeStatus | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return null;
+    return await getCityKnowledgeStatus(profile.org_id, city);
+  } catch (e) { console.error("[city-knowledge-status] failed:", e); return null; }
+}
+
+/** Lazy city learning — bootstrap/refresh/reuse a city's brokerage knowledge on demand. */
+export async function ensureCityBrokerageKnowledgeAction(city: string, reason: string, force?: "bootstrap" | "refresh" | "reuse"): Promise<{ ok: boolean; result?: EnsureCityResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    const result = await ensureCityBrokerageKnowledge(profile.org_id, city, reason, force ? { force } : {});
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[ensure-city-knowledge] failed:", e); return { ok: false, error: "למידת העיר נכשלה." }; }
+}
 
 /** READ-ONLY National Brokerage Census for a city — coverage metrics (evidence-only). */
 export async function getCityBrokerageCensusAction(city: string): Promise<CityBrokerageCensus | null> {
