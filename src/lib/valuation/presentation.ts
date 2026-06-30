@@ -31,7 +31,8 @@ export function renderPresentationHtml(payload: ReportPayload): string {
   const date = new Date(generatedAt).toLocaleDateString("he-IL");
   const available = r?.valuationAvailable !== false && (r?.estimatedValue ?? 0) > 0;
 
-  const comps = [...v.comparables].filter((c) => (c.pricePerSqm ?? 0) > 0)
+  // ONLY traceable comparables reach the shared presentation (VAL-QA-7).
+  const comps = [...v.comparables].filter((c) => (c.pricePerSqm ?? 0) > 0 && c.isTraceable !== false)
     .sort((a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0)).slice(0, 8);
   const soldComps = comps.filter((c) => c.comparableType === "sold");
   const sourceList = [...new Set(v.comparables.map((c) => SOURCE_LABEL[c.source] ?? c.source))];
@@ -84,11 +85,12 @@ export function renderPresentationHtml(payload: ReportPayload): string {
   const insightVal = (key: string) => intel?.marketInsights.find((x) => x.key === key)?.value ?? "—";
 
   const compsTable = comps.length ? `<table class="lux-table"><thead><tr>
-      <th>מקור</th><th>כתובת</th><th>חדרים</th><th>שטח</th><th>מחיר</th><th>למ"ר</th><th>התאמה</th></tr></thead><tbody>
+      <th>מקור</th><th>כתובת</th><th>חדרים</th><th>שטח</th><th>מחיר</th><th>למ"ר</th><th>התאמה</th><th>קישור</th></tr></thead><tbody>
       ${comps.map((c) => `<tr><td>${esc(SOURCE_LABEL[c.source] ?? c.source)}</td>
         <td>${esc(c.street || c.neighborhood || c.city || "—")}</td><td>${c.rooms ?? "—"}</td>
         <td>${c.sqm ?? "—"}</td><td>${money(c.price)}</td><td>${c.pricePerSqm ? fmt(c.pricePerSqm) : "—"}</td>
-        <td>${c.similarityScore ?? "—"}%</td></tr>`).join("")}
+        <td>${c.similarityScore ?? "—"}%</td>
+        <td>${c.originalUrl && /^https?:\/\//.test(c.originalUrl) ? `<a href="${esc(c.originalUrl)}" target="_blank" rel="noreferrer">פתח מודעה ↗</a>` : "מקור פנימי"}</td></tr>`).join("")}
       </tbody></table>` : `<p class="muted">לא נמצאו עסקאות/מודעות להשוואה ישירה.</p>`;
 
   const recentRows = [

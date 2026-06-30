@@ -70,9 +70,10 @@ export function renderReportHtml(payload: ReportPayload): string {
   const debug = r?.debug ?? null;
   const quality = (r?.valuationQuality ?? (available ? r?.confidenceLevel : "insufficient")) as ValuationQualityLevel | undefined;
 
-  // Comparables actually shown, with the relative weight each contributed.
+  // Comparables actually shown — ONLY traceable rows (real source row + raw
+  // price + sqm). Untraceable evidence never reaches the shared report (VAL-QA-7).
   const comps = [...v.comparables]
-    .filter((c) => (c.pricePerSqm ?? 0) > 0)
+    .filter((c) => (c.pricePerSqm ?? 0) > 0 && c.isTraceable !== false)
     .sort((a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0))
     .slice(0, 12);
   const weights = normalizedComparableWeights(i, comps);
@@ -111,8 +112,9 @@ export function renderReportHtml(payload: ReportPayload): string {
         <td>${c.distanceMeters != null ? `${Math.round(c.distanceMeters)} מ'` : "—"}</td>
         <td>${c.similarityScore ?? "—"}%</td>
         <td>${weights[idx] != null ? `${weights[idx]}%` : "—"}</td>
+        <td>${c.originalUrl && /^https?:\/\//.test(c.originalUrl) ? `<a href="${esc(c.originalUrl)}" target="_blank" rel="noreferrer">פתח מודעה ↗</a>` : '<span class="muted-inline">מקור פנימי · אין קישור</span>'}</td>
       </tr>`).join("")
-    : `<tr><td colspan="12" class="muted">לא נמצאו עסקאות/מודעות להשוואה ישירה באזור.</td></tr>`;
+    : `<tr><td colspan="13" class="muted">לא נמצאו עסקאות/מודעות להשוואה ישירה באזור.</td></tr>`;
 
   const brokerRows = v.brokerSold.length
     ? v.brokerSold.slice(0, 8).map((b) => `<tr>
@@ -247,7 +249,7 @@ th{color:#6b6385;font-weight:700;font-size:12px}
   </div>`) : ""}
 
   <!-- 5. Comparable transactions -->
-  ${section("עסקאות ומודעות בשימוש בהערכה", `<div class="tw"><table><thead><tr><th>מקור</th><th>כתובת</th><th>סוג נכס</th><th>חד׳</th><th>מ"ר</th><th>קומה</th><th>מחיר</th><th>למ"ר</th><th>סטטוס/תאריך</th><th>מרחק</th><th>התאמה</th><th>משקל</th></tr></thead><tbody>${compsRows}</tbody></table></div>`)}
+  ${section("עסקאות ומודעות בשימוש בהערכה", `<div class="tw"><table><thead><tr><th>מקור</th><th>כתובת</th><th>סוג נכס</th><th>חד׳</th><th>מ"ר</th><th>קומה</th><th>מחיר</th><th>למ"ר</th><th>סטטוס/תאריך</th><th>מרחק</th><th>התאמה</th><th>משקל</th><th>קישור</th></tr></thead><tbody>${compsRows}</tbody></table></div>`)}
 
   <!-- 6. Broker sold nearby (only if exists) -->
   ${v.brokerSold.length ? section("נכסים שמכרתי באזור", `<table><thead><tr><th>כתובת</th><th>מחיר מכירה</th><th>למ"ר</th><th>תאריך</th><th>מול השוק</th></tr></thead><tbody>${brokerRows}</tbody></table>`) : ""}
