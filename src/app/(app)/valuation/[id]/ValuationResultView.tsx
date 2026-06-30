@@ -63,7 +63,12 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
     );
   }
 
-  const noData = (r.estimatedValue ?? 0) <= 0;
+  // A valuation is only "available" when the engine produced a real value. The
+  // engine flags this explicitly (valuationAvailable); we fall back to a value
+  // check for older rows that predate the flag. When NOT available, estimatedValue
+  // is 0 — and 0 must NEVER be shown as ₪0 (it is insufficient_data, not a price).
+  const available = r.valuationAvailable !== false && (r.estimatedValue ?? 0) > 0;
+  const noData = !available;
   const conf = r.confidenceScore ?? 0;
   const positives = record.adjustments.filter((a) => a.direction === "positive");
   const negatives = record.adjustments.filter((a) => a.direction === "negative");
@@ -103,46 +108,64 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
         <div className="relative px-6 py-10 text-center text-white sm:py-14">
           <p className="text-sm font-bold text-white/85">{addr}</p>
           {(i.rooms || i.builtSqm) && <p className="text-xs text-white/70">{[i.rooms && `${i.rooms} חדרים`, i.builtSqm && `${i.builtSqm} מ"ר`, i.floor != null && `קומה ${i.floor}`].filter(Boolean).join(" · ")}</p>}
-          <div className="mt-4 inline-block rounded-3xl bg-white/10 px-8 py-5 backdrop-blur-md">
-            <p className="text-xs font-bold uppercase tracking-wide text-white/80">שווי מוערך</p>
-            <p className="mt-1 text-4xl font-black tracking-tight sm:text-5xl">{ils(r.estimatedValue)}</p>
-            <p className="mt-1 text-sm text-white/80">טווח {ils(r.lowValue)} – {ils(r.highValue)}</p>
-          </div>
-          <div className="mx-auto mt-5 max-w-sm">
-            <div className="flex items-center justify-between text-xs font-bold text-white/85">
-              <span>ביטחון: {CONFIDENCE_LABEL[r.confidenceLevel ?? "low"]}</span><span>{conf}%</span>
+          {available ? (
+            <>
+              <div className="mt-4 inline-block rounded-3xl bg-white/10 px-8 py-5 backdrop-blur-md">
+                <p className="text-xs font-bold uppercase tracking-wide text-white/80">שווי מוערך</p>
+                <p className="mt-1 text-4xl font-black tracking-tight sm:text-5xl">{ils(r.estimatedValue)}</p>
+                <p className="mt-1 text-sm text-white/80">טווח {ils(r.lowValue)} – {ils(r.highValue)}</p>
+              </div>
+              <div className="mx-auto mt-5 max-w-sm">
+                <div className="flex items-center justify-between text-xs font-bold text-white/85">
+                  <span>ביטחון: {CONFIDENCE_LABEL[r.confidenceLevel ?? "low"]}</span><span>{conf}%</span>
+                </div>
+                <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/20">
+                  <div className="h-2 rounded-full bg-gradient-to-l from-emerald-300 to-emerald-500" style={{ width: `${conf}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-white/75">מבוסס על עסקאות, מודעות פעילות ונכסים שמכרת באזור</p>
+              </div>
+            </>
+          ) : (
+            // Insufficient data — NEVER show ₪0. Honest message instead of a price.
+            <div className="mt-4 inline-block max-w-md rounded-3xl bg-white/10 px-8 py-5 backdrop-blur-md">
+              <p className="text-2xl font-black sm:text-3xl">לא ניתן לחשב הערכת שווי</p>
+              <p className="mt-1 text-base font-bold text-white/85">חסרים נתונים</p>
+              {r.unavailableReason && <p className="mt-2 text-sm leading-relaxed text-white/80">{r.unavailableReason}</p>}
             </div>
-            <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/20">
-              <div className="h-2 rounded-full bg-gradient-to-l from-emerald-300 to-emerald-500" style={{ width: `${conf}%` }} />
-            </div>
-            <p className="mt-2 text-xs text-white/75">מבוסס על עסקאות, מודעות פעילות ונכסים שמכרת באזור</p>
-          </div>
+          )}
         </div>
       </section>
 
       {noData && (
         <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-          לא נמצאו מספיק עסקאות/מודעות להשוואה ישירה באזור. ההערכה אינדיקטיבית בלבד — ניתן לייבא עסקאות שוק ומודעות כדי לדייק.
+          {r.unavailableReason ?? "לא נמצאו מספיק עסקאות/מודעות להשוואה ישירה באזור."}
+          {r.missingData && r.missingData.length > 0 && <span> חסר: {r.missingData.join(", ")}.</span>}
+          {r.recommendedAction && <span className="mt-1 block font-normal">המלצה: {r.recommendedAction}</span>}
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <KpiCard icon="Megaphone" label="מחיר מומלץ לפרסום" value={ils(r.recommendedListingPrice)} tone="brand" sub="אסטרטגיה: מאוזנת" />
-        <KpiCard icon="Target" label="מחיר יעד לסגירה" value={ils(r.targetClosingPrice)} tone="warning" sub={`מינימום: ${ils(r.minimumAcceptablePrice)}`} />
-        <KpiCard icon="Flame" label="ביקוש באזור" value={DEMAND_LABEL[market?.demandLevel ?? "low"]} tone="success" sub={market ? `${market.transactionCount} עסקאות · ${market.activeListingCount} מודעות` : ""} />
-      </div>
-
-      {/* AI insights */}
-      <Section title="AI Insights" icon="Sparkles">
-        <div className="border-line bg-card rounded-card border p-5 shadow-card">
-          <p className="text-muted mb-4 text-sm leading-relaxed">{r.explanation}</p>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <FactorList title="מעלי ערך" tone="pos" items={positives} />
-            <FactorList title="מורידי ערך" tone="neg" items={negatives} />
-          </div>
+      {/* KPI cards — only when a real value exists (never render ₪0 prices). */}
+      {!noData && (
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <KpiCard icon="Megaphone" label="מחיר מומלץ לפרסום" value={ils(r.recommendedListingPrice)} tone="brand" sub="אסטרטגיה: מאוזנת" />
+          <KpiCard icon="Target" label="מחיר יעד לסגירה" value={ils(r.targetClosingPrice)} tone="warning" sub={`מינימום: ${ils(r.minimumAcceptablePrice)}`} />
+          <KpiCard icon="Flame" label="ביקוש באזור" value={DEMAND_LABEL[market?.demandLevel ?? "low"]} tone="success" sub={market ? `${market.transactionCount} עסקאות · ${market.activeListingCount} מודעות` : ""} />
         </div>
-      </Section>
+      )}
+
+      {/* AI insights — the engine's explanation embeds the value, so only show it
+          when a real value exists (otherwise it would read "₪0"). */}
+      {!noData && (
+        <Section title="AI Insights" icon="Sparkles">
+          <div className="border-line bg-card rounded-card border p-5 shadow-card">
+            <p className="text-muted mb-4 text-sm leading-relaxed">{r.explanation}</p>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <FactorList title="מעלי ערך" tone="pos" items={positives} />
+              <FactorList title="מורידי ערך" tone="neg" items={negatives} />
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* What-if slider */}
       {!noData && <WhatIf estimated={r.estimatedValue ?? 0} demand={market?.demandLevel ?? "medium"} recommended={r.recommendedListingPrice ?? 0} />}
@@ -155,12 +178,14 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
       {/* Broker sold nearby */}
       <BrokerSold record={record} onFollowup={() => runner.run(() => createSellerFollowupFromValuationAction(record.id), { id: "fup", pendingMessage: "יוצר מעקב…", success: (res) => (res.ok && res.data.taskId ? "משימת מעקב נוצרה." : "המעקב נשמר.") })} busy={runner.busyId === "fup"} />
 
-      {/* Pricing strategies */}
-      <Section title="אסטרטגיית תמחור" icon="Layers">
-        <div className="grid gap-3 sm:grid-cols-3">
-          {(r.strategies ?? []).map((s) => <StrategyCard key={s.key} s={s} />)}
-        </div>
-      </Section>
+      {/* Pricing strategies — only when a real value exists. */}
+      {!noData && (r.strategies ?? []).length > 0 && (
+        <Section title="אסטרטגיית תמחור" icon="Layers">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(r.strategies ?? []).map((s) => <StrategyCard key={s.key} s={s} />)}
+          </div>
+        </Section>
+      )}
 
       {/* Market pulse */}
       {market && (
