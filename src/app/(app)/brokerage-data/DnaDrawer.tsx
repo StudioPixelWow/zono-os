@@ -10,6 +10,7 @@ import type { BrokerageDna, DnaSignal } from "@/lib/brokerage-data/dna";
 import type { AIReasoningResponse } from "@/lib/ai-reasoning/types";
 import type { BrokerOfficeReasonResult } from "@/lib/brokerage-data/office-reasoning";
 import type { ProfileExtras } from "@/lib/brokerage-data/profile-data";
+import { BrokerIdentityPanel } from "./BrokerIdentityPanel";
 
 export interface DnaTarget { type: "office" | "broker"; id: string; name: string }
 
@@ -130,6 +131,9 @@ export function DnaDrawer({ target, onClose, onOpen }: { target: DnaTarget | nul
               {dna.footprint.cities.length > 0 && <span className="rounded-full bg-surface px-2 py-0.5 text-muted">{dna.footprint.cities.length} ערים</span>}
               {dna.footprint.sources.length > 0 && <span className="rounded-full bg-surface px-2 py-0.5 text-muted">{dna.footprint.sources.length} מקורות</span>}
             </div>
+
+            {/* Broker Identity Resolution (Phase 26.12) — resolved office + evidence. */}
+            {target.type === "broker" && <BrokerIdentityPanel agentId={target.id} />}
 
             {strengths.length > 0 && (
               <section>

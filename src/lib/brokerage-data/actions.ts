@@ -21,6 +21,41 @@ import { getProfileExtras, type ProfileExtras } from "./profile-data";
 import { getBrokerageDataOverview, getBrokerDirectory, EMPTY_BROKERAGE_OVERVIEW, type BrokerageDataOverview, type BrokerDirectory } from "./overview";
 import { runNationalBrokerageDiscovery, type BrokerageDiscoveryResult } from "./discovery-engine";
 import { runNationalOfficeRegistry, getOfficeRegistrySnapshot, type RegistryRunResult, type OfficeRegistrySnapshot } from "./office-registry";
+import { getBrokerIdentity, resolveBrokerIdentity, resolveAllBrokerIdentities, type IdentityRunResult } from "./broker-identity/engine";
+import type { BrokerIdentityPackage, BrokerResolution } from "./broker-identity/types";
+
+export interface BrokerIdentityView { pkg: BrokerIdentityPackage | null; stored: BrokerResolution | null }
+
+/** Broker Identity profile read (package + last resolution). RLS-scoped via session. */
+export async function getBrokerIdentityAction(agentId: string): Promise<BrokerIdentityView | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return null;
+    return await getBrokerIdentity(agentId);
+  } catch (e) { console.error("[broker-identity] view failed:", e); return null; }
+}
+
+/** Resolve one broker on demand (rebuilds evidence + persists). Auth-only (dev/QA). */
+export async function resolveBrokerIdentityAction(agentId: string): Promise<{ ok: boolean; resolution?: BrokerResolution; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const r = await resolveBrokerIdentity(agentId);
+    revalidatePath("/brokerage-data");
+    return r ? { ok: true, resolution: r } : { ok: false, error: "מתווך לא נמצא." };
+  } catch (e) { console.error("[broker-identity] resolve failed:", e); return { ok: false, error: "השיוך נכשל." }; }
+}
+
+/** Batch Broker Identity Resolution. Auth-only (dev/QA; TODO restrict before launch). */
+export async function runBrokerIdentityResolutionAction(): Promise<{ ok: boolean; result?: IdentityRunResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const result = await resolveAllBrokerIdentities(profile.org_id, {});
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[broker-identity] batch failed:", e); return { ok: false, error: "ההרצה נכשלה." }; }
+}
 
 export interface RegistryRunActionState { ok: boolean; result?: RegistryRunResult; error?: string }
 

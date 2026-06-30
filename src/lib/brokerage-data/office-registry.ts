@@ -210,9 +210,14 @@ export async function runNationalOfficeRegistry(
       // contact names. Personal contact names are NOT treated as offices.
       const hints: { name: string; source: string; domain: string | null }[] = [];
       if (detectFranchise(b.fullName).matched) hints.push({ name: b.fullName, source: "broker_name_brand", domain: null });
+      // STEP 7 (26.12): a detected_broker_name / contact_name that EQUALS the
+      // broker's own name is NOT office evidence — ignore it and keep collecting.
+      const isSelfName = (v: string): boolean => normalizeHebrewName(v) === b.normalizedName;
       for (const l of listings) {
-        if (l.detectedBrokerName && l.detectedBrokerName.length >= 2) hints.push({ name: l.detectedBrokerName, source: l.source ? `listing:${l.source}` : "detected_broker_name", domain: l.domain });
-        if (l.contactName && (detectFranchise(l.contactName).matched || /(תיווך|נדל|נכסים|realty|real\s*estate|properties|group|קבוצת)/i.test(l.contactName))) {
+        if (l.detectedBrokerName && l.detectedBrokerName.length >= 2 && !isSelfName(l.detectedBrokerName)) {
+          hints.push({ name: l.detectedBrokerName, source: l.source ? `listing:${l.source}` : "detected_broker_name", domain: l.domain });
+        }
+        if (l.contactName && !isSelfName(l.contactName) && (detectFranchise(l.contactName).matched || /(תיווך|נדל|נכסים|realty|real\s*estate|properties|group|קבוצת)/i.test(l.contactName))) {
           hints.push({ name: l.contactName, source: l.source ? `listing:${l.source}` : "contact_name", domain: l.domain });
         }
       }
