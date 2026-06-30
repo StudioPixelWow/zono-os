@@ -176,10 +176,9 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
       {/* What-if slider */}
       {!noData && <WhatIf estimated={r.estimatedValue ?? 0} demand={market?.demandLevel ?? "medium"} recommended={r.recommendedListingPrice ?? 0} />}
 
-      {/* Comparables */}
-      <Section title="עסקאות ומודעות דומות" icon="Building2">
-        <Comparables record={record} />
-      </Section>
+      {/* Comparables — official transactions / internal properties / external
+          listings are classified by source table and NEVER mislabeled. */}
+      <ComparablesSection record={record} />
 
       {/* Broker sold nearby */}
       <BrokerSold record={record} onFollowup={() => runner.run(() => createSellerFollowupFromValuationAction(record.id), { id: "fup", pendingMessage: "יוצר מעקב…", success: (res) => (res.ok && res.data.taskId ? "משימת מעקב נוצרה." : "המעקב נשמר.") })} busy={runner.busyId === "fup"} />
@@ -302,17 +301,29 @@ function EvidenceSearchPanel({ valuationId }: { valuationId: string }) {
               </table>
             </div>
             <div className="text-muted">סה״כ {data.counts.totalRows} ראיות · {data.counts.usable} שמישות · {data.counts.sameCity} עיר מדויקת · {data.counts.normalizedCity} עיר מנורמלת · {data.counts.radius} ברדיוס · קומפרבלים להערכה: {data.comparablesForValuation.length}</div>
+            <div className="rounded-lg border border-line bg-surface px-3 py-2">
+              <b>סיכום סריקת מקורות אמיתיים:</b>{" "}
+              מודעות חיצוניות שנסרקו: {data.sources.find((x) => x.source === "external_listings")?.rawCount ?? 0} ·
+              מודעות אמיתיות שמישות: {data.evidence.filter((e) => e.source === "external_listings" && e.usableForValuation).length} ·
+              עסקאות רשמיות: {data.evidence.filter((e) => e.source === "property_transactions" && e.usableForValuation).length} ·
+              נכסים פנימיים: {data.evidence.filter((e) => e.source === "properties" && e.usableForValuation).length} ·
+              market_property_sources: {data.evidence.filter((e) => e.source === "market_property_sources" && e.usableForValuation).length} ·
+              נדחו (לא עקיבים): {data.evidence.filter((e) => !e.isTraceable).length} ·
+              רדיוס: {data.coordinatesStatus === "present" ? "זמין" : "לא זמין"} ·
+              רמות קרבה: {data.matchLevelsUsed.length || "—"}
+            </div>
             {/* Per-comparable traceability (anti-fake proof) */}
             <div className="overflow-x-auto">
               <b>עקיבות ראיות (הוכחה למקור אמיתי):</b>
               <table className="mt-1 w-full text-[11px]">
-                <thead className="text-muted"><tr><th className="text-right">טבלת מקור</th><th>מזהה שורה</th><th>ספק</th><th>URL</th><th>תמונה</th><th>מחיר/מ״ר</th><th>שמיש</th><th>סיבת דחייה</th></tr></thead>
+                <thead className="text-muted"><tr><th className="text-right">טבלת מקור</th><th>מזהה שורה</th><th>ספק</th><th>מודעה חיצונית</th><th>URL</th><th>תמונה</th><th>מחיר/מ״ר</th><th>שמיש</th><th>סיבת דחייה</th></tr></thead>
                 <tbody>
                   {data.evidence.slice(0, 20).map((e, i) => (
                     <tr key={i} className={cn("border-line border-b", !e.isTraceable && "bg-rose-50/50")}>
                       <td className="py-1 font-bold">{e.sourceTable}</td>
                       <td className="max-w-[90px] truncate" title={e.externalId ?? ""}>{e.externalId ?? "—"}</td>
                       <td>{e.source}</td>
+                      <td className="text-center">{e.sourceTable === "external_listings" || e.sourceTable === "market_property_sources" ? "✓" : "—"}</td>
                       <td className="text-center">{e.originalUrl && /^https?:\/\//.test(e.originalUrl) ? "✓" : "—"}</td>
                       <td className="text-center">{e.imageUrl ? "✓" : "—"}</td>
                       <td className="text-center">{(e.price ?? 0) > 0 && (e.sqm ?? 0) > 0 ? "✓" : "—"}</td>
@@ -490,46 +501,86 @@ function WhatIf({ estimated, demand, recommended }: { estimated: number; demand:
   );
 }
 
-function Comparables({ record }: { record: ValuationRecord }) {
-  const comps = record.comparables;
-  if (comps.length === 0) {
-    return <div className="border-line bg-card text-muted rounded-card border border-dashed p-8 text-center text-sm shadow-card">לא נמצאו עסקאות/מודעות להשוואה ישירה באזור. ניתן לייבא נתוני שוק כדי להעשיר את ההשוואה.</div>;
-  }
+type Comp = ValuationRecord["comparables"][number];
+type CompKind = "official" | "internal" | "external";
+/** Classify a comparable by its REAL source table — never by a generic label. */
+function compKind(c: Comp): CompKind {
+  const t = c.sourceTable ?? null;
+  if (t === "property_transactions" || c.source === "govmap" || c.source === "tax_authority") return "official";
+  if (t === "external_listings" || t === "market_property_sources" || c.source === "madlan" || c.source === "yad2") return "external";
+  return "internal"; // properties / deals / zono inventory
+}
+const KIND_BADGE: Record<CompKind, string> = { official: "עסקה רשמית", internal: "נכס פנימי", external: "מודעה" };
+const isReal = (c: Comp) => c.isTraceable !== false && !!c.externalId && !!c.sourceTable;
+
+function ComparablesSection({ record }: { record: ValuationRecord }) {
+  // Only traceable comparables ever render (anti-fake, VAL-QA-6/8).
+  const comps = record.comparables.filter(isReal);
+  const external = comps.filter((c) => compKind(c) === "external");
+  const officialInternal = comps.filter((c) => compKind(c) !== "external");
+  const guard = comps.length === 0 ? null
+    : external.length > 0 ? "הערכת השווי כוללת מודעות פעילות אמיתיות שנמצאו במערכת."
+      : "הערכת השווי מבוססת על עסקאות רשמיות / נכסים פנימיים בלבד, לא על מודעות פעילות.";
+
+  return (
+    <>
+      {guard && <p className="border-line bg-surface text-muted mt-6 rounded-xl border px-4 py-2 text-sm font-semibold">{guard}</p>}
+      {officialInternal.length > 0 && (
+        <Section title="עסקאות רשמיות ונכסים דומים" icon="Building2">
+          <CompCarousel comps={officialInternal} />
+        </Section>
+      )}
+      <Section title="מודעות חיצוניות דומות" icon="Megaphone">
+        {external.length > 0
+          ? <CompCarousel comps={external} />
+          : <div className="border-line bg-card text-muted rounded-card border border-dashed p-8 text-center text-sm shadow-card">לא נמצאו מודעות חיצוניות אמיתיות להשוואה באזור.</div>}
+      </Section>
+    </>
+  );
+}
+
+function CompCarousel({ comps }: { comps: Comp[] }) {
   return (
     <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
-      {comps.slice(0, 16).map((c, idx) => (
-        <div key={idx} className="border-line bg-card w-60 shrink-0 overflow-hidden rounded-card border shadow-card">
-          <div className="relative h-28 w-full bg-line/40">
-            {/* Image ONLY if a real image_url exists — never a fabricated property photo. */}
-            {c.imageUrl ? <img src={c.imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="text-muted/70 grid h-full place-items-center gap-1 text-center"><Icon name="Building2" size={20} /><span className="text-[10px]">אין תמונה מקורית</span></div>}
-            <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">{SOURCE_LABEL[c.source] ?? c.source}</span>
-            <span className="absolute left-2 top-2 rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-white">{c.comparableType === "sold" ? "עסקה" : "מודעה"}</span>
-          </div>
-          <div className="p-3">
-            <p className="text-ink truncate text-sm font-bold">{c.street || c.neighborhood || c.city || "—"}</p>
-            <p className="text-brand-strong mt-0.5 text-lg font-black">{ils(c.price)}</p>
-            <p className="text-muted text-xs">{c.pricePerSqm ? `${ils(c.pricePerSqm)} למ"ר` : ""}</p>
-            <div className="text-muted mt-2 flex flex-wrap gap-1.5 text-[11px]">
-              {c.rooms != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{c.rooms} חד׳</span>}
-              {c.sqm != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{c.sqm} {'מ"ר'}</span>}
-              {c.floor != null && <span className="bg-line/50 rounded px-1.5 py-0.5">קומה {c.floor}</span>}
-              {c.distanceMeters != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{Math.round(c.distanceMeters)} {"מ'"}</span>}
-            </div>
-            {c.similarityScore != null && (
-              <div className="mt-2">
-                <div className="text-muted flex justify-between text-[10px] font-bold"><span>התאמה</span><span>{c.similarityScore}%</span></div>
-                <div className="bg-line/50 mt-0.5 h-1 w-full overflow-hidden rounded-full"><div className="bg-brand h-1 rounded-full" style={{ width: `${c.similarityScore}%` }} /></div>
-              </div>
-            )}
-            {/* Clickable ONLY when a real public URL exists; otherwise honest label. */}
-            <div className="mt-2 text-[11px]">
-              {c.originalUrl && /^https?:\/\//.test(c.originalUrl)
-                ? <a href={c.originalUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold hover:underline">פתח מודעה ↗</a>
-                : <span className="text-muted/70">מקור פנימי · אין קישור ציבורי</span>}
-            </div>
-          </div>
+      {comps.slice(0, 16).map((c, idx) => <CompCard key={idx} c={c} />)}
+    </div>
+  );
+}
+
+function CompCard({ c }: { c: Comp }) {
+  const kind = compKind(c);
+  const realUrl = kind === "external" && c.originalUrl && /^https?:\/\//.test(c.originalUrl) ? c.originalUrl : null;
+  return (
+    <div className="border-line bg-card w-60 shrink-0 overflow-hidden rounded-card border shadow-card">
+      <div className="relative h-28 w-full bg-line/40">
+        {/* Real image only — never a fabricated property photo. */}
+        {c.imageUrl ? <img src={c.imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="text-muted/70 grid h-full place-items-center gap-1 text-center"><Icon name="Building2" size={20} /><span className="text-[10px]">אין תמונה מקורית</span></div>}
+        <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">{SOURCE_LABEL[c.source] ?? c.source}</span>
+        <span className={cn("absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-bold text-white", kind === "official" ? "bg-emerald-600" : kind === "internal" ? "bg-slate-600" : "bg-brand")}>{KIND_BADGE[kind]}</span>
+      </div>
+      <div className="p-3">
+        <p className="text-ink truncate text-sm font-bold">{c.street || c.neighborhood || c.city || "—"}</p>
+        <p className="text-brand-strong mt-0.5 text-lg font-black">{ils(c.price)}</p>
+        <p className="text-muted text-xs">{c.pricePerSqm ? `${ils(c.pricePerSqm)} למ"ר` : ""}</p>
+        <div className="text-muted mt-2 flex flex-wrap gap-1.5 text-[11px]">
+          {c.rooms != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{c.rooms} חד׳</span>}
+          {c.sqm != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{c.sqm} {'מ"ר'}</span>}
+          {c.floor != null && <span className="bg-line/50 rounded px-1.5 py-0.5">קומה {c.floor}</span>}
+          {c.distanceMeters != null && <span className="bg-line/50 rounded px-1.5 py-0.5">{Math.round(c.distanceMeters)} {"מ'"}</span>}
         </div>
-      ))}
+        {c.similarityScore != null && (
+          <div className="mt-2">
+            <div className="text-muted flex justify-between text-[10px] font-bold"><span>התאמה</span><span>{c.similarityScore}%</span></div>
+            <div className="bg-line/50 mt-0.5 h-1 w-full overflow-hidden rounded-full"><div className="bg-brand h-1 rounded-full" style={{ width: `${c.similarityScore}%` }} /></div>
+          </div>
+        )}
+        {/* "פתח מודעה" ONLY for a real external listing URL; everything else honest. */}
+        <div className="mt-2 text-[11px]">
+          {realUrl
+            ? <a href={realUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold hover:underline">פתח מודעה ↗</a>
+            : <span className="text-muted/70">{kind === "official" ? "עסקה רשמית · ללא קישור ציבורי" : kind === "internal" ? "נכס פנימי · ללא קישור ציבורי" : "מודעה · אין קישור ציבורי"}</span>}
+        </div>
+      </div>
     </div>
   );
 }
