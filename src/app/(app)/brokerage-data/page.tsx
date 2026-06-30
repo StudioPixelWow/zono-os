@@ -26,7 +26,9 @@ export default async function BrokerageDataPage() {
   return (
     <div className="flex flex-col gap-8">
       <BrokerageDataView cc={cc} />
-      {cc.access.isOwner && <RegistryView />}
+      {/* National Registry — mounted for ALL authenticated org users (dev/QA).
+          TODO before launch: restrict to owner/admin. */}
+      <RegistryView />
       <KnowledgeView />
       <EvolutionView />
     </div>

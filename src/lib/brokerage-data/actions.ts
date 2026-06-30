@@ -34,8 +34,8 @@ export async function runNationalOfficeRegistryAction(): Promise<RegistryRunActi
   try {
     const { profile } = await getSessionContext();
     if (!profile?.org_id) return { ok: false, error: "יש להתחבר כדי להפעיל את המרשם." };
-    const access = await getBrokerageAccess();
-    if (!access?.isOwner) return { ok: false, error: "המרשם הלאומי זמין למנהל הסוכנות בלבד." };
+    // TODO before launch: restrict to owner/admin. During dev/QA the registry is
+    // intentionally open to any authenticated org user.
     const p = profile as { id?: string | null };
     console.info(`[brokerage-data] national registry by user=${p.id ?? "?"} org=${profile.org_id}`);
     const result = await runNationalOfficeRegistry(profile.org_id, p.id ?? null, {});
@@ -52,8 +52,7 @@ export async function getOfficeRegistrySnapshotAction(): Promise<OfficeRegistryS
   try {
     const { profile } = await getSessionContext();
     if (!profile?.org_id) return null;
-    const access = await getBrokerageAccess();
-    if (!access?.isOwner) return null;
+    // Open to any authenticated org user during dev/QA (see registry action TODO).
     return await getOfficeRegistrySnapshot();
   } catch (e) { console.error("[brokerage-data] registry snapshot failed:", e); return null; }
 }

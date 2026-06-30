@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { getOfficeRegistrySnapshotAction, runNationalOfficeRegistryAction } from "@/lib/brokerage-data/actions";
-import type { OfficeRegistrySnapshot } from "@/lib/brokerage-data/office-registry";
+import type { OfficeRegistrySnapshot, RegistryRunResult } from "@/lib/brokerage-data/office-registry";
 
 const STATUS_HE: Record<string, string> = {
   candidate_pending_verification: "מועמד — ממתין לאימות",
@@ -58,6 +58,7 @@ export function RegistryView() {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<RegistryRunResult | null>(null);
 
   const [city, setCity] = useState("");
   const [brand, setBrand] = useState("");
@@ -75,10 +76,11 @@ export function RegistryView() {
   }, []);
 
   const runRegistry = () => {
-    setMsg(null); setErr(null);
+    setMsg(null); setErr(null); setLastResult(null);
     start(async () => {
       const r = await runNationalOfficeRegistryAction();
       if (!r.ok) { setErr(r.error ?? "המרשם נכשל."); return; }
+      setLastResult(r.result ?? null);
       setMsg(r.result?.message ?? "המרשם הסתיים ✓");
       const data = await getOfficeRegistrySnapshotAction();
       setSnap(data);
@@ -93,40 +95,65 @@ export function RegistryView() {
       (!status || c.status === status) && (!source || c.suggestedBy === source) && c.confidence >= minConf);
   }, [snap, city, brand, status, source, minConf]);
 
-  if (loading) return <Section title="מרשם משרדי תיווך לאומי"><Empty text="טוען מרשם…" /></Section>;
-  if (!snap) return null; // not an owner / no access — silently hidden
-
-  const c = snap.counts;
-  const verifiedOffices = snap.offices.filter((o) => (!city || o.city === city) && (!brand || o.brandNetwork === brand) && o.confidence >= minConf);
-  const needsReview = snap.candidates.filter((x) => x.status === "needs_review");
+  // The header + run button render UNCONDITIONALLY (no permission/loading/null
+  // gate) so the primary action is always visible in Brokerage Data.
+  const verifiedOffices = (snap?.offices ?? []).filter((o) => (!city || o.city === city) && (!brand || o.brandNetwork === brand) && o.confidence >= minConf);
+  const needsReview = (snap?.candidates ?? []).filter((x) => x.status === "needs_review");
+  const rm = lastResult?.metrics;
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
-      <section className="border-brand/40 bg-brand-soft/40 flex flex-wrap items-start justify-between gap-3 rounded-2xl border p-4">
-        <div>
-          <h2 className="text-brand-strong text-base font-black">🗂️ מרשם משרדי תיווך לאומי</h2>
+      {/* ── Always-visible header + primary run button ── */}
+      <section className="border-brand/40 bg-brand-soft/40 flex flex-wrap items-start justify-between gap-3 rounded-2xl border p-4 sm:p-5">
+        <div className="min-w-0">
+          <h2 className="text-brand-strong text-lg font-black">🗂️ מרשם משרדי תיווך לאומי</h2>
           <p className="text-muted mt-1 max-w-2xl text-[11px] leading-relaxed">
             בונה מאגר מובנה של מועמדי משרדים לפי עיר/מותג מראיות. AI מציע מועמדים בלבד — אימות מתבצע על בסיס ראיות בלבד, ורק אז נוצר משרד מאומת. אין משרדים/טלפונים/אתרים מומצאים.
           </p>
-          {snap.lastRun && (
+          {snap?.lastRun && (
             <p className="text-muted mt-1.5 text-[11px]">
               ריצה אחרונה: <Pill tone={snap.lastRun.status === "completed" ? "green" : snap.lastRun.status === "failed" ? "amber" : "blue"}>{STATUS_HE[snap.lastRun.status] ?? snap.lastRun.status}</Pill>
               {snap.lastRun.finishedAt ? ` · ${new Date(snap.lastRun.finishedAt).toLocaleString("he-IL")}` : ""} · {snap.lastRun.candidatesCreated} מועמדים · {snap.lastRun.candidatesVerified} אומתו · {snap.lastRun.officesCreated} משרדים
             </p>
           )}
         </div>
-        <Button size="sm" onClick={runRegistry} disabled={pending}>הפעל מרשם לאומי</Button>
+        <Button onClick={runRegistry} disabled={pending} className="!min-w-[220px] shrink-0">
+          {pending ? "⏳ מריץ מרשם לאומי…" : "🚀 הפעל מרשם לאומי"}
+        </Button>
       </section>
+
+      {/* Progress while running */}
+      {pending && (
+        <div className="border-brand/30 bg-brand-soft/30 text-brand-strong flex items-center gap-3 rounded-2xl border p-4 text-sm font-bold">
+          <span className="border-brand-strong/30 border-t-brand-strong h-4 w-4 animate-spin rounded-full border-2" />
+          מגלה מועמדים · מאמת ראיות · מקשר מתווכים למשרדים…
+        </div>
+      )}
       {(msg || err) && <p className={`text-sm font-bold ${err ? "text-rose-700" : "text-emerald-700"}`}>{err ?? msg}</p>}
 
+      {/* Post-run summary (from the run result itself) */}
+      {rm && (
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="מועמדים נוצרו" value={rm.officeCandidatesCreated} />
+          <Stat label="מועמדים אומתו" value={rm.candidatesVerified} tone="green" />
+          <Stat label="משרדים נוצרו" value={rm.officesCreated} tone="green" />
+          <Stat label="מתווכים שויכו" value={rm.brokersResolved} />
+          <Stat label="ממתינים לאישור" value={rm.brokersPendingReview} tone="amber" />
+          <Stat label="מתווכים ללא משרד" value={rm.brokersUnresolved} />
+        </div>
+      )}
+
+      {loading && <Empty text="טוען מרשם…" />}
+
+      {snap && <>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        <Stat label="מועמדים לאימות" value={c.candidatesPending} />
-        <Stat label="דורשים בדיקה" value={c.needsReview} tone="amber" />
-        <Stat label="משרדים מאומתים" value={c.verified} tone="green" />
-        <Stat label="סך משרדים" value={c.offices} tone="green" />
-        <Stat label="כפילויות" value={c.duplicates} tone="amber" />
-        <Stat label="מתווכים ללא משרד" value={c.unresolved} />
-        <Stat label="הצעות AI" value={c.aiCandidates} />
+        <Stat label="מועמדים לאימות" value={snap.counts.candidatesPending} />
+        <Stat label="דורשים בדיקה" value={snap.counts.needsReview} tone="amber" />
+        <Stat label="משרדים מאומתים" value={snap.counts.verified} tone="green" />
+        <Stat label="סך משרדים" value={snap.counts.offices} tone="green" />
+        <Stat label="כפילויות" value={snap.counts.duplicates} tone="amber" />
+        <Stat label="מתווכים ללא משרד" value={snap.counts.unresolved} />
+        <Stat label="הצעות AI" value={snap.counts.aiCandidates} />
       </div>
 
       {/* Filters */}
@@ -240,6 +267,7 @@ export function RegistryView() {
           )}
         </Section>
       </div>
+      </>}
     </div>
   );
 }
