@@ -359,14 +359,21 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
 
       {data && (
         <div className="mt-4 flex flex-col gap-3 text-[12px]">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             <Mini label="משרדים שהתגלו" value={fmt(data.officesDiscovered)} tone="green" />
             <Mini label="מועמדים נוצרו" value={fmt(data.officeCandidatesCreated)} />
             <Mini label="מאומתים" value={fmt(data.verifiedOffices)} tone="green" />
             <Mini label="במחקר" value={fmt(data.researchingOffices)} tone="amber" />
             <Mini label="מתווכים שויכו" value={fmt(data.brokersMatched)} />
             <Mini label="מתווכים במחקר" value={fmt(data.brokersResearching)} tone="amber" />
+            <Mini label="מודעות קושרו" value={fmt(data.listingsLinked)} />
           </div>
+          {data.aiAnalysis && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2 text-violet-900">
+              <b>ניתוח AI (על הראיות בלבד — אינו קובע שיוך):</b>
+              <p className="mt-1 leading-relaxed">{data.aiAnalysis}</p>
+            </div>
+          )}
           <div className="text-muted">
             עיר מנורמלת: <b>{data.cityNormalized}</b>{data.cityVariants.length > 1 ? ` · איותים: ${data.cityVariants.join(" / ")}` : ""} · מקורות: {data.sourcesUsed.join(", ") || "—"} · מחקר ציבורי: {data.publicResearch.enabled ? `${data.publicResearch.queriesRun} שאילתות / ${data.publicResearch.resultsFound} תוצאות` : (data.publicResearch.reason ?? "כבוי")}
           </div>

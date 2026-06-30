@@ -13,6 +13,8 @@ import { detectFranchise } from "./franchise";
 import { isAcceptableOfficeName } from "./office-name-guard";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
 import { activeSearchVendor } from "./broker-research/providers";
+import { runReasoningGateway, selectProvider } from "@/lib/ai-reasoning/gateway";
+import { CONTEXT_ENGINE_VERSION, type ContextPackage } from "@/lib/context-engine/types";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
@@ -46,6 +48,7 @@ export interface CityDiscoveryResult {
   sourcesUsed: string[];
   discoveredOffices: DiscoveredOffice[];
   publicResearch: { enabled: boolean; queriesRun: number; resultsFound: number; reason: string | null };
+  aiAnalysis: string | null;     // OpenAI analysis of the evidence — NEVER used for assignment
   notes: string[];
 }
 
@@ -73,7 +76,7 @@ export async function discoverBrokerageOfficesForCity(
     db.from("brokerage_agents" as never).select("id,full_name,normalized_name,primary_phone,whatsapp_phone,primary_email,city,office_id").limit(20000),
     db.from("brokerage_offices" as never).select("id,name,normalized_name,brand_network,city,status,primary_phone").limit(20000),
     db.from("brokerage_office_candidates" as never).select("normalized_brand,normalized_name,city,status").limit(20000),
-    db.from("external_listings" as never).select("detected_broker_name,contact_name,contact_phone,source,listing_url,city").ilike("city", `%${stem}%`).limit(20000),
+    db.from("external_listings" as never).select("id,detected_broker_name,contact_name,contact_phone,source,listing_url,city").ilike("city", `%${stem}%`).limit(20000),
   ]);
   const agents = ((agentRes.data ?? []) as Row[]).filter((r) => inCity(r.city));
   const offices = ((officeRes.data ?? []) as Row[]).filter((r) => inCity(r.city));
@@ -141,8 +144,9 @@ export async function discoverBrokerageOfficesForCity(
   const conflicts = 0; // city-discovery never auto-resolves conflicts (manual only)
   const discoveredOffices: DiscoveredOffice[] = [];
   const nowIso = new Date().toISOString();
+  const officeIdByKey = new Map<string, OfficeAgg & { officeId: string }>();   // for the listing relink pass
 
-  for (const a of agg.values()) {
+  for (const [aggKey, a] of agg) {
     const strongBusiness = a.sources.has("public_web") || a.domains.size > 0;
     const verified = a.brokerIds.size >= 2 || strongBusiness || a.observations >= 3 || (a.brandMatched && (a.phones.size >= 1 || a.brokerIds.size >= 1));
     const status = verified ? "verified" : "candidate_pending_verification";
@@ -181,6 +185,7 @@ export async function discoverBrokerageOfficesForCity(
     let officeId: string | null = null;
     if (verified) {
       officeId = await findOrCreateOffice(db, a, cityLabel, phone, confidence, nowIso);
+      if (officeId) officeIdByKey.set(aggKey, { ...a, officeId });
       if (officeId && opts.includeBrokerRematch !== false) {
         brokersMatched += await linkBrokers(db, agents, a, officeId, nowIso);
       }
@@ -196,14 +201,88 @@ export async function discoverBrokerageOfficesForCity(
 
   if (officesDiscovered === 0) notes.push("לא נמצאו ראיות לשמות משרד בעיר זו — נדרש מחקר ציבורי (Tavily) או ייבוא מודעות עם detected_broker_name.");
 
+  // ── 6) Listing → office relink (only to offices discovered in THIS run) ──────
+  let listingsLinked = 0;
+  if (opts.includeListingRelink !== false && officeIdByKey.size > 0) {
+    const officeKeyOf = (rawName: string): string | null => {
+      const name = (rawName ?? "").trim();
+      if (name.length < 2 || !isAcceptableOfficeName(name)) return null;
+      const fr = detectFranchise(name);
+      const officeName = fr.matched ? `${fr.brandNetwork} ${cityLabel}` : name;
+      const key = `${fr.normalizedBrand}|${normalizeHebrewName(officeName)}`;
+      return officeIdByKey.has(key) ? key : null;
+    };
+    const listingIds = listings.map((l) => s(l.id)).filter(Boolean);
+    const { data: existingLinks } = await db.from("brokerage_external_listing_links" as never)
+      .select("external_listing_id,office_id").in("external_listing_id", listingIds).limit(50000);
+    const linkedPair = new Set(((existingLinks ?? []) as Row[]).map((r) => `${s(r.external_listing_id)}|${s(r.office_id)}`));
+    const newLinks: Row[] = [];
+    for (const l of listings) {
+      const lid = s(l.id); if (!lid) continue;
+      let key = officeKeyOf(s(l.detected_broker_name)) ?? officeKeyOf(s(l.contact_name));
+      if (!key) { const lp = normalizePhoneNumber(s(l.contact_phone)); if (lp) for (const [k, o] of officeIdByKey) if (o.phones.has(lp)) { key = k; break; } }
+      if (!key) continue;
+      const office = officeIdByKey.get(key)!;
+      const pair = `${lid}|${office.officeId}`;
+      if (linkedPair.has(pair)) continue;
+      linkedPair.add(pair);
+      newLinks.push({
+        external_listing_id: lid, organization_id: orgId, agent_id: null, office_id: office.officeId,
+        city: cityLabel, matched_phone: normalizePhoneNumber(s(l.contact_phone)) || null,
+        matched_name: office.officeName, matched_source: s(l.source) || null,
+        confidence_score: 80, status: "auto_linked",
+        match_reasons: ["city_discovery_relink", `office:${office.officeName}`, s(l.source) ? `source:${s(l.source)}` : "listing"].filter(Boolean) as never,
+      });
+    }
+    for (let i = 0; i < newLinks.length; i += 500) {
+      const chunk = newLinks.slice(i, i + 500);
+      const { error } = await db.from("brokerage_external_listing_links" as never).insert(chunk as never);
+      if (!error) listingsLinked += chunk.length;
+      else if (!/duplicate key/i.test(error.message)) notes.push(`קישור מודעות נכשל: ${error.message}`);
+    }
+  }
+
+  // ── 7) OpenAI evidence ANALYSIS (never assignment) — best-effort, bounded ────
+  let aiAnalysis: string | null = null;
+  if ((depth === "deep") && selectProvider() && discoveredOffices.length > 0) {
+    aiAnalysis = await analyzeEvidence(cityLabel, discoveredOffices, orgId).catch(() => null);
+  }
+
   return {
     city: cityLabel, cityNormalized: cityNorm, cityVariants,
     officesDiscovered, officeCandidatesCreated, verifiedOffices, researchingOffices,
     brokersInCity, brokersMatched, brokersResearching,
-    listingsLinked: 0, conflicts,
+    listingsLinked, conflicts,
     sourcesUsed: [...sourcesUsed], discoveredOffices,
-    publicResearch: research, notes,
+    publicResearch: research, aiAnalysis, notes,
   };
+}
+
+/** AI analysis of the COLLECTED evidence (explanatory only — never assigns offices). */
+async function analyzeEvidence(city: string, offices: DiscoveredOffice[], orgId: string): Promise<string | null> {
+  try {
+    const summary = offices.slice(0, 20).map((o, i) => ({ idx: i + 1, office: o.name, brand: o.brandNetwork, status: o.status, confidence: o.confidence, brokers: o.brokerCount, sources: o.sources, evidence: o.evidence }));
+    const block = {
+      key: "brokerage.city-office-evidence", label: "ראיות גילוי משרדים בעיר", priority: 100, confidence: 0,
+      source: "brokerage-data.city-discovery", data: { city, offices: summary },
+      evidence: summary.map((o) => ({ source: "city_discovery", detail: `${o.office} (${o.status})`, confidence: o.confidence })),
+    };
+    const context: ContextPackage = {
+      request: { type: "office", entityId: city, size: "small" },
+      identity: { orgId, orgName: null, userId: null, userName: null, isManager: true },
+      screen: "brokerage-data", workflow: "city-office-discovery",
+      blocks: [block], permissions: { isManager: true, removedBlocks: [], redactedFields: [] },
+      explain: { repositoriesUsed: ["brokerage_offices", "external_listings"], entitiesCollected: [city], confidence: null, missing: [], prioritySummary: [{ key: block.key, priority: 100 }], size: "small", blockCount: 1, approxChars: JSON.stringify(block).length, timestamp: new Date().toISOString(), version: CONTEXT_ENGINE_VERSION },
+      cacheKey: `city-discovery:${city}`,
+    };
+    const QUESTION = "בהתבסס אך ורק על הראיות המצורפות, סכם בקצרה אילו משרדי תיווך סבירים בעיר זו ומה חוזק הראיות לכל אחד. אל תמציא משרדים שאינם בראיות. זהו ניתוח בלבד — אינו קובע שיוך.";
+    const res = await Promise.race([
+      runReasoningGateway({ question: QUESTION, context, mode: "answer", language: "he", userId: null, organizationId: orgId }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000)),
+    ]);
+    if (!res) return null;
+    return res.status === "answered" ? (res.answer ?? null) : (res.answer || null);
+  } catch { return null; }
 }
 
 /** Find an existing active office for this name/city, else create one. No fakes. */
