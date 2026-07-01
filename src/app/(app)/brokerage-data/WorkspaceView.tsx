@@ -522,14 +522,18 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
           <div className="text-violet-900 font-black">✨ זריעת מועמדי AI — {seed.city}</div>
           {!seed.aiConfigured && <p className="font-semibold text-rose-700">מנוע ה-AI אינו מוגדר (חסר OPENAI_API_KEY).</p>}
           {seed.aiConfigured && !seed.searchConfigured && <p className="font-semibold text-amber-700">⚠ אין ספק חיפוש ציבורי — כל המועמדים יישארו &quot;במחקר&quot; עד שיתווסף מקור אימות.</p>}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             <Mini label="הוצעו ע״י AI" value={fmt(seed.candidatesGenerated)} />
             <Mini label="ייחודיים" value={fmt(seed.candidatesAfterDedup)} />
-            <Mini label="נוצרו" value={fmt(seed.candidatesCreated)} />
+            <Mini label="נשמרו (במחקר)" value={fmt(seed.candidatesSaved)} tone="amber" />
             <Mini label="אומתו" value={fmt(seed.candidatesVerified)} tone="green" />
             <Mini label="במחקר" value={fmt(seed.candidatesResearching)} tone="amber" />
+            <Mini label="ממתינים לראיה" value={fmt(seed.candidatesWaitingForEvidence)} />
             <Mini label="נדחו" value={fmt(seed.candidatesRejected)} tone="red" />
           </div>
+          {/* Progress log (Part 4 — never looks stuck) */}
+          {seed.steps.length > 0 && <div className="text-muted text-[11px]"><b>מהלך הריצה:</b> {seed.steps.join(" ← ")}</div>}
+          {seed.timedOut && <p className="font-semibold text-amber-700">הפעולה התחילה אך עשויה להמשיך בהרצה הבאה / ידנית — חלק מהמועמדים ממתינים לאימות ציבורי.</p>}
           <div className="text-muted">ראיות ציבוריות שנמצאו: <b>{fmt(seed.evidenceFound)}</b></div>
           {seed.candidates.length > 0 && (
             <div className="flex flex-col gap-1.5">
@@ -542,7 +546,9 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
                         ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">מאומת · ראיה ציבורית</span>
                         : c.status === "rejected"
                           ? <span className="rounded-full bg-rose-50 px-2 py-0.5 font-bold text-rose-700">נדחה</span>
-                          : <span className="rounded-full bg-violet-100 px-2 py-0.5 font-bold text-violet-700">AI suggested · researching</span>}
+                          : c.researched
+                            ? <span className="rounded-full bg-violet-100 px-2 py-0.5 font-bold text-violet-700">AI suggested · researching</span>
+                            : <span className="rounded-full bg-slate-100 px-2 py-0.5 font-bold text-slate-600">AI suggested · ממתין לראיה</span>}
                       <span className="text-muted tabular-nums" title="ביטחון מערכת (מבוסס ראיות)">מערכת {c.systemConfidence}%</span>
                       <span className="text-violet-500 tabular-nums" title="ביטחון ה-AI — ללא סמכות">AI {c.aiConfidence}%</span>
                     </span>
