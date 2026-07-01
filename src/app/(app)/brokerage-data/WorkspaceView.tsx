@@ -34,12 +34,13 @@ import {
   startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
-  getCityTerritoryIntelligenceAction,
+  getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
 import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence/types";
+import type { CityCompetitiveDashboard } from "@/lib/brokerage-data/competitive-intelligence/types";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -337,6 +338,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <CityCensusPanel cities={index?.cities ?? []} />
           <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
           <TerritoryIntelligencePanel cities={index?.cities ?? []} />
+          <CompetitiveDashboardPanel cities={index?.cities ?? []} />
           <BrandHierarchyPanel cities={index?.cities ?? []} />
           <PromotionDebugPanel cities={index?.cities ?? []} />
           <PipelineAuditPanel />
@@ -838,6 +840,79 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
   UI_SHOWING_INCOMPLETE_DATA: "הממשק מציג נתונים חלקיים",
   MULTIPLE_PIPELINE_FAILURES: "כשלים מרובים בצינור",
 };
+
+// ── Competitive Intelligence — city market dashboard ─────────────────────────
+const CONC_HE: Record<string, string> = { fragmented: "מפוצל", moderate: "בינוני", concentrated: "מרוכז" };
+function CompetitiveDashboardPanel({ cities }: { cities: string[] }) {
+  const [city, setCity] = useState("קריית ביאליק");
+  const [data, setData] = useState<CityCompetitiveDashboard | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getCityCompetitiveDashboardAction(city); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border border-indigo-200 bg-indigo-50/20 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-indigo-900 text-lg font-black">⚔️ מודיעין תחרותי — לוח שוק עירוני</h2>
+          <p className="text-muted mt-1 text-[12px]">כל משרד מול כל מתחרה: דירוג, נתח, צמיחה/ירידה, ריכוזיות שוק ותובנות — מבוסס-ראיות בלבד.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={city} onChange={(e) => setCity(e.target.value)} list="comp-city-list" placeholder="עיר" className="border-line bg-surface text-ink min-w-[160px] rounded-full border px-3 py-1.5 text-sm" />
+          <datalist id="comp-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+          <button onClick={run} disabled={pending || !city.trim()} className="bg-indigo-600 rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "נתח תחרות"}</button>
+        </div>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="משרדים פעילים" value={fmt(data.snapshot.activeOffices)} />
+            <Mini label="מאומתים" value={fmt(data.snapshot.verifiedOffices)} tone="green" />
+            <Mini label="מתווכים פעילים" value={fmt(data.snapshot.activeBrokers)} />
+            <Mini label="מודעות פעילות" value={fmt(data.snapshot.activeListings)} tone="green" />
+            <Mini label="מגמת מלאי" value={`${data.snapshot.inventoryTrendPct > 0 ? "+" : ""}${data.snapshot.inventoryTrendPct}%`} tone={data.snapshot.inventoryTrendPct >= 0 ? "green" : "red"} />
+            <Mini label="ריכוזיות" value={CONC_HE[data.snapshot.concentrationLevel]} />
+            <Mini label="נתח מוביל" value={`${data.snapshot.topOfficeSharePct}%`} />
+          </div>
+          {data.insights.length > 0 && <ul className="flex flex-col gap-0.5">{data.insights.slice(0, 6).map((ins, i) => <li key={i} className="text-ink" title={ins.evidence}>• {ins.text}</li>)}</ul>}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="text-muted mb-1 text-[11px] font-bold">משרדים מובילים (נתח מלאי)</div>
+              <div className="flex flex-col gap-1">
+                {data.topOffices.slice(0, 8).map((o) => (
+                  <Link key={o.officeId} href={`/brokerage-data/office/${o.officeId}`} className="border-line bg-surface hover:border-brand/40 flex items-center justify-between rounded-lg border px-3 py-1.5 text-[12px] transition-colors">
+                    <span className="text-ink font-bold">#{o.rank} {o.officeName}{o.brand ? <span className="text-muted font-normal"> · {o.brand}</span> : ""}</span>
+                    <span className="text-muted text-[11px] tabular-nums">{o.listingSharePct}% · {fmt(o.activeListings)} · {fmt(o.neighborhoods.length)} שכונות</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-rows-2 gap-2">
+              <div>
+                <div className="text-muted mb-1 text-[11px] font-bold">צומחים מהר</div>
+                <div className="flex flex-wrap gap-1">{data.topGrowing.length ? data.topGrowing.slice(0, 6).map((o) => <span key={o.officeId} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">{o.officeName} +{o.growthPct}%</span>) : <span className="text-muted text-[11px]">—</span>}</div>
+              </div>
+              <div>
+                <div className="text-muted mb-1 text-[11px] font-bold">בירידה</div>
+                <div className="flex flex-wrap gap-1">{data.topDeclining.length ? data.topDeclining.slice(0, 6).map((o) => <span key={o.officeId} className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">{o.officeName} {o.growthPct}%</span>) : <span className="text-muted text-[11px]">—</span>}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3 text-[11px]">
+            <div className="border-line bg-surface rounded-xl border px-3 py-2"><b>שליטת יוקרה</b><div className="text-muted mt-1">{data.highestLuxuryShare.slice(0, 4).map((c) => `${c.officeName} ${c.note}`).join(" · ") || "—"}</div></div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2"><b>שליטה מסחרית</b><div className="text-muted mt-1">{data.highestCommercialShare.slice(0, 4).map((c) => `${c.officeName} ${c.note}`).join(" · ") || "—"}</div></div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2"><b>אזורים מתפתחים</b><div className="text-muted mt-1">{data.emergingAreas.slice(0, 4).map((o) => o.area ?? o.title).join(" · ") || "—"}</div></div>
+          </div>
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((nt, i) => <li key={i}>{nt}</li>)}</ul>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Territory Intelligence — who dominates every neighborhood/street ─────────
 const nis = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);

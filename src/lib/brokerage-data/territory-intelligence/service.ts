@@ -23,8 +23,10 @@ const num = (v: unknown): number | null => (typeof v === "number" ? v : v == nul
 const DAY = 86400000;
 const isRecent = (iso: string | null): boolean => { if (!iso) return false; const d = (Date.now() - new Date(iso).getTime()) / DAY; return Number.isFinite(d) && d >= 0 && d <= 90; };
 
-/** Resolve every city listing to its office + broker (via the links table). */
-async function loadAttributedListings(cityRaw: string): Promise<AttributedListing[]> {
+/** Resolve every city listing to its office + broker (via the links table).
+ *  Exported (additive; behavior unchanged) so the Competitive Intelligence
+ *  engine reuses the same attribution instead of duplicating DB logic. */
+export async function loadAttributedListings(cityRaw: string): Promise<AttributedListing[]> {
   const db = createServiceRoleClient();
   const match = makeCityMatch(cityRaw);
   const stem = cityRaw.trim().split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? cityRaw.trim();

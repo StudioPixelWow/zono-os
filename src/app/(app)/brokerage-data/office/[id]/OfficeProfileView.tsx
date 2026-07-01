@@ -9,7 +9,11 @@ import type { OfficeInventory } from "@/lib/brokerage-data/office-inventory";
 import type { BrokerRankCard } from "@/lib/brokerage-data/broker-intelligence";
 import type { OfficeTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence";
 import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence";
+import type { OfficeCompetitiveProfile } from "@/lib/brokerage-data/competitive-intelligence";
 import { BackfillButton } from "./BackfillButton";
+
+const THREAT_HE: Record<string, string> = { low: "נמוך", moderate: "בינוני", high: "גבוה" };
+const MOM_HE: Record<string, string> = { growing: "בצמיחה", stable: "יציב", declining: "בירידה" };
 
 const ATTR_HE: Record<string, string> = { direct: "קישור ישיר למשרד", office_phone: "התאמת טלפון", office_website: "התאמת אתר", derived_broker: "נגזר ממתווך" };
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -46,11 +50,12 @@ function CoverBox({ title, items }: { title: string; items: { key: string; count
   );
 }
 
-export function OfficeProfileView({ profile, inventory, ranking, territory }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[]; territory?: OfficeTerritoryIntelligence | null }) {
+export function OfficeProfileView({ profile, inventory, ranking, territory, competitive }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[]; territory?: OfficeTerritoryIntelligence | null; competitive?: OfficeCompetitiveProfile | null }) {
   const p = profile;
   const inv = inventory ?? null;
   const rank = ranking ?? [];
   const terr = territory ?? null;
+  const comp = competitive ?? null;
   const website = p.website ? (p.website.startsWith("http") ? p.website : `https://${p.website}`) : null;
   return (
     <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-4 p-4 sm:p-6">
@@ -134,6 +139,47 @@ export function OfficeProfileView({ profile, inventory, ranking, territory }: { 
               </Link>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Competitive Position — market rank, competitors, SWOT (26.7) */}
+      {comp && (
+        <section className="border-line bg-card rounded-2xl border p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-ink text-sm font-black">⚔️ עמדה תחרותית</h2>
+            <span className="flex items-center gap-2 text-[11px]">
+              <span className="rounded-full bg-brand-soft/60 px-2 py-0.5 font-bold">מדורג #{comp.marketRank} / {fmt(comp.totalOffices)}</span>
+              <span className={`rounded-full px-2 py-0.5 font-bold ${comp.momentum === "growing" ? "bg-emerald-50 text-emerald-700" : comp.momentum === "declining" ? "bg-rose-50 text-rose-700" : "bg-surface text-muted"}`}>מומנטום: {MOM_HE[comp.momentum]}{comp.growthPct ? ` (${comp.growthPct > 0 ? "+" : ""}${comp.growthPct}%)` : ""}</span>
+              <span className={`rounded-full px-2 py-0.5 font-bold ${comp.threatLevel === "high" ? "bg-rose-50 text-rose-700" : comp.threatLevel === "moderate" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>איום: {THREAT_HE[comp.threatLevel]}</span>
+            </span>
+          </div>
+          <p className="text-muted mb-2 text-[11px]">{comp.rankExplanation}</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Stat label="נתח מלאי" value={`${comp.listingSharePct}%`} tone="green" />
+            <Stat label="נתח מתווכים" value={`${comp.brokerSharePct}%`} />
+            <Stat label="נתח יוקרה" value={`${comp.luxurySharePct}%`} />
+            <Stat label="נתח מסחרי" value={`${comp.commercialSharePct}%`} />
+            <Stat label="שכונות" value={comp.neighborhoods} />
+            <Stat label="₪/מ״ר ממוצע" value={comp.avgPricePerSqm ? fmtPrice(comp.avgPricePerSqm) : "—"} />
+          </div>
+          {comp.insights.length > 0 && <ul className="mt-2 flex flex-col gap-0.5 text-[12px]">{comp.insights.slice(0, 5).map((ins, i) => <li key={i} className="text-ink" title={ins.evidence}>• {ins.text}</li>)}</ul>}
+          {/* Top competitors */}
+          {comp.competitors.mainCompetitors.length > 0 && (
+            <div className="mt-2 text-[11px]"><b>מתחרים עיקריים:</b> {comp.competitors.mainCompetitors.map((c) => `${c.officeName} (${c.note})`).join(" · ")}</div>
+          )}
+          {comp.competitors.fastestGrowing.length > 0 && (
+            <div className="mt-1 text-[11px] text-amber-700"><b>הצומחים מהר:</b> {comp.competitors.fastestGrowing.map((c) => `${c.officeName} ${c.note}`).join(" · ")}</div>
+          )}
+          {/* SWOT */}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-[11px]">
+            {([["חוזקות", comp.swot.strengths, "emerald"], ["חולשות", comp.swot.weaknesses, "rose"], ["הזדמנויות", comp.swot.opportunities, "sky"], ["איומים", comp.swot.threats, "amber"]] as const).map(([title, items, tone]) => (
+              <div key={title} className="border-line bg-surface rounded-xl border px-3 py-2">
+                <div className={`font-bold ${tone === "emerald" ? "text-emerald-700" : tone === "rose" ? "text-rose-700" : tone === "amber" ? "text-amber-700" : "text-sky-700"}`}>{title}</div>
+                {items.length === 0 ? <div className="text-muted mt-1">—</div> : <ul className="text-muted mt-1 flex flex-col gap-0.5">{items.slice(0, 4).map((it, i) => <li key={i} title={it.evidence}>• {it.text}</li>)}</ul>}
+              </div>
+            ))}
+          </div>
+          {comp.opportunities.length > 0 && <div className="mt-2 text-[11px] text-emerald-700"><b>הזדמנויות שוק:</b> {comp.opportunities.map((o) => `${o.area ?? o.title} (${o.evidence})`).join(" · ")}</div>}
         </section>
       )}
 

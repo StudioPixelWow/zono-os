@@ -31,6 +31,7 @@ import { getBrandHierarchy, type BrandHierarchy } from "./brand-identity";
 import { getBrokerIntelligenceProfile, getOfficeBrokerRanking, type BrokerIntelligenceProfile, type BrokerRankCard } from "./broker-intelligence";
 import { getOfficeInventory, backfillOfficeInventoryFromBrokers, type OfficeInventory, type BackfillResult } from "./office-inventory";
 import { getCityTerritoryIntelligence, getOfficeTerritory, type CityTerritoryIntelligence, type OfficeTerritoryIntelligence } from "./territory-intelligence";
+import { getCityCompetitiveDashboard, getOfficeCompetitiveProfile, type CityCompetitiveDashboard, type OfficeCompetitiveProfile } from "./competitive-intelligence";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -173,6 +174,16 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+// ── Phase 26.7 — Competitive Intelligence ────────────────────────────────────
+export async function getCityCompetitiveDashboardAction(city: string): Promise<{ ok: boolean; result?: CityCompetitiveDashboard; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." }; return { ok: true, result: await getCityCompetitiveDashboard(city) }; }
+  catch (e) { console.error("[competitive] city failed:", e); return { ok: false, error: "מודיעין תחרותי נכשל." }; }
+}
+export async function getOfficeCompetitiveProfileAction(officeId: string): Promise<{ ok: boolean; result?: OfficeCompetitiveProfile | null; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOfficeCompetitiveProfile(officeId) }; }
+  catch (e) { console.error("[competitive] office failed:", e); return { ok: false, error: "פרופיל תחרותי למשרד נכשל." }; }
 }
 
 // ── Phase 26.6 — Territory Intelligence ──────────────────────────────────────
