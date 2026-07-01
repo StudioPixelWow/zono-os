@@ -33,7 +33,9 @@ import {
   seedCityAICandidatesAction, crossCheckCityRepositoriesAction,
   startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
+  buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction,
 } from "@/lib/brokerage-data/actions";
+import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -840,7 +842,12 @@ function PromotionDebugPanel({ cities }: { cities: string[] }) {
   const [data, setData] = useState<PromotionDebugDashboard | null>(null);
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 26.4.18 — Office Intelligence enrichment.
+  const [enriching, setEnriching] = useState<string | null>(null);   // candidateId | "ALL" | null
+  const [cityEnrich, setCityEnrich] = useState<CityEnrichmentResult | null>(null);
   const run = async () => { setPending(true); setErr(null); try { const r = await getPromotionDebugAction(city); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+  const enrichOne = async (candidateId: string) => { setEnriching(candidateId); try { await buildOfficeIntelligenceForCandidateAction(candidateId); await run(); } finally { setEnriching(null); } };
+  const enrichAll = async () => { setEnriching("ALL"); setCityEnrich(null); try { const r = await buildOfficeIntelligenceForCityAction(city); if (r.ok) setCityEnrich(r.result ?? null); await run(); } finally { setEnriching(null); } };
 
   return (
     <section className="rounded-3xl border border-indigo-200 bg-indigo-50/20 p-5 sm:p-6">
@@ -852,10 +859,17 @@ function PromotionDebugPanel({ cities }: { cities: string[] }) {
         <div className="flex items-center gap-2">
           <input value={city} onChange={(e) => setCity(e.target.value)} list="promo-city-list" placeholder="עיר" className="border-line bg-surface text-ink min-w-[180px] rounded-full border px-3 py-1.5 text-sm" />
           <datalist id="promo-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
-          <button onClick={run} disabled={pending || !city.trim()} className="bg-indigo-600 rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "נתח קידום"}</button>
+          <button onClick={run} disabled={pending || enriching != null || !city.trim()} className="bg-indigo-600 rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "נתח קידום"}</button>
+          <button onClick={enrichAll} disabled={enriching != null || !city.trim()} className="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-1.5 text-sm font-bold text-indigo-800 disabled:opacity-60">{enriching === "ALL" ? "בונה…" : "🏢 בנה פרופילים לכל המועמדים"}</button>
         </div>
       </div>
       {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {cityEnrich && (
+        <div className="mt-2 rounded-xl border border-indigo-200 bg-surface px-3 py-2 text-[12px]">
+          <b>העשרה בעיר:</b> עובדו {fmt(cityEnrich.processed)}/{fmt(cityEnrich.totalCandidates)} · אומתו {fmt(cityEnrich.verified)} · נותרו במחקר {fmt(cityEnrich.researching)} · נותרו {fmt(cityEnrich.remaining)}{cityEnrich.timedOut ? " · נעצר עקב תקציב — ניתן להריץ שוב" : ""}
+          {!cityEnrich.searchConfigured && <div className="text-amber-700">אין ספק חיפוש ציבורי — לא בוצעה העשרה.</div>}
+        </div>
+      )}
 
       {data && (
         <div className="mt-4 flex flex-col gap-3 text-[12px]">
@@ -877,7 +891,9 @@ function PromotionDebugPanel({ cities }: { cities: string[] }) {
                 <span className="flex items-center gap-2 text-[11px]">
                   <span className={cn("rounded-full px-2 py-0.5 font-bold", PROMO_STATUS_TONE[c.status])}>{PROMO_STATUS_HE[c.status]}</span>
                   <span className="bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 font-bold tabular-nums">ציון {c.promotionScore.total}/100</span>
+                  {c.profileCompleteness != null && <span className="bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5 font-bold tabular-nums" title="שלמות פרופיל">פרופיל {c.profileCompleteness}%</span>}
                   <span className="text-muted tabular-nums">ביטחון {c.systemConfidence}%</span>
+                  {c.status !== "REJECTED" && <button onClick={() => enrichOne(c.candidateId)} disabled={enriching != null} className="rounded border border-indigo-300 bg-indigo-50 px-2 py-0.5 font-bold text-indigo-800 disabled:opacity-60">{enriching === c.candidateId ? "בונה…" : "בנה פרופיל"}</button>}
                 </span>
               </div>
               {/* Pipeline (Part 7) — highlight where it stopped */}
@@ -901,7 +917,7 @@ function PromotionDebugPanel({ cities }: { cities: string[] }) {
               {/* Simulation (Part 6) */}
               {c.simulations.length > 0 && <div className="text-muted mt-1 text-[11px]"><b>סימולציה:</b> {c.simulations.map((sm) => `${sm.hypothesis} → ${sm.wouldVerify ? "היה מאומת" : "עדיין לא"}`).join(" · ")}</div>}
               {/* Office creation outcome (Part 8) */}
-              <div className="text-muted mt-1 text-[11px] italic">יצירת משרד: {c.officeCreation.outcome} — {c.officeCreation.explanation}</div>
+              <div className="text-muted mt-1 text-[11px] italic">יצירת משרד: {c.officeCreation.outcome} — {c.officeCreation.explanation}{c.lastEnrichedAt ? ` · הועשר: ${new Date(c.lastEnrichedAt).toLocaleDateString("he-IL")}` : ""}</div>
             </div>
           ))}
           {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((nt, i) => <li key={i}>{nt}</li>)}</ul>}

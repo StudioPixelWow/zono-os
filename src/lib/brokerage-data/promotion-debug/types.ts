@@ -48,6 +48,9 @@ export interface CandidatePromotionDebug {
   pipeline: { reached: PipelineStage; stoppedAt: PipelineStage | null; stages: { stage: PipelineStage; done: boolean }[] };
   officeCreation: { outcome: OfficeCreationOutcome; explanation: string };
   evidence: { strongSources: number; independentDomains: number; phone: string | null; publicUrls: string[]; evidenceFound: string[]; sourcesChecked: string[]; researched: boolean; systemVerified: boolean };
+  // 26.4.18 — office-intelligence enrichment (null until enriched).
+  profileCompleteness: number | null;
+  lastEnrichedAt: string | null;
 }
 
 export interface PromotionDebugDashboard {

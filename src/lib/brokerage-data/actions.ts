@@ -26,6 +26,7 @@ import { seedBrokerageOfficeCandidatesWithAI, type AICandidateSeedSummary } from
 import { runBrokerageResearchAgent, type AgentReport, type ResearchDepth } from "./research-agent";
 import { crossCheckCityRepositories, type CityRepositoryAudit } from "./city-repository-audit";
 import { getPromotionDebug, type PromotionDebugDashboard } from "./promotion-debug";
+import { buildOfficeIntelligenceForCandidate, buildOfficeIntelligenceForCity, type EnrichmentResult, type CityEnrichmentResult } from "./office-intelligence";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -168,6 +169,26 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+// ── Phase 26.4.18 — Office Intelligence Builder (candidate enrichment) ────────
+export async function buildOfficeIntelligenceForCandidateAction(candidateId: string): Promise<{ ok: boolean; result?: EnrichmentResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !candidateId) return { ok: false, error: "יש להתחבר." };
+    const result = await buildOfficeIntelligenceForCandidate(profile.org_id, candidateId);
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[office-intelligence] candidate failed:", e); return { ok: false, error: "העשרת המועמד נכשלה." }; }
+}
+export async function buildOfficeIntelligenceForCityAction(city: string): Promise<{ ok: boolean; result?: CityEnrichmentResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    const result = await buildOfficeIntelligenceForCity(profile.org_id, city);
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[office-intelligence] city failed:", e); return { ok: false, error: "העשרת העיר נכשלה." }; }
 }
 
 /** Phase 26.4.17 — READ-ONLY promotion debugger: why candidates (don't) promote. */

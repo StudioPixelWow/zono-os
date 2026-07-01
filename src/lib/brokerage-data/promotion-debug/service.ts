@@ -78,6 +78,8 @@ export async function getPromotionDebug(city: string): Promise<PromotionDebugDas
       topReasons: topBlockingReasons(facts, sig, status), simulations: buildSimulations(facts, sig, status),
       pipeline: buildPipeline(facts, sig), officeCreation: officeCreationOutcome(facts, sig),
       evidence: { strongSources: facts.strongSources, independentDomains: facts.independentDomains, phone: facts.phone, publicUrls, evidenceFound, sourcesChecked, researched, systemVerified: facts.systemVerified },
+      profileCompleteness: ev.profile_completeness != null ? n(ev.profile_completeness) : null,
+      lastEnrichedAt: s(ev.last_enriched_at) || null,
     });
   }
 
