@@ -23,6 +23,7 @@ import { getCityDiscoveryAudit, type CityDiscoveryAudit } from "./brokerage-disc
 import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./brokerage-pipeline-audit";
 import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDiscoveryOptions } from "./city-discovery";
 import { seedBrokerageOfficeCandidatesWithAI, type AICandidateSeedSummary } from "./ai-candidate-seeding";
+import { runBrokerageResearchAgent, type AgentReport, type ResearchDepth } from "./research-agent";
 import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, getCityKnowledgeStatus, type CityKnowledge, type CityBrokerageCensus, type CityKnowledgeStatus } from "./brokerage-knowledge";
 import { ensureCityBrokerageKnowledge, type EnsureCityResult } from "./city-lazy-learning";
 import { triggerCityLearning, type CityLearningReason, type CityLearningOutcome } from "./city-learning-trigger";
@@ -99,6 +100,18 @@ export async function seedCityAICandidatesAction(city: string): Promise<{ ok: bo
     revalidatePath("/brokerage-data");
     return { ok: true, result };
   } catch (e) { console.error("[ai-seeding] failed:", e); return { ok: false, error: "זריעת מועמדי AI נכשלה." }; }
+}
+
+/** Phase 26.4.13 — multi-step Brokerage Research Agent for a city (save-first,
+ *  verify with public evidence, resumable). */
+export async function runBrokerageResearchAgentAction(city: string, depth: ResearchDepth = "standard"): Promise<{ ok: boolean; result?: AgentReport; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    const result = await runBrokerageResearchAgent(profile.org_id, city, { depth });
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[research-agent] failed:", e); return { ok: false, error: "סוכן המחקר נכשל." }; }
 }
 
 /** READ-ONLY forensic pipeline audit — measures every discovery stage + cross-checks repos. */
