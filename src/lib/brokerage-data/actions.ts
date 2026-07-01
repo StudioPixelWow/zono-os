@@ -25,6 +25,7 @@ import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDis
 import { seedBrokerageOfficeCandidatesWithAI, type AICandidateSeedSummary } from "./ai-candidate-seeding";
 import { runBrokerageResearchAgent, type AgentReport, type ResearchDepth } from "./research-agent";
 import { crossCheckCityRepositories, type CityRepositoryAudit } from "./city-repository-audit";
+import { getPromotionDebug, type PromotionDebugDashboard } from "./promotion-debug";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -167,6 +168,15 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+/** Phase 26.4.17 — READ-ONLY promotion debugger: why candidates (don't) promote. */
+export async function getPromotionDebugAction(city: string): Promise<{ ok: boolean; result?: PromotionDebugDashboard; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    return { ok: true, result: await getPromotionDebug(city) };
+  } catch (e) { console.error("[promotion-debug] failed:", e); return { ok: false, error: "ניתוח הקידום נכשל." }; }
 }
 
 /** Phase 26.4.14 — READ-ONLY repository cross-check: why City panels read 0. */

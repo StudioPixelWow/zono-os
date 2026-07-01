@@ -21,6 +21,8 @@ import type { ResearchDepth } from "@/lib/brokerage-data/research-agent/types";
 import type { ResearchJob } from "@/lib/brokerage-data/research-jobs/types";
 import { JOB_STAGE_HE, JOB_STATUS_HE } from "@/lib/brokerage-data/research-jobs/types";
 import type { ContinuousTickResult, SchedulerPlan } from "@/lib/brokerage-data/continuous-learning/types";
+import type { PromotionDebugDashboard, PromotionStatus } from "@/lib/brokerage-data/promotion-debug/types";
+import { PIPELINE_STAGES, PIPELINE_STAGE_HE } from "@/lib/brokerage-data/promotion-debug/types";
 import type { CityBrokerageCensus, CityKnowledgeStatus } from "@/lib/brokerage-data/brokerage-knowledge";
 import type { EnsureCityResult } from "@/lib/brokerage-data/city-lazy-learning";
 import {
@@ -30,7 +32,7 @@ import {
   getCityKnowledgeStatusAction, ensureCityBrokerageKnowledgeAction, runBrokerResearchAction,
   seedCityAICandidatesAction, crossCheckCityRepositoriesAction,
   startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
-  getContinuousSchedulerPlanAction, runContinuousLearningTickAction,
+  getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
@@ -328,6 +330,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <CityKnowledgeStatusPanel cities={index?.cities ?? []} onChanged={reload} />
           <CityCensusPanel cities={index?.cities ?? []} />
           <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
+          <PromotionDebugPanel cities={index?.cities ?? []} />
           <PipelineAuditPanel />
           <CityAuditPanel cities={index?.cities ?? []} />
         </div>
@@ -827,6 +830,86 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
   UI_SHOWING_INCOMPLETE_DATA: "הממשק מציג נתונים חלקיים",
   MULTIPLE_PIPELINE_FAILURES: "כשלים מרובים בצינור",
 };
+
+// ── Promotion Debug™ — explain exactly why candidates (don't) become offices ──
+const PROMO_STATUS_HE: Record<PromotionStatus, string> = { READY: "מוכן לקידום", BLOCKED: "חסום", WAITING: "ממתין", REJECTED: "נדחה" };
+const PROMO_STATUS_TONE: Record<PromotionStatus, string> = { READY: "bg-emerald-50 text-emerald-700", BLOCKED: "bg-rose-50 text-rose-700", WAITING: "bg-amber-50 text-amber-700", REJECTED: "bg-slate-100 text-slate-600" };
+
+function PromotionDebugPanel({ cities }: { cities: string[] }) {
+  const [city, setCity] = useState("קריית ביאליק");
+  const [data, setData] = useState<PromotionDebugDashboard | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getPromotionDebugAction(city); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border border-indigo-200 bg-indigo-50/20 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-indigo-900 text-lg font-black">🔬 Promotion Debug™ — למה מועמד הופך (או לא) למשרד</h2>
+          <p className="text-muted mt-1 text-[12px]">שקיפות מלאה: לכל מועמד — צ׳קליסט, ציון קידום, כללים שנכשלו, סיבות חסימה, סימולציה וצינור הקידום. קריאה בלבד; ללא שינוי בכללי האימות.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={city} onChange={(e) => setCity(e.target.value)} list="promo-city-list" placeholder="עיר" className="border-line bg-surface text-ink min-w-[180px] rounded-full border px-3 py-1.5 text-sm" />
+          <datalist id="promo-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+          <button onClick={run} disabled={pending || !city.trim()} className="bg-indigo-600 rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "נתח קידום"}</button>
+        </div>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="מועמדים" value={fmt(data.totals.candidates)} />
+            <Mini label="מוכנים" value={fmt(data.totals.ready)} tone="green" />
+            <Mini label="חסומים" value={fmt(data.totals.blocked)} tone="red" />
+            <Mini label="ממתינים" value={fmt(data.totals.waiting)} tone="amber" />
+            <Mini label="נדחו" value={fmt(data.totals.rejected)} />
+            <Mini label="מאומתים" value={fmt(data.totals.verified)} tone="green" />
+            <Mini label="ציון קידום ממוצע" value={`${data.averagePromotionScore}`} />
+          </div>
+          {data.mostCommonBlockingReason && <div className="text-muted"><b>סיבת החסימה השכיחה:</b> {data.mostCommonBlockingReason}{data.blockingReasonBreakdown.length ? ` · פירוט: ${data.blockingReasonBreakdown.slice(0, 4).map((b) => `${b.reason} (${fmt(b.count)})`).join(" · ")}` : ""}</div>}
+
+          {data.candidates.slice(0, 30).map((c) => (
+            <div key={c.candidateId} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-ink font-bold">{c.officeName}{c.brandNetwork ? <span className="text-muted font-normal"> · {c.brandNetwork}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[11px]">
+                  <span className={cn("rounded-full px-2 py-0.5 font-bold", PROMO_STATUS_TONE[c.status])}>{PROMO_STATUS_HE[c.status]}</span>
+                  <span className="bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 font-bold tabular-nums">ציון {c.promotionScore.total}/100</span>
+                  <span className="text-muted tabular-nums">ביטחון {c.systemConfidence}%</span>
+                </span>
+              </div>
+              {/* Pipeline (Part 7) — highlight where it stopped */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px]">
+                {PIPELINE_STAGES.map((st) => {
+                  const stg = c.pipeline.stages.find((x) => x.stage === st)!;
+                  const stopped = c.pipeline.stoppedAt === st;
+                  return <span key={st} className={cn("rounded px-1.5 py-0.5 font-bold", stg.done ? "bg-emerald-100 text-emerald-700" : stopped ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500")}>{stg.done ? "✓" : stopped ? "⛔" : "·"} {PIPELINE_STAGE_HE[st]}</span>;
+                })}
+              </div>
+              {/* Checklist */}
+              <div className="text-muted mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px]">
+                {c.checklist.map((ci) => <span key={ci.key} className={ci.state === "pass" ? "text-emerald-700" : ci.state === "fail" ? "text-rose-600" : "text-slate-400"}>{ci.state === "pass" ? "✓" : ci.state === "fail" ? "✗" : "•"} {ci.label}</span>)}
+              </div>
+              {/* Promotion score breakdown */}
+              <div className="text-muted mt-1 text-[10px]"><b>ניקוד:</b> {c.promotionScore.items.map((it) => `${it.label} ${it.got}/${it.max}`).join(" · ")}</div>
+              {/* Failed rules (Part 3) */}
+              {c.failedRules.length > 0 && <div className="mt-1 text-[11px] text-rose-700">{c.failedRules.map((r, i) => <div key={i}>❌ {r.title}: {r.reason}{r.detail ? ` — ${r.detail}` : ""}</div>)}</div>}
+              {/* Top reasons (Part 5) */}
+              {c.topReasons.length > 0 && <div className="mt-1 text-[11px] text-amber-700"><b>למה עדיין לא אומת:</b> {c.topReasons.join(" · ")}</div>}
+              {/* Simulation (Part 6) */}
+              {c.simulations.length > 0 && <div className="text-muted mt-1 text-[11px]"><b>סימולציה:</b> {c.simulations.map((sm) => `${sm.hypothesis} → ${sm.wouldVerify ? "היה מאומת" : "עדיין לא"}`).join(" · ")}</div>}
+              {/* Office creation outcome (Part 8) */}
+              <div className="text-muted mt-1 text-[11px] italic">יצירת משרד: {c.officeCreation.outcome} — {c.officeCreation.explanation}</div>
+            </div>
+          ))}
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((nt, i) => <li key={i}>{nt}</li>)}</ul>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function PipelineAuditPanel() {
   const [data, setData] = useState<BrokeragePipelineAudit | null>(null);
