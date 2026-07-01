@@ -5,7 +5,11 @@
 // ============================================================================
 import Link from "next/link";
 import type { OfficeProfile } from "@/lib/brokerage-data/office-profile";
+import type { OfficeInventory } from "@/lib/brokerage-data/office-inventory";
+import type { BrokerRankCard } from "@/lib/brokerage-data/broker-intelligence";
+import { BackfillButton } from "./BackfillButton";
 
+const ATTR_HE: Record<string, string> = { direct: "קישור ישיר למשרד", office_phone: "התאמת טלפון", office_website: "התאמת אתר", derived_broker: "נגזר ממתווך" };
 const fmt = (n: number) => n.toLocaleString("he-IL");
 const fmtPrice = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL") : "—");
@@ -28,8 +32,22 @@ function Stat({ label, value, tone }: { label: string; value: string | number; t
   );
 }
 
-export function OfficeProfileView({ profile }: { profile: OfficeProfile }) {
+function CoverBox({ title, items }: { title: string; items: { key: string; count: number }[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="border-line bg-surface rounded-xl border px-3 py-2">
+      <div className="text-ink font-bold">{title}</div>
+      <div className="text-muted mt-1 flex flex-wrap gap-1">
+        {items.slice(0, 8).map((it) => <span key={it.key} className="bg-brand-soft/40 rounded-full px-2 py-0.5 font-bold">{it.key} · {fmt(it.count)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+export function OfficeProfileView({ profile, inventory, ranking }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[] }) {
   const p = profile;
+  const inv = inventory ?? null;
+  const rank = ranking ?? [];
   const website = p.website ? (p.website.startsWith("http") ? p.website : `https://${p.website}`) : null;
   return (
     <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-4 p-4 sm:p-6">
@@ -66,6 +84,56 @@ export function OfficeProfileView({ profile }: { profile: OfficeProfile }) {
         <Stat label="איכות דאטה" value={`${Math.round(p.dataQualityScore)}%`} />
       </div>
 
+      {/* Office Inventory (direct + derived through brokers) — Phase 26.5 */}
+      {inv && (
+        <section className="border-line bg-card rounded-2xl border p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-ink text-sm font-black">📦 מלאי המשרד (ישיר + נגזר ממתווכים)</h2>
+            <BackfillButton />
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Stat label="סה״כ נכסים" value={inv.totals.total} tone="green" />
+            <Stat label="פעילים" value={inv.totals.active} tone="green" />
+            <Stat label="לא פעילים" value={inv.totals.inactive} />
+            <Stat label="ישיר למשרד" value={inv.totals.direct} />
+            <Stat label="נגזר ממתווכים" value={inv.totals.derivedThroughBrokers} tone="amber" />
+            <Stat label="מתווכים פעילים" value={inv.totals.activeBrokers} />
+            <Stat label="התנגשויות" value={inv.totals.conflicts} tone={inv.totals.conflicts ? "amber" : undefined} />
+          </div>
+          {inv.conflicts.length > 0 && (
+            <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/50 px-3 py-2 text-[11px] text-amber-800">
+              <b>התנגשויות שיוך (לא נדרסו):</b> {inv.conflicts.slice(0, 6).map((c) => c.note).join(" · ")}
+            </div>
+          )}
+          {/* Market coverage */}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-[11px]">
+            <CoverBox title="לפי עיר" items={inv.byCity} />
+            <CoverBox title="לפי שכונה" items={inv.byNeighborhood} />
+            <CoverBox title="לפי סוג נכס" items={inv.byType} />
+            <CoverBox title="לפי טווח מחיר" items={inv.byPriceBand} />
+          </div>
+        </section>
+      )}
+
+      {/* Broker Intelligence — top brokers ranked, not a raw name list */}
+      {rank.length > 0 && (
+        <section className="border-line bg-card rounded-2xl border p-4">
+          <h2 className="text-ink mb-2 text-sm font-black">🧠 מודיעין מתווכים — מובילים לפי פעילות</h2>
+          <div className="flex flex-col gap-1.5">
+            {rank.slice(0, 12).map((b, i) => (
+              <Link key={b.id} href={`/brokerage-data?broker=${b.id}&name=${encodeURIComponent(b.name)}`} className="border-line bg-surface hover:border-brand/40 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm transition-colors">
+                <span className="text-ink truncate font-bold">{i + 1}. {b.name}{b.topAreas.length ? <span className="text-muted font-normal"> · {b.topAreas.join(", ")}</span> : ""}</span>
+                <span className="flex shrink-0 items-center gap-2 text-[11px]">
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 tabular-nums">{fmt(b.activeListings)} פעילים</span>
+                  <span className="text-muted tabular-nums">{fmt(b.totalListings)} סה״כ · {fmt(b.neighborhoods)} שכונות</span>
+                  {b.priceVolume > 0 && <span className="text-muted tabular-nums">₪{fmt(Math.round(b.priceVolume / 1_000_000))}M נפח</span>}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Active areas */}
       {(p.stats.cities.length > 0 || p.stats.neighborhoods.length > 0 || p.stats.sources.length > 0) && (
         <section className="border-line bg-card rounded-2xl border p-4">
@@ -100,29 +168,45 @@ export function OfficeProfileView({ profile }: { profile: OfficeProfile }) {
         )}
       </section>
 
-      {/* Listings / properties — ALWAYS visible, honest empty state. */}
+      {/* Listings — with attribution (why each belongs to the office). Uses the
+          full inventory (direct + broker-derived) when available. */}
       <section className="border-line bg-card rounded-2xl border p-4">
-        <h2 className="text-ink mb-2 text-sm font-black">נכסי המשרד ({fmt(p.stats.listingCount)})</h2>
-        {p.listings.length === 0 ? (
+        <h2 className="text-ink mb-2 text-sm font-black">נכסי המשרד ({fmt(inv ? inv.totals.total : p.stats.listingCount)})</h2>
+        {inv ? (
+          inv.listings.length === 0 ? (
+            <p className="text-muted rounded-xl border border-dashed border-line bg-surface px-3 py-4 text-center text-xs">עדיין לא שויכו נכסים למשרד הזה.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {inv.listings.map((l) => (
+                <div key={l.listingId} className="border-line bg-surface rounded-xl border px-3 py-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-ink truncate font-bold">{l.title ?? "מודעה"}{!l.active && <span className="text-muted font-normal"> · לא פעיל</span>}</div>
+                      <div className="text-muted truncate text-[11px]">{[l.neighborhood, l.city, l.source].filter(Boolean).join(" · ") || "—"}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 text-[11px]">
+                      <span className={`rounded-full px-2 py-0.5 font-bold ${l.attribution.derived ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{ATTR_HE[l.attribution.kind] ?? l.attribution.kind}</span>
+                      <span className="text-ink font-bold tabular-nums">{fmtPrice(l.price)}</span>
+                      {l.listingUrl && <a href={l.listingUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold">↗</a>}
+                    </div>
+                  </div>
+                  <div className="text-muted mt-0.5 text-[10px]">מדוע שייך: {l.attribution.reason}{l.attribution.conflictNote ? ` · ⚠ ${l.attribution.conflictNote}` : ""}</div>
+                </div>
+              ))}
+              {inv.totals.total > inv.listings.length && <p className="text-muted mt-1 text-[11px]">מוצגים {fmt(inv.listings.length)} מתוך {fmt(inv.totals.total)} נכסים.</p>}
+            </div>
+          )
+        ) : p.listings.length === 0 ? (
           <p className="text-muted rounded-xl border border-dashed border-line bg-surface px-3 py-4 text-center text-xs">עדיין לא שויכו נכסים למשרד הזה.</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             {p.listings.map((l) => (
               <div key={l.id} className="border-line bg-surface flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm">
-                <div className="min-w-0">
-                  <div className="text-ink truncate font-bold">{l.title ?? "מודעה"}</div>
-                  <div className="text-muted truncate text-[11px]">{[l.neighborhood, l.city, l.source].filter(Boolean).join(" · ") || "—"}</div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2 text-[11px]">
-                  <span className="text-ink font-bold tabular-nums">{fmtPrice(l.price)}</span>
-                  {l.listingUrl && <a href={l.listingUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold">↗</a>}
-                </div>
+                <div className="min-w-0"><div className="text-ink truncate font-bold">{l.title ?? "מודעה"}</div><div className="text-muted truncate text-[11px]">{[l.neighborhood, l.city, l.source].filter(Boolean).join(" · ") || "—"}</div></div>
+                <div className="flex shrink-0 items-center gap-2 text-[11px]"><span className="text-ink font-bold tabular-nums">{fmtPrice(l.price)}</span>{l.listingUrl && <a href={l.listingUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold">↗</a>}</div>
               </div>
             ))}
           </div>
-        )}
-        {p.stats.listingCount > p.listings.length && (
-          <p className="text-muted mt-2 text-[11px]">מוצגים {fmt(p.listings.length)} מתוך {fmt(p.stats.listingCount)} נכסים.</p>
         )}
       </section>
     </div>

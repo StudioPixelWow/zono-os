@@ -28,6 +28,8 @@ import { crossCheckCityRepositories, type CityRepositoryAudit } from "./city-rep
 import { getPromotionDebug, type PromotionDebugDashboard } from "./promotion-debug";
 import { buildOfficeIntelligenceForCandidate, buildOfficeIntelligenceForCity, type EnrichmentResult, type CityEnrichmentResult } from "./office-intelligence";
 import { getBrandHierarchy, type BrandHierarchy } from "./brand-identity";
+import { getBrokerIntelligenceProfile, getOfficeBrokerRanking, type BrokerIntelligenceProfile, type BrokerRankCard } from "./broker-intelligence";
+import { getOfficeInventory, backfillOfficeInventoryFromBrokers, type OfficeInventory, type BackfillResult } from "./office-inventory";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -170,6 +172,29 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+// ── Phase 26.5 — Broker Intelligence + Office Inventory Attribution ───────────
+export async function getOfficeInventoryAction(officeId: string): Promise<{ ok: boolean; result?: OfficeInventory | null; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOfficeInventory(officeId) }; }
+  catch (e) { console.error("[office-inventory] failed:", e); return { ok: false, error: "טעינת מלאי המשרד נכשלה." }; }
+}
+export async function getOfficeBrokerRankingAction(officeId: string): Promise<{ ok: boolean; result?: BrokerRankCard[]; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOfficeBrokerRanking(officeId) }; }
+  catch (e) { console.error("[broker-ranking] failed:", e); return { ok: false, error: "דירוג המתווכים נכשל." }; }
+}
+export async function getBrokerIntelligenceProfileAction(brokerId: string): Promise<{ ok: boolean; result?: BrokerIntelligenceProfile | null; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getBrokerIntelligenceProfile(brokerId) }; }
+  catch (e) { console.error("[broker-intel] failed:", e); return { ok: false, error: "טעינת פרופיל המתווך נכשלה." }; }
+}
+/** Manual: attribute broker listings to their office (safe backfill). */
+export async function backfillOfficeInventoryAction(): Promise<{ ok: boolean; result?: BackfillResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const result = await backfillOfficeInventoryFromBrokers(profile.org_id);
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[office-inventory backfill] failed:", e); return { ok: false, error: "שיוך נכסי הסוכנים נכשל." }; }
 }
 
 /** Phase 26.4.19 — READ-ONLY brand→branch→broker hierarchy. */

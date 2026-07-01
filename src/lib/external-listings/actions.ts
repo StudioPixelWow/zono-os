@@ -77,6 +77,9 @@ export async function finishSyncJobAction(jobId: string, cities: string[], error
         // 26.4.16 — new listings are a data event → differential city refresh.
         enqueueCityRefreshFireAndForget(orgId, city, "new_listings");
       }
+      // 26.5 — attribute newly-imported broker listings into their office inventory.
+      const { backfillOfficeInventoryFromBrokers } = await import("@/lib/brokerage-data/office-inventory");
+      void backfillOfficeInventoryFromBrokers(orgId, { cap: 3000 }).catch(() => {});
     } catch (e) { console.error("[external-listings] city learning trigger skipped:", e); }
     return { summary };
   } catch (e) {
