@@ -24,6 +24,7 @@ import { auditBrokerageDiscoveryPipeline, type BrokeragePipelineAudit } from "./
 import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDiscoveryOptions } from "./city-discovery";
 import { seedBrokerageOfficeCandidatesWithAI, type AICandidateSeedSummary } from "./ai-candidate-seeding";
 import { runBrokerageResearchAgent, type AgentReport, type ResearchDepth } from "./research-agent";
+import { crossCheckCityRepositories, type CityRepositoryAudit } from "./city-repository-audit";
 import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, getCityKnowledgeStatus, type CityKnowledge, type CityBrokerageCensus, type CityKnowledgeStatus } from "./brokerage-knowledge";
 import { ensureCityBrokerageKnowledge, type EnsureCityResult } from "./city-lazy-learning";
 import { triggerCityLearning, type CityLearningReason, type CityLearningOutcome } from "./city-learning-trigger";
@@ -100,6 +101,16 @@ export async function seedCityAICandidatesAction(city: string): Promise<{ ok: bo
     revalidatePath("/brokerage-data");
     return { ok: true, result };
   } catch (e) { console.error("[ai-seeding] failed:", e); return { ok: false, error: "זריעת מועמדי AI נכשלה." }; }
+}
+
+/** Phase 26.4.14 — READ-ONLY repository cross-check: why City panels read 0. */
+export async function crossCheckCityRepositoriesAction(city: string): Promise<{ ok: boolean; result?: CityRepositoryAudit; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    const result = await crossCheckCityRepositories(city);
+    return { ok: true, result };
+  } catch (e) { console.error("[city-repo-audit] failed:", e); return { ok: false, error: "בדיקת המאגרים נכשלה." }; }
 }
 
 /** Phase 26.4.13 — multi-step Brokerage Research Agent for a city (save-first,

@@ -26,8 +26,9 @@ import {
   getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction,
   discoverBrokerageOfficesForCityAction, getCityBrokerageCensusAction,
   getCityKnowledgeStatusAction, ensureCityBrokerageKnowledgeAction, runBrokerResearchAction,
-  seedCityAICandidatesAction, runBrokerageResearchAgentAction,
+  seedCityAICandidatesAction, runBrokerageResearchAgentAction, crossCheckCityRepositoriesAction,
 } from "@/lib/brokerage-data/actions";
+import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
@@ -339,9 +340,11 @@ function CityKnowledgeStatusPanel({ cities, onChanged }: { cities: string[]; onC
   const [city, setCity] = useState("קריית ביאליק");
   const [status, setStatus] = useState<CityKnowledgeStatus | null>(null);
   const [ensure, setEnsure] = useState<EnsureCityResult | null>(null);
-  const [pending, setPending] = useState<null | "status" | "learn">(null);
+  const [pending, setPending] = useState<null | "status" | "learn" | "audit">(null);
+  const [repoAudit, setRepoAudit] = useState<CityRepositoryAudit | null>(null);
 
   const loadStatus = async () => { setPending("status"); setEnsure(null); try { setStatus(await getCityKnowledgeStatusAction(city)); } finally { setPending(null); } };
+  const runRepoAudit = async () => { setPending("audit"); try { const r = await crossCheckCityRepositoriesAction(city); setRepoAudit(r.ok ? r.result ?? null : null); } finally { setPending(null); } };
   const run = async (force?: "bootstrap" | "refresh" | "reuse") => {
     setPending("learn");
     try {
@@ -362,6 +365,7 @@ function CityKnowledgeStatusPanel({ cities, onChanged }: { cities: string[]; onC
             className="border-line bg-surface text-ink min-w-[180px] rounded-full border px-3 py-1.5 text-sm" />
           <datalist id="status-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
           <button onClick={loadStatus} disabled={pending != null || !city.trim()} className="border-line bg-card text-ink rounded-xl border px-4 py-1.5 text-sm font-bold disabled:opacity-60">{pending === "status" ? "בודק…" : "בדוק סטטוס"}</button>
+          <button onClick={runRepoAudit} disabled={pending != null || !city.trim()} className="border-line bg-card text-muted rounded-xl border px-4 py-1.5 text-sm font-bold disabled:opacity-60">{pending === "audit" ? "בודק מאגרים…" : "🔍 בדוק מאגרים"}</button>
         </div>
       </div>
 
@@ -370,16 +374,20 @@ function CityKnowledgeStatusPanel({ cities, onChanged }: { cities: string[]; onC
       {status && (
         <div className="mt-4 flex flex-col gap-3 text-[12px]">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={cn("rounded-full px-2.5 py-1 font-bold", status.existsInKnowledgeBase ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{status.existsInKnowledgeBase ? "מוכרת למערכת" : "עיר חדשה"}</span>
+            <span className={cn("rounded-full px-2.5 py-1 font-bold", status.knowledgeState === "VERIFIED" ? "bg-emerald-50 text-emerald-700" : status.knowledgeState === "NO_CITY_DATA" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700")}>{status.knowledgeStateLabel}</span>
             <span className="bg-surface text-muted rounded-full px-2.5 py-1 font-bold">פעולה מומלצת: {CITY_ACTION_HE[status.recommendedAction]}</span>
-            {status.stalenessReason && <span className="text-muted">· {status.stalenessReason}</span>}
           </div>
+          {status.stalenessReason && <div className="text-muted text-[11px]"><b>החלק החסר:</b> {status.stalenessReason}</div>}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            <Mini label="כיסוי ידע" value={`${status.coverageScore}%`} tone={status.coverageScore >= 60 ? "green" : "amber"} />
-            <Mini label="רמת אמינות" value={`${status.confidenceScore}%`} tone={status.confidenceScore >= 70 ? "green" : "amber"} />
+            <Mini label="נוכחות נתונים" value={`${status.dataPresenceScore}%`} tone={status.dataPresenceScore >= 60 ? "green" : status.rawDataExists ? "amber" : "red"} />
+            <Mini label="מתווכים ידועים" value={fmt(status.knownBrokers)} tone={status.knownBrokers > 0 ? "green" : undefined} />
+            <Mini label="מתווכים במחקר" value={fmt(status.brokersResearching)} tone="amber" />
+            <Mini label="מודעות בעיר" value={fmt(status.knownListings)} tone={status.knownListings > 0 ? "green" : undefined} />
+            <Mini label="נכסים פנימיים" value={fmt(status.propertiesInCity)} />
+            <Mini label="מועמדים (AI)" value={fmt(status.aiCandidates)} />
+            <Mini label="משרדים מאומתים" value={fmt(status.verifiedOffices)} tone={status.verifiedOffices > 0 ? "green" : "amber"} />
+            <Mini label="מודעות מקושרות" value={fmt(status.linkedListings)} />
             <Mini label="רעננות" value={`${status.freshnessScore}%`} tone={status.freshnessScore >= 70 ? "green" : "amber"} />
-            <Mini label="משרדים ידועים" value={fmt(status.verifiedOffices)} />
-            <Mini label="מתווכים ידועים" value={fmt(status.knownBrokers)} />
             <Mini label="מחקר אחרון" value={status.lastResearchAt ? new Date(status.lastResearchAt).toLocaleDateString("he-IL") : "—"} />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -401,6 +409,32 @@ function CityKnowledgeStatusPanel({ cities, onChanged }: { cities: string[]; onC
             <li>נותר לא ידוע: {ensure.explanation.remainingUnknown}</li>
             <li>רענון הבא: {ensure.explanation.nextRefresh}</li>
           </ul>
+        </div>
+      )}
+
+      {repoAudit && (
+        <div className="mt-3 rounded-xl border border-line bg-surface px-3 py-2 text-[12px]">
+          <div className="text-ink font-black">🔍 בדיקת מאגרים — {repoAudit.city}</div>
+          <div className={cn("mt-1 rounded-lg px-2 py-1 text-[11px] font-bold", repoAudit.verdict === "REPOSITORY_OK" ? "bg-emerald-50 text-emerald-700" : repoAudit.verdict === "NO_DATA" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700")}>שורש הבעיה: {repoAudit.rootCause}</div>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead className="text-muted"><tr><th className="text-right">טבלה</th><th>סה״כ</th><th>עיר מדויקת</th><th>עיר מנורמלת</th><th>ללא עיר</th><th>אנגלית</th><th>שדה</th></tr></thead>
+              <tbody>
+                {repoAudit.tables.map((t, i) => (
+                  <tr key={i} className={cn("border-line border-b", !t.exists && "opacity-50")}>
+                    <td className="py-1 font-bold">{t.table}</td>
+                    <td className="text-center tabular-nums">{t.error ? <span className="text-rose-600" title={t.error}>—</span> : fmt(t.totalOrgRows)}</td>
+                    <td className="text-center tabular-nums">{fmt(t.exactCityRows)}</td>
+                    <td className="text-center tabular-nums font-bold text-emerald-700">{fmt(t.normalizedCityRows)}</td>
+                    <td className="text-center tabular-nums">{fmt(t.missingCityRows)}</td>
+                    <td className="text-center tabular-nums">{fmt(t.englishVariantRows)}</td>
+                    <td className="text-center text-muted">{t.cityFieldUsed ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-muted mt-1 text-[10px]">עמודת &quot;עיר מנורמלת&quot; = מה שהשכבה המתוקנת קוראת (התאמת אסימונים/הכלה/אנגלית).</p>
         </div>
       )}
     </section>
@@ -432,12 +466,22 @@ function CityCensusPanel({ cities }: { cities: string[] }) {
       {data && (
         <div className="mt-4 flex flex-col gap-3 text-[12px]">
           <div className="border-brand/30 bg-brand-soft/30 rounded-2xl border p-3 text-center">
-            <div className="text-muted text-[11px] font-bold">{data.city} · כיסוי שוק</div>
-            <div className="text-brand-strong text-3xl font-black tabular-nums">{data.marketCoveragePct}%</div>
-            <div className="text-muted text-[11px]">אומדן משרדים פעילים (מבוסס-ראיות): <b>{fmt(data.estimatedActiveOffices)}</b> · מאומתים <b>{fmt(data.verifiedOffices)}</b> · במחקר <b>{fmt(data.researchingOffices)}</b></div>
+            <div className="text-muted text-[11px] font-bold">{data.city} · {data.knowledgeStateLabel}</div>
+            <div className="text-brand-strong text-3xl font-black tabular-nums">{data.dataPresenceScore}%</div>
+            <div className="text-muted text-[11px]">נוכחות נתונים גולמיים · כיסוי מאומת: <b>{data.marketCoveragePct}%</b> · אומדן משרדים פעילים: <b>{fmt(data.estimatedActiveOffices)}</b> · מאומתים <b>{fmt(data.verifiedOffices)}</b></div>
           </div>
+          {/* RAW market data — always shown so 0 verified never reads as 0 data */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <Mini label="כיסוי משרדים" value={`${data.officeCoveragePct}%`} tone="green" />
+            <Mini label="מתווכים בעיר" value={fmt(data.brokersTotal)} tone={data.brokersTotal > 0 ? "green" : undefined} />
+            <Mini label="מתווכים במחקר" value={fmt(data.brokersResearching)} tone="amber" />
+            <Mini label="מודעות בעיר" value={fmt(data.listingsTotal)} tone={data.listingsTotal > 0 ? "green" : undefined} />
+            <Mini label="נכסים פנימיים" value={fmt(data.propertiesTotal)} />
+            <Mini label="מועמדי משרד" value={fmt(data.missingKnowledge.unverifiedCandidates)} />
+            <Mini label="מועמדים (AI)" value={fmt(data.aiCandidates)} />
+          </div>
+          {/* VERIFIED knowledge — separated from raw data */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Mini label="משרדים מאומתים" value={fmt(data.verifiedOffices)} tone={data.verifiedOffices > 0 ? "green" : "amber"} />
             <Mini label="כיסוי מתווכים" value={`${data.brokerCoveragePct}%`} />
             <Mini label="כיסוי מודעות" value={`${data.listingCoveragePct}%`} />
             <Mini label="מתווכים ללא משרד" value={fmt(data.brokersUnmatched)} tone="amber" />

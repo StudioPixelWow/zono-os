@@ -29,6 +29,39 @@ export function normCityKb(raw: string | null | undefined): string {
     .replace(/קריי/g, "קרי").replace(/[ךםןףץ]/g, (c) => HEB_FINALS[c] ?? c)
     .replace(/\s+/g, " ").trim().toLowerCase();
 }
+
+// Minimal Hebrew→English city aliases (extensible). Rows imported with an
+// English city name would otherwise be excluded by the Hebrew-only fold.
+const CITY_EN_ALIASES: Record<string, string[]> = {
+  "קרית ביאליק": ["kiryat bialik", "qiryat bialik", "kiryat byalik"],
+  "קרית מוצקין": ["kiryat motzkin", "qiryat motzkin"],
+  "קרית ים": ["kiryat yam", "qiryat yam"],
+  "קרית אתא": ["kiryat ata", "qiryat ata"],
+  "תל אביב": ["tel aviv", "tel aviv yafo", "tel-aviv"],
+  "חיפה": ["haifa"], "ירושלים": ["jerusalem"], "ראשון לציון": ["rishon lezion", "rishon letzion"],
+};
+
+/**
+ * VAL/26.4.14 — robust city matcher. Matches a stored city value to the target
+ * when: normalized-equal, OR every target token appears in the value (handles
+ * "קרית ביאליק, ישראל" / trailing suffixes), OR one contains the other, OR an
+ * English alias matches. Precise for multi-token cities (needs ALL tokens), so
+ * "קרית ביאליק" never leaks into "קרית אתא".
+ */
+export function makeCityMatch(cityRaw: string): (value: unknown) => boolean {
+  const norm = normCityKb(cityRaw);
+  const tokens = norm.split(" ").filter((t) => t.length >= 2);
+  const enAliases = (CITY_EN_ALIASES[norm] ?? []).map((x) => x.toLowerCase());
+  return (value: unknown): boolean => {
+    const cv = normCityKb(s(value));
+    if (!cv || !norm) return false;
+    if (cv === norm) return true;
+    if (tokens.length > 0 && tokens.every((t) => cv.includes(t))) return true;   // all tokens present
+    if (norm.length >= 4 && (cv.includes(norm) || norm.includes(cv))) return true; // containment
+    if (enAliases.length && enAliases.some((a) => cv === a || cv.includes(a) || a.includes(cv))) return true;
+    return false;
+  };
+}
 /** Stable office key shared across discovery, matching and relink. */
 export function officeKey(name: string): string {
   const fr = detectFranchise(name);
@@ -49,10 +82,15 @@ export interface CityKnowledge {
   candidateOffices: { name: string; status: string; confidence: number }[];
   brokers: KnownBroker[];
   brokersWithOffice: number;
+  brokersResearching: number;              // brokers in the city not yet linked to an office
   brokerOfficeLinks: number;
   contactPoints: { phones: string[]; domains: string[] };
   listingsInCity: number;
   listingsLinked: number;
+  propertiesInCity: number;                // internal `properties` rows in the city
+  aiCandidateCount: number;                // candidates seeded by AI / research agent
+  unverifiedCandidates: number;            // candidates not yet verified
+  rawDataExists: boolean;                  // any brokers/listings/properties/candidates present
   knownAliases: string[];                  // distinct office-name spellings seen
 }
 
@@ -61,13 +99,15 @@ export async function getBrokerageKnowledgeForCity(orgId: string, cityRaw: strin
   const db = createServiceRoleClient();
   const cityNorm = normCityKb(cityRaw);
   const stem = cityRaw.trim().split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? cityRaw.trim();
-  const inCity = (c: unknown) => normCityKb(s(c)) === cityNorm;
+  // 26.4.14 — robust matcher (token/containment/English), NOT strict equality,
+  // so rows with suffixes / spelling / English variants are no longer excluded.
+  const inCity = makeCityMatch(cityRaw);
   void orgId; // brokerage tables are national (service-role); city is the scope key.
 
   const [officeRes, agentRes, candRes, linkRes] = await Promise.all([
     db.from("brokerage_offices" as never).select("id,name,normalized_name,brand_network,city,status,primary_phone,email,website,confidence_score,last_seen_at,last_verified_at,metadata").limit(20000),
     db.from("brokerage_agents" as never).select("id,full_name,primary_phone,whatsapp_phone,city,office_id").limit(20000),
-    db.from("brokerage_office_candidates" as never).select("office_name,city,status,confidence,phone,domain").limit(20000),
+    db.from("brokerage_office_candidates" as never).select("office_name,city,status,confidence,phone,domain,suggested_by").limit(20000),
     db.from("brokerage_external_listing_links" as never).select("office_id,external_listing_id,city").limit(50000),
   ]);
 
@@ -114,33 +154,67 @@ export async function getBrokerageKnowledgeForCity(orgId: string, cityRaw: strin
 
   const brokers: KnownBroker[] = agents.map((a) => ({ id: s(a.id), name: s(a.full_name), phone: normalizePhoneNumber(s(a.primary_phone) || s(a.whatsapp_phone)) || null, officeId: s(a.office_id) || null }));
   const brokersWithOffice = brokers.filter((b) => b.officeId).length;
+  const brokersResearching = brokers.length - brokersWithOffice;
 
-  // Listings linked in this city (via the links table — count distinct listings).
+  // Listings in this city — fetch a broad candidate set (ilike on the stem to
+  // keep the query cheap) then apply the robust matcher so variants still count.
   const cityListingIds = new Set<string>();
-  const { data: cityListings } = await db.from("external_listings" as never).select("id").ilike("city", `%${stem}%`).limit(50000);
-  for (const r of (cityListings ?? []) as Row[]) cityListingIds.add(s(r.id));
+  const { data: cityListings } = await db.from("external_listings" as never)
+    .select("id,city,city_name").ilike("city", `%${stem}%`).limit(50000);
+  for (const r of (cityListings ?? []) as Row[]) if (inCity(r.city) || inCity((r as Row).city_name)) cityListingIds.add(s(r.id));
+  // Properties (internal inventory) in the city.
+  let propertiesInCity = 0;
+  try {
+    const { data: props } = await db.from("properties" as never).select("id,city,city_name").ilike("city", `%${stem}%`).limit(50000);
+    propertiesInCity = ((props ?? []) as Row[]).filter((r) => inCity(r.city) || inCity((r as Row).city_name)).length;
+  } catch { /* properties table optional */ }
   const linkedSet = new Set<string>();
   for (const r of ((linkRes.data ?? []) as Row[])) { const lid = s(r.external_listing_id); if (s(r.office_id) && (cityListingIds.has(lid) || inCity(r.city))) linkedSet.add(lid); }
 
+  const AI_SOURCES = new Set(["ai_candidate_seed", "brokerage_research_agent"]);
+  const aiCandidateCount = candRows.filter((c) => AI_SOURCES.has(s(c.suggested_by))).length;
+  const unverifiedCandidates = candidateOffices.filter((c) => c.status !== "verified").length;
+  const rawDataExists = brokers.length > 0 || cityListingIds.size > 0 || propertiesInCity > 0 || candidateOffices.length > 0 || verifiedOffices.length > 0;
+
   return {
     city: cityRaw.trim(), cityNormalized: cityNorm, cityVariants: [...variants].slice(0, 10),
-    verifiedOffices, candidateOffices, brokers, brokersWithOffice,
+    verifiedOffices, candidateOffices, brokers, brokersWithOffice, brokersResearching,
     brokerOfficeLinks: brokersWithOffice,
     contactPoints: { phones: [...phonesAll].filter(Boolean).slice(0, 50), domains: [...domainsAll].filter(Boolean).slice(0, 50) },
     listingsInCity: cityListingIds.size,
     listingsLinked: linkedSet.size,
+    propertiesInCity, aiCandidateCount, unverifiedCandidates, rawDataExists,
     knownAliases: [...aliases].slice(0, 50),
   };
 }
 
 // ── National Brokerage Census (Phase 26.5) — coverage metrics, EVIDENCE-ONLY ──
+// 26.4.14 — knowledge state separates RAW market data from VERIFIED knowledge.
+export type CityKnowledgeState =
+  | "NO_CITY_DATA" | "RAW_DATA_ONLY" | "BROKERS_KNOWN" | "CANDIDATES_KNOWN"
+  | "PARTIALLY_VERIFIED" | "VERIFIED";
+export const CITY_KNOWLEDGE_STATE_HE: Record<CityKnowledgeState, string> = {
+  NO_CITY_DATA: "עיר חדשה — אין נתונים כלל",
+  RAW_DATA_ONLY: "קיימים נתוני שוק גולמיים (מודעות/נכסים) — טרם זוהו מתווכים/משרדים",
+  BROKERS_KNOWN: "העיר מוכרת חלקית — יש הרבה נתונים, אבל מעט משרדים מאומתים",
+  CANDIDATES_KNOWN: "קיימים מועמדי משרד במחקר — טרם אומתו בראיה ציבורית",
+  PARTIALLY_VERIFIED: "העיר מוכרת חלקית — חלק מהמשרדים אומתו, נותרה השלמה",
+  VERIFIED: "העיר ממופה — קיימים משרדים מאומתים",
+};
+
 export interface CityBrokerageCensus {
   city: string; cityNormalized: string; cityVariants: string[];
   estimatedActiveOffices: number;          // evidence-backed: verified + researching
   verifiedOffices: number; researchingOffices: number; avgOfficeConfidence: number;
   brokersTotal: number; brokersMatched: number; brokersUnmatched: number; brokerCoveragePct: number;
+  brokersResearching: number;              // brokers not yet linked to an office
   listingsTotal: number; listingsLinked: number; listingsUnlinked: number; listingCoveragePct: number;
+  propertiesTotal: number;
+  aiCandidates: number;                     // AI/agent-seeded candidates
   officeCoveragePct: number; marketCoveragePct: number;
+  rawDataExists: boolean;
+  dataPresenceScore: number;                // 0..100 — never 0 when raw data exists
+  knowledgeState: CityKnowledgeState; knowledgeStateLabel: string;
   contactPoints: number;
   lastResearchAt: string | null;
   missingKnowledge: { unmatchedBrokers: number; unlinkedListings: number; unverifiedCandidates: number };
@@ -170,8 +244,23 @@ export async function getCityBrokerageCensus(orgId: string, city: string): Promi
   const marketCoveragePct = parts.length ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : 0;
   const lastResearchAt = kb.verifiedOffices.map((o) => o.lastVerifiedAt || o.lastSeenAt).filter(Boolean).sort().pop() ?? null;
 
+  // 26.4.14 — separate RAW market data from VERIFIED knowledge.
+  const rawDataExists = kb.rawDataExists;
+  const knowledgeState: CityKnowledgeState =
+    !rawDataExists ? "NO_CITY_DATA"
+      : verifiedOffices > 0 && verifiedOffices >= Math.max(1, Math.ceil(estimatedActiveOffices * 0.5)) && brokersUnmatched === 0 ? "VERIFIED"
+        : verifiedOffices > 0 ? "PARTIALLY_VERIFIED"
+          : brokersTotal > 0 ? "BROKERS_KNOWN"
+            : kb.candidateOffices.length > 0 ? "CANDIDATES_KNOWN"
+              : "RAW_DATA_ONLY";
+  // Data-presence: never 0% when raw data exists (distinct from verified coverage).
+  const dataPresenceScore = !rawDataExists ? 0 : Math.max(marketCoveragePct, Math.min(100,
+    15 + (brokersTotal > 0 ? 30 : 0) + (listingsTotal > 0 ? 25 : 0) + (kb.propertiesInCity > 0 ? 10 : 0)
+    + (kb.candidateOffices.length > 0 ? 10 : 0) + (verifiedOffices > 0 ? 10 : 0)));
+
   const notes: string[] = [];
   notes.push("המספרים מבוססי-ראיות בלבד. סך השוק האמיתי ('לא ידוע') אינו ניתן לאמידה ללא מרשם חיצוני — ולכן אינו מומצא.");
+  if (rawDataExists && verifiedOffices === 0) notes.push("קיימים נתונים גולמיים (מתווכים/מודעות/מועמדים) אך עדיין 0 משרדים מאומתים — נדרש אימות, לא ייבוא.");
   if (brokersUnmatched > 0) notes.push(`${brokersUnmatched} מתווכים בעיר עדיין ללא שיוך משרד.`);
   if (listingsUnlinked > 0) notes.push(`${listingsUnlinked} מודעות בעיר עדיין ללא שיוך משרד.`);
 
@@ -179,11 +268,15 @@ export async function getCityBrokerageCensus(orgId: string, city: string): Promi
     city: kb.city, cityNormalized: kb.cityNormalized, cityVariants: kb.cityVariants,
     estimatedActiveOffices, verifiedOffices, researchingOffices, avgOfficeConfidence,
     brokersTotal, brokersMatched, brokersUnmatched, brokerCoveragePct,
+    brokersResearching: kb.brokersResearching,
     listingsTotal, listingsLinked, listingsUnlinked, listingCoveragePct,
+    propertiesTotal: kb.propertiesInCity, aiCandidates: kb.aiCandidateCount,
     officeCoveragePct, marketCoveragePct,
+    rawDataExists, dataPresenceScore,
+    knowledgeState, knowledgeStateLabel: CITY_KNOWLEDGE_STATE_HE[knowledgeState],
     contactPoints: kb.contactPoints.phones.length + kb.contactPoints.domains.length,
     lastResearchAt,
-    missingKnowledge: { unmatchedBrokers: brokersUnmatched, unlinkedListings: listingsUnlinked, unverifiedCandidates: researchingOffices },
+    missingKnowledge: { unmatchedBrokers: brokersUnmatched, unlinkedListings: listingsUnlinked, unverifiedCandidates: kb.unverifiedCandidates },
     offices: kb.verifiedOffices.map((o) => ({ id: o.id, name: o.name, brand: o.brandNetwork, status: o.status, confidence: o.confidence, brokerCount: o.brokerCount, lastSeenAt: o.lastSeenAt, lastVerifiedAt: o.lastVerifiedAt, phones: o.phones, website: o.website })).sort((a, b) => b.brokerCount - a.brokerCount),
     unknownEstimable: false,
     notes,
@@ -195,8 +288,13 @@ export type CityRecommendedAction = "BOOTSTRAP_CITY" | "REFRESH_CITY" | "REUSE_K
 export interface CityKnowledgeStatus {
   city: string; normalizedCity: string;
   existsInKnowledgeBase: boolean;
+  rawDataExists: boolean;                   // 26.4.14 — any brokers/listings/props/candidates
+  knowledgeState: CityKnowledgeState; knowledgeStateLabel: string;
+  dataPresenceScore: number;                // never 0 when raw data exists
   verifiedOffices: number; researchingOffices: number;
-  knownBrokers: number; knownListings: number; linkedListings: number; contactPoints: number;
+  knownBrokers: number; brokersResearching: number;
+  knownListings: number; linkedListings: number; propertiesInCity: number;
+  aiCandidates: number; contactPoints: number;
   lastResearchAt: string | null; lastRefreshAt: string | null;
   coverageScore: number; confidenceScore: number; freshnessScore: number;
   stalenessReason: string | null;
@@ -208,7 +306,9 @@ export interface CityKnowledgeStatus {
 /** Decide whether a city needs bootstrap, refresh, or can reuse existing knowledge. */
 export async function getCityKnowledgeStatus(orgId: string, city: string): Promise<CityKnowledgeStatus> {
   const c = await getCityBrokerageCensus(orgId, city);
-  const existsInKnowledgeBase = c.verifiedOffices > 0 || c.researchingOffices > 0 || c.brokersTotal > 0;
+  // 26.4.14 — "known" means ANY real data exists (brokers/listings/props/candidates),
+  // not just verified offices. A data-rich city is never reported as "new".
+  const existsInKnowledgeBase = c.rawDataExists;
   const coverageScore = c.marketCoveragePct;
   const confidenceScore = c.avgOfficeConfidence;
   const ageDays = c.lastResearchAt ? (Date.now() - new Date(c.lastResearchAt).getTime()) / 86400000 : null;
@@ -219,6 +319,7 @@ export async function getCityKnowledgeStatus(orgId: string, city: string): Promi
 
   let stalenessReason: string | null = null;
   if (!existsInKnowledgeBase) stalenessReason = "העיר אינה מוכרת למערכת";
+  else if (c.rawDataExists && c.verifiedOffices === 0) stalenessReason = "העיר מוכרת חלקית — קיימים נתונים גולמיים אך טרם אומתו משרדים";
   else if (coverageScore < CITY_FRESHNESS.minCoverage) stalenessReason = `כיסוי נמוך (${coverageScore}%)`;
   else if (confidenceScore < CITY_FRESHNESS.minConfidence) stalenessReason = `אמינות נמוכה (${confidenceScore}%)`;
   else if (ageDays != null && ageDays > CITY_FRESHNESS.researchStaleDays) stalenessReason = `מחקר אחרון לפני ${Math.round(ageDays)} ימים`;
@@ -240,8 +341,12 @@ export async function getCityKnowledgeStatus(orgId: string, city: string): Promi
   return {
     city: c.city, normalizedCity: c.cityNormalized,
     existsInKnowledgeBase,
+    rawDataExists: c.rawDataExists, knowledgeState: c.knowledgeState, knowledgeStateLabel: c.knowledgeStateLabel,
+    dataPresenceScore: c.dataPresenceScore,
     verifiedOffices: c.verifiedOffices, researchingOffices: c.researchingOffices,
-    knownBrokers: c.brokersTotal, knownListings: c.listingsTotal, linkedListings: c.listingsLinked, contactPoints: c.contactPoints,
+    knownBrokers: c.brokersTotal, brokersResearching: c.brokersResearching,
+    knownListings: c.listingsTotal, linkedListings: c.listingsLinked, propertiesInCity: c.propertiesTotal,
+    aiCandidates: c.aiCandidates, contactPoints: c.contactPoints,
     lastResearchAt: c.lastResearchAt, lastRefreshAt: c.lastResearchAt,
     coverageScore, confidenceScore, freshnessScore, stalenessReason,
     shouldBootstrap, shouldRefresh, recommendedAction,
