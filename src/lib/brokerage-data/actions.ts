@@ -30,6 +30,7 @@ import { buildOfficeIntelligenceForCandidate, buildOfficeIntelligenceForCity, ty
 import { getBrandHierarchy, type BrandHierarchy } from "./brand-identity";
 import { getBrokerIntelligenceProfile, getOfficeBrokerRanking, type BrokerIntelligenceProfile, type BrokerRankCard } from "./broker-intelligence";
 import { getOfficeInventory, backfillOfficeInventoryFromBrokers, type OfficeInventory, type BackfillResult } from "./office-inventory";
+import { getCityTerritoryIntelligence, getOfficeTerritory, type CityTerritoryIntelligence, type OfficeTerritoryIntelligence } from "./territory-intelligence";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -172,6 +173,16 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+// ── Phase 26.6 — Territory Intelligence ──────────────────────────────────────
+export async function getCityTerritoryIntelligenceAction(city: string): Promise<{ ok: boolean; result?: CityTerritoryIntelligence; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." }; return { ok: true, result: await getCityTerritoryIntelligence(city) }; }
+  catch (e) { console.error("[territory] city failed:", e); return { ok: false, error: "מודיעין הטריטוריה נכשל." }; }
+}
+export async function getOfficeTerritoryAction(officeId: string): Promise<{ ok: boolean; result?: OfficeTerritoryIntelligence | null; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOfficeTerritory(officeId) }; }
+  catch (e) { console.error("[territory] office failed:", e); return { ok: false, error: "מודיעין טריטוריה למשרד נכשל." }; }
 }
 
 // ── Phase 26.5 — Broker Intelligence + Office Inventory Attribution ───────────

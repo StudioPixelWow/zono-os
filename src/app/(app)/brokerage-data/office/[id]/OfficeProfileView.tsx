@@ -7,6 +7,8 @@ import Link from "next/link";
 import type { OfficeProfile } from "@/lib/brokerage-data/office-profile";
 import type { OfficeInventory } from "@/lib/brokerage-data/office-inventory";
 import type { BrokerRankCard } from "@/lib/brokerage-data/broker-intelligence";
+import type { OfficeTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence";
+import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence";
 import { BackfillButton } from "./BackfillButton";
 
 const ATTR_HE: Record<string, string> = { direct: "קישור ישיר למשרד", office_phone: "התאמת טלפון", office_website: "התאמת אתר", derived_broker: "נגזר ממתווך" };
@@ -44,10 +46,11 @@ function CoverBox({ title, items }: { title: string; items: { key: string; count
   );
 }
 
-export function OfficeProfileView({ profile, inventory, ranking }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[] }) {
+export function OfficeProfileView({ profile, inventory, ranking, territory }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[]; territory?: OfficeTerritoryIntelligence | null }) {
   const p = profile;
   const inv = inventory ?? null;
   const rank = ranking ?? [];
+  const terr = territory ?? null;
   const website = p.website ? (p.website.startsWith("http") ? p.website : `https://${p.website}`) : null;
   return (
     <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-4 p-4 sm:p-6">
@@ -131,6 +134,47 @@ export function OfficeProfileView({ profile, inventory, ranking }: { profile: Of
               </Link>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Territory Intelligence — market share / dominance / expansion (26.6) */}
+      {terr && (terr.topNeighborhoods.length > 0 || terr.insights.length > 0) && (
+        <section className="border-line bg-card rounded-2xl border p-4">
+          <h2 className="text-ink mb-2 text-sm font-black">🗺️ מודיעין טריטוריה — נתח שוק ודומיננטיות</h2>
+          {terr.insights.length > 0 && (
+            <ul className="mb-3 flex flex-col gap-1 text-[12px]">
+              {terr.insights.map((ins, i) => <li key={i} className="text-ink">• {ins}</li>)}
+            </ul>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="text-muted mb-1 text-[11px] font-bold">שכונות מובילות</div>
+              <div className="flex flex-col gap-1">
+                {terr.topNeighborhoods.slice(0, 8).map((a) => (
+                  <div key={a.name} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5 text-[12px]">
+                    <span className="text-ink font-bold">{a.name}</span>
+                    <span className="flex items-center gap-2 text-[11px]">
+                      <span className={`rounded-full px-2 py-0.5 font-bold ${a.band === "Leader" ? "bg-emerald-100 text-emerald-700" : a.band === "Strong" ? "bg-emerald-50 text-emerald-700" : a.band === "Weak" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>{DOMINANCE_BAND_HE[a.band]}</span>
+                      <span className="text-muted tabular-nums">{a.sharePct}% · {fmt(a.activeListings)} פעילים</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-muted mb-1 text-[11px] font-bold">רחובות מובילים</div>
+              <div className="flex flex-col gap-1">
+                {terr.topStreets.slice(0, 8).map((a) => (
+                  <div key={a.name} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5 text-[12px]">
+                    <span className="text-ink font-bold">{a.name}</span>
+                    <span className="text-muted text-[11px] tabular-nums">{a.sharePct}% · {fmt(a.activeListings)} פעילים</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {terr.weakAreas.length > 0 && <div className="text-muted mt-2 text-[11px]"><b>אזורים חלשים:</b> {terr.weakAreas.map((a) => `${a.name} (${a.sharePct}%)`).join(" · ")}</div>}
+          {terr.expansionOpportunities.length > 0 && <div className="mt-1 text-[11px] text-emerald-700"><b>הזדמנויות התרחבות:</b> {terr.expansionOpportunities.map((e) => e.name).join(" · ")}</div>}
         </section>
       )}
 

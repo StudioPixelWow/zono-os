@@ -34,9 +34,12 @@ import {
   startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
+  getCityTerritoryIntelligenceAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
+import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
+import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence/types";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -333,6 +336,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <CityKnowledgeStatusPanel cities={index?.cities ?? []} onChanged={reload} />
           <CityCensusPanel cities={index?.cities ?? []} />
           <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
+          <TerritoryIntelligencePanel cities={index?.cities ?? []} />
           <BrandHierarchyPanel cities={index?.cities ?? []} />
           <PromotionDebugPanel cities={index?.cities ?? []} />
           <PipelineAuditPanel />
@@ -834,6 +838,90 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
   UI_SHOWING_INCOMPLETE_DATA: "הממשק מציג נתונים חלקיים",
   MULTIPLE_PIPELINE_FAILURES: "כשלים מרובים בצינור",
 };
+
+// ── Territory Intelligence — who dominates every neighborhood/street ─────────
+const nis = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
+function TerritoryIntelligencePanel({ cities }: { cities: string[] }) {
+  const [city, setCity] = useState("קריית ביאליק");
+  const [data, setData] = useState<CityTerritoryIntelligence | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getCityTerritoryIntelligenceAction(city); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+  const heatColor = (v: number) => v >= 66 ? "bg-emerald-500/70" : v >= 40 ? "bg-emerald-400/50" : v >= 20 ? "bg-amber-300/50" : v > 0 ? "bg-amber-200/40" : "bg-line/40";
+
+  return (
+    <section className="rounded-3xl border border-line bg-card p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">🗺️ מודיעין טריטוריה — מי שולט בכל שכונה ורחוב</h2>
+          <p className="text-muted mt-1 text-[12px]">נתח שוק, דומיננטיות ותובנות — מבוסס-ראיות בלבד (מודעות מקושרות למשרדים/מתווכים). ללא שינוי בהערכת שווי/גילוי.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={city} onChange={(e) => setCity(e.target.value)} list="terr-city-list" placeholder="עיר" className="border-line bg-surface text-ink min-w-[160px] rounded-full border px-3 py-1.5 text-sm" />
+          <datalist id="terr-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+          <button onClick={run} disabled={pending || !city.trim()} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "נתח טריטוריה"}</button>
+        </div>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="מודעות" value={fmt(data.totals.listings)} />
+            <Mini label="פעילות" value={fmt(data.cityStats.activeListings)} tone="green" />
+            <Mini label="משרדים" value={fmt(data.totals.offices)} />
+            <Mini label="מתווכים" value={fmt(data.totals.brokers)} />
+            <Mini label="חציון מחיר" value={nis(data.cityStats.medianPrice)} />
+            <Mini label="יוקרה %" value={`${data.cityStats.luxuryPct}%`} />
+            <Mini label="שכונות" value={fmt(data.totals.neighborhoods)} />
+          </div>
+          {data.insights.length > 0 && <ul className="flex flex-col gap-0.5">{data.insights.map((ins, i) => <li key={i} className="text-ink">• {ins}</li>)}</ul>}
+
+          {/* Neighborhood leaders */}
+          {data.neighborhoods.length > 0 && (
+            <div className="overflow-x-auto">
+              <b>מובילי שכונות:</b>
+              <table className="mt-1 w-full text-[11px]">
+                <thead className="text-muted"><tr><th className="text-right">שכונה</th><th>פעילות</th><th>מוביל</th><th>נתח</th><th>דירוג</th><th>חציון</th><th>יוקרה</th></tr></thead>
+                <tbody>
+                  {data.neighborhoods.slice(0, 15).map((n) => { const d = n.officeDominance[0]; return (
+                    <tr key={n.key} className="border-line border-b">
+                      <td className="py-1 font-bold">{n.name}</td>
+                      <td className="text-center tabular-nums">{fmt(n.stats.activeListings)}</td>
+                      <td className="text-center">{n.leaderOffice?.name ?? "—"}</td>
+                      <td className="text-center tabular-nums">{n.leaderOffice?.sharePct ?? 0}%</td>
+                      <td className="text-center">{d ? DOMINANCE_BAND_HE[d.band] : "—"}</td>
+                      <td className="text-center tabular-nums">{nis(n.stats.medianPrice)}</td>
+                      <td className="text-center tabular-nums">{n.stats.luxuryPct}%</td>
+                    </tr>
+                  ); })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Heatmap (office dominance / supply / luxury) */}
+          {data.heatmap.length > 0 && (
+            <div>
+              <b>מפת חום (דומיננטיות · היצע · יוקרה):</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.heatmap.slice(0, 14).map((h) => (
+                  <div key={h.key} className="flex items-center gap-2">
+                    <span className="w-28 shrink-0 truncate text-[11px] font-bold">{h.name}</span>
+                    <span className={cn("h-4 rounded", heatColor(h.officeDominance))} style={{ width: `${Math.max(4, h.officeDominance)}%` }} title={`דומיננטיות ${h.officeDominance}`} />
+                    <span className={cn("h-4 rounded", heatColor(h.supply))} style={{ width: `${Math.max(4, h.supply)}%` }} title={`היצע ${h.supply}`} />
+                    <span className={cn("h-4 rounded", heatColor(h.luxury))} style={{ width: `${Math.max(4, h.luxury)}%` }} title={`יוקרה ${h.luxury}`} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((nt, i) => <li key={i}>{nt}</li>)}</ul>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Brand & Branch Identity — Brand → Branch → Broker hierarchy (read-only) ──
 function BrandHierarchyPanel({ cities }: { cities: string[] }) {
