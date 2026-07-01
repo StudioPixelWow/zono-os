@@ -10,6 +10,8 @@ import type { BrokerRankCard } from "@/lib/brokerage-data/broker-intelligence";
 import type { OfficeTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence";
 import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence";
 import type { OfficeCompetitiveProfile } from "@/lib/brokerage-data/competitive-intelligence";
+import type { DecisionPackage } from "@/lib/decision-engine";
+import { EXECUTION_HE } from "@/lib/decision-engine";
 import { BackfillButton } from "./BackfillButton";
 
 const THREAT_HE: Record<string, string> = { low: "נמוך", moderate: "בינוני", high: "גבוה" };
@@ -50,12 +52,13 @@ function CoverBox({ title, items }: { title: string; items: { key: string; count
   );
 }
 
-export function OfficeProfileView({ profile, inventory, ranking, territory, competitive }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[]; territory?: OfficeTerritoryIntelligence | null; competitive?: OfficeCompetitiveProfile | null }) {
+export function OfficeProfileView({ profile, inventory, ranking, territory, competitive, decisions }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[]; territory?: OfficeTerritoryIntelligence | null; competitive?: OfficeCompetitiveProfile | null; decisions?: DecisionPackage | null }) {
   const p = profile;
   const inv = inventory ?? null;
   const rank = ranking ?? [];
   const terr = territory ?? null;
   const comp = competitive ?? null;
+  const dec = decisions ?? null;
   const website = p.website ? (p.website.startsWith("http") ? p.website : `https://${p.website}`) : null;
   return (
     <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-4 p-4 sm:p-6">
@@ -81,6 +84,43 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
         </div>
         <p className="text-muted mt-3 text-[11px] leading-relaxed">{STATUS_EXPLAIN[p.status] ?? ""} עודכן לאחרונה: {fmtDate(p.lastSeenAt)}{p.lastVerifiedAt ? ` · אומת: ${fmtDate(p.lastVerifiedAt)}` : ""}.</p>
       </section>
+
+      {/* Decision Engine — prioritized, evidence-based actions (27.4) */}
+      {dec && (dec.decisions.length > 0 || dec.notes.length > 0) && (
+        <section className="border-brand/40 bg-brand-soft/20 rounded-2xl border p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-brand-strong text-sm font-black">🧭 החלטות ופעולות מומלצות</h2>
+            <span className="flex items-center gap-2 text-[11px]">
+              <span className="rounded-full bg-surface px-2 py-0.5 font-bold">ציון עסקי {dec.businessScore}</span>
+              <span className="text-muted">ביטחון AI {dec.aiConfidence}%</span>
+            </span>
+          </div>
+          {dec.notes.length > 0 && <p className="text-muted mb-2 text-[11px]">{dec.notes.join(" · ")}</p>}
+          <div className="flex flex-col gap-1.5">
+            {dec.decisions.map((d) => (
+              <div key={d.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-ink font-bold">{d.title}</span>
+                  <span className="flex items-center gap-2 text-[11px]">
+                    <span className="rounded-full bg-surface px-2 py-0.5 font-bold">{d.category}</span>
+                    <span className="bg-brand-soft/60 rounded-full px-2 py-0.5 font-bold tabular-nums">עדיפות {d.priorityScore}</span>
+                    <span className="text-muted">{EXECUTION_HE[d.executionReadiness]}</span>
+                  </span>
+                </div>
+                <div className="text-muted mt-0.5 text-[11px]">{d.why}</div>
+                <div className="text-emerald-700 mt-0.5 text-[10px]">מדוע: {d.evidence.join(" · ")}</div>
+                {d.actions.length > 0 && <div className="text-muted mt-0.5 text-[11px]"><b>פעולה:</b> {d.actions.map((a) => `${a.title} (השפעה ${a.expectedImpact}, מאמץ ${a.effort}${a.deadlineDays ? `, ${a.deadlineDays} ימים` : ""})`).join(" · ")}</div>}
+              </div>
+            ))}
+          </div>
+          {(dec.risks.length > 0 || dec.opportunities.length > 0) && (
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 text-[11px]">
+              {dec.risks.length > 0 && <div className="rounded-xl border border-rose-200 bg-rose-50/50 px-3 py-2"><b className="text-rose-700">סיכונים</b><ul className="text-muted mt-1 flex flex-col gap-0.5">{dec.risks.slice(0, 5).map((r) => <li key={r.id} title={r.evidence}>• {r.title} ({r.severity})</li>)}</ul></div>}
+              {dec.opportunities.length > 0 && <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2"><b className="text-emerald-700">הזדמנויות</b><ul className="text-muted mt-1 flex flex-col gap-0.5">{dec.opportunities.slice(0, 5).map((o) => <li key={o.id} title={o.evidence}>• {o.title}</li>)}</ul></div>}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">

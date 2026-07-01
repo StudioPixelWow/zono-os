@@ -32,6 +32,7 @@ import { getBrokerIntelligenceProfile, getOfficeBrokerRanking, type BrokerIntell
 import { getOfficeInventory, backfillOfficeInventoryFromBrokers, type OfficeInventory, type BackfillResult } from "./office-inventory";
 import { getCityTerritoryIntelligence, getOfficeTerritory, type CityTerritoryIntelligence, type OfficeTerritoryIntelligence } from "./territory-intelligence";
 import { getCityCompetitiveDashboard, getOfficeCompetitiveProfile, type CityCompetitiveDashboard, type OfficeCompetitiveProfile } from "./competitive-intelligence";
+import { getOfficeDecisionPackage, getCityDecisionBriefing, type DecisionPackage, type DailyBriefing } from "@/lib/decision-engine";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -174,6 +175,16 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+// ── Phase 27.4 — Decision Engine & Action Planner ────────────────────────────
+export async function getOfficeDecisionPackageAction(officeId: string): Promise<{ ok: boolean; result?: DecisionPackage | null; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOfficeDecisionPackage(officeId) }; }
+  catch (e) { console.error("[decision] office failed:", e); return { ok: false, error: "מנוע ההחלטות נכשל." }; }
+}
+export async function getCityDecisionBriefingAction(city: string): Promise<{ ok: boolean; result?: DailyBriefing; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." }; return { ok: true, result: await getCityDecisionBriefing(city) }; }
+  catch (e) { console.error("[decision] briefing failed:", e); return { ok: false, error: "התדריך היומי נכשל." }; }
 }
 
 // ── Phase 26.7 — Competitive Intelligence ────────────────────────────────────

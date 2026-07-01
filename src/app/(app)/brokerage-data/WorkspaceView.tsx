@@ -34,13 +34,15 @@ import {
   startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
-  getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction,
+  getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
 import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence/types";
 import type { CityCompetitiveDashboard } from "@/lib/brokerage-data/competitive-intelligence/types";
+import type { DailyBriefing } from "@/lib/decision-engine/types";
+import { EXECUTION_HE } from "@/lib/decision-engine/types";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -333,6 +335,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <CommandCenterPanel cities={index?.cities ?? []} />
           <ContinuousLearningPanel onChanged={reload} />
           <CityKnowledgeStatusPanel cities={index?.cities ?? []} onChanged={reload} />
           <CityCensusPanel cities={index?.cities ?? []} />
@@ -840,6 +843,68 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
   UI_SHOWING_INCOMPLETE_DATA: "הממשק מציג נתונים חלקיים",
   MULTIPLE_PIPELINE_FAILURES: "כשלים מרובים בצינור",
 };
+
+// ── Command Center — Daily AI Briefing (Decision Engine, 27.4) ───────────────
+function CommandCenterPanel({ cities }: { cities: string[] }) {
+  const [city, setCity] = useState("קריית ביאליק");
+  const [data, setData] = useState<DailyBriefing | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getCityDecisionBriefingAction(city); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="border-brand/50 bg-brand-soft/30 rounded-3xl border p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-brand-strong text-lg font-black">🧭 מרכז פיקוד — תדריך AI יומי</h2>
+          <p className="text-muted mt-1 text-[12px]">מנוע ההחלטות המרכזי: עדיפויות, סיכונים, הזדמנויות והתראות — מבוסס-ראיות בלבד, לא ספקולטיבי.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={city} onChange={(e) => setCity(e.target.value)} list="cc-city-list" placeholder="עיר" className="border-line bg-surface text-ink min-w-[160px] rounded-full border px-3 py-1.5 text-sm" />
+          <datalist id="cc-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+          <button onClick={run} disabled={pending || !city.trim()} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "בונה תדריך…" : "בנה תדריך יומי"}</button>
+        </div>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-surface px-3 py-1 font-bold">ציון עסקי {data.businessScore}</span>
+            <span className="text-muted">ביטחון AI {data.aiConfidence}%</span>
+          </div>
+          {/* Top priorities */}
+          {data.todaysPriorities.length > 0 && (
+            <div>
+              <b>עדיפויות היום:</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.todaysPriorities.map((d) => (
+                  <div key={d.id} className="border-line bg-surface rounded-lg border px-3 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ink font-bold">{d.title}</span>
+                      <span className="flex items-center gap-2 text-[11px]"><span className="bg-brand-soft/60 rounded-full px-2 py-0.5 font-bold tabular-nums">עדיפות {d.priorityScore}</span><span className="text-muted">{EXECUTION_HE[d.executionReadiness]}</span></span>
+                    </div>
+                    <div className="text-emerald-700 mt-0.5 text-[10px]">מדוע: {d.evidence.join(" · ")}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {data.topRisks.length > 0 && <div className="rounded-xl border border-rose-200 bg-rose-50/50 px-3 py-2"><b className="text-rose-700">סיכונים מובילים</b><ul className="text-muted mt-1 flex flex-col gap-0.5 text-[11px]">{data.topRisks.map((r) => <li key={r.id} title={r.evidence}>• {r.title} ({r.severity})</li>)}</ul></div>}
+            {data.topOpportunities.length > 0 && <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2"><b className="text-emerald-700">הזדמנויות מובילות</b><ul className="text-muted mt-1 flex flex-col gap-0.5 text-[11px]">{data.topOpportunities.map((o) => <li key={o.id} title={o.evidence}>• {o.title}</li>)}</ul></div>}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3 text-[11px]">
+            <div className="border-line bg-surface rounded-xl border px-3 py-2"><b>התראות מתחרים</b><ul className="text-muted mt-1">{data.competitorAlerts.length ? data.competitorAlerts.map((a, i) => <li key={i}>• {a}</li>) : <li>—</li>}</ul></div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2"><b>התראות מתווכים</b><ul className="text-muted mt-1">{data.brokerAlerts.length ? data.brokerAlerts.map((a, i) => <li key={i}>• {a}</li>) : <li>—</li>}</ul></div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2"><b>התראות שוק</b><ul className="text-muted mt-1">{data.marketAlerts.map((a, i) => <li key={i}>• {a}</li>)}</ul></div>
+          </div>
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((nt, i) => <li key={i}>{nt}</li>)}</ul>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Competitive Intelligence — city market dashboard ─────────────────────────
 const CONC_HE: Record<string, string> = { fragmented: "מפוצל", moderate: "בינוני", concentrated: "מרוכז" };
