@@ -35,8 +35,9 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction,
+  getActionCenterAction, getChiefOfStaffAction,
 } from "@/lib/brokerage-data/actions";
+import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -338,6 +339,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <ChiefOfStaffPanel />
           <ActionCenterPanel />
           <CommandCenterPanel cities={index?.cities ?? []} />
           <ContinuousLearningPanel onChanged={reload} />
@@ -849,6 +851,123 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── AI Chief of Staff — CEO dashboard (orchestration over every engine, 27.6) ─
+function ChiefOfStaffPanel() {
+  const [data, setData] = useState<ChiefOfStaffReport | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getChiefOfStaffAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+  const band = (n: number): "green" | "amber" | "red" => (n >= 66 ? "green" : n >= 40 ? "amber" : "red");
+
+  return (
+    <section className="border-brand rounded-3xl border-2 bg-gradient-to-l from-brand-soft/40 to-transparent p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-brand-strong text-xl font-black">🧠 ה-Chief of Staff של ZONO — דשבורד מנכ״ל</h2>
+          <p className="text-muted mt-1 text-[12px]">שכבת התזמור מעל כל מנועי ZONO: מסתכל, מתעדף, מחבר וממליץ — לעולם לא מקור אמת ולא מבצע אוטומטית. מבוסס-ראיות בלבד.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "הפעל Chief of Staff"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          {/* Organization Score + AI confidence */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="border-brand/40 bg-surface rounded-2xl border px-5 py-3">
+              <div className="text-muted text-[11px] font-bold">ציון ארגוני כולל</div>
+              <div className="text-brand-strong text-3xl font-black tabular-nums">{data.organizationScore.overall}</div>
+              <div className="text-muted text-[10px]">ביטחון AI {data.dashboard.aiConfidence}%</div>
+            </div>
+            <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {data.dashboard.health.map((h) => <Mini key={h.key} label={h.label} value={`${h.score}`} tone={band(h.score)} />)}
+            </div>
+          </div>
+
+          {/* Organization Score dimensions */}
+          <div>
+            <b>ציון הארגון — 8 ממדים:</b>
+            <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {data.organizationScore.dims.map((d) => (
+                <div key={d.key} className="border-line bg-surface rounded-lg border px-3 py-1.5">
+                  <div className="flex items-center justify-between"><span className="text-ink font-bold">{d.label}</span><span className="tabular-nums font-black" style={{ color: d.score >= 66 ? "#15803d" : d.score >= 40 ? "#b45309" : "#be123c" }}>{d.score}</span></div>
+                  <div className="text-muted mt-0.5 text-[10px] leading-tight">{d.basis}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {/* Executive briefing */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <BriefBlock title="🎯 עדיפויות היום" items={data.briefing.todaysPriorities.map((r) => `${r.title} · ${r.affectedEntities[0] ?? ""}`)} />
+            <BriefBlock title="⚠️ סיכונים קריטיים" items={data.briefing.criticalRisks.map((r) => `${r.title} — ${r.evidence[0] ?? ""}`)} tone="red" />
+            <BriefBlock title="💡 הזדמנויות" items={data.briefing.importantOpportunities.map((r) => `${r.title} · ${r.affectedEntities[0] ?? ""}`)} tone="green" />
+            <BriefBlock title="🚀 משימות דחופות" items={data.briefing.urgentMissions.map((r) => `${r.title} (${r.urgency})`)} />
+          </div>
+
+          {/* Cross-module reasoning */}
+          {data.crossModuleInsights.length > 0 && (
+            <div>
+              <b>🔗 חשיבה חוצת-מודולים:</b>
+              <div className="mt-1 flex flex-col gap-2">
+                {data.crossModuleInsights.map((ins) => (
+                  <div key={ins.id} className="border-brand/30 bg-surface rounded-xl border px-3 py-2">
+                    <div className="flex items-center justify-between"><span className="text-ink font-bold">{ins.title}</span><span className="text-muted text-[10px]">{ins.modules.join(" → ")} · ביטחון {ins.confidence}%</span></div>
+                    <div className="text-muted mt-1 text-[11px]">{ins.chain.join("  ↓  ")}</div>
+                    <div className="text-brand-strong mt-1 text-[11px] font-bold">← {ins.recommendation}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Execution coordinator interventions */}
+          {data.interventions.length > 0 && (
+            <div className="text-[11px]">
+              <b>🛠️ רכז ביצוע — התערבויות מומלצות (לא מבוצע אוטומטית):</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.interventions.slice(0, 6).map((i) => (
+                  <div key={i.id} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5">
+                    <span className="text-ink font-bold">{i.title}</span>
+                    <span className="text-muted">{i.affectedEntities[0] ?? ""} · דחיפות {i.urgency}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Alerts + business memory */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <BriefBlock title="📣 התראות תחרות/שוק" items={[...data.briefing.competitiveAlerts, ...data.briefing.marketAlerts].slice(0, 6)} />
+            <div className="border-line bg-surface rounded-xl border px-3 py-2 text-[11px]">
+              <b>🧠 זיכרון ארגוני:</b>
+              <p className="text-muted mt-1">{data.businessMemory.summary}</p>
+              {data.businessMemory.successfulStrategies.length > 0 && <p className="mt-1 text-green-700"><b>אסטרטגיות מוצלחות:</b> {data.businessMemory.successfulStrategies.map((s) => `${s.key} (${s.count})`).join(" · ")}</p>}
+              {data.businessMemory.repeatedProblems.length > 0 && <p className="mt-1 text-rose-700"><b>בעיות חוזרות:</b> {data.businessMemory.repeatedProblems.map((p) => `${p.key} (${p.count})`).join(" · ")}</p>}
+            </div>
+          </div>
+
+          <p className="text-muted text-[10px]">מקורות שנטענו: {data.globalContext.sources.join(" · ")} · נוצר {new Date(data.generatedAt).toLocaleString("he-IL")}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BriefBlock({ title, items, tone }: { title: string; items: string[]; tone?: "red" | "green" }) {
+  if (!items.length) return null;
+  const color = tone === "red" ? "text-rose-700" : tone === "green" ? "text-green-700" : "text-ink";
+  return (
+    <div className="border-line bg-surface rounded-xl border px-3 py-2">
+      <b className={color}>{title}</b>
+      <ul className="mt-1 flex flex-col gap-0.5">
+        {items.slice(0, 6).map((t, i) => <li key={i} className="text-muted text-[11px]">• {t}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 function ActionCenterPanel() {
   const [data, setData] = useState<ActionCenter | null>(null);
   const [pending, setPending] = useState(false);
