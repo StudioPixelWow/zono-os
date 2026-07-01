@@ -34,6 +34,10 @@ import { getCityTerritoryIntelligence, getOfficeTerritory, type CityTerritoryInt
 import { getCityCompetitiveDashboard, getOfficeCompetitiveProfile, type CityCompetitiveDashboard, type OfficeCompetitiveProfile } from "./competitive-intelligence";
 import { getOfficeDecisionPackage, getCityDecisionBriefing, type DecisionPackage, type DailyBriefing } from "@/lib/decision-engine";
 import {
+  getActionCenter, listEntityMissions, generateMissionsFromOfficeDecisions, updateMissionStatus,
+  type ActionCenter, type Mission,
+} from "@/lib/mission-engine";
+import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
   type JobResult,
@@ -175,6 +179,33 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+// ── Phase 27.5 — Universal Mission Engine & Action Center ────────────────────
+export async function getActionCenterAction(): Promise<{ ok: boolean; result?: ActionCenter; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getActionCenter(profile.org_id) }; }
+  catch (e) { console.error("[missions] action center failed:", e); return { ok: false, error: "מרכז הפעולות נכשל." }; }
+}
+export async function listOfficeMissionsAction(officeId: string): Promise<{ ok: boolean; result?: Mission[]; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await listEntityMissions("office", officeId, profile.org_id) }; }
+  catch (e) { console.error("[missions] list failed:", e); return { ok: false, error: "טעינת משימות נכשלה." }; }
+}
+export async function generateOfficeMissionsAction(officeId: string): Promise<{ ok: boolean; created?: number; migrationRequired?: boolean; note?: string; error?: string }> {
+  try {
+    const { profile, user } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const r = await generateMissionsFromOfficeDecisions(profile.org_id, officeId, user?.id ?? null);
+    revalidatePath(`/brokerage-data/office/${officeId}`);
+    return { ok: r.ok, created: r.created.length, migrationRequired: r.migrationRequired, note: r.note };
+  } catch (e) { console.error("[missions] generate failed:", e); return { ok: false, error: "יצירת משימות נכשלה." }; }
+}
+export async function updateMissionStatusAction(missionId: string, status: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const r = await updateMissionStatus(missionId, status as never);
+    revalidatePath("/brokerage-data");
+    return { ok: r.ok, error: r.error };
+  } catch (e) { console.error("[missions] status failed:", e); return { ok: false, error: "עדכון סטטוס נכשל." }; }
 }
 
 // ── Phase 27.4 — Decision Engine & Action Planner ────────────────────────────

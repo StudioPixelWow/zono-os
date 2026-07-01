@@ -12,7 +12,9 @@ import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence";
 import type { OfficeCompetitiveProfile } from "@/lib/brokerage-data/competitive-intelligence";
 import type { DecisionPackage } from "@/lib/decision-engine";
 import { EXECUTION_HE } from "@/lib/decision-engine";
+import type { Mission } from "@/lib/mission-engine";
 import { BackfillButton } from "./BackfillButton";
+import { MissionsSection } from "./MissionsSection";
 
 const THREAT_HE: Record<string, string> = { low: "נמוך", moderate: "בינוני", high: "גבוה" };
 const MOM_HE: Record<string, string> = { growing: "בצמיחה", stable: "יציב", declining: "בירידה" };
@@ -52,7 +54,7 @@ function CoverBox({ title, items }: { title: string; items: { key: string; count
   );
 }
 
-export function OfficeProfileView({ profile, inventory, ranking, territory, competitive, decisions }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[]; territory?: OfficeTerritoryIntelligence | null; competitive?: OfficeCompetitiveProfile | null; decisions?: DecisionPackage | null }) {
+export function OfficeProfileView({ profile, inventory, ranking, territory, competitive, decisions, officeId, missions }: { profile: OfficeProfile; inventory?: OfficeInventory | null; ranking?: BrokerRankCard[]; territory?: OfficeTerritoryIntelligence | null; competitive?: OfficeCompetitiveProfile | null; decisions?: DecisionPackage | null; officeId?: string; missions?: Mission[] }) {
   const p = profile;
   const inv = inventory ?? null;
   const rank = ranking ?? [];
@@ -121,6 +123,9 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
           )}
         </section>
       )}
+
+      {/* Mission Engine — turn decisions into executable missions (27.5) */}
+      {officeId && <MissionsSection officeId={officeId} initial={missions ?? []} />}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">

@@ -35,6 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
+  getActionCenterAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
@@ -43,6 +44,8 @@ import { DOMINANCE_BAND_HE } from "@/lib/brokerage-data/territory-intelligence/t
 import type { CityCompetitiveDashboard } from "@/lib/brokerage-data/competitive-intelligence/types";
 import type { DailyBriefing } from "@/lib/decision-engine/types";
 import { EXECUTION_HE } from "@/lib/decision-engine/types";
+import type { ActionCenter } from "@/lib/mission-engine/types";
+import { EXEC_STATUS_HE } from "@/lib/mission-engine/types";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -335,6 +338,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <ActionCenterPanel />
           <CommandCenterPanel cities={index?.cities ?? []} />
           <ContinuousLearningPanel onChanged={reload} />
           <CityKnowledgeStatusPanel cities={index?.cities ?? []} onChanged={reload} />
@@ -843,6 +847,56 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
   UI_SHOWING_INCOMPLETE_DATA: "הממשק מציג נתונים חלקיים",
   MULTIPLE_PIPELINE_FAILURES: "כשלים מרובים בצינור",
 };
+
+// ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+function ActionCenterPanel() {
+  const [data, setData] = useState<ActionCenter | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getActionCenterAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="border-brand/50 bg-brand-soft/20 rounded-3xl border p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-brand-strong text-lg font-black">🚀 מרכז פעולות — משימות ביצוע</h2>
+          <p className="text-muted mt-1 text-[12px]">מנוע המשימות האוניברסלי: החלטות הופכות למשימות ומשימות למשימות-משנה. שום דבר לא רץ אוטומטית.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "טוען…" : "טען מרכז פעולות"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="פעילות" value={fmt(data.totals.active)} tone="amber" />
+            <Mini label="בביצוע" value={fmt(data.totals.inProgress)} tone="green" />
+            <Mini label="ממתינות" value={fmt(data.totals.waiting)} />
+            <Mini label="חסומות" value={fmt(data.totals.blocked)} tone="red" />
+            <Mini label="הושלמו" value={fmt(data.totals.completed)} tone="green" />
+            <Mini label="ציון ביצוע" value={`${data.executionScore}`} />
+            <Mini label="שיעור השלמה" value={`${data.completionRatePct}%`} />
+          </div>
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+          {data.critical.length + data.highPriority.length > 0 && (
+            <div>
+              <b>משימות קריטיות / עדיפות גבוהה:</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {[...data.critical, ...data.highPriority].slice(0, 8).map((m) => (
+                  <div key={m.id} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5">
+                    <span className="text-ink font-bold">{m.goal || m.missionType}{m.entityName ? <span className="text-muted font-normal"> · {m.entityName}</span> : ""}</span>
+                    <span className="flex items-center gap-2 text-[11px]"><span className="bg-brand-soft/60 rounded-full px-2 py-0.5 font-bold tabular-nums">{m.priority}</span><span className="text-muted">{EXEC_STATUS_HE[m.status]}</span></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.todaysTasks.length > 0 && <div className="text-muted text-[11px]"><b>משימות להיום:</b> {data.todaysTasks.slice(0, 8).map((t) => t.task.title).join(" · ")}</div>}
+          {(data.blocked.length > 0 || data.waiting.length > 0) && <div className="text-muted text-[11px]"><b>חסומות/ממתינות:</b> {[...data.blocked, ...data.waiting].slice(0, 6).map((m) => `${m.goal || m.missionType} (${EXEC_STATUS_HE[m.status]})`).join(" · ")}</div>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Command Center — Daily AI Briefing (Decision Engine, 27.4) ───────────────
 function CommandCenterPanel({ cities }: { cities: string[] }) {
