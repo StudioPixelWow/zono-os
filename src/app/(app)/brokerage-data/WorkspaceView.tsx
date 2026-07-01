@@ -33,9 +33,10 @@ import {
   seedCityAICandidatesAction, crossCheckCityRepositoriesAction,
   startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
-  buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction,
+  buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
+import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
@@ -332,6 +333,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <CityKnowledgeStatusPanel cities={index?.cities ?? []} onChanged={reload} />
           <CityCensusPanel cities={index?.cities ?? []} />
           <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
+          <BrandHierarchyPanel cities={index?.cities ?? []} />
           <PromotionDebugPanel cities={index?.cities ?? []} />
           <PipelineAuditPanel />
           <CityAuditPanel cities={index?.cities ?? []} />
@@ -832,6 +834,86 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
   UI_SHOWING_INCOMPLETE_DATA: "הממשק מציג נתונים חלקיים",
   MULTIPLE_PIPELINE_FAILURES: "כשלים מרובים בצינור",
 };
+
+// ── Brand & Branch Identity — Brand → Branch → Broker hierarchy (read-only) ──
+function BrandHierarchyPanel({ cities }: { cities: string[] }) {
+  const [city, setCity] = useState("");
+  const [data, setData] = useState<BrandHierarchy | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getBrandHierarchyAction(city.trim() || undefined); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border border-line bg-card p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-ink text-lg font-black">🏷️ מותג ← סניף ← מתווך</h2>
+          <p className="text-muted mt-1 text-[12px]">היררכיית תיווך אמיתית. סניפים של אותו מותג (RE/MAX Smart, Vision…) הם משרדים נפרדים — לעולם לא ממוזגים. כפילות מסומנת רק לפי מזהים חזקים (טלפון/אתר/כתובת/קואורדינטות).</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={city} onChange={(e) => setCity(e.target.value)} list="brand-city-list" placeholder="עיר (ריק = הכל)" className="border-line bg-surface text-ink min-w-[160px] rounded-full border px-3 py-1.5 text-sm" />
+          <datalist id="brand-city-list">{cities.map((c) => <option key={c} value={c} />)}</datalist>
+          <button onClick={run} disabled={pending} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "טוען…" : "בנה היררכיה"}</button>
+        </div>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      {data && (
+        <div className="mt-4 flex flex-col gap-3 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <Mini label="מותגים" value={fmt(data.totals.brands)} />
+            <Mini label="סניפים" value={fmt(data.totals.branches)} tone="green" />
+            <Mini label="עצמאיים" value={fmt(data.totals.independents)} />
+            <Mini label="מתווכים" value={fmt(data.totals.brokers)} />
+            <Mini label="כפילות אפשרית" value={fmt(data.totals.possibleDuplicates)} tone={data.totals.possibleDuplicates ? "amber" : undefined} />
+          </div>
+
+          {data.brands.map((brand) => (
+            <div key={brand.normalizedBrand} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="text-ink font-black">🏢 {brand.brand} <span className="text-muted font-normal">· {fmt(brand.branchCount)} סניפים · {fmt(brand.brokerCount)} מתווכים</span></div>
+              <div className="mt-1 flex flex-col gap-1">
+                {brand.branches.map((b) => (
+                  <div key={b.officeId} className="border-line ms-3 border-s ps-3">
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <span className="text-ink font-bold">├── {b.branch ?? "(סניף ראשי)"} <span className="text-muted font-normal">· {b.displayName}</span></span>
+                      <span className="flex items-center gap-2 text-[11px]">
+                        <span className={cn("rounded-full px-2 py-0.5 font-bold", b.verificationState === "active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{b.verificationState}</span>
+                        <span className="text-muted tabular-nums">{fmt(b.brokerCount)} מתווכים · {Math.round(b.confidence)}%</span>
+                      </span>
+                    </div>
+                    <div className="text-muted mt-0.5 text-[10px]">{b.explain.whySeparate} · {b.explain.whyNotMerged}</div>
+                    {b.brokers.length > 0 && <div className="text-muted mt-0.5 text-[10px]">└─ {b.brokers.slice(0, 8).map((br) => br.name).join(" · ")}{b.brokers.length > 8 ? ` +${b.brokers.length - 8}` : ""}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {data.independentOffices.length > 0 && (
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="text-ink font-black">🏠 משרדים עצמאיים <span className="text-muted font-normal">· {fmt(data.independentOffices.length)}</span></div>
+              <div className="mt-1 flex flex-col gap-0.5">
+                {data.independentOffices.slice(0, 30).map((b) => (
+                  <div key={b.officeId} className="flex items-center justify-between text-[11px]"><span className="text-ink font-bold">• {b.displayName}</span><span className="text-muted">{fmt(b.brokerCount)} מתווכים · {b.city ?? ""}</span></div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.possibleDuplicates.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 px-3 py-2 text-amber-800">
+              <b>כפילות אפשרית (לבדיקה ידנית בלבד — לא ממוזג):</b>
+              <ul className="mt-1 list-disc pr-5">
+                {data.possibleDuplicates.slice(0, 12).map((d, i) => <li key={i}>{d.officeAName} ↔ {d.officeBName} — {d.sharedSignals.join(", ")}</li>)}
+              </ul>
+            </div>
+          )}
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((nt, i) => <li key={i}>{nt}</li>)}</ul>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Promotion Debug™ — explain exactly why candidates (don't) become offices ──
 const PROMO_STATUS_HE: Record<PromotionStatus, string> = { READY: "מוכן לקידום", BLOCKED: "חסום", WAITING: "ממתין", REJECTED: "נדחה" };

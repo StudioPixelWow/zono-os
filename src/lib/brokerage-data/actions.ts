@@ -27,6 +27,7 @@ import { runBrokerageResearchAgent, type AgentReport, type ResearchDepth } from 
 import { crossCheckCityRepositories, type CityRepositoryAudit } from "./city-repository-audit";
 import { getPromotionDebug, type PromotionDebugDashboard } from "./promotion-debug";
 import { buildOfficeIntelligenceForCandidate, buildOfficeIntelligenceForCity, type EnrichmentResult, type CityEnrichmentResult } from "./office-intelligence";
+import { getBrandHierarchy, type BrandHierarchy } from "./brand-identity";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -169,6 +170,15 @@ export async function cancelCityResearchJobAction(jobId: string): Promise<JobRes
   const r = await cancelBrokerageResearchJob(jobId);
   revalidatePath("/brokerage-data");
   return r;
+}
+
+/** Phase 26.4.19 — READ-ONLY brand→branch→broker hierarchy. */
+export async function getBrandHierarchyAction(city?: string): Promise<{ ok: boolean; result?: BrandHierarchy; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    return { ok: true, result: await getBrandHierarchy(city || null) };
+  } catch (e) { console.error("[brand-identity] failed:", e); return { ok: false, error: "בניית ההיררכיה נכשלה." }; }
 }
 
 // ── Phase 26.4.18 — Office Intelligence Builder (candidate enrichment) ────────
