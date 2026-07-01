@@ -12,8 +12,9 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import {
   runValuationAction, generateValuationReportAction, sendValuationReportAsPdfAction,
   createSellerFollowupFromValuationAction, diagnoseValuationEvidenceAction,
-  getValuationEvidenceSearchAction,
+  getValuationEvidenceSearchAction, getValuationScanProofAction,
 } from "@/lib/valuation/actions";
+import type { ValuationScanProof, ExternalScanClassification } from "@/lib/valuation/external-scan-proof";
 import type { ValuationEvidenceDiagnosis } from "@/lib/valuation/diagnostics";
 // Import from the PURE submodules — NOT the barrel — so the server-only engine/
 // service/repository never get pulled into this client bundle.
@@ -31,6 +32,7 @@ import {
   STRATEGY_LABEL, VALUATION_DISCLAIMER,
 } from "@/lib/valuation/types";
 
+const fmt = (n: number) => n.toLocaleString("he-IL");
 const ils = (n: number | null | undefined) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 const ils0 = (n: number | null | undefined) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
@@ -237,11 +239,116 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
       </Section>
 
       {/* Read-only evidence diagnostic (QA/admin) — collapsed by default. */}
+      <ScanProofPanel valuationId={record.id} />
       <EvidenceDiagnostic valuationId={record.id} />
       <EvidenceSearchPanel valuationId={record.id} />
 
       {sendOpen && <SendModal valuationId={record.id} hasReport={!!reportToken} onClose={() => setSendOpen(false)} onGenerated={(t) => setReportToken(t)} />}
     </main>
+  );
+}
+
+// ── VAL-QA-10 — External Listings Scan Proof panel (honest enforcement) ──────
+const SCAN_CLASS_HE: Record<ExternalScanClassification, { label: string; tone: "green" | "amber" | "red" }> = {
+  EXTERNAL_LISTINGS_OK: { label: "מודעות חיצוניות נסרקו ונמצאו שמישות", tone: "green" },
+  NO_EXTERNAL_LISTINGS_IMPORTED: { label: "לא יובאו מודעות חיצוניות", tone: "amber" },
+  EXTERNAL_PROVIDER_NOT_READING_TABLE: { label: "הספק אינו קורא את הטבלה", tone: "red" },
+  EXTERNAL_CITY_FILTER_MISMATCH: { label: "אי-התאמת עיר/רדיוס", tone: "amber" },
+  EXTERNAL_MISSING_PRICE_OR_SQM: { label: "חסר מחיר/שטח", tone: "amber" },
+  EXTERNAL_COMPARABLES_NOT_USED: { label: "מודעות שמישות שלא נוצלו", tone: "red" },
+};
+
+function ScanProofPanel({ valuationId }: { valuationId: string }) {
+  const [data, setData] = useState<ValuationScanProof | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setPending(true); setErr(null);
+    try { const r = await getValuationScanProofAction(valuationId); if (r.ok) setData(r.data); else setErr(r.error); }
+    catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setPending(false); }
+  };
+
+  const f = data?.external;
+  const cls = data ? SCAN_CLASS_HE[data.classification] : null;
+  const toneCol = cls?.tone === "green" ? "text-emerald-700" : cls?.tone === "red" ? "text-rose-700" : "text-amber-700";
+  const toneBg = cls?.tone === "green" ? "border-emerald-200 bg-emerald-50/50" : cls?.tone === "red" ? "border-rose-200 bg-rose-50/50" : "border-amber-200 bg-amber-50/50";
+
+  return (
+    <details className="border-line bg-card rounded-2xl border p-4">
+      <summary className="flex cursor-pointer items-center justify-between">
+        <span className="text-ink text-sm font-black">🧾 הוכחת סריקת מודעות חיצוניות (VAL-QA-10)</span>
+        <button onClick={(e) => { e.preventDefault(); run(); }} disabled={pending} className="bg-ink rounded-lg px-3 py-1 text-xs font-bold text-white disabled:opacity-60">{pending ? "בודק…" : "הרץ הוכחה"}</button>
+      </summary>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && f && (
+        <div className="mt-3 flex flex-col gap-3 text-[12px]">
+          {/* Honest verdict banner (Part 4 enforcement) */}
+          <div className={cn("rounded-xl border px-3 py-2", toneBg)}>
+            {!data.externalScanned
+              ? <b className="text-rose-700">המערכת לא סרקה מודעות חיצוניות — יש לבדוק חיבור מקור.</b>
+              : <span><b className={toneCol}>{cls?.label}</b> — {data.reasonHe}</span>}
+            <div className="text-muted mt-0.5 text-[11px]">סיווג: {data.classification} · נסרקו ע״י הספק: {fmt(data.externalProvider.rawRowsRead)} · שמישות אצל הספק: {fmt(data.externalProvider.usableRows)} · שולבו בהערכה: {fmt(data.externalUsedInValuation)}</div>
+          </div>
+
+          {/* Full external funnel (Core requirement) */}
+          <div className="overflow-x-auto">
+            <b>משפך external_listings:</b>
+            <table className="mt-1 w-full text-[11px]">
+              <tbody>
+                {[
+                  ["שורות גולמיות בארגון", f.rawRowsInOrg],
+                  ["בעיר מדויקת", f.rowsAfterExactCity],
+                  ["בעיר מנורמלת", f.rowsAfterNormalizedCity],
+                  ["עם מחיר", f.rowsAfterPrice],
+                  ["עם שטח (מ״ר)", f.rowsAfterSqm],
+                  ["עם מחיר+שטח", f.rowsAfterPriceAndSqm],
+                  ["תואם סוג נכס", f.rowsAfterType],
+                  ["בטווח חדרים (±1)", f.rowsAfterRooms],
+                  ["בטווח שטח (±25%)", f.rowsAfterArea],
+                  ["ברדיוס 4 ק״מ", f.rowsAfterRadius],
+                  ["שמישות (מיקום+מחיר+שטח)", f.usableRows],
+                  ["נדחו", f.rejectedRows],
+                ].map(([label, val], i) => (
+                  <tr key={i} className="border-line border-b">
+                    <td className="py-1 font-bold">{label}</td>
+                    <td className="text-left tabular-nums">{fmt(Number(val))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {f.rejectionReasons.length > 0 && (
+            <div className="text-muted"><b>סיבות דחייה:</b> {f.rejectionReasons.map((r) => `${r.reason} (${fmt(r.count)})`).join(" · ")}</div>
+          )}
+          {f.rowsAfterNormalizedCity === 0 && f.rawRowsInOrg > 0 && f.distinctCities.length > 0 && (
+            <div className="text-muted"><b>ערים במודעות שקיימות:</b> {f.distinctCities.slice(0, 12).join(" · ")}</div>
+          )}
+
+          {/* Per-provider timing + counters (Part 1) */}
+          <div className="overflow-x-auto">
+            <b>תזמון וספירת ספקים:</b>
+            <table className="mt-1 w-full text-[11px]">
+              <thead className="text-muted"><tr><th className="text-right">ספק</th><th>טבלה</th><th>זמן (ms)</th><th>גולמי</th><th>שמיש</th><th>סטטוס</th></tr></thead>
+              <tbody>
+                {data.timings.map((t, i) => (
+                  <tr key={i} className="border-line border-b">
+                    <td className="py-1 font-bold">{t.provider}</td>
+                    <td className="text-muted">{t.table}</td>
+                    <td className="text-center tabular-nums">{fmt(t.durationMs)}</td>
+                    <td className="text-center tabular-nums">{fmt(t.rawRowsRead)}</td>
+                    <td className="text-center tabular-nums">{fmt(t.usableRows)}</td>
+                    <td className="text-center">{t.status === "error" ? <span className="text-rose-700" title={t.message ?? ""}>שגיאה</span> : t.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data.notes.length > 0 && <ul className="text-muted list-disc pr-5">{data.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+        </div>
+      )}
+    </details>
   );
 }
 

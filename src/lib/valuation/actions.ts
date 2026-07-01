@@ -16,6 +16,7 @@ import {
 } from "./report-service";
 import { getBrokerSoldProperties } from "./providers";
 import { diagnoseValuationEvidence, type ValuationEvidenceDiagnosis } from "./diagnostics";
+import { buildValuationScanProof, type ValuationScanProof } from "./external-scan-proof";
 import { getPropertyEvidence, type EvidencePackage } from "@/lib/evidence-search";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
@@ -125,5 +126,11 @@ export async function diagnoseValuationEvidenceAction(id: string): Promise<Resul
 /** READ-ONLY Evidence Search™ — progressive evidence retrieval for a valuation. */
 export async function getValuationEvidenceSearchAction(id: string, allowNearbyCities = false): Promise<Result<EvidencePackage>> {
   try { return { ok: true, data: await getPropertyEvidence({ valuationId: id, allowNearbyCities }) }; }
+  catch (e) { return fail(e); }
+}
+
+/** VAL-QA-10 — READ-ONLY scan proof: proves whether external_listings were scanned. */
+export async function getValuationScanProofAction(id: string): Promise<Result<ValuationScanProof | null>> {
+  try { return { ok: true, data: await buildValuationScanProof(id) }; }
   catch (e) { return fail(e); }
 }
