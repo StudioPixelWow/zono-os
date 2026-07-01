@@ -62,6 +62,36 @@ export async function buildSchedulerPlan(orgId: string | null, cap = 12): Promis
   return { scannedCities: scanned, queue, picked: queue[0] ?? null, generatedAt: new Date().toISOString() };
 }
 
+export interface ContinuousSweepResult {
+  ticks: number; citiesProcessed: number; stoppedReason: string;
+  processed: { city: string; reason: string; tier: number; jobStatus: string | null; confidenceEvolved: number; healthBefore: number | null; healthAfter: number | null }[];
+}
+
+/**
+ * Run MANY ticks in one background pass (for the Vercel cron). Drains the
+ * priority queue city-by-city until there's no pending work, the tick cap is
+ * hit, or the wall-clock budget is exhausted. Each city is refreshed
+ * differentially. Never throws.
+ */
+export async function runContinuousLearningSweep(maxTicks = 8, totalBudgetMs = 240000, perTickBudgetMs = 18000): Promise<ContinuousSweepResult> {
+  const t0 = Date.now();
+  const processed: ContinuousSweepResult["processed"] = [];
+  let stoppedReason = "no_work";
+  let ticks = 0;
+  for (; ticks < maxTicks; ticks++) {
+    if (Date.now() - t0 > totalBudgetMs - perTickBudgetMs) { stoppedReason = "time_budget"; break; }
+    const r = await runContinuousLearningTick(null, perTickBudgetMs).catch(() => null);
+    if (!r || !r.ran || !r.picked) { stoppedReason = "no_work"; break; }
+    processed.push({
+      city: r.picked.city, reason: r.picked.reason, tier: r.picked.tier,
+      jobStatus: r.jobStatus, confidenceEvolved: r.confidenceEvolved,
+      healthBefore: r.profileBefore?.learningHealth ?? null, healthAfter: r.profileAfter?.learningHealth ?? null,
+    });
+    if (ticks + 1 >= maxTicks) stoppedReason = "tick_cap";
+  }
+  return { ticks, citiesProcessed: processed.length, stoppedReason, processed };
+}
+
 /** Run ONE scheduler tick: refresh the highest-priority city. */
 export async function runContinuousLearningTick(orgId: string | null, executionBudgetMs = 20000): Promise<ContinuousTickResult> {
   const plan = await buildSchedulerPlan(orgId);

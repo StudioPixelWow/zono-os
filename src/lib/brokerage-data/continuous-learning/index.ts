@@ -6,7 +6,7 @@
 // Census / Verification. No new discovery/agent/prompt, no schema rewrite.
 // ============================================================================
 export { getCityLearningProfile } from "./profile";
-export { buildSchedulerPlan, runContinuousLearningTick, scanKnownCities } from "./scheduler";
+export { buildSchedulerPlan, runContinuousLearningTick, runContinuousLearningSweep, scanKnownCities, type ContinuousSweepResult } from "./scheduler";
 export { enqueueCityRefresh, enqueueCityRefreshFireAndForget, evolveCityOfficeConfidence } from "./refresh";
 export { classifyCityPriority, rankPriorities, type CitySignals } from "./priority";
 export { freshnessScore, isStale, learningHealth, evolveConfidence, daysSince } from "./freshness";

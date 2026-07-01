@@ -21,6 +21,10 @@
       "schedule": "50 4 * * *"
     },
     {
+      "path": "/api/cron/brokerage-continuous-learning",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/transactions-refresh",
       "schedule": "0 3 * * *"
     },
