@@ -69,9 +69,14 @@ export async function finishSyncJobAction(jobId: string, cities: string[], error
     try {
       const { getSessionContext } = await import("@/lib/auth/session");
       const { triggerCityLearning } = await import("@/lib/brokerage-data/city-learning-trigger");
+      const { enqueueCityRefreshFireAndForget } = await import("@/lib/brokerage-data/continuous-learning");
       const { profile } = await getSessionContext().catch(() => ({ profile: null as { org_id?: string } | null }));
       const orgId = profile?.org_id ?? null;
-      for (const city of [...new Set(cities)].slice(0, 20)) void triggerCityLearning(orgId, city, "external_listing_city_detected").catch(() => {});
+      for (const city of [...new Set(cities)].slice(0, 20)) {
+        void triggerCityLearning(orgId, city, "external_listing_city_detected").catch(() => {});
+        // 26.4.16 — new listings are a data event → differential city refresh.
+        enqueueCityRefreshFireAndForget(orgId, city, "new_listings");
+      }
     } catch (e) { console.error("[external-listings] city learning trigger skipped:", e); }
     return { summary };
   } catch (e) {

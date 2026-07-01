@@ -44,10 +44,12 @@ function rowToJob(r: Row): ResearchJob {
 export async function insertJob(orgId: string | null, cityRaw: string, opts: CreateJobOptions): Promise<ResearchJob | null> {
   const db = createServiceRoleClient();
   const nowIso = new Date().toISOString();
+  const skip = opts.skipStages ?? [];
   const { data, error } = await db.from(TABLE as never).insert({
     organization_id: orgId, city: cityRaw.trim(), normalized_city: normCityKb(cityRaw),
-    status: "queued", depth: opts.depth ?? "standard", current_stage: "INIT", progress_percent: 0,
-    checkpoints: { stagesDone: [] }, errors: [], logs: [], created_by: opts.createdBy ?? null, updated_at: nowIso,
+    status: "queued", depth: opts.depth ?? "standard",
+    current_stage: skip.length ? "VERIFY" : "INIT", progress_percent: 0,
+    checkpoints: { stagesDone: skip }, errors: [], logs: [], created_by: opts.createdBy ?? null, updated_at: nowIso,
   } as never).select("*").maybeSingle();
   if (error) { if (isMissingTable(error.message)) return null; throw new Error(error.message); }
   return data ? rowToJob(data as Row) : null;

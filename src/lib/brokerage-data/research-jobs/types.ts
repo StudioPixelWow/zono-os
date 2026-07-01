@@ -78,7 +78,12 @@ export interface ResearchJob extends JobCounts {
   createdBy: string | null;
 }
 
-export interface CreateJobOptions { depth?: ResearchDepth; createdBy?: string | null }
+export interface CreateJobOptions {
+  depth?: ResearchDepth; createdBy?: string | null;
+  /** Differential refresh — pre-mark these stages done so the job skips them
+   *  (e.g. skip AI_SEED + PUBLIC_SEARCH to only drain/verify + rematch/relink). */
+  skipStages?: JobStage[];
+}
 
 // Human-readable stage labels for the UI.
 export const JOB_STAGE_HE: Record<JobStage, string> = {

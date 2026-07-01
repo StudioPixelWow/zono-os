@@ -20,6 +20,7 @@ import type { AICandidateSeedSummary } from "@/lib/brokerage-data/ai-candidate-s
 import type { ResearchDepth } from "@/lib/brokerage-data/research-agent/types";
 import type { ResearchJob } from "@/lib/brokerage-data/research-jobs/types";
 import { JOB_STAGE_HE, JOB_STATUS_HE } from "@/lib/brokerage-data/research-jobs/types";
+import type { ContinuousTickResult, SchedulerPlan } from "@/lib/brokerage-data/continuous-learning/types";
 import type { CityBrokerageCensus, CityKnowledgeStatus } from "@/lib/brokerage-data/brokerage-knowledge";
 import type { EnsureCityResult } from "@/lib/brokerage-data/city-lazy-learning";
 import {
@@ -29,6 +30,7 @@ import {
   getCityKnowledgeStatusAction, ensureCityBrokerageKnowledgeAction, runBrokerResearchAction,
   seedCityAICandidatesAction, crossCheckCityRepositoriesAction,
   startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
+  getContinuousSchedulerPlanAction, runContinuousLearningTickAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
@@ -322,6 +324,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <ContinuousLearningPanel onChanged={reload} />
           <CityKnowledgeStatusPanel cities={index?.cities ?? []} onChanged={reload} />
           <CityCensusPanel cities={index?.cities ?? []} />
           <CityDiscoveryPanel cities={index?.cities ?? []} onChanged={reload} />
@@ -330,6 +333,63 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Continuous Brokerage Intelligence — scheduler + differential refresh ─────
+function ContinuousLearningPanel({ onChanged }: { onChanged: () => Promise<void> }) {
+  const [plan, setPlan] = useState<SchedulerPlan | null>(null);
+  const [tick, setTick] = useState<ContinuousTickResult | null>(null);
+  const [pending, setPending] = useState<null | "plan" | "tick">(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const loadPlan = async () => { setPending("plan"); setErr(null); try { const r = await getContinuousSchedulerPlanAction(); if (r.ok) setPlan(r.result ?? null); else setErr(r.error ?? "נכשל"); } finally { setPending(null); } };
+  const runTick = async () => { setPending("tick"); setErr(null); try { const r = await runContinuousLearningTickAction(); if (r.ok) { setTick(r.result ?? null); setPlan(r.result?.plan ?? null); await onChanged().catch(() => {}); } else setErr(r.error ?? "נכשל"); } finally { setPending(null); } };
+
+  return (
+    <section className="rounded-3xl border border-indigo-200 bg-indigo-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-indigo-900 text-lg font-black">🔄 למידה רציפה של שוק התיווך</h2>
+          <p className="text-muted mt-1 text-[12px]">כל עיר לומדת את עצמה כשמופיעים נתונים חדשים — רענון דיפרנציאלי בלבד (ללא AI/חיפוש מיותר), לפי סדר עדיפויות. אין צורך בלחיצת משתמש.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={loadPlan} disabled={pending != null} className="border-line bg-card text-ink rounded-xl border px-4 py-1.5 text-sm font-bold disabled:opacity-60">{pending === "plan" ? "טוען…" : "תור עדיפויות"}</button>
+          <button onClick={runTick} disabled={pending != null} className="bg-indigo-600 rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending === "tick" ? "מריץ…" : "הרץ מחזור למידה"}</button>
+        </div>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      {plan && (
+        <div className="mt-4 text-[12px]">
+          <div className="text-muted">נסרקו {fmt(plan.scannedCities)} ערים · בתור: {fmt(plan.queue.length)}{plan.picked ? ` · הבא: ${plan.picked.city} (${plan.picked.tierLabel})` : " · אין עבודה ממתינה"}</div>
+          {plan.queue.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1">
+              {plan.queue.slice(0, 8).map((p, i) => (
+                <div key={i} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5">
+                  <span className="text-ink font-bold">{i + 1}. {p.city}</span>
+                  <span className="flex items-center gap-2 text-[11px]">
+                    <span className={cn("rounded-full px-2 py-0.5 font-bold", p.tier === 1 ? "bg-rose-50 text-rose-700" : p.tier <= 3 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600")}>עדיפות {p.tier} · {p.tierLabel}</span>
+                    <span className="text-muted">ממתינים {fmt(p.signals.waitingCandidates)} · כיסוי {p.signals.coveragePct}% · רעננות {p.signals.freshnessScore}%</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tick && tick.ran && tick.picked && (
+        <div className="mt-3 rounded-xl border border-indigo-200 bg-surface px-3 py-2 text-[12px]">
+          <b>מחזור הורץ על {tick.picked.city}</b> ({tick.picked.tierLabel}) · {tick.note}
+          <div className="text-muted mt-1 text-[11px]">משרה: {tick.jobStatus ?? "—"} · ביטחון משרדים עודכן: {fmt(tick.confidenceEvolved)}</div>
+          {tick.profileBefore && tick.profileAfter && (
+            <div className="text-muted mt-1 text-[11px]">בריאות למידה: {tick.profileBefore.learningHealth}% → <b>{tick.profileAfter.learningHealth}%</b> · אומתו: {fmt(tick.profileBefore.verifiedOffices)} → <b>{fmt(tick.profileAfter.verifiedOffices)}</b> · ממתינים: {fmt(tick.profileBefore.waitingCandidates)} → <b>{fmt(tick.profileAfter.waitingCandidates)}</b></div>
+          )}
+        </div>
+      )}
+      {tick && !tick.ran && <p className="text-muted mt-3 text-[12px]">{tick.note}</p>}
+    </section>
   );
 }
 

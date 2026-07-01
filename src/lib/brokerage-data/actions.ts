@@ -31,6 +31,10 @@ import {
   type JobResult,
 } from "./research-jobs";
 import type { ResearchDepth as JobDepth } from "./research-jobs";
+import {
+  getCityLearningProfile, buildSchedulerPlan, runContinuousLearningTick,
+  type CityLearningProfile, type SchedulerPlan, type ContinuousTickResult,
+} from "./continuous-learning";
 import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, getCityKnowledgeStatus, type CityKnowledge, type CityBrokerageCensus, type CityKnowledgeStatus } from "./brokerage-knowledge";
 import { ensureCityBrokerageKnowledge, type EnsureCityResult } from "./city-lazy-learning";
 import { triggerCityLearning, type CityLearningReason, type CityLearningOutcome } from "./city-learning-trigger";
@@ -107,6 +111,32 @@ export async function seedCityAICandidatesAction(city: string): Promise<{ ok: bo
     revalidatePath("/brokerage-data");
     return { ok: true, result };
   } catch (e) { console.error("[ai-seeding] failed:", e); return { ok: false, error: "זריעת מועמדי AI נכשלה." }; }
+}
+
+// ── Phase 26.4.16 — Continuous Brokerage Intelligence (scheduler + profiles) ──
+export async function getCityLearningProfileAction(city: string): Promise<{ ok: boolean; result?: CityLearningProfile; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+    return { ok: true, result: await getCityLearningProfile(profile.org_id, city) };
+  } catch (e) { console.error("[continuous] profile failed:", e); return { ok: false, error: "טעינת פרופיל נכשלה." }; }
+}
+export async function getContinuousSchedulerPlanAction(): Promise<{ ok: boolean; result?: SchedulerPlan; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    return { ok: true, result: await buildSchedulerPlan(profile.org_id) };
+  } catch (e) { console.error("[continuous] plan failed:", e); return { ok: false, error: "בניית תוכנית נכשלה." }; }
+}
+/** Run one continuous-learning tick (highest-priority city). Manual or scheduled. */
+export async function runContinuousLearningTickAction(): Promise<{ ok: boolean; result?: ContinuousTickResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const result = await runContinuousLearningTick(profile.org_id, 20000);
+    revalidatePath("/brokerage-data");
+    return { ok: true, result };
+  } catch (e) { console.error("[continuous] tick failed:", e); return { ok: false, error: "מחזור למידה נכשל." }; }
 }
 
 // ── Phase 26.4.15 — Persistent Background Research Jobs (resumable, no timeout) ──
