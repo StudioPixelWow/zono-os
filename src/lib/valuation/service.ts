@@ -133,10 +133,14 @@ export async function runValuationById(id: string): Promise<RunOutput> {
       city: input.city ?? null, cityNormalized: normalizeCity(input.city),
       neighborhood: input.neighborhood ?? null, neighborhoodNormalized: normalizeNeighborhood(input.neighborhood),
       street: input.street ?? null, streetNormalized: normalizeStreet(input.street),
+      houseNumber: input.houseNumber ?? null,
       latitude: input.latitude ?? null, longitude: input.longitude ?? null,
       hasCoordinates: input.latitude != null && input.longitude != null,
-      propertyType: input.propertyType ?? null, rooms: input.rooms ?? null, sqm: input.builtSqm ?? null,
-      floor: input.floor ?? null, buildingYear: input.buildingYear ?? null,
+      propertyType: input.propertyType ?? null, propertyTypeNormalized: (input.propertyType ?? "").trim().toLowerCase(),
+      rooms: input.rooms ?? null, sqm: input.builtSqm ?? null,
+      floor: input.floor ?? null, totalFloors: input.totalFloors ?? null, buildingYear: input.buildingYear ?? null,
+      parking: input.parkingCount ?? null, storage: input.storage ?? null, balcony: input.balconySqm ?? null,
+      elevator: input.elevator ?? null, condition: input.propertyCondition ?? null, isNew: null, luxuryLevel: input.viewQuality ?? null,
     };
     const discovery = await runComparableDiscovery(db, orgId, subject);
     if (discovery.selectedComparables.length > 0) {

@@ -13,19 +13,35 @@ import type { createClient } from "@/lib/supabase/server";
 import { getBrokerSoldProperties } from "../providers";
 import type { Comparable, ComparableSource, ValuationInput } from "../types";
 import {
-  normalizeCity, normalizeNeighborhood, normalizeStreet, firstStr, firstNum,
+  normalizeCity, normalizeNeighborhood, normalizeStreet, normalizeHouseNumber, firstStr, firstNum,
 } from "./normalizers";
 import { distanceOrNull, radiusBucket } from "./distance";
 import { computeSimilarity } from "./similarity";
+import { computeQuality, buildMatchReasons } from "./quality";
 import { dedupeCandidates } from "./dedupe";
 import { fetchAllSourceRows, type SourceSpec } from "./repository";
 import { buildSelectionExplanation, classifyFailure } from "./explain";
 import {
-  RADIUS_LADDER, DEFAULT_MAX_RADIUS_M, EXPANDED_MAX_RADIUS_M,
+  RADIUS_LADDER, DEFAULT_MAX_RADIUS_M, EXPANDED_MAX_RADIUS_M, SOURCE_PRIORITY,
   MIN_STRONG_COMPARABLES, MIN_TOTAL_COMPARABLES, STRONG_SIMILARITY, DISCOVERY_ENGINE_VERSION,
   type Candidate, type DiscoverySubject, type DiscoverySourceId, type MatchLevel,
   type SourceScanStat, type RadiusStat, type ComparableDiscoveryPackage,
 } from "./types";
+
+const s = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
+/** Tri-state boolean read: true / false / null (unknown). */
+function boolField(row: Record<string, unknown>, fields: string[]): boolean | null {
+  for (const f of fields) {
+    const v = row[f];
+    if (v == null || v === "") continue;
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return v > 0;
+    const t = s(v).trim().toLowerCase();
+    if (["true", "yes", "כן", "1", "y"].includes(t)) return true;
+    if (["false", "no", "לא", "0", "n"].includes(t)) return false;
+  }
+  return null;
+}
 
 type DB = Awaited<ReturnType<typeof createClient>>;
 type Row = Record<string, unknown>;
@@ -74,6 +90,14 @@ function toCandidate(spec: SourceSpec, row: Row, subj: DiscoverySubject): Candid
   const ppsqm = ppsqmDirect && ppsqmDirect > 0 ? ppsqmDirect : (price && price > 0 && sqm && sqm > 0 ? Math.round(price / sqm) : null);
   const rooms = firstNum(row, spec.roomsFields);
   const floor = firstNum(row, ["floor"]);
+  const totalFloors = firstNum(row, ["total_floors", "building_floors", "floors"]);
+  const parking = firstNum(row, ["parking", "parking_count", "parking_spots"]);
+  const storage = boolField(row, ["storage", "storeroom", "מחסן"]);
+  const balcony = firstNum(row, ["balcony_sqm", "balcony", "מרפסת"]);
+  const elevator = boolField(row, ["elevator", "has_elevator", "מעלית"]);
+  const condition = firstStr(row, ["condition", "property_condition", "renovated"]) || null;
+  const buildingYear = firstNum(row, ["building_year", "built_year", "year_built"]);
+  const houseNumber = normalizeHouseNumber(firstStr(row, ["house_number", "building_number"]) || street || "");
   const propertyType = firstStr(row, spec.typeFields) || null;
   const sourceId = firstStr(row, spec.idFields) || null;
   const saleDate = firstStr(row, spec.saleDateFields) || null;
@@ -84,19 +108,32 @@ function toCandidate(spec: SourceSpec, row: Row, subj: DiscoverySubject): Candid
   const hasPrice = !!price && price > 0, hasSqm = !!sqm && sqm > 0;
   const isTraceable = !!sourceId && hasPrice && hasSqm;
 
-  const sameNeighborhood = !!subj.neighborhoodNormalized && normalizeNeighborhood(neighborhood) === subj.neighborhoodNormalized;
+  const candNeighNorm = normalizeNeighborhood(neighborhood);
+  const sameNeighborhood = !!subj.neighborhoodNormalized && candNeighNorm === subj.neighborhoodNormalized;
+  const differentKnownNeighborhood = !!subj.neighborhoodNormalized && !!candNeighNorm && candNeighNorm !== subj.neighborhoodNormalized;
   const sameStreet = !!subj.streetNormalized && normalizeStreet(street) === subj.streetNormalized;
-  const subjType = (subj.propertyType ?? "").trim().toLowerCase();
+  const sameBuilding = (sameStreet && !!subj.houseNumber && houseNumber === subj.houseNumber) || (distance != null && distance <= 40);
   const candType = (propertyType ?? "").trim().toLowerCase();
-  const sameType = !!subjType && !!candType && subjType === candType;
+  const sameType = !!subj.propertyTypeNormalized && !!candType && candType === subj.propertyTypeNormalized;
   const roomsDiff = subj.rooms != null && rooms != null ? Math.abs(subj.rooms - rooms) : null;
   const sqmDiffPct = subj.sqm != null && subj.sqm > 0 && sqm != null ? Math.abs(subj.sqm - sqm) / subj.sqm : null;
   const floorDiff = subj.floor != null && floor != null ? Math.abs(subj.floor - floor) : null;
+  const totalFloorsDiff = subj.totalFloors != null && totalFloors != null ? Math.abs(subj.totalFloors - totalFloors) : null;
+  const yearDiff = subj.buildingYear != null && buildingYear != null ? Math.abs(subj.buildingYear - buildingYear) : null;
+  const sameConstructionPeriod = yearDiff != null && yearDiff <= 3;
+  const bothNum = (a: number | null, b: number | null) => a != null && b != null;
+  const parkingMatch = bothNum(subj.parking, parking) ? ((subj.parking ?? 0) > 0) === ((parking ?? 0) > 0) : null;
+  const storageMatch = subj.storage != null && storage != null ? subj.storage === storage : null;
+  const balconyMatch = bothNum(subj.balcony, balcony) ? ((subj.balcony ?? 0) > 0) === ((balcony ?? 0) > 0) : null;
+  const elevatorMatch = subj.elevator != null && elevator != null ? subj.elevator === elevator : null;
+  const conditionMatch = subj.condition && condition ? subj.condition.trim().toLowerCase() === condition.trim().toLowerCase() : null;
   const ageMonths = ageMonthsOf(saleDate ?? listingDate);
 
   const similarityScore = computeSimilarity({
-    matchLevel: level, distanceMeters: distance, sameNeighborhood, sameStreet, sameType, hasType: !!candType,
-    roomsDiff, sqmDiffPct, floorDiff, ageMonths, source: spec.id as DiscoverySourceId, hasPrice, hasSqm, isTraceable,
+    matchLevel: level, distanceMeters: distance, sameNeighborhood, differentKnownNeighborhood, sameStreet, sameBuilding,
+    sameConstructionPeriod, sameType, hasType: !!candType, roomsDiff, sqmDiffPct, floorDiff, totalFloorsDiff,
+    parkingMatch, storageMatch, balconyMatch, elevatorMatch, conditionMatch, luxuryMatch: null, yearDiff,
+    ageMonths, source: spec.id as DiscoverySourceId, hasPrice, hasSqm, isTraceable,
   });
 
   const usable = isTraceable && level !== "out";
@@ -106,17 +143,19 @@ function toCandidate(spec: SourceSpec, row: Row, subj: DiscoverySubject): Candid
   else if (!hasSqm) rejectionReason = "ללא שטח (מ״ר)";
   else if (level === "out") rejectionReason = "מחוץ לעיר/רדיוס";
 
-  return {
+  const cand: Candidate = {
     source: spec.id as DiscoverySourceId, sourceTable: spec.table, sourceId,
     provider: firstStr(row, spec.sourceField) || null, comparableSource: coerceSource(spec, row),
     comparableType: spec.comparableType, city, neighborhood, street,
     latitude: lat, longitude: lng, distanceMeters: distance,
-    rooms, sqm, floor, buildingYear: firstNum(row, ["building_year", "built_year"]),
+    rooms, sqm, floor, buildingYear,
     price: hasPrice ? price : null, pricePerSqm: ppsqm, propertyType, saleDate, listingDate,
     imageUrl: firstImage(row, spec.imageFields), originalUrl: firstStr(row, spec.urlFields) || null,
     similarityScore, radiusBucket: radiusBucket(distance), matchLevel: level,
-    isTraceable, usable, rejectionReason, duplicateRefs: [],
+    isTraceable, usable, sameType, matchReasons: [], rejectionReason, duplicateRefs: [],
   };
+  cand.matchReasons = buildMatchReasons(subj, cand, { sameBuilding, sameNeighborhood, sameConstructionPeriod });
+  return cand;
 }
 
 /** broker_sold candidates via the existing read-only provider. */
@@ -129,10 +168,15 @@ function brokerSoldToCandidate(b: Awaited<ReturnType<typeof getBrokerSoldPropert
   const isTraceable = !!sourceId && hasPrice && hasSqm;
   const roomsDiff = subj.rooms != null && b.rooms != null ? Math.abs(subj.rooms - b.rooms) : null;
   const sqmDiffPct = subj.sqm != null && subj.sqm > 0 && b.sqm != null ? Math.abs(subj.sqm - b.sqm) / subj.sqm : null;
+  const sameNeighborhood = !!subj.neighborhoodNormalized && normalizeNeighborhood(b.neighborhood ?? null) === subj.neighborhoodNormalized;
+  const sameStreet = !!subj.streetNormalized && normalizeStreet(b.street ?? null) === subj.streetNormalized;
+  const sameBuilding = distance != null && distance <= 40;
   const similarityScore = computeSimilarity({
-    matchLevel: level, distanceMeters: distance, sameNeighborhood: false, sameStreet: false, sameType: false, hasType: false,
-    roomsDiff, sqmDiffPct, floorDiff: null, ageMonths: ageMonthsOf(b.saleDate ?? null),
-    source: "broker_sold", hasPrice, hasSqm, isTraceable,
+    matchLevel: level, distanceMeters: distance, sameNeighborhood, differentKnownNeighborhood: false, sameStreet,
+    sameBuilding, sameConstructionPeriod: false, sameType: false, hasType: false,
+    roomsDiff, sqmDiffPct, floorDiff: null, totalFloorsDiff: null,
+    parkingMatch: null, storageMatch: null, balconyMatch: null, elevatorMatch: null, conditionMatch: null, luxuryMatch: null,
+    yearDiff: null, ageMonths: ageMonthsOf(b.saleDate ?? null), source: "broker_sold", hasPrice, hasSqm, isTraceable,
   });
   const usable = isTraceable && level !== "out";
   let rejectionReason: string | null = null;
@@ -140,7 +184,7 @@ function brokerSoldToCandidate(b: Awaited<ReturnType<typeof getBrokerSoldPropert
   else if (!hasPrice) rejectionReason = "ללא מחיר";
   else if (!hasSqm) rejectionReason = "ללא שטח (מ״ר)";
   else if (level === "out") rejectionReason = "מחוץ לעיר/רדיוס";
-  return {
+  const cand: Candidate = {
     source: "broker_sold", sourceTable: "deals", sourceId, provider: "broker_sold", comparableSource: "zono",
     comparableType: "sold", city, neighborhood: b.neighborhood ?? null, street: b.street ?? null,
     latitude: null, longitude: null, distanceMeters: distance,
@@ -149,8 +193,10 @@ function brokerSoldToCandidate(b: Awaited<ReturnType<typeof getBrokerSoldPropert
     propertyType: null, saleDate: b.saleDate ?? null, listingDate: null,
     imageUrl: b.imageUrl ?? null, originalUrl: null,
     similarityScore, radiusBucket: radiusBucket(distance), matchLevel: level,
-    isTraceable, usable, rejectionReason, duplicateRefs: [],
+    isTraceable, usable, sameType: false, matchReasons: [], rejectionReason, duplicateRefs: [],
   };
+  cand.matchReasons = buildMatchReasons(subj, cand, { sameBuilding, sameNeighborhood, sameConstructionPeriod: false });
+  return cand;
 }
 
 function toComparable(c: Candidate): Comparable {
@@ -179,18 +225,26 @@ function funnel(source: DiscoverySourceId, table: string, wired: boolean, cands:
     if (c.usable) usable++;
     else { rejected++; const r = c.rejectionReason ?? "אחר"; reasons.set(r, (reasons.get(r) ?? 0) + 1); }
   }
+  const perRadius = RADIUS_LADDER.map((r) => ({ radiusM: r, count: cands.filter((c) => c.distanceMeters != null && c.distanceMeters <= r).length }));
   return {
     source, table, wired, startedAt, finishedAt, durationMs, error,
     rawRowsScanned: raw, cityMatch, normalizedCityMatch: normCity,
-    within500m: w500, within1km: w1k, within2km: w2k, within3km: w3k, within4km: w4k,
+    within500m: w500, within1km: w1k, within2km: w2k, within3km: w3k, within4km: w4k, perRadius,
     withPrice, withSqm, withPriceAndSqm: both, usableRows: usable, rejectedRows: rejected,
     rejectionReasons: [...reasons.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
   };
 }
 
-const inChosen = (c: Candidate, maxM: number): boolean =>
+const inRing = (c: Candidate, ring: number): boolean =>
   c.matchLevel === "same_city" || c.matchLevel === "normalized_city"
-    ? true : c.matchLevel === "radius" ? (c.radiusBucket != null && c.radiusBucket <= maxM) : false;
+    ? true : c.matchLevel === "radius" ? (c.radiusBucket != null && c.radiusBucket <= ring) : false;
+
+/** Professional selection ranking: similarity → source priority → distance. */
+function rankSelect(a: Candidate, b: Candidate): number {
+  return b.similarityScore - a.similarityScore
+    || SOURCE_PRIORITY[a.source] - SOURCE_PRIORITY[b.source]
+    || (a.distanceMeters ?? 1e9) - (b.distanceMeters ?? 1e9);
+}
 
 export interface DiscoveryOptions { maxRadiusM?: number }
 
@@ -224,18 +278,35 @@ export async function runComparableDiscovery(
   // ── Dedupe across sources (keep strongest traceable) ──────────────────────
   const { kept, duplicatesRemoved } = dedupeCandidates(allCandidates);
 
-  // ── Radius policy: default 3km; escalate to 4km only when thin ────────────
-  let maxRadiusUsedM = options.maxRadiusM ?? DEFAULT_MAX_RADIUS_M;
-  const usableWithin = (maxM: number) => kept.filter((c) => c.usable && inChosen(c, maxM));
-  let sel = usableWithin(maxRadiusUsedM);
-  let strong = sel.filter((c) => c.similarityScore >= STRONG_SIMILARITY).length;
-  if ((strong < MIN_STRONG_COMPARABLES || sel.length < MIN_TOTAL_COMPARABLES) && maxRadiusUsedM < EXPANDED_MAX_RADIUS_M && !options.maxRadiusM) {
-    maxRadiusUsedM = EXPANDED_MAX_RADIUS_M;
-    sel = usableWithin(maxRadiusUsedM);
-    strong = sel.filter((c) => c.similarityScore >= STRONG_SIMILARITY).length;
+  // ── Concentric selection (Part 2/4): expand ring by ring; prefer same-type;
+  //    stop once enough high-quality comparables exist. 4km only when thin.
+  const defaultMax = options.maxRadiusM ?? DEFAULT_MAX_RADIUS_M;
+  const usableAll = kept.filter((c) => c.usable);
+  const gateType = !!subject.propertyTypeNormalized;
+  const typePool = gateType ? usableAll.filter((c) => c.sameType) : usableAll;
+  const ringsUpToDefault = RADIUS_LADDER.filter((r) => r <= defaultMax);
+
+  let maxRadiusUsedM = defaultMax;
+  let chosen: Candidate[] | null = null;
+  for (const ring of ringsUpToDefault) {
+    const p = typePool.filter((c) => inRing(c, ring));
+    const strongN = p.filter((c) => c.similarityScore >= STRONG_SIMILARITY).length;
+    if (strongN >= MIN_STRONG_COMPARABLES && p.length >= MIN_TOTAL_COMPARABLES) { maxRadiusUsedM = ring; chosen = p; break; }
   }
-  sel = [...sel].sort((a, b) => b.similarityScore - a.similarityScore).slice(0, 24);
+  if (!chosen && !options.maxRadiusM) { maxRadiusUsedM = EXPANDED_MAX_RADIUS_M; chosen = typePool.filter((c) => inRing(c, EXPANDED_MAX_RADIUS_M)); }
+  else if (!chosen) { maxRadiusUsedM = defaultMax; chosen = typePool.filter((c) => inRing(c, defaultMax)); }
+
+  // Type gating fallback (Part 4): mix other types ONLY when same-type is insufficient.
+  let mixedTypes = false;
+  if (gateType && chosen.length < MIN_TOTAL_COMPARABLES) {
+    const mixed = usableAll.filter((c) => inRing(c, maxRadiusUsedM));
+    if (mixed.length > chosen.length) { chosen = mixed; mixedTypes = true; }
+  }
+
+  const sel = [...chosen].sort(rankSelect).slice(0, 24);
+  const strong = sel.filter((c) => c.similarityScore >= STRONG_SIMILARITY).length;
   const selectedComparables = sel.map(toComparable);
+  const quality = computeQuality(sel);
 
   // ── Radius stats over candidates with coordinates ─────────────────────────
   const radiusStats: RadiusStat[] = RADIUS_LADDER.map((r) => ({
@@ -262,7 +333,7 @@ export async function runComparableDiscovery(
   return {
     subject, coordinatesStatus: subject.hasCoordinates ? "present" : "missing",
     maxRadiusUsedM, expandedBeyondDefault: maxRadiusUsedM > DEFAULT_MAX_RADIUS_M,
-    sourceStats, radiusStats, candidatePool: kept, selectedComparables,
+    sourceStats, radiusStats, candidatePool: kept, selected: sel, selectedComparables, quality, mixedTypes,
     totals: { rawScanned, candidates: kept.length, duplicatesRemoved, traceable, usable, selected: sel.length, strongSelected: strong },
     flags: { everySourceScanned: sourceStats.length >= 5, externalScanned, externalUsed, onlyOfficial },
     selectionExplanation, failureMode,

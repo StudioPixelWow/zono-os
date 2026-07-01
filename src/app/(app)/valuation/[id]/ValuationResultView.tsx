@@ -280,12 +280,20 @@ function DiscoveryPanel({ valuationId }: { valuationId: string }) {
   return (
     <details className="border-brand/40 bg-brand-soft/20 rounded-2xl border p-4">
       <summary className="flex cursor-pointer items-center justify-between">
-        <span className="text-ink text-sm font-black">🧭 מנוע גילוי השוואות — הוכחת סריקה מלאה (VAL-QA-10)</span>
+        <span className="text-ink text-sm font-black">🧭 מנוע בחירת השוואות מקצועי (27.4)</span>
         <button onClick={(e) => { e.preventDefault(); run(); }} disabled={pending} className="bg-brand-strong rounded-lg px-3 py-1 text-xs font-bold text-white disabled:opacity-60">{pending ? "סורק…" : "הרץ גילוי"}</button>
       </summary>
       {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
       {data && (
         <div className="mt-3 flex flex-col gap-3 text-[12px]">
+          {/* Comparable Quality Score (Part 10) — honest when weak */}
+          <div className={cn("rounded-xl border px-3 py-2", data.quality.weak ? "border-amber-200 bg-amber-50/50" : "border-emerald-200 bg-emerald-50/50")}>
+            <div className="flex items-center justify-between">
+              <b className={data.quality.weak ? "text-amber-700" : "text-emerald-700"}>ציון איכות השוואות: {data.quality.score}/100 — {data.quality.label}</b>
+              {data.mixedTypes && <span className="text-amber-600 text-[11px]">שולבו סוגי נכס שונים (מעט השוואות באותו סוג)</span>}
+            </div>
+            <div className="text-muted mt-0.5 text-[11px]">מרחק {data.quality.factors.distance} · דמיון {data.quality.factors.similarity} · איכות מקור {data.quality.factors.sourceQuality} · שלמות מאפיינים {data.quality.factors.attributeCompleteness} · עקיבות {data.quality.factors.traceability}</div>
+          </div>
           {/* Selection explanation + honest source message */}
           <div className={cn("rounded-xl border px-3 py-2", data.failureMode ? "border-rose-200 bg-rose-50/50" : data.flags.externalUsed ? "border-emerald-200 bg-emerald-50/50" : "border-amber-200 bg-amber-50/50")}>
             <b>{data.flags.onlyOfficial ? "הערכת השווי מבוססת על עסקאות רשמיות בלבד." : data.flags.externalUsed ? "הערכת השווי כוללת מודעות חיצוניות אמיתיות שנמצאו במערכת." : (data.failureMode ? "אין ראיות מספיקות" : "נבחרו השוואות")}</b>
@@ -330,8 +338,41 @@ function DiscoveryPanel({ valuationId }: { valuationId: string }) {
             מודעות חיצוניות נסרקו: <b>{data.flags.externalScanned ? "כן" : "לא"}</b> ·
             משך כולל: <b>{fmt(data.timings.totalMs)}ms</b>
           </div>
-          {/* Radius ladder */}
-          <div className="text-muted"><b>ספירת רדיוס:</b> {data.radiusStats.map((r) => `${(r.radiusM / 1000).toLocaleString("he-IL")}ק״מ: ${fmt(r.usable)}/${fmt(r.found)}`).join(" · ")}</div>
+          {/* Concentric per-source ring proof (Part 9) — properties inside each ring, per source */}
+          <div className="overflow-x-auto">
+            <b>נכסים בכל טבעת רדיוס, לכל מקור:</b>
+            <table className="mt-1 w-full text-[11px]">
+              <thead className="text-muted"><tr><th className="text-right">מקור</th>{data.radiusStats.map((r) => <th key={r.radiusM}>{r.radiusM < 1000 ? `${r.radiusM}מ׳` : `${r.radiusM / 1000}ק״מ`}</th>)}</tr></thead>
+              <tbody>
+                {data.sourceStats.map((s, i) => (
+                  <tr key={i} className="border-line border-b">
+                    <td className="py-1 font-bold">{SRC_HE[s.source] ?? s.source}</td>
+                    {s.perRadius.map((p) => <td key={p.radiusM} className="text-center tabular-nums">{fmt(p.count)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* Selected comparables with WHY (Part 8) */}
+          {data.selected.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <b>השוואות נבחרות (מדוע נבחרו):</b>
+              {data.selected.slice(0, 12).map((c, i) => (
+                <div key={i} className="border-line bg-surface rounded-xl border px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ink font-bold">{SRC_HE[c.source] ?? c.source}{c.street ? ` · ${c.street}` : ""}{c.city ? `, ${c.city}` : ""}</span>
+                    <span className="flex items-center gap-2 text-[11px]">
+                      {c.pricePerSqm != null && <span className="text-muted tabular-nums">{fmt(c.pricePerSqm)} ₪/מ״ר</span>}
+                      <span className="bg-brand-soft/50 rounded-full px-2 py-0.5 font-bold tabular-nums">דמיון {c.similarityScore}%</span>
+                    </span>
+                  </div>
+                  {c.matchReasons.length > 0 && <div className="text-emerald-700 mt-1 text-[11px]">{c.matchReasons.join("  ·  ")}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Usable-radius ladder */}
+          <div className="text-muted"><b>ספירת רדיוס (שמישים/נמצאו):</b> {data.radiusStats.map((r) => `${r.radiusM < 1000 ? `${r.radiusM}מ׳` : `${r.radiusM / 1000}ק״מ`}: ${fmt(r.usable)}/${fmt(r.found)}`).join(" · ")}</div>
         </div>
       )}
     </details>

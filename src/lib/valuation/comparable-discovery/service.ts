@@ -7,7 +7,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
-import { normalizeCity, normalizeNeighborhood, normalizeStreet, strOf, numOf } from "./normalizers";
+import { normalizeCity, normalizeNeighborhood, normalizeStreet, normalizeHouseNumber, strOf, numOf } from "./normalizers";
 import { runComparableDiscovery } from "./engine";
 import type { DiscoveryInput, DiscoverySubject, ComparableDiscoveryPackage } from "./types";
 
@@ -39,14 +39,26 @@ export async function discoverValuationComparables(input: DiscoveryInput): Promi
   const rooms = pick(input.rooms ?? null, numOf(src.rooms));
   const sqm = pick(input.sqm ?? null, numOf(src.built_sqm) ?? numOf(src.size_sqm) ?? numOf(src.sqm));
   const floor = pick(input.floor ?? null, numOf(src.floor));
-  const buildingYear = pick(input.buildingYear ?? null, numOf(src.building_year) ?? numOf(src.built_year));
+  const totalFloors = pick(input.totalFloors ?? null, numOf(src.total_floors) ?? numOf(src.building_floors));
+  const buildingYear = pick(input.buildingYear ?? null, numOf(src.building_year) ?? numOf(src.built_year) ?? numOf(src.year_built));
+  const parking = pick(input.parking ?? null, numOf(src.parking_count) ?? numOf(src.parking));
+  const balcony = pick(input.balcony ?? null, numOf(src.balcony_sqm) ?? numOf(src.balcony));
+  const houseNumber = pick(input.houseNumber, strOf(src.house_number) || strOf(src.building_number));
+  const boolOf = (v: unknown): boolean | null => (typeof v === "boolean" ? v : v == null || v === "" ? null : ["true", "yes", "כן", "1"].includes(String(v).toLowerCase()) ? true : ["false", "no", "לא", "0"].includes(String(v).toLowerCase()) ? false : null);
+  const storage = input.storage ?? (boolOf(src.storage) ?? boolOf(src.storeroom));
+  const elevator = input.elevator ?? boolOf(src.elevator);
+  const condition = pick(input.condition, strOf(src.property_condition) || strOf(src.condition) || strOf(src.renovated));
+  const isNew = input.isNew ?? boolOf(src.is_new);
+  const luxuryLevel = pick(input.luxuryLevel, strOf(src.luxury_level) || strOf(src.view_quality));
 
   const subject: DiscoverySubject = {
     city, cityNormalized: normalizeCity(city),
     neighborhood, neighborhoodNormalized: normalizeNeighborhood(neighborhood),
-    street, streetNormalized: normalizeStreet(street),
+    street, streetNormalized: normalizeStreet(street), houseNumber: houseNumber ? normalizeHouseNumber(houseNumber) : null,
     latitude, longitude, hasCoordinates: latitude != null && longitude != null,
-    propertyType, rooms, sqm, floor, buildingYear,
+    propertyType, propertyTypeNormalized: (propertyType ?? "").trim().toLowerCase(),
+    rooms, sqm, floor, totalFloors, buildingYear,
+    parking, storage, balcony, elevator, condition, isNew, luxuryLevel,
   };
 
   return runComparableDiscovery(db, orgId, subject, input.maxRadiusM ? { maxRadiusM: input.maxRadiusM } : {});
