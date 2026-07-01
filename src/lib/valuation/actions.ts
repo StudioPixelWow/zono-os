@@ -17,6 +17,7 @@ import {
 import { getBrokerSoldProperties } from "./providers";
 import { diagnoseValuationEvidence, type ValuationEvidenceDiagnosis } from "./diagnostics";
 import { buildValuationScanProof, type ValuationScanProof } from "./external-scan-proof";
+import { discoverValuationComparables, type ComparableDiscoveryPackage } from "./comparable-discovery";
 import { getPropertyEvidence, type EvidencePackage } from "@/lib/evidence-search";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
@@ -132,5 +133,11 @@ export async function getValuationEvidenceSearchAction(id: string, allowNearbyCi
 /** VAL-QA-10 — READ-ONLY scan proof: proves whether external_listings were scanned. */
 export async function getValuationScanProofAction(id: string): Promise<Result<ValuationScanProof | null>> {
   try { return { ok: true, data: await buildValuationScanProof(id) }; }
+  catch (e) { return fail(e); }
+}
+
+/** VAL-QA-10 — READ-ONLY Comparable Discovery: full-universe scan proof + selection. */
+export async function getValuationDiscoveryAction(id: string): Promise<Result<ComparableDiscoveryPackage>> {
+  try { return { ok: true, data: await discoverValuationComparables({ valuationId: id }) }; }
   catch (e) { return fail(e); }
 }

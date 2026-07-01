@@ -10,6 +10,9 @@ import { getSessionContext } from "@/lib/auth/session";
 import { gatherEvidence, getBrokerSoldProperties } from "./providers";
 import type { ProviderResult } from "./providers";
 import { getPropertyEvidence } from "@/lib/evidence-search";
+import { runComparableDiscovery } from "./comparable-discovery/engine";
+import { normalizeCity, normalizeNeighborhood, normalizeStreet } from "./comparable-discovery/normalizers";
+import type { DiscoverySubject } from "./comparable-discovery/types";
 import { runValuation as runEngine, normalizeInput } from "./valuation-engine";
 import { buildValuationIntelligence, ALGORITHM_VERSION } from "./intelligence";
 import { getCityCalibration } from "./accuracy-service";
@@ -120,6 +123,30 @@ export async function runValuationById(id: string): Promise<RunOutput> {
       if (pkg.comparablesForValuation.length > 0) comparables = pkg.comparablesForValuation;
     } catch (e) { console.error("[valuation] evidence-search fallback failed:", e); }
   }
+
+  // ── VAL-QA-10 — Comparable Discovery Engine: ALWAYS scan the whole evidence
+  //    universe (GovMap never short-circuits external listings). Union its
+  //    selected TRACEABLE comparables so real external/market rows are included.
+  //    The AVM formula is UNCHANGED — this only widens/proves evidence retrieval.
+  try {
+    const subject: DiscoverySubject = {
+      city: input.city ?? null, cityNormalized: normalizeCity(input.city),
+      neighborhood: input.neighborhood ?? null, neighborhoodNormalized: normalizeNeighborhood(input.neighborhood),
+      street: input.street ?? null, streetNormalized: normalizeStreet(input.street),
+      latitude: input.latitude ?? null, longitude: input.longitude ?? null,
+      hasCoordinates: input.latitude != null && input.longitude != null,
+      propertyType: input.propertyType ?? null, rooms: input.rooms ?? null, sqm: input.builtSqm ?? null,
+      floor: input.floor ?? null, buildingYear: input.buildingYear ?? null,
+    };
+    const discovery = await runComparableDiscovery(db, orgId, subject);
+    if (discovery.selectedComparables.length > 0) {
+      const seen = new Set(comparables.map((c) => `${c.sourceTable ?? ""}|${c.externalId ?? ""}`));
+      for (const c of discovery.selectedComparables) {
+        const k = `${c.sourceTable ?? ""}|${c.externalId ?? ""}`;
+        if (!seen.has(k)) { comparables.push(c); seen.add(k); }
+      }
+    }
+  } catch (e) { console.error("[valuation] comparable discovery failed:", e); }
 
   // ── Anti-fake HARD BLOCK (Phase VAL-QA-6) — only comparables that trace to a
   //    real persisted row (source table + source id + raw price + raw sqm) may

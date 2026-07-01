@@ -12,9 +12,10 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import {
   runValuationAction, generateValuationReportAction, sendValuationReportAsPdfAction,
   createSellerFollowupFromValuationAction, diagnoseValuationEvidenceAction,
-  getValuationEvidenceSearchAction, getValuationScanProofAction,
+  getValuationEvidenceSearchAction, getValuationScanProofAction, getValuationDiscoveryAction,
 } from "@/lib/valuation/actions";
 import type { ValuationScanProof, ExternalScanClassification } from "@/lib/valuation/external-scan-proof";
+import type { ComparableDiscoveryPackage } from "@/lib/valuation/comparable-discovery";
 import type { ValuationEvidenceDiagnosis } from "@/lib/valuation/diagnostics";
 // Import from the PURE submodules — NOT the barrel — so the server-only engine/
 // service/repository never get pulled into this client bundle.
@@ -33,6 +34,15 @@ import {
 } from "@/lib/valuation/types";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
+function Mini({ label, value, tone }: { label: string; value: string; tone?: "green" | "amber" | "red" }) {
+  const col = tone === "green" ? "text-emerald-700" : tone === "amber" ? "text-amber-700" : tone === "red" ? "text-rose-700" : "text-ink";
+  return (
+    <div className="border-line bg-surface rounded-lg border px-2 py-1.5 text-center">
+      <div className={cn("text-sm font-black tabular-nums", col)}>{value}</div>
+      <div className="text-muted text-[10px]">{label}</div>
+    </div>
+  );
+}
 const ils = (n: number | null | undefined) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 const ils0 = (n: number | null | undefined) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
@@ -239,12 +249,92 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
       </Section>
 
       {/* Read-only evidence diagnostic (QA/admin) — collapsed by default. */}
+      <DiscoveryPanel valuationId={record.id} />
       <ScanProofPanel valuationId={record.id} />
       <EvidenceDiagnostic valuationId={record.id} />
       <EvidenceSearchPanel valuationId={record.id} />
 
       {sendOpen && <SendModal valuationId={record.id} hasReport={!!reportToken} onClose={() => setSendOpen(false)} onGenerated={(t) => setReportToken(t)} />}
     </main>
+  );
+}
+
+// ── VAL-QA-10 — Comparable Discovery Engine panel (full-universe scan proof) ─
+const SRC_HE: Record<string, string> = {
+  property_transactions: "GovMap (עסקאות רשמיות)", external_listings: "מודעות חיצוניות",
+  market_property_sources: "מקורות שוק", properties: "מלאי פנימי", broker_sold: "עסקאות המתווך",
+};
+
+function DiscoveryPanel({ valuationId }: { valuationId: string }) {
+  const [data, setData] = useState<ComparableDiscoveryPackage | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setPending(true); setErr(null);
+    try { const r = await getValuationDiscoveryAction(valuationId); if (r.ok) setData(r.data); else setErr(r.error); }
+    catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setPending(false); }
+  };
+
+  return (
+    <details className="border-brand/40 bg-brand-soft/20 rounded-2xl border p-4">
+      <summary className="flex cursor-pointer items-center justify-between">
+        <span className="text-ink text-sm font-black">🧭 מנוע גילוי השוואות — הוכחת סריקה מלאה (VAL-QA-10)</span>
+        <button onClick={(e) => { e.preventDefault(); run(); }} disabled={pending} className="bg-brand-strong rounded-lg px-3 py-1 text-xs font-bold text-white disabled:opacity-60">{pending ? "סורק…" : "הרץ גילוי"}</button>
+      </summary>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-3 flex flex-col gap-3 text-[12px]">
+          {/* Selection explanation + honest source message */}
+          <div className={cn("rounded-xl border px-3 py-2", data.failureMode ? "border-rose-200 bg-rose-50/50" : data.flags.externalUsed ? "border-emerald-200 bg-emerald-50/50" : "border-amber-200 bg-amber-50/50")}>
+            <b>{data.flags.onlyOfficial ? "הערכת השווי מבוססת על עסקאות רשמיות בלבד." : data.flags.externalUsed ? "הערכת השווי כוללת מודעות חיצוניות אמיתיות שנמצאו במערכת." : (data.failureMode ? "אין ראיות מספיקות" : "נבחרו השוואות")}</b>
+            <div className="text-muted mt-0.5 text-[11px]">{data.selectionExplanation}</div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            <Mini label="נסרקו (סה״כ)" value={fmt(data.totals.rawScanned)} />
+            <Mini label="מועמדים" value={fmt(data.totals.candidates)} />
+            <Mini label="כפילויות הוסרו" value={fmt(data.totals.duplicatesRemoved)} />
+            <Mini label="עקיבים" value={fmt(data.totals.traceable)} />
+            <Mini label="נבחרו" value={fmt(data.totals.selected)} tone="green" />
+            <Mini label="חזקות" value={fmt(data.totals.strongSelected)} tone="green" />
+          </div>
+
+          {/* Per-source scan proof (every source, every time) */}
+          <div className="overflow-x-auto">
+            <b>הוכחת סריקה לכל מקור:</b>
+            <table className="mt-1 w-full text-[11px]">
+              <thead className="text-muted"><tr><th className="text-right">מקור</th><th>זמן</th><th>גולמי</th><th>עיר</th><th>מנורמל</th><th>≤1ק״מ</th><th>≤3ק״מ</th><th>מחיר+שטח</th><th>שמיש</th><th>נדחו</th></tr></thead>
+              <tbody>
+                {data.sourceStats.map((s, i) => (
+                  <tr key={i} className="border-line border-b">
+                    <td className="py-1 font-bold">{SRC_HE[s.source] ?? s.source}{!s.wired && <span className="text-amber-600"> (לא מחובר)</span>}</td>
+                    <td className="text-center tabular-nums">{fmt(s.durationMs)}ms</td>
+                    <td className="text-center tabular-nums">{s.error ? <span className="text-rose-700" title={s.error}>שגיאה</span> : fmt(s.rawRowsScanned)}</td>
+                    <td className="text-center tabular-nums">{fmt(s.cityMatch)}</td>
+                    <td className="text-center tabular-nums">{fmt(s.normalizedCityMatch)}</td>
+                    <td className="text-center tabular-nums">{fmt(s.within1km)}</td>
+                    <td className="text-center tabular-nums">{fmt(s.within3km)}</td>
+                    <td className="text-center tabular-nums">{fmt(s.withPriceAndSqm)}</td>
+                    <td className="text-center tabular-nums font-bold">{fmt(s.usableRows)}</td>
+                    <td className="text-center tabular-nums">{fmt(s.rejectedRows)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-muted">
+            רדיוס מרבי בשימוש: <b>{(data.maxRadiusUsedM / 1000).toLocaleString("he-IL")} ק״מ</b>{data.expandedBeyondDefault ? " (הורחב)" : ""} ·
+            כל המקורות נסרקו: <b>{data.flags.everySourceScanned ? "כן" : "לא"}</b> ·
+            מודעות חיצוניות נסרקו: <b>{data.flags.externalScanned ? "כן" : "לא"}</b> ·
+            משך כולל: <b>{fmt(data.timings.totalMs)}ms</b>
+          </div>
+          {/* Radius ladder */}
+          <div className="text-muted"><b>ספירת רדיוס:</b> {data.radiusStats.map((r) => `${(r.radiusM / 1000).toLocaleString("he-IL")}ק״מ: ${fmt(r.usable)}/${fmt(r.found)}`).join(" · ")}</div>
+        </div>
+      )}
+    </details>
   );
 }
 
