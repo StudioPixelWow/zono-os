@@ -17,8 +17,9 @@ import type { CityDiscoveryAudit } from "@/lib/brokerage-data/brokerage-discover
 import type { BrokeragePipelineAudit } from "@/lib/brokerage-data/brokerage-pipeline-audit";
 import type { CityDiscoveryResult } from "@/lib/brokerage-data/city-discovery";
 import type { AICandidateSeedSummary } from "@/lib/brokerage-data/ai-candidate-seeding";
-import type { AgentReport, ResearchDepth } from "@/lib/brokerage-data/research-agent/types";
-import { STAGE_HE } from "@/lib/brokerage-data/research-agent/explain";
+import type { ResearchDepth } from "@/lib/brokerage-data/research-agent/types";
+import type { ResearchJob } from "@/lib/brokerage-data/research-jobs/types";
+import { JOB_STAGE_HE, JOB_STATUS_HE } from "@/lib/brokerage-data/research-jobs/types";
 import type { CityBrokerageCensus, CityKnowledgeStatus } from "@/lib/brokerage-data/brokerage-knowledge";
 import type { EnsureCityResult } from "@/lib/brokerage-data/city-lazy-learning";
 import {
@@ -26,7 +27,8 @@ import {
   getCityDiscoveryAuditAction, auditBrokerageDiscoveryPipelineAction,
   discoverBrokerageOfficesForCityAction, getCityBrokerageCensusAction,
   getCityKnowledgeStatusAction, ensureCityBrokerageKnowledgeAction, runBrokerResearchAction,
-  seedCityAICandidatesAction, runBrokerageResearchAgentAction, crossCheckCityRepositoriesAction,
+  seedCityAICandidatesAction, crossCheckCityRepositoriesAction,
+  startCityResearchJobAction, resumeCityResearchJobAction, cancelCityResearchJobAction,
 } from "@/lib/brokerage-data/actions";
 import type { CityRepositoryAudit } from "@/lib/brokerage-data/city-repository-audit";
 
@@ -524,11 +526,13 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
   const [seed, setSeed] = useState<AICandidateSeedSummary | null>(null);
   const [seedPending, setSeedPending] = useState(false);
   const [seedErr, setSeedErr] = useState<string | null>(null);
-  // Phase 26.4.13 — multi-step Brokerage Research Agent.
-  const [agent, setAgent] = useState<AgentReport | null>(null);
+  // Phase 26.4.15 — persistent background research job (resumable, no timeout).
+  const [job, setJob] = useState<ResearchJob | null>(null);
   const [agentDepth, setAgentDepth] = useState<ResearchDepth>("standard");
-  const [agentPending, setAgentPending] = useState(false);
-  const [agentErr, setAgentErr] = useState<string | null>(null);
+  const [jobPending, setJobPending] = useState(false);
+  const [jobErr, setJobErr] = useState<string | null>(null);
+  const [jobMigration, setJobMigration] = useState(false);
+  const [autoContinue, setAutoContinue] = useState(true);
 
   const run = async () => {
     setPending(true); setErr(null);
@@ -548,14 +552,38 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
     finally { setSeedPending(false); }
   };
 
-  const runAgent = async () => {
-    setAgentPending(true); setAgentErr(null);
+  const startJob = async () => {
+    setJobPending(true); setJobErr(null); setJobMigration(false);
     try {
-      const r = await runBrokerageResearchAgentAction(city, agentDepth);
-      if (r.ok) { setAgent(r.result ?? null); await onChanged().catch(() => {}); } else setAgentErr(r.error ?? "נכשל");
-    } catch (e) { setAgentErr(e instanceof Error ? e.message : "שגיאה"); }
-    finally { setAgentPending(false); }
+      const r = await startCityResearchJobAction(city, agentDepth);
+      if (r.migrationRequired) { setJobMigration(true); setJobErr(r.error ?? null); }
+      else if (r.ok) { setJob(r.job ?? null); await onChanged().catch(() => {}); }
+      else setJobErr(r.error ?? "נכשל");
+    } catch (e) { setJobErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setJobPending(false); }
   };
+  const resumeJob = async () => {
+    if (!job) return;
+    setJobPending(true); setJobErr(null);
+    try {
+      const r = await resumeCityResearchJobAction(job.id);
+      if (r.ok) { setJob(r.job ?? null); await onChanged().catch(() => {}); } else setJobErr(r.error ?? "נכשל");
+    } catch (e) { setJobErr(e instanceof Error ? e.message : "שגיאה"); }
+    finally { setJobPending(false); }
+  };
+  const cancelJob = async () => {
+    if (!job) return;
+    const r = await cancelCityResearchJobAction(job.id);
+    if (r.ok) setJob(r.job ?? null);
+  };
+  // Auto-continue: while a job is "waiting" and auto is on, resume from checkpoint.
+  useEffect(() => {
+    if (!job || !autoContinue || jobPending) return;
+    if (job.status !== "waiting") return;
+    const t = setTimeout(() => { void resumeJob(); }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.id, job?.status, job?.updatedAt, autoContinue, jobPending]);
 
   return (
     <section className="border-brand/40 bg-brand-soft/30 rounded-3xl border p-5 sm:p-6">
@@ -576,57 +604,43 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
         <select value={agentDepth} onChange={(e) => setAgentDepth(e.target.value as ResearchDepth)} className="border-line bg-surface text-ink rounded-full border px-3 py-1.5 text-xs font-bold">
           <option value="quick">מהיר</option><option value="standard">רגיל</option><option value="deep">מעמיק</option>
         </select>
-        <button onClick={runAgent} disabled={agentPending || !city.trim()} className="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-1.5 text-sm font-bold text-indigo-800 disabled:opacity-60">{agentPending ? "חוקר…" : "🧠 חקור את שוק התיווך בעיר"}</button>
+        <button onClick={startJob} disabled={jobPending || !city.trim()} className="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-1.5 text-sm font-bold text-indigo-800 disabled:opacity-60">{jobPending ? "מפעיל…" : "🧠 חקור את שוק התיווך בעיר"}</button>
+        <label className="text-muted flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" checked={autoContinue} onChange={(e) => setAutoContinue(e.target.checked)} /> המשך אוטומטי</label>
       </div>
-      {agentErr && <p className="mt-2 font-semibold text-rose-700">{agentErr}</p>}
-      {agentPending && <p className="text-muted mt-1 text-[11px]">הסוכן מריץ חיפוש רב-שלבי (רשתות · עצמאיים · מדריכים · פורטלים · חברתי · הצלבה). ניתן להריץ שוב להשלמה.</p>}
+      <p className="text-muted mt-1 text-[11px]">המחקר רץ כמשרת רקע מתמשכת עם צ׳קפוינטים — הממשק אינו ממתין לסיום ותקלת timeout אינה מאבדת התקדמות. ניתן להמשיך מהנקודה שנעצרה.</p>
+      {jobMigration && <p className="mt-2 font-semibold text-rose-700">טבלת המשרות אינה קיימת — יש להריץ את מיגרציית 26.4.15 (brokerage_research_jobs) ב-Supabase.</p>}
+      {jobErr && !jobMigration && <p className="mt-2 font-semibold text-rose-700">{jobErr}</p>}
 
-      {agent && (
+      {job && (
         <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-3 text-[12px]">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-indigo-900 font-black">🧠 סוכן חקר שוק התיווך — {agent.city} ({agent.depth})</span>
-            <span className="text-muted text-[11px]">{fmt(agent.searchesCompleted)} חיפושים · {fmt(agent.sourcesChecked)} מקורות · {(agent.elapsedMs / 1000).toLocaleString("he-IL", { maximumFractionDigits: 1 })}ש׳</span>
+            <span className="text-indigo-900 font-black">🧠 משרת מחקר — {job.city} ({job.depth})</span>
+            <span className="flex items-center gap-2 text-[11px]">
+              <span className={cn("rounded-full px-2 py-0.5 font-bold", job.status === "completed" ? "bg-emerald-50 text-emerald-700" : job.status === "waiting" ? "bg-amber-50 text-amber-700" : job.status === "failed" ? "bg-rose-50 text-rose-700" : "bg-indigo-100 text-indigo-700")}>{JOB_STATUS_HE[job.status]}</span>
+              <span className="text-muted">שלב: {JOB_STAGE_HE[job.currentStage]}</span>
+              <span className="text-muted tabular-nums">{job.progressPercent}%</span>
+            </span>
           </div>
-          {!agent.aiConfigured && <p className="font-semibold text-rose-700">מנוע ה-AI אינו מוגדר (חסר OPENAI_API_KEY) — חילוץ שמות מוגבל לזיהוי רשתות.</p>}
-          {!agent.searchConfigured && <p className="font-semibold text-amber-700">⚠ אין ספק חיפוש ציבורי — לא בוצע אימות; המועמדים נשמרו כ״במחקר״.</p>}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            <Mini label="נמצאו" value={fmt(agent.candidatesFound)} />
-            <Mini label="נשמרו (במחקר)" value={fmt(agent.candidatesSaved)} tone="amber" />
-            <Mini label="אומתו" value={fmt(agent.candidatesVerified)} tone="green" />
-            <Mini label="במחקר" value={fmt(agent.candidatesResearching)} tone="amber" />
-            <Mini label="ממתינים לראיה" value={fmt(agent.candidatesWaitingForEvidence)} />
-            <Mini label="נדחו" value={fmt(agent.candidatesRejected)} tone="red" />
+          <div className="bg-line/50 h-1.5 w-full overflow-hidden rounded-full"><div className="bg-indigo-500 h-1.5 rounded-full transition-all" style={{ width: `${job.progressPercent}%` }} /></div>
+          {job.status === "waiting" && <p className="text-amber-700 text-[11px] font-bold">המחקר נשמר. אפשר להמשיך מהנקודה שבה נעצר.{autoContinue ? " (ממשיך אוטומטית…)" : ""}</p>}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="חיפושים" value={fmt(job.searchesCompleted)} />
+            <Mini label="נמצאו" value={fmt(job.candidatesFound)} />
+            <Mini label="נשמרו (במחקר)" value={fmt(job.candidatesSaved)} tone="amber" />
+            <Mini label="אומתו" value={fmt(job.candidatesVerified)} tone="green" />
+            <Mini label="במחקר" value={fmt(job.candidatesResearching)} tone="amber" />
+            <Mini label="ממתינים לראיה" value={fmt(job.candidatesWaitingForEvidence)} />
+            <Mini label="נדחו" value={fmt(job.candidatesRejected)} tone="red" />
           </div>
-          <div className="text-muted text-[11px]"><b>שלבים:</b> {agent.stagesRun.map((st) => STAGE_HE[st]).join(" ← ") || "—"}</div>
-          {agent.steps.length > 0 && <div className="text-muted text-[11px]"><b>מהלך:</b> {agent.steps.join(" ← ")}</div>}
-          {agent.timedOut && <p className="font-semibold text-amber-700">הפעולה התחילה אך עשויה להמשיך בהרצה הבאה / ידנית — חלק מהמועמדים ממתינים לאימות.</p>}
-          {agent.candidates.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              {agent.candidates.slice(0, 40).map((c, i) => (
-                <div key={i} className="border-line bg-surface rounded-xl border px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-ink font-bold">{c.officeName}{c.brandNetwork ? <span className="text-muted font-normal"> · {c.brandNetwork}{c.branch ? ` (${c.branch})` : ""}</span> : ""}</span>
-                    <span className="flex items-center gap-2 text-[11px]">
-                      {c.status === "verified"
-                        ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">מאומת · ראיה ציבורית</span>
-                        : c.status === "rejected"
-                          ? <span className="rounded-full bg-rose-50 px-2 py-0.5 font-bold text-rose-700">נדחה</span>
-                          : c.researched
-                            ? <span className="rounded-full bg-indigo-100 px-2 py-0.5 font-bold text-indigo-700">במחקר</span>
-                            : <span className="rounded-full bg-slate-100 px-2 py-0.5 font-bold text-slate-600">ממתין לראיה</span>}
-                      <span className="text-muted tabular-nums" title="ביטחון מערכת (ראיות)">מערכת {c.systemConfidence}%</span>
-                    </span>
-                  </div>
-                  {c.aliases.length > 1 && <div className="text-muted mt-1 text-[11px]"><b>וריאציות:</b> {c.aliases.join(" · ")}</div>}
-                  {c.sourcesChecked.length > 0 && <div className="text-muted mt-0.5 text-[11px]"><b>מקורות שנבדקו:</b> {c.sourcesChecked.join(" · ")}</div>}
-                  {c.evidenceFound.length > 0 && <div className="mt-0.5 text-[11px] text-emerald-700"><b>ראיות:</b> {c.evidenceFound.join(" · ")}</div>}
-                  <div className="text-muted mt-0.5 text-[11px] italic">{c.verdictReason}</div>
-                </div>
-              ))}
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(job.status === "waiting" || job.status === "queued") && <button onClick={resumeJob} disabled={jobPending} className="bg-indigo-600 rounded-lg px-3 py-1 text-xs font-bold text-white disabled:opacity-60">{jobPending ? "ממשיך…" : "המשך עכשיו"}</button>}
+            {(job.status === "waiting" || job.status === "running" || job.status === "queued") && <button onClick={cancelJob} disabled={jobPending} className="border-line bg-card text-muted rounded-lg border px-3 py-1 text-xs font-bold disabled:opacity-60">בטל</button>}
+            {job.resultSummary && <span className="text-muted text-[11px]">מאומתים: <b>{fmt(Number(job.resultSummary.verifiedOffices ?? 0))}</b> · מתווכים: <b>{fmt(Number(job.resultSummary.brokersTotal ?? 0))}</b> · מודעות: <b>{fmt(Number(job.resultSummary.listingsTotal ?? 0))}</b></span>}
+          </div>
+          {job.logs.length > 0 && (
+            <div className="text-muted text-[11px]"><b>יומן שלבים:</b> {job.logs.slice(-6).map((l) => `${JOB_STAGE_HE[l.stage]} (${fmt(l.itemsProcessed)}, ${fmt(l.durationMs)}ms)`).join(" ← ")}</div>
           )}
-          {agent.gaps.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-amber-800"><b>פערים:</b><ul className="list-disc pr-5">{agent.gaps.map((g, i) => <li key={i}>{g}</li>)}</ul></div>}
-          {agent.notes.length > 0 && <ul className="text-muted list-disc pr-5">{agent.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+          {job.errors.length > 0 && <div className="rounded-lg border border-rose-200 bg-rose-50/50 px-3 py-2 text-rose-700"><b>שגיאות:</b> {job.errors.slice(-4).map((e) => `${JOB_STAGE_HE[e.stage]}: ${e.message}`).join(" · ")}</div>}
         </div>
       )}
       <p className="text-muted mt-1 text-[11px]">זריעת AI: ה-AI מציע <b>שמות מועמדים בלבד</b>. כל מועמד נחקר במקורות ציבוריים — ומקבל סטטוס &quot;מאומת&quot; <b>רק</b> עם ראיה ציבורית אמיתית. ללא ראיה הוא נשאר &quot;במחקר&quot;. ה-AI לעולם אינו מאמת בעצמו.</p>

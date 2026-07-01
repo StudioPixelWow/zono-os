@@ -25,6 +25,12 @@ import { discoverBrokerageOfficesForCity, type CityDiscoveryResult, type CityDis
 import { seedBrokerageOfficeCandidatesWithAI, type AICandidateSeedSummary } from "./ai-candidate-seeding";
 import { runBrokerageResearchAgent, type AgentReport, type ResearchDepth } from "./research-agent";
 import { crossCheckCityRepositories, type CityRepositoryAudit } from "./city-repository-audit";
+import {
+  createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
+  getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
+  type JobResult,
+} from "./research-jobs";
+import type { ResearchDepth as JobDepth } from "./research-jobs";
 import { getBrokerageKnowledgeForCity, getCityBrokerageCensus, getCityKnowledgeStatus, type CityKnowledge, type CityBrokerageCensus, type CityKnowledgeStatus } from "./brokerage-knowledge";
 import { ensureCityBrokerageKnowledge, type EnsureCityResult } from "./city-lazy-learning";
 import { triggerCityLearning, type CityLearningReason, type CityLearningOutcome } from "./city-learning-trigger";
@@ -101,6 +107,36 @@ export async function seedCityAICandidatesAction(city: string): Promise<{ ok: bo
     revalidatePath("/brokerage-data");
     return { ok: true, result };
   } catch (e) { console.error("[ai-seeding] failed:", e); return { ok: false, error: "זריעת מועמדי AI נכשלה." }; }
+}
+
+// ── Phase 26.4.15 — Persistent Background Research Jobs (resumable, no timeout) ──
+/** Create a research job and immediately run one budgeted slice (returns fast). */
+export async function startCityResearchJobAction(city: string, depth: JobDepth = "standard"): Promise<JobResult> {
+  const { profile, user } = await getSessionContext().catch(() => ({ profile: null as { org_id?: string } | null, user: null as { id?: string } | null }));
+  if (!profile?.org_id || !city.trim()) return { ok: false, error: "יש להזין עיר ולהתחבר." };
+  const created = await createBrokerageResearchJob(profile.org_id, city, { depth, createdBy: user?.id ?? null });
+  if (!created.ok || !created.job) return created;
+  // Run one slice now so the user sees immediate progress; the rest resumes later.
+  const ran = await runBrokerageResearchJob(created.job.id, 20000);
+  revalidatePath("/brokerage-data");
+  return ran.ok ? ran : created;
+}
+export async function resumeCityResearchJobAction(jobId: string): Promise<JobResult> {
+  const r = await resumeBrokerageResearchJob(jobId, 20000);
+  revalidatePath("/brokerage-data");
+  return r;
+}
+export async function getCityResearchJobStatusAction(jobId: string): Promise<JobResult> {
+  return getBrokerageResearchJobStatus(jobId);
+}
+export async function getLatestCityResearchJobAction(city: string): Promise<JobResult> {
+  const { profile } = await getSessionContext().catch(() => ({ profile: null as { org_id?: string } | null }));
+  return getLatestCityResearchJob(profile?.org_id ?? null, city);
+}
+export async function cancelCityResearchJobAction(jobId: string): Promise<JobResult> {
+  const r = await cancelBrokerageResearchJob(jobId);
+  revalidatePath("/brokerage-data");
+  return r;
 }
 
 /** Phase 26.4.14 — READ-ONLY repository cross-check: why City panels read 0. */
