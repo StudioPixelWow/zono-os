@@ -35,9 +35,11 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
+import type { OrgTruthReport } from "@/lib/truth-engine";
+import { FRESHNESS_HE, VERIFICATION_HE } from "@/lib/truth-engine";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -340,6 +342,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
+          <TruthEnginePanel />
           <ActionCenterPanel />
           <CommandCenterPanel cities={index?.cities ?? []} />
           <ContinuousLearningPanel onChanged={reload} />
@@ -851,6 +854,103 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Truth Engine — data reliability framework (27.7) ─────────────────────────
+function TruthEnginePanel() {
+  const [data, setData] = useState<OrgTruthReport | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getTruthReportAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+  const band = (n: number): "green" | "amber" | "red" => (n >= 66 ? "green" : n >= 40 ? "amber" : "red");
+
+  return (
+    <section className="rounded-3xl border-2 border-emerald-500/60 bg-emerald-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-emerald-800">🛡️ מנוע האמת — מסגרת מהימנות נתונים</h2>
+          <p className="text-muted mt-1 text-[12px]">כל ישות מקבלת ציון אמון נמדד מראיות אמיתיות: איכות נתונים, טריות, אימות, סתירות ומידע חסר. לעולם לא מפוברק — הביטחון מוגבל לראיות בפועל.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-emerald-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מחשב אמון…" : "הפעל מנוע אמת"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          {/* Organization truth + data health */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="border-line bg-surface rounded-2xl border px-5 py-3">
+              <div className="text-muted text-[11px] font-bold">ציון אמת ארגוני</div>
+              <div className="text-3xl font-black tabular-nums text-emerald-800">{data.organization.truthScore}</div>
+              <div className="text-muted text-[10px]">ביטחון {data.organization.confidence}% · {VERIFICATION_HE[data.organization.verificationLevel]} · {FRESHNESS_HE[data.organization.freshnessLevel]}</div>
+            </div>
+            <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {(["organization", "office", "broker", "property", "market"] as const).map((k) => {
+                const h = data.dataHealth[k];
+                const label = { organization: "ארגון", office: "משרדים", broker: "מתווכים", property: "נכסים", market: "שוק" }[k];
+                return <Mini key={k} label={label} value={`${h.score}`} tone={band(h.score)} />;
+              })}
+            </div>
+          </div>
+
+          {/* Executive integration — CoS consumes truth */}
+          {data.executive && (
+            <div className="rounded-xl border border-emerald-500/40 bg-surface px-3 py-2">
+              <b className="text-emerald-800">🧠 השפעה על ה-Chief of Staff:</b>
+              <span className="text-muted"> ביטחון AI {data.executive.cosAiConfidence} → מותאם-אמון <b className="text-emerald-800">{data.executive.truthAdjustedConfidence}</b>. {data.executive.note}</span>
+            </div>
+          )}
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {/* Data health detail */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {(["organization", "office", "broker", "property", "market"] as const).map((k) => {
+              const h = data.dataHealth[k];
+              const label = { organization: "ארגון", office: "משרדים", broker: "מתווכים", property: "נכסים", market: "שוק" }[k];
+              return (
+                <div key={k} className="border-line bg-surface rounded-lg border px-3 py-1.5">
+                  <div className="flex items-center justify-between"><span className="text-ink font-bold">{label}</span><span className="tabular-nums font-black" style={{ color: h.score >= 66 ? "#15803d" : h.score >= 40 ? "#b45309" : "#be123c" }}>{h.score}</span></div>
+                  <div className="text-muted mt-0.5 text-[10px] leading-tight">{h.entities} ישויות · מאומת {h.verifiedPct}% · סתירות {h.contradictionRatePct}% · מתיישנות {h.staleCount}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Top contradictions */}
+          {data.topContradictions.length > 0 && (
+            <div>
+              <b className="text-rose-700">⚠️ סתירות מובילות (מנוע הסתירות):</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.topContradictions.slice(0, 6).map((c) => (
+                  <div key={c.id} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5">
+                    <span className="text-ink font-bold">{c.note}</span>
+                    <span className="text-muted text-[11px]">{c.values.slice(0, 3).join(" ≠ ")} · {c.severity}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Lowest trust + stale */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <BriefBlock title="🔻 אמון נמוך — דורש אימות" items={data.lowestTrust.map((t) => `${t.entityName ?? t.entityId} — אמת ${t.truthScore} · ${VERIFICATION_HE[t.verificationLevel]}`)} tone="red" />
+            <BriefBlock title="⏳ ישויות מתיישנות" items={data.staleEntities.map((t) => `${t.entityName ?? t.entityId} — ${FRESHNESS_HE[t.freshnessLevel]} (טריות ${t.freshness})`)} />
+          </div>
+
+          {/* Explainability sample */}
+          {data.sampleOffices[0] && (
+            <div className="rounded-xl border border-emerald-500/30 bg-surface px-3 py-2 text-[11px]">
+              <b>🔍 הסבר אמון (דוגמה — {data.sampleOffices[0].entityName}):</b>
+              <p className="text-muted mt-1">{data.sampleOffices[0].explanation.why}</p>
+              <p className="text-muted">טריות: {data.sampleOffices[0].explanation.freshness} · חסר: {data.sampleOffices[0].explanation.missingData.join(", ")} · סתירות: {data.sampleOffices[0].explanation.contradictions.join(", ")}</p>
+            </div>
+          )}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · מנוע אמת v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── AI Chief of Staff — CEO dashboard (orchestration over every engine, 27.6) ─
 function ChiefOfStaffPanel() {
   const [data, setData] = useState<ChiefOfStaffReport | null>(null);

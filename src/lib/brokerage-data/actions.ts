@@ -38,6 +38,7 @@ import {
   type ActionCenter, type Mission,
 } from "@/lib/mission-engine";
 import { getChiefOfStaff, type ChiefOfStaffReport } from "@/lib/chief-of-staff";
+import { getOrgTruthReport, type OrgTruthReport } from "@/lib/truth-engine";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -207,6 +208,12 @@ export async function updateMissionStatusAction(missionId: string, status: strin
     revalidatePath("/brokerage-data");
     return { ok: r.ok, error: r.error };
   } catch (e) { console.error("[missions] status failed:", e); return { ok: false, error: "עדכון סטטוס נכשל." }; }
+}
+
+// ── Phase 27.7 — Truth Engine & Data Reliability Framework ───────────────────
+export async function getTruthReportAction(): Promise<{ ok: boolean; result?: OrgTruthReport; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOrgTruthReport(profile.org_id) }; }
+  catch (e) { console.error("[truth-engine] report failed:", e); return { ok: false, error: "מנוע האמון נכשל." }; }
 }
 
 // ── Phase 27.6 — AI Chief of Staff (orchestration over every engine) ─────────
