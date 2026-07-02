@@ -48,6 +48,7 @@ import { getCrmGraph, type CrmGraphResult } from "@/lib/digital-twin/crm-graph";
 import { getCustomerJourneys, type CustomerJourneysOverview } from "@/lib/digital-twin/customer";
 import { getAgentsDashboard, setAgentEnabled, approveInboxItem, rejectInboxItem, type AgentsDashboard } from "@/lib/agent-framework";
 import { getListingScorecards, type ListingScorecardsOverview } from "@/lib/listing-agent";
+import { getBuyerAgentScorecards, type BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -275,6 +276,12 @@ export async function rejectInboxItemAction(itemId: string, reason: string): Pro
 export async function getListingScorecardsAction(): Promise<{ ok: boolean; result?: ListingScorecardsOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getListingScorecards(profile.org_id) }; }
   catch (e) { console.error("[listing-agent] scorecards failed:", e); return { ok: false, error: "סוכן המודעות נכשל." }; }
+}
+
+// ── Phase 29.4 — Buyer Intelligence Agent (per-buyer scorecards) ─────────────
+export async function getBuyerAgentScorecardsAction(): Promise<{ ok: boolean; result?: BuyerAgentScorecardsOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getBuyerAgentScorecards(profile.org_id) }; }
+  catch (e) { console.error("[buyer-agent] scorecards failed:", e); return { ok: false, error: "סוכן הקונים נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

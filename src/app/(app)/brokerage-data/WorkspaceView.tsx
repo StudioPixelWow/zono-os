@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -52,6 +52,8 @@ import { STAGE_HE, ROLE_HE } from "@/lib/digital-twin/customer";
 import type { AgentsDashboard } from "@/lib/agent-framework";
 import type { ListingScorecardsOverview } from "@/lib/listing-agent";
 import { STRATEGY_HE } from "@/lib/listing-agent";
+import type { BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
+import { BUYER_STRATEGY_HE } from "@/lib/buyer-agent";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -356,6 +358,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <ChiefOfStaffPanel />
           <AgentsPanel />
           <ListingAgentPanel />
+          <BuyerAgentPanel />
           <CustomerJourneyPanel />
           <CrmRelationshipPanel />
           <DigitalTwinPanel />
@@ -875,6 +878,68 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Buyer Intelligence Agent — per-buyer scorecards (29.4) ───────────────────
+function BuyerAgentPanel() {
+  const [data, setData] = useState<BuyerAgentScorecardsOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getBuyerAgentScorecardsAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-cyan-500/50 bg-cyan-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-cyan-800">🛒 סוכן מודיעין קונים — כרטיס לכל קונה</h2>
+          <p className="text-muted mt-1 text-[12px]">סוכן AI לכל קונה: בריאות, מוכנות, התאמות נכס, סיכונים ואסטרטגיית קנייה מוסברת (מהלך מסודר). המלצה בלבד — אין ביצוע אוטומטי, הכול דרך תיבת הסוכנים.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-cyan-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח קונים…" : "הפעל סוכן קונים"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="קונים" value={fmt(data.totals.buyers)} />
+            <Mini label="חמים" value={fmt(data.totals.hot)} tone="green" />
+            <Mini label="קרים" value={fmt(data.totals.cold)} tone="red" />
+            <Mini label="בסגירה" value={fmt(data.totals.closing)} tone="green" />
+            <Mini label="חסר מידע" value={fmt(data.totals.needsInfo)} tone="amber" />
+            <Mini label="רדומים" value={fmt(data.totals.dormant)} />
+            <Mini label="עם התאמות" value={fmt(data.totals.withMatches)} />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.scorecards.slice(0, 6).map((c) => (
+            <div key={c.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{c.name}{c.classification.length ? <span className="text-cyan-700 font-bold"> · {c.classification.join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className={cn("rounded-full px-2 py-0.5 font-bold", c.health.label === "בריא" ? "bg-green-100 text-green-800" : c.health.label === "בסיכון" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{c.health.label}</span>
+                  <span className="text-muted">בריאות {c.health.buyerHealth} · קנייה {c.health.buyingConfidence}%</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                מוכנות {c.health.buyingReadiness} · מומנטום {c.health.buyingMomentum} · אמון {c.health.trust} · תקשורת {c.health.communicationHealth} · יחסים {c.health.relationshipHealth}
+                {c.truthScore != null ? <span> · אמת {c.truthScore}</span> : null}
+                {c.lifecycleRoles.length ? <span> · תפקידים: {c.lifecycleRoles.join(",")}</span> : null}
+              </div>
+              <div className="text-cyan-800 mt-1 rounded-lg border border-cyan-500/30 bg-cyan-50/40 px-2 py-1 text-[11px] font-bold">
+                🎯 {BUYER_STRATEGY_HE[c.strategy.recommendedStrategy] ?? c.strategy.recommendedStrategy} · ביטחון {c.strategy.confidence}% · {c.strategy.change.signal === "switch" ? "החלף אסטרטגיה" : c.strategy.change.signal === "succeeded" ? "בהצלחה" : "פעיל"}
+                <span className="text-muted font-normal"> — {c.aiRecommendation}</span>
+              </div>
+              <div className="text-muted mt-0.5 text-[10px]">התאמות: {c.matchIntel.perfect.length} מושלמות · {c.matchIntel.emerging.length} מתפתחות · {c.matchIntel.hidden.length} נסתרות{c.matchIntel.expired.length ? ` · ${c.matchIntel.expired.length} פגות` : ""}</div>
+              {c.risks[0] && <div className="text-rose-700 mt-0.5 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
+              {c.strategy.playbook[0] && <div className="text-muted text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}</div>}
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Buyer Agent v{data.version} · ההמלצות זורמות לתיבת הסוכנים · אין ביצוע אוטומטי</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Listing Intelligence Agent — per-property scorecards (29.3) ──────────────
 function ListingAgentPanel() {
   const [data, setData] = useState<ListingScorecardsOverview | null>(null);
