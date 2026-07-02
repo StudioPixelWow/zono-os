@@ -41,5 +41,6 @@ export function buildScorecard(sig: ListingSignals, now: number = Date.now()): P
     id: sig.id, title: sig.title, city: sig.city, price: sig.price, status: sig.status,
     health, risks, opportunities, recommendations, timeline, classification,
     aiConfidence: clamp(health.confidence), truthScore: sig.truthScore, activeMissions: sig.openMissions,
+    valuation: sig.valuation,
   };
 }

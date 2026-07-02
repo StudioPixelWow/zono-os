@@ -7,7 +7,9 @@
 // Mission history) READ-ONLY. Everything is recommendation-only; nothing
 // auto-executes. Evidence-only — sparse data → conservative + low confidence.
 // ============================================================================
-export const LISTING_AGENT_VERSION = "29.3";
+import type { ValuationView } from "./valuation";
+
+export const LISTING_AGENT_VERSION = "29.3.1";
 
 export type Impact = "high" | "medium" | "low";
 
@@ -23,6 +25,7 @@ export interface ListingSignals {
   recentBuyerActivity: number;                        // interactions in last 30d
   market: { inventoryTrendPct: number | null; concentrationLevel: string | null; topSharePct: number | null } | null;
   sellerLinked: boolean; valuationEstimate: number | null;
+  valuation: ValuationView;                            // read-only valuation link (29.3.1)
   campaignActive: boolean | null;                     // marketing signal (null = unknown)
   lastActivityAt: string | null;
   openMissions: number;
@@ -61,4 +64,5 @@ export interface PropertyScorecard {
   health: PropertyHealth; risks: PropertyRisk[]; opportunities: PropertyOpportunity[];
   recommendations: ListingRecommendation[]; timeline: PropertyTimelineEntry[];
   classification: string[]; aiConfidence: number; truthScore: number | null; activeMissions: number;
+  valuation: ValuationView;                            // shown as a badge (29.3.1)
 }

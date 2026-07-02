@@ -15,6 +15,7 @@ export { buildScorecard, buildTimeline, classifyListing } from "./scorecard";
 export { computePropertyHealth } from "./health";
 export { detectRisks, detectOpportunities } from "./risk-opportunity";
 export { buildRecommendations } from "./recommendations";
+export { computeValuationView, confidenceLabelOf, NO_VALUATION, type ValuationInput, type ValuationView, type RangePosition, type ConfidenceLabel } from "./valuation";
 export { getListingSignals, getListingScorecards, type ListingScorecardsOverview } from "./service";
 export { runSelfCheck, type LASelfCheck, type LACheck } from "./qa";
 export { LISTING_AGENT_VERSION } from "./types";

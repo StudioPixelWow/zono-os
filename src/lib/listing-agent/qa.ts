@@ -6,6 +6,7 @@
 // ============================================================================
 import { buildScorecard } from "./scorecard";
 import { listingAgent } from "./agent";
+import { computeValuationView, NO_VALUATION, type ValuationInput } from "./valuation";
 import type { ListingSignals } from "./types";
 
 export interface LACheck { name: string; pass: boolean; detail: string }
@@ -21,8 +22,10 @@ const sig = (over: Partial<ListingSignals> = {}): ListingSignals => ({
   timeOnMarketDays: 15, zonoScore: 70, estimatedDaysToSell: 60, hasExclusivity: true, exclusivityEndsAt: iso(-60),
   matchCount: 6, avgMatchScore: 78, recentBuyerActivity: 3,
   market: { inventoryTrendPct: 2, concentrationLevel: "moderate", topSharePct: 30 },
-  sellerLinked: true, valuationEstimate: 1_950_000, campaignActive: true, lastActivityAt: iso(2), openMissions: 1, truthScore: 70, ...over,
+  sellerLinked: true, valuationEstimate: 1_950_000, valuation: computeValuationView(2_000_000, val({ estimatedValue: 1_950_000, lowValue: 1_850_000, highValue: 2_050_000, confidence: 75, createdAt: iso(10) }), NOW),
+  campaignActive: true, lastActivityAt: iso(2), openMissions: 1, truthScore: 70, ...over,
 });
+const val = (o: Partial<ValuationInput>): ValuationInput => ({ available: true, estimatedValue: 1_950_000, lowValue: 1_850_000, highValue: 2_050_000, confidence: 75, createdAt: iso(10), unavailableReason: null, ...o });
 
 export function runSelfCheck(): LASelfCheck {
   const checks: LACheck[] = [];
@@ -45,13 +48,24 @@ export function runSelfCheck(): LASelfCheck {
   add("stale risk + refresh rec", hasRisk(stale, "stale") && hasRec(stale, /רענן|החלף תמונות/), "");
   add("stale classified", stale.classification.includes("מתיישן") || stale.classification.includes("קריטי"), stale.classification.join(","));
 
-  // Overpriced.
-  const over = card({ timeOnMarketDays: 80, listedAt: iso(80), matchCount: 1, avgMatchScore: 0, recentBuyerActivity: 0, updatedAt: iso(40), lastActivityAt: iso(40) });
-  add("overpriced risk + lower-price rec", hasRisk(over, "overpriced") && hasRec(over, /הורד מחיר/), "");
+  // Overpriced — market-inferred only (valuation within range) → soft CMA, NOT lower price.
+  const over = card({ price: 2_000_000, timeOnMarketDays: 80, listedAt: iso(80), matchCount: 1, avgMatchScore: 0, recentBuyerActivity: 0, updatedAt: iso(40), lastActivityAt: iso(40) });
+  add("market-inferred overpriced → CMA not lower-price", hasRisk(over, "overpriced") && over.recommendations.some((r) => /סקירת מחיר|CMA/.test(r.action)) && !over.recommendations.some((r) => /הורד מחיר/.test(r.action)), "");
 
-  // Underpriced.
-  const under = card({ timeOnMarketDays: 10, listedAt: iso(10), matchCount: 10, avgMatchScore: 85, recentBuyerActivity: 5 });
-  add("underpriced risk / price opportunity", hasRisk(under, "underpriced") || under.opportunities.some((o) => o.type === "price_opportunity"), "");
+  // ── Valuation link scenarios (29.3.1) ───────────────────────────────────────
+  const vsig = (price: number, o: Partial<ValuationInput>) => buildScorecard(sig({ price, valuation: computeValuationView(price, val(o), NOW) }), NOW);
+  const noVal = buildScorecard(sig({ valuation: NO_VALUATION }), NOW);
+  add("no valuation → missing risk + valuation review + honest reason", hasRisk(noVal, "missing_valuation") && noVal.recommendations.some((r) => /הערכת שווי/.test(r.action)) && noVal.valuation.unavailableReason != null, "");
+  const staleVal = vsig(2_400_000, { createdAt: iso(200) });
+  add("stale valuation → stale risk + no forced price drop", noVal.valuation.available === false && staleVal.risks.some((r) => r.type === "missing_valuation") && !staleVal.recommendations.some((r) => /הורד מחיר/.test(r.action)), `age ${staleVal.valuation.ageDays}`);
+  const above = vsig(2_400_000, { confidence: 80, createdAt: iso(10) });
+  add("asking above range (strong) → lower-price rec", above.valuation.rangePosition === "above" && above.valuation.strongEnoughForPricing && above.recommendations.some((r) => /הורד מחיר/.test(r.action)), `${above.valuation.priceGapPct}%`);
+  const below = vsig(1_700_000, { confidence: 80, createdAt: iso(10) });
+  add("asking below range (strong) → raise-price rec", below.valuation.rangePosition === "below" && below.recommendations.some((r) => /העלאת מחיר/.test(r.action)), "");
+  const within = vsig(1_980_000, { confidence: 80, createdAt: iso(10) });
+  add("asking within range → no price-change rec", within.valuation.rangePosition === "within" && !within.recommendations.some((r) => /הורד מחיר|העלאת מחיר/.test(r.action)), "");
+  const lowConf = vsig(2_400_000, { confidence: 20, createdAt: iso(10) });
+  add("low valuation confidence → no forced price drop", lowConf.valuation.rangePosition === "above" && !lowConf.valuation.strongEnoughForPricing && !lowConf.recommendations.some((r) => /הורד מחיר/.test(r.action)), lowConf.valuation.confidenceLabel);
 
   // Luxury.
   add("luxury classified", card({ price: 5_000_000 }).classification.includes("יוקרה"), "");
@@ -65,7 +79,7 @@ export function runSelfCheck(): LASelfCheck {
   add("no activity risk + buyer follow-up", hasRisk(noact, "no_activity") && hasRec(noact, /חזור למתעניינים/), "");
 
   // Missing valuation.
-  const noval = card({ valuationEstimate: null });
+  const noval = card({ valuation: NO_VALUATION });
   add("missing valuation risk + rec", hasRisk(noval, "missing_valuation") && hasRec(noval, /הערכת שווי/), "");
 
   // Seller at risk.

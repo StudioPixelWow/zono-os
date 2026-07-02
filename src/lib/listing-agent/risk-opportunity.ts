@@ -9,14 +9,20 @@ export function detectRisks(sig: ListingSignals, h: PropertyHealth): PropertyRis
   const tom = sig.timeOnMarketDays ?? 0;
   if (tom > 90 && h.freshness <= 20) out.push({ type: "stale", severity: "high", title: "מודעה מתיישנת", evidence: [`${tom} ימים בשוק`, `טריות ${h.freshness}`] });
   else if (tom > 60 && h.freshness <= 45) out.push({ type: "stale", severity: "medium", title: "מודעה מתחילה להתיישן", evidence: [`${tom} ימים בשוק`] });
-  if (tom > 60 && h.demand < 40) out.push({ type: "overpriced", severity: "high", title: "חשד לתמחור גבוה מדי", evidence: [`${tom} ימים · ביקוש ${h.demand}`, sig.valuationEstimate != null && sig.price != null && sig.price > sig.valuationEstimate ? `מחיר מעל הערכה` : "היעדר תגובת שוק"] });
-  if (h.demand >= 75 && tom <= 21) out.push({ type: "underpriced", severity: "medium", title: "חשד לתמחור נמוך מדי", evidence: [`ביקוש גבוה ${h.demand} תוך ${tom} ימים`] });
+  const v = sig.valuation;
+  // Overpriced — valuation-backed (asking above range) OR market-inferred.
+  if (v.available && v.rangePosition === "above") out.push({ type: "overpriced", severity: v.strongEnoughForPricing ? "high" : "medium", title: "מחיר מבוקש מעל טווח ההערכה", evidence: [`מבוקש ${(sig.price ?? 0).toLocaleString("he-IL")} מול הערכה ${(v.estimatedValue ?? 0).toLocaleString("he-IL")} (+${v.priceGapPct}%)`, `ביטחון הערכה ${v.confidenceLabel}${v.fresh ? "" : " · מיושנת"}`] });
+  else if (tom > 60 && h.demand < 40) out.push({ type: "overpriced", severity: "medium", title: "חשד לתמחור גבוה (תגובת שוק חלשה)", evidence: [`${tom} ימים · ביקוש ${h.demand}`, "אין הערכת שווי תומכת — נדרש CMA"] });
+  // Underpriced — valuation-backed (below range) OR strong market response.
+  if (v.available && v.rangePosition === "below") out.push({ type: "underpriced", severity: "medium", title: "מחיר מבוקש מתחת לטווח ההערכה", evidence: [`מבוקש מתחת להערכה (${v.priceGapPct}%)`, `ביטחון הערכה ${v.confidenceLabel}`] });
+  else if (h.demand >= 75 && tom <= 21) out.push({ type: "underpriced", severity: "low", title: "אינדיקציית שוק לתמחור נמוך", evidence: [`ביקוש גבוה ${h.demand} תוך ${tom} ימים`] });
   if (sig.matchCount <= 1 && tom > 21) out.push({ type: "weak_exposure", severity: "high", title: "חשיפה חלשה", evidence: [`${sig.matchCount} התאמות בלבד`] });
   if (sig.sellerLinked && tom > 75 && h.freshness <= 20) out.push({ type: "seller_frustration", severity: "high", title: "סיכון לתסכול מוכר", evidence: [`${tom} ימים ללא התקדמות`] });
   if (h.competitionPressure >= 60) out.push({ type: "competition_pressure", severity: "medium", title: "לחץ תחרותי גבוה", evidence: [`לחץ תחרות ${h.competitionPressure}`, sig.market?.concentrationLevel ? `ריכוזיות ${sig.market.concentrationLevel}` : ""].filter(Boolean) });
   if (sig.campaignActive === false) out.push({ type: "missing_marketing", severity: "medium", title: "אין קמפיין שיווק פעיל", evidence: ["ללא קמפיין פעיל"] });
   if (h.freshness <= 10 && sig.recentBuyerActivity === 0) out.push({ type: "no_activity", severity: "medium", title: "אין פעילות אחרונה", evidence: [`טריות ${h.freshness}`] });
-  if (sig.valuationEstimate == null) out.push({ type: "missing_valuation", severity: "low", title: "אין הערכת שווי מקושרת", evidence: ["חסרה הערכת שווי"] });
+  if (!v.available) out.push({ type: "missing_valuation", severity: "low", title: "אין הערכת שווי זמינה", evidence: [v.unavailableReason ?? "לא נמצאה הערכה למכירה זו"] });
+  else if (!v.fresh) out.push({ type: "missing_valuation", severity: "medium", title: "הערכת שווי מיושנת", evidence: [`גיל הערכה ${v.ageDays} ימים`] });
   return out;
 }
 

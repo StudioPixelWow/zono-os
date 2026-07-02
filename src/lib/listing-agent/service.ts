@@ -11,6 +11,7 @@ import { getCityCompetitiveDashboard } from "@/lib/brokerage-data/competitive-in
 import { computeTruthScore } from "@/lib/truth-engine";
 import { getActionCenter } from "@/lib/mission-engine";
 import { buildScorecard } from "./scorecard";
+import { computeValuationView, NO_VALUATION, type ValuationInput } from "./valuation";
 import type { ListingSignals, PropertyScorecard } from "./types";
 
 type Row = Record<string, unknown>;
@@ -43,6 +44,22 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
   const marketByCity = new Map<string, ListingSignals["market"]>();
   await Promise.all(cities.map(async (c) => { try { const d = await getCityCompetitiveDashboard(c); marketByCity.set(c, { inventoryTrendPct: d.snapshot.inventoryTrendPct, concentrationLevel: d.snapshot.concentrationLevel, topSharePct: d.snapshot.topOfficeSharePct }); } catch { /* none */ } }));
 
+  // READ-ONLY valuation lookup — latest completed valuation per property (29.3.1).
+  // No formula change, no fake valuation. Missing/stale handled honestly.
+  const valById = new Map<string, ValuationInput>();
+  for (const r of await safe("property_valuations", "property_id,status,estimated_value,low_value,high_value,confidence_score,confidence_level,created_at", 3000)) {
+    const pid = s(r.property_id); if (!pid || !ids.includes(pid)) continue;
+    if ((s(r.status) ?? "") !== "completed") continue;
+    const at = s(r.created_at);
+    const prev = valById.get(pid);
+    // keep the most recent completed valuation
+    if (prev && prev.createdAt && at && prev.createdAt >= at) continue;
+    const cScore = num(r.confidence_score);
+    const cLabel = s(r.confidence_level);
+    const confidence = cScore != null ? Math.round(cScore <= 1 ? cScore * 100 : cScore) : cLabel === "high" ? 80 : cLabel === "medium" ? 55 : cLabel === "low" ? 30 : null;
+    valById.set(pid, { available: true, estimatedValue: num(r.estimated_value), lowValue: num(r.low_value), highValue: num(r.high_value), confidence, createdAt: at, unavailableReason: null });
+  }
+
   // Open missions per property (from Action Center).
   const openByProp = new Map<string, number>();
   try { const ac = await getActionCenter(orgId); for (const b of [ac.critical, ac.highPriority, ac.inProgress, ac.blocked, ac.waiting, ac.recentlyCreated]) for (const mm of b) if (mm.entityType === "property" && mm.entityId) openByProp.set(mm.entityId, (openByProp.get(mm.entityId) ?? 0) + 1); } catch { /* none */ }
@@ -54,6 +71,8 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
     const listedAt = s(r.listed_at) ?? s(r.created_at);
     const recentBuyerActivity = actAgg.get(id) ?? 0;
     const lastActivityAt = lastAct.get(id) ?? s(r.updated_at);
+    const vInput = valById.get(id);
+    const valuation = vInput ? computeValuationView(num(r.price), vInput, now) : NO_VALUATION;
     const truth = computeTruthScore({
       entityType: "property", entityId: id, entityName: s(r.title),
       evidence: [...Array(Math.min(agg.count, 10)).fill(0).map(() => ({ source: "match_engine", sourceType: "match", at: s(r.updated_at), stance: "support" as const })), ...Array(Math.min(recentBuyerActivity, 10)).fill(0).map(() => ({ source: "activity", sourceType: "activity", at: lastActivityAt, stance: "support" as const }))],
@@ -67,7 +86,7 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
       zonoScore: num(r.zono_score), estimatedDaysToSell: num(r.estimated_days_to_sell), hasExclusivity: !!r.has_exclusivity, exclusivityEndsAt: s(r.exclusivity_ends_at),
       matchCount: agg.count, avgMatchScore, recentBuyerActivity,
       market: r.city ? marketByCity.get(String(r.city)) ?? null : null,
-      sellerLinked: !!s(r.seller_id), valuationEstimate: null, campaignActive: null, lastActivityAt,
+      sellerLinked: !!s(r.seller_id), valuationEstimate: valuation.estimatedValue, valuation, campaignActive: null, lastActivityAt,
       openMissions: openByProp.get(id) ?? 0, truthScore: truth.truthScore,
     };
   });

@@ -21,10 +21,21 @@ export function computePropertyHealth(sig: ListingSignals, now: number = Date.no
   const mkt = sig.market;
   const competitionPressure = clamp(mkt ? ((mkt.inventoryTrendPct != null && mkt.inventoryTrendPct < 0 ? Math.min(40, Math.abs(mkt.inventoryTrendPct)) : 0) + (mkt.concentrationLevel === "concentrated" ? 40 : mkt.concentrationLevel === "moderate" ? 20 : 0) + (mkt.topSharePct != null ? Math.min(20, mkt.topSharePct / 5) : 0)) : 20);
 
-  // Pricing health — strong market response = well priced; long TOM + weak demand = mispriced.
-  const overpricedSignal = tom > 60 && demand < 40 ? Math.min(50, (tom - 60) / 2 + (40 - demand)) : 0;
-  const valGap = sig.valuationEstimate != null && sig.price != null && sig.valuationEstimate > 0 ? (sig.price - sig.valuationEstimate) / sig.valuationEstimate : null;
-  const pricingHealth = clamp(70 + demand * 0.2 - overpricedSignal - (valGap != null && valGap > 0.1 ? Math.min(40, valGap * 100) : 0) - (sig.estimatedDaysToSell != null && sig.estimatedDaysToSell > 120 ? 15 : 0));
+  // Pricing health — VALUATION-BACKED when real evidence exists (29.3.1), else
+  // falls back to market response. Weak/stale valuations carry less weight.
+  const v = sig.valuation;
+  let pricingHealth: number;
+  if (v.available && v.rangePosition !== "unknown") {
+    const confW = v.confidenceLabel === "high" ? 1 : v.confidenceLabel === "medium" ? 0.7 : 0.4;
+    const freshW = v.fresh ? 1 : 0.6;
+    const gapPen = v.rangePosition === "above" ? Math.min(45, Math.abs(v.priceGapPct ?? 0)) * confW * freshW : 0;
+    const belowPen = v.rangePosition === "below" ? Math.min(15, Math.abs(v.priceGapPct ?? 0) * 0.3) : 0;
+    const withinBonus = v.rangePosition === "within" ? 15 : 0;
+    pricingHealth = clamp(70 + withinBonus + demand * 0.15 - gapPen - belowPen - (v.fresh ? 0 : 5));
+  } else {
+    const overpricedSignal = tom > 60 && demand < 40 ? Math.min(50, (tom - 60) / 2 + (40 - demand)) : 0;
+    pricingHealth = clamp(65 + demand * 0.2 - overpricedSignal - (sig.estimatedDaysToSell != null && sig.estimatedDaysToSell > 120 ? 15 : 0));
+  }
 
   const exposure = clamp(Math.min(100, sig.matchCount * 10) + (sig.campaignActive ? 25 : 0));
   const marketingHealth = clamp(exposure * 0.5 + freshness * 0.3 + (sig.campaignActive === false ? -15 : 0) + 40);

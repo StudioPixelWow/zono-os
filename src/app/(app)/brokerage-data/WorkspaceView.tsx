@@ -917,6 +917,20 @@ function ListingAgentPanel() {
                 תמחור {c.health.pricingHealth} · שיווק {c.health.marketingHealth} · ביקוש {c.health.demand} · לחץ תחרות {c.health.competitionPressure} · משימות {c.activeMissions}
                 {c.truthScore != null ? <span> · אמת {c.truthScore}</span> : null} · ביטחון {c.aiConfidence}%
               </div>
+              {/* Valuation badge (29.3.1) */}
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                {c.valuation.available ? (
+                  <>
+                    <span className={cn("rounded-full px-2 py-0.5 font-bold", c.valuation.rangePosition === "above" ? "bg-rose-100 text-rose-800" : c.valuation.rangePosition === "below" ? "bg-sky-100 text-sky-800" : "bg-green-100 text-green-800")}>
+                      {c.valuation.rangePosition === "above" ? "מעל טווח" : c.valuation.rangePosition === "below" ? "מתחת לטווח" : "בתוך הטווח"}
+                    </span>
+                    <span className="text-muted">מבוקש {c.price ? c.price.toLocaleString("he-IL") : "—"} ₪ מול הערכה {c.valuation.estimatedValue ? c.valuation.estimatedValue.toLocaleString("he-IL") : "—"} ₪{c.valuation.priceGapPct != null ? ` (${c.valuation.priceGapPct > 0 ? "+" : ""}${c.valuation.priceGapPct}%)` : ""}</span>
+                    <span className="text-muted">ביטחון הערכה {c.valuation.confidenceLabel}{c.valuation.fresh ? "" : ` · מיושנת (${c.valuation.ageDays} ימים)`}</span>
+                  </>
+                ) : (
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 font-bold text-slate-600">אין הערכת שווי זמינה</span>
+                )}
+              </div>
               {c.risks[0] && <div className="text-rose-700 mt-1 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
               {c.recommendations[0] && <div className="text-orange-800 mt-1 text-[11px] font-bold">← {c.recommendations[0].action} (עדיפות {c.recommendations[0].priority}, ROI: {c.recommendations[0].roi})</div>}
               {c.recommendations[1] && <div className="text-muted text-[11px]">גם: {c.recommendations.slice(1, 3).map((r) => r.action).join(" · ")}</div>}
