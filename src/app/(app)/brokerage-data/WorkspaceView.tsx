@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { OrgTruthReport } from "@/lib/truth-engine";
@@ -43,6 +43,7 @@ import { FRESHNESS_HE, VERIFICATION_HE } from "@/lib/truth-engine";
 import type { OrgMemoryReport } from "@/lib/org-memory";
 import type { RelationshipReport } from "@/lib/relationship-graph";
 import { RELATION_HE } from "@/lib/relationship-graph";
+import type { BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -345,6 +346,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
+          <DigitalTwinPanel />
           <TruthEnginePanel />
           <OrgMemoryPanel />
           <RelationshipGraphPanel />
@@ -859,6 +861,65 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Digital Twin Framework — Buyer Twins (28.1) ──────────────────────────────
+function DigitalTwinPanel() {
+  const [data, setData] = useState<BuyerTwinsOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getBuyerTwinsAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-fuchsia-500/50 bg-fuchsia-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-fuchsia-800">👤 Digital Twin — קונים (הטמעה ראשונה של המסגרת)</h2>
+          <p className="text-muted mt-1 text-[12px]">מסגרת Digital Twin אוניברסלית שכל ישות עתידית תשתמש בה. הקונה הוא ה-Twin הראשון: פרופיל, זיכרון, אמון, קשרים, החלטות, משימות, בריאות ולמידה — מראיות בלבד.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-fuchsia-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "בונה Twins…" : "בנה Digital Twins"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="קונים" value={fmt(data.totals.buyers)} />
+            <Mini label="חמים" value={fmt(data.totals.hot)} tone="red" />
+            <Mini label="יוקרה" value={fmt(data.totals.luxury)} />
+            <Mini label="משקיעים" value={fmt(data.totals.investors)} />
+            <Mini label="משפחות" value={fmt(data.totals.families)} tone="green" />
+            <Mini label="רדומים" value={fmt(data.totals.dormant)} />
+            <Mini label="ערך גבוה" value={fmt(data.totals.highValue)} tone="green" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          <p className="text-muted text-[11px]"><b>המסגרת תומכת בישויות:</b> {data.frameworkEntities.join(" · ")}</p>
+
+          {data.twins.slice(0, 6).map((t) => (
+            <div key={t.identity.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{t.identity.name}{t.classification.length ? <span className="text-fuchsia-700 font-bold"> · {t.classification.join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className="rounded-full bg-fuchsia-100 px-2 py-0.5 font-bold">קנייה {t.profile.probabilityToBuy}%</span>
+                  <span className="text-muted">בריאות {t.health.score} · {t.health.label}</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                מוכנות {t.profile.readiness} · דחיפות {t.profile.urgency} · אמון {t.profile.trust} · חלון {t.profile.timeline} · תקציב {t.profile.budget.max ? `עד ${(t.profile.budget.max).toLocaleString("he-IL")} ₪` : "לא ידוע"}
+                {t.truth ? <span> · אמת נתונים {t.truth.truthScore}</span> : null}
+              </div>
+              {t.decisions[0] && <div className="text-fuchsia-800 mt-1 text-[11px] font-bold">← החלטה: {t.decisions[0].action} ({t.decisions[0].priority})</div>}
+              {t.missions[0] && <div className="text-muted text-[11px]">משימה: {t.missions[0].title} · {t.missions.slice(0, 3).map((m) => m.missionType).join(", ")}</div>}
+              {t.learnings[0] && <div className="text-muted text-[11px]">למידה: {t.learnings[0].note}</div>}
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Digital Twin v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Relationship Intelligence & Universal Entity Graph (27.9) ────────────────
 function RelationshipGraphPanel() {
   const [data, setData] = useState<RelationshipReport | null>(null);

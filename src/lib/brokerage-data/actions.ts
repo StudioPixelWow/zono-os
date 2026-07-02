@@ -41,6 +41,7 @@ import { getChiefOfStaff, type ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import { getOrgTruthReport, type OrgTruthReport } from "@/lib/truth-engine";
 import { getOrgMemoryReport, type OrgMemoryReport } from "@/lib/org-memory";
 import { getRelationshipReport, type RelationshipReport } from "@/lib/relationship-graph";
+import { getBuyerTwins, type BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -210,6 +211,12 @@ export async function updateMissionStatusAction(missionId: string, status: strin
     revalidatePath("/brokerage-data");
     return { ok: r.ok, error: r.error };
   } catch (e) { console.error("[missions] status failed:", e); return { ok: false, error: "עדכון סטטוס נכשל." }; }
+}
+
+// ── Phase 28.1 — Digital Twin Framework (Buyer = first Twin) ─────────────────
+export async function getBuyerTwinsAction(): Promise<{ ok: boolean; result?: BuyerTwinsOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getBuyerTwins(profile.org_id) }; }
+  catch (e) { console.error("[digital-twin] buyer twins failed:", e); return { ok: false, error: "בניית ה-Digital Twins נכשלה." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────
