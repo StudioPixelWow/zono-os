@@ -6,7 +6,8 @@
 // ============================================================================
 import { AgentRegistry } from "./registry";
 import { computePerformance } from "./performance";
-import { canAutoExecute, requiresApproval } from "./permissions";
+import { canAutoExecute, requiresApproval, approvalCreates } from "./permissions";
+import { performanceFromInbox } from "./performance";
 import { shouldRun } from "./scheduler";
 import { seedBuiltinAgents } from "./agents";
 import type { AgentDefinition, AgentContext, AgentActionRecord } from "./types";
@@ -89,6 +90,14 @@ export function runSelfCheck(): AFSelfCheck {
   const mf = reg2.runAgent("mission-followup", ctx({ actionCenter: { blocked: [{ id: "M1", goal: "גייס", entityName: "משרד", priority: 80 }], waiting: [{ id: "M2", goal: "אשר", priority: 60 }], critical: [{ id: "M3", goal: "קריטי", priority: 90 }] } }));
   add("mission agent suggests + can propose mission (permitted)", mf.inbox.some((i) => i.kind === "mission" && !i.blocked), "");
   add("built-in agents never auto-execute", brief.inbox.concat(mf.inbox).every((i) => i.requiresApproval && i.status === "pending"), "");
+
+  // ── Persistence layer: approval gate + inbox performance (29.2, pure) ───────
+  add("approve mission → creates mission (permitted)", approvalCreates({ kind: "mission", blocked: false }, ["CREATE_MISSION"]) === "mission", "");
+  add("approve mission blocked → no creation", approvalCreates({ kind: "mission", blocked: true }, ["CREATE_MISSION"]) === null, "");
+  add("approve mission without permission → no creation", approvalCreates({ kind: "mission", blocked: false }, ["SUGGEST"]) === null, "");
+  add("approve recommendation → no mission created", approvalCreates({ kind: "recommendation", blocked: false }, ["CREATE_MISSION"]) === null, "");
+  const invPerf = performanceFromInbox([{ status: "approved", impact: "high" }, { status: "rejected", impact: "low" }, { status: "pending", impact: "medium" }, { status: "completed", impact: "high" }]);
+  add("inbox performance counts + rate", invPerf.recommendations === 4 && invPerf.approved === 1 && invPerf.rejected === 1 && invPerf.completed === 1 && invPerf.falsePositives === 1 && invPerf.successRatePct === 67, `${invPerf.successRatePct}`);
 
   const passed = checks.filter((c) => c.pass).length;
   return { ok: passed === checks.length, total: checks.length, passed, checks };

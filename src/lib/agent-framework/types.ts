@@ -42,17 +42,21 @@ export interface AgentProposal {
   kind: ProposalKind; title: string; reason: string; evidence: string[];
   confidence: number; impact: Impact; urgency: number;
   entityType?: string; entityId?: string | null; entityName?: string | null;
+  missionType?: string;                  // mission type to create on approval (kind='mission')
   alternatives?: string[]; ifIgnored?: string;
 }
 
 // Part 6 — an inbox item (a gated, explained proposal awaiting approval).
+export type InboxStatus = "pending" | "approved" | "rejected" | "completed";
 export interface AgentInboxItem {
   id: string; agentId: string; agentName: string;
   kind: ProposalKind;
   entity: string; recommendation: string; reason: string; evidence: string[];
   confidence: number; impact: Impact; urgency: number;
+  missionType?: string; entityType?: string; entityId?: string | null; entityName?: string | null;
   requiresApproval: boolean;
-  status: "pending" | "approved" | "rejected" | "completed";
+  status: InboxStatus;
+  createdMissionId?: string | null; decisionReason?: string | null;
   blocked: boolean; blockReason: string | null;
   // Part 9 — explainability.
   explain: { why: string; evidence: string[]; recommends: string; ifIgnored: string; confidence: number; alternatives: string[] };

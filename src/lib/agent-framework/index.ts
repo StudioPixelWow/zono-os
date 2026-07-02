@@ -11,11 +11,12 @@ import "./agents"; // side-effect: seed the built-in placeholder agents
 export { AgentRegistry, agentRegistry } from "./registry";
 export { runAgentDefinition, type RunOptions } from "./runtime";
 export { buildInboxItem } from "./inbox";
-export { computePerformance, agentHealth, emptyPerformance } from "./performance";
 export { shouldRun, nextRunAt, triggerEventFor } from "./scheduler";
-export { has, canPropose, requiresApproval, canAutoExecute, DEFAULT_PERMISSIONS } from "./permissions";
+export { has, canPropose, requiresApproval, canAutoExecute, approvalCreates, DEFAULT_PERMISSIONS } from "./permissions";
+export { computePerformance, performanceFromInbox, agentHealth, emptyPerformance } from "./performance";
 export { BUILTIN_AGENTS, seedBuiltinAgents, dailyBriefingAgent, missionFollowupAgent } from "./agents";
-export { getAgentsDashboard, setAgentEnabled, type AgentsDashboard } from "./service";
+export { getAgentsDashboard, setAgentEnabled, approveInboxItem, rejectInboxItem, runScheduledAgents, type AgentsDashboard } from "./service";
+export { listOrgsWithAgents } from "./persistence";
 export { runSelfCheck, type AFSelfCheck, type AFCheck } from "./qa";
 export { AGENT_FRAMEWORK_VERSION } from "./types";
 export type {

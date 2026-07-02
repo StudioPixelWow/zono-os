@@ -17,8 +17,9 @@ export function buildInboxItem(agent: AgentDefinition, p: AgentProposal, seq: nu
     id: `${agent.id}-inbox-${seq}`, agentId: agent.id, agentName: agent.name, kind: p.kind,
     entity, recommendation: p.title, reason: p.reason, evidence: p.evidence,
     confidence: clamp(p.confidence), impact: p.impact, urgency: clamp(p.urgency),
+    missionType: p.missionType, entityType: p.entityType, entityId: p.entityId ?? null, entityName: p.entityName ?? null,
     requiresApproval: requiresApproval(agent.permissions),
-    status: "pending",
+    status: "pending", createdMissionId: null, decisionReason: null,
     blocked: !allowed, blockReason: allowed ? null : `לסוכן אין הרשאה ל-${p.kind}`,
     explain: {
       why: `הסוכן "${agent.name}" פעל: ${p.reason}`,

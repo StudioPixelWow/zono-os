@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -880,6 +880,8 @@ function AgentsPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const run = async () => { setPending(true); setErr(null); try { const r = await getAgentsDashboardAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
   const toggle = async (id: string, enabled: boolean) => { setBusy(id); try { await setAgentEnabledAction(id, enabled); await run(); } finally { setBusy(null); } };
+  const approve = async (id: string) => { setBusy(id); try { await approveInboxItemAction(id); await run(); } finally { setBusy(null); } };
+  const reject = async (id: string) => { setBusy(id); try { await rejectInboxItemAction(id, "נדחה ידנית"); await run(); } finally { setBusy(null); } };
 
   return (
     <section className="rounded-3xl border-2 border-slate-500/50 bg-slate-50/40 p-5 sm:p-6">
@@ -921,29 +923,47 @@ function AgentsPanel() {
             ))}
           </div>
 
-          {/* Inbox — needs approval */}
+          {/* Inbox — persists across refresh/deploy; approve/reject */}
           {data.inbox.length > 0 && (
             <div>
-              <b>📥 תיבת סוכנים — ממתין לאישור (לא מבוצע אוטומטית):</b>
+              <b>📥 תיבת סוכנים — ממתין לאישור (נשמר, לא מבוצע אוטומטית):</b>
               <div className="mt-1 flex flex-col gap-1">
-                {data.inbox.slice(0, 10).map((i) => (
-                  <div key={i.id} className={cn("border-line bg-surface rounded-lg border px-3 py-1.5", i.blocked && "opacity-60")}>
+                {data.inbox.slice(0, 12).map((i) => (
+                  <div key={i.id} className={cn("border-line bg-surface rounded-lg border px-3 py-1.5", i.blocked && "opacity-60", i.status === "approved" && "border-green-400/60", i.status === "rejected" && "border-rose-300/60")}>
                     <div className="flex flex-wrap items-center justify-between gap-1">
                       <span className="text-ink font-bold">{i.recommendation} <span className="text-muted font-normal">· {i.agentName} · {i.entity}</span></span>
                       <span className="flex items-center gap-2 text-[10px]">
                         <span className={cn("rounded-full px-2 py-0.5 font-bold", i.impact === "high" ? "bg-rose-100 text-rose-800" : i.impact === "medium" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800")}>{i.impact}</span>
                         <span className="text-muted">דחיפות {i.urgency} · ביטחון {i.confidence}%</span>
-                        {i.blocked ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">חסום</span> : i.requiresApproval ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 font-bold">דורש אישור</span> : null}
+                        {i.blocked ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">חסום</span>
+                          : i.status === "approved" ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-800 font-bold">אושר{i.createdMissionId ? " · נוצרה משימה" : ""}</span>
+                          : i.status === "rejected" ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-rose-800 font-bold">נדחה</span>
+                          : <span className="flex items-center gap-1">
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 font-bold">דורש אישור</span>
+                              <button onClick={() => approve(i.id)} disabled={busy === i.id} className="rounded-lg bg-green-700 px-2 py-0.5 font-bold text-white disabled:opacity-60">אשר</button>
+                              <button onClick={() => reject(i.id)} disabled={busy === i.id} className="rounded-lg bg-rose-700 px-2 py-0.5 font-bold text-white disabled:opacity-60">דחה</button>
+                            </span>}
                       </span>
                     </div>
-                    <div className="text-muted mt-0.5 text-[10px]">{i.explain.why} · אם יתעלמו: {i.explain.ifIgnored}{i.blockReason ? ` · ${i.blockReason}` : ""}</div>
+                    <div className="text-muted mt-0.5 text-[10px]">{i.explain.why} · אם יתעלמו: {i.explain.ifIgnored}{i.blockReason ? ` · ${i.blockReason}` : ""}{i.decisionReason ? ` · ${i.decisionReason}` : ""}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Agent Framework v{data.version} · אין ביצוע אוטומטי</p>
+          {/* Run history + performance over time */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <BriefBlock title="🕓 היסטוריית ריצות" items={data.runs.slice(0, 6).map((r) => `${r.agentId} · ${new Date(r.ranAt).toLocaleString("he-IL")} · ${r.proposals} הצעות${r.skipped ? " (דילג)" : ""} · ${r.trigger}`)} />
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <b>📈 ביצועים לאורך זמן:</b>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {data.agents.map((a) => <li key={a.id} className="text-muted text-[11px]">{a.name}: המלצות {a.performance.recommendations} · אושרו {a.performance.approved} · נדחו {a.performance.rejected} · שיעור הצלחה {a.performance.successRatePct}% · נקודות היסטוריה {a.performanceHistory.length}</li>)}
+              </ul>
+            </div>
+          </div>
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Agent Framework v{data.version} · נשמר · אין ביצוע אוטומטי{data.migrationRequired ? " · יש להריץ מיגרציית 29.2" : ""}</p>
         </div>
       )}
     </section>

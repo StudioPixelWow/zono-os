@@ -29,3 +29,16 @@ export function requiresApproval(permissions: AgentPermission[]): boolean {
 export function canAutoExecute(): boolean {
   return false;
 }
+
+/**
+ * Part 3 — on approval, whether the item may CREATE a mission/task. Only when the
+ * item is a mission/task kind, is not blocked, and the agent holds the matching
+ * permission. Approving never auto-executes: a created mission itself awaits
+ * execution approval (default WAITING_FOR_APPROVAL).
+ */
+export function approvalCreates(item: { kind: ProposalKind; blocked: boolean }, permissions: AgentPermission[]): "mission" | "task" | null {
+  if (item.blocked) return null;
+  if (item.kind === "mission" && has(permissions, "CREATE_MISSION")) return "mission";
+  if (item.kind === "task" && has(permissions, "CREATE_TASK")) return "task";
+  return null;
+}

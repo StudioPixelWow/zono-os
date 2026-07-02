@@ -34,7 +34,7 @@ export const missionFollowupAgent: AgentDefinition = {
     for (const m of (ac.critical ?? []).slice(0, 2)) out.push({
       kind: "mission", title: `צור משימת מעקב ל: ${label(m)}`, reason: "משימה קריטית ללא התקדמות",
       evidence: [`עדיפות ${m.priority ?? 80}`], confidence: 65, impact: "high", urgency: m.priority ?? 80,
-      entityType: "mission", entityId: m.id, entityName: m.entityName ?? undefined,
+      entityType: "mission", entityId: m.id, entityName: m.entityName ?? undefined, missionType: "AGENT_FOLLOWUP",
       ifIgnored: "המשימה הקריטית עלולה להיתקע", alternatives: ["הקצה אחראי", "העלה עדיפות"],
     });
     return out;

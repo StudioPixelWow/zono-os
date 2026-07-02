@@ -46,7 +46,7 @@ import { getSellerTwins, type SellerTwinsOverview } from "@/lib/digital-twin/sel
 import { getLeadTwins, type LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import { getCrmGraph, type CrmGraphResult } from "@/lib/digital-twin/crm-graph";
 import { getCustomerJourneys, type CustomerJourneysOverview } from "@/lib/digital-twin/customer";
-import { getAgentsDashboard, setAgentEnabled, type AgentsDashboard } from "@/lib/agent-framework";
+import { getAgentsDashboard, setAgentEnabled, approveInboxItem, rejectInboxItem, type AgentsDashboard } from "@/lib/agent-framework";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -258,8 +258,16 @@ export async function getAgentsDashboardAction(): Promise<{ ok: boolean; result?
   catch (e) { console.error("[agents] dashboard failed:", e); return { ok: false, error: "לוח הסוכנים נכשל." }; }
 }
 export async function setAgentEnabledAction(agentId: string, enabled: boolean): Promise<{ ok: boolean; error?: string }> {
-  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; setAgentEnabled(agentId, enabled); return { ok: true }; }
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; await setAgentEnabled(profile.org_id, agentId, enabled); return { ok: true }; }
   catch (e) { console.error("[agents] toggle failed:", e); return { ok: false, error: "עדכון הסוכן נכשל." }; }
+}
+export async function approveInboxItemAction(itemId: string): Promise<{ ok: boolean; note?: string; createdMissionId?: string | null; error?: string }> {
+  try { const { profile, user } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; const r = await approveInboxItem(profile.org_id, itemId, user?.id ?? null); return { ok: r.ok, note: r.note, createdMissionId: r.createdMissionId, error: r.ok ? undefined : r.note }; }
+  catch (e) { console.error("[agents] approve failed:", e); return { ok: false, error: "אישור נכשל." }; }
+}
+export async function rejectInboxItemAction(itemId: string, reason: string): Promise<{ ok: boolean; note?: string; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; const r = await rejectInboxItem(profile.org_id, itemId, reason); return { ok: r.ok, note: r.note, error: r.ok ? undefined : r.note }; }
+  catch (e) { console.error("[agents] reject failed:", e); return { ok: false, error: "דחייה נכשלה." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

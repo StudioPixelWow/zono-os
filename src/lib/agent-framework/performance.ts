@@ -26,6 +26,17 @@ export function computePerformance(records: AgentActionRecord[], impacts: Impact
   return { recommendations, approved, rejected, completed, failed, ignored, successRatePct, avgImpact, falsePositives };
 }
 
+/** Performance derived from persisted inbox items (statuses + impacts). */
+export function performanceFromInbox(items: { status: string; impact: Impact }[]): AgentPerformance {
+  const c = (st: string) => items.filter((i) => i.status === st).length;
+  const recommendations = items.length;
+  const approved = c("approved"), rejected = c("rejected"), completed = c("completed");
+  const decided = approved + completed + rejected;
+  const successRatePct = decided ? clamp(((approved + completed) / decided) * 100) : 0;
+  const avgImpact = items.length ? clamp(items.reduce((s, i) => s + IMPACT_VAL[i.impact], 0) / items.length) : 0;
+  return { recommendations, approved, rejected, completed, failed: 0, ignored: 0, successRatePct, avgImpact, falsePositives: rejected };
+}
+
 /** Agent health from performance + pending load (0..100). */
 export function agentHealth(perf: AgentPerformance, pendingApprovals: number, enabled: boolean): number {
   if (!enabled) return 0;
