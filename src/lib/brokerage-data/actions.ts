@@ -45,6 +45,7 @@ import { getBuyerTwins, type BuyerTwinsOverview } from "@/lib/digital-twin/buyer
 import { getSellerTwins, type SellerTwinsOverview } from "@/lib/digital-twin/sellers";
 import { getLeadTwins, type LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import { getCrmGraph, type CrmGraphResult } from "@/lib/digital-twin/crm-graph";
+import { getCustomerJourneys, type CustomerJourneysOverview } from "@/lib/digital-twin/customer";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -242,6 +243,12 @@ export async function getCrmGraphAction(): Promise<{ ok: boolean; result?: CrmDa
     const r = await getCrmGraph(profile.org_id);
     return { ok: true, result: { version: r.version, generatedAt: r.generatedAt, dashboard: r.dashboard, notes: r.notes } };
   } catch (e) { console.error("[crm-graph] report failed:", e); return { ok: false, error: "גרף ה-CRM נכשל." }; }
+}
+
+// ── Phase 28.5 — Unified Customer Journey & Lifecycle Intelligence ───────────
+export async function getCustomerJourneysAction(): Promise<{ ok: boolean; result?: CustomerJourneysOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getCustomerJourneys(profile.org_id) }; }
+  catch (e) { console.error("[customer-journey] report failed:", e); return { ok: false, error: "מסע הלקוח נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

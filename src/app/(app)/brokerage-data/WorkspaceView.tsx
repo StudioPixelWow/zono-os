@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -47,6 +47,8 @@ import { RELATION_HE } from "@/lib/relationship-graph";
 import type { BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
 import type { SellerTwinsOverview } from "@/lib/digital-twin/sellers";
 import type { LeadTwinsOverview } from "@/lib/digital-twin/leads";
+import type { CustomerJourneysOverview } from "@/lib/digital-twin/customer";
+import { STAGE_HE, ROLE_HE } from "@/lib/digital-twin/customer";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -349,6 +351,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
+          <CustomerJourneyPanel />
           <CrmRelationshipPanel />
           <DigitalTwinPanel />
           <SellerTwinPanel />
@@ -867,6 +870,64 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Unified Customer Journey & Lifecycle Intelligence (28.5) ─────────────────
+function CustomerJourneyPanel() {
+  const [data, setData] = useState<CustomerJourneysOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getCustomerJourneysAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-rose-500/50 bg-rose-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-rose-800">🧭 מסע לקוח מאוחד — מודיעין מחזור חיים</h2>
+          <p className="text-muted mt-1 text-[12px]">אדם אחד = לקוח אחד. ליד/קונה/מוכר מתאחדים לזהות אחת שעוברת שלבי מחזור חיים — היסטוריה משולבת, מעברים מוסברים, בריאות וערך חיים. אין כפילות אנשים.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-rose-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "בונה מסעות…" : "בנה מסעות לקוח"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+            <Mini label="לקוחות" value={fmt(data.totals.customers)} />
+            <Mini label="רב-תפקידי" value={fmt(data.totals.multiRole)} tone="green" />
+            <Mini label="חוזרים" value={fmt(data.totals.repeat)} tone="green" />
+            <Mini label="משקיעים" value={fmt(data.totals.investors)} />
+            <Mini label="הפניות" value={fmt(data.totals.referrals)} />
+            <Mini label="רדומים" value={fmt(data.totals.dormant)} tone="amber" />
+            <Mini label="ערך גבוה" value={fmt(data.totals.highValue)} tone="green" />
+            <Mini label="מעברים" value={fmt(data.totals.transitions)} />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.journeys.slice(0, 6).map((j) => (
+            <div key={j.identity.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{j.identity.name} <span className="text-rose-700 font-bold">· {STAGE_HE[j.currentStage]}</span>{j.classification.length ? <span className="text-muted font-normal"> · {j.classification.join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 font-bold">LTV {j.health.lifetimeValue}</span>
+                  <span className="text-muted">עתידי {j.health.futureValue} · נטישה {j.health.retentionRisk}</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                תפקידים: {j.identity.roles.map((r) => ROLE_HE[r]).join(" · ")} · {j.memory.totalActivities} פעילויות · אמון {j.health.trust} · הפניה {j.health.referralPotential}
+                {j.health.ltvEstimate != null ? <span> · ערך ~{j.health.ltvEstimate.toLocaleString("he-IL")} ₪</span> : null}
+              </div>
+              {j.transitions.length > 0 && <div className="text-rose-800 mt-1 text-[11px] font-bold">מעברים: {j.transitions.map((t) => `${STAGE_HE[t.from]}→${STAGE_HE[t.to]} (${t.confidence}%)`).join(" · ")}</div>}
+              {j.decisions[0] && <div className="text-muted text-[11px]">החלטה: {j.decisions[0].action} ({j.decisions[0].priority})</div>}
+              {j.missions[0] && <div className="text-muted text-[11px]">משימות מחזור-חיים: {j.missions.slice(0, 3).map((m) => m.title).join(", ")}</div>}
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Customer Journey v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── CRM Relationship Graph Integration — dashboard (28.4) ────────────────────
 function CrmRelationshipPanel() {
   const [data, setData] = useState<CrmDashboardResult | null>(null);
