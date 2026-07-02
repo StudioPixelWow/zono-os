@@ -22,7 +22,9 @@ const sig = (over: Partial<ListingSignals> = {}): ListingSignals => ({
   timeOnMarketDays: 15, zonoScore: 70, estimatedDaysToSell: 60, hasExclusivity: true, exclusivityEndsAt: iso(-60),
   matchCount: 6, avgMatchScore: 78, perfectMatchCount: 2, medianDomCity: 40, recentBuyerActivity: 3,
   market: { inventoryTrendPct: 2, concentrationLevel: "moderate", topSharePct: 30 },
-  sellerLinked: true, valuationEstimate: 1_950_000, valuation: computeValuationView(2_000_000, val({ estimatedValue: 1_950_000, lowValue: 1_850_000, highValue: 2_050_000, confidence: 75, createdAt: iso(10) }), NOW),
+  sellerLinked: true, valuationEstimate: 1_950_000,
+  seller: { linked: true, readiness: 60, trust: 60, priceFlexibility: 55, mainObjection: null, hasSignedAgreement: false },
+  valuation: computeValuationView(2_000_000, val({ estimatedValue: 1_950_000, lowValue: 1_850_000, highValue: 2_050_000, confidence: 75, createdAt: iso(10) }), NOW),
   campaignActive: true, lastActivityAt: iso(2), openMissions: 1, truthScore: 70, ...over,
 });
 const val = (o: Partial<ValuationInput>): ValuationInput => ({ available: true, estimatedValue: 1_950_000, lowValue: 1_850_000, highValue: 2_050_000, confidence: 75, createdAt: iso(10), unavailableReason: null, ...o });
@@ -107,6 +109,25 @@ export function runSelfCheck(): LASelfCheck {
   const weakDemand = card({ matchCount: 0, avgMatchScore: 0, perfectMatchCount: 0, recentBuyerActivity: 0, updatedAt: iso(60), lastActivityAt: iso(60) });
   add("weak demand → insight", weakDemand.marketPerformance.insights.some((i) => /ביקוש קונים חלש/.test(i.text)), "");
   add("market position + trend valid", ["above", "at", "below", "unknown"].includes(base.marketPerformance.marketPosition) && ["improving", "stable", "declining"].includes(base.marketPerformance.trend), "");
+
+  // ── Strategy Engine scenarios (29.3.3) ──────────────────────────────────────
+  add("strategy full model", typeof base.strategy.recommendedStrategy === "string" && typeof base.strategy.confidence === "number" && Array.isArray(base.strategy.playbook) && base.strategy.why.length >= 0 && base.strategy.expectedOutcome.length > 0 && !!base.strategy.change.signal, "");
+  add("playbook ordered actions", base.strategy.playbook.every((a, i) => a.order === i + 1 && a.action.length > 0 && !!a.missionType), "");
+  add("healthy → hold/performing strategy", ["hold", "slow_burn", "open_house", "aggressive_selling"].includes(fast.strategy.recommendedStrategy), fast.strategy.recommendedStrategy);
+  add("stale → marketing strategy", ["refresh_marketing", "launch_campaign", "photography_refresh"].includes(slow.strategy.recommendedStrategy) || slow.strategy.alternatives.some((a) => /refresh_marketing|launch_campaign/.test(a)), slow.strategy.recommendedStrategy);
+  add("high demand → aggressive/open-house", ["aggressive_selling", "open_house"].includes(strongDemand.strategy.recommendedStrategy), strongDemand.strategy.recommendedStrategy);
+  const luxuryLow = card({ price: 5_000_000, matchCount: 1, avgMatchScore: 0, recentBuyerActivity: 0, timeOnMarketDays: 40 });
+  add("luxury weak → luxury campaign", luxuryLow.strategy.recommendedStrategy === "luxury_campaign" || luxuryLow.strategy.alternatives.includes("luxury_campaign"), luxuryLow.strategy.recommendedStrategy);
+  // Seller refusing price reduction → seller_meeting, NOT reduce_price.
+  const sellerRefuses = buildScorecard(sig({ price: 2_400_000, timeOnMarketDays: 80, medianDomCity: 40, matchCount: 1, avgMatchScore: 0, recentBuyerActivity: 0, updatedAt: iso(40), lastActivityAt: iso(40), seller: { linked: true, readiness: 40, trust: 45, priceFlexibility: 20, mainObjection: "לא מוכן להוריד מחיר", hasSignedAgreement: false }, valuation: computeValuationView(2_400_000, val({ confidence: 80, createdAt: iso(10) }), NOW) }), NOW);
+  add("seller refuses cut → seller_meeting not reduce_price", sellerRefuses.strategy.recommendedStrategy === "seller_meeting" && !sellerRefuses.strategy.sellerAlignment.aggressiveOk, sellerRefuses.strategy.recommendedStrategy);
+  add("seller alignment blocks aggressive + notes", sellerRefuses.strategy.sellerAlignment.notes.length > 0, "");
+  // Seller flexible + overpriced + market weak → reduce_price.
+  const sellerFlexible = buildScorecard(sig({ price: 2_400_000, timeOnMarketDays: 80, medianDomCity: 40, matchCount: 1, avgMatchScore: 0, recentBuyerActivity: 0, updatedAt: iso(40), lastActivityAt: iso(40), seller: { linked: true, readiness: 70, trust: 70, priceFlexibility: 70, mainObjection: null, hasSignedAgreement: false }, valuation: computeValuationView(2_400_000, val({ confidence: 80, createdAt: iso(10) }), NOW) }), NOW);
+  add("seller flexible + overpriced → reduce_price", sellerFlexible.strategy.recommendedStrategy === "reduce_price", sellerFlexible.strategy.recommendedStrategy);
+  add("strategy switch detection", sellerFlexible.strategy.change.signal === "switch" || sellerFlexible.strategy.change.signal === "working" || sellerFlexible.strategy.change.signal === "failed", sellerFlexible.strategy.change.signal);
+  add("playbook has ROI + approvals + risks + alternatives", typeof sellerFlexible.strategy.estimatedRoi === "string" && Array.isArray(sellerFlexible.strategy.requiredApprovals) && sellerFlexible.strategy.risks.length > 0 && Array.isArray(sellerFlexible.strategy.alternatives), "");
+  add("reduce_price requires seller approval", sellerFlexible.strategy.requiredApprovals.includes("מוכר"), "");
 
   // Recommendations carry priority/ROI/confidence/impact/deadline/evidence.
   add("recs carry full metadata", stale.recommendations.every((r) => typeof r.priority === "number" && r.roi.length > 0 && typeof r.confidence === "number" && !!r.impact && Array.isArray(r.evidence)), "");

@@ -51,6 +51,22 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
   const marketByCity = new Map<string, ListingSignals["market"]>();
   await Promise.all(cities.map(async (c) => { try { const d = await getCityCompetitiveDashboard(c); marketByCity.set(c, { inventoryTrendPct: d.snapshot.inventoryTrendPct, concentrationLevel: d.snapshot.concentrationLevel, topSharePct: d.snapshot.topOfficeSharePct }); } catch { /* none */ } }));
 
+  // Seller alignment (29.3.3) — read-only from the sellers read model per linked seller.
+  const sellerIds = [...new Set(propRows.slice(0, limit).map((r) => s(r.seller_id)).filter((x): x is string => !!x))];
+  const sellerById = new Map<string, { readiness: number | null; trust: number | null; priceFlexibility: number | null; mainObjection: string | null; hasSignedAgreement: boolean }>();
+  if (sellerIds.length) {
+    for (const sr of await safe("sellers", "id,trust_sensitivity_score,cooperation_score,negotiation_flexibility_score,time_sensitivity_score,main_objection,has_signed_agreement", 1000)) {
+      const sid = s(sr.id); if (!sid || !sellerIds.includes(sid)) continue;
+      const coop = num(sr.cooperation_score), tsen = num(sr.time_sensitivity_score);
+      sellerById.set(sid, {
+        readiness: coop != null || tsen != null ? Math.round(((coop ?? 50) + (tsen ?? 50)) / 2) : null,
+        trust: num(sr.trust_sensitivity_score),
+        priceFlexibility: num(sr.negotiation_flexibility_score),
+        mainObjection: s(sr.main_objection), hasSignedAgreement: !!sr.has_signed_agreement,
+      });
+    }
+  }
+
   // READ-ONLY valuation lookup — latest completed valuation per property (29.3.1).
   // No formula change, no fake valuation. Missing/stale handled honestly.
   const valById = new Map<string, ValuationInput>();
@@ -93,7 +109,9 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
       zonoScore: num(r.zono_score), estimatedDaysToSell: num(r.estimated_days_to_sell), hasExclusivity: !!r.has_exclusivity, exclusivityEndsAt: s(r.exclusivity_ends_at),
       matchCount: agg.count, avgMatchScore, perfectMatchCount: agg.perfect, medianDomCity: medianDomFor(s(r.city), num(r.price)), recentBuyerActivity,
       market: r.city ? marketByCity.get(String(r.city)) ?? null : null,
-      sellerLinked: !!s(r.seller_id), valuationEstimate: valuation.estimatedValue, valuation, campaignActive: null, lastActivityAt,
+      sellerLinked: !!s(r.seller_id), valuationEstimate: valuation.estimatedValue,
+      seller: s(r.seller_id) ? { linked: true, ...(sellerById.get(s(r.seller_id)!) ?? { readiness: null, trust: null, priceFlexibility: null, mainObjection: null, hasSignedAgreement: false }) } : null,
+      valuation, campaignActive: null, lastActivityAt,
       openMissions: openByProp.get(id) ?? 0, truthScore: truth.truthScore,
     };
   });

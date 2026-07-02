@@ -27,6 +27,7 @@ export interface ListingSignals {
   recentBuyerActivity: number;                        // interactions in last 30d
   market: { inventoryTrendPct: number | null; concentrationLevel: string | null; topSharePct: number | null } | null;
   sellerLinked: boolean; valuationEstimate: number | null;
+  seller: { linked: boolean; readiness: number | null; trust: number | null; priceFlexibility: number | null; mainObjection: string | null; hasSignedAgreement: boolean } | null; // 29.3.3
   valuation: ValuationView;                            // read-only valuation link (29.3.1)
   campaignActive: boolean | null;                     // marketing signal (null = unknown)
   lastActivityAt: string | null;
@@ -76,6 +77,30 @@ export interface MarketPerformance {
   insights: PerformanceInsight[];
 }
 
+// Part 1-2 — listing strategy (29.3.3).
+export type StrategyType =
+  | "hold" | "reduce_price" | "increase_price" | "refresh_marketing" | "launch_campaign"
+  | "luxury_campaign" | "photography_refresh" | "open_house" | "buyer_reactivation"
+  | "seller_meeting" | "valuation_update" | "premium_exposure" | "aggressive_selling" | "slow_burn";
+export const STRATEGY_HE: Record<StrategyType, string> = {
+  hold: "החזק פוזיציה", reduce_price: "הורדת מחיר", increase_price: "העלאת מחיר", refresh_marketing: "רענון שיווק",
+  launch_campaign: "השקת קמפיין", luxury_campaign: "קמפיין יוקרה", photography_refresh: "רענון צילום", open_house: "בית פתוח",
+  buyer_reactivation: "החייאת קונים", seller_meeting: "פגישת מוכר", valuation_update: "עדכון הערכת שווי",
+  premium_exposure: "חשיפה פרימיום", aggressive_selling: "מכירה אגרסיבית", slow_burn: "בעירה איטית",
+};
+export type StrategyChange = "working" | "switch" | "succeeded" | "failed" | "review";
+export interface SellerAlignment { readiness: number | null; trust: number | null; priceFlexibility: number | null; aggressiveOk: boolean; notes: string[] }
+export interface PlaybookAction { order: number; action: string; missionType: string; durationDays: number | null; why: string }
+export interface ListingStrategy {
+  currentStrategy: StrategyType; recommendedStrategy: StrategyType;
+  confidence: number; businessImpact: Impact;
+  why: string[]; expectedOutcome: string; estimatedRoi: string;
+  playbook: PlaybookAction[]; expectedDurationDays: number | null;
+  requiredApprovals: string[]; risks: string[]; alternatives: StrategyType[];
+  change: { signal: StrategyChange; reason: string };
+  sellerAlignment: SellerAlignment;
+}
+
 // Part 10 — property scorecard.
 export interface PropertyScorecard {
   id: string; title: string; city: string | null; price: number | null; status: string;
@@ -84,4 +109,5 @@ export interface PropertyScorecard {
   classification: string[]; aiConfidence: number; truthScore: number | null; activeMissions: number;
   valuation: ValuationView;                            // shown as a badge (29.3.1)
   marketPerformance: MarketPerformance;                // 29.3.2
+  strategy: ListingStrategy;                           // 29.3.3
 }

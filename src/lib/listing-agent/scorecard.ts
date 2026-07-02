@@ -5,6 +5,7 @@ import { computePropertyHealth, clamp } from "./health";
 import { detectRisks, detectOpportunities } from "./risk-opportunity";
 import { buildRecommendations } from "./recommendations";
 import { computeMarketPerformance } from "./market-performance";
+import { computeListingStrategy } from "./strategy";
 import type { ListingSignals, PropertyTimelineEntry, PropertyScorecard } from "./types";
 
 const LUXURY = 4_000_000;
@@ -35,6 +36,7 @@ export function buildScorecard(sig: ListingSignals, now: number = Date.now()): P
   const opportunities = detectOpportunities(sig, health);
   const marketPerformance = computeMarketPerformance(sig, health);
   const recommendations = buildRecommendations(sig, health, risks, opportunities, marketPerformance);
+  const strategy = computeListingStrategy(sig, health, marketPerformance, recommendations);
   const timeline = buildTimeline(sig);
   const hasHighRisk = risks.some((r) => r.severity === "high");
   const oppHigh = opportunities.some((o) => o.impact === "high");
@@ -43,6 +45,6 @@ export function buildScorecard(sig: ListingSignals, now: number = Date.now()): P
     id: sig.id, title: sig.title, city: sig.city, price: sig.price, status: sig.status,
     health, risks, opportunities, recommendations, timeline, classification,
     aiConfidence: clamp(health.confidence), truthScore: sig.truthScore, activeMissions: sig.openMissions,
-    valuation: sig.valuation, marketPerformance,
+    valuation: sig.valuation, marketPerformance, strategy,
   };
 }

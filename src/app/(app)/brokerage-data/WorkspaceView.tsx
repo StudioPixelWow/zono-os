@@ -51,6 +51,7 @@ import type { CustomerJourneysOverview } from "@/lib/digital-twin/customer";
 import { STAGE_HE, ROLE_HE } from "@/lib/digital-twin/customer";
 import type { AgentsDashboard } from "@/lib/agent-framework";
 import type { ListingScorecardsOverview } from "@/lib/listing-agent";
+import { STRATEGY_HE } from "@/lib/listing-agent";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -939,6 +940,17 @@ function ListingAgentPanel() {
                 <span className="text-muted">ביקוש {c.marketPerformance.buyerDemand.demandScore} ({c.marketPerformance.buyerDemand.activeMatches} התאמות · {c.marketPerformance.buyerDemand.perfectMatches} מושלמות)</span>
               </div>
               {c.marketPerformance.insights[0] && <div className="text-muted mt-1 text-[11px]">📊 {c.marketPerformance.insights.slice(0, 3).map((i) => i.text).join(" · ")}</div>}
+              {/* Strategy (29.3.3) */}
+              <div className="mt-1 rounded-lg border border-orange-500/30 bg-orange-50/40 px-2 py-1.5 text-[11px]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-orange-900">🎯 אסטרטגיה: {STRATEGY_HE[c.strategy.recommendedStrategy] ?? c.strategy.recommendedStrategy}</span>
+                  <span className="text-muted text-[10px]">נוכחית: {STRATEGY_HE[c.strategy.currentStrategy] ?? c.strategy.currentStrategy} · ביטחון {c.strategy.confidence}% · ROI {c.strategy.estimatedRoi}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", c.strategy.change.signal === "switch" ? "bg-amber-100 text-amber-800" : c.strategy.change.signal === "failed" ? "bg-rose-100 text-rose-800" : c.strategy.change.signal === "succeeded" ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-700")}>{c.strategy.change.signal === "switch" ? "החלף אסטרטגיה" : c.strategy.change.signal === "working" ? "עובדת" : c.strategy.change.signal === "failed" ? "נכשלה" : c.strategy.change.signal === "succeeded" ? "הצליחה" : "לבחינה"}</span>
+                </div>
+                {c.strategy.why[0] && <div className="text-muted mt-0.5 text-[10px]">למה: {c.strategy.why.join(" · ")} · תוצאה: {c.strategy.expectedOutcome}</div>}
+                {c.strategy.playbook[0] && <div className="text-muted mt-0.5 text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}{c.strategy.expectedDurationDays ? ` · ${c.strategy.expectedDurationDays} ימים` : ""}</div>}
+                {c.strategy.requiredApprovals.length > 0 && <div className="text-muted mt-0.5 text-[10px]">אישורים: {c.strategy.requiredApprovals.join(", ")}{c.strategy.sellerAlignment.notes.length ? ` · ${c.strategy.sellerAlignment.notes[0]}` : ""}</div>}
+              </div>
               {c.risks[0] && <div className="text-rose-700 mt-1 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
               {c.recommendations[0] && <div className="text-orange-800 mt-1 text-[11px] font-bold">← {c.recommendations[0].action} (עדיפות {c.recommendations[0].priority}, ROI: {c.recommendations[0].roi})</div>}
               {c.recommendations[1] && <div className="text-muted text-[11px]">גם: {c.recommendations.slice(1, 3).map((r) => r.action).join(" · ")}</div>}
