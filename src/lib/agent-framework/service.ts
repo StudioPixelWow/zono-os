@@ -14,7 +14,8 @@ import { shouldRun, nextRunAt } from "./scheduler";
 import { performanceFromInbox, agentHealth } from "./performance";
 import { approvalCreates } from "./permissions";
 import * as store from "./persistence";
-import "./agents"; // seed built-ins
+import "./agents"; // seed built-in agents
+import { getListingSignals } from "@/lib/listing-agent"; // seed + inject the listing agent's signals
 import type { AgentContext, AgentInboxItem, AgentView, AgentDefinition } from "./types";
 
 export interface AgentsDashboard {
@@ -28,7 +29,11 @@ export interface AgentsDashboard {
 
 async function loadContext(orgId: string | null): Promise<{ ctx: AgentContext; notes: string[] }> {
   const notes: string[] = [];
-  const [cos, ac] = await Promise.all([getChiefOfStaff(orgId).catch(() => null), getActionCenter(orgId).catch(() => null)]);
+  const [cos, ac, listings] = await Promise.all([
+    getChiefOfStaff(orgId).catch(() => null),
+    getActionCenter(orgId).catch(() => null),
+    getListingSignals(orgId, 20).catch(() => []),
+  ]);
   if (!cos) notes.push("לא ניתן לטעון את ה-Chief of Staff.");
   if (!ac) notes.push("לא ניתן לטעון את מרכז הפעולות.");
   return {
@@ -38,6 +43,7 @@ async function loadContext(orgId: string | null): Promise<{ ctx: AgentContext; n
       data: {
         briefing: cos ? { businessScore: cos.briefing.businessScore, executionScore: cos.briefing.executionScore, todaysPriorities: cos.briefing.todaysPriorities, criticalRisks: cos.briefing.criticalRisks } : undefined,
         actionCenter: ac ? { blocked: ac.blocked, waiting: ac.waiting, critical: ac.critical } : undefined,
+        listings,   // Listing Intelligence Agent signals (per property)
       },
     },
   };

@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -50,6 +50,7 @@ import type { LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import type { CustomerJourneysOverview } from "@/lib/digital-twin/customer";
 import { STAGE_HE, ROLE_HE } from "@/lib/digital-twin/customer";
 import type { AgentsDashboard } from "@/lib/agent-framework";
+import type { ListingScorecardsOverview } from "@/lib/listing-agent";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -353,6 +354,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
           <AgentsPanel />
+          <ListingAgentPanel />
           <CustomerJourneyPanel />
           <CrmRelationshipPanel />
           <DigitalTwinPanel />
@@ -872,6 +874,62 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Listing Intelligence Agent — per-property scorecards (29.3) ──────────────
+function ListingAgentPanel() {
+  const [data, setData] = useState<ListingScorecardsOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getListingScorecardsAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-orange-500/50 bg-orange-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-orange-800">🏠 סוכן מודיעין מודעות — כרטיס לכל נכס</h2>
+          <p className="text-muted mt-1 text-[12px]">סוכן AI לכל נכס: מנטר בריאות, ביקוש, זמן בשוק, תמחור ותחרות, וממליץ פרואקטיבית (תמחור/שיווק/מוכר/קונים). המלצה בלבד — אין ביצוע אוטומטי.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-orange-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח נכסים…" : "הפעל סוכן מודעות"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Mini label="נכסים" value={fmt(data.totals.properties)} />
+            <Mini label="בריאים" value={fmt(data.totals.healthy)} tone="green" />
+            <Mini label="קריטיים" value={fmt(data.totals.critical)} tone="red" />
+            <Mini label="יוקרה" value={fmt(data.totals.luxury)} />
+            <Mini label="מתיישנים" value={fmt(data.totals.stale)} tone="amber" />
+            <Mini label="הזדמנות גבוהה" value={fmt(data.totals.highOpportunity)} tone="green" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.scorecards.slice(0, 6).map((c) => (
+            <div key={c.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{c.title}{c.classification.length ? <span className="text-orange-700 font-bold"> · {c.classification.join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className={cn("rounded-full px-2 py-0.5 font-bold", c.health.label === "בריא" ? "bg-green-100 text-green-800" : c.health.label === "קריטי" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{c.health.label}</span>
+                  <span className="text-muted">בריאות {c.health.listingHealth} · דחיפות {c.health.urgency}</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                תמחור {c.health.pricingHealth} · שיווק {c.health.marketingHealth} · ביקוש {c.health.demand} · לחץ תחרות {c.health.competitionPressure} · משימות {c.activeMissions}
+                {c.truthScore != null ? <span> · אמת {c.truthScore}</span> : null} · ביטחון {c.aiConfidence}%
+              </div>
+              {c.risks[0] && <div className="text-rose-700 mt-1 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
+              {c.recommendations[0] && <div className="text-orange-800 mt-1 text-[11px] font-bold">← {c.recommendations[0].action} (עדיפות {c.recommendations[0].priority}, ROI: {c.recommendations[0].roi})</div>}
+              {c.recommendations[1] && <div className="text-muted text-[11px]">גם: {c.recommendations.slice(1, 3).map((r) => r.action).join(" · ")}</div>}
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Listing Agent v{data.version} · ההמלצות זורמות גם לתיבת הסוכנים · אין ביצוע אוטומטי</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Autonomous AI Agent Framework — AI Agents dashboard (29.1) ───────────────
 function AgentsPanel() {
   const [data, setData] = useState<AgentsDashboard | null>(null);
