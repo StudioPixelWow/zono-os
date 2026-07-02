@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -49,6 +49,7 @@ import type { SellerTwinsOverview } from "@/lib/digital-twin/sellers";
 import type { LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import type { CustomerJourneysOverview } from "@/lib/digital-twin/customer";
 import { STAGE_HE, ROLE_HE } from "@/lib/digital-twin/customer";
+import type { AgentsDashboard } from "@/lib/agent-framework";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -351,6 +352,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
+          <AgentsPanel />
           <CustomerJourneyPanel />
           <CrmRelationshipPanel />
           <DigitalTwinPanel />
@@ -870,6 +872,84 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Autonomous AI Agent Framework — AI Agents dashboard (29.1) ───────────────
+function AgentsPanel() {
+  const [data, setData] = useState<AgentsDashboard | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getAgentsDashboardAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+  const toggle = async (id: string, enabled: boolean) => { setBusy(id); try { await setAgentEnabledAction(id, enabled); await run(); } finally { setBusy(null); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-slate-500/50 bg-slate-50/40 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-slate-800">🤖 סוכני AI — מסגרת סוכנים אוטונומית</h2>
+          <p className="text-muted mt-1 text-[12px]">מסגרת אחת לכל הסוכנים העתידיים: תצפית → הסקה → תכנון → הצעות לאישור. שום דבר לא מבוצע אוטומטית. שני סוכני דמו: תדריך יומי ומעקב משימות.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-slate-800 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מריץ סוכנים…" : "הרץ סוכנים"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Mini label="סוכנים" value={fmt(data.totals.agents)} />
+            <Mini label="פעילים" value={fmt(data.totals.active)} tone="green" />
+            <Mini label="מושבתים" value={fmt(data.totals.disabled)} />
+            <Mini label="המלצות" value={fmt(data.totals.recommendations)} />
+            <Mini label="ממתין לאישור" value={fmt(data.totals.needsApproval)} tone="amber" />
+            <Mini label="חסום" value={fmt(data.totals.blocked)} tone="red" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {/* Agents */}
+          <div className="grid gap-2 lg:grid-cols-2">
+            {data.agents.map((a) => (
+              <div key={a.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <span className="text-ink font-bold">{a.name} <span className="text-muted font-normal">· {a.type}</span></span>
+                  <div className="flex items-center gap-2 text-[10px]">
+                    <span className="text-muted">בריאות {a.health} · ממתין {a.pendingApprovals}</span>
+                    <button onClick={() => toggle(a.id, a.status !== "enabled")} disabled={busy === a.id} className={cn("rounded-full px-2 py-0.5 font-bold", a.status === "enabled" ? "bg-green-100 text-green-800" : "bg-slate-200 text-slate-600")}>{a.status === "enabled" ? "פעיל" : "מושבת"}</button>
+                  </div>
+                </div>
+                <div className="text-muted mt-0.5 text-[11px]">{a.description}</div>
+                <div className="text-muted mt-0.5 text-[10px]">הרשאות: {a.permissions.join(", ")} · לו״ז: {a.schedule.mode} · ריצה אחרונה: {a.lastRunAt ? new Date(a.lastRunAt).toLocaleString("he-IL") : "—"}{a.nextRunAt ? ` · הבאה: ${new Date(a.nextRunAt).toLocaleDateString("he-IL")}` : ""} · המלצות {a.performance.recommendations}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Inbox — needs approval */}
+          {data.inbox.length > 0 && (
+            <div>
+              <b>📥 תיבת סוכנים — ממתין לאישור (לא מבוצע אוטומטית):</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.inbox.slice(0, 10).map((i) => (
+                  <div key={i.id} className={cn("border-line bg-surface rounded-lg border px-3 py-1.5", i.blocked && "opacity-60")}>
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <span className="text-ink font-bold">{i.recommendation} <span className="text-muted font-normal">· {i.agentName} · {i.entity}</span></span>
+                      <span className="flex items-center gap-2 text-[10px]">
+                        <span className={cn("rounded-full px-2 py-0.5 font-bold", i.impact === "high" ? "bg-rose-100 text-rose-800" : i.impact === "medium" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800")}>{i.impact}</span>
+                        <span className="text-muted">דחיפות {i.urgency} · ביטחון {i.confidence}%</span>
+                        {i.blocked ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">חסום</span> : i.requiresApproval ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 font-bold">דורש אישור</span> : null}
+                      </span>
+                    </div>
+                    <div className="text-muted mt-0.5 text-[10px]">{i.explain.why} · אם יתעלמו: {i.explain.ifIgnored}{i.blockReason ? ` · ${i.blockReason}` : ""}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Agent Framework v{data.version} · אין ביצוע אוטומטי</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Unified Customer Journey & Lifecycle Intelligence (28.5) ─────────────────
 function CustomerJourneyPanel() {
   const [data, setData] = useState<CustomerJourneysOverview | null>(null);

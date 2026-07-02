@@ -46,6 +46,7 @@ import { getSellerTwins, type SellerTwinsOverview } from "@/lib/digital-twin/sel
 import { getLeadTwins, type LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import { getCrmGraph, type CrmGraphResult } from "@/lib/digital-twin/crm-graph";
 import { getCustomerJourneys, type CustomerJourneysOverview } from "@/lib/digital-twin/customer";
+import { getAgentsDashboard, setAgentEnabled, type AgentsDashboard } from "@/lib/agent-framework";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -249,6 +250,16 @@ export async function getCrmGraphAction(): Promise<{ ok: boolean; result?: CrmDa
 export async function getCustomerJourneysAction(): Promise<{ ok: boolean; result?: CustomerJourneysOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getCustomerJourneys(profile.org_id) }; }
   catch (e) { console.error("[customer-journey] report failed:", e); return { ok: false, error: "מסע הלקוח נכשל." }; }
+}
+
+// ── Phase 29.1 — Autonomous AI Agent Framework ───────────────────────────────
+export async function getAgentsDashboardAction(): Promise<{ ok: boolean; result?: AgentsDashboard; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getAgentsDashboard(profile.org_id) }; }
+  catch (e) { console.error("[agents] dashboard failed:", e); return { ok: false, error: "לוח הסוכנים נכשל." }; }
+}
+export async function setAgentEnabledAction(agentId: string, enabled: boolean): Promise<{ ok: boolean; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; setAgentEnabled(agentId, enabled); return { ok: true }; }
+  catch (e) { console.error("[agents] toggle failed:", e); return { ok: false, error: "עדכון הסוכן נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────
