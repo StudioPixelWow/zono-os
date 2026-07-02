@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction, getOfficeGrowthScorecardAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction, getOfficeGrowthScorecardAction, getOrchestratorDashboardAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -60,6 +60,8 @@ import type { LeadAgentScorecardsOverview } from "@/lib/lead-agent";
 import { LEAD_STRATEGY_HE, ROUTING_HE } from "@/lib/lead-agent";
 import type { OfficeGrowthOverview } from "@/lib/office-agent";
 import { OFFICE_STRATEGY_HE, OFFICE_DECISION_HE } from "@/lib/office-agent";
+import type { OrchestratorOverview } from "@/lib/agent-orchestrator";
+import { AGENT_HE, EVENT_HE, STANCE_HE } from "@/lib/agent-orchestrator";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -363,6 +365,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
           <AgentsPanel />
+          <OrchestratorPanel />
           <OfficeGrowthPanel />
           <ListingAgentPanel />
           <LeadAgentPanel />
@@ -943,6 +946,104 @@ function SellerAgentPanel() {
           ))}
 
           <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Seller Agent v{data.version} · ההמלצות זורמות לתיבת הסוכנים · אין ביצוע אוטומטי</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Multi-Agent Orchestrator — cross-agent dashboard (29.8) ─────────────────
+function OrchestratorPanel() {
+  const [data, setData] = useState<OrchestratorOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getOrchestratorDashboardAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-fuchsia-600/50 bg-fuchsia-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-fuchsia-800">🕸️ מנצח הסוכנים — תזמור רב-סוכני</h2>
+          <p className="text-muted mt-1 text-[12px]">הסוכנים כבר לא פועלים לבד — הם משתפים פעולה: אירועים בין-סוכניים, שרשראות הזדמנות (קונה חם + מוכר מוכן + נכס בריא = עסקה), תור עדיפויות, פתרון קונפליקטים ותוכניות ביצוע מאוחדות. הכול לאישור בלבד — ללא ביצוע אוטומטי.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-fuchsia-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מתזמר…" : "הפעל תזמור"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Mini label="אירועים" value={fmt(data.totals.events)} />
+            <Mini label="הזדמנויות" value={fmt(data.totals.opportunities)} tone="green" />
+            <Mini label="עסקאות פוטנציאליות" value={fmt(data.totals.potentialDeals)} tone="green" />
+            <Mini label="קונפליקטים" value={fmt(data.totals.conflicts)} tone={data.totals.conflicts ? "amber" : undefined} />
+            <Mini label="תוכניות" value={fmt(data.totals.plans)} />
+            <Mini label="עדיפות גבוהה" value={fmt(data.totals.highPriority)} tone="red" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.opportunities.length > 0 && (
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">שרשראות הזדמנות</p>
+              {data.opportunities.slice(0, 5).map((o) => (
+                <div key={o.id} className="mb-2 last:mb-0">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <span className="text-fuchsia-800 font-bold">{o.type === "potential_deal" ? "💰 " : o.type === "buyer_listing_match" ? "🎯 " : o.type === "defend_market" ? "🛡️ " : "🔁 "}{o.title}</span>
+                    <span className="text-[10px]"><span className="text-fuchsia-700 font-bold">ציון {o.opportunityScore}</span> · ביטחון {o.confidence}%{o.requiredApprovals.length ? ` · אישורים: ${o.requiredApprovals.join(",")}` : ""}</span>
+                  </div>
+                  <div className="text-muted text-[10px]">{o.links.map((l) => `${AGENT_HE[l.agent]}: ${l.role}`).join(" → ")}</div>
+                  <div className="text-muted text-[10px]">{o.why}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">תור עדיפויות</p>
+              {data.priorityQueue.slice(0, 6).map((p) => (
+                <div key={p.id} className="text-muted flex items-center justify-between text-[11px]">
+                  <span>{p.kind === "opportunity" ? "✨" : "•"} {p.title}</span>
+                  <span className={cn("font-bold", p.priorityScore >= 70 ? "text-rose-700" : "text-fuchsia-700")}>{p.priorityScore}</span>
+                </div>
+              ))}
+              {!data.priorityQueue.length && <p className="text-muted text-[11px]">אין פריטים בתור.</p>}
+            </div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">אירועים בין-סוכניים</p>
+              {data.events.slice(0, 6).map((e) => (
+                <div key={e.id} className="text-muted text-[11px]"><span className="text-fuchsia-700 font-bold">{EVENT_HE[e.type]}</span> — {e.summary} <span className="text-[10px]">({AGENT_HE[e.source]})</span></div>
+              ))}
+              {!data.events.length && <p className="text-muted text-[11px]">אין אירועים פעילים.</p>}
+            </div>
+          </div>
+
+          {data.conflicts.length > 0 && (
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">קונפליקטים והכרעה</p>
+              {data.conflicts.slice(0, 4).map((c) => (
+                <div key={c.id} className="mb-1 last:mb-0 text-[11px]">
+                  <span className="text-ink font-bold">{c.entityLabel}: </span>
+                  <span className="text-muted">{c.positions.map((p) => `${AGENT_HE[p.agent]}=${STANCE_HE[p.stance]}`).join(" ✗ ")}</span>
+                  <span className="text-emerald-700 font-bold"> ← {AGENT_HE[c.resolution.winner]}: {c.resolution.action}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.executionPlans.length > 0 && (
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">תוכניות ביצוע מאוחדות</p>
+              {data.executionPlans.slice(0, 3).map((pl) => (
+                <div key={pl.id} className="text-muted mb-1 last:mb-0 text-[11px]">
+                  <span className="text-ink font-bold">{pl.title}: </span>
+                  {pl.steps.slice(0, 4).map((s) => `${s.order}. ${s.action} (${AGENT_HE[s.owner]})`).join(" ← ")}{pl.requiredApprovals.length ? ` · אישורים: ${pl.requiredApprovals.join(",")}` : ""}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Multi-Agent Orchestrator v{data.version} · תזמור בלבד — ההמלצות זורמות לתיבת הסוכנים · אין ביצוע אוטומטי</p>
         </div>
       )}
     </section>

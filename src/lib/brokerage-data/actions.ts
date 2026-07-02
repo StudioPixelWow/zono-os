@@ -52,6 +52,7 @@ import { getBuyerAgentScorecards, type BuyerAgentScorecardsOverview } from "@/li
 import { getSellerAgentScorecards, type SellerAgentScorecardsOverview } from "@/lib/seller-agent";
 import { getLeadAgentScorecards, type LeadAgentScorecardsOverview } from "@/lib/lead-agent";
 import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/office-agent";
+import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent-orchestrator";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -303,6 +304,12 @@ export async function getLeadAgentScorecardsAction(): Promise<{ ok: boolean; res
 export async function getOfficeGrowthScorecardAction(): Promise<{ ok: boolean; result?: OfficeGrowthOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOfficeGrowthScorecard(profile.org_id) }; }
   catch (e) { console.error("[office-agent] scorecard failed:", e); return { ok: false, error: "סוכן צמיחת המשרד נכשל." }; }
+}
+
+// ── Phase 29.8 — Multi-Agent Orchestrator (cross-agent dashboard) ───────────
+export async function getOrchestratorDashboardAction(): Promise<{ ok: boolean; result?: OrchestratorOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOrchestratorDashboard(profile.org_id) }; }
+  catch (e) { console.error("[orchestrator] dashboard failed:", e); return { ok: false, error: "מנצח הסוכנים נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────
