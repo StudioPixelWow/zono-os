@@ -51,6 +51,7 @@ import { getListingScorecards, type ListingScorecardsOverview } from "@/lib/list
 import { getBuyerAgentScorecards, type BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
 import { getSellerAgentScorecards, type SellerAgentScorecardsOverview } from "@/lib/seller-agent";
 import { getLeadAgentScorecards, type LeadAgentScorecardsOverview } from "@/lib/lead-agent";
+import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/office-agent";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -296,6 +297,12 @@ export async function getSellerAgentScorecardsAction(): Promise<{ ok: boolean; r
 export async function getLeadAgentScorecardsAction(): Promise<{ ok: boolean; result?: LeadAgentScorecardsOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getLeadAgentScorecards(profile.org_id) }; }
   catch (e) { console.error("[lead-agent] scorecards failed:", e); return { ok: false, error: "סוכן מודיעין הלידים נכשל." }; }
+}
+
+// ── Phase 29.7 — Office Growth Agent (brokerage-level scorecard) ─────────────
+export async function getOfficeGrowthScorecardAction(): Promise<{ ok: boolean; result?: OfficeGrowthOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOfficeGrowthScorecard(profile.org_id) }; }
+  catch (e) { console.error("[office-agent] scorecard failed:", e); return { ok: false, error: "סוכן צמיחת המשרד נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

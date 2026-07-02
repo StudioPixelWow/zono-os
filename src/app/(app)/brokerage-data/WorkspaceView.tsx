@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction, getOfficeGrowthScorecardAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -58,6 +58,8 @@ import type { SellerAgentScorecardsOverview } from "@/lib/seller-agent";
 import { SELLER_STRATEGY_HE } from "@/lib/seller-agent";
 import type { LeadAgentScorecardsOverview } from "@/lib/lead-agent";
 import { LEAD_STRATEGY_HE, ROUTING_HE } from "@/lib/lead-agent";
+import type { OfficeGrowthOverview } from "@/lib/office-agent";
+import { OFFICE_STRATEGY_HE, OFFICE_DECISION_HE } from "@/lib/office-agent";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -361,6 +363,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
           <AgentsPanel />
+          <OfficeGrowthPanel />
           <ListingAgentPanel />
           <LeadAgentPanel />
           <BuyerAgentPanel />
@@ -940,6 +943,100 @@ function SellerAgentPanel() {
           ))}
 
           <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Seller Agent v{data.version} · ההמלצות זורמות לתיבת הסוכנים · אין ביצוע אוטומטי</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Office Growth Agent — brokerage-level scorecard (29.7) ───────────────────
+function OfficeGrowthPanel() {
+  const [data, setData] = useState<OfficeGrowthOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getOfficeGrowthScorecardAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+  const c = data?.scorecard ?? null;
+
+  return (
+    <section className="rounded-3xl border-2 border-indigo-600/50 bg-indigo-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-indigo-800">🏢 סוכן צמיחת המשרד — ניהול העסק עצמו</h2>
+          <p className="text-muted mt-1 text-[12px]">לא מנהל אדם — מנהל את עסק התיווך: בריאות עסקית, מלאי, מתווכים, תחרות, משפכים ואסטרטגיית צמיחה עם Playbook והחלטות מוסברות. המלצה בלבד — ללא ביצוע אוטומטי, הכול דרך תיבת הסוכנים.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-indigo-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח עסק…" : "הפעל סוכן צמיחה"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && !c && <p className="text-muted mt-3 text-[12px]">{data.notes.join(" · ") || "אין נתונים."}</p>}
+      {data && c && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            <Mini label="בריאות עסקית" value={fmt(c.health.businessHealth)} tone={c.health.businessHealth >= 62 ? "green" : c.health.businessHealth < 45 ? "red" : undefined} />
+            <Mini label="צמיחה" value={fmt(c.growthScore)} />
+            <Mini label="מלאי" value={fmt(c.inventoryScore)} />
+            <Mini label="מתווכים" value={fmt(c.brokerScore)} />
+            <Mini label="מיקום שוק" value={fmt(c.marketPosition)} />
+            <Mini label="מוכנות הרחבה" value={fmt(c.health.expansionReadiness)} />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          <div className="border-line bg-surface rounded-xl border px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <span className="text-ink font-black">{c.name}</span>
+              <span className="flex items-center gap-2 text-[10px]">
+                <span className={cn("rounded-full px-2 py-0.5 font-bold", ["מצוינת", "בריאה"].includes(c.health.label) ? "bg-green-100 text-green-800" : c.health.label === "בסיכון" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{c.health.label}</span>
+                {c.truthScore != null ? <span className="text-muted">אמון נתונים {c.truthScore}</span> : null}
+              </span>
+            </div>
+            <div className="text-indigo-800 mt-1 rounded-lg border border-indigo-600/30 bg-indigo-50/40 px-2 py-1 text-[11px] font-bold">
+              🎯 {OFFICE_STRATEGY_HE[c.strategy.recommendedStrategy] ?? c.strategy.recommendedStrategy} · ביטחון {c.strategy.confidence}% · {c.strategy.change.signal === "switch" ? "החלף אסטרטגיה" : c.strategy.change.signal === "succeeded" ? "בהצלחה" : c.strategy.change.signal === "failed" ? "נסיגה" : "פעיל"}
+              <span className="text-muted font-normal"> — {c.aiRecommendation}</span>
+            </div>
+            <div className="text-muted mt-1 text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}{c.strategy.requiredApprovals.length ? ` · אישורים: ${c.strategy.requiredApprovals.join(",")}` : ""}</div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">משפכים</p>
+              {c.pipeline.stages.map((s) => (
+                <div key={s.name} className="text-muted flex items-center justify-between text-[11px]">
+                  <span>{s.name} <span className="text-[10px]">({s.volume})</span></span>
+                  <span className={cn("font-bold", s.health >= 60 ? "text-green-700" : s.health < 45 ? "text-rose-700" : "text-amber-700")}>{s.health}{s.bottleneck ? <span className="text-rose-600 font-normal"> · {s.bottleneck}</span> : null}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">החלטות מומלצות</p>
+              {c.decisions.slice(0, 5).map((d, i) => (
+                <div key={i} className="text-muted text-[11px]"><span className="text-indigo-700 font-bold">{OFFICE_DECISION_HE[d.type]}</span> — {d.title}{d.requiresApproval ? <span className="text-[10px]"> (אישור)</span> : null}</div>
+              ))}
+              {!c.decisions.length && <p className="text-muted text-[11px]">אין החלטות דחופות.</p>}
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">מלאי</p>
+              {c.inventory.slice(0, 4).map((f, i) => <div key={i} className="text-muted text-[11px]">• {f.title}</div>)}
+              {!c.inventory.length && <p className="text-muted text-[11px]">מאוזן.</p>}
+            </div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">מתווכים</p>
+              {c.brokerFindings.slice(0, 4).map((f, i) => <div key={i} className="text-muted text-[11px]">• {f.title}</div>)}
+              {!c.brokerFindings.length && <p className="text-muted text-[11px]">אין ממצאים.</p>}
+            </div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <p className="text-ink mb-1 font-bold">תחרות</p>
+              {c.competitive.slice(0, 4).map((f, i) => <div key={i} className="text-muted text-[11px]">• {f.title}</div>)}
+              {!c.competitive.length && <p className="text-muted text-[11px]">אין אותות.</p>}
+            </div>
+          </div>
+
+          {c.risks[0] && <div className="text-rose-700 text-[11px]">⚠️ סיכונים: {c.risks.slice(0, 4).map((r) => r.title).join(" · ")}</div>}
+          {c.opportunities[0] && <div className="text-emerald-700 text-[11px]">✨ הזדמנויות: {c.opportunities.slice(0, 4).map((o) => o.title).join(" · ")}</div>}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Office Growth Agent v{data.version} · ההמלצות זורמות לתיבת הסוכנים · אין ביצוע אוטומטי</p>
         </div>
       )}
     </section>
