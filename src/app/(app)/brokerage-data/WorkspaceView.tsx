@@ -35,11 +35,12 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { OrgTruthReport } from "@/lib/truth-engine";
 import { FRESHNESS_HE, VERIFICATION_HE } from "@/lib/truth-engine";
+import type { OrgMemoryReport } from "@/lib/org-memory";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -343,6 +344,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
           <TruthEnginePanel />
+          <OrgMemoryPanel />
           <ActionCenterPanel />
           <CommandCenterPanel cities={index?.cities ?? []} />
           <ContinuousLearningPanel onChanged={reload} />
@@ -854,6 +856,96 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Organizational Memory & Learning Brain (27.8) ────────────────────────────
+function OrgMemoryPanel() {
+  const [data, setData] = useState<OrgMemoryReport | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getOrgMemoryAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-indigo-500/50 bg-indigo-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-indigo-800">🧠 זיכרון ארגוני ומוח לומד</h2>
+          <p className="text-muted mt-1 text-[12px]">ZONO זוכר מה קרה, מה עבד, מה נכשל ומה חזר — מתוך היסטוריית משימות אמיתית. הזיכרון שייך לארגון, לא ל-AI. מבוסס-ראיות בלבד.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-indigo-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "נזכר…" : "טען זיכרון ארגוני"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Mini label="אירועים" value={fmt(data.totals.events)} />
+            <Mini label="הצלחות" value={fmt(data.totals.successes)} tone="green" />
+            <Mini label="כשלים" value={fmt(data.totals.failures)} tone="red" />
+            <Mini label="לקחים" value={fmt(data.learnings.length)} />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {/* Learnings */}
+          {data.learnings.length > 0 && (
+            <div>
+              <b>📚 לקחים ארגוניים (מתבניות חוזרות):</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.learnings.slice(0, 6).map((l) => (
+                  <div key={l.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+                    <div className="flex items-center justify-between"><span className="font-bold" style={{ color: l.kind === "success" ? "#15803d" : "#be123c" }}>{l.title}</span><span className="text-muted text-[10px]">×{l.occurrences} · ביטחון {l.confidence}%</span></div>
+                    <div className="text-brand-strong mt-0.5 text-[11px] font-bold">← {l.recommendation}</div>
+                    <div className="text-muted mt-0.5 text-[10px]">{l.why}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Chief of Staff answers + decision improvements */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <b className="text-indigo-800">🗣️ ה-Chief of Staff נזכר:</b>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {data.chiefOfStaffAnswers.map((a, i) => <li key={i} className="text-muted text-[11px]"><b className="text-ink">{a.question}</b> {a.answer}</li>)}
+              </ul>
+            </div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <b className="text-indigo-800">🎯 שיפור החלטות מהיסטוריה:</b>
+              {data.decisionImprovements.length ? (
+                <ul className="mt-1 flex flex-col gap-0.5">
+                  {data.decisionImprovements.slice(0, 6).map((im, i) => <li key={i} className="text-muted text-[11px]">{im.direction === "boost" ? "⬆️" : "⚠️"} {im.note}</li>)}
+                </ul>
+              ) : <p className="text-muted mt-1 text-[11px]">אין עדיין שיפורים — נדרשת היסטוריה חוזרת.</p>}
+            </div>
+          </div>
+
+          {/* Executive memory */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <BriefBlock title="🏆 הצלחות מובילות" items={data.executiveMemory.topSuccesses.map((l) => `${l.title}`)} tone="green" />
+            <BriefBlock title="💥 בעיות חוזרות" items={data.executiveMemory.recurringProblems.map((p) => `${p.note}`)} tone="red" />
+          </div>
+
+          {/* Timeline */}
+          {data.timeline.length > 0 && (
+            <div>
+              <b>🕓 ציר זמן ארגוני:</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.timeline.slice(0, 8).map((e, i) => (
+                  <div key={i} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5">
+                    <span className="text-ink"><b style={{ color: e.outcome === "success" ? "#15803d" : e.outcome === "failure" ? "#be123c" : "#334155" }}>{e.outcomeText}</b> · {e.entity}</span>
+                    <span className="text-muted text-[10px]">{e.at.slice(0, 10)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · זיכרון ארגוני v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Truth Engine — data reliability framework (27.7) ─────────────────────────
 function TruthEnginePanel() {
   const [data, setData] = useState<OrgTruthReport | null>(null);
