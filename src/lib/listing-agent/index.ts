@@ -13,6 +13,7 @@ if (!agentRegistry.getAgent(listingAgent.id)) agentRegistry.registerAgent(listin
 export { listingAgent } from "./agent";
 export { buildScorecard, buildTimeline, classifyListing } from "./scorecard";
 export { computePropertyHealth } from "./health";
+export { computeMarketPerformance } from "./market-performance";
 export { detectRisks, detectOpportunities } from "./risk-opportunity";
 export { buildRecommendations } from "./recommendations";
 export { computeValuationView, confidenceLabelOf, NO_VALUATION, type ValuationInput, type ValuationView, type RangePosition, type ConfidenceLabel } from "./valuation";
@@ -22,4 +23,5 @@ export { LISTING_AGENT_VERSION } from "./types";
 export type {
   ListingSignals, PropertyHealth, PropertyRisk, PropertyOpportunity,
   ListingRecommendation, PropertyTimelineEntry, PropertyScorecard,
+  MarketPerformance, DomBand, MarketPosition, PerformanceTrend, PerformanceInsight,
 } from "./types";

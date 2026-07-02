@@ -19,7 +19,9 @@ export function computePropertyHealth(sig: ListingSignals, now: number = Date.no
 
   // Competition pressure — declining/concentrated market raises it.
   const mkt = sig.market;
-  const competitionPressure = clamp(mkt ? ((mkt.inventoryTrendPct != null && mkt.inventoryTrendPct < 0 ? Math.min(40, Math.abs(mkt.inventoryTrendPct)) : 0) + (mkt.concentrationLevel === "concentrated" ? 40 : mkt.concentrationLevel === "moderate" ? 20 : 0) + (mkt.topSharePct != null ? Math.min(20, mkt.topSharePct / 5) : 0)) : 20);
+  // Competition pressure rises with inventory GROWTH (more supply = more rivals),
+  // broker concentration and a dominant top share.
+  const competitionPressure = clamp(mkt ? ((mkt.inventoryTrendPct != null && mkt.inventoryTrendPct > 0 ? Math.min(30, mkt.inventoryTrendPct) : 0) + (mkt.concentrationLevel === "concentrated" ? 40 : mkt.concentrationLevel === "moderate" ? 20 : 0) + (mkt.topSharePct != null ? Math.min(20, mkt.topSharePct / 5) : 0)) : 20);
 
   // Pricing health — VALUATION-BACKED when real evidence exists (29.3.1), else
   // falls back to market response. Weak/stale valuations carry less weight.

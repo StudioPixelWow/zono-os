@@ -931,6 +931,14 @@ function ListingAgentPanel() {
                   <span className="rounded-full bg-slate-200 px-2 py-0.5 font-bold text-slate-600">אין הערכת שווי זמינה</span>
                 )}
               </div>
+              {/* Market performance (29.3.2) */}
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                <span className={cn("rounded-full px-2 py-0.5 font-bold", c.marketPerformance.score >= 66 ? "bg-green-100 text-green-800" : c.marketPerformance.score >= 40 ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800")}>ביצוע שוק {c.marketPerformance.score}</span>
+                <span className="text-muted">מיקום: {c.marketPerformance.marketPosition === "above" ? "מעל השוק" : c.marketPerformance.marketPosition === "below" ? "מתחת לשוק" : c.marketPerformance.marketPosition === "at" ? "בקצב השוק" : "לא ידוע"} · מגמה {c.marketPerformance.trend === "improving" ? "משתפרת" : c.marketPerformance.trend === "declining" ? "יורדת" : "יציבה"}</span>
+                <span className="text-muted">DOM {c.marketPerformance.domVsMarket.days ?? "—"} מול חציון {c.marketPerformance.domVsMarket.median ?? "—"} ({c.marketPerformance.domVsMarket.band === "fast" ? "מהיר" : c.marketPerformance.domVsMarket.band === "normal" ? "בקצב" : c.marketPerformance.domVsMarket.band === "slow" ? "איטי" : c.marketPerformance.domVsMarket.band === "very_slow" ? "איטי מאוד" : "—"})</span>
+                <span className="text-muted">ביקוש {c.marketPerformance.buyerDemand.demandScore} ({c.marketPerformance.buyerDemand.activeMatches} התאמות · {c.marketPerformance.buyerDemand.perfectMatches} מושלמות)</span>
+              </div>
+              {c.marketPerformance.insights[0] && <div className="text-muted mt-1 text-[11px]">📊 {c.marketPerformance.insights.slice(0, 3).map((i) => i.text).join(" · ")}</div>}
               {c.risks[0] && <div className="text-rose-700 mt-1 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
               {c.recommendations[0] && <div className="text-orange-800 mt-1 text-[11px] font-bold">← {c.recommendations[0].action} (עדיפות {c.recommendations[0].priority}, ROI: {c.recommendations[0].roi})</div>}
               {c.recommendations[1] && <div className="text-muted text-[11px]">גם: {c.recommendations.slice(1, 3).map((r) => r.action).join(" · ")}</div>}

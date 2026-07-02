@@ -22,6 +22,8 @@ export interface ListingSignals {
   timeOnMarketDays: number | null;
   zonoScore: number | null; estimatedDaysToSell: number | null; hasExclusivity: boolean; exclusivityEndsAt: string | null;
   matchCount: number; avgMatchScore: number;         // demand from buyer↔property matches
+  perfectMatchCount: number;                          // matches with score ≥ 80
+  medianDomCity: number | null;                       // median days-on-market (same city/band)
   recentBuyerActivity: number;                        // interactions in last 30d
   market: { inventoryTrendPct: number | null; concentrationLevel: string | null; topSharePct: number | null } | null;
   sellerLinked: boolean; valuationEstimate: number | null;
@@ -58,6 +60,22 @@ export interface ListingRecommendation {
 // Part 5 — timeline.
 export interface PropertyTimelineEntry { at: string; kind: string; label: string }
 
+// Part 1 — market performance (29.3.2).
+export type DomBand = "fast" | "normal" | "slow" | "very_slow" | "unknown";
+export const DOM_HE: Record<DomBand, string> = { fast: "מהיר", normal: "בקצב השוק", slow: "איטי", very_slow: "איטי מאוד", unknown: "לא ידוע" };
+export type MarketPosition = "above" | "at" | "below" | "unknown";
+export type PerformanceTrend = "improving" | "stable" | "declining";
+export interface PerformanceInsight { text: string; evidence: string[] }
+export interface MarketPerformance {
+  score: number;                                      // 0..100
+  domVsMarket: { days: number | null; median: number | null; ratio: number | null; band: DomBand };
+  buyerDemand: { activeMatches: number; perfectMatches: number; avgMatchScore: number; recentActivity: number; demandScore: number };
+  competition: { inventoryTrendPct: number | null; concentrationLevel: string | null; topSharePct: number | null; pressure: number };
+  pricePosition: { rangePosition: string; gapPct: number | null };
+  marketPosition: MarketPosition; momentum: number; trend: PerformanceTrend;
+  insights: PerformanceInsight[];
+}
+
 // Part 10 — property scorecard.
 export interface PropertyScorecard {
   id: string; title: string; city: string | null; price: number | null; status: string;
@@ -65,4 +83,5 @@ export interface PropertyScorecard {
   recommendations: ListingRecommendation[]; timeline: PropertyTimelineEntry[];
   classification: string[]; aiConfidence: number; truthScore: number | null; activeMissions: number;
   valuation: ValuationView;                            // shown as a badge (29.3.1)
+  marketPerformance: MarketPerformance;                // 29.3.2
 }

@@ -4,9 +4,9 @@
 // priority / ROI / confidence / impact / deadline. Recommendation-only.
 // ============================================================================
 import { clamp } from "./health";
-import type { ListingSignals, PropertyHealth, PropertyRisk, PropertyOpportunity, ListingRecommendation } from "./types";
+import type { ListingSignals, PropertyHealth, PropertyRisk, PropertyOpportunity, ListingRecommendation, MarketPerformance } from "./types";
 
-export function buildRecommendations(sig: ListingSignals, h: PropertyHealth, risks: PropertyRisk[], opps: PropertyOpportunity[]): ListingRecommendation[] {
+export function buildRecommendations(sig: ListingSignals, h: PropertyHealth, risks: PropertyRisk[], opps: PropertyOpportunity[], mp: MarketPerformance): ListingRecommendation[] {
   const out: ListingRecommendation[] = [];
   const baseConf = clamp(40 + h.confidence * 0.5);
   const mk = (action: string, missionType: string, priority: number, roi: string, impact: ListingRecommendation["impact"], deadlineDays: number | null, evidence: string[], reason: string) =>
@@ -17,14 +17,20 @@ export function buildRecommendations(sig: ListingSignals, h: PropertyHealth, ris
   const tom = sig.timeOnMarketDays ?? 0;
   const v = sig.valuation;
 
-  // Pricing recommendations are VALUATION-BACKED (29.3.1). Never recommend a price
-  // change from weak evidence alone — only when the valuation is real, fresh and
-  // confident (strongEnoughForPricing). Otherwise recommend a Valuation Review.
+  // MULTI-SIGNAL pricing (29.3.2). A price cut needs BOTH valuation evidence
+  // (above range, strong) AND market confirmation (slow DOM or weak demand). If
+  // the market performs well despite the price, hold. Never rely on one signal.
+  const marketWeak = mp.domVsMarket.band === "slow" || mp.domVsMarket.band === "very_slow" || mp.buyerDemand.demandScore < 40;
+  const marketStrong = mp.domVsMarket.band === "fast" || (mp.buyerDemand.demandScore >= 60 && mp.domVsMarket.band !== "very_slow");
+  const valAbove = v.available && v.rangePosition === "above" && v.strongEnoughForPricing;
+  const valBelow = v.available && v.rangePosition === "below" && v.strongEnoughForPricing;
+
   if (hasRisk("overpriced")) {
-    if (v.available && v.rangePosition === "above" && v.strongEnoughForPricing) mk("הורד מחיר מבוקש לכיוון טווח ההערכה", "PRICE_REVIEW", 88, "קיצור זמן מכירה + הגדלת פניות", "high", 7, hasRisk("overpriced")!.evidence, "מחיר מעל טווח ההערכה (מבוסס הערכת שווי)");
-    else mk("בצע סקירת מחיר עם CMA (אין הערכה תומכת חזקה)", "PRICE_REVIEW", 64, "בסיס ראייתי לתמחור", "medium", 10, [...hasRisk("overpriced")!.evidence, "אין הערכת שווי חזקה — נדרש אימות לפני שינוי מחיר"], "חשד לתמחור גבוה ללא ראיה חזקה");
+    if (valAbove && marketWeak) mk("הורד מחיר מבוקש לכיוון טווח ההערכה", "PRICE_REVIEW", 90, "קיצור זמן מכירה + הגדלת פניות", "high", 7, [...hasRisk("overpriced")!.evidence, `ביצוע שוק ${mp.score} · DOM ${mp.domVsMarket.band}`], "הערכה + ביצוע שוק מאשרים תמחור גבוה");
+    else if (valAbove && marketStrong) mk("החזק מחיר — הנכס מבצע היטב למרות המחיר", "MARKETING_REFRESH", 40, "מיצוי ערך ללא ויתור מיותר", "low", 14, [`ביצוע שוק ${mp.score}`, `מחיר +${v.priceGapPct}% אך ביקוש/DOM טובים`], "אות בודד (הערכה) בלבד — אין קונצנזוס לחתוך מחיר");
+    else mk("בצע סקירת מחיר עם CMA (אין קונצנזוס אותות)", "PRICE_REVIEW", 62, "בסיס ראייתי לתמחור", "medium", 10, [...hasRisk("overpriced")!.evidence, `ביצוע שוק ${mp.score}`], "חשד לתמחור גבוה ללא קונצנזוס");
   }
-  if (hasRisk("underpriced") && v.available && v.rangePosition === "below" && v.strongEnoughForPricing) mk("בחן העלאת מחיר לכיוון טווח ההערכה", "PRICE_REVIEW", 60, "מקסום ערך", "medium", 7, hasRisk("underpriced")!.evidence, "מחיר מתחת לטווח ההערכה (מבוסס הערכת שווי)");
+  if (hasRisk("underpriced") && valBelow && mp.buyerDemand.demandScore >= 55) mk("בחן העלאת מחיר לכיוון טווח ההערכה", "PRICE_REVIEW", 60, "מקסום ערך", "medium", 7, [...hasRisk("underpriced")!.evidence, `ביקוש ${mp.buyerDemand.demandScore}`], "הערכה + ביקוש חזק מאשרים תמחור נמוך");
   if (hasRisk("stale")) { mk("רענן את המודעה", "MARKETING_REFRESH", 72, "החזרת המודעה לראש התוצאות", "medium", 5, hasRisk("stale")!.evidence, "מודעה מתיישנת"); mk("החלף תמונות", "PHOTOGRAPHY", 60, "העלאת שיעור הקלקה", "medium", 10, ["מודעה ותיקה"], "רענון ויזואלי"); }
   if (hasRisk("weak_exposure") || hasRisk("missing_marketing")) mk("השק קמפיין / הגבר חשיפה", "CAMPAIGN_LAUNCH", 75, "יותר צפיות ולידים", "high", 7, [(hasRisk("weak_exposure") ?? hasRisk("missing_marketing"))!.evidence[0] ?? ""], "חשיפה חלשה");
   if (hasRisk("seller_frustration")) mk("התקשר למוכר", "SELLER_FOLLOWUP", 82, "שימור בלעדיות ואמון", "high", 2, hasRisk("seller_frustration")!.evidence, "סיכון תסכול מוכר");

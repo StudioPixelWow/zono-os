@@ -31,9 +31,16 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
 
   const ids = propRows.slice(0, limit).map((r) => String(r.id));
 
-  // Demand from buyer↔property matches.
-  const matchAgg = new Map<string, { count: number; sum: number }>();
-  for (const m of await safe("buyer_property_matches", "linked_property_id,match_score", 5000)) { const pid = s(m.linked_property_id); if (!pid) continue; const a = matchAgg.get(pid) ?? { count: 0, sum: 0 }; a.count += 1; a.sum += num(m.match_score) ?? 0; matchAgg.set(pid, a); }
+  // Demand from buyer↔property matches (count + avg + perfect ≥ 80).
+  const matchAgg = new Map<string, { count: number; sum: number; perfect: number }>();
+  for (const m of await safe("buyer_property_matches", "linked_property_id,match_score", 5000)) { const pid = s(m.linked_property_id); if (!pid) continue; const sc = num(m.match_score) ?? 0; const a = matchAgg.get(pid) ?? { count: 0, sum: 0, perfect: 0 }; a.count += 1; a.sum += sc; if (sc >= 80) a.perfect += 1; matchAgg.set(pid, a); }
+
+  // Median days-on-market per city + price band (from the loaded active listings).
+  const priceBand = (p: number | null): string => (p == null ? "?" : p >= 4_000_000 ? "L" : p >= 2_500_000 ? "H" : p >= 1_500_000 ? "M" : "S");
+  const domGroups = new Map<string, number[]>();
+  for (const r of propRows.slice(0, limit)) { const listed = s(r.listed_at) ?? s(r.created_at); const d = daysBetween(listed, now); if (d == null) continue; const key = `${s(r.city) ?? "?"}|${priceBand(num(r.price))}`; (domGroups.get(key) ?? domGroups.set(key, []).get(key)!).push(d); }
+  const median = (arr: number[]): number | null => { if (!arr.length) return null; const a = [...arr].sort((x, y) => x - y); const mid = Math.floor(a.length / 2); return a.length % 2 ? a[mid] : Math.round((a[mid - 1] + a[mid]) / 2); };
+  const medianDomFor = (city: string | null, price: number | null): number | null => { const g = domGroups.get(`${city ?? "?"}|${priceBand(price)}`); return g && g.length >= 3 ? median(g) : null; };
 
   // Recent buyer activity per property (best-effort).
   const actAgg = new Map<string, number>(); const lastAct = new Map<string, string>();
@@ -66,7 +73,7 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
 
   const signals: ListingSignals[] = propRows.slice(0, limit).map((r) => {
     const id = String(r.id);
-    const agg = matchAgg.get(id) ?? { count: 0, sum: 0 };
+    const agg = matchAgg.get(id) ?? { count: 0, sum: 0, perfect: 0 };
     const avgMatchScore = agg.count ? Math.round(agg.sum / agg.count) : 0;
     const listedAt = s(r.listed_at) ?? s(r.created_at);
     const recentBuyerActivity = actAgg.get(id) ?? 0;
@@ -84,7 +91,7 @@ async function assembleSignals(orgId: string | null, limit: number): Promise<{ s
       listedAt, createdAt: s(r.created_at), updatedAt: s(r.updated_at),
       timeOnMarketDays: daysBetween(listedAt, now),
       zonoScore: num(r.zono_score), estimatedDaysToSell: num(r.estimated_days_to_sell), hasExclusivity: !!r.has_exclusivity, exclusivityEndsAt: s(r.exclusivity_ends_at),
-      matchCount: agg.count, avgMatchScore, recentBuyerActivity,
+      matchCount: agg.count, avgMatchScore, perfectMatchCount: agg.perfect, medianDomCity: medianDomFor(s(r.city), num(r.price)), recentBuyerActivity,
       market: r.city ? marketByCity.get(String(r.city)) ?? null : null,
       sellerLinked: !!s(r.seller_id), valuationEstimate: valuation.estimatedValue, valuation, campaignActive: null, lastActivityAt,
       openMissions: openByProp.get(id) ?? 0, truthScore: truth.truthScore,
