@@ -9,6 +9,7 @@ import "server-only";
 import { listBuyers, getBuyerById, getBuyerActivities, type BuyerRow } from "@/lib/buyers/repository";
 import { computeTruthScore } from "@/lib/truth-engine";
 import { getOrgMemoryReport } from "@/lib/org-memory";
+import { getCrmEdgeIndex, type LiteEdge } from "../crm-graph";
 import { buildBuyerTwin } from "./twin";
 import type { BuyerSeed, BuyerActivityInput, BuyerTwin } from "./types";
 
@@ -37,7 +38,7 @@ function actToInput(a: ActRow): BuyerActivityInput {
 
 const TEMP_BASE: Record<string, number> = { hot: 75, warm: 55, cold: 30 };
 
-async function assemble(seed: BuyerSeed, activities: BuyerActivityInput[], lessons: string[]): Promise<BuyerTwin> {
+async function assemble(seed: BuyerSeed, activities: BuyerActivityInput[], lessons: string[], edges?: LiteEdge[]): Promise<BuyerTwin> {
   const truth = computeTruthScore({
     entityType: "buyer", entityId: seed.id, entityName: seed.name,
     evidence: activities.map((a) => ({ source: a.kind, sourceType: a.kind, at: a.at, stance: "support" as const })),
@@ -46,7 +47,7 @@ async function assemble(seed: BuyerSeed, activities: BuyerActivityInput[], lesso
     presentFields: [seed.budgetMax != null ? "budget" : "", seed.preferredAreas.length ? "areas" : "", seed.preferredTypes.length ? "types" : "", seed.hasPhone || seed.hasEmail ? "contact" : ""].filter(Boolean),
     baseConfidence: TEMP_BASE[seed.temperature ?? ""] ?? null,
   });
-  return buildBuyerTwin({ seed, activities, truth, orgMemoryLessons: lessons });
+  return buildBuyerTwin({ seed, activities, truth, orgMemoryLessons: lessons, relationshipEdges: edges });
 }
 
 export interface BuyerTwinsOverview {
@@ -62,14 +63,17 @@ export async function getBuyerTwins(orgId: string | null, limit = 20): Promise<B
   const notes: string[] = [];
   let rows: BuyerRow[] = [];
   try { rows = await listBuyers(); } catch { notes.push("לא ניתן לטעון קונים — ודא הרשאות/נתונים."); }
-  const lessons = await getOrgMemoryReport(orgId).then((r) => r.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]);
+  const [lessons, edgeIndex] = await Promise.all([
+    getOrgMemoryReport(orgId).then((r) => r.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]),
+    getCrmEdgeIndex(orgId),
+  ]);
 
   const slice = rows.slice(0, limit);
   const twins = await Promise.all(slice.map(async (r) => {
     const seed = rowToSeed(r);
     let acts: BuyerActivityInput[] = [];
     try { acts = ((await getBuyerActivities(seed.id)) as ActRow[]).map(actToInput); } catch { /* none */ }
-    return assemble(seed, acts, lessons);
+    return assemble(seed, acts, lessons, edgeIndex.get(seed.id));
   }));
 
   if (!rows.length) notes.push("אין קונים במערכת עדיין — המסגרת מוכנה; צור קונים כדי לבנות Twins. אין המצאות.");
@@ -98,6 +102,9 @@ export async function getBuyerTwinById(orgId: string | null, buyerId: string): P
   const seed = rowToSeed(r);
   let acts: BuyerActivityInput[] = [];
   try { acts = ((await getBuyerActivities(seed.id)) as ActRow[]).map(actToInput); } catch { /* none */ }
-  const lessons = await getOrgMemoryReport(orgId).then((x) => x.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]);
-  return assemble(seed, acts, lessons);
+  const [lessons, edgeIndex] = await Promise.all([
+    getOrgMemoryReport(orgId).then((x) => x.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]),
+    getCrmEdgeIndex(orgId),
+  ]);
+  return assemble(seed, acts, lessons, edgeIndex.get(seed.id));
 }

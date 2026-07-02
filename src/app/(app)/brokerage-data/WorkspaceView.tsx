@@ -35,7 +35,8 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction,
+  type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { OrgTruthReport } from "@/lib/truth-engine";
@@ -348,6 +349,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
+          <CrmRelationshipPanel />
           <DigitalTwinPanel />
           <SellerTwinPanel />
           <LeadTwinPanel />
@@ -865,6 +867,78 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── CRM Relationship Graph Integration — dashboard (28.4) ────────────────────
+function CrmRelationshipPanel() {
+  const [data, setData] = useState<CrmDashboardResult | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getCrmGraphAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-violet-500/50 bg-violet-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-violet-800">🔗 גרף קשרי CRM — קונים · מוכרים · לידים</h2>
+          <p className="text-muted mt-1 text-[12px]">מחבר את ה-Digital Twins של קונה/מוכר/ליד לגרף הישויות: המרות, התאמות נכס, הערכות שווי, בעלות מתווך, משימות וכפילויות — מראיות בלבד.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-violet-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "בונה גרף…" : "בנה גרף CRM"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="ישויות" value={fmt(data.dashboard.totals.nodes)} />
+            <Mini label="קשרים" value={fmt(data.dashboard.totals.edges)} />
+            <Mini label="המרות" value={fmt(data.dashboard.totals.conversions)} tone="green" />
+            <Mini label="קונה↔נכס" value={fmt(data.dashboard.totals.buyerPropertyLinks)} />
+            <Mini label="מוכר↔נכס" value={fmt(data.dashboard.totals.sellerPropertyLinks)} />
+            <Mini label="כפילויות" value={fmt(data.dashboard.totals.duplicates)} tone="amber" />
+            <Mini label="פערי קשר" value={fmt(data.dashboard.totals.gaps)} tone="red" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {/* Chief of Staff CRM understanding */}
+          <div className="rounded-xl border border-violet-500/40 bg-surface px-3 py-2">
+            <b className="text-violet-800">🧠 ה-Chief of Staff רואה קשרי CRM:</b>
+            <ul className="mt-1 flex flex-col gap-0.5">{data.dashboard.chiefOfStaffStatements.map((s, i) => <li key={i} className="text-muted text-[11px]">• {s}</li>)}</ul>
+          </div>
+
+          {/* Conversion paths */}
+          {data.dashboard.conversionPaths.length > 0 && (
+            <div>
+              <b>🛣️ מסלולי המרה:</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.dashboard.conversionPaths.slice(0, 6).map((p, i) => (
+                  <div key={i} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5">
+                    <span className="text-ink font-bold">{p.steps.join("  ←  ")}</span>
+                    <span className="text-muted text-[10px]">עוצמה {p.strength}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Strongest matches + seller links */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <BriefBlock title="🏠 התאמות קונה↔נכס חזקות" items={data.dashboard.strongestBuyerPropertyMatches.map((m) => `${m.fromName} ↔ ${m.toName} (עוצמה ${m.strength})`)} />
+            <BriefBlock title="🏷️ קישורי מוכר↔נכס/הערכה" items={[...data.dashboard.sellerPropertyLinks, ...data.dashboard.sellerValuationLinks].map((m) => `${m.fromName} ${RELATION_HE[m.type] ?? m.type} ${m.toName}`)} tone="green" />
+          </div>
+
+          {/* Broker ownership + duplicates + gaps */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            <BriefBlock title="👔 בעלות מתווך" items={data.dashboard.brokerOwnership.map((b) => `${b.broker}: ${b.count} קשרים`)} />
+            <BriefBlock title="👥 לידים כפולים" items={data.dashboard.duplicateLeads.map((d) => `${d.fromName} ↔ ${d.toName}`)} tone="red" />
+            <BriefBlock title="⚠️ פערי קשר" items={data.dashboard.relationshipGaps.map((g) => `${g.name} (${g.type})`)} tone="red" />
+          </div>
+
+          <p className="text-muted text-[10px]">בריאות רשת {data.dashboard.networkHealth} · נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · CRM Graph v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Lead Digital Twin — third Twin on the framework (28.3) ───────────────────
 function LeadTwinPanel() {
   const [data, setData] = useState<LeadTwinsOverview | null>(null);

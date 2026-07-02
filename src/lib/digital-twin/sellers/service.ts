@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listSellers, getSellerById, type SellerRow } from "@/lib/sellers/repository";
 import { computeTruthScore } from "@/lib/truth-engine";
 import { getOrgMemoryReport } from "@/lib/org-memory";
+import { getCrmEdgeIndex, type LiteEdge } from "../crm-graph";
 import { buildSellerTwin } from "./twin";
 import type { SellerSeed, SellerActivityInput, SellerTwin } from "./types";
 
@@ -45,7 +46,7 @@ const actToInput = (a: Row): SellerActivityInput => ({
   summary: s(a.title) ?? s(a.description) ?? s(a.kind) ?? "פעילות",
 });
 
-async function assemble(seed: SellerSeed, activities: SellerActivityInput[], lessons: string[]): Promise<SellerTwin> {
+async function assemble(seed: SellerSeed, activities: SellerActivityInput[], lessons: string[], edges?: LiteEdge[]): Promise<SellerTwin> {
   const truth = computeTruthScore({
     entityType: "seller", entityId: seed.id, entityName: seed.name,
     evidence: activities.map((a) => ({ source: a.kind, sourceType: a.kind, at: a.at, stance: "support" as const })),
@@ -54,7 +55,7 @@ async function assemble(seed: SellerSeed, activities: SellerActivityInput[], les
     presentFields: [seed.desiredPrice != null ? "price" : "", seed.motivationLabel || seed.urgencyLevel ? "motivation" : "", seed.hasPhone || seed.hasEmail ? "contact" : "", seed.propertyId ? "property" : ""].filter(Boolean),
     baseConfidence: seed.trustSensitivity,
   });
-  return buildSellerTwin({ seed, activities, truth, orgMemoryLessons: lessons });
+  return buildSellerTwin({ seed, activities, truth, orgMemoryLessons: lessons, relationshipEdges: edges });
 }
 
 export interface SellerTwinsOverview {
@@ -90,14 +91,15 @@ export async function getSellerTwins(orgId: string | null, limit = 20): Promise<
   try { rows = await listSellers(); } catch { notes.push("לא ניתן לטעון מוכרים — ודא הרשאות/נתונים."); }
   const slice = rows.slice(0, limit);
   const ids = slice.map((r) => String((r as unknown as Row).id));
-  const [{ props, acts }, lessons] = await Promise.all([
+  const [{ props, acts }, lessons, edgeIndex] = await Promise.all([
     loadLinksAndActivities(ids),
     getOrgMemoryReport(orgId).then((r) => r.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]),
+    getCrmEdgeIndex(orgId),
   ]);
 
   const twins = await Promise.all(slice.map((r) => {
     const seed = rowToSeed(r, props.get(String((r as unknown as Row).id)));
-    return assemble(seed, acts.get(seed.id) ?? [], lessons);
+    return assemble(seed, acts.get(seed.id) ?? [], lessons, edgeIndex.get(seed.id));
   }));
 
   if (!rows.length) notes.push("אין מוכרים במערכת עדיין — המסגרת מוכנה; צור מוכרים כדי לבנות Twins. אין המצאות.");
@@ -123,7 +125,10 @@ export async function getSellerTwinById(orgId: string | null, sellerId: string):
   const r = await getSellerById(sellerId).catch(() => null);
   if (!r) return null;
   const { props, acts } = await loadLinksAndActivities([sellerId]);
-  const lessons = await getOrgMemoryReport(orgId).then((x) => x.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]);
+  const [lessons, edgeIndex] = await Promise.all([
+    getOrgMemoryReport(orgId).then((x) => x.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]),
+    getCrmEdgeIndex(orgId),
+  ]);
   const seed = rowToSeed(r, props.get(sellerId));
-  return assemble(seed, acts.get(sellerId) ?? [], lessons);
+  return assemble(seed, acts.get(sellerId) ?? [], lessons, edgeIndex.get(sellerId));
 }

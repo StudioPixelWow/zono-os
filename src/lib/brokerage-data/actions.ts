@@ -44,6 +44,7 @@ import { getRelationshipReport, type RelationshipReport } from "@/lib/relationsh
 import { getBuyerTwins, type BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
 import { getSellerTwins, type SellerTwinsOverview } from "@/lib/digital-twin/sellers";
 import { getLeadTwins, type LeadTwinsOverview } from "@/lib/digital-twin/leads";
+import { getCrmGraph, type CrmGraphResult } from "@/lib/digital-twin/crm-graph";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -231,6 +232,16 @@ export async function getSellerTwinsAction(): Promise<{ ok: boolean; result?: Se
 export async function getLeadTwinsAction(): Promise<{ ok: boolean; result?: LeadTwinsOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getLeadTwins(profile.org_id) }; }
   catch (e) { console.error("[digital-twin] lead twins failed:", e); return { ok: false, error: "בניית ה-Lead Twins נכשלה." }; }
+}
+
+// ── Phase 28.4 — CRM Relationship Graph Integration ──────────────────────────
+export type CrmDashboardResult = Pick<CrmGraphResult, "version" | "generatedAt" | "dashboard" | "notes">;
+export async function getCrmGraphAction(): Promise<{ ok: boolean; result?: CrmDashboardResult; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const r = await getCrmGraph(profile.org_id);
+    return { ok: true, result: { version: r.version, generatedAt: r.generatedAt, dashboard: r.dashboard, notes: r.notes } };
+  } catch (e) { console.error("[crm-graph] report failed:", e); return { ok: false, error: "גרף ה-CRM נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

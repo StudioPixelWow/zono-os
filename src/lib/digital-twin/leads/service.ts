@@ -9,6 +9,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { computeTruthScore } from "@/lib/truth-engine";
 import { getOrgMemoryReport } from "@/lib/org-memory";
+import { getCrmEdgeIndex, type LiteEdge } from "../crm-graph";
 import { buildLeadTwin } from "./twin";
 import type { LeadSeed, LeadActivityInput, LeadTwin, LeadIntent } from "./types";
 
@@ -37,7 +38,7 @@ const actToInput = (a: Row): LeadActivityInput => ({
   summary: s(a.title) ?? s(a.description) ?? s(a.kind) ?? "פעילות",
 });
 
-async function assemble(seed: LeadSeed, activities: LeadActivityInput[], lessons: string[]): Promise<LeadTwin> {
+async function assemble(seed: LeadSeed, activities: LeadActivityInput[], lessons: string[], edges?: LiteEdge[]): Promise<LeadTwin> {
   const truth = computeTruthScore({
     entityType: "lead", entityId: seed.id, entityName: seed.name,
     evidence: activities.map((a) => ({ source: a.kind, sourceType: a.kind, at: a.at, stance: "support" as const })),
@@ -46,7 +47,7 @@ async function assemble(seed: LeadSeed, activities: LeadActivityInput[], lessons
     presentFields: [seed.hasPhone || seed.hasEmail ? "contact" : "", seed.source ? "source" : "", seed.intent !== "unknown" ? "intent" : "", seed.score != null ? "score" : ""].filter(Boolean),
     baseConfidence: seed.score,
   });
-  return buildLeadTwin({ seed, activities, truth, orgMemoryLessons: lessons });
+  return buildLeadTwin({ seed, activities, truth, orgMemoryLessons: lessons, relationshipEdges: edges });
 }
 
 export interface LeadTwinsOverview {
@@ -80,8 +81,11 @@ export async function getLeadTwins(orgId: string | null, limit = 25): Promise<Le
     for (const a of (data ?? []) as Row[]) { const lid = s(a.lead_id); if (!lid) continue; (actsByLead.get(lid) ?? actsByLead.set(lid, []).get(lid)!).push(actToInput(a)); }
   } catch { /* none */ }
 
-  const lessons = await getOrgMemoryReport(orgId).then((r) => r.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]);
-  const twins = await Promise.all(slice.map((r) => assemble(rowToSeed(r, dupFor(r)), actsByLead.get(String(r.id)) ?? [], lessons)));
+  const [lessons, edgeIndex] = await Promise.all([
+    getOrgMemoryReport(orgId).then((r) => r.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]),
+    getCrmEdgeIndex(orgId),
+  ]);
+  const twins = await Promise.all(slice.map((r) => assemble(rowToSeed(r, dupFor(r)), actsByLead.get(String(r.id)) ?? [], lessons, edgeIndex.get(String(r.id)))));
 
   if (!rows.length) notes.push("אין לידים במערכת עדיין — המסגרת מוכנה; צור לידים כדי לבנות Twins. אין המצאות.");
   const has = (t: LeadTwin, tag: string) => t.classification.includes(tag);
@@ -110,6 +114,9 @@ export async function getLeadTwinById(orgId: string | null, leadId: string): Pro
   const r = data as Row;
   let acts: LeadActivityInput[] = [];
   try { const { data: a } = await db.from("activities").select("*").eq("lead_id", leadId).order("occurred_at", { ascending: false }).limit(100); acts = ((a ?? []) as Row[]).map(actToInput); } catch { /* none */ }
-  const lessons = await getOrgMemoryReport(orgId).then((x) => x.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]);
-  return assemble(rowToSeed(r, 0), acts, lessons);
+  const [lessons, edgeIndex] = await Promise.all([
+    getOrgMemoryReport(orgId).then((x) => x.executiveMemory.lessonsLearned.slice(0, 4)).catch(() => [] as string[]),
+    getCrmEdgeIndex(orgId),
+  ]);
+  return assemble(rowToSeed(r, 0), acts, lessons, edgeIndex.get(leadId));
 }
