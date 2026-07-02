@@ -17,6 +17,7 @@ import * as store from "./persistence";
 import "./agents"; // seed built-in agents
 import { getListingSignals } from "@/lib/listing-agent"; // seed + inject the listing agent's signals
 import { getBuyerAgentSignals } from "@/lib/buyer-agent"; // seed + inject the buyer agent's signals
+import { getSellerAgentSignals } from "@/lib/seller-agent"; // seed + inject the seller agent's signals
 import type { AgentContext, AgentInboxItem, AgentView, AgentDefinition } from "./types";
 
 export interface AgentsDashboard {
@@ -30,11 +31,12 @@ export interface AgentsDashboard {
 
 async function loadContext(orgId: string | null): Promise<{ ctx: AgentContext; notes: string[] }> {
   const notes: string[] = [];
-  const [cos, ac, listings, buyers] = await Promise.all([
+  const [cos, ac, listings, buyers, sellers] = await Promise.all([
     getChiefOfStaff(orgId).catch(() => null),
     getActionCenter(orgId).catch(() => null),
     getListingSignals(orgId, 20).catch(() => []),
     getBuyerAgentSignals(orgId, 20).catch(() => []),
+    getSellerAgentSignals(orgId, 20).catch(() => []),
   ]);
   if (!cos) notes.push("לא ניתן לטעון את ה-Chief of Staff.");
   if (!ac) notes.push("לא ניתן לטעון את מרכז הפעולות.");
@@ -47,6 +49,7 @@ async function loadContext(orgId: string | null): Promise<{ ctx: AgentContext; n
         actionCenter: ac ? { blocked: ac.blocked, waiting: ac.waiting, critical: ac.critical } : undefined,
         listings,   // Listing Intelligence Agent signals (per property)
         buyers,     // Buyer Intelligence Agent signals (per buyer)
+        sellers,    // Seller Intelligence Agent signals (per seller)
       },
     },
   };

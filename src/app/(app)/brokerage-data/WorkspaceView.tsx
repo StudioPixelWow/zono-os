@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -54,6 +54,8 @@ import type { ListingScorecardsOverview } from "@/lib/listing-agent";
 import { STRATEGY_HE } from "@/lib/listing-agent";
 import type { BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
 import { BUYER_STRATEGY_HE } from "@/lib/buyer-agent";
+import type { SellerAgentScorecardsOverview } from "@/lib/seller-agent";
+import { SELLER_STRATEGY_HE } from "@/lib/seller-agent";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -359,6 +361,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <AgentsPanel />
           <ListingAgentPanel />
           <BuyerAgentPanel />
+          <SellerAgentPanel />
           <CustomerJourneyPanel />
           <CrmRelationshipPanel />
           <DigitalTwinPanel />
@@ -878,6 +881,68 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Seller Intelligence Agent — per-seller scorecards (29.5) ─────────────────
+function SellerAgentPanel() {
+  const [data, setData] = useState<SellerAgentScorecardsOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getSellerAgentScorecardsAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-emerald-600/50 bg-emerald-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-emerald-800">🏷️ סוכן מודיעין מוכרים — כרטיס לכל מוכר</h2>
+          <p className="text-muted mt-1 text-[12px]">סוכן AI לכל מוכר: בריאות, מוכנות לחתימה, נכס+הערכת שווי+שוק, קונים ממתינים, סיכונים ואסטרטגיית מכירה מוסברת. המלצה בלבד — הכול דרך תיבת הסוכנים, ללא ביצוע אוטומטי.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-emerald-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח מוכרים…" : "הפעל סוכן מוכרים"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="מוכרים" value={fmt(data.totals.sellers)} />
+            <Mini label="חמים" value={fmt(data.totals.hot)} tone="green" />
+            <Mini label="בסיכון" value={fmt(data.totals.atRisk)} tone="red" />
+            <Mini label="מוכן לחתימה" value={fmt(data.totals.readyToSign)} tone="green" />
+            <Mini label="פערי מחיר" value={fmt(data.totals.priceIssues)} tone="amber" />
+            <Mini label="עם קונים" value={fmt(data.totals.withBuyers)} />
+            <Mini label="יוקרה" value={fmt(data.totals.luxury)} />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.scorecards.slice(0, 6).map((c) => (
+            <div key={c.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{c.name}{c.classification.length ? <span className="text-emerald-700 font-bold"> · {c.classification.join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className={cn("rounded-full px-2 py-0.5 font-bold", c.health.label === "בריא" ? "bg-green-100 text-green-800" : c.health.label === "בסיכון" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{c.health.label}</span>
+                  <span className="text-muted">בריאות {c.health.sellerHealth} · חתימה {c.health.readinessToSign} · נטישה {c.health.churnRisk}</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                מוטיבציה {c.health.motivation} · אמון {c.health.trust} · גמישות מחיר {c.health.priceFlexibility}
+                {c.property.hasProperty ? <span> · נכס: מחיר {c.property.valuationPosition === "above" ? "מעל" : c.property.valuationPosition === "below" ? "מתחת" : c.property.valuationPosition === "within" ? "בתוך" : "?"} לטווח · שוק {c.property.marketScore ?? "—"} · ביקוש {c.property.buyerDemandScore ?? "—"}</span> : <span> · אין נכס מקושר</span>}
+                {c.truthScore != null ? <span> · אמת {c.truthScore}</span> : null}
+              </div>
+              <div className="text-emerald-800 mt-1 rounded-lg border border-emerald-600/30 bg-emerald-50/40 px-2 py-1 text-[11px] font-bold">
+                🎯 {SELLER_STRATEGY_HE[c.strategy.recommendedStrategy] ?? c.strategy.recommendedStrategy} · ביטחון {c.strategy.confidence}% · {c.strategy.change.signal === "switch" ? "החלף אסטרטגיה" : c.strategy.change.signal === "succeeded" ? "בהצלחה" : "פעיל"}
+                <span className="text-muted font-normal"> — {c.aiRecommendation}</span>
+              </div>
+              <div className="text-muted mt-0.5 text-[10px]">קונים: {c.buyerConnection.waitingBuyers.length} ממתינים · {c.buyerConnection.matchingBuyers.length} מתאימים · {c.buyerConnection.priorityBuyers.length} בעדיפות</div>
+              {c.risks[0] && <div className="text-rose-700 mt-0.5 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
+              {c.strategy.playbook[0] && <div className="text-muted text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}{c.strategy.requiredApprovals.length ? ` · אישורים: ${c.strategy.requiredApprovals.join(",")}` : ""}</div>}
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Seller Agent v{data.version} · ההמלצות זורמות לתיבת הסוכנים · אין ביצוע אוטומטי</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Buyer Intelligence Agent — per-buyer scorecards (29.4) ───────────────────
 function BuyerAgentPanel() {
   const [data, setData] = useState<BuyerAgentScorecardsOverview | null>(null);

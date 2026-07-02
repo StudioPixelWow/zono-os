@@ -49,6 +49,7 @@ import { getCustomerJourneys, type CustomerJourneysOverview } from "@/lib/digita
 import { getAgentsDashboard, setAgentEnabled, approveInboxItem, rejectInboxItem, type AgentsDashboard } from "@/lib/agent-framework";
 import { getListingScorecards, type ListingScorecardsOverview } from "@/lib/listing-agent";
 import { getBuyerAgentScorecards, type BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
+import { getSellerAgentScorecards, type SellerAgentScorecardsOverview } from "@/lib/seller-agent";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -282,6 +283,12 @@ export async function getListingScorecardsAction(): Promise<{ ok: boolean; resul
 export async function getBuyerAgentScorecardsAction(): Promise<{ ok: boolean; result?: BuyerAgentScorecardsOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getBuyerAgentScorecards(profile.org_id) }; }
   catch (e) { console.error("[buyer-agent] scorecards failed:", e); return { ok: false, error: "סוכן הקונים נכשל." }; }
+}
+
+// ── Phase 29.5 — Seller Intelligence Agent (per-seller scorecards) ───────────
+export async function getSellerAgentScorecardsAction(): Promise<{ ok: boolean; result?: SellerAgentScorecardsOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getSellerAgentScorecards(profile.org_id) }; }
+  catch (e) { console.error("[seller-agent] scorecards failed:", e); return { ok: false, error: "סוכן המוכרים נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────
