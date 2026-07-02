@@ -35,12 +35,14 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { OrgTruthReport } from "@/lib/truth-engine";
 import { FRESHNESS_HE, VERIFICATION_HE } from "@/lib/truth-engine";
 import type { OrgMemoryReport } from "@/lib/org-memory";
+import type { RelationshipReport } from "@/lib/relationship-graph";
+import { RELATION_HE } from "@/lib/relationship-graph";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -345,6 +347,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <ChiefOfStaffPanel />
           <TruthEnginePanel />
           <OrgMemoryPanel />
+          <RelationshipGraphPanel />
           <ActionCenterPanel />
           <CommandCenterPanel cities={index?.cities ?? []} />
           <ContinuousLearningPanel onChanged={reload} />
@@ -856,6 +859,88 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Relationship Intelligence & Universal Entity Graph (27.9) ────────────────
+function RelationshipGraphPanel() {
+  const [data, setData] = useState<RelationshipReport | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getRelationshipGraphAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+  const band = (n: number): "green" | "amber" | "red" => (n >= 66 ? "green" : n >= 40 ? "amber" : "red");
+
+  return (
+    <section className="rounded-3xl border-2 border-sky-500/50 bg-sky-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-sky-800">🕸️ מודיעין קשרים — גרף ישויות אוניברסלי</h2>
+          <p className="text-muted mt-1 text-[12px]">כל ישות יודעת כיצד היא קשורה לכל ישות אחרת. קשרים הם אזרחים מהמעלה הראשונה: עוצמה, ביטחון, ראיות, משך, טריות ואימות — מראיות אמיתיות בלבד.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-sky-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "בונה גרף…" : "בנה גרף קשרים"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Mini label="ישויות" value={fmt(data.graph.counts.nodes)} />
+            <Mini label="קשרים" value={fmt(data.graph.counts.edges)} />
+            <Mini label="חזקים" value={fmt(data.executive.totals.strong)} tone="green" />
+            <Mini label="חלשים" value={fmt(data.executive.totals.weak)} tone="red" />
+            <Mini label="מנותקים" value={fmt(data.executive.totals.disconnected)} />
+            <Mini label="בריאות רשת" value={`${data.executive.networkHealth}`} tone={band(data.executive.networkHealth)} />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {/* Most connected + strongest */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <BriefBlock title="🔗 המתווכים הכי מקושרים" items={data.network.mostConnectedBrokers.map((n) => `${n.name} — ${n.degree} קשרים`)} />
+            <BriefBlock title="🏢 המשרדים הכי משפיעים" items={data.network.mostInfluentialOffices.map((n) => `${n.name} — משקל ${n.weightedDegree}`)} />
+          </div>
+
+          {/* Strategic relationships */}
+          {data.executive.strategicRelationships.length > 0 && (
+            <div>
+              <b className="text-sky-800">⭐ קשרים אסטרטגיים (חזקים ומאומתים):</b>
+              <div className="mt-1 flex flex-col gap-1">
+                {data.executive.strategicRelationships.slice(0, 6).map((e) => {
+                  const fromName = data.graph.nodes.find((n) => n.id === e.from)?.name ?? e.from;
+                  const toName = data.graph.nodes.find((n) => n.id === e.to)?.name ?? e.to;
+                  return (
+                    <div key={e.id} className="border-line bg-surface flex items-center justify-between rounded-lg border px-3 py-1.5">
+                      <span className="text-ink"><b>{fromName}</b> <span className="text-sky-700">{RELATION_HE[e.type] ?? e.type}</span> <b>{toName}</b></span>
+                      <span className="text-muted text-[10px]">עוצמה {e.strength} · {e.occurrences}× · {e.verification}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Hidden opportunities */}
+          {data.network.hiddenOpportunities.length > 0 && (
+            <BriefBlock title="💎 הזדמנויות נסתרות (קשרים חסרים)" items={data.network.hiddenOpportunities.map((h) => `${h.aName} ↔ ${h.bName}: ${h.suggestion} (${h.sharedNeighbors} משותפים)`)} tone="green" />
+          )}
+
+          {/* CoS + Decision */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <b className="text-sky-800">🗣️ ה-Chief of Staff מסיק מהקשרים:</b>
+              <ul className="mt-1 flex flex-col gap-0.5">{data.chiefOfStaffAnswers.map((a, i) => <li key={i} className="text-muted text-[11px]">• {a.statement}</li>)}</ul>
+            </div>
+            <div className="border-line bg-surface rounded-xl border px-3 py-2">
+              <b className="text-sky-800">🎯 השפעת קשרים על החלטות:</b>
+              {data.decisionInfluences.length ? (
+                <ul className="mt-1 flex flex-col gap-0.5">{data.decisionInfluences.slice(0, 6).map((im, i) => <li key={i} className="text-muted text-[11px]">{im.direction === "increase" ? "⬆️" : im.direction === "decrease" ? "⬇️" : "▪️"} {im.note}</li>)}</ul>
+              ) : <p className="text-muted mt-1 text-[11px]">אין עדיין השפעות — נדרשים קשרים.</p>}
+            </div>
+          </div>
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · גרף קשרים v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Organizational Memory & Learning Brain (27.8) ────────────────────────────
 function OrgMemoryPanel() {
   const [data, setData] = useState<OrgMemoryReport | null>(null);

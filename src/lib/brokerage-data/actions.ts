@@ -40,6 +40,7 @@ import {
 import { getChiefOfStaff, type ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import { getOrgTruthReport, type OrgTruthReport } from "@/lib/truth-engine";
 import { getOrgMemoryReport, type OrgMemoryReport } from "@/lib/org-memory";
+import { getRelationshipReport, type RelationshipReport } from "@/lib/relationship-graph";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -209,6 +210,12 @@ export async function updateMissionStatusAction(missionId: string, status: strin
     revalidatePath("/brokerage-data");
     return { ok: r.ok, error: r.error };
   } catch (e) { console.error("[missions] status failed:", e); return { ok: false, error: "עדכון סטטוס נכשל." }; }
+}
+
+// ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────
+export async function getRelationshipGraphAction(): Promise<{ ok: boolean; result?: RelationshipReport; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getRelationshipReport(profile.org_id) }; }
+  catch (e) { console.error("[relationship-graph] report failed:", e); return { ok: false, error: "גרף הקשרים נכשל." }; }
 }
 
 // ── Phase 27.8 — Organizational Memory & Learning Brain ──────────────────────
