@@ -43,6 +43,7 @@ import { getOrgMemoryReport, type OrgMemoryReport } from "@/lib/org-memory";
 import { getRelationshipReport, type RelationshipReport } from "@/lib/relationship-graph";
 import { getBuyerTwins, type BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
 import { getSellerTwins, type SellerTwinsOverview } from "@/lib/digital-twin/sellers";
+import { getLeadTwins, type LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -224,6 +225,12 @@ export async function getBuyerTwinsAction(): Promise<{ ok: boolean; result?: Buy
 export async function getSellerTwinsAction(): Promise<{ ok: boolean; result?: SellerTwinsOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getSellerTwins(profile.org_id) }; }
   catch (e) { console.error("[digital-twin] seller twins failed:", e); return { ok: false, error: "בניית ה-Seller Twins נכשלה." }; }
+}
+
+// ── Phase 28.3 — Lead Digital Twin (third Twin) ──────────────────────────────
+export async function getLeadTwinsAction(): Promise<{ ok: boolean; result?: LeadTwinsOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getLeadTwins(profile.org_id) }; }
+  catch (e) { console.error("[digital-twin] lead twins failed:", e); return { ok: false, error: "בניית ה-Lead Twins נכשלה." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

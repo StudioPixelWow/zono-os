@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { OrgTruthReport } from "@/lib/truth-engine";
@@ -45,6 +45,7 @@ import type { RelationshipReport } from "@/lib/relationship-graph";
 import { RELATION_HE } from "@/lib/relationship-graph";
 import type { BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
 import type { SellerTwinsOverview } from "@/lib/digital-twin/sellers";
+import type { LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -349,6 +350,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <ChiefOfStaffPanel />
           <DigitalTwinPanel />
           <SellerTwinPanel />
+          <LeadTwinPanel />
           <TruthEnginePanel />
           <OrgMemoryPanel />
           <RelationshipGraphPanel />
@@ -863,6 +865,65 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Lead Digital Twin — third Twin on the framework (28.3) ───────────────────
+function LeadTwinPanel() {
+  const [data, setData] = useState<LeadTwinsOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getLeadTwinsAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-amber-500/50 bg-amber-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-amber-800">🎯 Digital Twin — לידים (Twin שלישי על אותה מסגרת)</h2>
+          <p className="text-muted mt-1 text-[12px]">הליד הוא ה-Twin השלישי: מקור, איכות, כוונה (קונה/מוכר), דחיפות, סיכוי המרה, סיכון כפילות/קשר והפעולה הבאה — מראיות בלבד.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-amber-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "בונה Twins…" : "בנה Lead Twins"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+            <Mini label="לידים" value={fmt(data.totals.leads)} />
+            <Mini label="חמים" value={fmt(data.totals.hot)} tone="green" />
+            <Mini label="קרים" value={fmt(data.totals.cold)} tone="red" />
+            <Mini label="קונים" value={fmt(data.totals.buyers)} />
+            <Mini label="מוכרים" value={fmt(data.totals.sellers)} />
+            <Mini label="כפילויות" value={fmt(data.totals.duplicates)} tone="amber" />
+            <Mini label="מתיישנים" value={fmt(data.totals.stale)} />
+            <Mini label="מוסמכים" value={fmt(data.totals.qualified)} tone="green" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.twins.slice(0, 6).map((t) => (
+            <div key={t.identity.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{t.identity.name}{t.classification.length ? <span className="text-amber-700 font-bold"> · {t.classification.join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 font-bold">המרה {t.profile.conversionProbability}%</span>
+                  <span className="text-muted">בריאות {t.health.score} · {t.health.label}</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                מקור {t.profile.source ?? "לא ידוע"} ({t.profile.sourceQuality}) · כוונה {t.profile.buyerSellerFit} ({t.profile.intentConfidence}%) · איכות {t.profile.leadQuality} · דחיפות {t.profile.urgency} · שלב {t.profile.stage}
+                {t.profile.duplicateRisk >= 60 ? <span> · כפילות {t.profile.duplicateRisk}%</span> : null}
+                {t.truth ? <span> · אמת נתונים {t.truth.truthScore}</span> : null}
+              </div>
+              <div className="text-amber-800 mt-1 text-[11px] font-bold">← הפעולה הבאה: {t.profile.nextBestAction}</div>
+              {t.missions[0] && <div className="text-muted text-[11px]">משימות: {t.missions.slice(0, 3).map((m) => m.title).join(", ")}</div>}
+              {t.learnings[0] && <div className="text-muted text-[11px]">למידה: {t.learnings[0].note}</div>}
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Lead Twin v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Seller Digital Twin — second Twin on the framework (28.2) ────────────────
 function SellerTwinPanel() {
   const [data, setData] = useState<SellerTwinsOverview | null>(null);

@@ -10,6 +10,8 @@ import { buildBuyerMatches } from "./buyers/matching";
 import type { BuyerSeed, BuyerActivityInput, ListingCandidate } from "./buyers/types";
 import { buildSellerTwin } from "./sellers/twin";
 import type { SellerSeed, SellerActivityInput } from "./sellers/types";
+import { buildLeadTwin } from "./leads/twin";
+import type { LeadSeed, LeadActivityInput } from "./leads/types";
 
 export interface DTCheck { name: string; pass: boolean; detail: string }
 export interface DTSelfCheck { ok: boolean; total: number; passed: number; checks: DTCheck[] }
@@ -105,6 +107,8 @@ export function runSelfCheck(): DTSelfCheck {
 
   // ── Seller Twin (second implementation, same framework) ─────────────────────
   runSellerChecks(add);
+  // ── Lead Twin (third implementation, same framework) ────────────────────────
+  runLeadChecks(add);
 
   const passed = checks.filter((c) => c.pass).length;
   return { ok: passed === checks.length, total: checks.length, passed, checks };
@@ -163,4 +167,50 @@ function runSellerChecks(add: (name: string, pass: boolean, detail: string) => v
   const noData = buildSellerTwin({ seed: sSeed({ desiredPrice: null, minimumPrice: null, dreamPrice: null, estimatedValue: null, motivationLabel: null, urgencyLevel: null, decisionStyle: null, propertyId: null, hasPhone: false, hasEmail: false }), activities: [], now: NOW });
   add("no data → low completeness + collect info", noData.profile.completeness < 40 && noData.decisions.some((d) => d.readiness === "needs_info"), `${noData.profile.completeness}`);
   add("seller confidence conservative (no data)", noData.confidence < 60, `${noData.confidence}`);
+}
+
+const lSeed = (over: Partial<LeadSeed> = {}): LeadSeed => ({
+  id: "LD1", name: "ליד בדיקה", source: "website", intent: "unknown", stage: "new",
+  score: 55, message: null, hasPhone: true, hasEmail: true,
+  propertyId: null, projectId: null, convertedBuyerId: null, convertedSellerId: null,
+  lostReason: null, duplicateContacts: 0, lastActivityAt: iso(2), createdAt: iso(10), updatedAt: iso(2), ...over,
+});
+const lAct = (kind: string, daysAgo: number, i: number): LeadActivityInput => ({ id: `la${i}`, kind, at: iso(daysAgo), summary: kind });
+
+function runLeadChecks(add: (name: string, pass: boolean, detail: string) => void) {
+  // New lead.
+  const fresh = buildLeadTwin({ seed: lSeed({ score: null }), activities: [], now: NOW });
+  add("lead uses framework (entity=lead)", fresh.identity.entityType === "lead" && fresh.version.length > 0, "");
+  add("lead scoring exists", typeof fresh.profile.leadQuality === "number" && typeof fresh.profile.conversionProbability === "number", "");
+  add("new lead → contact decision + follow-up mission", fresh.decisions.some((d) => d.action.includes("צור קשר")) && fresh.missions.some((m) => m.missionType === "LEAD_FOLLOWUP"), "");
+
+  // Hot lead (qualified, high score, referral, recent, buyer).
+  const hot = buildLeadTwin({ seed: lSeed({ source: "referral", intent: "buyer", stage: "qualified", score: 85 }), activities: [lAct("call", 1, 1), lAct("meeting", 2, 2)], now: NOW });
+  add("hot lead high conversion + classified", hot.profile.conversionProbability >= 60 && hot.classification.includes("ליד חם"), `${hot.profile.conversionProbability}`);
+  add("hot buyer lead → convert-buyer mission", hot.missions.some((m) => m.missionType === "LEAD_CONVERT_BUYER") && hot.classification.includes("ליד קונה"), "");
+
+  // Cold lead (lost).
+  const cold = buildLeadTwin({ seed: lSeed({ stage: "lost", score: 20, lostReason: "לא מעוניין" }), activities: [], now: NOW });
+  add("cold lead classified + low conversion", cold.classification.includes("ליד קר") && cold.profile.conversionProbability < 30, `${cold.profile.conversionProbability}`);
+
+  // Duplicate lead.
+  const dup = buildLeadTwin({ seed: lSeed({ duplicateContacts: 2 }), activities: [], now: NOW });
+  add("duplicate risk + dedup mission + learning", dup.classification.includes("כפילות") && dup.missions.some((m) => m.missionType === "LEAD_DEDUPLICATION") && dup.learnings.some((l) => l.type === "duplicate_risk"), "");
+
+  // Buyer lead (intent from message when unknown).
+  const buyerLead = buildLeadTwin({ seed: lSeed({ intent: "unknown", message: "אני מחפש דירה לקנות ברחובות", stage: "contacted" }), activities: [], now: NOW });
+  add("buyer intent detected from message", buyerLead.profile.intent === "buyer" && buyerLead.learnings.some((l) => l.type === "intent_detected"), buyerLead.profile.intent);
+
+  // Seller lead.
+  const sellerLead = buildLeadTwin({ seed: lSeed({ intent: "seller", stage: "qualified", score: 70 }), activities: [lAct("call", 2, 1)], now: NOW });
+  add("seller lead → convert-seller mission + fit", sellerLead.missions.some((m) => m.missionType === "LEAD_CONVERT_SELLER") && sellerLead.classification.includes("ליד מוכר"), "");
+
+  // Stale lead.
+  const stale = buildLeadTwin({ seed: lSeed({ stage: "contacted", lastActivityAt: iso(120) }), activities: [lAct("call", 120, 1)], now: NOW });
+  add("stale lead classified + going cold", stale.classification.includes("מתיישן") && stale.learnings.some((l) => l.type === "going_cold"), stale.classification.join(","));
+
+  // No data lead (no contact, unknown intent, no source/score).
+  const noData = buildLeadTwin({ seed: lSeed({ source: null, intent: "unknown", score: null, hasPhone: false, hasEmail: false, message: null, lastActivityAt: null }), activities: [], now: NOW });
+  add("no data → low completeness + contact-risk decision", noData.profile.completeness < 40 && noData.decisions.some((d) => d.readiness === "needs_info"), `${noData.profile.completeness}`);
+  add("lead confidence conservative (no data)", noData.confidence < 60 && noData.profile.contactRisk >= 70, `${noData.confidence}`);
 }
