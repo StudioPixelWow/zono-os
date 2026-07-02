@@ -53,6 +53,7 @@ import { getSellerAgentScorecards, type SellerAgentScorecardsOverview } from "@/
 import { getLeadAgentScorecards, type LeadAgentScorecardsOverview } from "@/lib/lead-agent";
 import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/office-agent";
 import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent-orchestrator";
+import { askZono, type AskZonoResponse, type ChatTurn } from "@/lib/ask-zono";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -310,6 +311,16 @@ export async function getOfficeGrowthScorecardAction(): Promise<{ ok: boolean; r
 export async function getOrchestratorDashboardAction(): Promise<{ ok: boolean; result?: OrchestratorOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOrchestratorDashboard(profile.org_id) }; }
   catch (e) { console.error("[orchestrator] dashboard failed:", e); return { ok: false, error: "מנצח הסוכנים נכשל." }; }
+}
+
+// ── Phase 30.1 — Ask ZONO (conversational, multi-engine, approval-gated) ─────
+export async function askZonoAction(query: string, history: ChatTurn[] = []): Promise<{ ok: boolean; result?: AskZonoResponse; error?: string }> {
+  try {
+    const q = (query ?? "").trim();
+    if (!q) return { ok: false, error: "יש להזין שאלה." };
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    return { ok: true, result: await askZono(profile.org_id, q, Array.isArray(history) ? history.slice(-8) : []) };
+  } catch (e) { console.error("[ask-zono] failed:", e); return { ok: false, error: "Ask ZONO נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

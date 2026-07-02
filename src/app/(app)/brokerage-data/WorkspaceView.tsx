@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction, getOfficeGrowthScorecardAction, getOrchestratorDashboardAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction, getOfficeGrowthScorecardAction, getOrchestratorDashboardAction, askZonoAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -62,6 +62,8 @@ import type { OfficeGrowthOverview } from "@/lib/office-agent";
 import { OFFICE_STRATEGY_HE, OFFICE_DECISION_HE } from "@/lib/office-agent";
 import type { OrchestratorOverview } from "@/lib/agent-orchestrator";
 import { AGENT_HE, EVENT_HE, STANCE_HE } from "@/lib/agent-orchestrator";
+import type { AskZonoResponse, ChatTurn } from "@/lib/ask-zono";
+import { ENGINE_HE } from "@/lib/ask-zono";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -363,6 +365,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       {/* ── Sources & coverage tab — forensic pipeline audit + city discovery ── */}
       {tab === "sources" && (
         <div className="flex flex-col gap-4">
+          <AskZonoPanel />
           <ChiefOfStaffPanel />
           <AgentsPanel />
           <OrchestratorPanel />
@@ -949,6 +952,92 @@ function SellerAgentPanel() {
         </div>
       )}
     </section>
+  );
+}
+
+// ── Ask ZONO — conversational intelligence (30.1) ───────────────────────────
+type AskMsg = { role: "user" | "assistant"; text: string; at: string; resp?: AskZonoResponse };
+const ASK_SUGGESTIONS = ["מה עליי לעשות היום?", "אילו מוכרים בסיכון נטישה?", "אילו קונים קרובים לסגירה?", "אילו נכסים דורשים הורדת מחיר?", "היכן לגייס מתווכים?", "אילו הזדמנויות עסקה פתוחות?"];
+
+function AskZonoPanel() {
+  const [messages, setMessages] = useState<AskMsg[]>([]);
+  const [input, setInput] = useState("");
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const ask = async (q: string) => {
+    const query = q.trim(); if (!query || pending) return;
+    setErr(null); setInput("");
+    const now = new Date().toISOString();
+    const history: ChatTurn[] = messages.map((m) => ({ role: m.role, text: m.text, intent: m.resp?.understanding.intent, at: m.at }));
+    setMessages((prev) => [...prev, { role: "user", text: query, at: now }]);
+    setPending(true);
+    try {
+      const r = await askZonoAction(query, history);
+      if (r.ok && r.result) setMessages((prev) => [...prev, { role: "assistant", text: r.result!.answer.executiveAnswer, at: new Date().toISOString(), resp: r.result }]);
+      else setErr(r.error ?? "נכשל");
+    } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); }
+  };
+
+  return (
+    <section className="rounded-3xl border-2 border-sky-600/50 bg-sky-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-sky-800">💬 Ask ZONO — שאל את המערכת</h2>
+          <p className="text-muted mt-1 text-[12px]">ממשק שיחה אחד מעל כל המנועים. שאל בשפה חופשית — ZONO מזהה כוונה, טוען רק את המנועים הנדרשים, ומחזיר תשובה עם נימוק, ראיות, מקורות, ביטחון והצעות פעולה (לאישור בלבד — ללא ביצוע אוטומטי).</p>
+        </div>
+        {messages.length > 0 && <button onClick={() => setMessages([])} className="text-muted rounded-lg border border-sky-300 px-3 py-1 text-[11px] font-bold">נקה שיחה</button>}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {ASK_SUGGESTIONS.map((s) => <button key={s} onClick={() => ask(s)} disabled={pending} className="rounded-full border border-sky-300 bg-sky-100/50 px-2.5 py-1 text-[11px] font-semibold text-sky-800 disabled:opacity-50">{s}</button>)}
+      </div>
+
+      {messages.length > 0 && (
+        <div className="mt-3 flex flex-col gap-3">
+          {messages.map((m, i) => (
+            <div key={i} className={cn("rounded-xl px-3 py-2 text-[12px]", m.role === "user" ? "bg-sky-100/70 self-end max-w-[85%]" : "border-line bg-surface border")}>
+              {m.role === "user" ? <span className="text-ink font-bold">{m.text}</span> : <AskAnswerView resp={m.resp!} onFollowUp={ask} />}
+            </div>
+          ))}
+        </div>
+      )}
+      {pending && <p className="text-muted mt-2 text-[11px]">חושב…</p>}
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+
+      <div className="mt-3 flex gap-2">
+        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") ask(input); }} placeholder="שאל שאלה… (למשל: אילו מוכרים בסיכון?)" className="border-line bg-surface flex-1 rounded-xl border px-3 py-2 text-[12px]" />
+        <button onClick={() => ask(input)} disabled={pending || !input.trim()} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">שאל</button>
+      </div>
+    </section>
+  );
+}
+
+function AskAnswerView({ resp, onFollowUp }: { resp: AskZonoResponse; onFollowUp: (q: string) => void }) {
+  const a = resp.answer;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-ink font-bold">{a.executiveAnswer}</p>
+      <p className="text-muted text-[11px]">🧠 {a.reasoning}</p>
+      {a.recommendations.length > 0 && (
+        <div className="text-[11px]"><span className="text-sky-800 font-bold">המלצות:</span> <span className="text-muted">{a.recommendations.slice(0, 4).join(" · ")}</span></div>
+      )}
+      {a.risks.length > 0 && <div className="text-rose-700 text-[11px]">⚠️ {a.risks.join(" · ")}</div>}
+      {a.opportunities.length > 0 && <div className="text-emerald-700 text-[11px]">✨ {a.opportunities.join(" · ")}</div>}
+      {a.actions.length > 0 && (
+        <div className="text-[11px]"><span className="text-sky-800 font-bold">פעולות (לאישור):</span> <span className="text-muted">{a.actions.slice(0, 3).map((x) => x.title).join(" · ")}</span></div>
+      )}
+      <div className="text-muted mt-0.5 flex flex-wrap items-center gap-2 text-[10px]">
+        <span className="rounded-full bg-sky-100 px-2 py-0.5 font-bold text-sky-800">ביטחון {a.confidence}%</span>
+        <span>מקורות: {a.explain.sourceEngines.map((e) => ENGINE_HE[e]).join(", ") || "—"}</span>
+      </div>
+      {a.evidence.length > 0 && <details className="text-[10px]"><summary className="text-muted cursor-pointer font-semibold">ראיות ומגבלות</summary><div className="text-muted mt-1">ראיות: {a.evidence.slice(0, 5).join(" · ")}<br />מגבלות: {a.explain.limitations.join(" · ")}</div></details>}
+      {a.followUps.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {a.followUps.map((f) => <button key={f} onClick={() => onFollowUp(f)} className="rounded-full border border-sky-300 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{f}</button>)}
+        </div>
+      )}
+    </div>
   );
 }
 
