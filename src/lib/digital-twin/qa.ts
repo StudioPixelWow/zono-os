@@ -8,6 +8,8 @@ import { createDigitalTwin, buildTwinMemory, learnFromActivity } from "./core";
 import { buildBuyerTwin } from "./buyers/twin";
 import { buildBuyerMatches } from "./buyers/matching";
 import type { BuyerSeed, BuyerActivityInput, ListingCandidate } from "./buyers/types";
+import { buildSellerTwin } from "./sellers/twin";
+import type { SellerSeed, SellerActivityInput } from "./sellers/types";
 
 export interface DTCheck { name: string; pass: boolean; detail: string }
 export interface DTSelfCheck { ok: boolean; total: number; passed: number; checks: DTCheck[] }
@@ -101,6 +103,64 @@ export function runSelfCheck(): DTSelfCheck {
   const learned = learnFromActivity(sellerTwin, [{ id: "y", kind: "offer", at: iso(0), summary: "offer", weight: 3 }], 70, 20, NOW);
   add("learnFromActivity folds memory", learned.memory.totalActivities === 2, `${learned.memory.totalActivities}`);
 
+  // ── Seller Twin (second implementation, same framework) ─────────────────────
+  runSellerChecks(add);
+
   const passed = checks.filter((c) => c.pass).length;
   return { ok: passed === checks.length, total: checks.length, passed, checks };
+}
+
+const sSeed = (over: Partial<SellerSeed> = {}): SellerSeed => ({
+  id: "S1", name: "מוכר בדיקה", motivationLabel: "relocation", urgencyLevel: "medium",
+  desiredPrice: 2_200_000, minimumPrice: 2_000_000, dreamPrice: 2_400_000, estimatedValue: 2_000_000,
+  decisionStyle: "אנליטי", mainObjection: null,
+  priceSensitivity: 50, timeSensitivity: 50, trustSensitivity: 50, cooperation: 60, negotiationFlexibility: 50,
+  hasSignedAgreement: false, propertyId: "P1", valuationId: "V1", hasPhone: true, hasEmail: true,
+  mustSellBy: null, targetSaleDate: null, createdAt: iso(90), updatedAt: iso(2), ...over,
+});
+const sAct = (kind: string, daysAgo: number, i: number): SellerActivityInput => ({ id: `sa${i}`, kind, at: iso(daysAgo), summary: kind });
+
+function runSellerChecks(add: (name: string, pass: boolean, detail: string) => void) {
+  // New seller (no activity).
+  const fresh = buildSellerTwin({ seed: sSeed(), activities: [], now: NOW });
+  add("seller uses framework (entity=seller)", fresh.identity.entityType === "seller" && fresh.version.length > 0, "");
+  add("new seller empty health + notes", fresh.health.label === "ריק" && fresh.notes.length > 0, fresh.health.label);
+  add("seller profile exists", typeof fresh.profile.motivation === "number" && typeof fresh.profile.churnRisk === "number" && typeof fresh.profile.readinessToSign === "number", "");
+  add("seller next best action present", fresh.profile.nextBestAction.length > 0, "");
+
+  // Motivated seller.
+  const motivated = buildSellerTwin({ seed: sSeed({ urgencyLevel: "high", timeSensitivity: 80 }), activities: [sAct("call", 2, 1), sAct("meeting", 4, 2), sAct("valuation", 5, 3)], now: NOW });
+  add("motivated → high motivation + hot", motivated.profile.motivation >= 55 && motivated.classification.includes("מוכר חם"), `${motivated.profile.motivation}`);
+  add("seller decisions exist + ranked", motivated.decisions.length > 0 && motivated.decisions.every((d, i) => i === 0 || motivated.decisions[i - 1].priority >= d.priority), "");
+  add("seller missions include follow-up", motivated.missions.some((m) => m.missionType === "SELLER_FOLLOWUP"), "");
+
+  // Price-resistant seller (desired ≫ valuation).
+  const priceGap = buildSellerTwin({ seed: sSeed({ desiredPrice: 2_600_000, estimatedValue: 2_000_000, priceSensitivity: 80 }), activities: [sAct("price", 3, 1), sAct("objection", 5, 2)], now: NOW });
+  add("price-gap classified + learned", priceGap.classification.includes("פער מחיר") && priceGap.learnings.some((l) => l.type === "price_resistance"), priceGap.classification.join(","));
+  add("price-gap → suggest price update", priceGap.decisions.some((d) => d.action.includes("עדכון מחיר")) && priceGap.missions.some((m) => m.missionType === "PRICE_REDUCTION"), "");
+
+  // Seller at risk (stale + objections + low trust).
+  const atRisk = buildSellerTwin({ seed: sSeed({ trustSensitivity: 10, cooperation: 15, updatedAt: iso(120) }), activities: [sAct("objection", 100, 1), sAct("objection", 110, 2)], now: NOW });
+  add("at-risk churn + recovery", atRisk.profile.churnRisk >= 55 && (atRisk.classification.includes("בסיכון נטישה") || atRisk.missions.some((m) => m.missionType === "SELLER_RECOVERY")), `${atRisk.profile.churnRisk}`);
+
+  // Ready-to-sign seller.
+  const ready = buildSellerTwin({ seed: sSeed({ urgencyLevel: "high", cooperation: 90, trustSensitivity: 85 }), activities: [sAct("meeting", 1, 1), sAct("valuation", 2, 2), sAct("document", 1, 3), sAct("call", 1, 4)], now: NOW });
+  add("ready-to-sign → send agreement", ready.profile.readinessToSign >= 55 && (ready.decisions.some((d) => d.action.includes("הסכם")) || ready.classification.includes("מוכן לחתימה")), `${ready.profile.readinessToSign}`);
+
+  // Signed seller → property prep + marketing launch missions.
+  const signed = buildSellerTwin({ seed: sSeed({ hasSignedAgreement: true }), activities: [sAct("agreement", 3, 1)], now: NOW });
+  add("signed → prep + marketing missions", signed.missions.some((m) => m.missionType === "PROPERTY_PREPARATION") && signed.missions.some((m) => m.missionType === "MARKETING_LAUNCH"), "");
+  add("signed classified חתום", signed.classification.includes("חתום"), "");
+
+  // Stale seller.
+  const stale = buildSellerTwin({ seed: sSeed(), activities: [sAct("call", 120, 1)], now: NOW });
+  add("stale classified + learned", stale.classification.includes("מתיישן") && stale.learnings.some((l) => l.type === "stale_followup"), stale.classification.join(","));
+
+  // High-value seller.
+  add("high-value tag", buildSellerTwin({ seed: sSeed({ desiredPrice: 5_000_000, estimatedValue: 4_800_000 }), activities: [], now: NOW }).classification.includes("ערך גבוה"), "");
+
+  // No data seller.
+  const noData = buildSellerTwin({ seed: sSeed({ desiredPrice: null, minimumPrice: null, dreamPrice: null, estimatedValue: null, motivationLabel: null, urgencyLevel: null, decisionStyle: null, propertyId: null, hasPhone: false, hasEmail: false }), activities: [], now: NOW });
+  add("no data → low completeness + collect info", noData.profile.completeness < 40 && noData.decisions.some((d) => d.readiness === "needs_info"), `${noData.profile.completeness}`);
+  add("seller confidence conservative (no data)", noData.confidence < 60, `${noData.confidence}`);
 }

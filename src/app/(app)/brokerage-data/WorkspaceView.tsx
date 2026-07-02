@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { OrgTruthReport } from "@/lib/truth-engine";
@@ -44,6 +44,7 @@ import type { OrgMemoryReport } from "@/lib/org-memory";
 import type { RelationshipReport } from "@/lib/relationship-graph";
 import { RELATION_HE } from "@/lib/relationship-graph";
 import type { BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
+import type { SellerTwinsOverview } from "@/lib/digital-twin/sellers";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -347,6 +348,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="flex flex-col gap-4">
           <ChiefOfStaffPanel />
           <DigitalTwinPanel />
+          <SellerTwinPanel />
           <TruthEnginePanel />
           <OrgMemoryPanel />
           <RelationshipGraphPanel />
@@ -861,6 +863,65 @@ const VERDICT_HE: Record<BrokeragePipelineAudit["verdict"], string> = {
 };
 
 // ── Action Center — Universal Mission Engine (27.5) ──────────────────────────
+// ── Seller Digital Twin — second Twin on the framework (28.2) ────────────────
+function SellerTwinPanel() {
+  const [data, setData] = useState<SellerTwinsOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getSellerTwinsAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-teal-500/50 bg-teal-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-teal-800">🏷️ Digital Twin — מוכרים (Twin שני על אותה מסגרת)</h2>
+          <p className="text-muted mt-1 text-[12px]">המוכר הוא ה-Twin השני על מסגרת ה-Digital Twin: מוטיבציה, אמון, פער מחיר, סיכון נטישה, מוכנות לחתימה, החלטות ומשימות — מראיות בלבד.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-teal-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "בונה Twins…" : "בנה Seller Twins"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            <Mini label="מוכרים" value={fmt(data.totals.sellers)} />
+            <Mini label="חמים" value={fmt(data.totals.hot)} tone="green" />
+            <Mini label="בסיכון" value={fmt(data.totals.atRisk)} tone="red" />
+            <Mini label="פער מחיר" value={fmt(data.totals.priceGap)} tone="amber" />
+            <Mini label="מוכן לחתימה" value={fmt(data.totals.readyToSign)} tone="green" />
+            <Mini label="מתיישנים" value={fmt(data.totals.stale)} />
+            <Mini label="ערך גבוה" value={fmt(data.totals.highValue)} tone="green" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.twins.slice(0, 6).map((t) => (
+            <div key={t.identity.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{t.identity.name}{t.classification.length ? <span className="text-teal-700 font-bold"> · {t.classification.join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className="rounded-full bg-teal-100 px-2 py-0.5 font-bold">אמון בעסקה {t.profile.sellerConfidence}%</span>
+                  <span className="text-muted">בריאות {t.health.score} · {t.health.label}</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                מוטיבציה {t.profile.motivation} · אמון {t.profile.trust} · מוכנות {t.profile.readinessToSign} · נטישה {t.profile.churnRisk} · חלון {t.profile.timeline}
+                {t.profile.priceGapPct != null ? <span> · פער מחיר {t.profile.priceGapPct}%</span> : null}
+                {t.truth ? <span> · אמת נתונים {t.truth.truthScore}</span> : null}
+              </div>
+              <div className="text-teal-800 mt-1 text-[11px] font-bold">← הפעולה הבאה: {t.profile.nextBestAction}</div>
+              {t.decisions[0] && <div className="text-muted text-[11px]">החלטה: {t.decisions[0].action} ({t.decisions[0].priority}) · {t.decisions[0].evidence[0] ?? ""}</div>}
+              {t.missions[0] && <div className="text-muted text-[11px]">משימות: {t.missions.slice(0, 3).map((m) => m.title).join(", ")}</div>}
+              {t.learnings[0] && <div className="text-muted text-[11px]">למידה: {t.learnings[0].note}</div>}
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Seller Twin v{data.version}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Digital Twin Framework — Buyer Twins (28.1) ──────────────────────────────
 function DigitalTwinPanel() {
   const [data, setData] = useState<BuyerTwinsOverview | null>(null);
