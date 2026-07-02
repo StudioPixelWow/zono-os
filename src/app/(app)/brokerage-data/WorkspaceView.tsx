@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -56,6 +56,8 @@ import type { BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
 import { BUYER_STRATEGY_HE } from "@/lib/buyer-agent";
 import type { SellerAgentScorecardsOverview } from "@/lib/seller-agent";
 import { SELLER_STRATEGY_HE } from "@/lib/seller-agent";
+import type { LeadAgentScorecardsOverview } from "@/lib/lead-agent";
+import { LEAD_STRATEGY_HE, ROUTING_HE } from "@/lib/lead-agent";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";
@@ -360,6 +362,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
           <ChiefOfStaffPanel />
           <AgentsPanel />
           <ListingAgentPanel />
+          <LeadAgentPanel />
           <BuyerAgentPanel />
           <SellerAgentPanel />
           <CustomerJourneyPanel />
@@ -937,6 +940,70 @@ function SellerAgentPanel() {
           ))}
 
           <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Seller Agent v{data.version} · ההמלצות זורמות לתיבת הסוכנים · אין ביצוע אוטומטי</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Lead Intelligence Agent — per-lead scorecards (29.6) ─────────────────────
+function LeadAgentPanel() {
+  const [data, setData] = useState<LeadAgentScorecardsOverview | null>(null);
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => { setPending(true); setErr(null); try { const r = await getLeadAgentScorecardsAction(); if (r.ok) setData(r.result ?? null); else setErr(r.error ?? "נכשל"); } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); } };
+
+  return (
+    <section className="rounded-3xl border-2 border-violet-500/50 bg-violet-50/30 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-violet-800">🎯 סוכן מודיעין לידים — כרטיס לכל ליד</h2>
+          <p className="text-muted mt-1 text-[12px]">מגע ראשון: מסווג כל ליד, מזהה כוונה, מונע כפילויות, ומנתב לקונה/מוכר/שניהם/טיפוח עם אסטרטגיה ו-Playbook מוסברים. ניתוב והמרה הן הצעות לאישור בלבד — ללא ביצוע אוטומטי, הכול דרך תיבת הסוכנים.</p>
+        </div>
+        <button onClick={run} disabled={pending} className="rounded-xl bg-violet-700 px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח לידים…" : "הפעל סוכן לידים"}</button>
+      </div>
+      {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
+      {data && (
+        <div className="mt-4 flex flex-col gap-4 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-9">
+            <Mini label="לידים" value={fmt(data.totals.leads)} />
+            <Mini label="חמים" value={fmt(data.totals.hot)} tone="green" />
+            <Mini label="כפילויות" value={fmt(data.totals.duplicates)} tone="red" />
+            <Mini label="→ קונה" value={fmt(data.totals.buyers)} />
+            <Mini label="→ מוכר" value={fmt(data.totals.sellers)} />
+            <Mini label="→ שניהם" value={fmt(data.totals.both)} tone="green" />
+            <Mini label="טיפוח" value={fmt(data.totals.nurture)} tone="amber" />
+            <Mini label="בדיקה אנושית" value={fmt(data.totals.humanReview)} tone="amber" />
+            <Mini label="מוכן להמרה" value={fmt(data.totals.convertReady)} tone="green" />
+          </div>
+
+          {data.notes.length > 0 && <p className="font-semibold text-amber-700">{data.notes.join(" · ")}</p>}
+
+          {data.scorecards.slice(0, 6).map((c) => (
+            <div key={c.id} className="border-line bg-surface rounded-xl border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-ink font-black">{c.name}{c.classification.length ? <span className="text-violet-700 font-bold"> · {c.classification.slice(0, 3).join(" · ")}</span> : ""}</span>
+                <span className="flex items-center gap-2 text-[10px]">
+                  <span className={cn("rounded-full px-2 py-0.5 font-bold", c.health.label === "בריא" ? "bg-green-100 text-green-800" : c.health.label === "בסיכון" || c.health.label === "רדום" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{c.health.label}</span>
+                  <span className="text-muted">בריאות {c.health.leadHealth} · המרה {c.health.conversionProbability} · כוונה {c.health.intentConfidence}</span>
+                </span>
+              </div>
+              <div className="text-muted mt-1 text-[11px]">
+                כוונה: <span className="font-bold text-violet-700">{c.intent.fit} ({c.intent.confidence}%)</span> · ניתוב מומלץ: <span className="font-bold text-violet-700">{ROUTING_HE[c.routing.target]}</span> · נגישות {c.health.contactability} · כפילות {c.health.duplicateRisk} · שלמות {c.health.dataCompleteness}
+                {c.truthScore != null ? <span> · אמת {c.truthScore}</span> : null}
+              </div>
+              <div className="text-violet-800 mt-1 rounded-lg border border-violet-600/30 bg-violet-50/40 px-2 py-1 text-[11px] font-bold">
+                🎯 {LEAD_STRATEGY_HE[c.strategy.recommendedStrategy] ?? c.strategy.recommendedStrategy} · ביטחון {c.strategy.confidence}% · {c.strategy.change.signal === "switch" ? "החלף אסטרטגיה" : c.strategy.change.signal === "succeeded" ? "הומר" : c.strategy.change.signal === "failed" ? "התקרר" : "פעיל"}
+                <span className="text-muted font-normal"> — {c.aiRecommendation}</span>
+              </div>
+              {c.opportunities[0] && <div className="text-emerald-700 mt-0.5 text-[11px]">✨ {c.opportunities.slice(0, 3).map((o) => o.title).join(" · ")}</div>}
+              {c.risks[0] && <div className="text-rose-700 mt-0.5 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
+              {c.strategy.playbook[0] && <div className="text-muted text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}{c.strategy.requiredApprovals.length ? ` · אישורים: ${c.strategy.requiredApprovals.join(",")}` : ""}</div>}
+              <div className="text-muted mt-0.5 text-[10px]">{c.routing.note}</div>
+            </div>
+          ))}
+
+          <p className="text-muted text-[10px]">נוצר {new Date(data.generatedAt).toLocaleString("he-IL")} · Lead Agent v{data.version} · ההמלצות זורמות לתיבת הסוכנים · אין המרה/ביצוע אוטומטי</p>
         </div>
       )}
     </section>

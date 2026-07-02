@@ -50,6 +50,7 @@ import { getAgentsDashboard, setAgentEnabled, approveInboxItem, rejectInboxItem,
 import { getListingScorecards, type ListingScorecardsOverview } from "@/lib/listing-agent";
 import { getBuyerAgentScorecards, type BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
 import { getSellerAgentScorecards, type SellerAgentScorecardsOverview } from "@/lib/seller-agent";
+import { getLeadAgentScorecards, type LeadAgentScorecardsOverview } from "@/lib/lead-agent";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -289,6 +290,12 @@ export async function getBuyerAgentScorecardsAction(): Promise<{ ok: boolean; re
 export async function getSellerAgentScorecardsAction(): Promise<{ ok: boolean; result?: SellerAgentScorecardsOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getSellerAgentScorecards(profile.org_id) }; }
   catch (e) { console.error("[seller-agent] scorecards failed:", e); return { ok: false, error: "סוכן המוכרים נכשל." }; }
+}
+
+// ── Phase 29.6 — Lead Intelligence Agent (per-lead scorecards) ───────────────
+export async function getLeadAgentScorecardsAction(): Promise<{ ok: boolean; result?: LeadAgentScorecardsOverview; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getLeadAgentScorecards(profile.org_id) }; }
+  catch (e) { console.error("[lead-agent] scorecards failed:", e); return { ok: false, error: "סוכן מודיעין הלידים נכשל." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────
