@@ -40,30 +40,35 @@ import {
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
 import type { OrgTruthReport } from "@/lib/truth-engine";
-import { FRESHNESS_HE, VERIFICATION_HE } from "@/lib/truth-engine";
+import { FRESHNESS_HE, VERIFICATION_HE } from "@/lib/truth-engine/types";
 import type { OrgMemoryReport } from "@/lib/org-memory";
 import type { RelationshipReport } from "@/lib/relationship-graph";
-import { RELATION_HE } from "@/lib/relationship-graph";
+import { RELATION_HE } from "@/lib/relationship-graph/types";
 import type { BuyerTwinsOverview } from "@/lib/digital-twin/buyers";
 import type { SellerTwinsOverview } from "@/lib/digital-twin/sellers";
 import type { LeadTwinsOverview } from "@/lib/digital-twin/leads";
 import type { CustomerJourneysOverview } from "@/lib/digital-twin/customer";
-import { STAGE_HE, ROLE_HE } from "@/lib/digital-twin/customer";
+import { STAGE_HE, ROLE_HE } from "@/lib/digital-twin/customer/types";
 import type { AgentsDashboard } from "@/lib/agent-framework";
+// NOTE: value (constant) imports below come from each engine's pure `/types`
+// submodule — NOT the package barrel — because the barrels re-export server-only
+// services. A client component importing a value from the barrel would pull
+// `server-only`/`node:async_hooks` into the browser bundle and break the build.
+// Type-only imports may stay on the barrel (they are erased at compile time).
 import type { ListingScorecardsOverview } from "@/lib/listing-agent";
-import { STRATEGY_HE } from "@/lib/listing-agent";
+import { STRATEGY_HE } from "@/lib/listing-agent/types";
 import type { BuyerAgentScorecardsOverview } from "@/lib/buyer-agent";
-import { BUYER_STRATEGY_HE } from "@/lib/buyer-agent";
+import { BUYER_STRATEGY_HE } from "@/lib/buyer-agent/types";
 import type { SellerAgentScorecardsOverview } from "@/lib/seller-agent";
-import { SELLER_STRATEGY_HE } from "@/lib/seller-agent";
+import { SELLER_STRATEGY_HE } from "@/lib/seller-agent/types";
 import type { LeadAgentScorecardsOverview } from "@/lib/lead-agent";
-import { LEAD_STRATEGY_HE, ROUTING_HE } from "@/lib/lead-agent";
+import { LEAD_STRATEGY_HE, ROUTING_HE } from "@/lib/lead-agent/types";
 import type { OfficeGrowthOverview } from "@/lib/office-agent";
-import { OFFICE_STRATEGY_HE, OFFICE_DECISION_HE } from "@/lib/office-agent";
+import { OFFICE_STRATEGY_HE, OFFICE_DECISION_HE } from "@/lib/office-agent/types";
 import type { OrchestratorOverview } from "@/lib/agent-orchestrator";
-import { AGENT_HE, EVENT_HE, STANCE_HE } from "@/lib/agent-orchestrator";
+import { AGENT_HE, EVENT_HE, STANCE_HE } from "@/lib/agent-orchestrator/types";
 import type { AskZonoResponse, ChatTurn } from "@/lib/ask-zono";
-import { ENGINE_HE } from "@/lib/ask-zono";
+import { ENGINE_HE } from "@/lib/ask-zono/types";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
 import type { BrandHierarchy } from "@/lib/brokerage-data/brand-identity/types";
 import type { CityTerritoryIntelligence } from "@/lib/brokerage-data/territory-intelligence/types";

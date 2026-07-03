@@ -3,8 +3,8 @@
 // from the office's AI decisions, view tasks/explainability, advance status.
 // Nothing auto-executes — every status change is a manual, explicit action.
 import { useState } from "react";
-import type { Mission, ExecStatus } from "@/lib/mission-engine";
-import { EXEC_STATUS_HE } from "@/lib/mission-engine";
+import type { Mission, ExecStatus } from "@/lib/mission-engine/types";
+import { EXEC_STATUS_HE } from "@/lib/mission-engine/types";
 import { generateOfficeMissionsAction, listOfficeMissionsAction, updateMissionStatusAction } from "@/lib/brokerage-data/actions";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
