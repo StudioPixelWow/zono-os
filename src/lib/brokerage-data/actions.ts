@@ -54,6 +54,7 @@ import { getLeadAgentScorecards, type LeadAgentScorecardsOverview } from "@/lib/
 import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/office-agent";
 import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent-orchestrator";
 import { askZono, type AskZonoResponse, type ChatTurn } from "@/lib/ask-zono";
+import { getAiHome, type AiHomeData } from "@/lib/ai-home";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -311,6 +312,12 @@ export async function getOfficeGrowthScorecardAction(): Promise<{ ok: boolean; r
 export async function getOrchestratorDashboardAction(): Promise<{ ok: boolean; result?: OrchestratorOverview; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getOrchestratorDashboard(profile.org_id) }; }
   catch (e) { console.error("[orchestrator] dashboard failed:", e); return { ok: false, error: "מנצח הסוכנים נכשל." }; }
+}
+
+// ── Phase 30.2 — Unified AI Workspace (AI Home aggregate) ───────────────────
+export async function getAiHomeAction(): Promise<{ ok: boolean; result?: AiHomeData; error?: string }> {
+  try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getAiHome(profile.org_id) }; }
+  catch (e) { console.error("[ai-home] failed:", e); return { ok: false, error: "טעינת מרחב העבודה נכשלה." }; }
 }
 
 // ── Phase 30.1 — Ask ZONO (conversational, multi-engine, approval-gated) ─────
