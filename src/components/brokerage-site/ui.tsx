@@ -24,9 +24,9 @@ export function Stat({ label, value }: { label: string; value: string }) {
 
 const fmt = (n: number | null) => (n == null ? null : `₪${n.toLocaleString("he-IL")}`);
 
-export function PropertyCard({ slug, id, title, price, image, badge }: { slug: string; id: string; title: string; price: number | null; image: string | null; badge?: string | null }) {
+export function PropertyCard({ slug, id, title, price, image, badge, base = "ai-site" }: { slug: string; id: string; title: string; price: number | null; image: string | null; badge?: string | null; base?: "ai-site" | "ai-agent" }) {
   return (
-    <Link href={`/ai-site/${slug}/property/${id}`} className="group overflow-hidden rounded-2xl border border-white/40 bg-white/60 shadow-md backdrop-blur-md transition hover:shadow-xl">
+    <Link href={`/${base}/${slug}/property/${id}`} className="group overflow-hidden rounded-2xl border border-white/40 bg-white/60 shadow-md backdrop-blur-md transition hover:shadow-xl">
       <div className="relative aspect-[4/3] bg-slate-100">
         {image ? <img src={image} alt={title} className="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" /> : <div className="flex h-full items-center justify-center text-slate-400">🏠</div>}
         {badge && <span className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ background: "var(--site-gradient)" }}>{badge}</span>}

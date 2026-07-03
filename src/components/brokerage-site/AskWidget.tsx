@@ -7,7 +7,7 @@ import { useState } from "react";
 
 interface Turn { role: "user" | "assistant"; text: string; followUps?: string[]; confidence?: number }
 
-export default function AskWidget({ slug, office, suggestions = [] }: { slug: string; office: string; suggestions?: string[] }) {
+export default function AskWidget({ slug, office, suggestions = [], apiBase = "site-ai", title }: { slug: string; office: string; suggestions?: string[]; apiBase?: "site-ai" | "agent-site"; title?: string }) {
   const [msgs, setMsgs] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -16,7 +16,7 @@ export default function AskWidget({ slug, office, suggestions = [] }: { slug: st
     const query = q.trim(); if (!query || pending) return;
     setInput(""); setMsgs((m) => [...m, { role: "user", text: query }]); setPending(true);
     try {
-      const res = await fetch(`/api/site-ai/${encodeURIComponent(slug)}/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query }) });
+      const res = await fetch(`/api/${apiBase}/${encodeURIComponent(slug)}/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query }) });
       const j = await res.json();
       const d = j?.data;
       setMsgs((m) => [...m, { role: "assistant", text: d?.answer ?? "לא הצלחתי לענות כרגע.", followUps: d?.followUps ?? [], confidence: d?.confidence }]);
@@ -25,7 +25,7 @@ export default function AskWidget({ slug, office, suggestions = [] }: { slug: st
 
   return (
     <div dir="rtl" className="rounded-3xl border border-white/40 bg-white/60 p-5 shadow-xl backdrop-blur-md">
-      <h3 className="text-lg font-black" style={{ color: "var(--site-accent)" }}>💬 שאל את {office}</h3>
+      <h3 className="text-lg font-black" style={{ color: "var(--site-accent)" }}>💬 {title ?? `שאל את ${office}`}</h3>
       <p className="mt-1 text-[12px] text-slate-600">תשובות מיידיות ממלאי המשרד — נכסים, אזורים, ייעוץ קנייה/מכירה. ללא התחייבות.</p>
       {suggestions.length > 0 && msgs.length === 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
