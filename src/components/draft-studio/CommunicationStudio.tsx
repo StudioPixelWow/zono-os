@@ -6,6 +6,8 @@
 // APPROVAL-GATED: nothing is ever sent. Value constants imported from /types only.
 // ============================================================================
 import { useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { generateDraftAction } from "@/lib/brokerage-data/actions";
 import type { DraftBundle, Draft, DraftTarget, Channel, Purpose, Tone, Language, EntityKind } from "@/lib/draft-studio/types";
@@ -19,9 +21,12 @@ type VerKey = "primary" | "short" | "long" | "alternative" | "altTone";
 const VER_HE: Record<VerKey, string> = { primary: "ראשית", short: "קצר", long: "מפורט", alternative: "ניסוח חלופי", altTone: "טון אחר" };
 
 export default function CommunicationStudio({ initialTarget }: { initialTarget?: DraftTarget }) {
-  const [kind, setKind] = useState<EntityKind>(initialTarget?.entityKind ?? "buyer");
-  const [entityId, setEntityId] = useState(initialTarget?.entityId ?? "");
-  const [name, setName] = useState(initialTarget?.name ?? "");
+  const sp = useSearchParams();
+  const wfId = sp.get("wf");
+  const wfKind = (sp.get("kind") as EntityKind | null);
+  const [kind, setKind] = useState<EntityKind>(initialTarget?.entityKind ?? wfKind ?? "buyer");
+  const [entityId, setEntityId] = useState(initialTarget?.entityId ?? sp.get("id") ?? "");
+  const [name, setName] = useState(initialTarget?.name ?? sp.get("name") ?? "");
   const [channel, setChannel] = useState<Channel>("whatsapp");
   const [purpose, setPurpose] = useState<Purpose>("follow_up");
   const [tone, setTone] = useState<Tone>("professional");
@@ -52,6 +57,13 @@ export default function CommunicationStudio({ initialTarget }: { initialTarget?:
         <h1 className="text-2xl font-black text-ink">✉️ סטודיו התקשורת של ZONO</h1>
         <p className="text-muted text-[13px]">מכין תקשורת לכל ישות — טיוטה בלבד. שום דבר לא נשלח אוטומטית; כל טיוטה מחייבת אישור והעתקה ידנית.</p>
       </header>
+
+      {wfId && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-300 bg-sky-50/50 px-3 py-2 text-[12px]">
+          <span className="text-sky-800 font-semibold">🔁 נפתח מתוך Workflow — צעד הטיוטה מסומן "הוכן / ממתין לאישור". ZONO אינו שולח אוטומטית.</span>
+          <Link href="/workflow-builder" className="rounded-lg border border-sky-400 px-3 py-1 font-bold text-sky-800">חזור לתהליך</Link>
+        </div>
+      )}
 
       {/* Target + request selectors */}
       <section className="rounded-2xl border border-line bg-surface p-4">

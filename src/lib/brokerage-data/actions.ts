@@ -56,7 +56,7 @@ import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent
 import { askZono, type AskZonoResponse, type ChatTurn } from "@/lib/ask-zono";
 import { getAiHome, type AiHomeData } from "@/lib/ai-home";
 import { generateDraft, type DraftBundle, type DraftRequest, type DraftTarget } from "@/lib/draft-studio";
-import { listWorkflowTemplates, startPersistentWorkflow, advancePersistentWorkflow, getPersistentWorkflow, listActiveWorkflows, listCompletedWorkflows, listPendingApprovalWorkflows, type WorkflowTemplateSummary, type WorkflowTarget, type WorkflowSummaryRow } from "@/lib/workflow-builder";
+import { listWorkflowTemplates, startPersistentWorkflow, advancePersistentWorkflow, getPersistentWorkflow, listActiveWorkflows, listCompletedWorkflows, listPendingApprovalWorkflows, listEntityWorkflows, type WorkflowTemplateSummary, type WorkflowTarget, type WorkflowSummaryRow } from "@/lib/workflow-builder";
 import type { Workflow, WorkflowEvent } from "@/lib/workflow-builder/types";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
@@ -329,13 +329,24 @@ export async function listWorkflowTemplatesAction(): Promise<{ ok: boolean; resu
   catch (e) { console.error("[workflow] templates failed:", e); return { ok: false, error: "טעינת התבניות נכשלה." }; }
 }
 
-export async function startWorkflowAction(templateId: string, target: WorkflowTarget): Promise<{ ok: boolean; result?: Workflow; migrationRequired?: boolean; error?: string }> {
+export async function startWorkflowAction(templateId: string, target: WorkflowTarget): Promise<{ ok: boolean; result?: Workflow; migrationRequired?: boolean; duplicate?: WorkflowSummaryRow; error?: string }> {
   try {
     const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
     if (!target?.entityId || !target?.entityKind) return { ok: false, error: "יש לבחור ישות." };
     const r = await startPersistentWorkflow(profile.org_id, templateId, target, profile.id ?? null);
-    return r.ok ? { ok: true, result: r.workflow } : { ok: false, migrationRequired: r.migrationRequired, error: r.error };
+    return r.ok ? { ok: true, result: r.workflow } : { ok: false, migrationRequired: r.migrationRequired, duplicate: r.duplicate, error: r.error };
   } catch (e) { console.error("[workflow] start failed:", e); return { ok: false, error: "הפעלת התהליך נכשלה." }; }
+}
+
+// Active workflows for a specific entity — powers the "Workflow פעיל" badge +
+// duplicate prevention on every surface.
+export async function getEntityWorkflowsAction(entityKind: string, entityId: string): Promise<{ ok: boolean; result?: WorkflowSummaryRow[]; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    if (!entityKind || !entityId) return { ok: true, result: [] };
+    const r = await listEntityWorkflows(profile.org_id, entityKind, entityId);
+    return { ok: true, result: r.rows };
+  } catch (e) { console.error("[workflow] entity list failed:", e); return { ok: false, error: "טעינת התהליכים נכשלה." }; }
 }
 
 export async function advanceWorkflowAction(workflowId: string, event: WorkflowEvent): Promise<{ ok: boolean; result?: Workflow; error?: string }> {

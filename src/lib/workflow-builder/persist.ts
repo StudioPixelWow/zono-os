@@ -11,18 +11,23 @@ import { instantiateWorkflow, advanceWorkflow } from "./engine";
 import { getTemplate } from "./templates";
 import { buildWorkflowContext, type WorkflowTarget } from "./service";
 import { planExecution } from "./execution";
-import { insertWorkflow, loadWorkflow, saveAdvance, listWorkflows, type WorkflowSummaryRow } from "./repository";
+import { insertWorkflow, loadWorkflow, saveAdvance, listWorkflows, listEntityActiveWorkflows, type WorkflowSummaryRow } from "./repository";
 import { createMission } from "@/lib/mission-engine";
 import { generateDraft } from "@/lib/draft-studio";
 import type { Workflow, WorkflowEvent, WorkflowHistoryEntry, WorkflowStatus } from "./types";
 
-export interface StartResult { ok: boolean; workflow?: Workflow; migrationRequired?: boolean; error?: string }
+export interface StartResult { ok: boolean; workflow?: Workflow; migrationRequired?: boolean; duplicate?: WorkflowSummaryRow; error?: string }
 export interface AdvanceResult { ok: boolean; workflow?: Workflow; error?: string }
 
-/** Start + persist a workflow (real context from the existing engines). */
+/** Start + persist a workflow (real context from the existing engines).
+ *  Duplicate prevention: refuses a second ACTIVE workflow for the same
+ *  entity + template (returns the existing one instead). */
 export async function startPersistentWorkflow(orgId: string | null, templateId: string, target: WorkflowTarget, createdBy: string | null): Promise<StartResult> {
   const t = getTemplate(templateId);
   if (!t) return { ok: false, error: "תבנית לא נמצאה." };
+  const dupCheck = await listEntityActiveWorkflows(orgId, target.entityKind, target.entityId);
+  const existing = dupCheck.rows.find((r) => r.templateId === templateId);
+  if (existing) return { ok: false, duplicate: existing, error: "כבר קיים Workflow פעיל מאותה תבנית עבור ישות זו." };
   const context = await buildWorkflowContext(orgId, target);
   const wf = instantiateWorkflow(templateId, t.trigger, target, context);
   if (!wf) return { ok: false, error: "יצירת התהליך נכשלה." };
@@ -78,5 +83,9 @@ const ACTIVE: WorkflowStatus[] = ["draft", "running", "waiting_approval", "block
 const DONE: WorkflowStatus[] = ["completed", "cancelled"];
 
 export async function listActiveWorkflows(orgId: string | null): Promise<{ rows: WorkflowSummaryRow[]; migrationRequired: boolean }> { return listWorkflows(orgId, ACTIVE); }
+/** Active workflows for a specific entity (badge + duplicate prevention). */
+export async function listEntityWorkflows(orgId: string | null, entityKind: string, entityId: string): Promise<{ rows: WorkflowSummaryRow[]; migrationRequired: boolean }> {
+  return listEntityActiveWorkflows(orgId, entityKind, entityId);
+}
 export async function listCompletedWorkflows(orgId: string | null): Promise<{ rows: WorkflowSummaryRow[]; migrationRequired: boolean }> { return listWorkflows(orgId, DONE); }
 export async function listPendingApprovalWorkflows(orgId: string | null): Promise<{ rows: WorkflowSummaryRow[]; migrationRequired: boolean }> { return listWorkflows(orgId, ["waiting_approval"]); }

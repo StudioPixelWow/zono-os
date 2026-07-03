@@ -165,7 +165,7 @@ function WorkflowDetail({ wf, pending, onApprove, onReject, onCancel }: { wf: Wo
 
 function StepRow({ step, entityKind, entityId, entityName, isCurrent, pending, onApprove, onReject }: { step: WorkflowStep; entityKind: EntityKind; entityId: string; entityName: string; isCurrent: boolean; pending: boolean; onApprove: () => void; onReject: () => void }) {
   const icon = step.status === "completed" ? "✅" : step.status === "blocked" ? "⛔" : step.status === "cancelled" ? "🚫" : step.status === "waiting_approval" ? "⏳" : step.status === "active" ? "▶️" : "•";
-  const draftLink = `/communication-studio`;
+  const draftLink = `/communication-studio?wf=1&kind=${encodeURIComponent(entityKind)}&id=${encodeURIComponent(entityId)}&name=${encodeURIComponent(entityName)}`;
   const isDraftStep = step.action === "CREATE_DRAFT";
   return (
     <li className={cn("rounded-xl border px-3 py-2 text-[12px]", isCurrent ? "border-sky-400 bg-surface" : "border-line bg-surface")}>

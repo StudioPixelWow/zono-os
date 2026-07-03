@@ -102,16 +102,28 @@ export async function saveAdvance(wf: Workflow, newHistory: WorkflowHistoryEntry
   } catch { /* best-effort persist */ }
 }
 
-export interface WorkflowSummaryRow { id: string; name: string; entityKind: EntityKind; entityName: string; status: WorkflowStatus; percent: number; updatedAt: string; currentStepId: string | null }
+export interface WorkflowSummaryRow { id: string; templateId: string; name: string; entityKind: EntityKind; entityId: string; entityName: string; status: WorkflowStatus; percent: number; updatedAt: string; currentStepId: string | null }
+const SUMMARY_COLS = "id,template_id,name,entity_type,entity_id,entity_name,status,progress,updated_at";
 const toSummary = (r: Row): WorkflowSummaryRow => {
   const progress = (r.progress as Workflow["progress"]) ?? { percent: 0, currentStepId: null };
-  return { id: s(r.id), name: s(r.name), entityKind: s(r.entity_type) as EntityKind, entityName: s(r.entity_name), status: s(r.status) as WorkflowStatus, percent: progress.percent ?? 0, updatedAt: s(r.updated_at), currentStepId: progress.currentStepId ?? null };
+  return { id: s(r.id), templateId: s(r.template_id), name: s(r.name), entityKind: s(r.entity_type) as EntityKind, entityId: s(r.entity_id), entityName: s(r.entity_name), status: s(r.status) as WorkflowStatus, percent: progress.percent ?? 0, updatedAt: s(r.updated_at), currentStepId: progress.currentStepId ?? null };
 };
 
 export async function listWorkflows(orgId: string | null, statuses: WorkflowStatus[], limit = 50): Promise<{ rows: WorkflowSummaryRow[]; migrationRequired: boolean }> {
   const db = createServiceRoleClient();
   try {
-    const q = await db.from(W as never).select("id,name,entity_type,entity_name,status,progress,updated_at").in("status", statuses as never).order("updated_at", { ascending: false }).limit(limit);
+    const q = await db.from(W as never).select(SUMMARY_COLS).in("status", statuses as never).order("updated_at", { ascending: false }).limit(limit);
+    if (q.error) return { rows: [], migrationRequired: isMissing(q.error.message) };
+    return { rows: ((q.data as Row[]) ?? []).map(toSummary), migrationRequired: false };
+  } catch (e) { return { rows: [], migrationRequired: isMissing(e instanceof Error ? e.message : "") }; }
+}
+
+const ACTIVE_STATUSES: WorkflowStatus[] = ["draft", "running", "waiting_approval", "blocked"];
+/** Active workflows for a specific entity (for badges + duplicate prevention). */
+export async function listEntityActiveWorkflows(orgId: string | null, entityType: string, entityId: string): Promise<{ rows: WorkflowSummaryRow[]; migrationRequired: boolean }> {
+  const db = createServiceRoleClient();
+  try {
+    const q = await db.from(W as never).select(SUMMARY_COLS).eq("entity_type", entityType).eq("entity_id", entityId).in("status", ACTIVE_STATUSES as never).order("updated_at", { ascending: false }).limit(20);
     if (q.error) return { rows: [], migrationRequired: isMissing(q.error.message) };
     return { rows: ((q.data as Row[]) ?? []).map(toSummary), migrationRequired: false };
   } catch (e) { return { rows: [], migrationRequired: isMissing(e instanceof Error ? e.message : "") }; }

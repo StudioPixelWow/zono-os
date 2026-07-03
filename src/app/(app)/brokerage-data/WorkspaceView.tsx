@@ -67,6 +67,10 @@ import type { OfficeGrowthOverview } from "@/lib/office-agent";
 import { OFFICE_STRATEGY_HE, OFFICE_DECISION_HE } from "@/lib/office-agent/types";
 import type { OrchestratorOverview } from "@/lib/agent-orchestrator";
 import { AGENT_HE, EVENT_HE, STANCE_HE } from "@/lib/agent-orchestrator/types";
+import StartWorkflowButton from "@/components/workflow-builder/StartWorkflowButton";
+import type { EntityKind as WfEntityKind } from "@/lib/workflow-builder/types";
+const WF_KINDS = new Set(["buyer", "seller", "lead", "office", "property", "broker", "customer"]);
+const asWfKind = (k: string): WfEntityKind | null => (WF_KINDS.has(k) ? (k as WfEntityKind) : null);
 import type { AskZonoResponse, ChatTurn } from "@/lib/ask-zono";
 import { ENGINE_HE } from "@/lib/ask-zono/types";
 import type { CityEnrichmentResult } from "@/lib/brokerage-data/office-intelligence/types";
@@ -950,6 +954,7 @@ function SellerAgentPanel() {
               <div className="text-muted mt-0.5 text-[10px]">קונים: {c.buyerConnection.waitingBuyers.length} ממתינים · {c.buyerConnection.matchingBuyers.length} מתאימים · {c.buyerConnection.priorityBuyers.length} בעדיפות</div>
               {c.risks[0] && <div className="text-rose-700 mt-0.5 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
               {c.strategy.playbook[0] && <div className="text-muted text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}{c.strategy.requiredApprovals.length ? ` · אישורים: ${c.strategy.requiredApprovals.join(",")}` : ""}</div>}
+              <div className="mt-1"><StartWorkflowButton entityType="seller" entityId={c.id} entityName={c.name} hints={c.health.churnRisk >= 55 ? ["at_risk"] : []} compact sourceTitle={c.aiRecommendation} /></div>
             </div>
           ))}
 
@@ -1189,6 +1194,7 @@ function OfficeGrowthPanel() {
               <span className="text-muted font-normal"> — {c.aiRecommendation}</span>
             </div>
             <div className="text-muted mt-1 text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}{c.strategy.requiredApprovals.length ? ` · אישורים: ${c.strategy.requiredApprovals.join(",")}` : ""}</div>
+            <div className="mt-1"><StartWorkflowButton entityType="office" entityId={c.id} entityName={c.name} hints={["recruit"]} compact sourceTitle={c.aiRecommendation} /></div>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
@@ -1292,6 +1298,7 @@ function LeadAgentPanel() {
               {c.risks[0] && <div className="text-rose-700 mt-0.5 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
               {c.strategy.playbook[0] && <div className="text-muted text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}{c.strategy.requiredApprovals.length ? ` · אישורים: ${c.strategy.requiredApprovals.join(",")}` : ""}</div>}
               <div className="text-muted mt-0.5 text-[10px]">{c.routing.note}</div>
+              <div className="mt-1"><StartWorkflowButton entityType="lead" entityId={c.id} entityName={c.name} hints={["qualify", c.routing.target]} compact sourceTitle={c.aiRecommendation} /></div>
             </div>
           ))}
 
@@ -1354,6 +1361,7 @@ function BuyerAgentPanel() {
               <div className="text-muted mt-0.5 text-[10px]">התאמות: {c.matchIntel.perfect.length} מושלמות · {c.matchIntel.emerging.length} מתפתחות · {c.matchIntel.hidden.length} נסתרות{c.matchIntel.expired.length ? ` · ${c.matchIntel.expired.length} פגות` : ""}</div>
               {c.risks[0] && <div className="text-rose-700 mt-0.5 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
               {c.strategy.playbook[0] && <div className="text-muted text-[10px]">Playbook: {c.strategy.playbook.slice(0, 3).map((a) => `${a.order}. ${a.action}`).join(" ← ")}</div>}
+              <div className="mt-1"><StartWorkflowButton entityType="buyer" entityId={c.id} entityName={c.name} hints={["hot"]} compact sourceTitle={c.aiRecommendation} /></div>
             </div>
           ))}
 
@@ -1443,6 +1451,7 @@ function ListingAgentPanel() {
               {c.risks[0] && <div className="text-rose-700 mt-1 text-[11px]">⚠️ {c.risks.slice(0, 3).map((r) => r.title).join(" · ")}</div>}
               {c.recommendations[0] && <div className="text-orange-800 mt-1 text-[11px] font-bold">← {c.recommendations[0].action} (עדיפות {c.recommendations[0].priority}, ROI: {c.recommendations[0].roi})</div>}
               {c.recommendations[1] && <div className="text-muted text-[11px]">גם: {c.recommendations.slice(1, 3).map((r) => r.action).join(" · ")}</div>}
+              <div className="mt-1"><StartWorkflowButton entityType="property" entityId={c.id} entityName={c.title} hints={[c.health.label === "קריטי" ? "critical" : "stale", c.classification.includes("יוקרה") ? "luxury" : ""]} compact sourceTitle={c.strategy.recommendedStrategy} /></div>
             </div>
           ))}
 
@@ -1527,6 +1536,9 @@ function AgentsPanel() {
                       </span>
                     </div>
                     <div className="text-muted mt-0.5 text-[10px]">{i.explain.why} · אם יתעלמו: {i.explain.ifIgnored}{i.blockReason ? ` · ${i.blockReason}` : ""}{i.decisionReason ? ` · ${i.decisionReason}` : ""}</div>
+                    {i.entityType && i.entityId && asWfKind(i.entityType) && i.status === "pending" && !i.blocked && (
+                      <div className="mt-1"><StartWorkflowButton entityType={asWfKind(i.entityType)!} entityId={i.entityId} entityName={i.entityName ?? i.entity} hints={[i.missionType ?? ""]} compact sourceTitle={i.recommendation} label="התחל Workflow" /></div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -12,6 +12,12 @@ import { getAiHomeAction, askZonoAction, approveInboxItemAction, rejectInboxItem
 import type { AiHomeData, EntityRef, HomeChain, MissionRef } from "@/lib/ai-home/types";
 import type { AskZonoResponse, ChatTurn } from "@/lib/ask-zono";
 import { ENGINE_HE } from "@/lib/ask-zono/types";
+import StartWorkflowButton from "@/components/workflow-builder/StartWorkflowButton";
+import type { EntityKind } from "@/lib/workflow-builder/types";
+
+const WF_KINDS = new Set(["buyer", "seller", "lead", "office", "property", "broker", "customer"]);
+const asWfKind = (k: string): EntityKind | null => (WF_KINDS.has(k) ? (k as EntityKind) : null);
+const toneHints = (t: EntityRef["tone"]): string[] => (t === "bad" || t === "warn" ? ["at_risk", "critical", "stale"] : t === "good" ? ["hot"] : []);
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
 const toneCls = (t: EntityRef["tone"]) => t === "good" ? "text-emerald-700" : t === "bad" ? "text-rose-700" : t === "warn" ? "text-amber-700" : "text-muted";
@@ -187,12 +193,18 @@ function EntityList({ title, items, onSelect }: { title: string; items: EntityRe
     <div className="border-line bg-surface rounded-xl border px-3 py-2">
       <p className="text-ink mb-1 text-[12px] font-bold">{title}</p>
       {items.length === 0 ? <p className="text-muted text-[11px]">אין.</p> : (
-        <ul className="flex flex-col gap-0.5">
-          {items.slice(0, 5).map((e) => (
-            <li key={e.id}><button onClick={() => onSelect(e)} className="text-right text-[11px] hover:underline">
-              <span className={cn("font-bold", toneCls(e.tone))}>{e.name}</span> <span className="text-muted">· {e.detail}</span>
-            </button></li>
-          ))}
+        <ul className="flex flex-col gap-1">
+          {items.slice(0, 5).map((e) => {
+            const wfKind = asWfKind(e.kind);
+            return (
+              <li key={e.id} className="flex flex-wrap items-center justify-between gap-1">
+                <button onClick={() => onSelect(e)} className="text-right text-[11px] hover:underline">
+                  <span className={cn("font-bold", toneCls(e.tone))}>{e.name}</span> <span className="text-muted">· {e.detail}</span>
+                </button>
+                {wfKind && <StartWorkflowButton entityType={wfKind} entityId={e.id} entityName={e.name} hints={toneHints(e.tone)} compact sourceTitle={e.detail} />}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -254,6 +266,11 @@ function ContextDrawer({ ref_, onClose }: { ref_: { kind: string; id: string; na
         <p className="text-ink font-bold">סיכום AI</p>
         <p className="text-muted mt-1">{ref_.detail || "אין פרטים נוספים."}</p>
       </div>
+      {asWfKind(ref_.kind) && (
+        <div className="mt-3">
+          <StartWorkflowButton entityType={asWfKind(ref_.kind)!} entityId={ref_.id} entityName={ref_.name} sourceTitle={ref_.detail} label="התחל Workflow לישות" />
+        </div>
+      )}
       <p className="text-muted mt-3 text-[11px]">פרטי הישות מוצגים מתוך הלוחות — לניתוח מלא פתחו את כרטיס הישות המתאים או שאלו את Ask ZONO. אין ביצוע אוטומטי.</p>
     </div>
   );
@@ -295,6 +312,10 @@ function AskZonoDock({ questions }: { questions: string[] }) {
                     <p className="text-ink font-bold">{m.text}</p>
                     {m.resp && <p className="text-muted mt-0.5 text-[10px]">ביטחון {m.resp.answer.confidence}% · {m.resp.answer.explain.sourceEngines.map((e) => ENGINE_HE[e]).join(", ")}</p>}
                     {m.resp && m.resp.answer.followUps.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{m.resp.answer.followUps.slice(0, 3).map((f) => <button key={f} onClick={() => ask(f)} className="rounded-full border border-sky-300 px-1.5 py-0.5 text-[9px] text-sky-700">{f}</button>)}</div>}
+                    {m.resp && (() => {
+                      const a = m.resp!.answer.actions.find((x) => x.entityType && x.entityId && asWfKind(x.entityType));
+                      return a ? <div className="mt-1"><StartWorkflowButton entityType={asWfKind(a.entityType!)!} entityId={a.entityId!} entityName={a.title} compact sourceTitle="הצעת Ask ZONO" /></div> : null;
+                    })()}
                   </div>
                 )}
               </div>
