@@ -55,6 +55,7 @@ import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/offic
 import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent-orchestrator";
 import { askZono, type AskZonoResponse, type ChatTurn } from "@/lib/ask-zono";
 import { getAiHome, type AiHomeData } from "@/lib/ai-home";
+import { generateDraft, type DraftBundle, type DraftRequest, type DraftTarget } from "@/lib/draft-studio";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -318,6 +319,16 @@ export async function getOrchestratorDashboardAction(): Promise<{ ok: boolean; r
 export async function getAiHomeAction(): Promise<{ ok: boolean; result?: AiHomeData; error?: string }> {
   try { const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." }; return { ok: true, result: await getAiHome(profile.org_id) }; }
   catch (e) { console.error("[ai-home] failed:", e); return { ok: false, error: "טעינת מרחב העבודה נכשלה." }; }
+}
+
+// ── Phase 30.3 — Draft Studio (prepare communication; approval-gated, no send) ─
+export async function generateDraftAction(target: DraftTarget, request: DraftRequest): Promise<{ ok: boolean; result?: DraftBundle; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    if (!target?.entityId || !target?.entityKind) return { ok: false, error: "יש לבחור ישות." };
+    const sender = { brokerName: (profile.full_name ?? "").trim() || null, officeName: null };
+    return { ok: true, result: await generateDraft(profile.org_id, target, request, sender) };
+  } catch (e) { console.error("[draft-studio] failed:", e); return { ok: false, error: "יצירת הטיוטה נכשלה." }; }
 }
 
 // ── Phase 30.1 — Ask ZONO (conversational, multi-engine, approval-gated) ─────
