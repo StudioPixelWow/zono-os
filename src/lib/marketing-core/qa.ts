@@ -73,6 +73,12 @@ export function runSelfCheck(): MCSelfCheck {
   const empty = composeWorkspace(input({ buyers: { total: 0, hot: 0, luxury: 0, investors: 0, families: 0, dormant: 0, highValue: 0 }, sellers: { total: 0, hot: 0, atRisk: 0, readyToSign: 0, priceGap: 0, stale: 0, highValue: 0 }, leads: { total: 0, hot: 0, cold: 0, stale: 0, qualified: 0 }, listings: { luxury: 0, priceDrops: 0, newListings: 0, underOffer: 0, avgTruthScore: null, topNeighborhoods: [] }, execRecommendations: [], org: { score: 10, confidence: 20, offices: 0, brokers: 0, activeListings: 0 } }));
   add("empty office → still safe (base campaigns + note)", empty.campaigns.length >= 1 && empty.notes.length >= 0 && empty.health.score >= 0);
 
+  // REUSE of the existing marketing engine (segments / opportunities / health).
+  const reused = composeWorkspace(input({ existing: { segments: [{ key: "luxury", label: "יוקרה", size: 42 }, { key: "investors", label: "משקיעים", size: 33 }], opportunities: [{ title: "קהילת פייסבוק חמה", body: "מעורבות גבוהה", impact: "high", evidence: ["ציון 82"] }], healthBaseline: 90 } }));
+  add("reuses persisted segment sizes (luxury/investors)", reused.audiences.some((a) => a.kind === "luxury" && a.size === 42) && reused.audiences.some((a) => a.kind === "investors" && a.size === 33));
+  add("surfaces persisted marketing opportunities as insights", reused.insights.some((i) => i.title === "קהילת פייסבוק חמה"));
+  add("blends persisted health baseline", reused.health.score !== composeWorkspace(input()).health.score);
+
   // Large office performance.
   const t0 = Date.now();
   const big = input({ buyers: { total: 5000, hot: 800, luxury: 300, investors: 400, families: 900, dormant: 600, highValue: 500 }, listings: { luxury: 200, priceDrops: 120, newListings: 400, underOffer: 150, avgTruthScore: 74, topNeighborhoods: Array.from({ length: 40 }, (_, i) => `אזור ${i}`) } });

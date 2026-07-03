@@ -58,6 +58,10 @@ export function buildInsights(input: MarketingInput, campaigns: Campaign[]): Mar
   const out: MarketingInsight[] = [];
   const covered = new Set(campaigns.map((c) => c.goal.objective));
 
+  // REUSE: surface the existing marketing engine's curated opportunity signals
+  // instead of re-deriving them here.
+  for (const o of (input.existing?.opportunities ?? []).slice(0, 4)) out.push({ kind: "opportunity", title: o.title, body: o.body, evidence: o.evidence, impact: o.impact, confidence: 65, suggestedObjective: null });
+
   if (input.listings.luxury > 0 && !covered.has("luxury")) out.push({ kind: "luxury", title: "הזדמנות יוקרה", body: `${input.listings.luxury} נכסי יוקרה ללא קמפיין ייעודי.`, evidence: [`${input.listings.luxury} נכסי יוקרה`], impact: "high", confidence: 70, suggestedObjective: "luxury" });
   if (input.sellers.total < 10) out.push({ kind: "opportunity", title: "חיזוק גיוס מוכרים", body: `רק ${input.sellers.total} מוכרים — קמפיין גיוס יאזן את הצנרת מול הביקוש.`, evidence: [`${input.sellers.total} מוכרים`, `${input.buyers.total} קונים`], impact: "high", confidence: 65, suggestedObjective: "seller_acquisition" });
   if (input.buyers.dormant + input.leads.stale >= 5) out.push({ kind: "opportunity", title: "החזרת רדומים", body: `${input.buyers.dormant + input.leads.stale} אנשי קשר רדומים ניתנים להחזרה ברימרקטינג.`, evidence: [`${input.buyers.dormant} קונים רדומים`, `${input.leads.stale} לידים ישנים`], impact: "medium", confidence: 58, suggestedObjective: "remarketing" });
@@ -79,7 +83,7 @@ export function composeWorkspace(input: MarketingInput): MarketingWorkspace {
   const insights = buildInsights(input, campaigns);
   const audiences = buildAudiences(input);
   const pendingApprovals = campaigns.flatMap((c) => pendingGates(c).map((approval) => ({ campaignId: c.id, campaignName: c.name, approval })));
-  const health = marketingHealth(campaigns, pendingApprovals.length);
+  const health = marketingHealth(campaigns, pendingApprovals.length, input.existing?.healthBaseline ?? null);
   const notes = campaigns.length === 0 ? ["אין עדיין מספיק אותות לבניית תוכנית שיווק — הוסיפו קונים, מוכרים ונכסים."] : [];
   return { version: MARKETING_CORE_VERSION, generatedAt: new Date().toISOString(), health, campaigns, audiences, calendar, insights, pendingApprovals, notes };
 }

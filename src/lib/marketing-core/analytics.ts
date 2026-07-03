@@ -29,11 +29,13 @@ export function computeAnalytics(p: {
 
 const OBJECTIVE_COVERAGE = ["lead_generation", "seller_acquisition", "buyer_acquisition", "property_exposure", "brand_awareness"] as const;
 
-export function marketingHealth(campaigns: Campaign[], pendingApprovals: number): MarketingHealth {
+export function marketingHealth(campaigns: Campaign[], pendingApprovals: number, baseline: number | null = null): MarketingHealth {
   const covered = new Set(campaigns.map((c) => c.goal.objective));
   const coverage = clamp((OBJECTIVE_COVERAGE.filter((o) => covered.has(o)).length / OBJECTIVE_COVERAGE.length) * 100);
   const avgHealth = campaigns.length ? campaigns.reduce((s, c) => s + c.analytics.health, 0) / campaigns.length : 0;
-  const score = clamp(avgHealth * 0.6 + coverage * 0.4);
+  const computed = avgHealth * 0.6 + coverage * 0.4;
+  // Blend with the existing marketing engine's health baseline when available.
+  const score = clamp(baseline != null ? computed * 0.6 + baseline * 0.4 : computed);
   const label: MarketingHealth["label"] = score >= 75 ? "מצוין" : score >= 50 ? "יציב" : score >= 25 ? "דורש תשומת לב" : "חלש";
   const basis = [`${campaigns.length} קמפיינים בתכנון`, `כיסוי ${coverage}% מיעדי הליבה`, `${pendingApprovals} אישורים ממתינים`];
   return { score, label, activeCampaigns: campaigns.length, pendingApprovals, coverage, basis };

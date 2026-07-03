@@ -121,4 +121,11 @@ export interface MarketingInput {
   leads: { total: number; hot: number; cold: number; stale: number; qualified: number };
   listings: { luxury: number; priceDrops: number; newListings: number; underOffer: number; avgTruthScore: number | null; topNeighborhoods: string[] };
   execRecommendations: { title: string; why: string; evidence: string[]; confidence: number; impact: Impact; kind: string }[];
+  // REUSED from the existing src/lib/marketing engine (persisted community/segment
+  // intelligence) — Marketing Core does not re-segment or re-score; it defers to it.
+  existing?: {
+    segments: { key: string; label: string; size: number }[];
+    opportunities: { title: string; body: string; impact: Impact; evidence: string[] }[];
+    healthBaseline: number | null;
+  };
 }

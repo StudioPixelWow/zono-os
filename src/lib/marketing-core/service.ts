@@ -13,18 +13,20 @@ import { getSellerTwins } from "@/lib/digital-twin/sellers/service";
 import { getLeadTwins } from "@/lib/digital-twin/leads/service";
 import { getListingScorecards } from "@/lib/listing-agent";
 import { getChiefOfStaff } from "@/lib/chief-of-staff";
+import { getMarketingBoard } from "@/lib/marketing/service";
 import { askZono } from "@/lib/ask-zono";
 import { composeWorkspace } from "./planning";
 import type { MarketingInput, MarketingWorkspace, Impact, Campaign } from "./types";
 import { OBJECTIVE_HE } from "./types";
 
 async function buildInput(orgId: string | null): Promise<MarketingInput> {
-  const [buyers, sellers, leads, listingsO, cos] = await Promise.all([
+  const [buyers, sellers, leads, listingsO, cos, board] = await Promise.all([
     getBuyerTwins(orgId).catch(() => null),
     getSellerTwins(orgId).catch(() => null),
     getLeadTwins(orgId).catch(() => null),
     getListingScorecards(orgId, 200).catch(() => null),
     getChiefOfStaff(orgId).catch(() => null),
+    getMarketingBoard().catch(() => null),   // REUSE existing marketing engine
   ]);
 
   const bt = buyers?.totals, st = sellers?.totals, lt = leads?.totals;
@@ -46,6 +48,11 @@ async function buildInput(orgId: string | null): Promise<MarketingInput> {
     leads: { total: lt?.leads ?? 0, hot: lt?.hot ?? 0, cold: lt?.cold ?? 0, stale: lt?.stale ?? 0, qualified: lt?.qualified ?? 0 },
     listings: { luxury: cards.filter(isLux).length, priceDrops: cards.filter(isDrop).length, newListings: 0, underOffer: 0, avgTruthScore: truths.length ? Math.round(truths.reduce((a, b) => a + b, 0) / truths.length) : null, topNeighborhoods: [] },
     execRecommendations,
+    existing: board ? {
+      segments: (board.segments ?? []).map((s) => ({ key: s.segment_key, label: s.label, size: s.segment_size })),
+      opportunities: (board.opportunities ?? []).map((o) => ({ title: o.title, body: o.description ?? o.recommended_action ?? "", impact: (o.impact_score >= 70 ? "high" : o.impact_score >= 40 ? "medium" : "low") as Impact, evidence: [`ציון השפעה ${o.impact_score}`] })),
+      healthBaseline: typeof board.health === "number" ? board.health : null,
+    } : undefined,
   };
 }
 
