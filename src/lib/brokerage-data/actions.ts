@@ -56,8 +56,8 @@ import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent
 import { askZono, type AskZonoResponse, type ChatTurn } from "@/lib/ask-zono";
 import { getAiHome, type AiHomeData } from "@/lib/ai-home";
 import { generateDraft, type DraftBundle, type DraftRequest, type DraftTarget } from "@/lib/draft-studio";
-import { listWorkflowTemplates, startWorkflow, type WorkflowTemplateSummary, type WorkflowTarget } from "@/lib/workflow-builder";
-import type { Workflow, WorkflowContext } from "@/lib/workflow-builder/types";
+import { listWorkflowTemplates, startPersistentWorkflow, advancePersistentWorkflow, getPersistentWorkflow, listActiveWorkflows, listCompletedWorkflows, listPendingApprovalWorkflows, type WorkflowTemplateSummary, type WorkflowTarget, type WorkflowSummaryRow } from "@/lib/workflow-builder";
+import type { Workflow, WorkflowEvent } from "@/lib/workflow-builder/types";
 import {
   createBrokerageResearchJob, runBrokerageResearchJob, resumeBrokerageResearchJob,
   getBrokerageResearchJobStatus, getLatestCityResearchJob, cancelBrokerageResearchJob,
@@ -329,13 +329,39 @@ export async function listWorkflowTemplatesAction(): Promise<{ ok: boolean; resu
   catch (e) { console.error("[workflow] templates failed:", e); return { ok: false, error: "טעינת התבניות נכשלה." }; }
 }
 
-export async function startWorkflowAction(templateId: string, target: WorkflowTarget): Promise<{ ok: boolean; result?: { workflow: Workflow; context: WorkflowContext }; error?: string }> {
+export async function startWorkflowAction(templateId: string, target: WorkflowTarget): Promise<{ ok: boolean; result?: Workflow; migrationRequired?: boolean; error?: string }> {
   try {
     const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
     if (!target?.entityId || !target?.entityKind) return { ok: false, error: "יש לבחור ישות." };
-    const r = await startWorkflow(profile.org_id, templateId, target);
-    return r ? { ok: true, result: r } : { ok: false, error: "תבנית לא נמצאה." };
+    const r = await startPersistentWorkflow(profile.org_id, templateId, target, profile.id ?? null);
+    return r.ok ? { ok: true, result: r.workflow } : { ok: false, migrationRequired: r.migrationRequired, error: r.error };
   } catch (e) { console.error("[workflow] start failed:", e); return { ok: false, error: "הפעלת התהליך נכשלה." }; }
+}
+
+export async function advanceWorkflowAction(workflowId: string, event: WorkflowEvent): Promise<{ ok: boolean; result?: Workflow; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    if (!workflowId) return { ok: false, error: "חסר מזהה תהליך." };
+    const r = await advancePersistentWorkflow(profile.org_id, workflowId, event, profile.id ?? null);
+    return r.ok ? { ok: true, result: r.workflow } : { ok: false, error: r.error };
+  } catch (e) { console.error("[workflow] advance failed:", e); return { ok: false, error: "עדכון התהליך נכשל." }; }
+}
+
+export async function getWorkflowAction(workflowId: string): Promise<{ ok: boolean; result?: Workflow; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const wf = await getPersistentWorkflow(workflowId);
+    return wf ? { ok: true, result: wf } : { ok: false, error: "תהליך לא נמצא." };
+  } catch (e) { console.error("[workflow] get failed:", e); return { ok: false, error: "טעינת התהליך נכשלה." }; }
+}
+
+export async function listWorkflowsAction(scope: "active" | "completed" | "pending"): Promise<{ ok: boolean; result?: WorkflowSummaryRow[]; migrationRequired?: boolean; error?: string }> {
+  try {
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const fn = scope === "completed" ? listCompletedWorkflows : scope === "pending" ? listPendingApprovalWorkflows : listActiveWorkflows;
+    const r = await fn(profile.org_id);
+    return { ok: true, result: r.rows, migrationRequired: r.migrationRequired };
+  } catch (e) { console.error("[workflow] list failed:", e); return { ok: false, error: "טעינת התהליכים נכשלה." }; }
 }
 
 // ── Phase 30.3 — Draft Studio (prepare communication; approval-gated, no send) ─

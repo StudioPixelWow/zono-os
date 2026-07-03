@@ -8,6 +8,9 @@ export { instantiateWorkflow, advanceWorkflow, computeProgress } from "./engine"
 export { evaluateCondition } from "./conditions";
 export { WORKFLOW_TEMPLATES, getTemplate } from "./templates";
 export { runSelfCheck } from "./qa";
+export { planExecution, runExecutionSelfCheck } from "./execution";
 export { listWorkflowTemplates, startWorkflow, buildWorkflowContext } from "./service";
 export type { WorkflowTemplateSummary, WorkflowTarget } from "./service";
+export { startPersistentWorkflow, advancePersistentWorkflow, getPersistentWorkflow, listActiveWorkflows, listCompletedWorkflows, listPendingApprovalWorkflows } from "./persist";
+export type { WorkflowSummaryRow } from "./repository";
 export * from "./types";
