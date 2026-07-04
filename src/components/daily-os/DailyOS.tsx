@@ -53,7 +53,8 @@ export function DailyOS({ data }: { data: DData }) {
             <div className="grid grid-cols-3 gap-2"><Tile l="ציון יומי" v={data.performance.daily} /><Tile l="שיעור מעקב" v={`${data.performance.followUpRatePct}%`} /><Tile l="הזדמנויות" v={data.performance.conversionOpportunities} /></div>
             <section><h2 className="text-ink mb-2 text-[15px] font-black">🗓️ ציר הזמן של היום</h2>{data.timeline.length === 0 ? <Empty t="אין אירועים מתוזמנים היום." /> : <div className="space-y-2">{data.timeline.map((e, i) => (
               <Link key={i} href={e.href} className="bg-surface flex items-center gap-3 rounded-2xl p-3"><span className="text-lg">{e.icon}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="text-ink line-clamp-1 text-[13px] font-bold">{e.title}</span><span className="text-muted shrink-0 text-[10px]">{new Date(e.at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span></div>{e.detail && <div className="text-muted text-[11px]">{e.detail}</div>}</div></Link>
-            ))}</div>}</section>
+            ))}</div>}
+            <Link href="/calendar" className="btn-zono-secondary mt-2 block rounded-xl py-2.5 text-center text-[13px] font-bold">היומן המלא (Calendar OS) ←</Link></section>
           </div>
         )}
 
