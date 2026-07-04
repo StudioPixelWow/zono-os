@@ -13,6 +13,7 @@ import {
   normalizeMeeting, normalizeTask, normalizeMission, normalizeFollowup, normalizePropertyPlan,
   dedupeEvents, buildDayPlan, proposeReschedule, optimizeRoute, availabilityFor, providerStatuses,
 } from "./engine";
+import { classifyCalendarIntent, calendarHealth, nextBestActions } from "./intelligence";
 import type {
   CalendarEvent, DayPlan, RescheduleProposal, RescheduleTrigger, OptimizedRoute,
   BrokerAvailability, EntityKind, RouteStop, CalendarProviderStatus,
@@ -176,5 +177,11 @@ export async function answerCalendarQuestion(question: string): Promise<Calendar
   if (/ignored|התעלמ|לא חזרתי/.test(q)) return pick(events.filter((e) => Date.parse(e.start) < now.getTime() && !e.done), "אירועים שעברו וטרם טופלו:");
   if (/free|פנוי|מתי אני/.test(q)) { const p = buildDayPlan(events, startIso); return { answer: p.summary.freeAfter ? `אתה פנוי אחרי ${new Date(p.summary.freeAfter).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}.` : "היום פנוי.", events: [] }; }
   if (/move|לשנות|לדחות|reschedule/.test(q)) { const r = proposeReschedule(events, "manual"); return { answer: r.moved.length ? `הצעה לדחות ${r.moved.length} אירועים פחות דחופים (דורש אישור).` : "אין מה לשנות.", events: r.moved.map((m) => ({ id: m.eventId, title: m.title, at: m.toSuggested ?? "", href: null })) }; }
+  // STEP 12 (43.1) — intelligence intents, reusing the pure layer.
+  const intent = classifyCalendarIntent(question);
+  if (intent === "organize" || intent === "prioritize") { const nb = nextBestActions(events, undefined, now.getTime()); return { answer: nb.length ? "כך כדאי לארגן את היום (לפי עדיפות):" : "היום פנוי — זמן לגיוס ומעקבים.", events: nb.map((a) => ({ id: a.eventId ?? a.title, title: `${a.title} — ${a.why}`, at: "", href: a.href })) }; }
+  if (intent === "waste") { const h = calendarHealth(events, undefined, startIso, 1); return { answer: h.busyPct < 40 ? `ניצול נמוך (${h.busyPct}%) — יש זמן פנוי לגיוס/מעקבים.` : h.travelPct > 40 ? `זמן נסיעה גבוה (${h.travelPct}%) — כדאי לאשכל ביקורים גיאוגרפית.` : "היום מנוצל היטב.", events: [] }; }
+  if (intent === "overdue") return pick(events.filter((e) => Date.parse(e.start) < now.getTime() && !e.done), "מה שבאיחור:");
+  if (intent === "cancel") { const r = proposeReschedule(events, "manual"); return { answer: r.moved.length ? "מועמדים לביטול/דחייה (הפחות דחופים, דורש אישור):" : "אין אירועים לבטל.", events: r.moved.map((m) => ({ id: m.eventId, title: m.title, at: m.toSuggested ?? "", href: null })) }; }
   return pick(upcoming, "האירועים הקרובים שלך:");
 }

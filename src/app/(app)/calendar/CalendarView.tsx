@@ -10,8 +10,11 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { EVENT_TYPE_HE, type CalendarEvent, type DayPlan, type BrokerAvailability, type CalendarProviderStatus, type AvailabilityState } from "@/lib/calendar-os/types";
 import { optimizeRouteAction, proposeRescheduleAction, askCalendarAction } from "@/lib/calendar-os/actions";
+import { getDayIntelligenceAction, getManagerViewAction } from "@/lib/calendar-os/intelligence-actions";
 
-type View = "agenda" | "day" | "week";
+type View = "agenda" | "day" | "week" | "intel";
+type IntelState = Awaited<ReturnType<typeof getDayIntelligenceAction>>["intel"] | null;
+type ManagerState = Awaited<ReturnType<typeof getManagerViewAction>>["view"] | null;
 type RouteState = Awaited<ReturnType<typeof optimizeRouteAction>>["route"] | null;
 type ReschedState = Awaited<ReturnType<typeof proposeRescheduleAction>>["proposal"] | null;
 type AskState = Awaited<ReturnType<typeof askCalendarAction>>["result"] | null;
@@ -54,7 +57,12 @@ export function CalendarView({ plan, weekEvents, team, providers, todayIso }: {
   const [resched, setResched] = useState<ReschedState>(null);
   const [ask, setAsk] = useState<AskState>(null);
   const [q, setQ] = useState("");
+  const [intel, setIntel] = useState<IntelState>(null);
+  const [manager, setManager] = useState<ManagerState>(null);
   const [pending, start] = useTransition();
+
+  const openIntel = () => { setView("intel"); if (!intel) start(async () => { const r = await getDayIntelligenceAction({ dateIso: todayIso }); setIntel(r.intel); }); };
+  const loadManager = () => start(async () => { const r = await getManagerViewAction(); setManager(r.view); });
 
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -82,9 +90,9 @@ export function CalendarView({ plan, weekEvents, team, providers, todayIso }: {
 
       {/* View switcher */}
       <div className="bg-card border-line mt-4 flex gap-1 rounded-2xl border p-1">
-        {(["agenda", "day", "week"] as View[]).map((v) => (
-          <button key={v} onClick={() => setView(v)} className={`flex-1 rounded-xl py-2 text-[13px] font-bold transition ${view === v ? "zono-gradient text-white" : "text-muted"}`}>
-            {v === "agenda" ? "סדר יום AI" : v === "day" ? "היום" : "שבוע"}
+        {(["agenda", "day", "week", "intel"] as View[]).map((v) => (
+          <button key={v} onClick={() => (v === "intel" ? openIntel() : setView(v))} className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition ${view === v ? "zono-gradient text-white" : "text-muted"}`}>
+            {v === "agenda" ? "סדר יום" : v === "day" ? "היום" : v === "week" ? "שבוע" : "אינטליגנציה"}
           </button>
         ))}
       </div>
@@ -164,6 +172,89 @@ export function CalendarView({ plan, weekEvents, team, providers, todayIso }: {
               <div className="space-y-2">{evs.map((e) => <EventRow key={e.id} e={e} />)}</div>
             </div>
           ))}
+        </section>
+      )}
+
+      {view === "intel" && (
+        <section className="mt-5 space-y-4">
+          {!intel ? <Empty label={pending ? "מחשב אינטליגנציה…" : "טוען…"} /> : (
+            <>
+              {/* Calendar health */}
+              <div className="bg-card border-line rounded-2xl border p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-ink text-[15px] font-black">בריאות היומן</h2>
+                  <span className="zono-gradient rounded-full px-3 py-1 text-[13px] font-black text-white">{intel.health.calendarScore} · {intel.health.grade}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-2">
+                  {[["עומס", intel.health.busyPct], ["נסיעות", intel.health.travelPct], ["פגישות", intel.health.meetingsPct], ["מעקבים", intel.health.followupsPct]].map(([l, v]) => (
+                    <div key={String(l)} className="bg-surface rounded-xl px-1 py-2 text-center"><div className="text-brand text-base font-black">{v as number}%</div><div className="text-muted text-[9px] font-bold">{l as string}</div></div>
+                  ))}
+                </div>
+                {(intel.health.lateResponses > 0 || intel.health.missedOpportunities > 0) && (
+                  <p className="text-warning mt-2 text-[11px] font-bold">{intel.health.lateResponses} תגובות באיחור · {intel.health.missedOpportunities} הזדמנויות שפוספסו</p>
+                )}
+              </div>
+
+              {/* Next best actions */}
+              <div>
+                <h2 className="text-ink mb-2 text-[15px] font-black">מה לעשות עכשיו</h2>
+                {intel.nextBest.length === 0 ? <Empty label="אין פעולות דחופות." /> : (
+                  <div className="space-y-2">{intel.nextBest.map((a, i) => (
+                    a.href ? <Link key={i} href={a.href} className="bg-card border-line flex items-center gap-3 rounded-2xl border p-3">
+                      <span className="bg-brand-soft text-brand-strong grid h-8 w-8 shrink-0 place-items-center rounded-xl"><Icon name={a.kind === "call" ? "Phone" : a.kind === "drive" ? "MapPin" : a.kind === "followup" ? "Clock" : "Calendar"} size={15} /></span>
+                      <div className="min-w-0 flex-1"><p className="text-ink truncate text-[13px] font-bold">{a.title}</p><p className="text-muted truncate text-[11px]">{a.why}</p></div>
+                      {a.urgency >= 90 && <span className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-[10px] font-bold">דחוף</span>}
+                    </Link> : <div key={i} className="bg-card border-line rounded-2xl border p-3 text-[13px]">{a.title}</div>
+                  ))}</div>
+                )}
+              </div>
+
+              {/* Free slots */}
+              {intel.freeSlots.length > 0 && (
+                <div>
+                  <h2 className="text-ink mb-2 text-[15px] font-black">חלונות פנויים</h2>
+                  <div className="space-y-2">{intel.freeSlots.map((sl, i) => (
+                    <div key={i} className="bg-success-soft/40 border-success/20 flex items-center justify-between rounded-2xl border p-3">
+                      <span className="text-ink text-[13px] font-bold">{time(sl.start)}–{time(sl.end)} ({sl.minutes} דק׳)</span>
+                      <span className="text-success text-[11px] font-bold">{sl.suggestion}</span>
+                    </div>
+                  ))}</div>
+                </div>
+              )}
+
+              {/* Smart routing merges */}
+              {intel.routing.merges.length > 0 && (
+                <div className="bg-card border-line rounded-2xl border p-3">
+                  <h2 className="text-ink text-[14px] font-black">מסלול חכם · {intel.routing.route.totalKm} ק״מ</h2>
+                  {intel.routing.merges.map((m, i) => <p key={i} className="text-muted mt-1 text-[12px]">• {m}</p>)}
+                  <p className="text-muted mt-1 text-[10px]">{intel.routing.note}</p>
+                </div>
+              )}
+
+              {/* Day optimizer warnings */}
+              {intel.optimization.warnings.length > 0 && (
+                <div className="bg-warning-soft/40 border-warning/30 rounded-2xl border p-3">
+                  <h2 className="text-ink text-[14px] font-black">שיפורים מוצעים</h2>
+                  {intel.optimization.warnings.map((w, i) => <p key={i} className="text-muted mt-1 text-[12px]">• {w}</p>)}
+                  <p className="text-warning mt-1 text-[10px] font-bold">{intel.optimization.note}</p>
+                </div>
+              )}
+
+              {/* Manager view */}
+              <div>
+                <button onClick={loadManager} disabled={pending} className="bg-surface text-ink inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-50"><Icon name="Users" size={14} /> מבט מנהל — עומסי צוות</button>
+                {manager && (
+                  <div className="bg-card border-line mt-2 rounded-2xl border p-3">
+                    <p className="text-ink text-[13px] font-black">{manager.freeBrokers} פנויים · {manager.overloadedBrokers} עמוסים · כיסוי {manager.coveragePct}%</p>
+                    <div className="mt-2 flex flex-wrap gap-2">{manager.brokers.map((b) => (
+                      <span key={b.brokerId} className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${b.state === "overloaded" ? "bg-danger-soft text-danger" : b.state === "free" ? "bg-success-soft text-success" : "bg-surface text-muted"}`}>{b.name ?? "ברוקר"} · {b.events}</span>
+                    ))}</div>
+                    <p className="text-muted mt-1 text-[11px]">{manager.note}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
       )}
 
