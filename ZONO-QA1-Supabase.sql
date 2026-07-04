@@ -1,4 +1,73 @@
 -- ============================================================================
+-- ZONO — PHASE 34.2 · QA.1 Supabase Setup Pack
+-- כל ה-SQL להרצה בסופהבייס — לפי הסדר, בקובץ אחד. אידמפוטנטי ובטוח להרצה חוזרת.
+-- ----------------------------------------------------------------------------
+-- הרצה:  SQL Editor → הדבק הכל → Run   (או:  supabase db push)
+-- כל בלוק RLS/אינדקסים מדלג בשקט על טבלאות שלא קיימות בבסיס הזה (to_regclass).
+-- אחרי ההרצה, לרענן types:
+--   supabase gen types typescript --project-id <PROJECT_ID> --schema public > src/lib/supabase/types.ts
+--   npm run check:types-drift
+-- הערה: כתיבות רצות תחת service_role; ל-authenticated יש קריאה מסוננת לפי ארגון.
+-- ============================================================================
+
+-- ###########################################################################
+-- ## part 1 / 7 — 20260906120000_qa1_storage_buckets.sql
+-- ###########################################################################
+-- ============================================================================
+-- ZONO — PHASE 34.2 · QA.1 STORAGE BUCKETS. STRICTLY ADDITIVE + IDEMPOTENT.
+-- ----------------------------------------------------------------------------
+-- Closes the QA.1 finding that storage buckets were provisioned by hand and not
+-- reproducible from code. Creates the canonical buckets with `on conflict do
+-- nothing` (safe if a bucket was already created in the dashboard) and attaches
+-- least-privilege object policies:
+--   • public buckets  → public READ, authenticated WRITE
+--   • private buckets → authenticated READ + WRITE (org isolation is enforced by
+--     an `<org_id>/...` path convention in app code + service-role writes)
+-- No public WRITE anywhere. Re-runnable: drop policy if exists guards policies.
+-- NOTE: requires the `storage` schema (present on all Supabase projects).
+-- ============================================================================
+
+insert into storage.buckets (id, name, public)
+values
+  ('creative-references', 'creative-references', false),
+  ('property-media',      'property-media',      true),
+  ('documents',           'documents',           false),
+  ('logos',               'logos',               true),
+  ('agent-photos',        'agent-photos',        true),
+  ('office-assets',       'office-assets',       true),
+  ('public-site-media',   'public-site-media',   true)
+on conflict (id) do nothing;
+
+-- ── Public READ for public-facing buckets ───────────────────────────────────
+drop policy if exists qa1_public_read on storage.objects;
+create policy qa1_public_read on storage.objects for select to public
+  using (bucket_id in ('property-media','logos','agent-photos','office-assets','public-site-media'));
+
+-- ── Authenticated READ for private buckets ──────────────────────────────────
+drop policy if exists qa1_private_read on storage.objects;
+create policy qa1_private_read on storage.objects for select to authenticated
+  using (bucket_id in ('creative-references','documents'));
+
+-- ── Authenticated WRITE (insert/update/delete) for all managed buckets ──────
+-- Actual bulk writes run under service_role (BYPASSRLS); this allows direct
+-- authenticated uploads where the product needs them. No public write.
+drop policy if exists qa1_auth_insert on storage.objects;
+create policy qa1_auth_insert on storage.objects for insert to authenticated
+  with check (bucket_id in ('creative-references','property-media','documents','logos','agent-photos','office-assets','public-site-media'));
+
+drop policy if exists qa1_auth_update on storage.objects;
+create policy qa1_auth_update on storage.objects for update to authenticated
+  using (bucket_id in ('creative-references','property-media','documents','logos','agent-photos','office-assets','public-site-media'));
+
+drop policy if exists qa1_auth_delete on storage.objects;
+create policy qa1_auth_delete on storage.objects for delete to authenticated
+  using (bucket_id in ('creative-references','property-media','documents','logos','agent-photos','office-assets','public-site-media'));
+
+
+-- ###########################################################################
+-- ## part 2 / 7 — 20260907120000_qa1_rls_coverage.sql
+-- ###########################################################################
+-- ============================================================================
 -- ZONO — PHASE 34.2 · QA.1 RLS COVERAGE PACK. STRICTLY ADDITIVE + IDEMPOTENT.
 -- ----------------------------------------------------------------------------
 -- Closes the QA.1 finding that many private tables lacked an explicit RLS
@@ -481,3 +550,271 @@ end $$;
 --   user_operating_localities
 --   zono_workflow_history
 --   zono_workflow_steps
+
+
+-- ###########################################################################
+-- ## part 3 / 7 — 20260908120000_qa1_org_memory.sql
+-- ###########################################################################
+-- ============================================================================
+-- ZONO — PHASE 34.2 · QA.1 DURABLE ORGANIZATIONAL MEMORY. ADDITIVE + IDEMPOTENT.
+-- ----------------------------------------------------------------------------
+-- Closes the QA.1 "Organizational Memory has no store" finding. The existing
+-- Org-Memory engine derives on read from mission history; these tables give it a
+-- DURABLE substrate so learning/patterns persist and can be trended. The engine
+-- keeps derive-on-read as a FALLBACK; the store becomes the primary source.
+-- Writes run under service_role (BYPASSRLS); authenticated gets org-scoped READ.
+-- ============================================================================
+
+-- ── Durable memory records ──────────────────────────────────────────────────
+create table if not exists public.zono_org_memory (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid not null,
+  entity_type   text,                         -- buyer|seller|lead|property|office|org|...
+  entity_id     text,
+  memory_type   text not null,                -- fact|pattern|preference|outcome|lesson
+  title         text not null,
+  summary       text,
+  evidence      jsonb not null default '[]'::jsonb,
+  confidence    numeric,                       -- 0..1
+  impact        text,                          -- low|medium|high
+  source_module text,
+  occurred_at   timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists zom_org_idx     on public.zono_org_memory (org_id);
+create index if not exists zom_entity_idx  on public.zono_org_memory (org_id, entity_type, entity_id);
+create index if not exists zom_type_idx    on public.zono_org_memory (org_id, memory_type);
+create index if not exists zom_occurred_idx on public.zono_org_memory (org_id, occurred_at desc);
+
+-- ── Append-only event stream feeding memory ─────────────────────────────────
+create table if not exists public.zono_org_memory_events (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid not null,
+  entity_type   text,
+  entity_id     text,
+  event_type    text not null,                 -- mission_completed|price_changed|deal_won|...
+  title         text not null,
+  summary       text,
+  evidence      jsonb not null default '[]'::jsonb,
+  impact        text,
+  source_module text,
+  occurred_at   timestamptz not null default now(),
+  created_at    timestamptz not null default now()
+);
+create index if not exists zome_org_idx      on public.zono_org_memory_events (org_id);
+create index if not exists zome_entity_idx   on public.zono_org_memory_events (org_id, entity_type, entity_id);
+create index if not exists zome_type_idx     on public.zono_org_memory_events (org_id, event_type);
+create index if not exists zome_occurred_idx on public.zono_org_memory_events (org_id, occurred_at desc);
+
+-- ── Learned patterns (aggregated lessons) ───────────────────────────────────
+create table if not exists public.zono_org_learning_patterns (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid not null,
+  entity_type   text,
+  memory_type   text not null default 'pattern',
+  title         text not null,
+  summary       text,
+  evidence      jsonb not null default '[]'::jsonb,
+  confidence    numeric,
+  impact        text,
+  occurrences   integer not null default 1,
+  source_module text,
+  first_seen_at timestamptz,
+  last_seen_at  timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists zolp_org_idx    on public.zono_org_learning_patterns (org_id);
+create index if not exists zolp_entity_idx on public.zono_org_learning_patterns (org_id, entity_type);
+create index if not exists zolp_conf_idx   on public.zono_org_learning_patterns (org_id, confidence desc);
+
+alter table public.zono_org_memory            enable row level security;
+alter table public.zono_org_memory_events     enable row level security;
+alter table public.zono_org_learning_patterns enable row level security;
+
+drop policy if exists zom_select on public.zono_org_memory;
+create policy zom_select on public.zono_org_memory for select to authenticated
+  using (org_id = public.current_org_id());
+
+drop policy if exists zome_select on public.zono_org_memory_events;
+create policy zome_select on public.zono_org_memory_events for select to authenticated
+  using (org_id = public.current_org_id());
+
+drop policy if exists zolp_select on public.zono_org_learning_patterns;
+create policy zolp_select on public.zono_org_learning_patterns for select to authenticated
+  using (org_id = public.current_org_id());
+
+
+-- ###########################################################################
+-- ## part 4 / 7 — 20260909120000_qa1_intelligence_snapshots.sql
+-- ###########################################################################
+-- ============================================================================
+-- ZONO — PHASE 34.2 · QA.1 INTELLIGENCE SNAPSHOTS. ADDITIVE + IDEMPOTENT.
+-- ----------------------------------------------------------------------------
+-- Closes the QA.1 "derive-on-read intelligence cannot be trended" finding. One
+-- generic table stores point-in-time computed intelligence (Truth scores, CoS
+-- org score, listing/buyer/seller/lead health, office growth, market domination,
+-- street/building intel, competitive position, ...). Modules are NOT forced to
+-- write immediately — a reusable repository (src/lib/intelligence-store) offers
+-- opt-in snapshot writes/reads. Writes run under service_role; authenticated
+-- gets org-scoped READ.
+-- ============================================================================
+
+create table if not exists public.zono_intelligence_snapshots (
+  id            uuid primary key default gen_random_uuid(),
+  org_id        uuid not null,
+  entity_type   text not null,                 -- property|buyer|seller|lead|office|org|street|building|area
+  entity_id     text,
+  kind          text not null,                 -- truth|cos_org|listing_health|buyer_health|... (namespaced)
+  score         numeric,
+  confidence    numeric,
+  truth_score   numeric,
+  payload       jsonb not null default '{}'::jsonb,
+  source_module text,
+  computed_at   timestamptz not null default now(),
+  expires_at    timestamptz,
+  created_at    timestamptz not null default now()
+);
+create index if not exists zis_org_idx      on public.zono_intelligence_snapshots (org_id);
+create index if not exists zis_entity_idx   on public.zono_intelligence_snapshots (org_id, entity_type, entity_id);
+create index if not exists zis_kind_idx     on public.zono_intelligence_snapshots (org_id, kind);
+create index if not exists zis_computed_idx on public.zono_intelligence_snapshots (org_id, kind, computed_at desc);
+create index if not exists zis_expires_idx  on public.zono_intelligence_snapshots (expires_at);
+
+alter table public.zono_intelligence_snapshots enable row level security;
+
+drop policy if exists zis_select on public.zono_intelligence_snapshots;
+create policy zis_select on public.zono_intelligence_snapshots for select to authenticated
+  using (org_id = public.current_org_id());
+
+
+-- ###########################################################################
+-- ## part 5 / 7 — 20260910120000_qa1_compute_cache.sql
+-- ###########################################################################
+-- ============================================================================
+-- ZONO — PHASE 34.2 · QA.1 COMPUTE CACHE. ADDITIVE + IDEMPOTENT.
+-- ----------------------------------------------------------------------------
+-- Closes the QA.1 "no cache tier for heavy assemblers" finding. A generic,
+-- org-scoped, TTL'd key/value cache for expensive multi-engine assemblies
+-- (AI Home, Ask ZONO, Chief of Staff, Orchestrator, Market Domination, Area
+-- Portal aggregates). Helpers live in src/lib/compute-cache
+-- (getCache/setCache/invalidateCache). Every key is org-scoped — no cross-org
+-- or unscoped public caching. Writes run under service_role; authenticated gets
+-- org-scoped READ.
+-- ============================================================================
+
+create table if not exists public.zono_compute_cache (
+  id          uuid primary key default gen_random_uuid(),
+  org_id      uuid not null,
+  namespace   text not null,                   -- ai_home|ask_zono|cos|orchestrator|market_domination|area_aggregates
+  cache_key   text not null,
+  payload     jsonb not null default '{}'::jsonb,
+  version     text,
+  computed_at timestamptz not null default now(),
+  expires_at  timestamptz,
+  unique (org_id, namespace, cache_key)
+);
+create index if not exists zcc_lookup_idx  on public.zono_compute_cache (org_id, namespace, cache_key);
+create index if not exists zcc_expires_idx on public.zono_compute_cache (expires_at);
+
+alter table public.zono_compute_cache enable row level security;
+
+drop policy if exists zcc_select on public.zono_compute_cache;
+create policy zcc_select on public.zono_compute_cache for select to authenticated
+  using (org_id = public.current_org_id());
+
+
+-- ###########################################################################
+-- ## part 6 / 7 — 20260911120000_qa1_ask_conversations.sql
+-- ###########################################################################
+-- ============================================================================
+-- ZONO — PHASE 34.2 · QA.1 ASK ZONO CONVERSATION LOG. ADDITIVE + IDEMPOTENT.
+-- ----------------------------------------------------------------------------
+-- Closes the QA.1 "Ask ZONO conversations are not persisted" finding. Durable
+-- log for audit, follow-up continuity, learning and future analytics. Private
+-- to the org — never exposed on public routes. Writes run under service_role;
+-- authenticated gets org-scoped READ (a user reads their own org's threads).
+-- ============================================================================
+
+create table if not exists public.zono_ask_conversations (
+  id          uuid primary key default gen_random_uuid(),
+  org_id      uuid not null,
+  user_id     uuid,
+  session_id  text not null,
+  title       text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists zac_org_idx     on public.zono_ask_conversations (org_id);
+create index if not exists zac_session_idx on public.zono_ask_conversations (org_id, session_id);
+create index if not exists zac_updated_idx on public.zono_ask_conversations (org_id, updated_at desc);
+
+create table if not exists public.zono_ask_messages (
+  id              uuid primary key default gen_random_uuid(),
+  org_id          uuid not null,
+  conversation_id uuid references public.zono_ask_conversations(id) on delete cascade,
+  session_id      text,
+  user_id         uuid,
+  question        text,
+  answer          text,
+  intent          text,
+  source_engines  jsonb not null default '[]'::jsonb,
+  evidence        jsonb not null default '[]'::jsonb,
+  confidence      numeric,
+  limitations     text,
+  created_at      timestamptz not null default now()
+);
+create index if not exists zam_org_idx     on public.zono_ask_messages (org_id);
+create index if not exists zam_conv_idx    on public.zono_ask_messages (conversation_id, created_at);
+create index if not exists zam_created_idx on public.zono_ask_messages (org_id, created_at desc);
+
+alter table public.zono_ask_conversations enable row level security;
+alter table public.zono_ask_messages      enable row level security;
+
+drop policy if exists zac_select on public.zono_ask_conversations;
+create policy zac_select on public.zono_ask_conversations for select to authenticated
+  using (org_id = public.current_org_id());
+
+drop policy if exists zam_select on public.zono_ask_messages;
+create policy zam_select on public.zono_ask_messages for select to authenticated
+  using (org_id = public.current_org_id());
+
+
+-- ###########################################################################
+-- ## part 7 / 7 — 20260912120000_qa1_performance_indexes.sql
+-- ###########################################################################
+-- ============================================================================
+-- ZONO — PHASE 34.2 · QA.1 PERFORMANCE INDEX PACK. ADDITIVE + IDEMPOTENT.
+-- ----------------------------------------------------------------------------
+-- Hot-path composite indexes for the derive-on-read read patterns identified in
+-- QA.1. Each index is created only if BOTH the table exists in this database
+-- (to_regclass guard) — so the pack is safe on any project — and the index does
+-- not already exist. Real column names verified against the live migrations
+-- (property_transactions.organization_id / neighborhood_name; distribution_posts
+-- .org_id; community_comments.organization_id). No table rewrites, no drops.
+-- ============================================================================
+
+do $$
+declare s record;
+begin
+  for s in (
+    select * from (values
+      ('property_transactions', 'qa1_ptx_city_street_date_idx',       'property_transactions (city_name, street, deal_date desc)'),
+      ('property_transactions', 'qa1_ptx_city_hood_date_idx',         'property_transactions (city_name, neighborhood_name, deal_date desc)'),
+      ('distribution_posts',    'qa1_dpost_org_status_sched_idx',     'distribution_posts (org_id, status, scheduled_at)'),
+      ('distribution_posts',    'qa1_dpost_org_prop_created_idx',     'distribution_posts (org_id, property_id, created_at desc)'),
+      ('community_comments',    'qa1_ccomment_org_prop_created_idx',  'community_comments (organization_id, property_id, created_at desc)'),
+      ('zono_agent_inbox',      'qa1_zai_org_status_created_idx',     'zono_agent_inbox (organization_id, status, created_at desc)'),
+      ('zono_workflows',        'qa1_zw_org_entity_status_idx',       'zono_workflows (organization_id, entity_type, entity_id, status)'),
+      ('zono_missions',         'qa1_zm_org_entity_status_idx',       'zono_missions (organization_id, entity_type, entity_id, status)')
+    ) as x(tbl, idx, def)
+  ) loop
+    continue when to_regclass('public.' || s.tbl) is null;
+    execute format('create index if not exists %I on public.%s;', s.idx, s.def);
+  end loop;
+end $$;
+
+-- NOTE: zono_api_audit already has (organization_id, at desc) [zaa_org_at_idx];
+-- the API audit hot path is already covered — no new index needed.
+

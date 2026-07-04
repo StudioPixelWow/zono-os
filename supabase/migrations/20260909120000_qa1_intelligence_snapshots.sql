@@ -35,4 +35,4 @@ alter table public.zono_intelligence_snapshots enable row level security;
 
 drop policy if exists zis_select on public.zono_intelligence_snapshots;
 create policy zis_select on public.zono_intelligence_snapshots for select to authenticated
-  using (public.is_zono_owner() or org_id = public.current_org_id());
+  using (org_id = public.current_org_id());

@@ -28,4 +28,4 @@ alter table public.zono_compute_cache enable row level security;
 
 drop policy if exists zcc_select on public.zono_compute_cache;
 create policy zcc_select on public.zono_compute_cache for select to authenticated
-  using (public.is_zono_owner() or org_id = public.current_org_id());
+  using (org_id = public.current_org_id());

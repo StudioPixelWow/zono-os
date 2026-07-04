@@ -78,12 +78,12 @@ alter table public.zono_org_learning_patterns enable row level security;
 
 drop policy if exists zom_select on public.zono_org_memory;
 create policy zom_select on public.zono_org_memory for select to authenticated
-  using (public.is_zono_owner() or org_id = public.current_org_id());
+  using (org_id = public.current_org_id());
 
 drop policy if exists zome_select on public.zono_org_memory_events;
 create policy zome_select on public.zono_org_memory_events for select to authenticated
-  using (public.is_zono_owner() or org_id = public.current_org_id());
+  using (org_id = public.current_org_id());
 
 drop policy if exists zolp_select on public.zono_org_learning_patterns;
 create policy zolp_select on public.zono_org_learning_patterns for select to authenticated
-  using (public.is_zono_owner() or org_id = public.current_org_id());
+  using (org_id = public.current_org_id());

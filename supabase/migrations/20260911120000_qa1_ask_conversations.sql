@@ -44,8 +44,8 @@ alter table public.zono_ask_messages      enable row level security;
 
 drop policy if exists zac_select on public.zono_ask_conversations;
 create policy zac_select on public.zono_ask_conversations for select to authenticated
-  using (public.is_zono_owner() or org_id = public.current_org_id());
+  using (org_id = public.current_org_id());
 
 drop policy if exists zam_select on public.zono_ask_messages;
 create policy zam_select on public.zono_ask_messages for select to authenticated
-  using (public.is_zono_owner() or org_id = public.current_org_id());
+  using (org_id = public.current_org_id());
