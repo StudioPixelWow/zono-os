@@ -8,6 +8,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import { createAcquisitionTaskAction, promoteExternalListingAction } from "@/lib/external-listings/actions";
+import { createAcquisitionAlertDraftAction, createBuyerMatchAlertDraftAction } from "@/lib/external-listings/alert-actions";
 import type { ExternalListingDetail } from "@/lib/external-listings/service";
 
 const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
@@ -53,6 +54,8 @@ export function ExternalListingDetailView({ detail }: { detail: ExternalListingD
   const promote = () => { setError(null); start(async () => { const r = await promoteExternalListingAction(l.id); if (r?.error) setError(r.error); }); };
   const acquire = () => { setError(null); setMsg(null); start(async () => { const r = await createAcquisitionTaskAction(l.id); if (r?.error) setError(r.error); else setMsg("נוצרה משימת גיוס נכס עם תסריט שיחה וצ׳קליסט ✓"); }); };
   const checkBuyers = () => { setMsg(null); setError(null); start(async () => { router.refresh(); setMsg("התאמות הקונים חושבו מחדש ✓"); }); };
+  const acqDraft = () => { setError(null); setMsg(null); start(async () => { const r = await createAcquisitionAlertDraftAction(l.id); if (!r.ok) setError(r.message ?? "שגיאה"); else setMsg(r.message ?? "טיוטת גיוס נוצרה"); }); };
+  const buyerDraft = () => { setError(null); setMsg(null); start(async () => { const r = await createBuyerMatchAlertDraftAction(l.id); if (!r.ok) setError(r.message ?? "שגיאה"); else setMsg(r.message ?? "טיוטת התאמת קונים נוצרה"); }); };
 
   return (
     <div className="flex flex-col gap-5">
@@ -108,7 +111,10 @@ export function ExternalListingDetailView({ detail }: { detail: ExternalListingD
         )}
         <Button size="sm" variant="secondary" onClick={checkBuyers} disabled={pending} leadingIcon={<Icon name="Users" size={15} />}>בדוק התאמות לקונים</Button>
         <Button size="sm" variant="ghost" onClick={acquire} disabled={pending} leadingIcon={<Icon name="Megaphone" size={15} />}>צור משימת גיוס נכס</Button>
+        {privateOwner && <Button size="sm" variant="ghost" onClick={acqDraft} disabled={pending} leadingIcon={<Icon name="Send" size={15} />}>טיוטת גיוס לברוקר</Button>}
+        {buyerMatches.length > 0 && <Button size="sm" variant="ghost" onClick={buyerDraft} disabled={pending} leadingIcon={<Icon name="Send" size={15} />}>טיוטת התאמת קונים</Button>}
       </div>
+      <p className="text-muted -mt-2 text-[11px]">טיוטות ה-WhatsApp נשמרות לאישור — שום הודעה לא נשלחת אוטומטית.</p>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* 1) Overview */}

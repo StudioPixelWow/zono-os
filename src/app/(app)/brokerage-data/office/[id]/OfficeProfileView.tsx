@@ -322,7 +322,7 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
                     <div className="flex shrink-0 items-center gap-2 text-[11px]">
                       <span className={`rounded-full px-2 py-0.5 font-bold ${l.attribution.derived ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{ATTR_HE[l.attribution.kind] ?? l.attribution.kind}</span>
                       <span className="text-ink font-bold tabular-nums">{fmtPrice(l.price)}</span>
-                      {l.listingUrl && <a href={l.listingUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold">↗</a>}
+                      {l.listingId && <Link href={`/external-listings/${l.listingId}`} className="text-brand-strong font-bold" aria-label="פרטי הנכס">↗</Link>}
                     </div>
                   </div>
                   <div className="text-muted mt-0.5 text-[10px]">מדוע שייך: {l.attribution.reason}{l.attribution.conflictNote ? ` · ⚠ ${l.attribution.conflictNote}` : ""}</div>
@@ -338,7 +338,7 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
             {p.listings.map((l) => (
               <div key={l.id} className="border-line bg-surface flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm">
                 <div className="min-w-0"><div className="text-ink truncate font-bold">{l.title ?? "מודעה"}</div><div className="text-muted truncate text-[11px]">{[l.neighborhood, l.city, l.source].filter(Boolean).join(" · ") || "—"}</div></div>
-                <div className="flex shrink-0 items-center gap-2 text-[11px]"><span className="text-ink font-bold tabular-nums">{fmtPrice(l.price)}</span>{l.listingUrl && <a href={l.listingUrl} target="_blank" rel="noreferrer" className="text-brand-strong font-bold">↗</a>}</div>
+                <div className="flex shrink-0 items-center gap-2 text-[11px]"><span className="text-ink font-bold tabular-nums">{fmtPrice(l.price)}</span>{l.id && <Link href={`/external-listings/${l.id}`} className="text-brand-strong font-bold" aria-label="פרטי הנכס">↗</Link>}</div>
               </div>
             ))}
           </div>

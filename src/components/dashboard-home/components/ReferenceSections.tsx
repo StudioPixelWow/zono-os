@@ -85,7 +85,7 @@ export function ExclusiveDealsSection({ deals, agentName }: { deals: ExclusiveDe
                   <div className="mt-auto flex items-center gap-1.5 pt-2">
                     {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(smartWhatsappText(d, agentName))}`} target="_blank" rel="noopener noreferrer" className="bg-success/10 text-success hover:bg-success/20 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-bold transition"><Icon name="MessageCircle" size={15} /> וואטסאפ חכם</a>}
                     {d.contactPhone && <a href={`tel:${d.contactPhone}`} className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 grid h-9 w-10 place-items-center rounded-xl transition" aria-label="התקשר"><Icon name="Phone" size={16} /></a>}
-                    {d.listingUrl && <a href={d.listingUrl} target="_blank" rel="noopener noreferrer" className="bg-surface text-muted hover:text-brand-strong grid h-9 w-10 place-items-center rounded-xl transition" aria-label="מקור"><Icon name="ExternalLink" size={16} /></a>}
+                    {d.id && <Link href={`/external-listings/${d.id}`} className="bg-surface text-muted hover:text-brand-strong grid h-9 w-10 place-items-center rounded-xl transition" aria-label="פרטי הנכס"><Icon name="ArrowLeft" size={16} /></Link>}
                   </div>
                 </div>
               </div>

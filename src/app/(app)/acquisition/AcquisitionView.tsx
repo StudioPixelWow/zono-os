@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
@@ -150,7 +151,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
                                 <p className="text-ink font-bold">פעולות מומלצות</p>
                                 <ul className="mt-1 flex flex-col gap-0.5">{detail.actions.slice(0, 5).map((a) => <li key={a.id} className="text-muted">• {a.title} <span className="text-[10px]">({a.expected_outcome})</span></li>)}</ul>
                               </div>
-                              {detail.listing.listingUrl && <a href={detail.listing.listingUrl} target="_blank" rel="noopener noreferrer" className="text-brand-strong font-bold">פתח במקור ↗</a>}
+                              {detail.listing.id && <Link href={`/external-listings/${detail.listing.id}`} className="text-brand-strong font-bold">פרטים מלאים ↗</Link>}
                             </div>
                           )}
                         </div>

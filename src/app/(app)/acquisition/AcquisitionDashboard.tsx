@@ -94,7 +94,7 @@ export function AcquisitionDashboard({ cards, cc }: { cards: AcquisitionCard[]; 
 
     // AI insights — from real reasons / next-best-actions.
     const insights = cards.filter((c) => c.reason || c.nextBestAction).slice(0, 4)
-      .map((c) => ({ id: c.profileId, title: c.nextBestAction || c.reason || "", sub: `${c.city ?? ""} · ציון ${c.acquisitionScore}`, href: c.listingUrl }));
+      .map((c) => ({ id: c.profileId, title: c.nextBestAction || c.reason || "", sub: `${c.city ?? ""} · ציון ${c.acquisitionScore}`, href: c.listingId ? `/external-listings/${c.listingId}` : null }));
 
     // Tasks — cards that need action.
     const tasks = cards.filter((c) => ["new", "qualified", "needs_review"].includes(c.status))
@@ -245,7 +245,7 @@ function HotCandidates({ candidates, onTask, pending }: { candidates: Acquisitio
                 {c.reason && <p className="text-muted line-clamp-2 text-[11px] leading-snug">{c.reason}</p>}
                 <div className="mt-auto flex gap-1.5 pt-1">
                   <Button size="sm" loading={pending} onClick={() => onTask(c.profileId)} leadingIcon={<Icon name="Phone" size={13} />} className="flex-1">צור קשר</Button>
-                  {c.listingUrl && <a href={c.listingUrl} target="_blank" rel="noreferrer" className="bg-brand-soft text-brand-strong grid h-8 w-8 place-items-center rounded-lg"><Icon name="ExternalLink" size={14} /></a>}
+                  {c.listingId && <Link href={`/external-listings/${c.listingId}`} className="bg-brand-soft text-brand-strong grid h-8 w-8 place-items-center rounded-lg" aria-label="פרטי הנכס"><Icon name="ArrowLeft" size={14} /></Link>}
                 </div>
               </motion.div>
             );
@@ -449,7 +449,7 @@ function HighPotentialProperties({ properties }: { properties: AcquisitionCard[]
                 <p className="text-muted text-xs">{c.city ?? ""}</p>
                 <p className="text-brand-strong text-base font-black">{c.price ? formatShekels(c.price) : "—"}</p>
                 <p className="text-muted text-[11px]">{[c.rooms ? `${c.rooms} חד׳` : null, c.sqm ? `${c.sqm} מ״ר` : null].filter(Boolean).join(" · ") || "—"}</p>
-                <Link href={c.listingUrl ?? `/external-listings/${c.listingId}`} className="bg-brand-soft text-brand-strong mt-auto rounded-lg px-3 py-2 text-center text-[13px] font-bold">לפרטים</Link>
+                <Link href={`/external-listings/${c.listingId}`} className="bg-brand-soft text-brand-strong mt-auto rounded-lg px-3 py-2 text-center text-[13px] font-bold">לפרטים</Link>
               </div>
             </div>
           ))}
