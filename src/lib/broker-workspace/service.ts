@@ -18,6 +18,7 @@ import { getAgentsDashboard } from "@/lib/agent-framework/service";
 import { listActiveWorkflows } from "@/lib/workflow-builder/persist";
 import { askZono } from "@/lib/ask-zono/service";
 import { getBrokerWhatsapp } from "@/lib/whatsapp/inbox-service";
+import { getBrokerFacebook } from "@/lib/facebook-home/service";
 import { assembleBrokerWorkspace } from "./assemble";
 import type { BrokerWorkspace, BrokerWorkspaceInput, OwnedSets, ScoredEntity, WsMission, WsInboxItem, WsWorkflow, WsMeeting, WsSuggestedEvent, Impact } from "./types";
 
@@ -102,6 +103,7 @@ export async function getBrokerWorkspace(): Promise<BrokerWorkspace> {
   ]);
   const suggested = await loadSuggested(orgId, owned.propertyIds);
   const whatsapp = await getBrokerWhatsapp(brokerId).catch(() => undefined);
+  const facebook = await getBrokerFacebook(brokerId).catch(() => undefined);
 
   const buyerSet = new Set(owned.buyerIds), sellerSet = new Set(owned.sellerIds), leadSet = new Set(owned.leadIds), propSet = new Set(owned.propertyIds);
 
@@ -149,7 +151,7 @@ export async function getBrokerWorkspace(): Promise<BrokerWorkspace> {
 
   const input: BrokerWorkspaceInput = {
     brokerId, brokerName, owned, buyers, sellers, listings, leads,
-    missions, inbox, workflows: wfWorkflows, meetings, suggested, whatsapp, notes,
+    missions, inbox, workflows: wfWorkflows, meetings, suggested, whatsapp, facebook, notes,
   };
   return assembleBrokerWorkspace(input);
 }

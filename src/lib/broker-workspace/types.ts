@@ -147,6 +147,11 @@ export interface BrokerWhatsappSummary {
   waitingConversations: { id: string; contactName: string; reason: string; href: string; urgency: number }[];
 }
 
+export interface BrokerFacebookSummary {
+  scheduledToday: number; commentsWaiting: number; leadApprovals: number; groupsToPublish: number;
+  tasks: { title: string; detail: string; href: string }[];
+}
+
 export interface BrokerWorkspace {
   version: string;
   brokerId: string | null;
@@ -159,6 +164,7 @@ export interface BrokerWorkspace {
   inbox: WsInboxItem[];
   performance: BrokerPerformance;
   whatsapp: BrokerWhatsappSummary;
+  facebook: BrokerFacebookSummary;
   notes: string[];
 }
 
@@ -177,6 +183,7 @@ export interface BrokerWorkspaceInput {
   meetings: WsMeeting[];
   suggested: WsSuggestedEvent[];
   whatsapp?: BrokerWhatsappSummary;
+  facebook?: BrokerFacebookSummary;
   notes: string[];
   now?: number;
 }
