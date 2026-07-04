@@ -149,6 +149,25 @@ function TodayTab({ data }: { data: BrokerWorkspace }) {
         </Section>
       )}
 
+      {data.website.hasSite && (data.website.alerts.length > 0 || !data.website.published) && (
+        <Section title="🌐 האתר שלי">
+          <Link href="/website" className="bg-card border-line block rounded-2xl border p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2"><span className="text-brand text-2xl font-black">{data.website.healthScore}</span><span className="text-muted text-[11px] font-bold">בריאות אתר</span></div>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${data.website.published ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>{data.website.published ? "מפורסם" : "טיוטה — ממתין לפרסום"}</span>
+            </div>
+            {data.website.alerts.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {data.website.alerts.slice(0, 3).map((a, i) => (
+                  <div key={i} className="bg-surface rounded-lg px-2.5 py-1.5"><span className="text-ink text-[12px] font-bold">{a.title}</span></div>
+                ))}
+              </div>
+            )}
+            <div className="text-brand mt-2 text-center text-[12px] font-bold">פתח בונה האתרים ←</div>
+          </Link>
+        </Section>
+      )}
+
       <Section title="🎯 עדיפויות היום" count={d.todaysPriorities.length}>
         {d.todaysPriorities.length === 0 ? <Empty text="אין משימות פתוחות." /> : d.todaysPriorities.slice(0, 6).map((m) => <MissionRow key={m.id} m={m} />)}
       </Section>

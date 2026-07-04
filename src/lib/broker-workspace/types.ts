@@ -152,6 +152,12 @@ export interface BrokerFacebookSummary {
   tasks: { title: string; detail: string; href: string }[];
 }
 
+export interface BrokerWebsiteSummaryLite {
+  hasSite: boolean; published: boolean; healthScore: number;
+  seoAlerts: number; landingDrafts: number; approvalsPending: number;
+  alerts: { title: string; detail: string }[];
+}
+
 export interface BrokerWorkspace {
   version: string;
   brokerId: string | null;
@@ -165,6 +171,7 @@ export interface BrokerWorkspace {
   performance: BrokerPerformance;
   whatsapp: BrokerWhatsappSummary;
   facebook: BrokerFacebookSummary;
+  website: BrokerWebsiteSummaryLite;
   notes: string[];
 }
 
@@ -184,6 +191,7 @@ export interface BrokerWorkspaceInput {
   suggested: WsSuggestedEvent[];
   whatsapp?: BrokerWhatsappSummary;
   facebook?: BrokerFacebookSummary;
+  website?: BrokerWebsiteSummaryLite;
   notes: string[];
   now?: number;
 }
