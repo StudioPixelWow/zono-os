@@ -4,7 +4,7 @@
 // ============================================================================
 export default function AiAgentLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div dir="rtl" className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900">
+    <div dir="rtl" className="bg-surface text-ink min-h-screen">
       {children}
     </div>
   );
