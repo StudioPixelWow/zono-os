@@ -21,6 +21,7 @@ import { journeyStageForStatusFallback } from "@/lib/journey/fallback";
 import { PropertyDetailView } from "./PropertyDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
+import { ApprovalBundleSection } from "@/components/approval-bundle/ApprovalBundleSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
 import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
 import { listRecommendationsForEntity } from "@/lib/recommendations/service";
@@ -106,6 +107,7 @@ export default async function PropertyDetailsPage({
       <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
         <CreateLegalDocumentButton entityType="property" entityId={id} />
       </div>
+      <ApprovalBundleSection entityType="property" entityId={id} />
       <EntityCalendarSection kind="property" id={id} />
       <CommunicationSection entityType="property" entityId={id} />
       <RelationshipSection entityType="property" entityId={id} />
