@@ -13,6 +13,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getLeadTwinById } from "@/lib/digital-twin/leads/service";
 import StartWorkflowButton from "@/components/workflow-builder/StartWorkflowButton";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
+import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +100,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       )}
 
       {/* Reused generic sections (already lead-aware) */}
+      <EntityCalendarSection kind="lead" id={id} name={name} />
       <CommunicationSection entityType="lead" entityId={id} />
       <RelationshipSection entityType="lead" entityId={id} />
     </div>

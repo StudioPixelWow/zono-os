@@ -16,3 +16,11 @@ export {
 export {
   getDayIntelligence, getWeekIntelligence, getVisitPrep, getMeetingPrep, getManagerView, buildSignals,
 } from "./intelligence-service";
+// 43.2 — connectors foundation + availability + booking.
+export * from "./connectors";
+export { DEFAULT_PREFS, mergePrefs, frameFromPrefs, isWorkingTime, type AvailabilityPrefs, type BlockedTime } from "./availability";
+export { generateBookingSlots, BOOKING_HE, BOOKING_MEETING_TYPE, runBookingSelfCheck, type BookingKind, type BookingSlot } from "./booking";
+export {
+  getAvailabilityPrefs, saveAvailabilityPrefs, proposeBooking, confirmBooking, getConnectorHealth,
+  type BookingProposal, type ConfirmBookingInput, type ConfirmBookingResult,
+} from "./booking-service";

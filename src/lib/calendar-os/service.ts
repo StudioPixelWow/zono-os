@@ -13,7 +13,7 @@ import {
   normalizeMeeting, normalizeTask, normalizeMission, normalizeFollowup, normalizePropertyPlan,
   dedupeEvents, buildDayPlan, proposeReschedule, optimizeRoute, availabilityFor, providerStatuses,
 } from "./engine";
-import { classifyCalendarIntent, calendarHealth, nextBestActions } from "./intelligence";
+import { classifyCalendarIntent, calendarHealth, nextBestActions, findFreeSlots } from "./intelligence";
 import type {
   CalendarEvent, DayPlan, RescheduleProposal, RescheduleTrigger, OptimizedRoute,
   BrokerAvailability, EntityKind, RouteStop, CalendarProviderStatus,
@@ -177,6 +177,10 @@ export async function answerCalendarQuestion(question: string): Promise<Calendar
   if (/ignored|התעלמ|לא חזרתי/.test(q)) return pick(events.filter((e) => Date.parse(e.start) < now.getTime() && !e.done), "אירועים שעברו וטרם טופלו:");
   if (/free|פנוי|מתי אני/.test(q)) { const p = buildDayPlan(events, startIso); return { answer: p.summary.freeAfter ? `אתה פנוי אחרי ${new Date(p.summary.freeAfter).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}.` : "היום פנוי.", events: [] }; }
   if (/move|לשנות|לדחות|reschedule/.test(q)) { const r = proposeReschedule(events, "manual"); return { answer: r.moved.length ? `הצעה לדחות ${r.moved.length} אירועים פחות דחופים (דורש אישור).` : "אין מה לשנות.", events: r.moved.map((m) => ({ id: m.eventId, title: m.title, at: m.toSuggested ?? "", href: null })) }; }
+  // STEP 10 (43.2) — booking / prep / follow-up scheduling intents.
+  if (/prep|הכנה|להתכונן|need.*prep/.test(q)) return pick(upcoming.filter((e) => (e.type === "meeting" || e.type.includes("visit") || e.type === "seller_meeting") && e.entity.id), "פגישות שדורשות הכנה (פתח את הישות להכנה מלאה):");
+  if (/schedule|לקבוע|find time|למצוא זמן|תאם|visit with|פגישה עם/.test(q)) { const fs = findFreeSlots(events, startIso); return { answer: fs.length ? "חלונות פנויים לקביעת פגישה (אשר בעמוד הישות — לא נקבע כלום אוטומטית):" : "אין חלונות פנויים היום.", events: fs.slice(0, 6).map((sl) => ({ id: sl.start, title: `${new Date(sl.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })} · ${sl.suggestion}`, at: sl.start, href: null })) }; }
+  if (/follow.?up|מעקב|לקבוע מעקב/.test(q)) return pick(events.filter((e) => e.source === "followup" || e.type === "phone_call").sort((a, b) => Date.parse(a.start) - Date.parse(b.start)), "מעקבים לתזמון/טיפול:");
   // STEP 12 (43.1) — intelligence intents, reusing the pure layer.
   const intent = classifyCalendarIntent(question);
   if (intent === "organize" || intent === "prioritize") { const nb = nextBestActions(events, undefined, now.getTime()); return { answer: nb.length ? "כך כדאי לארגן את היום (לפי עדיפות):" : "היום פנוי — זמן לגיוס ומעקבים.", events: nb.map((a) => ({ id: a.eventId ?? a.title, title: `${a.title} — ${a.why}`, at: "", href: a.href })) }; }

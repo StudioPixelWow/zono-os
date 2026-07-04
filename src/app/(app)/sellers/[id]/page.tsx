@@ -9,6 +9,7 @@ import { getSeller360 } from "@/lib/sellers/service360";
 import { SellerCommandCenter } from "./SellerCommandCenter";
 import { Seller360Sections } from "./Seller360Sections";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
+import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
 import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
 import { listRecommendationsForEntity } from "@/lib/recommendations/service";
@@ -62,6 +63,7 @@ export default async function SellerDetailPage({
       <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
         <CreateLegalDocumentButton entityType="seller" entityId={id} />
       </div>
+      <EntityCalendarSection kind="seller" id={id} name={seller.full_name} />
       <CommunicationSection entityType="seller" entityId={id} />
       <RelationshipSection entityType="seller" entityId={id} />
 
