@@ -41,10 +41,13 @@ export interface BrokerCompareRow { brokerId: string; name: string | null; score
 
 export interface ExecApprovalCenter { count: number; bundles: { bundleId: string; title: string; priority: number; entityHref: string | null }[] }
 
+import type { AutomationHealth } from "@/lib/automation-os/unify";
+
 export interface ExecutiveOS {
   version: string; orgId: string | null; generatedAt: string;
   score: ExecutiveScore;
   health: OfficeHealth;
+  automation: AutomationHealth | null;   // 46.0 — consumed from Automation OS (unified), never recomputed
   briefings: ExecBriefing[];
   priorities: ExecItem[];
   risks: ExecItem[];

@@ -67,7 +67,7 @@ export function composeExecutive(input: ExecutiveInput): ExecutiveOS {
   const opportunities = input.recs.filter((r) => r.kind === "opportunity").sort((a, b) => b.confidence - a.confidence);
   return {
     version: "45.0", orgId: input.orgId, generatedAt: new Date().toISOString(),
-    score, health, briefings: buildBriefings(input),
+    score, health, automation: null, briefings: buildBriefings(input),
     priorities, risks, opportunities,
     timeline: [...input.timeline].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(0, 40),
     decisions: buildDecisions(priorities),

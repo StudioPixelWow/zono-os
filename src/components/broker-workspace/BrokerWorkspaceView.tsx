@@ -119,6 +119,14 @@ function TodayTab({ data }: { data: BrokerWorkspace }) {
         </Link>
       </Section>
 
+      <Section title="⚡ אוטומציות">
+        <Link href="/automation" className="bg-card border-line block rounded-2xl border p-3">
+          <div className="text-ink text-[13px] font-black">Automation OS — האוטומציות שלי</div>
+          <div className="text-muted mt-0.5 text-[12px]">ממתינות לאישור, הושלמו היום והצעות — הכול דרך המנועים הקיימים, ללא הרצה אוטומטית.</div>
+          <div className="text-brand mt-2 text-center text-[12px] font-bold">פתח מרכז אוטומציות ←</div>
+        </Link>
+      </Section>
+
       {(data.whatsapp.waiting > 0 || data.whatsapp.unread > 0) && (
         <Section title="💬 WhatsApp">
           <Link href="/whatsapp/inbox" className="bg-card border-line block rounded-2xl border p-3">

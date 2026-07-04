@@ -16,6 +16,7 @@ import { getWeekIntelligence } from "@/lib/calendar-os/intelligence-service";
 import { getTeamAvailability } from "@/lib/calendar-os/service";
 import { getInboxBundles } from "@/lib/approval-bundle/service";
 import { getDailyOS } from "@/lib/daily-os/service";
+import { getAutomationHealth } from "@/lib/automation-os/service";
 import { composeExecutive, answerExecutive } from "./compose";
 import type { ExecutiveOS, ExecutiveInput, ExecItem, ExecDimension, ExecTimelineItem, OfficeTrend, BrokerCompareRow } from "./types";
 
@@ -75,6 +76,7 @@ export async function getExecutiveOS(): Promise<ExecutiveOS> {
   };
 
   const os = composeExecutive(input);
+  os.automation = await getAutomationHealth().catch(() => null);   // 46.0 — Executive OS receives unified automation health
   if (orgId) await setCache(orgId, "executive_os", ["v45"], os as unknown as Parameters<typeof setCache>[3], { ttlSeconds: 600 });
   return os;
 }

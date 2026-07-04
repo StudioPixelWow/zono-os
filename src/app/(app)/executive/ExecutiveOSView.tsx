@@ -87,6 +87,22 @@ export function ExecutiveOSView({ os }: { os: ExecutiveOS }) {
             </div>
             {briefing && <><p className="text-ink mt-2 text-[13px] font-bold">{briefing.headline}</p><ul className="mt-1 space-y-0.5">{briefing.points.map((p, i) => <li key={i} className="text-muted text-[12px]">• {p}</li>)}</ul></>}
           </div>
+          {/* Automation OS health (46.0 — unified, not recomputed) */}
+          {os.automation && (
+            <Link href="/automation" className="bg-card border-line block rounded-2xl border p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-ink flex items-center gap-1.5 text-[15px] font-black"><Icon name="Zap" size={16} /> אוטומציות (Automation OS)</h2>
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${os.automation.state === "at_risk" ? "bg-danger-soft text-danger" : os.automation.state === "needs_attention" ? "bg-warning-soft text-warning" : os.automation.state === "idle" ? "bg-line/70 text-muted" : "bg-success-soft text-success"}`}>{os.automation.state === "healthy" ? "תקין" : os.automation.state === "needs_attention" ? "דורש תשומת לב" : os.automation.state === "at_risk" ? "בסיכון" : "לא פעיל"}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {[["הצלחה", `${os.automation.successRate}%`], ["אישור", `${os.automation.approvalRate}%`], ["ממתינות", os.automation.pending], ["הצעות", os.automation.suggested]].map(([l, v]) => (
+                  <div key={String(l)} className="bg-surface rounded-xl px-1 py-2 text-center"><div className="text-brand text-base font-black">{v as string | number}</div><div className="text-muted text-[9px] font-bold">{l as string}</div></div>
+                ))}
+              </div>
+              <p className="text-brand mt-2 text-center text-[12px] font-bold">פתח מרכז אוטומציות ←</p>
+            </Link>
+          )}
+
           {/* Dimensions */}
           <div>
             <h2 className="text-ink mb-2 text-[15px] font-black">ממדי ציון (נצרכים מהמנועים)</h2>
