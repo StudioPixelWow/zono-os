@@ -93,6 +93,7 @@ export function assembleBrokerWorkspace(input: BrokerWorkspaceInput): BrokerWork
     comms,
     inbox: brokerInbox.slice(0, 20),
     performance,
+    whatsapp: input.whatsapp ?? { unread: 0, waiting: 0, urgent: 0, today: 0, waitingConversations: [] },
     notes,
   };
 }

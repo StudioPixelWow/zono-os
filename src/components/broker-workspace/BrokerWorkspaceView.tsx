@@ -111,6 +111,26 @@ function TodayTab({ data }: { data: BrokerWorkspace }) {
           ))}
       </Section>
 
+      {(data.whatsapp.waiting > 0 || data.whatsapp.unread > 0) && (
+        <Section title="💬 WhatsApp">
+          <Link href="/whatsapp/inbox" className="bg-card border-line block rounded-2xl border p-3">
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {[["לא נקרא", data.whatsapp.unread], ["ממתין", data.whatsapp.waiting], ["דחוף", data.whatsapp.urgent], ["היום", data.whatsapp.today]].map(([l, v]) => (
+                <div key={String(l)}><div className="text-brand text-lg font-black">{v as number}</div><div className="text-muted text-[10px] font-bold">{l as string}</div></div>
+              ))}
+            </div>
+            {data.whatsapp.waitingConversations.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {data.whatsapp.waitingConversations.slice(0, 3).map((c) => (
+                  <div key={c.id} className="bg-surface flex items-center justify-between rounded-lg px-2.5 py-1.5"><span className="text-ink text-[12px] font-bold">{c.contactName}</span><span className="text-muted text-[10px]">{c.reason}</span></div>
+                ))}
+              </div>
+            )}
+            <div className="text-brand mt-2 text-center text-[12px] font-bold">פתח תיבה מאוחדת ←</div>
+          </Link>
+        </Section>
+      )}
+
       <Section title="🎯 עדיפויות היום" count={d.todaysPriorities.length}>
         {d.todaysPriorities.length === 0 ? <Empty text="אין משימות פתוחות." /> : d.todaysPriorities.slice(0, 6).map((m) => <MissionRow key={m.id} m={m} />)}
       </Section>

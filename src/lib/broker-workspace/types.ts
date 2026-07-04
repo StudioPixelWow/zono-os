@@ -142,6 +142,11 @@ export interface BrokerPerformance {
   weakSpots: { title: string; detail: string; impact: Impact }[];
 }
 
+export interface BrokerWhatsappSummary {
+  unread: number; waiting: number; urgent: number; today: number;
+  waitingConversations: { id: string; contactName: string; reason: string; href: string; urgency: number }[];
+}
+
 export interface BrokerWorkspace {
   version: string;
   brokerId: string | null;
@@ -153,6 +158,7 @@ export interface BrokerWorkspace {
   comms: BrokerComms;
   inbox: WsInboxItem[];
   performance: BrokerPerformance;
+  whatsapp: BrokerWhatsappSummary;
   notes: string[];
 }
 
@@ -170,6 +176,7 @@ export interface BrokerWorkspaceInput {
   workflows: WsWorkflow[];
   meetings: WsMeeting[];
   suggested: WsSuggestedEvent[];
+  whatsapp?: BrokerWhatsappSummary;
   notes: string[];
   now?: number;
 }
