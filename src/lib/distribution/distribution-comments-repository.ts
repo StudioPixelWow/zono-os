@@ -110,4 +110,14 @@ export const distributionCommentsRepository = {
     const { error } = await s.db.from(DIST.comments as never).update({ handled } as never).eq("id", id).eq("org_id", s.orgId);
     return !error;
   },
+
+  /** Merge a patch into the comment's metadata jsonb (read-modify-write, org-scoped). */
+  async updateMetadata(id: string, patch: Record<string, unknown>): Promise<boolean> {
+    const s = await scope(); if (!s) return false;
+    const { data } = await s.db.from(DIST.comments as never).select("metadata").eq("id", id).eq("org_id", s.orgId).limit(1).maybeSingle();
+    const current = ((data as { metadata?: Record<string, unknown> } | null)?.metadata) ?? {};
+    const { error } = await s.db.from(DIST.comments as never)
+      .update({ metadata: { ...current, ...patch } } as never).eq("id", id).eq("org_id", s.orgId);
+    return !error;
+  },
 };

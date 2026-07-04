@@ -8,6 +8,8 @@ import "server-only";
 import { distributionCommentsRepository, type CommentInput } from "./distribution-comments-repository";
 import { distributionRepo } from "./repository";
 import { classifyComment, isHotLead } from "./comment-classifier";
+import { enrichPendingSuggestionWithPhone } from "./comment-journey-service";
+import { deriveLifecycleStatus, type LifecycleStatus } from "./comment-journey-core";
 import type { DistCommentRow, DistGroupRow, DistPostRow } from "./db-types";
 
 export interface CommentView {
@@ -17,6 +19,8 @@ export interface CommentView {
   text: string; category: string | null; sentiment: string | null; leadIntentScore: number;
   suggestedReply: string | null; shouldCreateLead: boolean; reason: string | null;
   handled: boolean; isLead: boolean; leadId: string | null; occurredAt: string;
+  // 41.1.1 — lifecycle (derived from metadata mirror; no schema change).
+  status: LifecycleStatus; phone: string | null; crmLeadId: string | null; workflowId: string | null;
 }
 
 export interface CommentsBoard {
@@ -38,6 +42,13 @@ async function groupContext(): Promise<Map<string, DistGroupRow>> {
 function toView(c: DistCommentRow, posts: Map<string, DistPostRow>, groups: Map<string, DistGroupRow>): CommentView {
   const post = c.post_id ? posts.get(c.post_id) ?? null : null;
   const group = c.group_id ? groups.get(c.group_id) ?? null : (post?.group_id ? groups.get(post.group_id) ?? null : null);
+  const meta = (c.metadata ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const phone = str(meta.phone);
+  const crmLeadId = str(meta.crm_lead_id);
+  const workflowId = str(meta.workflow_id);
+  const status = (str(meta.status) as LifecycleStatus | null)
+    ?? deriveLifecycleStatus({ phone, isLeadCandidate: c.is_lead || c.should_create_lead, crmLeadId, workflowId, handled: c.handled });
   return {
     id: c.id, postId: c.post_id, groupId: c.group_id ?? post?.group_id ?? null,
     groupName: group?.name ?? null, postTitle: post?.post_title ?? null, externalPostUrl: post?.external_post_url ?? null,
@@ -46,6 +57,7 @@ function toView(c: DistCommentRow, posts: Map<string, DistPostRow>, groups: Map<
     text: c.comment_text ?? "", category: c.category, sentiment: c.sentiment, leadIntentScore: c.lead_intent_score,
     suggestedReply: c.suggested_reply, shouldCreateLead: c.should_create_lead, reason: c.analysis_reason,
     handled: c.handled, isLead: c.is_lead, leadId: c.lead_id, occurredAt: c.occurred_at,
+    status, phone, crmLeadId, workflowId,
   };
 }
 
@@ -65,6 +77,8 @@ export const distributionCommentService = {
     if (!created) return null;
     await this.analyzeRow(created);
     if (autoLead) { const a = classifyComment(created.comment_text); if (a.shouldCreateLead) await this.createLeadFromComment(created.id); }
+    // 41.1.1 — auto phone-detection monitoring: enrich the pending suggestion only (never creates a CRM lead).
+    await enrichPendingSuggestionWithPhone(created.id).catch(() => {});
     const fresh = await distributionCommentsRepository.getById(created.id);
     const [posts, groups] = await Promise.all([postContext(), groupContext()]);
     return fresh ? toView(fresh, posts, groups) : null;
@@ -79,6 +93,7 @@ export const distributionCommentService = {
     for (const c of created) {
       await this.analyzeRow(c);
       if (autoLead) { const a = classifyComment(c.comment_text); if (a.shouldCreateLead) await this.createLeadFromComment(c.id); }
+      await enrichPendingSuggestionWithPhone(c.id).catch(() => {});
     }
     return created.length;
   },

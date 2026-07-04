@@ -12,6 +12,8 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getDistributionCenter } from "@/lib/distribution/center-data";
 import { getGroupsIntelligence } from "@/lib/facebook-groups-intelligence/service";
 import { distributionCommentService } from "@/lib/distribution/distribution-comment-service";
+import { getPhoneReceivedPending } from "@/lib/distribution/comment-journey-service";
+import { PHONE_RECEIVED_NOTE } from "@/lib/distribution/comment-journey-core";
 import { getMarketDomination } from "@/lib/market-domination/service";
 import { facebookConnectionPathService } from "@/lib/distribution/facebook-connection-paths";
 import { assembleFacebookHome } from "./assemble";
@@ -110,20 +112,26 @@ export async function getFacebookHome(): Promise<FacebookHome> {
 // ── Broker-scoped Facebook summary (for /my) ────────────────────────────────
 export interface BrokerFacebook {
   scheduledToday: number; commentsWaiting: number; leadApprovals: number; groupsToPublish: number;
+  phoneReceived: number;
   tasks: { title: string; detail: string; href: string }[];
 }
 
 export async function getBrokerFacebook(ownerId: string | null): Promise<BrokerFacebook> {
-  const empty: BrokerFacebook = { scheduledToday: 0, commentsWaiting: 0, leadApprovals: 0, groupsToPublish: 0, tasks: [] };
+  const empty: BrokerFacebook = { scheduledToday: 0, commentsWaiting: 0, leadApprovals: 0, groupsToPublish: 0, phoneReceived: 0, tasks: [] };
   try {
-    const home = assembleFacebookHome(await buildInput(ownerId));
+    const [home, phonePending] = await Promise.all([
+      assembleFacebookHome(await buildInput(ownerId)),
+      getPhoneReceivedPending().catch(() => ({ count: 0, items: [] as never[] })),
+    ]);
     const scheduledToday = home.scheduled.filter((p) => { const t = p.scheduledAt ? Date.parse(p.scheduledAt) : NaN; if (!Number.isFinite(t)) return false; return new Date(t).toDateString() === new Date().toDateString(); }).length;
     const groupsToPublish = home.groups.inactive.length + home.groups.opportunity.length;
     const tasks: BrokerFacebook["tasks"] = [];
+    // 41.1.1 — phone-received FB suggestions waiting for CRM promotion (top priority).
+    if (phonePending.count > 0) tasks.push({ title: PHONE_RECEIVED_NOTE, detail: `${phonePending.count} לידים מפייסבוק`, href: "/distribution" });
     if (home.comments.counts.needsReply > 0) tasks.push({ title: "תגובות ממתינות למענה", detail: `${home.comments.counts.needsReply} תגובות`, href: "/facebook" });
     if (home.comments.leadCandidates.length > 0) tasks.push({ title: "לידים לאישור מתגובות", detail: `${home.comments.leadCandidates.length} מועמדים`, href: "/facebook" });
     if (groupsToPublish > 0) tasks.push({ title: "קבוצות לפרסום", detail: `${groupsToPublish} קבוצות ללא פרסום/הזדמנות`, href: "/distribution/campaign-wizard" });
-    return { scheduledToday, commentsWaiting: home.comments.counts.needsReply, leadApprovals: home.comments.leadCandidates.length, groupsToPublish, tasks };
+    return { scheduledToday, commentsWaiting: home.comments.counts.needsReply, leadApprovals: home.comments.leadCandidates.length, groupsToPublish, phoneReceived: phonePending.count, tasks };
   } catch { return empty; }
 }
 

@@ -176,10 +176,22 @@ export const distributionRepo = {
     if (error) { console.error("[distribution.repo] createLead:", error.message); return null; }
     return data as unknown as DistLeadRow;
   },
-  async updateLead(id: string, patch: Partial<{ status: DistLeadStatus; notes: string | null; phone: string | null; name: string | null }>): Promise<boolean> {
+  async updateLead(id: string, patch: Partial<{ status: DistLeadStatus; notes: string | null; phone: string | null; name: string | null; metadata: Record<string, unknown> }>): Promise<boolean> {
     const s = await scope(); if (!s) return false;
     const { error } = await s.db.from(DIST.leads as never).update(patch as never).eq("id", id).eq("org_id", s.orgId);
     return !error;
+  },
+  async getLeadById(id: string): Promise<DistLeadRow | null> {
+    const s = await scope(); if (!s) return null;
+    const { data } = await s.db.from(DIST.leads as never).select("*").eq("id", id).eq("org_id", s.orgId).limit(1).maybeSingle();
+    return (data as unknown as DistLeadRow) ?? null;
+  },
+  /** Find the distribution_lead that a CRM lead was promoted from (metadata.crm_lead_id). */
+  async getLeadByCrmLeadId(crmLeadId: string): Promise<DistLeadRow | null> {
+    const s = await scope(); if (!s) return null;
+    const { data } = await s.db.from(DIST.leads as never).select("*").eq("org_id", s.orgId)
+      .eq("metadata->>crm_lead_id", crmLeadId).limit(1).maybeSingle();
+    return (data as unknown as DistLeadRow) ?? null;
   },
 
   // ── Analytics ──────────────────────────────────────────────────────────────

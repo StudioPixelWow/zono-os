@@ -11,8 +11,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { distributionCommentsRepository } from "./distribution-comments-repository";
 import { distributionCommentService } from "./distribution-comment-service";
+import { distributionRepo } from "./repository";
 import { startWorkflow } from "@/lib/workflow-builder/service";
 import { pickPhone, mapCommentToLead, approvedPhoneReply } from "./comment-lead-bridge-core";
+import { buildJourneyEnrichment, shouldStartJourney, deriveLifecycleStatus } from "./comment-journey-core";
+import type { DistLeadRow } from "./db-types";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
@@ -50,23 +53,17 @@ export async function promoteCommentToCrmLead(
   const distLeadId = comment.lead_id ?? (await distributionCommentService.createLeadFromComment(commentId).catch(() => null));
   const db = await createClient();
 
-  // Read the distribution_lead for source fields + any stored phone + idempotency.
-  let distLead: Row | null = null;
-  if (distLeadId) {
-    try {
-      const { data } = await db.from("distribution_leads" as never).select("id,property_id,phone,name,metadata,status" as never)
-        .eq("organization_id" as never, orgId as never).eq("id" as never, distLeadId as never).limit(1).maybeSingle();
-      distLead = (data as Row | null) ?? null;
-    } catch { distLead = null; }
-  }
-  const meta = (distLead?.metadata as { crm_lead_id?: string } | null) ?? null;
-  if (meta?.crm_lead_id) return { ok: true, alreadyPromoted: true, crmLeadId: meta.crm_lead_id, distributionLeadId: distLeadId ?? undefined, note: "כבר קודם ל-CRM." };
+  // Read the distribution_lead (org-scoped via the repository) for source fields,
+  // any stored phone, and idempotency.
+  const distLead: DistLeadRow | null = distLeadId ? await distributionRepo.getLeadById(distLeadId).catch(() => null) : null;
+  const meta = (distLead?.metadata as Row | undefined) ?? {};
+  if (s(meta.crm_lead_id)) return { ok: true, alreadyPromoted: true, crmLeadId: s(meta.crm_lead_id)!, distributionLeadId: distLeadId ?? undefined, workflowId: s(meta.workflow_id), note: "כבר קודם ל-CRM." };
 
-  // Capture phone (reuse extractPhone across the comment + any later messages + the distribution lead).
-  const phone = opts.phone ?? pickPhone([comment.comment_text, s(distLead?.phone), ...(opts.extraTexts ?? [])]);
+  // Capture phone (reuse extractPhone across the comment + any later messages + the distribution lead + the enriched metadata).
+  const phone = opts.phone ?? pickPhone([comment.comment_text, distLead?.phone ?? null, s(meta.phone), ...(opts.extraTexts ?? [])]);
 
   // Create the CRM lead (approval = the broker's explicit action).
-  const lean = { authorName: comment.author_name, commentText: comment.comment_text, leadIntentScore: comment.lead_intent_score, category: comment.category, suggestedReply: comment.suggested_reply, propertyId: s(distLead?.property_id) };
+  const lean = { authorName: comment.author_name, commentText: comment.comment_text, leadIntentScore: comment.lead_intent_score, category: comment.category, suggestedReply: comment.suggested_reply, propertyId: distLead?.property_id ?? null };
   const fields = mapCommentToLead(lean, phone);
   let crmLeadId: string | null = null;
   try {
@@ -79,20 +76,32 @@ export async function promoteCommentToCrmLead(
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "יצירת הליד נכשלה." }; }
   if (!crmLeadId) return { ok: false, error: "יצירת הליד נכשלה." };
 
-  // Link back (idempotency) + mark the comment handled.
-  try {
-    if (distLeadId) await db.from("distribution_leads" as never).update({ metadata: { ...(distLead?.metadata as object ?? {}), crm_lead_id: crmLeadId, promoted_at: new Date().toISOString() }, status: "converted" } as never).eq("organization_id" as never, orgId as never).eq("id" as never, distLeadId as never);
-    await distributionCommentsRepository.markHandled(commentId, true);
-  } catch { /* linkage best-effort */ }
-
-  // Start the EXISTING approval-gated lead journey/workflow.
-  let workflowId: string | null = null;
-  if (opts.startWorkflow !== false) {
+  // Journey-once guard: start the EXISTING approval-gated lead workflow only if
+  // one was never started for this suggestion.
+  let workflowId: string | null = s(meta.workflow_id);
+  const startJourney = opts.startWorkflow !== false && shouldStartJourney(meta);
+  if (startJourney) {
     try {
       const wf = await startWorkflow(orgId, "lead_qualification", { entityKind: "lead", entityId: crmLeadId, entityName: fields.full_name });
-      workflowId = wf?.workflow.id ?? null;
-    } catch { workflowId = null; }
+      workflowId = wf?.workflow.id ?? workflowId;
+    } catch { /* keep prior workflowId */ }
   }
+
+  // Attach the Lead-Journey enrichment (by REFERENCE — no duplicated data) +
+  // full source links + lifecycle status onto the distribution_lead metadata.
+  const journey = buildJourneyEnrichment({
+    workflowId, commentId, phone,
+    propertyId: distLead?.property_id ?? fields.property_id ?? null,
+    campaignId: distLead?.campaign_id ?? null, groupId: distLead?.group_id ?? null, postId: distLead?.post_id ?? comment.post_id,
+    classification: comment.category, suggestedReply: comment.suggested_reply, confidence: comment.lead_intent_score,
+    evidence: [comment.comment_text, comment.analysis_reason], now: new Date().toISOString(),
+  });
+  const status = deriveLifecycleStatus({ phone, isLeadCandidate: true, crmLeadId, workflowId });
+  try {
+    if (distLeadId) await distributionRepo.updateLead(distLeadId, { status: "converted", phone, metadata: { ...meta, crm_lead_id: crmLeadId, promoted_at: journey.startedAt, workflow_id: workflowId, status, journey: journey as unknown as Record<string, unknown> } });
+    await distributionCommentsRepository.updateMetadata(commentId, { crm_lead_id: crmLeadId, workflow_id: workflowId, status }).catch(() => {});
+    await distributionCommentsRepository.markHandled(commentId, true);
+  } catch { /* linkage best-effort */ }
 
   return { ok: true, crmLeadId, phone, distributionLeadId: distLeadId ?? undefined, workflowId, note: "ליד נוצר ב-CRM והופעל תהליך ליד (דורש אישור בשלבים)." };
 }

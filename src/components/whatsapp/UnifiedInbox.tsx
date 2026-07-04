@@ -142,6 +142,13 @@ export function UnifiedInbox({ data, initialConversation }: { data: UnifiedInbox
         </div>
       </div>
 
+      {(data.facebookPhoneReceived ?? 0) > 0 && (
+        <Link href="/distribution" className="bg-success-soft text-success mt-4 flex items-center justify-between gap-2 rounded-2xl px-4 py-3 text-[13px] font-bold">
+          <span>📞 התקבל מספר טלפון - ממתין לקידום ל-CRM</span>
+          <span className="bg-success rounded-full px-2 py-0.5 text-[11px] text-white">{data.facebookPhoneReceived}</span>
+        </Link>
+      )}
+
       <div className="mt-4"><AskBox /></div>
 
       {data.groups.length === 0 ? (

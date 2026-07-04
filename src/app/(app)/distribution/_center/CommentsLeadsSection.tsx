@@ -18,6 +18,8 @@ import {
   markCommentHandledAction,
 } from "@/lib/distribution/distribution-comment-actions";
 import { promoteCommentToCrmLeadAction } from "@/lib/distribution/comment-lead-bridge-actions";
+import { LIFECYCLE_HE, type LifecycleStatus } from "@/lib/distribution/comment-journey-core";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Glass, SectionHeading, StatTile, EmptyState, Chip, ScoreBar, Icon, compact, pct } from "./shared";
 import type { RunAction, RunActionAsync } from "./DistributionCenterView";
@@ -29,6 +31,17 @@ const field =
 const IGNORED = ["spam", "not_relevant", "negative", "broker_comment"];
 // Lead-intent categories (a comment in one of these can become a lead).
 const LEAD_CATS = ["asks_for_price", "asks_for_details", "asks_for_location", "asks_for_photos", "asks_for_phone", "interested"];
+
+// 41.1.1 — lifecycle status → chip tone.
+const STATUS_TONE: Record<LifecycleStatus, string> = {
+  waiting_for_phone: "bg-line/70 text-muted",
+  phone_received: "bg-success-soft text-success",
+  waiting_crm_approval: "bg-warning-soft text-warning",
+  crm_lead_created: "bg-brand-soft text-brand-strong",
+  journey_started: "bg-brand-soft text-brand-strong",
+  closed: "bg-line/70 text-muted",
+  rejected: "bg-danger-soft text-danger",
+};
 
 // Short Hebrew labels for the classifier categories.
 const CAT_LABEL: Record<string, string> = {
@@ -234,6 +247,16 @@ export function CommentsLeadsSection({
               </span>
             )}
           </div>
+        </div>
+
+        {/* 41.1.1 — lifecycle badges (status · phone · CRM · workflow · campaign · property) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-bold", STATUS_TONE[c.status])}>{LIFECYCLE_HE[c.status]}</span>
+          {c.phone && <span className="bg-success-soft text-success inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold"><Icon name="Phone" size={11} /> {c.phone}</span>}
+          {c.crmLeadId && <span className="bg-brand-soft text-brand-strong inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold"><Icon name="UserCheck" size={11} /> ליד CRM</span>}
+          {c.workflowId && <span className="bg-brand-soft text-brand-strong inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold"><Icon name="GitBranch" size={11} /> מסע ליד פעיל</span>}
+          {c.campaignId && <span className="bg-card/70 border-line text-muted inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold"><Icon name="Megaphone" size={11} /> קמפיין</span>}
+          {c.propertyId && <Link href={`/properties/${c.propertyId}`} className="bg-card/70 border-line text-muted inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold"><Icon name="Home" size={11} /> נכס</Link>}
         </div>
 
         {/* Comment text */}

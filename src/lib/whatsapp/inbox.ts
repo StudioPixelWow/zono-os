@@ -56,7 +56,7 @@ export interface InboxConversation extends WaConv {
 
 export interface InboxGroup { kind: ConvKind; label: string; conversations: InboxConversation[] }
 export interface InboxTotals { conversations: number; unread: number; waiting: number; urgent: number; missedCall: number; opportunities: number }
-export interface UnifiedInbox { groups: InboxGroup[]; totals: InboxTotals }
+export interface UnifiedInbox { groups: InboxGroup[]; totals: InboxTotals; facebookPhoneReceived?: number }
 
 const DAY = 86_400_000;
 const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));

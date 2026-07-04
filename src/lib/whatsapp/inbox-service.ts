@@ -10,6 +10,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { listEntityMissions } from "@/lib/mission-engine/service";
+import { getPhoneReceivedPending } from "@/lib/distribution/comment-journey-service";
 import { groupConversations, mergeTimeline, buildConversationCard, classifyKind, type WaConv, type UnifiedInbox, type TimelineEvent, type ConversationCard, type ConvKind, type BrokerWhatsapp } from "./inbox";
 
 type Row = Record<string, unknown>;
@@ -48,8 +49,11 @@ async function loadConversations(limit = 300): Promise<WaConv[]> {
 
 /** The full unified WhatsApp inbox, grouped by CRM entity with intelligence cards. */
 export async function getUnifiedInbox(): Promise<UnifiedInbox> {
-  const convs = await loadConversations();
-  return groupConversations(convs);
+  const [convs, phonePending] = await Promise.all([
+    loadConversations(),
+    getPhoneReceivedPending().catch(() => ({ count: 0, items: [] as never[] })),
+  ]);
+  return { ...groupConversations(convs), facebookPhoneReceived: phonePending.count };
 }
 
 export interface ConversationDetail {
