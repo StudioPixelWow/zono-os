@@ -27,6 +27,7 @@ import { CreatePortalButton } from "@/components/portals/CreatePortalButton";
 import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
 import { ContextPanel } from "@/components/intelligence/ContextPanel";
 import { PropertyMarketingLog } from "@/components/property/PropertyMarketingLog";
+import { PropertyMarketingActionCenter } from "@/components/property/PropertyMarketingActionCenter";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,7 @@ export default async function PropertyDetailsPage({
       />
       <EntityRecommendationsPanel entityType="property" entityId={id} recommendations={await listRecommendationsForEntity("property", id).catch(() => [])} />
       <ContextPanel city={property.city} neighborhood={property.neighborhood} />
+      <PropertyMarketingActionCenter propertyId={id} />
       <PropertyMarketingLog propertyId={id} />
       <CreatePortalButton entityType="property" entityId={id} portalType="property" label="צור פורטל נכס / מוכר" />
       <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
