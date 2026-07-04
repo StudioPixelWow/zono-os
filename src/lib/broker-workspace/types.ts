@@ -158,6 +158,13 @@ export interface BrokerWebsiteSummaryLite {
   alerts: { title: string; detail: string }[];
 }
 
+export interface BrokerTerritoryLite {
+  acquisitionStreets: { street: string; city: string | null; score: number; href: string }[];
+  buildings: { label: string; city: string | null; score: number; href: string }[];
+  opportunities: { title: string; why: string; href: string }[];
+  marketChanges: { title: string; detail: string }[];
+}
+
 export interface BrokerWorkspace {
   version: string;
   brokerId: string | null;
@@ -172,6 +179,7 @@ export interface BrokerWorkspace {
   whatsapp: BrokerWhatsappSummary;
   facebook: BrokerFacebookSummary;
   website: BrokerWebsiteSummaryLite;
+  territory: BrokerTerritoryLite;
   notes: string[];
 }
 
@@ -192,6 +200,7 @@ export interface BrokerWorkspaceInput {
   whatsapp?: BrokerWhatsappSummary;
   facebook?: BrokerFacebookSummary;
   website?: BrokerWebsiteSummaryLite;
+  territory?: BrokerTerritoryLite;
   notes: string[];
   now?: number;
 }

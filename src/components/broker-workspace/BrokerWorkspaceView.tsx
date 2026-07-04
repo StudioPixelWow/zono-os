@@ -168,6 +168,25 @@ function TodayTab({ data }: { data: BrokerWorkspace }) {
         </Section>
       )}
 
+      {(data.territory.acquisitionStreets.length > 0 || data.territory.opportunities.length > 0) && (
+        <Section title="🗺️ טריטוריה">
+          <Link href="/territory" className="bg-card border-line block rounded-2xl border p-3">
+            {data.territory.acquisitionStreets.length > 0 && (
+              <div className="mb-2">
+                <div className="text-muted mb-1 text-[11px] font-bold">רחובות לגיוס היום</div>
+                <div className="space-y-1">{data.territory.acquisitionStreets.slice(0, 3).map((st, i) => (
+                  <div key={i} className="bg-surface flex items-center justify-between rounded-lg px-2.5 py-1.5"><span className="text-ink text-[12px] font-bold">{st.street}{st.city ? ` · ${st.city}` : ""}</span><span className="text-brand text-[11px] font-black">{st.score}</span></div>
+                ))}</div>
+              </div>
+            )}
+            {data.territory.opportunities.slice(0, 2).map((o, i) => (
+              <div key={i} className="bg-surface mt-1 rounded-lg px-2.5 py-1.5"><span className="text-ink text-[12px] font-bold">{o.title}</span></div>
+            ))}
+            <div className="text-brand mt-2 text-center text-[12px] font-bold">פתח את מערכת הטריטוריה ←</div>
+          </Link>
+        </Section>
+      )}
+
       <Section title="🎯 עדיפויות היום" count={d.todaysPriorities.length}>
         {d.todaysPriorities.length === 0 ? <Empty text="אין משימות פתוחות." /> : d.todaysPriorities.slice(0, 6).map((m) => <MissionRow key={m.id} m={m} />)}
       </Section>

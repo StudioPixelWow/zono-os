@@ -96,6 +96,7 @@ export function assembleBrokerWorkspace(input: BrokerWorkspaceInput): BrokerWork
     whatsapp: input.whatsapp ?? { unread: 0, waiting: 0, urgent: 0, today: 0, waitingConversations: [] },
     facebook: input.facebook ?? { scheduledToday: 0, commentsWaiting: 0, leadApprovals: 0, groupsToPublish: 0, tasks: [] },
     website: input.website ?? { hasSite: false, published: false, healthScore: 0, seoAlerts: 0, landingDrafts: 0, approvalsPending: 0, alerts: [] },
+    territory: input.territory ?? { acquisitionStreets: [], buildings: [], opportunities: [], marketChanges: [] },
     notes,
   };
 }
