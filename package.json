@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "check:types-drift": "tsx scripts/check-types-drift.ts",
     "dev-check:platform": "tsx scripts/platform-dev-check.ts",
     "dev-check:launch": "tsx scripts/launch-dev-check.ts",
     "readiness": "tsx scripts/zono-production-readiness.ts",

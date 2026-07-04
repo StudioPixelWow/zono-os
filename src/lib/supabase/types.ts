@@ -4671,6 +4671,43 @@ type ZiFaqRow = {
   role_min: string; published: boolean; created_at: string; updated_at: string;
 };
 
+// ── PHASE 34.2 · QA.1 stabilization tables ──────────────────────────────────
+type ZonoOrgMemoryRow = {
+  id: string; org_id: string; entity_type: string | null; entity_id: string | null;
+  memory_type: string; title: string; summary: string | null; evidence: Json;
+  confidence: number | null; impact: string | null; source_module: string | null;
+  occurred_at: string | null; created_at: string; updated_at: string;
+};
+type ZonoOrgMemoryEventsRow = {
+  id: string; org_id: string; entity_type: string | null; entity_id: string | null;
+  event_type: string; title: string; summary: string | null; evidence: Json;
+  impact: string | null; source_module: string | null; occurred_at: string; created_at: string;
+};
+type ZonoOrgLearningPatternsRow = {
+  id: string; org_id: string; entity_type: string | null; memory_type: string;
+  title: string; summary: string | null; evidence: Json; confidence: number | null;
+  impact: string | null; occurrences: number; source_module: string | null;
+  first_seen_at: string | null; last_seen_at: string | null; created_at: string; updated_at: string;
+};
+type ZonoIntelligenceSnapshotsRow = {
+  id: string; org_id: string; entity_type: string; entity_id: string | null; kind: string;
+  score: number | null; confidence: number | null; truth_score: number | null; payload: Json;
+  source_module: string | null; computed_at: string; expires_at: string | null; created_at: string;
+};
+type ZonoComputeCacheRow = {
+  id: string; org_id: string; namespace: string; cache_key: string; payload: Json;
+  version: string | null; computed_at: string; expires_at: string | null;
+};
+type ZonoAskConversationsRow = {
+  id: string; org_id: string; user_id: string | null; session_id: string; title: string | null;
+  created_at: string; updated_at: string;
+};
+type ZonoAskMessagesRow = {
+  id: string; org_id: string; conversation_id: string | null; session_id: string | null;
+  user_id: string | null; question: string | null; answer: string | null; intent: string | null;
+  source_engines: Json; evidence: Json; confidence: number | null; limitations: string | null; created_at: string;
+};
+
 type Insertable<Row, Required extends keyof Row> = Pick<Row, Required> &
   Partial<Omit<Row, Required>>;
 
@@ -5357,6 +5394,13 @@ export interface Database {
       automation_voices: TableShape<AutomationVoicesRow, "voice_key" | "name_he" | "description_he" | "tone_he">;
       automation_priority_labels: TableShape<AutomationPriorityLabelsRow, "label_key" | "label_he" | "description_he">;
       automation_microcopy: TableShape<AutomationMicrocopyRow, "scope" | "copy_key" | "text_he">;
+      zono_org_memory: TableShape<ZonoOrgMemoryRow, "org_id" | "memory_type" | "title">;
+      zono_org_memory_events: TableShape<ZonoOrgMemoryEventsRow, "org_id" | "event_type" | "title">;
+      zono_org_learning_patterns: TableShape<ZonoOrgLearningPatternsRow, "org_id" | "title">;
+      zono_intelligence_snapshots: TableShape<ZonoIntelligenceSnapshotsRow, "org_id" | "entity_type" | "kind">;
+      zono_compute_cache: TableShape<ZonoComputeCacheRow, "org_id" | "namespace" | "cache_key">;
+      zono_ask_conversations: TableShape<ZonoAskConversationsRow, "org_id" | "session_id">;
+      zono_ask_messages: TableShape<ZonoAskMessagesRow, "org_id">;
     };
     Views: { [_ in never]: never };
     Functions: {
