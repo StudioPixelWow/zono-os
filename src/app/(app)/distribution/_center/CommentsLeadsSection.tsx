@@ -17,6 +17,7 @@ import {
   createLeadFromCommentAction,
   markCommentHandledAction,
 } from "@/lib/distribution/distribution-comment-actions";
+import { promoteCommentToCrmLeadAction } from "@/lib/distribution/comment-lead-bridge-actions";
 import { cn } from "@/lib/utils";
 import { Glass, SectionHeading, StatTile, EmptyState, Chip, ScoreBar, Icon, compact, pct } from "./shared";
 import type { RunAction, RunActionAsync } from "./DistributionCenterView";
@@ -285,6 +286,11 @@ export function CommentsLeadsSection({
               <Icon name="UserPlus" size={14} /> צור ליד
             </button>
           )}
+          <button type="button" disabled={pending}
+            onClick={() => runAction(() => promoteCommentToCrmLeadAction({ commentId: c.id }), "הליד קודם ל-CRM והופעל תהליך ליד (דורש אישור)")}
+            className="text-brand bg-brand-soft inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition hover:brightness-95 disabled:opacity-50">
+            <Icon name="ArrowLeftRight" size={14} /> קדם ל-CRM
+          </button>
           {!c.handled && (
             <button type="button" disabled={pending}
               onClick={() => runAction(() => markCommentHandledAction({ commentId: c.id, handled: true }), "התגובה סומנה כטופלה")}
