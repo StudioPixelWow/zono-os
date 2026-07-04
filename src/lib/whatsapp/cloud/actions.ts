@@ -28,8 +28,18 @@ export async function sendApprovedWhatsappDraftAction(input: { draftId: string }
   if (!convId) return { ok: false, error: "אין שיחה משויכת לטיוטה." };
   const to = await recipientForConversation(orgId, convId);
   if (!to) return { ok: false, error: "מספר הנמען אינו ידוע (אין הודעה נכנסת בשיחה)." };
-  const r = await sendText(to, s(draft.body) ?? "");
-  if (!r.ok) return { ok: false, error: r.error ?? "השליחה נכשלה." };
+  const body = s(draft.body) ?? "";
+  const r = await sendText(to, body);
+  if (!r.ok) {
+    await db.from("whatsapp_drafts").update({ send_status: "failed" } as never).eq("organization_id", orgId).eq("id", input.draftId);
+    return { ok: false, error: `${r.error ?? "השליחה נכשלה."}${r.errorKind ? ` (${r.errorKind})` : ""}` };
+  }
+  // Record the sent message as an outbound row so status webhooks can track it (provider_message_id).
+  await db.from("whatsapp_drafts").update({ send_status: r.mock ? "sent_manual" : "sent_api", sent_at: new Date().toISOString() } as never).eq("organization_id", orgId).eq("id", input.draftId);
+  await db.from("whatsapp_messages").insert({
+    organization_id: orgId, conversation_id: convId, direction: "outbound", source: "meta_api", body, status: "sent",
+    metadata: { provider_message_id: r.providerMessageId, wa_message_id: r.providerMessageId, to, mock: r.mock },
+  } as never).then(() => {}, () => {});
   await markDraftSent(input.draftId).catch(() => {});
   revalidatePath("/whatsapp/inbox");
   return { ok: true, mock: r.mock };
