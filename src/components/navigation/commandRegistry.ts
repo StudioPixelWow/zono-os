@@ -45,9 +45,11 @@ export const SYSTEM_MAP: SystemGroup[] = [
     key: "home", title: "בית ושליטה", icon: "Home", items: [
       { id: "home", label: "דף הבית", description: "מרכז העבודה היומי", href: "/", icon: "Home", category: "עמודים", group: "home", type: "page" },
       { id: "command", label: "AI Command Center", description: "מרכז ההחלטות הניהולי", href: "/command", icon: "Flame", category: "עמודים", group: "home", type: "page", keywords: ["פיקוד", "decision"] },
-      { id: "today", label: "מוקד היום", description: "מה דורש טיפול עכשיו", href: "/command", icon: "Target", category: "עמודים", group: "home", type: "page" },
+      { id: "today", label: "מוקד היום", description: "Daily OS — מה דורש טיפול עכשיו", href: "/today", icon: "Target", category: "עמודים", group: "home", type: "page", keywords: ["daily os", "היום"] },
+      { id: "my", label: "שולחן העבודה שלי", description: "Broker Workspace", href: "/my", icon: "Users", category: "עמודים", group: "home", type: "page", keywords: ["workspace", "broker"] },
+      { id: "executive", label: "מוח ניהולי", description: "Executive Intelligence OS", href: "/executive", icon: "Sparkles", category: "עמודים", group: "home", type: "page", keywords: ["executive", "ceo", "ציון ארגון"] },
       { id: "notifications", label: "התראות", href: "/notifications", icon: "Bell", category: "עמודים", group: "home", type: "page" },
-      { id: "calendar", label: "יומן", icon: "Calendar", category: "עמודים", group: "home", type: "page", disabled: true },
+      { id: "calendar", label: "יומן", description: "Calendar OS — סדר יום, מסלול, פגישות", href: "/calendar", icon: "Calendar", category: "עמודים", group: "home", type: "page", keywords: ["calendar", "לוח שנה"] },
     ],
   },
   {
