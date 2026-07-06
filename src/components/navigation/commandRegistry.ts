@@ -99,6 +99,7 @@ export const SYSTEM_MAP: SystemGroup[] = [
   {
     key: "ai", title: "AI ואוטומציות", icon: "Sparkles", items: [
       { id: "brain", label: "מוח הברוקר", description: "AI Broker Brain — מטרה אסטרטגית → תוכנית פעולה", href: "/brain", icon: "Sparkles", category: "AI", group: "ai", type: "ai", keywords: ["broker brain", "מוח", "תוכנית", "בלעדיות", "מטרה", "goal", "plan"] },
+      { id: "relationships", label: "גרף הקשרים", description: "Universal Knowledge Graph — קשרים מבוססי ראיות בין כל הישויות", href: "/relationships", icon: "Route", category: "AI", group: "ai", type: "ai", keywords: ["graph", "גרף", "קשרים", "knowledge graph", "relationships", "מחובר"] },
       { id: "ai-insights", label: "AI Insights", href: "/ai-office", icon: "Sparkles", category: "AI", group: "ai", type: "ai" },
       { id: "opportunity-radar", label: "Opportunity Radar", href: "/command", icon: "Activity", category: "AI", group: "ai", type: "ai", keywords: ["הזדמנויות"] },
       { id: "recommendations", label: "Recommendations", href: "/recommendations", icon: "Sparkles", category: "AI", group: "ai", type: "ai", keywords: ["המלצות"] },
