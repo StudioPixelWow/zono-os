@@ -57,6 +57,7 @@ export function FacebookHome({ data }: { data: FBData }) {
               <Tile label="קבוצות" value={k.groups} /><Tile label="קמפיינים" value={k.activeCampaigns} /><Tile label="מתוזמנים" value={k.scheduledPosts} /><Tile label="לידים" value={k.leads} />
               <Tile label="תגובות" value={k.comments} /><Tile label="למענה" value={k.needsReply} /><Tile label="חשיפה" value={k.reach} /><Tile label="המרה" value={`${k.conversionRate}%`} />
             </div>
+            <button onClick={() => { try { window.dispatchEvent(new Event("zono:open-daily-publishing")); } catch { /* ignore */ } }} className="bg-brand-soft text-brand flex w-full items-center justify-center gap-2 rounded-2xl p-3 text-center text-[13px] font-black">📣 פתח שולחן פרסום היומי{k.scheduledPosts > 0 ? ` · ${k.scheduledPosts} מתוזמנים` : ""}</button>
             <div className="grid grid-cols-2 gap-2">
               <Link href="/distribution/campaign-wizard" className="bg-brand rounded-2xl p-3 text-center text-[13px] font-bold text-white">אשף קמפיין</Link>
               <Link href="/distribution/groups/intelligence" className="bg-card border-line text-brand rounded-2xl border p-3 text-center text-[13px] font-bold">מודיעין קבוצות</Link>

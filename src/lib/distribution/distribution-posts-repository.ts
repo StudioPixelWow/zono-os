@@ -122,6 +122,14 @@ export const distributionPostsRepository = {
     } as never).eq("id", id).eq("org_id", s.orgId);
     return !error;
   },
+  /** Mark a queued post as SKIPPED (broker chose not to publish it today). */
+  async markSkipped(id: string, reason: string): Promise<boolean> {
+    const s = await scope(); if (!s) return false;
+    const { error } = await s.db.from(DIST.posts as never)
+      .update({ status: "skipped", skipped_reason: reason.slice(0, 500) } as never)
+      .eq("id", id).eq("org_id", s.orgId);
+    return !error;
+  },
   /** Mark a manual publish as failed with a reason. */
   async markManualFailed(id: string, reason: string): Promise<boolean> {
     const s = await scope(); if (!s) return false;
