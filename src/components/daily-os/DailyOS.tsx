@@ -46,6 +46,10 @@ export function DailyOS({ data }: { data: DData }) {
       <div className="mt-4">
         {tab === "morning" && (
           <div className="space-y-4">
+            <Link href="/brain" className="bg-brand flex items-center justify-between gap-3 rounded-2xl p-3.5 text-white shadow-[var(--shadow-card)]">
+              <div><div className="text-[11px] font-bold opacity-90">🧠 מוח הברוקר · AI Broker Brain</div><div className="mt-0.5 text-[14px] font-black">אמור מטרה — קבל תוכנית פעולה</div></div>
+              <span className="text-[13px] font-black">←</span>
+            </Link>
             <div className="grid grid-cols-2 gap-2">
               {b.biggestOpportunity && <Link href={b.biggestOpportunity.href} className="bg-success-soft rounded-2xl p-3"><div className="text-success text-[11px] font-bold">🚀 ההזדמנות הגדולה</div><div className="text-ink mt-0.5 text-[14px] font-black">{b.biggestOpportunity.label}</div><div className="text-muted text-[11px]">{b.biggestOpportunity.detail}</div></Link>}
               {b.biggestRisk && <Link href={b.biggestRisk.href} className="bg-danger-soft rounded-2xl p-3"><div className="text-danger text-[11px] font-bold">⚠️ הסיכון הגדול</div><div className="text-ink mt-0.5 text-[14px] font-black">{b.biggestRisk.label}</div><div className="text-muted text-[11px]">{b.biggestRisk.detail}</div></Link>}
