@@ -107,6 +107,7 @@ export const SYSTEM_MAP: SystemGroup[] = [
       { id: "automations", label: "Automations", href: "/automation", icon: "Layers", category: "AI", group: "ai", type: "ai", keywords: ["אוטומציה"] },
       { id: "smart-matching", label: "Smart Matching", href: "/matches", icon: "Target", category: "AI", group: "ai", type: "ai" },
       { id: "predictions", label: "Market Predictions", href: "/forecast", icon: "TrendingUp", category: "AI", group: "ai", type: "ai", keywords: ["תחזיות"] },
+      { id: "prediction-engine", label: "מנוע התחזיות", description: "Prediction Engine — נטישה, סגירה, המרה, עומס, טריטוריה", href: "/predictions", icon: "Sparkles", category: "AI", group: "ai", type: "ai", keywords: ["תחזית", "forecast", "prediction", "churn", "סבירות", "חיזוי"] },
     ],
   },
   {
