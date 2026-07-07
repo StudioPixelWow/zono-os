@@ -27,14 +27,14 @@ export function SiteSection({ id, eyebrow, title, subtitle, action, children, cl
   );
 }
 
-/** Premium stat band — evidence numbers, official tokens. */
+/** Premium stat band — evidence numbers; value tinted with the active theme. */
 export function StatBand({ stats }: { stats: { label: string; value: string }[] }) {
   if (!stats.length) return null;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {stats.map((s) => (
-        <div key={s.label} className="bg-card border-line rounded-[var(--radius-card)] border px-4 py-4 text-center shadow-[var(--shadow-card)]">
-          <div className="text-ink text-2xl font-black tracking-tight sm:text-3xl">{s.value}</div>
+        <div key={s.label} className="bg-card/90 border-line rounded-[var(--radius-card)] border px-4 py-4 text-center shadow-[var(--shadow-card)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)]">
+          <div className="text-2xl font-black tracking-tight sm:text-3xl" style={{ color: "var(--site-accent)" }}>{s.value}</div>
           <div className="text-muted mt-1 text-[12px] font-bold">{s.label}</div>
         </div>
       ))}
@@ -42,13 +42,21 @@ export function StatBand({ stats }: { stats: { label: string; value: string }[] 
   );
 }
 
-/** Honest empty state — no fabricated content. */
-export function SiteEmptyState({ icon = "✨", title, hint }: { icon?: string; title: string; hint?: string }) {
+/**
+ * Premium empty state — never fabricates content, but never feels dead either.
+ * A themed halo + glass card, a large iconic mark, and an optional action so a
+ * missing section (e.g. "no sold listings yet") still looks intentional.
+ */
+export function SiteEmptyState({ icon = "✨", title, hint, action }: { icon?: string; title: string; hint?: string; action?: ReactNode }) {
   return (
-    <div className="bg-card border-line rounded-[var(--radius-card)] border p-10 text-center shadow-[var(--shadow-card)]">
-      <div className="text-3xl">{icon}</div>
-      <p className="text-ink mt-2 text-lg font-black">{title}</p>
-      {hint && <p className="text-muted mt-1 text-sm">{hint}</p>}
+    <div className="bg-card/90 border-line relative overflow-hidden rounded-[var(--radius-card)] border p-12 text-center shadow-[var(--shadow-card)] backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-x-0 -top-16 mx-auto h-40 w-40 rounded-full opacity-20 blur-3xl" style={{ background: "var(--site-gradient)" }} />
+      <div className="relative">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full text-3xl text-white shadow-[var(--shadow-soft)]" style={{ background: "var(--site-gradient)" }}>{icon}</div>
+        <p className="text-ink mt-4 text-lg font-black">{title}</p>
+        {hint && <p className="text-muted mx-auto mt-1 max-w-md text-sm leading-relaxed">{hint}</p>}
+        {action && <div className="mt-5 flex justify-center">{action}</div>}
+      </div>
     </div>
   );
 }
