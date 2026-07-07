@@ -25,6 +25,9 @@ function tomorrowAt(hour = 9): string {
 
 export function DailyGroupsPublishingModal({ initial, onClose }: { initial: DailyGroupsPublishingPlan; onClose: () => void }) {
   const [plan, setPlan] = useState(initial);
+  // Snapshot the day's starting workload so we can show real progress as the
+  // broker publishes / skips (each action removes the post from the plan).
+  const [startTotal] = useState(() => initial.totalPosts);
   const [folder, setFolder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -96,6 +99,23 @@ export function DailyGroupsPublishingModal({ initial, onClose }: { initial: Dail
             </div>
           )}
         </div>
+
+        {/* Daily progress — real completion as posts are published/skipped. */}
+        {startTotal > 0 && (() => {
+          const done = Math.max(0, Math.min(startTotal, startTotal - plan.totalPosts));
+          const pct = Math.round((done / startTotal) * 100);
+          return (
+            <div className="border-line border-b px-5 py-3">
+              <div className="mb-1 flex items-center justify-between text-[12px] font-bold">
+                <span className="text-ink">{done === startTotal ? "כל הפרסומים להיום הושלמו 🎉" : `התקדמות היום · ${done}/${startTotal}`}</span>
+                <span className="text-brand-strong tabular-nums">{pct}%</span>
+              </div>
+              <div className="bg-surface h-2.5 overflow-hidden rounded-full">
+                <div className={cn("h-full rounded-full transition-all duration-500", done === startTotal ? "bg-success" : "zono-gradient")} style={{ width: `${Math.max(3, pct)}%` }} />
+              </div>
+            </div>
+          );
+        })()}
 
         {error && <p className="bg-danger-soft text-danger mx-5 mt-3 rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
 
