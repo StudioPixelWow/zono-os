@@ -11,6 +11,7 @@ import { CarouselWheelScroll } from "@/components/ui/CarouselWheelScroll";
 import { ZonoRealtimeProvider } from "@/components/realtime/ZonoRealtimeProvider";
 import { StickySystemRefreshButton } from "@/components/orchestrator/StickySystemRefreshButton";
 import { DailyGroupsPublishingProvider } from "@/components/daily-groups-publishing/DailyGroupsPublishingProvider";
+import { PwaProvider } from "@/components/mobile/PwaProvider";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <ZonoRealtimeProvider />
       <StickySystemRefreshButton />
       <DailyGroupsPublishingProvider />
+      <PwaProvider />
     </DashboardDataProvider>
   );
 }

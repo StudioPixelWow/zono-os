@@ -6,6 +6,7 @@
 import { notFound } from "next/navigation";
 import { getVisitMode } from "@/lib/field-ops/service";
 import { VisitMode } from "@/components/field-ops/VisitMode";
+import { FieldCaptureBar } from "@/components/mobile/FieldCaptureBar";
 
 export const dynamic = "force-dynamic";
 
@@ -13,5 +14,12 @@ export default async function FieldVisitPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const data = await getVisitMode(id);
   if (!data) notFound();
-  return <VisitMode data={data} />;
+  return (
+    <>
+      <VisitMode data={data} />
+      <div className="mx-auto mt-3 max-w-2xl px-4 pb-6">
+        <FieldCaptureBar routeUrl={data.directionsUrl} />
+      </div>
+    </>
+  );
 }
