@@ -1,9 +1,10 @@
 "use client";
 // ============================================================================
 // 🗺️ Live Market Intelligence Map™ — flagship intelligence experience (RTL).
-// Presentation only. Layer system + Zone Explorer + live feed over the existing
-// MapLibre map. Everything shown already exists in persisted intelligence;
-// nothing is recomputed. White, minimal, financial-terminal.
+// Presentation only. Weighted-intelligence heat + dynamic layers + live filters +
+// territory search + internal property preview drawer, over the existing MapLibre
+// map. Nothing is recomputed server-side; every value is already-persisted
+// intelligence. No external navigation — sources are data providers only.
 // ============================================================================
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
@@ -15,7 +16,7 @@ import {
 } from "@/components/intelligence/framework";
 import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
 import { getZoneIntelligenceAction } from "@/lib/intelligence-explorer/zone-actions";
-import type { MapIntelligenceDTO, MapLayer, MapZone } from "@/lib/intelligence-explorer/map";
+import type { MapIntelligenceDTO, MapLayer, MapZone, MapPoint, MapPointMetrics } from "@/lib/intelligence-explorer/map";
 import type { TerritoryIntelligenceDTO } from "@/lib/agencies/api/agencyIntelligenceApiTypes";
 
 const LAYERS: { id: MapLayer; label: string; emoji: string }[] = [
@@ -26,26 +27,94 @@ const LAYERS: { id: MapLayer; label: string; emoji: string }[] = [
   { id: "offmarket", label: "אוף-מרקט / ללא מתווך", emoji: "🔓" },
   { id: "opportunity", label: "הזדמנויות", emoji: "🎯" },
 ];
+
+// Weighted intelligence layers — each recomputes per-point heat weight from real
+// signals (never fabricated; unknown → low baseline). Smooth live transitions.
+type HeatMetric = "density" | "opportunity" | "ai" | "fresh" | "offmarket" | "exclusive";
+const HEAT_METRICS: { id: HeatMetric; label: string; emoji: string }[] = [
+  { id: "density", label: "עוצמת שוק", emoji: "🔥" },
+  { id: "opportunity", label: "הזדמנויות", emoji: "🎯" },
+  { id: "ai", label: "המלצות AI", emoji: "🧠" },
+  { id: "fresh", label: "טריות מודעות", emoji: "🆕" },
+  { id: "offmarket", label: "מוכר / ללא מתווך", emoji: "🔓" },
+  { id: "exclusive", label: "בלעדיות", emoji: "💎" },
+];
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+function weightOf(m: MapPointMetrics, metric: HeatMetric): number {
+  switch (metric) {
+    case "opportunity": return clamp01((m.opportunity ?? 0) / 100);
+    case "ai": return clamp01((m.ai ?? 0) / 100);
+    case "fresh": return m.freshnessDays == null ? 0.2 : clamp01(1 - Math.min(m.freshnessDays, 60) / 60);
+    case "offmarket": return m.offmarket ? 1 : 0.12;
+    case "exclusive": return m.exclusive ? 1 : 0.1;
+    default: return 1;
+  }
+}
+
+interface Filters { priceMin: string; priceMax: string; roomsMin: string; sqmMin: string; source: string; propertyType: string; oppMin: string; freshMax: string; text: string }
+const EMPTY: Filters = { priceMin: "", priceMax: "", roomsMin: "", sqmMin: "", source: "", propertyType: "", oppMin: "", freshMax: "", text: "" };
+const numF = (s: string): number | null => { const n = parseFloat(s); return Number.isFinite(n) ? n : null; };
+
+function matchFilters(m: MapPointMetrics, f: Filters): boolean {
+  const pMin = numF(f.priceMin), pMax = numF(f.priceMax), rMin = numF(f.roomsMin), sMin = numF(f.sqmMin), oMin = numF(f.oppMin), frMax = numF(f.freshMax);
+  if (pMin != null && (m.price == null || m.price < pMin)) return false;
+  if (pMax != null && (m.price == null || m.price > pMax)) return false;
+  if (rMin != null && (m.rooms == null || m.rooms < rMin)) return false;
+  if (sMin != null && (m.sqm == null || m.sqm < sMin)) return false;
+  if (oMin != null && ((m.opportunity ?? m.ai ?? 0) < oMin)) return false;
+  if (frMax != null && (m.freshnessDays == null || m.freshnessDays > frMax)) return false;
+  if (f.source && m.source !== f.source) return false;
+  if (f.propertyType && m.propertyType !== f.propertyType) return false;
+  if (f.text) { const q = f.text.toLowerCase(); if (![m.city, m.neighborhood, m.street].some((v) => v && v.toLowerCase().includes(q))) return false; }
+  return true;
+}
+
 const COMP_TONE: Record<string, StatusTone> = { high: "rising", moderate: "contender", low: "runner", none: "neutral" };
 const COMP_HE: Record<string, string> = { high: "תחרות גבוהה", moderate: "תחרות בינונית", low: "תחרות נמוכה", none: "ללא תחרות" };
 const FEED_HE: Record<string, string> = { new_listing: "מודעה חדשה", off_market: "ללא מתווך", opportunity: "הזדמנות" };
 
+function nextAction(m: MapPointMetrics): string {
+  if ((m.opportunity ?? 0) >= 70) return "🎯 הזדמנות חמה — פנה למוכר/בעל הנכס";
+  if (m.offmarket) return "🔓 ללא מתווך — צור קשר ישיר";
+  if (m.fresh) return "🆕 מודעה טרייה — פעל מהר לפני התחרות";
+  if ((m.ai ?? 0) >= 70) return "🧠 מומלץ ע\"י AI — בדוק התאמות קונים";
+  return "בדוק התאמות קונים ושייך לפעולה";
+}
+
 export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
   const [active, setActive] = useState<Set<MapLayer>>(new Set(LAYERS.map((l) => l.id)));
   const [heatmap, setHeatmap] = useState(false);
+  const [metric, setMetric] = useState<HeatMetric>("density");
+  const [filters, setFilters] = useState<Filters>(EMPTY);
+  const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
   const [zone, setZone] = useState<MapZone | null>(null);
   const [zoneData, setZoneData] = useState<TerritoryIntelligenceDTO | null>(null);
-  const [selected, setSelected] = useState<ZonoMapPoint | null>(null);
+  const [selected, setSelected] = useState<MapPoint | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
 
   const toggle = (id: MapLayer) => setActive((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const setF = (k: keyof Filters, v: string) => setFilters((p) => ({ ...p, [k]: v }));
+
+  const sources = useMemo(() => Array.from(new Set(data.points.map((p) => p.m.source).filter(Boolean))) as string[], [data.points]);
+  const types = useMemo(() => Array.from(new Set(data.points.map((p) => p.m.propertyType).filter(Boolean))) as string[], [data.points]);
+
+  const filtered = useMemo(() =>
+    data.points.filter((p) => p.layers.some((l) => active.has(l)) && matchFilters(p.m, filters)),
+    [data.points, active, filters]);
 
   const points: ZonoMapPoint[] = useMemo(() =>
-    data.points
-      .filter((p) => p.layers.some((l) => active.has(l)))
-      .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, title: p.title, details: p.details, tone: p.tone, href: p.href, imageUrl: (p as { imageUrl?: string | null }).imageUrl ?? null })),
-    [data.points, active]);
+    filtered.map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, title: p.title, details: p.details, tone: p.tone, href: p.href, imageUrl: p.imageUrl, weight: heatmap ? weightOf(p.m, metric) : undefined })),
+    [filtered, heatmap, metric]);
+
+  const runSearch = () => {
+    const q = filters.text.trim().toLowerCase();
+    if (!q) return;
+    const hit = filtered.find((p) => [p.m.city, p.m.neighborhood, p.m.street, p.title].some((v) => v && v.toLowerCase().includes(q)));
+    const zoneHit = data.zones.find((z) => [z.neighborhood, z.city].some((v) => v && v.toLowerCase().includes(q)));
+    const t = hit ?? zoneHit;
+    if (t) setFocus({ lat: t.lat, lng: t.lng, zoom: hit ? 16 : 14 });
+  };
 
   const copyLink = () => {
     if (!selected?.href) return;
@@ -53,22 +122,18 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
     navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => { /* clipboard unavailable */ });
   };
 
-  const openZone = (z: MapZone) => {
-    setZone(z); setZoneData(null);
-    start(async () => { setZoneData(await getZoneIntelligenceAction(z.city || null, z.neighborhood)); });
-  };
+  const openZone = (z: MapZone) => { setZone(z); setZoneData(null); start(async () => { setZoneData(await getZoneIntelligenceAction(z.city || null, z.neighborhood)); }); };
 
   const hasPoints = data.points.length > 0;
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const field = "bg-card border-line text-ink focus:border-brand-light h-9 rounded-lg border px-2.5 text-[13px] outline-none w-full";
 
   return (
     <IntelligencePage wide>
       <MarketIntelNav active="map" crumbs={[{ label: "מפת שוק חיה" }]} />
-
       <IntelligenceHeader
-        emoji="🗺️"
-        eyebrow="LIVE MARKET MAP"
-        title="מפת שוק חיה"
-        subtitle="שכבות מודיעין על נכסי שוק, הזדמנויות, ירידות מחיר ואזורים פעילים."
+        emoji="🗺️" eyebrow="LIVE MARKET MAP" title="מפת שוק חיה"
+        subtitle="מודיעין משוקלל, שכבות חכמות, סינון חי וחיפוש — עם תצוגת נכס פנימית."
         actions={
           <IntelligenceActionBar>
             <IntelligenceActionLink href="/market-intelligence/listings">🌍 נכסי השוק</IntelligenceActionLink>
@@ -79,38 +144,60 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
       />
 
       {!hasPoints ? (
-        <IntelligenceEmptyState
-          title="עדיין אין מספיק נכסים עם מיקום להצגת מפה"
-          steps={["סנכרן נכסים חיצוניים כדי להתחיל", "רענן מערכת", "חזור למפה לאחר הסנכרון"]}
-        />
+        <IntelligenceEmptyState title="עדיין אין מספיק נכסים עם מיקום להצגת מפה" steps={["סנכרן נכסים חיצוניים כדי להתחיל", "רענן מערכת", "חזור למפה לאחר הסנכרון"]} />
       ) : (
-      <div className="grid gap-4 lg:grid-cols-[240px_1fr_280px]">
-        {/* Layer panel + zones (compact) */}
+      <div className="grid gap-4 lg:grid-cols-[250px_1fr_280px]">
         <IntelligenceSidebar>
+          {/* Territory search */}
+          <TerminalSection title="חיפוש טריטוריה" subtitle="עיר · שכונה · רחוב · נכס">
+            <div className="flex gap-1.5">
+              <input value={filters.text} onChange={(e) => setF("text", e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }} placeholder="חפש והזז את המפה…" className={field} />
+              <button onClick={runSearch} className="btn-zono-primary shrink-0 rounded-lg px-3 text-[13px] font-bold text-white">➤</button>
+            </div>
+          </TerminalSection>
+
+          {/* Layers */}
           <TerminalSection title="שכבות מפה" subtitle="הפעל/כבה עצמאית">
             <div className="flex flex-col gap-1.5">
               {LAYERS.map((l) => {
                 const on = active.has(l.id);
                 return (
                   <button key={l.id} onClick={() => toggle(l.id)} className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${on ? "border-brand-light bg-brand-soft text-brand-strong" : "border-line bg-card text-muted"}`}>
-                    <span>{l.emoji} {l.label}</span>
-                    <span className="text-[11px] tabular-nums">{data.counts[l.id]}</span>
+                    <span>{l.emoji} {l.label}</span><span className="text-[11px] tabular-nums">{data.counts[l.id]}</span>
                   </button>
                 );
               })}
               <button onClick={() => setHeatmap((v) => !v)} className={`mt-1 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${heatmap ? "border-brand-light bg-brand-soft text-brand-strong" : "border-line bg-card text-muted"}`}>
-                <span>🔥 מפת חום</span><span className="text-[11px]">{heatmap ? "פעיל" : "כבוי"}</span>
+                <span>🔥 מפת חום חכמה</span><span className="text-[11px]">{heatmap ? "פעיל" : "כבוי"}</span>
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <Link href="/transactions" className="border-line bg-surface text-ink rounded-lg border px-2 py-1 text-[11px] font-bold">🏛️ עסקאות רשמיות ↗</Link>
-              <Link href="/property-radar" className="border-line bg-surface text-ink rounded-lg border px-2 py-1 text-[11px] font-bold">📡 רדאר נכסים ↗</Link>
+            {heatmap && (
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {HEAT_METRICS.map((h) => (
+                  <button key={h.id} onClick={() => setMetric(h.id)} className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold transition ${metric === h.id ? "border-brand-light bg-brand-soft text-brand-strong" : "border-line bg-card text-muted"}`}>{h.emoji} {h.label}</button>
+                ))}
+              </div>
+            )}
+          </TerminalSection>
+
+          {/* Advanced filters — live */}
+          <TerminalSection title={`מסננים${activeFilterCount ? ` · ${activeFilterCount}` : ""}`} subtitle="מעדכן את המפה מיידית">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex gap-1.5"><input value={filters.priceMin} onChange={(e) => setF("priceMin", e.target.value)} inputMode="numeric" placeholder="מחיר מ-" className={field} /><input value={filters.priceMax} onChange={(e) => setF("priceMax", e.target.value)} inputMode="numeric" placeholder="עד" className={field} /></div>
+              <div className="flex gap-1.5"><input value={filters.roomsMin} onChange={(e) => setF("roomsMin", e.target.value)} inputMode="numeric" placeholder="חדרים מ-" className={field} /><input value={filters.sqmMin} onChange={(e) => setF("sqmMin", e.target.value)} inputMode="numeric" placeholder="מ״ר מ-" className={field} /></div>
+              <div className="flex gap-1.5"><input value={filters.oppMin} onChange={(e) => setF("oppMin", e.target.value)} inputMode="numeric" placeholder="ציון הזדמנות מ-" className={field} /><input value={filters.freshMax} onChange={(e) => setF("freshMax", e.target.value)} inputMode="numeric" placeholder="גיל מודעה עד (ימים)" className={field} /></div>
+              <select value={filters.source} onChange={(e) => setF("source", e.target.value)} className={field}><option value="">כל המקורות</option>{sources.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+              <select value={filters.propertyType} onChange={(e) => setF("propertyType", e.target.value)} className={field}><option value="">כל סוגי הנכס</option>{types.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+              <div className="flex items-center justify-between pt-0.5">
+                <span className="text-muted text-[11px] tabular-nums">{filtered.length} מתוך {data.points.length}</span>
+                {activeFilterCount > 0 && <button onClick={() => setFilters(EMPTY)} className="text-brand-strong text-[11px] font-bold">נקה מסננים</button>}
+              </div>
             </div>
           </TerminalSection>
 
-          <TerminalSection title="סייר אזורים" subtitle="בחר שכונה לפתיחת מודיעין">
+          <TerminalSection title="סייר אזורים" subtitle="בחר שכונה למודיעין">
             {data.zones.length ? (
-              <div className="flex max-h-[40vh] flex-col gap-1 overflow-y-auto">
+              <div className="flex max-h-[32vh] flex-col gap-1 overflow-y-auto">
                 {data.zones.slice(0, 40).map((z) => (
                   <button key={z.id} onClick={() => openZone(z)} className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-right text-sm transition ${zone?.id === z.id ? "bg-brand-soft text-brand-strong" : "hover:bg-surface text-ink"}`}>
                     <span className="truncate font-bold">{z.neighborhood}<span className="text-muted font-normal"> · {z.city}</span></span>
@@ -122,14 +209,21 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
           </TerminalSection>
         </IntelligenceSidebar>
 
-        {/* Map — visually dominant */}
-        <div className="min-w-0">
-          <ZonoMap points={points} heatmap={heatmap} markersWithHeat={heatmap}
-            onSelect={(id) => setSelected(points.find((p) => p.id === id) ?? null)}
-            heightClass="h-[74vh]" emptyMessage="אין מיקומים גאוקודדים לשכבות שנבחרו." clusterThreshold={80} />
+        {/* Map — visually dominant, with premium legend overlay */}
+        <div className="relative min-w-0">
+          <ZonoMap points={points} heatmap={heatmap} markersWithHeat={heatmap} focus={focus}
+            onSelect={(id) => setSelected(filtered.find((p) => p.id === id) ?? null)}
+            heightClass="h-[74vh]" emptyMessage="אין מיקומים גאוקודדים לשכבות/מסננים שנבחרו." clusterThreshold={80} />
+          {heatmap && (
+            <div className="border-line bg-card/90 pointer-events-none absolute bottom-3 left-3 z-[5] rounded-2xl border px-3 py-2 shadow-[var(--shadow-card)] backdrop-blur-sm">
+              <p className="text-ink text-[11px] font-black">{HEAT_METRICS.find((h) => h.id === metric)?.emoji} {HEAT_METRICS.find((h) => h.id === metric)?.label}</p>
+              <div className="mt-1 h-2 w-32 rounded-full" style={{ background: "linear-gradient(90deg, rgba(167,139,250,.5), #8b5cf6, #6d28d9, #43148c)" }} />
+              <div className="text-muted mt-0.5 flex justify-between text-[9px] font-bold"><span>נמוך</span><span>גבוה</span></div>
+            </div>
+          )}
         </div>
 
-        {/* Live feed — secondary */}
+        {/* Live feed */}
         <aside>
           <TerminalSection title="פיד שוק חי" subtitle="כרונולוגי — אירועים קיימים">
             {data.feed.length ? (
@@ -151,14 +245,8 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
       </div>
       )}
 
-      {/* Zone drawer — one reusable Intelligence drawer (Phase 26.8) */}
-      <IntelligenceDrawer
-        open={!!zone}
-        onClose={() => setZone(null)}
-        eyebrow="אזור שנבחר"
-        title={zone?.neighborhood ?? ""}
-        subtitle={zone?.city || "—"}
-      >
+      {/* Zone intelligence drawer */}
+      <IntelligenceDrawer open={!!zone} onClose={() => setZone(null)} eyebrow="אזור שנבחר" title={zone?.neighborhood ?? ""} subtitle={zone?.city || "—"}>
         {zone && (
           <>
             <MetricGrid>
@@ -172,37 +260,33 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
         )}
       </IntelligenceDrawer>
 
-      {/* Property preview drawer — opens INSIDE ZONO (never navigates to an
-          external listing site). External sources are data providers only. */}
-      <IntelligenceDrawer
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        eyebrow="נכס נבחר"
-        title={selected?.title ?? "נכס"}
-        subtitle={selected?.details?.[0] ?? "—"}
-      >
+      {/* Property preview drawer — opens INSIDE ZONO (never navigates out). */}
+      <IntelligenceDrawer open={!!selected} onClose={() => setSelected(null)} eyebrow="נכס נבחר" title={selected?.title ?? "נכס"} subtitle={[selected?.m.neighborhood, selected?.m.city].filter(Boolean).join(" · ") || "—"}>
         {selected && (
           <div className="flex flex-col gap-3">
-            {selected.imageUrl && (
-              <div className="h-44 w-full rounded-2xl bg-cover bg-center shadow-[var(--shadow-card)]" style={{ backgroundImage: `url(${selected.imageUrl})` }} />
-            )}
-            {selected.details && selected.details.length > 1 && (
-              <MetricGrid>
-                {selected.details[1] && <Metric label="מחיר" value={selected.details[1]} accent />}
-                {selected.details[2] && <Metric label="פרטים" value={selected.details[2]} />}
-              </MetricGrid>
-            )}
-            {selected.details && selected.details.length > 3 && (
-              <p className="text-muted text-[12px] leading-relaxed">{selected.details.slice(3).filter(Boolean).join(" · ")}</p>
-            )}
+            {selected.imageUrl && <div className="h-44 w-full rounded-2xl bg-cover bg-center shadow-[var(--shadow-card)]" style={{ backgroundImage: `url(${selected.imageUrl})` }} />}
+            <MetricGrid>
+              {selected.m.price != null && <Metric label="מחיר" value={`₪${Math.round(selected.m.price).toLocaleString("he-IL")}`} accent />}
+              {(selected.m.rooms != null || selected.m.sqm != null) && <Metric label="גודל" value={[selected.m.rooms != null ? `${selected.m.rooms} חד׳` : null, selected.m.sqm != null ? `${selected.m.sqm} מ״ר` : null].filter(Boolean).join(" · ") || "—"} />}
+              {(selected.m.opportunity ?? selected.m.ai) != null && <Metric label="ציון AI" value={String(selected.m.opportunity ?? selected.m.ai)} />}
+              {selected.m.freshnessDays != null && <Metric label="גיל מודעה" value={`${selected.m.freshnessDays} ימים`} />}
+            </MetricGrid>
+            <div className="flex flex-wrap gap-1.5">
+              {selected.m.propertyType && <Pill tone="neutral">{selected.m.propertyType}</Pill>}
+              {selected.m.status && <Pill tone="neutral">{selected.m.status}</Pill>}
+              {selected.m.source && <Pill tone="neutral">מקור: {selected.m.source}</Pill>}
+              {selected.m.exclusive && <Pill tone="rising">בלעדיות</Pill>}
+              {selected.m.offmarket && <Pill tone="contender">ללא מתווך</Pill>}
+            </div>
+            <div className="bg-brand-soft text-brand-strong rounded-xl px-3 py-2 text-[13px] font-bold">➤ פעולה מומלצת: {nextAction(selected.m)}</div>
+            {selected.m.street && <p className="text-muted text-[12px]">📍 {[selected.m.street, selected.m.neighborhood, selected.m.city].filter(Boolean).join(", ")}</p>}
             <div className="mt-1 flex flex-col gap-2">
-              {selected.href && (
-                <Link href={selected.href} prefetch={false} className="btn-zono-primary inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-black text-white">פתח נכס בתוך ZONO ←</Link>
-              )}
+              {selected.href && <Link href={selected.href} prefetch={false} className="btn-zono-primary inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-black text-white">פתח נכס בתוך ZONO ←</Link>}
               <div className="flex gap-2">
                 <Link href="/action-center" className="border-line bg-surface text-ink hover:border-brand-light flex flex-1 items-center justify-center rounded-xl border px-3 py-2 text-[13px] font-bold transition">🎯 צור משימה</Link>
                 <button type="button" onClick={copyLink} className="border-line bg-surface text-ink hover:border-brand-light flex flex-1 items-center justify-center rounded-xl border px-3 py-2 text-[13px] font-bold transition">{copied ? "הקישור הועתק ✓" : "🔗 שתף"}</button>
               </div>
+              {selected.href && <Link href={selected.href} prefetch={false} className="text-muted text-center text-[11px] font-semibold hover:underline">התאמות קונים, לוח זמנים ומצב שיווק — בעמוד הנכס ←</Link>}
             </div>
             <p className="text-muted text-[11px] leading-relaxed">מקורות חיצוניים (יד2/מדלן) משמשים כמידע בלבד — הצפייה והפעולה נשארות בתוך ZONO.</p>
           </div>

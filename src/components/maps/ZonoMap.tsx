@@ -67,6 +67,9 @@ export interface ZonoMapProps {
    *  id INSTEAD of opening the popup link — so the consumer can open an internal
    *  ZONO preview drawer. External sources are never a navigation target. */
   onSelect?: (id: string) => void;
+  /** Animate the map to a coordinate (e.g. a search result). Changing the object
+   *  identity triggers a smooth flyTo. */
+  focus?: { lat: number; lng: number; zoom?: number } | null;
 }
 
 // ZONO-purple heat ramp (transparent → lavender → violet → deep purple).
@@ -134,6 +137,7 @@ export function ZonoMap({
   markerRevealZoom = 14,
   polygons = [],
   onSelect,
+  focus = null,
 }: ZonoMapProps) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -306,6 +310,13 @@ export function ZonoMap({
     if (m.isStyleLoaded()) apply(); else m.once("idle", apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weightSig, heatmap]);
+
+  // Animate to a search result when `focus` changes.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !focus || !Number.isFinite(focus.lat) || !Number.isFinite(focus.lng)) return;
+    m.flyTo({ center: [focus.lng, focus.lat], zoom: focus.zoom ?? 16, duration: 900, essential: true });
+  }, [focus]);
 
   const shell = "border-line bg-card relative w-full overflow-hidden rounded-card border shadow-card";
 
