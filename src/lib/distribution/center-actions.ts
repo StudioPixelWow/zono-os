@@ -14,7 +14,7 @@ const ok = () => { revalidatePath(PATH); return {}; };
 const fail = (msg: string) => ({ error: msg });
 
 // ── Groups ───────────────────────────────────────────────────────────────────
-export async function createGroupAction(input: { name: string; url?: string; city?: string; area?: string; category?: string; membersCount?: number }): Promise<{ error?: string }> {
+export async function createGroupAction(input: { name: string; url?: string; city?: string; area?: string; category?: string; membersCount?: number; notes?: string; propertyType?: string }): Promise<{ error?: string }> {
   if (!input.name?.trim()) return fail("שם הקבוצה חסר");
   const row = await distributionRepo.createGroup(input);
   return row ? ok() : fail("יצירת הקבוצה נכשלה");

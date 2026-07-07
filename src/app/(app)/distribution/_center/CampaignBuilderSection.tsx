@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Glass, SectionHeading, EmptyState, Icon, ils, compact } from "./shared";
 import { AUDIENCE_LABEL, type AudienceKey, type PropertyLite } from "./variations";
 import type { RunAction, RunActionAsync } from "./DistributionCenterView";
+import { MAX_GROUPS_PER_PROPERTY } from "@/lib/daily-groups-publishing/types";
 
 const AUDIENCES: AudienceKey[] = ["families", "investors", "young", "luxury", "commercial", "sellers"];
 const GOALS: { key: string; label: string }[] = [
@@ -195,7 +196,7 @@ export function CampaignBuilderSection({
         </div>
 
         {groups.length === 0 ? (
-          <EmptyState icon="Users" title="אין עדיין קבוצות" body="הוסף קבוצות פייסבוק בספריית הקבוצות כדי שתוכל לבחור אותן לקמפיין ההפצה." />
+          <EmptyState icon="Users" title="אין עדיין קבוצות" body="אין עדיין קבוצות. חבר פייסבוק או הוסף קבוצות ידנית בספריית הקבוצות כדי לבנות ספריית הפצה ולבחור אותן לקמפיין." />
         ) : !activeCampaignId ? (
           <EmptyState icon="Megaphone" title="בחר או צור קמפיין" body="צור קמפיין למעלה, או בחר קמפיין קיים מהרשימה — ואז סמן את הקבוצות שבהן הוא יופץ." />
         ) : (
@@ -205,10 +206,20 @@ export function CampaignBuilderSection({
                 <option value="">כל הערים</option>
                 {cityOptions.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
-              <span className="text-muted text-xs font-semibold tabular-nums">{selectedGroups.length} נבחרו מתוך {groupOptions.length}</span>
-              <button type="button" onClick={() => setSelectedGroups(groupOptions.map((g) => g.id))} className="text-brand-strong text-xs font-bold">בחר הכל</button>
+              <span className="text-muted text-xs font-semibold tabular-nums">{selectedGroups.length} נבחרו מתוך {groupOptions.length} · מגבלה {MAX_GROUPS_PER_PROPERTY}/יום</span>
+              <button type="button" onClick={() => setSelectedGroups(groupOptions.slice(0, MAX_GROUPS_PER_PROPERTY).map((g) => g.id))} className="text-brand-strong text-xs font-bold">בחר עד {MAX_GROUPS_PER_PROPERTY}</button>
               <button type="button" onClick={() => setSelectedGroups([])} className="text-muted text-xs font-bold">נקה</button>
             </div>
+
+            {selectedGroups.length > MAX_GROUPS_PER_PROPERTY && (
+              <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+                <Icon name="AlertTriangle" size={16} className="mt-0.5 shrink-0" />
+                <p className="text-[13px] font-semibold leading-relaxed">
+                  נבחרו {selectedGroups.length} קבוצות. מדיניות Meta מגבילה ל-{MAX_GROUPS_PER_PROPERTY} פרסומים לנכס ביום —
+                  {MAX_GROUPS_PER_PROPERTY} הראשונות יפורסמו היום, והיתר ({selectedGroups.length - MAX_GROUPS_PER_PROPERTY}) יתוזמנו אוטומטית לימים הבאים.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {groupOptions.map((g) => {

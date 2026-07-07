@@ -37,12 +37,15 @@ export const distributionRepo = {
     const { data } = await q.order("performance_score", { ascending: false }).limit(opts.limit ?? 200);
     return list<DistGroupRow>(data);
   },
-  async createGroup(input: { name: string; url?: string | null; platform?: string; category?: string | null; city?: string | null; area?: string | null; membersCount?: number; status?: DistGroupStatus }): Promise<DistGroupRow | null> {
+  async createGroup(input: { name: string; url?: string | null; platform?: string; category?: string | null; city?: string | null; area?: string | null; membersCount?: number; status?: DistGroupStatus; notes?: string | null; propertyType?: string | null }): Promise<DistGroupRow | null> {
     const s = await scope(); if (!s) return null;
+    // property type is stored in the EXISTING metadata jsonb (no new column/table).
+    const metadata = input.propertyType ? { property_type: input.propertyType } : {};
     const { data, error } = await s.db.from(DIST.groups as never).insert({
       org_id: s.orgId, name: input.name, group_url: input.url ?? null, platform: input.platform ?? "facebook",
       category: input.category ?? null, city: input.city ?? null, locality: input.area ?? null,
       members_count: input.membersCount ?? 0, status: input.status ?? "active", created_by: s.userId,
+      rules_notes: input.notes ?? null, metadata,
     } as never).select("*").single();
     if (error) { console.error("[distribution.repo] createGroup:", error.message); return null; }
     return data as unknown as DistGroupRow;
