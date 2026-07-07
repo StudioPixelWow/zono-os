@@ -9,11 +9,20 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { UnifiedInbox as UnifiedInboxData, InboxConversation, ConvKind } from "@/lib/whatsapp/inbox";
 import type { ConversationDetail } from "@/lib/whatsapp/inbox-service";
-import { getConversationDetailAction, askWhatsappAction } from "@/lib/whatsapp/inbox-actions";
+import { getConversationDetailAction, askWhatsappAction, getConversationMatchesAction, type ConvMatch } from "@/lib/whatsapp/inbox-actions";
 import { createDraftAction } from "@/lib/whatsapp/actions";
+import StartWorkflowButton from "@/components/workflow-builder/StartWorkflowButton";
 
 const impCls: Record<string, string> = { high: "bg-danger-soft text-danger", medium: "bg-warning-soft text-warning", low: "bg-surface text-muted" };
 const healthCls = (v: number) => (v >= 70 ? "bg-success-soft text-success" : v >= 45 ? "bg-warning-soft text-warning" : "bg-danger-soft text-danger");
+const KIND_HE: Record<string, string> = { buyer: "קונה", seller: "מוכר", lead: "ליד", property: "נכס" };
+const ilsFmt = (n: number) => `₪${Math.round(n).toLocaleString("he-IL")}`;
+function tempLabel(card: { health: number; opportunity: string | null; urgency: number } | null): string {
+  if (!card) return "—";
+  if (card.health >= 70 || card.opportunity) return "חם 🔥";
+  if (card.health >= 45 || card.urgency >= 60) return "פושר 🌤️";
+  return "קר ❄️";
+}
 
 function Card({ c, onOpen }: { c: InboxConversation; onOpen: () => void }) {
   const card = c.card;
@@ -42,12 +51,22 @@ function Card({ c, onOpen }: { c: InboxConversation; onOpen: () => void }) {
 
 function DetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
+  const [matches, setMatches] = useState<ConvMatch[]>([]);
   const [loading, startLoad] = useTransition();
   const [draftMsg, setDraftMsg] = useState<string | null>(null);
   const [drafting, startDraft] = useTransition();
   const [loaded, setLoaded] = useState(false);
 
-  if (!loaded) { setLoaded(true); startLoad(async () => { const r = await getConversationDetailAction(id); setDetail(r.ok && r.result ? r.result : null); }); }
+  if (!loaded) {
+    setLoaded(true);
+    startLoad(async () => {
+      const r = await getConversationDetailAction(id);
+      const d = r.ok && r.result ? r.result : null;
+      setDetail(d);
+      const buyerId = d?.conversation?.buyerId;
+      if (buyerId) { const m = await getConversationMatchesAction(buyerId); if (m.ok && m.result) setMatches(m.result); }
+    });
+  }
 
   const draftReply = () => { if (!detail?.card) return; startDraft(async () => { const r = await createDraftAction({ conversationId: id, body: detail.card!.recommendedReply }); setDraftMsg(("message" in r && r.message) ? r.message : ("error" in r && r.error) ? r.error : "טיוטה נוצרה"); }); };
 
@@ -82,6 +101,51 @@ function DetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
                 <div className="text-muted mt-1 text-center text-[10px]">טיוטה בלבד — לא נשלח אוטומטית.</div>
               </div>
             )}
+
+            {/* Conversation Intelligence rail — context, temperature, suggested
+                properties, and reused action hooks. Everything approval-gated. */}
+            {(() => {
+              const conv = detail.conversation!;
+              const entity: { t: "buyer" | "seller" | "lead" | "property"; id: string } | null =
+                conv.buyerId ? { t: "buyer", id: conv.buyerId } : conv.sellerId ? { t: "seller", id: conv.sellerId }
+                : conv.leadId ? { t: "lead", id: conv.leadId } : conv.propertyId ? { t: "property", id: conv.propertyId } : null;
+              return (
+                <div className="mt-3 space-y-3">
+                  <div className="bg-surface rounded-2xl p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink text-[13px] font-black">🧠 מוח השיחה</span>
+                      {entity && <span className="bg-brand-soft text-brand rounded-full px-2 py-0.5 text-[10px] font-bold">{KIND_HE[entity.t]}</span>}
+                    </div>
+                    <div className="text-muted mt-1.5 text-[12px]">טמפרטורת ליד: <b className="text-ink">{tempLabel(detail.card)}</b>{detail.card ? ` · פעולה מומלצת: ${detail.card.recommendedAction}` : ""}</div>
+                  </div>
+
+                  {matches.length > 0 && (
+                    <div>
+                      <p className="text-ink mb-1.5 text-[13px] font-black">🏠 נכסים מתאימים ללקוח</p>
+                      <div className="space-y-1.5">
+                        {matches.map((m) => (
+                          <Link key={m.propertyId} href={m.href} className="bg-surface hover:bg-brand-soft flex items-center gap-2 rounded-xl p-2.5 transition">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-ink truncate text-[12px] font-bold">{m.title}</p>
+                              <p className="text-muted truncate text-[10px]">{[m.locality, m.price != null ? ilsFmt(m.price) : null].filter(Boolean).join(" · ")}{m.reason ? ` · ${m.reason}` : ""}</p>
+                            </div>
+                            {m.compatibility != null && <span className="text-brand-strong shrink-0 text-[12px] font-black">{m.compatibility}</span>}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {entity && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StartWorkflowButton entityType={entity.t} entityId={entity.id} entityName={conv.contactName ?? "לקוח"} compact />
+                      <Link href="/calendar" className="bg-surface text-ink border-line inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-[12px] font-bold">📅 קבע פגישה</Link>
+                      {detail.entityHref && <Link href={detail.entityHref} className="bg-surface text-ink border-line inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-[12px] font-bold">📇 כרטיס CRM</Link>}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <h3 className="text-ink mt-4 mb-2 text-[15px] font-black">ציר זמן מאוחד</h3>
             {detail.timeline.length === 0 ? <div className="text-muted text-[13px]">{detail.notes[0] ?? "אין אירועים."}</div> : (
