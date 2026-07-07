@@ -70,6 +70,7 @@ export const SYSTEM_MAP: SystemGroup[] = [
       { id: "matches", label: "התאמות קונים", href: "/matches", icon: "Target", category: "נכסים", group: "properties", type: "page", keywords: ["matching"] },
       { id: "heatmap", label: "מפת חום", description: "מפת הנכסים החיה", href: "/", icon: "Map", category: "נכסים", group: "properties", type: "page", keywords: ["heatmap", "מפה"] },
       { id: "market", label: "Market Intelligence", href: "/market", icon: "BarChart3", category: "נכסים", group: "properties", type: "page", keywords: ["מודיעין שוק"] },
+      { id: "marketplace", label: "מרקטפלייס", description: "Marketplace Intelligence — הזדמנויות רכישה והתאמות מהשוק החיצוני", href: "/marketplace", icon: "Building", category: "נכסים", group: "properties", type: "page", keywords: ["marketplace", "yad2", "madlan", "חיצוני", "רכישה", "acquisition", "external"] },
       { id: "transactions", label: "עסקאות שוק", href: "/transactions", icon: "Banknote", category: "נכסים", group: "properties", type: "page" },
       { id: "areas", label: "שכונות ואזורים", href: "/settings/operating-areas", icon: "MapPin", category: "נכסים", group: "properties", type: "page", keywords: ["אזור התמחות"] },
       { id: "radar", label: "ייבוא נכסים", description: "רדאר נכסים חי", href: "/property-radar", icon: "Download", category: "נכסים", group: "properties", type: "page", keywords: ["yad2", "madlan", "סנכרון"] },
