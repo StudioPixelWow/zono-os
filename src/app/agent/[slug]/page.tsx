@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { getPublicAgentSite, logAgentSiteEvent, type PublicAgentProperty } from "@/lib/agent-website/service";
+import { getPublicAgentSite, logAgentSiteEvent } from "@/lib/agent-website/service";
+import { PropertyCard } from "@/components/brokerage-site/ui";
 import { AgentLeadForm } from "./AgentLeadForm";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +100,10 @@ export default async function AgentSitePage({ params }: { params: Promise<{ slug
 
         {S.featured_properties !== false && site.featured.length > 0 && (
           <Section title="נכסים נבחרים" id="properties" cta={{ href: `/agent/${slug}/properties`, label: "לכל הנכסים ←" }}>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{site.featured.map((p) => <PropCard key={p.id} p={p} />)}</div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{site.featured.map((p) => {
+              const loc = [p.neighborhood, p.city].filter(Boolean).join(" · ");
+              return <PropertyCard key={p.id} slug={slug} id={p.id} title={loc || "נכס"} price={p.price} image={p.image} badge={p.tag} href={`/agent/${slug}/properties`} rooms={p.rooms} area={p.area} />;
+            })}</div>
           </Section>
         )}
 
@@ -180,14 +184,6 @@ function Kpi({ v, l }: { v: string; l: string }) {
 }
 function Section({ title, id, cta, children }: { title: string; id?: string; cta?: { href: string; label: string }; children: React.ReactNode }) {
   return <section id={id} className="py-10"><div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-black sm:text-2xl">{title}</h2>{cta && <Link href={cta.href} className="text-sm font-bold text-[#7C3AED]">{cta.label}</Link>}</div>{children}</section>;
-}
-function PropCard({ p }: { p: PublicAgentProperty }) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#eef0f4]">
-      <div className="relative h-44 bg-[#f1f5f9]">{p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-3xl">🏠</div>}{p.tag && <span className="absolute right-3 top-3 rounded-full bg-[#7C3AED] px-2 py-0.5 text-[11px] font-bold text-white">{p.tag}</span>}</div>
-      <div className="p-4"><p className="text-lg font-black">{money(p.price)}</p><p className="text-[13px] text-[#64748b]">{p.city ?? ""}{p.neighborhood ? " · " + p.neighborhood : ""}</p><p className="mt-1 text-[13px] text-[#334155]">{p.rooms ? `${p.rooms} חד׳` : ""}{p.area ? ` · ${p.area} מ״ר` : ""}</p></div>
-    </div>
-  );
 }
 function Inactive({ title }: { title: string }) {
   return <main dir="rtl" className="grid min-h-screen place-items-center bg-white px-4"><div className="rounded-3xl border border-[#eef0f4] p-10 text-center"><div className="mb-3 text-4xl">👤</div><h1 className="text-xl font-black">{title}</h1></div></main>;
