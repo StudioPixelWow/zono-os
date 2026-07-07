@@ -110,6 +110,7 @@ export const SYSTEM_MAP: SystemGroup[] = [
       { id: "agents", label: "Agents", icon: "Users", category: "AI", group: "ai", type: "ai", beta: true },
       { id: "automations", label: "Automations", href: "/automation", icon: "Layers", category: "AI", group: "ai", type: "ai", keywords: ["אוטומציה"] },
       { id: "smart-matching", label: "Smart Matching", href: "/matches", icon: "Target", category: "AI", group: "ai", type: "ai" },
+      { id: "negotiation", label: "עוזר מו״מ", description: "AI Negotiation Assistant — אסטרטגיה, תסריטים והכנה לפגישה", href: "/negotiation", icon: "Handshake", category: "AI", group: "ai", type: "ai", keywords: ["negotiation", "מו״מ", "משא ומתן", "הצעה", "offer", "אסטרטגיה"] },
       { id: "predictions", label: "Market Predictions", href: "/forecast", icon: "TrendingUp", category: "AI", group: "ai", type: "ai", keywords: ["תחזיות"] },
       { id: "prediction-engine", label: "מנוע התחזיות", description: "Prediction Engine — נטישה, סגירה, המרה, עומס, טריטוריה", href: "/predictions", icon: "Sparkles", category: "AI", group: "ai", type: "ai", keywords: ["תחזית", "forecast", "prediction", "churn", "סבירות", "חיזוי"] },
     ],
