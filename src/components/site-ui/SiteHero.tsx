@@ -31,7 +31,12 @@ export function SiteHero({ logo, cover, headline, subtitle, ctas, stats, trustBa
     <section className="pt-6">
       <div className="relative overflow-hidden rounded-[var(--radius-xl2)] shadow-[var(--shadow-lift)]">
         {cover ? <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <div className="absolute inset-0" style={{ background: "var(--site-gradient)" }} />}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/25 to-black/10" />
+        {/* Theme-driven cinematic overlay — depth scales with the active theme
+            (--site-overlay: light for Ultra Minimal, deep for Dark Prestige). */}
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(to top, rgba(0,0,0,var(--site-overlay,0.4)) 0%, rgba(0,0,0,calc(var(--site-overlay,0.4) * 0.5)) 45%, rgba(0,0,0,calc(var(--site-overlay,0.4) * 0.2)) 100%)" }}
+        />
 
         <div className="relative z-10 flex flex-col-reverse items-start gap-6 p-7 text-white sm:flex-row sm:items-center sm:justify-between sm:p-12">
           <div className="min-w-0">
