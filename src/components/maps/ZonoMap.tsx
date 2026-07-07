@@ -31,6 +31,8 @@ export interface ZonoMapPoint {
   href?: string;
   /** Optional real cover image shown at the top of the popover (no placeholder). */
   imageUrl?: string | null;
+  /** Heat contribution 0..1 (weighted intelligence). Defaults to 1 (density). */
+  weight?: number;
 }
 
 /** An optional area polygon (e.g. broker expertise area / neighborhood). */
@@ -244,17 +246,18 @@ export function ZonoMap({
         if (heatmap && realPoints.length) {
           map.addSource("zono-heat", {
             type: "geojson",
-            data: { type: "FeatureCollection", features: realPoints.map((p) => ({ type: "Feature" as const, properties: {}, geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] } })) },
+            data: { type: "FeatureCollection", features: realPoints.map((p) => ({ type: "Feature" as const, properties: { w: typeof p.weight === "number" ? p.weight : 1 }, geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] } })) },
           });
           map.addLayer({
             id: "zono-heat-layer",
             type: "heatmap",
             source: "zono-heat",
             paint: {
-              "heatmap-weight": 1,
+              // Weighted intelligence: each point contributes by its business value.
+              "heatmap-weight": ["interpolate", ["linear"], ["get", "w"], 0, 0, 1, 1],
               "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 16, 2.4],
               "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 8, 16, 34],
-              "heatmap-opacity": 0.78,
+              "heatmap-opacity": 0.8,
               "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], ...HEAT_COLOR.flat()],
             },
           });
@@ -288,6 +291,21 @@ export function ZonoMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pointsSig, polysSig, heatmap, markersWithHeat, markerRevealZoom, clusterThreshold, initialZoom]);
+
+  // Live-update the weighted heat when the active layer's weights change — no map
+  // rebuild (smooth transition; supports large datasets efficiently).
+  const weightSig = heatmap ? realPoints.map((p) => Math.round((p.weight ?? 1) * 20)).join("") : "";
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !heatmap) return;
+    const apply = () => {
+      const src = m.getSource("zono-heat") as import("maplibre-gl").GeoJSONSource | undefined;
+      if (!src) return;
+      src.setData({ type: "FeatureCollection", features: realPoints.map((p) => ({ type: "Feature" as const, properties: { w: typeof p.weight === "number" ? p.weight : 1 }, geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] } })) });
+    };
+    if (m.isStyleLoaded()) apply(); else m.once("idle", apply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weightSig, heatmap]);
 
   const shell = "border-line bg-card relative w-full overflow-hidden rounded-card border shadow-card";
 
