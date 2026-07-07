@@ -7,6 +7,7 @@ import Link from "next/link";
 
 const NAV: { href: string; label: string; icon: string }[] = [
   { href: "/buyer-portal/dashboard", label: "בית", icon: "🏠" },
+  { href: "/buyer-portal/timeline", label: "מסלול", icon: "📍" },
   { href: "/buyer-portal/properties", label: "נכסים", icon: "🔑" },
   { href: "/buyer-portal/favorites", label: "מועדפים", icon: "❤️" },
   { href: "/buyer-portal/searches", label: "חיפושים", icon: "🔍" },

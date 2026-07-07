@@ -6,6 +6,7 @@ import Link from "next/link";
 
 const NAV: { href: string; label: string; icon: string }[] = [
   { href: "/seller-portal/dashboard", label: "בית", icon: "🏠" },
+  { href: "/seller-portal/timeline", label: "מסלול", icon: "📍" },
   { href: "/seller-portal/property", label: "הנכס", icon: "🔑" },
   { href: "/seller-portal/buyers", label: "קונים", icon: "🧲" },
   { href: "/seller-portal/activity", label: "פעילות", icon: "📈" },
