@@ -41,7 +41,7 @@ export default async function AgentPropertiesPage({ params }: { params: Promise<
           {listings.map((l) => {
             const bg = badgesFor(l);
             const badge = bg.demand === "high" ? "ביקוש גבוה" : bg.trust === "verified" ? "מאומת" : bg.strategyLabel;
-            return <PropertyCard key={l.id} slug={slug} id={l.id} title={l.title} price={l.price} image={l.image} badge={badge} base="ai-agent" />;
+            return <PropertyCard key={l.id} slug={slug} id={l.id} title={l.title} price={l.price} image={l.image} badge={badge} base="ai-agent" matchScore={bg.marketScore ?? null} />;
           })}
         </div>
       )}
