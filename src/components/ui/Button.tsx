@@ -64,7 +64,10 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center rounded-lg font-semibold transition-colors",
+        // PHASE 61 — tactile press feedback + smooth transitions (reduced-motion safe).
+        "inline-flex items-center justify-center rounded-lg font-semibold",
+        "transition-[color,background-color,border-color,box-shadow,transform] duration-150",
+        "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
         "disabled:cursor-not-allowed disabled:opacity-50",
         variantClasses[variant],

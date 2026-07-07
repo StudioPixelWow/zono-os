@@ -838,3 +838,71 @@ body {
   .zono-sysrefresh-spin { animation: none !important; }
   .zono-sysrefresh-toast { animation: none !important; }
 }
+
+/* ============================================================================
+   ZONO PHASE 61 — UX Excellence polish primitives.
+   Central, additive, reduced-motion safe. Every rule below improves clarity,
+   feedback, accessibility or perceived speed — never decoration. Applied at the
+   design-system level so no page or component is duplicated.
+   ========================================================================== */
+
+/* STEP 15 — Keyboard focus for links + form controls that don't opt into a
+   component focus ring. (Buttons/primitives keep their own rings.) Only affects
+   keyboard users via :focus-visible; never mouse/touch. */
+a[href]:focus-visible,
+input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.6);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* STEP 4 — Soft page-enter (keyed per route by PageTransition). Replaces hard
+   route jumps with a subtle 220ms fade + rise that reduces cognitive load. */
+.zono-page-enter { animation: zono-page-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes zono-page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* STEP 9 — Content skeleton. A content-shaped placeholder to replace spinners;
+   improves perceived speed. Use as <div class="zono-skeleton h-4 w-40" />. */
+.zono-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(100deg, rgba(124, 58, 237, 0.06) 30%, rgba(124, 58, 237, 0.12) 50%, rgba(124, 58, 237, 0.06) 70%);
+  background-size: 200% 100%;
+  animation: zono-skeleton 1.3s ease-in-out infinite;
+  border-radius: 12px;
+}
+@keyframes zono-skeleton {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* STEP 2 / STEP 14 — Premium, unobtrusive scrollbar across the app. Thin,
+   translucent brand thumb; keeps chrome out of the way and feels intentional. */
+html { scrollbar-width: thin; scrollbar-color: rgba(124, 58, 237, 0.26) transparent; }
+.zono-scroll { scrollbar-width: thin; scrollbar-color: rgba(124, 58, 237, 0.26) transparent; }
+html::-webkit-scrollbar,
+.zono-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+html::-webkit-scrollbar-track,
+.zono-scroll::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar-thumb,
+.zono-scroll::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.22);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+html::-webkit-scrollbar-thumb:hover,
+.zono-scroll::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.4); background-clip: content-box; }
+
+/* Respect the user's motion preference for these new primitives (STEP 15). */
+@media (prefers-reduced-motion: reduce) {
+  .zono-page-enter { animation: none; }
+  .zono-skeleton { animation: none; }
+}
