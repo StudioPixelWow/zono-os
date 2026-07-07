@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { getPublicOfficeSite, logSiteEvent, type PublicProperty } from "@/lib/office-website/service";
+import { getPublicOfficeSite, logSiteEvent } from "@/lib/office-website/service";
+import { PropertyCard } from "@/components/brokerage-site/ui";
 import { SiteLeadForm } from "./SiteLeadForm";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +100,10 @@ export default async function OfficeSitePage({ params }: { params: Promise<{ slu
 
         {S.featured_properties !== false && site.featured.length > 0 && (
           <Section title="נכסים מובחרים" id="properties" cta={{ href: `/site/${slug}/properties`, label: "לכל הנכסים ←" }}>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{site.featured.map((p) => <PropCard key={p.id} p={p} />)}</div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{site.featured.map((p) => (
+              <PropertyCard key={p.id} slug={slug} id={p.id} title={p.title} price={p.price} image={p.image} badge={p.tag}
+                href={`/site/${slug}/properties`} location={[p.neighborhood, p.city].filter(Boolean).join(" · ") || null} rooms={p.rooms} area={p.area} />
+            ))}</div>
           </Section>
         )}
 
@@ -216,18 +220,6 @@ function Section({ title, id, cta, children }: { title: string; id?: string; cta
       <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-black sm:text-2xl">{title}</h2>{cta && <Link href={cta.href} className="text-sm font-bold text-[#7C3AED]">{cta.label}</Link>}</div>
       {children}
     </section>
-  );
-}
-function PropCard({ p }: { p: PublicProperty }) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#eef0f4]">
-      <div className="relative h-44 bg-[#f1f5f9]">{p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-3xl">🏠</div>}{p.tag && <span className="absolute right-3 top-3 rounded-full bg-[#7C3AED] px-2 py-0.5 text-[11px] font-bold text-white">{p.tag}</span>}</div>
-      <div className="p-4">
-        <p className="text-lg font-black">{money(p.price)}</p>
-        <p className="text-[13px] text-[#64748b]">{p.city ?? ""}{p.neighborhood ? " · " + p.neighborhood : ""}</p>
-        <p className="mt-1 text-[13px] text-[#334155]">{p.rooms ? `${p.rooms} חד׳` : ""}{p.area ? ` · ${p.area} מ״ר` : ""}</p>
-      </div>
-    </div>
   );
 }
 function Inactive({ title }: { title: string }) {
