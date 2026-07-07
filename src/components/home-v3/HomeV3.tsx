@@ -118,29 +118,37 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
         </section>
       </Reveal>
 
-      {/* ── S2 · TODAY'S MISSION — one premium mission card ── */}
-      {mission && (
+      {/* ── HERO DUO · 50/50 — Today's Mission ⟷ Property Spotlight ──
+          Two equal-weight cards: the decision (left) and the star property
+          (right). Tablet/mobile stack Mission-first. Existing data only. ── */}
+      {(mission || spotlight) && (
         <Reveal>
-          <Link href={mission.href} className="bg-card border-line hover:border-brand-light block rounded-[24px] border p-6 shadow-[var(--shadow-card)] transition">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-brand text-[11px] font-bold">⟡ המשימה של היום</p>
-                <p className="text-ink mt-1 text-xl font-black sm:text-2xl">{mission.title}</p>
-                {mission.why && <p className="text-muted mt-1 text-sm leading-relaxed">{mission.why}</p>}
-              </div>
-              <span className={cn("shrink-0 rounded-full px-3 py-1 text-[11px] font-bold", priCls[mission.priority] ?? priCls.low)}>{priHe[mission.priority] ?? "רגיל"}</span>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {b?.biggestOpportunity && <Chip icon="TrendingUp" label={`פוטנציאל: ${b.biggestOpportunity.label}`} tone="text-success" />}
-              {perf && <Chip icon="Target" label={`שיעור מעקב ${perf.followUpRatePct}%`} />}
-              <span className="btn-zono-primary zono-focus-ring me-auto inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-bold text-white">בצע עכשיו →</span>
-            </div>
-          </Link>
+          <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+            {mission && (
+              <Link href={mission.href} className="bg-card border-line hover:border-brand-light flex h-full min-h-[16rem] flex-col justify-between rounded-[28px] border p-6 shadow-[var(--shadow-card)] transition sm:min-h-[20rem]">
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-brand text-[11px] font-bold">⟡ המשימה של היום</p>
+                    <span className={cn("shrink-0 rounded-full px-3 py-1 text-[11px] font-bold", priCls[mission.priority] ?? priCls.low)}>{priHe[mission.priority] ?? "רגיל"}</span>
+                  </div>
+                  <p className="text-ink mt-2 text-xl font-black sm:text-2xl">{mission.title}</p>
+                  {mission.why && <p className="text-muted mt-1.5 text-sm leading-relaxed">{mission.why}</p>}
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {commission > 0 && <Chip icon="Wallet" label={`עמלה משוערת ${ils(commission)}`} tone="text-success" />}
+                    {b && <Chip icon="Target" label={`ביטחון AI ${b.dailyScore}%`} />}
+                    {perf && <Chip icon="TrendingUp" label={`שיעור מעקב ${perf.followUpRatePct}%`} />}
+                  </div>
+                </div>
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <span className="text-muted text-[11px] font-bold">{(daily?.approvals.length ?? 0) > 0 ? "🔒 מוכן לאישור" : "✓ מוכן לביצוע מיידי"}</span>
+                  <span className="btn-zono-primary zono-focus-ring inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-[13px] font-bold text-white">בצע עכשיו →</span>
+                </div>
+              </Link>
+            )}
+            {spotlight && <Spotlight t={t} p={spotlight} />}
+          </div>
         </Reveal>
       )}
-
-      {/* ── PROPERTY SPOTLIGHT — the star (Netflix / Airbnb feel) ── */}
-      {spotlight && <Spotlight t={t} p={spotlight} />}
 
       {/* ── S3 · QUICK ACTIONS — the morning launchpad ── */}
       <Reveal>
@@ -258,9 +266,8 @@ function Spotlight({ t, p }: { t: (k: string) => string; p: PropertyCard }) {
   const insight = p.aiInsightKey ? t(p.aiInsightKey) : null;
   const loc = [p.neighborhood, p.city].filter(Boolean).join(" · ");
   return (
-    <Reveal>
-      <section className="bg-card border-line group relative overflow-hidden rounded-[28px] border shadow-[var(--shadow-card)]">
-        <div className="relative h-64 w-full overflow-hidden sm:h-80">
+      <section className="bg-card border-line group relative h-full min-h-[16rem] overflow-hidden rounded-[28px] border shadow-[var(--shadow-card)] sm:min-h-[20rem]">
+        <div className="relative h-full w-full overflow-hidden">
           {p.imageUrl
             ? <div className="zono-kenburns absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${p.imageUrl})` }} />
             : <div className="zono-gradient absolute inset-0" />}
@@ -283,7 +290,6 @@ function Spotlight({ t, p }: { t: (k: string) => string; p: PropertyCard }) {
           </div>
         </div>
       </section>
-    </Reveal>
   );
 }
 
