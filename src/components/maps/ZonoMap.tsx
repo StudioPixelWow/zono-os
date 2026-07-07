@@ -54,8 +54,17 @@ export interface ZonoMapProps {
   /** Render a real density heat overlay instead of markers. The heat reflects
    *  the density of REAL points only — no fake heat is ever drawn. */
   heatmap?: boolean;
+  /** With `heatmap`, also reveal individual property markers once zoomed past
+   *  `markerRevealZoom` (heat when zoomed out → pins at street/building level). */
+  markersWithHeat?: boolean;
+  /** Zoom at which markers appear on top of / instead of heat (default 14). */
+  markerRevealZoom?: number;
   /** Optional real area polygons (broker expertise / neighborhoods). */
   polygons?: ZonoMapPolygon[];
+  /** When provided, clicking a single property marker calls this with the point
+   *  id INSTEAD of opening the popup link — so the consumer can open an internal
+   *  ZONO preview drawer. External sources are never a navigation target. */
+  onSelect?: (id: string) => void;
 }
 
 // ZONO-purple heat ramp (transparent → lavender → violet → deep purple).
@@ -119,12 +128,18 @@ export function ZonoMap({
   clusterThreshold = 60,
   initialZoom = 11,
   heatmap = false,
+  markersWithHeat = false,
+  markerRevealZoom = 14,
   polygons = [],
+  onSelect,
 }: ZonoMapProps) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const popupRef = useRef<MLPopup | null>(null);
   const markersRef = useRef<MLMarker[]>([]);
+  // Keep the latest onSelect without rebuilding the whole map.
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
   const realPoints = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
@@ -152,6 +167,7 @@ export function ZonoMap({
         style,
         center: realPoints[0] ? [realPoints[0].lng, realPoints[0].lat] : [ISRAEL_CENTER.lng, ISRAEL_CENTER.lat],
         zoom: initialZoom,
+        maxZoom: 19, // building-level detail (raster tiles cap at 19)
         attributionControl: { compact: true },
         cooperativeGestures: false,
       });
@@ -166,9 +182,13 @@ export function ZonoMap({
         if (!map) return;
         markersRef.current.forEach((m) => m.remove());
         markersRef.current = [];
-        if (heatmap || realPoints.length === 0) return; // heat mode → no markers
-
+        if (realPoints.length === 0) return;
         const zoom = map.getZoom() ?? initialZoom;
+        // Heat-only when zoomed out; reveal individual pins at street/building
+        // level (markersWithHeat), or never when it's a pure heat map.
+        if (heatmap && !markersWithHeat) return;
+        if (heatmap && markersWithHeat && zoom < markerRevealZoom) return;
+
         const groups = realPoints.length > clusterThreshold
           ? clusterPoints(realPoints, zoom)
           : realPoints.map((p) => ({ lat: p.lat, lng: p.lng, items: [p] }));
@@ -179,7 +199,7 @@ export function ZonoMap({
             const el = document.createElement("div");
             el.style.cssText = `width:${size}px;height:${size}px;border-radius:9999px;background:${MAP_BRAND.purple}ed;border:2px solid ${MAP_BRAND.lavender};color:${MAP_BRAND.ink};font:700 12px/1 inherit;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px rgba(109,40,217,0.45)`;
             el.textContent = String(g.items.length);
-            el.addEventListener("click", (e) => { e.stopPropagation(); map?.easeTo({ center: [g.lng, g.lat], zoom: Math.min(18, zoom + 2) }); });
+            el.addEventListener("click", (e) => { e.stopPropagation(); map?.easeTo({ center: [g.lng, g.lat], zoom: Math.min(19, zoom + 2) }); });
             markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([g.lng, g.lat]).addTo(map));
           } else {
             const p = g.items[0];
@@ -189,6 +209,8 @@ export function ZonoMap({
             el.style.cssText = `width:30px;height:39px;cursor:pointer;background:center/contain no-repeat url("${brandedMarkerSvg(p.tone ?? "brand")}")`;
             el.addEventListener("click", (e) => {
               e.stopPropagation(); // don't let the map receive it (would close the popup)
+              // Preferred: open an internal ZONO preview drawer (never navigate out).
+              if (onSelectRef.current) { popupRef.current?.remove(); onSelectRef.current(p.id); return; }
               popupRef.current?.remove();
               popupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 28, maxWidth: "240px", className: "zono-pop" })
                 .setLngLat([p.lng, p.lat]).setHTML(infoHtml(p)).addTo(map!);
@@ -246,10 +268,10 @@ export function ZonoMap({
           ...realPoints.map((p) => [p.lng, p.lat] as [number, number]),
           ...realPolys.flatMap((r) => r.map((c) => [c.lng, c.lat] as [number, number])),
         ];
-        if (coords.length === 1) { map.jumpTo({ center: coords[0], zoom: 15 }); }
+        if (coords.length === 1) { map.jumpTo({ center: coords[0], zoom: 16 }); }
         else if (coords.length > 1) {
           const b = coords.reduce((acc, c) => acc.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
-          map.fitBounds(b, { padding: 48, maxZoom: 16, duration: 0 });
+          map.fitBounds(b, { padding: 48, maxZoom: 17, duration: 0 });
         }
         ready = true;
         if (!cancelled) setState("ready");
@@ -265,7 +287,7 @@ export function ZonoMap({
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pointsSig, polysSig, heatmap, clusterThreshold, initialZoom]);
+  }, [pointsSig, polysSig, heatmap, markersWithHeat, markerRevealZoom, clusterThreshold, initialZoom]);
 
   const shell = "border-line bg-card relative w-full overflow-hidden rounded-card border shadow-card";
 

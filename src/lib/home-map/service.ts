@@ -195,7 +195,9 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
             `${r.deal_type === "rent" ? "להשכרה" : "למכירה"} · ${ils(num(r.price))}`,
             `מקור: ${src}${r.has_agent === false ? " · בעל בית פרטי" : ""}`,
           ],
-          href: r.listing_url ? String(r.listing_url) : null,
+          // Stay inside ZONO — never navigate to the raw external listing site.
+          // External sources are data providers only; open the internal detail page.
+          href: `/external-listings/${String(r.id)}`,
           imageUrl: (() => { const im = Array.isArray(r.images) ? r.images : []; const first = im[0]; return typeof first === "string" ? first : (first && typeof first === "object" && typeof (first as { url?: string }).url === "string" ? (first as { url: string }).url : null); })(),
         });
         externalCount++;
