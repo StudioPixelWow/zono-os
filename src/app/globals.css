@@ -906,3 +906,114 @@ html::-webkit-scrollbar-thumb:hover,
   .zono-page-enter { animation: none; }
   .zono-skeleton { animation: none; }
 }
+
+/* ============================================================================
+   ZONO PHASE 61.3 — "Bring ZONO to life" cinematic Home primitives.
+   100% presentational. Subtle, premium, reduced-motion + mobile-perf safe.
+   The magic is the feeling that ZONO worked before the broker arrived — motion
+   only reinforces it; it is never a gimmick. One accent (purple). No rainbow.
+   ========================================================================== */
+
+/* Cinematic hero canvas — deep purple with ambient, slowly-drifting glow. */
+.zono-hero-cine {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 85% 0%, rgba(139, 92, 246, 0.28) 0%, transparent 55%),
+    radial-gradient(120% 120% at 10% 100%, rgba(109, 40, 217, 0.30) 0%, transparent 55%),
+    linear-gradient(135deg, #1a1236 0%, #241a52 55%, #2b1a5e 100%);
+}
+.zono-hero-cine::before {
+  content: ""; position: absolute; inset: -30%;
+  background: radial-gradient(closest-side, rgba(167, 139, 250, 0.22), transparent 70%);
+  filter: blur(24px);
+  animation: zono-ambient 14s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes zono-ambient {
+  0%, 100% { transform: translate3d(-4%, -3%, 0) scale(1); opacity: 0.85; }
+  50% { transform: translate3d(5%, 4%, 0) scale(1.08); opacity: 1; }
+}
+
+/* Floating micro-particles (decorative dots inside the hero). */
+.zono-particle {
+  position: absolute; border-radius: 9999px;
+  background: rgba(196, 181, 253, 0.55);
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.6);
+  animation: zono-float 9s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes zono-float {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.35; }
+  50% { transform: translateY(-14px) scale(1.25); opacity: 0.85; }
+}
+
+/* The Orb — a living heart, not a spinner. Breathing glow keyed by health. */
+.zono-orb-live { position: relative; }
+.zono-orb-live::after {
+  content: ""; position: absolute; inset: -18%;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.55), transparent 72%);
+  animation: zono-breathe var(--orb-speed, 4.2s) ease-in-out infinite;
+  pointer-events: none; z-index: -1;
+}
+@keyframes zono-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.12); opacity: 0.95; }
+}
+
+/* Property Spotlight — slow, luxurious Ken-Burns zoom on the hero image. */
+.zono-kenburns { animation: zono-kenburns 24s ease-in-out infinite alternate; will-change: transform; }
+@keyframes zono-kenburns {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
+/* Count-up figure gets a brief glow as it settles. */
+.zono-figure-glow { text-shadow: 0 0 22px rgba(167, 139, 250, 0.45); }
+
+/* Live pulse dot — used ONLY beside genuinely live surfaces. */
+.zono-live-dot { position: relative; }
+.zono-live-dot::before {
+  content: ""; position: absolute; inset: 0; border-radius: 9999px;
+  background: currentColor; opacity: 0.55;
+  animation: zono-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes zono-ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+
+/* Rotating AI-feed line — soft rise as each line takes the stage. */
+.zono-feed-rise { animation: zono-feed-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes zono-feed-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Typed digest lines reveal one after another (staggered via inline delay). */
+.zono-digest-line { animation: zono-feed-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Approve → celebrate: a short confirming glow (no confetti gimmicks). */
+.zono-celebrate { animation: zono-celebrate 0.6s ease-out; }
+@keyframes zono-celebrate {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+  40% { box-shadow: 0 0 0 6px rgba(52, 211, 153, 0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
+/* Performance + accessibility: kill hero ambience on small screens and for
+   users who prefer reduced motion. The static premium look remains intact. */
+@media (max-width: 768px) {
+  .zono-particle { display: none; }
+  .zono-hero-cine::before { animation: none; }
+  .zono-kenburns { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zono-hero-cine::before,
+  .zono-particle,
+  .zono-orb-live::after,
+  .zono-kenburns,
+  .zono-live-dot::before,
+  .zono-feed-rise,
+  .zono-digest-line,
+  .zono-celebrate { animation: none !important; }
+  .zono-particle { display: none; }
+}
