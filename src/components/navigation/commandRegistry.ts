@@ -48,6 +48,7 @@ export const SYSTEM_MAP: SystemGroup[] = [
       { id: "today", label: "מוקד היום", description: "Daily OS — מה דורש טיפול עכשיו", href: "/today", icon: "Target", category: "עמודים", group: "home", type: "page", keywords: ["daily os", "היום"] },
       { id: "my", label: "שולחן העבודה שלי", description: "Broker Workspace", href: "/my", icon: "Users", category: "עמודים", group: "home", type: "page", keywords: ["workspace", "broker"] },
       { id: "executive", label: "מוח ניהולי", description: "Executive Intelligence OS", href: "/executive", icon: "Sparkles", category: "עמודים", group: "home", type: "page", keywords: ["executive", "ceo", "ציון ארגון"] },
+      { id: "office-manager", label: "מנהל המשרד", description: "Office AI Manager — עומס צוות, האצלות, מעקבים ואישורים", href: "/office-manager", icon: "Users", category: "עמודים", group: "home", type: "page", keywords: ["manager", "מנהל", "משרד", "עומס", "צוות", "האצלה", "workload"] },
       { id: "notifications", label: "התראות", href: "/notifications", icon: "Bell", category: "עמודים", group: "home", type: "page" },
       { id: "calendar", label: "יומן", description: "Calendar OS — סדר יום, מסלול, פגישות", href: "/calendar", icon: "Calendar", category: "עמודים", group: "home", type: "page", keywords: ["calendar", "לוח שנה"] },
     ],
