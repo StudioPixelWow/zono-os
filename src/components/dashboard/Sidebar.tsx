@@ -1,8 +1,8 @@
 "use client";
 // ============================================================================
-// ZONO Launcher sidebar (Phase 26.8.3). A premium product launcher — not an
-// admin accordion. Five Hebrew launcher groups, each a full-width tile with a
-// large accent icon, title and short description. The group that owns the
+// ZONO Launcher sidebar. A premium product launcher — not an admin accordion.
+// Seven Hebrew OS launcher groups, each a full-width tile with a large accent
+// icon, title and short description. The group that owns the
 // active route opens by default (fallback: מרכז הבקרה); nested links live inside
 // their tile. Collapsed → an icon rail whose hover/focus flyout shows the group
 // title + description + links. Navigation / presentation only — every href is an
@@ -29,41 +29,60 @@ const ACCENTS: Record<Accent, { iconBg: string; ring: string; activeItem: string
   slate:  { iconBg: "bg-slate-100 text-slate-600",     ring: "border-slate-300",   activeItem: "bg-slate-100 text-slate-700" },
 };
 
-/** The ZONO information architecture — 5 launcher groups, existing routes only. */
+/** The ZONO information architecture — 7 OS launcher groups. Every href below is
+ *  an EXISTING route (verified against the app router). One href per item, no
+ *  duplicates, no dead links. Surfaces without a dedicated page (e.g. approvals,
+ *  missions) live inside their hub and are reachable via the ⌘K palette. */
 const GROUPS: NavGroup[] = [
-  { key: "command", title: "מרכז הבקרה", desc: "AI • משימות • מרכז הפעולות", icon: "Flame", accent: "purple", items: [
+  { key: "command", title: "מרכז הבקרה", desc: "בית • Daily OS • Broker Brain", icon: "Flame", accent: "purple", items: [
     { label: "דף הבית", href: "/", icon: "Home" },
-    { label: "Mission Control", href: "/mission-control", icon: "Sparkles" },
+    { label: "היום · Daily OS", href: "/today", icon: "Sun" },
+    { label: "מוח הברוקר", href: "/brain", icon: "Sparkles" },
+    { label: "Mission Control", href: "/mission-control", icon: "Target" },
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
   ]},
-  { key: "office", title: "המשרד שלי", desc: "נכסים • קונים • מוכרים • עסקאות", icon: "Building2", accent: "blue", items: [
-    { label: "הנכסים שלי", href: "/my-properties", icon: "Building" },
-    { label: "מלאי המשרד", href: "/office-inventory", icon: "Building2" },
+  { key: "office", title: "המשרד שלי", desc: "נכסים • אנשים • עסקאות • יומן", icon: "Building2", accent: "blue", items: [
+    { label: "נכסים", href: "/properties", icon: "Building" },
     { label: "קונים", href: "/buyers", icon: "Users" },
     { label: "מוכרים", href: "/sellers", icon: "UserCheck" },
+    { label: "לידים", href: "/social-leads", icon: "UserPlus" },
     { label: "עסקאות", href: "/deals", icon: "Handshake" },
+    { label: "פגישות", href: "/calendar", icon: "Calendar" },
   ]},
-  { key: "market", title: "השוק", desc: "נכסי שוק • מודיעין • מפה • רדאר", icon: "Globe", accent: "green", items: [
-    { label: "נכסי השוק", href: "/market-intelligence/listings", icon: "Globe" },
-    { label: "מודיעין שוק", href: "/market-intelligence/dashboard", icon: "Map" },
-    { label: "מפת שוק חיה", href: "/market-intelligence/map", icon: "MapPin" },
-    { label: "רדאר נכסים", href: "/property-radar", icon: "Locate" },
-    { label: "חיפוש מודיעין", href: "/intelligence-explorer", icon: "Search" },
+  { key: "marketing", title: "תקשורת ושיווק", desc: "WhatsApp • Facebook • קמפיינים", icon: "Megaphone", accent: "green", items: [
+    { label: "WhatsApp", href: "/whatsapp", icon: "MessageCircle" },
+    { label: "Facebook", href: "/facebook", icon: "Send" },
+    { label: "פרסום בקבוצות", href: "/distribution", icon: "Megaphone" },
+    { label: "קמפיינים", href: "/distribution/campaign-wizard", icon: "Target" },
+    { label: "Marketing OS", href: "/marketing", icon: "BarChart3" },
+    { label: "Creative Studio", href: "/creative-studio", icon: "Presentation" },
   ]},
-  { key: "intelligence", title: "מודיעין עסקי", desc: "סוכנים • משרדים • שכונות • דאטה", icon: "BarChart3", accent: "amber", items: [
-    { label: "דאטה משרדי תיווך", href: "/brokerage-data", icon: "Database" },
-    { label: "מודיעין סוכנים", href: "/broker-intelligence/dashboard", icon: "Users" },
-    { label: "מודיעין משרדים", href: "/office-intelligence/dashboard", icon: "Building2" },
-    { label: "מודיעין שכונות", href: "/neighborhood-intelligence/dashboard", icon: "Map" },
+  { key: "intelligence", title: "מודיעין עסקי", desc: "Executive • Territory • תחזיות", icon: "BarChart3", accent: "amber", items: [
+    { label: "Executive OS", href: "/executive", icon: "BarChart3" },
+    { label: "Territory OS", href: "/territory", icon: "Map" },
+    { label: "תחזיות", href: "/predictions", icon: "TrendingUp" },
+    { label: "Knowledge Graph", href: "/graph", icon: "Layers" },
+    { label: "Marketplace Intelligence", href: "/marketplace", icon: "Globe" },
+    { label: "מפת חום שוק", href: "/market-intelligence/map", icon: "MapPin" },
   ]},
-  { key: "management", title: "ניהול המערכת", desc: "המלצות • צוות • מסמכים • הגדרות", icon: "Settings", accent: "slate", items: [
-    { label: "המלצות", href: "/recommendations", icon: "Sparkles" },
-    { label: "AI Memory", href: "/mission-control#memory", icon: "Layers" },
-    { label: "משימות AI", href: "/mission-control#mission-planner", icon: "ListChecks" },
-    { label: "ZONO קריאייטיב", href: "/creative", icon: "Presentation" },
-    { label: "מודיעין שיווק", href: "/marketing", icon: "Megaphone" },
+  { key: "sites", title: "אתרים ופורטלים", desc: "אתרי משרד/סוכן • דפי נחיתה • פורטלים", icon: "Globe", accent: "blue", items: [
+    { label: "אתר משרד", href: "/office-website", icon: "Building2" },
+    { label: "אתר סוכן", href: "/agent-website", icon: "UserCheck" },
+    { label: "אתרים ודפי נחיתה", href: "/website", icon: "LayoutGrid" },
+    { label: "פורטלים (קונה/מוכר)", href: "/portals", icon: "Users" },
+  ]},
+  { key: "ops", title: "אוטומציה ותפעול", desc: "Automation • Workflows • Voice AI", icon: "Route", accent: "green", items: [
+    { label: "Automation OS", href: "/automation", icon: "Route" },
+    { label: "Workflows", href: "/workflow-builder", icon: "ListChecks" },
+    { label: "מסעות לקוח", href: "/journeys", icon: "Activity" },
+    { label: "Voice AI", href: "/voice", icon: "Mic" },
+    { label: "Self-Learning", href: "/learning", icon: "Sparkles" },
+  ]},
+  { key: "system", title: "ניהול מערכת", desc: "צוות • חיבורים • מסמכים • הגדרות", icon: "Settings", accent: "slate", items: [
     { label: "צוות וסוכנים", href: "/team", icon: "UserCheck" },
+    { label: "חיבורים", href: "/settings/distribution-connections", icon: "Send" },
     { label: "מסמכים", href: "/documents", icon: "FileText" },
+    { label: "דאטה משרדי תיווך", href: "/brokerage-data", icon: "Database" },
     { label: "הגדרות", href: "/settings", icon: "Settings" },
   ]},
 ];
@@ -76,12 +95,20 @@ export function Sidebar() {
   // undefined = follow active group; string = user-opened group; null = all closed.
   const [openOverride, setOpenOverride] = useState<string | null | undefined>(undefined);
 
-  const pathActive = (href: string) => {
+  // Boundary-aware match (so "/market-intelligence/map" doesn't light up "/marketing",
+  // and "/settings/distribution-connections" doesn't also light up "/settings").
+  const matches = (href: string) => {
     const base = href.split("#")[0];
-    return base === "/" ? pathname === "/" : pathname.startsWith(base);
+    if (base === "/") return pathname === "/";
+    return pathname === base || pathname.startsWith(`${base}/`);
   };
-  const itemActive = (href: string) => (href.includes("#") ? false : pathActive(href));
-  const activeGroupKey = GROUPS.find((g) => g.items.some((it) => itemActive(it.href)))?.key ?? null;
+  // Exactly ONE active item — the longest matching base wins.
+  const activeHref = GROUPS
+    .flatMap((g) => g.items.map((it) => it.href))
+    .filter((h) => !h.includes("#") && matches(h))
+    .sort((a, b) => b.length - a.length)[0] ?? null;
+  const itemActive = (href: string) => !href.includes("#") && href === activeHref;
+  const activeGroupKey = GROUPS.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
   // Derived (no effect): active group opens by default, fallback מרכז הבקרה.
   const openGroupKey = openOverride === undefined ? (activeGroupKey ?? "command") : openOverride;
 
