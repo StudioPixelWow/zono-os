@@ -35,6 +35,8 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
   const [heatmap, setHeatmap] = useState(false);
   const [zone, setZone] = useState<MapZone | null>(null);
   const [zoneData, setZoneData] = useState<TerritoryIntelligenceDTO | null>(null);
+  const [selected, setSelected] = useState<ZonoMapPoint | null>(null);
+  const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
 
   const toggle = (id: MapLayer) => setActive((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -42,8 +44,14 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
   const points: ZonoMapPoint[] = useMemo(() =>
     data.points
       .filter((p) => p.layers.some((l) => active.has(l)))
-      .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, title: p.title, details: p.details, tone: p.tone, href: p.href })),
+      .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, title: p.title, details: p.details, tone: p.tone, href: p.href, imageUrl: (p as { imageUrl?: string | null }).imageUrl ?? null })),
     [data.points, active]);
+
+  const copyLink = () => {
+    if (!selected?.href) return;
+    const url = typeof window !== "undefined" ? new URL(selected.href, window.location.origin).href : selected.href;
+    navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => { /* clipboard unavailable */ });
+  };
 
   const openZone = (z: MapZone) => {
     setZone(z); setZoneData(null);
@@ -116,7 +124,9 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
 
         {/* Map — visually dominant */}
         <div className="min-w-0">
-          <ZonoMap points={points} heatmap={heatmap} heightClass="h-[74vh]" emptyMessage="אין מיקומים גאוקודדים לשכבות שנבחרו." clusterThreshold={80} />
+          <ZonoMap points={points} heatmap={heatmap} markersWithHeat={heatmap}
+            onSelect={(id) => setSelected(points.find((p) => p.id === id) ?? null)}
+            heightClass="h-[74vh]" emptyMessage="אין מיקומים גאוקודדים לשכבות שנבחרו." clusterThreshold={80} />
         </div>
 
         {/* Live feed — secondary */}
@@ -159,6 +169,43 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
               {pending && !zoneData ? <TerminalEmpty text="טוען מודיעין אזור…" /> : zoneData ? <ZoneIntel dto={zoneData} /> : <TerminalEmpty text="אין מודיעין מפורט לאזור זה עדיין." />}
             </div>
           </>
+        )}
+      </IntelligenceDrawer>
+
+      {/* Property preview drawer — opens INSIDE ZONO (never navigates to an
+          external listing site). External sources are data providers only. */}
+      <IntelligenceDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        eyebrow="נכס נבחר"
+        title={selected?.title ?? "נכס"}
+        subtitle={selected?.details?.[0] ?? "—"}
+      >
+        {selected && (
+          <div className="flex flex-col gap-3">
+            {selected.imageUrl && (
+              <div className="h-44 w-full rounded-2xl bg-cover bg-center shadow-[var(--shadow-card)]" style={{ backgroundImage: `url(${selected.imageUrl})` }} />
+            )}
+            {selected.details && selected.details.length > 1 && (
+              <MetricGrid>
+                {selected.details[1] && <Metric label="מחיר" value={selected.details[1]} accent />}
+                {selected.details[2] && <Metric label="פרטים" value={selected.details[2]} />}
+              </MetricGrid>
+            )}
+            {selected.details && selected.details.length > 3 && (
+              <p className="text-muted text-[12px] leading-relaxed">{selected.details.slice(3).filter(Boolean).join(" · ")}</p>
+            )}
+            <div className="mt-1 flex flex-col gap-2">
+              {selected.href && (
+                <Link href={selected.href} prefetch={false} className="btn-zono-primary inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-black text-white">פתח נכס בתוך ZONO ←</Link>
+              )}
+              <div className="flex gap-2">
+                <Link href="/action-center" className="border-line bg-surface text-ink hover:border-brand-light flex flex-1 items-center justify-center rounded-xl border px-3 py-2 text-[13px] font-bold transition">🎯 צור משימה</Link>
+                <button type="button" onClick={copyLink} className="border-line bg-surface text-ink hover:border-brand-light flex flex-1 items-center justify-center rounded-xl border px-3 py-2 text-[13px] font-bold transition">{copied ? "הקישור הועתק ✓" : "🔗 שתף"}</button>
+              </div>
+            </div>
+            <p className="text-muted text-[11px] leading-relaxed">מקורות חיצוניים (יד2/מדלן) משמשים כמידע בלבד — הצפייה והפעולה נשארות בתוך ZONO.</p>
+          </div>
         )}
       </IntelligenceDrawer>
     </IntelligencePage>
