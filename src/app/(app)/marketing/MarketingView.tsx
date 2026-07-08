@@ -1,5 +1,11 @@
 "use client";
-
+// ============================================================================
+// 📣 ZONO — Marketing OS™ view. SCREEN 16. Premium campaign command center (RTL).
+// Answers what to promote today, which channels perform, where leads come from,
+// and what ZONO recommends next — all from REAL marketing intelligence
+// (property marketing DNA, community intel, opportunity signals, segments).
+// Publishing stays assisted/manual via Distribution; nothing auto-publishes.
+// ============================================================================
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -17,11 +23,11 @@ const LEVEL: Record<string, { t: string; c: string }> = {
 const PLATFORM: Record<string, string> = { facebook: "פייסבוק", whatsapp: "וואטסאפ", telegram: "טלגרם", linkedin: "לינקדאין", investors: "משקיעים", neighborhood: "שכונתי", local: "מקומי" };
 const AUDIENCE: Record<string, string> = { buyers: "קונים", sellers: "מוכרים", investors: "משקיעים", luxury: "יוקרה", families: "משפחות", young: "צעירים", commercial: "מסחרי" };
 const SIGNAL: Record<string, string> = { high_demand_locality: "ביקוש גבוה", low_inventory_locality: "מלאי נמוך", investor_hotspot: "מוקד משקיעים", luxury_hotspot: "מוקד יוקרה", family_hotspot: "מוקד משפחות", seller_acquisition_hotspot: "גיוס מוכרים", promotion_opportunity: "קידום נכס" };
-const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
+const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-warning");
 
 export function MarketingView({ board }: { board: MarketingBoard }) {
   const router = useRouter();
-  const { health, communities, topCommunities, segments, opportunities, propertyDna } = board;
+  const { health, communities, segments, opportunities, propertyDna } = board;
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -32,31 +38,41 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
   const addCommunity = () => { if (!nf.name.trim()) { setError("נדרש שם קהילה"); return; } run(() => createCommunityAction({ name: nf.name.trim(), platform: nf.platform, city: nf.city || null, audienceType: nf.audienceType, membersCount: Number(nf.membersCount) || 0 })); setNf({ name: "", platform: "facebook", city: "", audienceType: "buyers", membersCount: "" }); };
 
   const empty = communities.length === 0 && propertyDna.length === 0;
+  const best = communities.filter((c) => c.intel && (c.intel.level === "elite" || c.intel.level === "strong")).slice(0, 6);
+  const weak = communities.filter((c) => c.intel && (c.intel.level === "weak" || c.intel.level === "dead")).slice(0, 6);
+  const leadSources = [...communities].filter((c) => c.intel).sort((a, b) => (b.intel!.lead_quality_score ?? 0) - (a.intel!.lead_quality_score ?? 0)).slice(0, 6);
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
-        <div>
-          <p className="text-brand text-xs font-bold">ZONO Marketing Intelligence OS</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">מודיעין שיווק</h1>
-          <p className="text-muted mt-1 text-sm">מה לשווק, היכן, למי, מתי ולמה — לפני שמערכת פרסום קיימת. דטרמיניסטי, ללא פרסום אוטומטי.</p>
+      {/* ── Cinematic marketing hero ────────────────────────────────────────── */}
+      <div className="bg-card border-line overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)]">
+        <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="min-w-0">
+            <p className="text-brand text-xs font-bold">ZONO Marketing OS</p>
+            <h1 className="text-ink mt-0.5 text-2xl font-black sm:text-3xl">מרכז השיווק והקמפיינים</h1>
+            <p className="text-muted mt-1 max-w-xl text-sm">מה לקדם היום, באילו ערוצים, למי ולמה — פרסום מפוקח אנושית. שום דבר לא מתפרסם או נשלח אוטומטית.</p>
+          </div>
+          <div className="bg-card grid h-24 w-24 shrink-0 place-items-center rounded-full text-center shadow-[var(--shadow-soft)]">
+            <div><div className={`text-4xl font-black leading-none ${tone(health)}`}>{health}</div><div className="text-muted mt-1 text-[10px] font-bold">בריאות שיווק</div></div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/distribution"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Send" size={15} />}>קהילות והפצה</Button></Link>
-          <Link href="/distribution/daily"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Megaphone" size={15} />}>שולחן יומי</Button></Link>
-          <Button size="sm" variant="secondary" onClick={() => setShowNew((v) => !v)} leadingIcon={<Icon name="Plus" size={15} />}>קהילה חדשה</Button>
-          <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין שיווק"}</Button>
+        <div className="grid grid-cols-3 sm:grid-cols-3">
+          <HeroStat label="נכסים לקידום" value={propertyDna.length} tone="text-brand-strong" />
+          <HeroStat label="הזדמנויות שיווק" value={opportunities.length} tone="text-warning" border />
+          <HeroStat label="קהילות פעילות" value={communities.filter((c) => c.status === "active").length} tone="text-ink" border />
         </div>
+      </div>
+
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין שיווק"}</Button>
+        <Link href="/distribution/daily"><Button size="sm" variant="secondary" leadingIcon={<Icon name="Megaphone" size={15} />}>שולחן הפצה יומי</Button></Link>
+        <Link href="/distribution"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Send" size={15} />}>קהילות והפצה</Button></Link>
+        <Link href="/marketing-core"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Sparkles" size={15} />}>מרכז קמפיינים AI</Button></Link>
+        <Button size="sm" variant="ghost" onClick={() => setShowNew((v) => !v)} leadingIcon={<Icon name="Plus" size={15} />}>קהילה חדשה</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="בריאות שיווק" value={String(health)} icon="Shield" tone={tone(health)} />
-        <Stat label="קהילות" value={String(communities.length)} icon="Users" />
-        <Stat label="הזדמנויות שיווק" value={String(opportunities.length)} icon="Flame" tone="text-warning" />
-        <Stat label="נכסים עם DNA" value={String(propertyDna.length)} icon="Megaphone" tone="text-brand-strong" />
-      </div>
 
       {showNew && (
         <div className="bg-card border-line rounded-[20px] border p-4">
@@ -74,118 +90,128 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
 
       {empty ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
-          <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Megaphone" size={26} /></span>
+          <span className="bg-brand-soft text-brand grid h-16 w-16 place-items-center rounded-3xl"><Icon name="Megaphone" size={28} /></span>
           <p className="text-ink text-lg font-extrabold">אין עדיין מודיעין שיווק</p>
-          <p className="text-muted max-w-sm text-sm">הוסף קהילות ולחץ ״חשב מודיעין שיווק״ כדי לבנות DNA שיווקי לכל נכס, דירוג קהילות והזדמנויות.</p>
+          <p className="text-muted max-w-sm text-sm">הוסיפו קהילות ולחצו ״חשב מודיעין שיווק״ כדי לבנות DNA שיווקי לכל נכס, דירוג ערוצים והזדמנויות קידום.</p>
+          <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />} className="mt-1">חשב מודיעין שיווק</Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Best opportunities */}
-          <Panel title="הזדמנויות שיווק" icon="Flame">
-            {opportunities.length === 0 ? <p className="text-muted text-sm">אין הזדמנויות פתוחות</p> : (
-              <ul className="flex flex-col gap-1.5">{opportunities.slice(0, 8).map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-ink min-w-0 flex-1 truncate font-semibold">{o.title} <span className="text-muted text-[10px]">· {SIGNAL[o.signal_type] ?? o.signal_type}</span></span>
-                  <span className={cn("shrink-0 text-xs font-black", tone(o.impact_score))}>{o.impact_score}</span>
-                </li>
-              ))}</ul>
-            )}
-          </Panel>
-
-          {/* Top communities */}
-          <Panel title="קהילות מובילות" icon="Users">
-            {topCommunities.length === 0 ? <p className="text-muted text-sm">אין קהילות — הוסף קהילה</p> : (
-              <ul className="flex flex-col gap-1.5">{topCommunities.map((c) => (
-                <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-ink min-w-0 flex-1 truncate font-semibold">{c.name} <span className="text-muted text-[10px]">· {PLATFORM[c.platform] ?? c.platform} · {AUDIENCE[c.audience_type] ?? c.audience_type}</span></span>
-                  {c.intel && <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", (LEVEL[c.intel.level] ?? LEVEL.average).c)}>{(LEVEL[c.intel.level] ?? LEVEL.average).t}</span>}
-                  <span className={cn("shrink-0 text-xs font-black", tone(c.intel?.community_health_score ?? 0))}>{c.intel?.community_health_score ?? 0}</span>
-                </li>
-              ))}</ul>
-            )}
-          </Panel>
-
-          {/* Property marketing DNA */}
-          <Panel title="DNA שיווקי לנכסים" icon="Megaphone">
-            {propertyDna.length === 0 ? <p className="text-muted text-sm">—</p> : (
-              <ul className="flex flex-col gap-1.5">{propertyDna.slice(0, 8).map((d) => (
-                <li key={d.propertyId} className="border-line rounded-xl border p-2 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <Link href={`/properties/${d.propertyId}`} className="text-ink hover:text-brand min-w-0 flex-1 truncate font-semibold">{d.title}</Link>
-                    <span className={cn("shrink-0 text-xs font-black", tone(d.score))}>{d.score}</span>
+        <>
+          {/* ── Today's promotion workload ───────────────────────────────────── */}
+          <Panel title="נכסים שדורשים קידום" icon="Megaphone" count={propertyDna.length}>
+            {propertyDna.length === 0 ? (
+              <Empty text="חשב מודיעין שיווק כדי לזהות נכסים לקידום." />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                {propertyDna.slice(0, 8).map((d) => (
+                  <div key={d.propertyId} className="border-line rounded-2xl border p-3.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <Link href={`/properties/${d.propertyId}`} className="text-ink hover:text-brand min-w-0 flex-1 truncate text-sm font-black">{d.title}</Link>
+                      <span className={cn("shrink-0 text-lg font-black", tone(d.score))}>{d.score}</span>
+                    </div>
+                    {d.summary && <p className="text-muted mt-1 line-clamp-2 text-[12px] leading-relaxed">{d.summary}</p>}
+                    <div className="text-muted mt-1.5 flex flex-wrap gap-x-3 text-[11px] font-semibold">
+                      {d.topCommunity && <span>ערוץ: {d.topCommunity}</span>}
+                      {d.budget && <span>תקציב: {d.budget}</span>}
+                      {d.audience.length > 0 && <span>{d.audience.map((a) => AUDIENCE[a] ?? a).join(", ")}</span>}
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      <Link href={`/creative/new?type=property_sale_post&propertyId=${d.propertyId}`}><Button size="sm" leadingIcon={<Icon name="Sparkles" size={13} />}>צור קריאייטיב</Button></Link>
+                      <Link href="/distribution/daily"><Button size="sm" variant="secondary" leadingIcon={<Icon name="Megaphone" size={13} />}>הפץ</Button></Link>
+                      <Link href={`/properties/${d.propertyId}`}><Button size="sm" variant="ghost" leadingIcon={<Icon name="ArrowUpRight" size={13} />}>יומן שיווק</Button></Link>
+                    </div>
                   </div>
-                  <p className="text-muted text-[11px]">{d.topCommunity ? `קהילה: ${d.topCommunity} · ` : ""}תקציב: {d.budget ?? "—"}{d.audience.length ? ` · ${d.audience.map((a) => AUDIENCE[a] ?? a).join(", ")}` : ""}</p>
-                </li>
-              ))}</ul>
-            )}
-          </Panel>
-
-          {/* Audience segments */}
-          <Panel title="פלחי קהל" icon="Users">
-            {segments.length === 0 ? <p className="text-muted text-sm">—</p> : (
-              <ul className="flex flex-col gap-1.5">{segments.filter((s) => s.segment_size > 0).map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-ink min-w-0 flex-1 truncate font-semibold">{s.label}</span>
-                  <span className="text-muted text-[11px]">{s.segment_size} קונים · המרה {s.segment_conversion}%</span>
-                  <span className={cn("shrink-0 text-xs font-black", tone(s.segment_quality))}>{s.segment_quality}</span>
-                </li>
-              ))}</ul>
-            )}
-          </Panel>
-
-          {/* Community rankings (all) */}
-          <Panel title="דירוג קהילות מלא" icon="BarChart3">
-            {communities.length === 0 ? <p className="text-muted text-sm">—</p> : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[420px] text-start text-sm">
-                  <thead className="text-muted border-line border-b text-xs"><tr>{["קהילה", "קהל", "לידים", "עסקאות", "ROI", "רמה"].map((h) => <th key={h} className="px-2 py-1.5 text-start font-bold">{h}</th>)}</tr></thead>
-                  <tbody>{communities.slice(0, 12).map((c) => (
-                    <tr key={c.id} className="border-line border-b last:border-0">
-                      <td className="text-ink px-2 py-1.5 font-semibold">{c.name}</td>
-                      <td className="text-muted px-2 py-1.5">{AUDIENCE[c.audience_type] ?? c.audience_type}</td>
-                      <td className="text-muted px-2 py-1.5">{c.intel?.lead_quality_score ?? 0}</td>
-                      <td className="text-muted px-2 py-1.5">{c.intel?.deal_generation_score ?? 0}</td>
-                      <td className="text-muted px-2 py-1.5">{c.intel?.roi_score ?? 0}</td>
-                      <td className="px-2 py-1.5">{c.intel && <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", (LEVEL[c.intel.level] ?? LEVEL.average).c)}>{(LEVEL[c.intel.level] ?? LEVEL.average).t}</span>}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
+                ))}
               </div>
             )}
           </Panel>
 
-          {/* Publishing recommendations */}
-          <Panel title="המלצות פרסום" icon="Clock">
-            {propertyDna.length === 0 ? <p className="text-muted text-sm">חשב מודיעין כדי לקבל המלצות פרסום</p> : (
-              <ul className="flex flex-col gap-1.5">{propertyDna.slice(0, 6).map((d) => (
-                <li key={d.propertyId} className="text-sm">
-                  <Link href={`/properties/${d.propertyId}`} className="text-ink hover:text-brand font-semibold">{d.title}</Link>
-                  <p className="text-muted text-[11px]">{d.summary}</p>
-                </li>
-              ))}</ul>
-            )}
-          </Panel>
-        </div>
+          {/* ── Channel performance: best vs weak ────────────────────────────── */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Panel title="ערוצים מובילים" icon="TrendingUp" count={best.length}>
+              {best.length === 0 ? <Empty text="אין ערוצים מובילים עדיין." /> : (
+                <ul className="flex flex-col gap-1.5">{best.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-ink min-w-0 flex-1 truncate font-semibold">{c.name} <span className="text-muted text-[10px]">· {PLATFORM[c.platform] ?? c.platform}</span></span>
+                    <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", (LEVEL[c.intel!.level] ?? LEVEL.average).c)}>{(LEVEL[c.intel!.level] ?? LEVEL.average).t}</span>
+                    <span className={cn("shrink-0 text-xs font-black", tone(c.intel!.community_health_score ?? 0))}>{c.intel!.community_health_score ?? 0}</span>
+                  </li>
+                ))}</ul>
+              )}
+            </Panel>
+            <Panel title="ערוצים חלשים / לשיפור" icon="AlertTriangle" count={weak.length}>
+              {weak.length === 0 ? <Empty text="אין ערוצים חלשים — כל הערוצים מתפקדים ✓" /> : (
+                <ul className="flex flex-col gap-1.5">{weak.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-ink min-w-0 flex-1 truncate font-semibold">{c.name} <span className="text-muted text-[10px]">· {PLATFORM[c.platform] ?? c.platform}</span></span>
+                    <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", (LEVEL[c.intel!.level] ?? LEVEL.average).c)}>{(LEVEL[c.intel!.level] ?? LEVEL.average).t}</span>
+                    <span className={cn("shrink-0 text-xs font-black", tone(c.intel!.community_health_score ?? 0))}>{c.intel!.community_health_score ?? 0}</span>
+                  </li>
+                ))}</ul>
+              )}
+            </Panel>
+          </div>
+
+          {/* ── Opportunities (AI next actions) + Lead sources ───────────────── */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Panel title="הזדמנויות שיווק · פעולות מומלצות" icon="Flame" count={opportunities.length}>
+              {opportunities.length === 0 ? <Empty text="אין הזדמנויות פתוחות כרגע." /> : (
+                <ul className="flex flex-col gap-1.5">{opportunities.slice(0, 8).map((o) => (
+                  <li key={o.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-ink min-w-0 flex-1 truncate font-semibold">{o.title} <span className="text-muted text-[10px]">· {SIGNAL[o.signal_type] ?? o.signal_type}</span></span>
+                    <span className={cn("shrink-0 text-xs font-black", tone(o.impact_score))}>{o.impact_score}</span>
+                  </li>
+                ))}</ul>
+              )}
+            </Panel>
+            <Panel title="מקורות לידים" icon="Users" count={leadSources.length}>
+              {leadSources.length === 0 ? <Empty text="אין נתוני מקורות לידים עדיין." /> : (
+                <ul className="flex flex-col gap-1.5">{leadSources.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-ink min-w-0 flex-1 truncate font-semibold">{c.name} <span className="text-muted text-[10px]">· {PLATFORM[c.platform] ?? c.platform}</span></span>
+                    <span className="text-muted text-[11px]">איכות לידים</span>
+                    <span className={cn("shrink-0 text-xs font-black", tone(c.intel!.lead_quality_score ?? 0))}>{c.intel!.lead_quality_score ?? 0}</span>
+                  </li>
+                ))}</ul>
+              )}
+            </Panel>
+          </div>
+
+          {/* ── Audience segments ────────────────────────────────────────────── */}
+          {segments.filter((s) => s.segment_size > 0).length > 0 && (
+            <Panel title="פלחי קהל" icon="Users">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{segments.filter((s) => s.segment_size > 0).map((s) => (
+                <div key={s.id} className="border-line flex items-center justify-between gap-2 rounded-2xl border p-3">
+                  <div className="min-w-0"><p className="text-ink truncate text-[13px] font-bold">{s.label}</p><p className="text-muted text-[11px]">{s.segment_size} קונים · המרה {s.segment_conversion}%</p></div>
+                  <span className={cn("shrink-0 text-lg font-black", tone(s.segment_quality))}>{s.segment_quality}</span>
+                </div>
+              ))}</div>
+            </Panel>
+          )}
+
+          <p className="text-muted text-center text-[11px]">הפרסום בפועל מתבצע בשולחן ההפצה — פייסבוק ווואטסאפ נשארים מפוקחים אנושית, ללא שליחה או פרסום אוטומטי.</p>
+        </>
       )}
     </div>
   );
 }
 
-function Panel({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
+function Panel({ title, icon, count, children }: { title: string; icon?: string; count?: number; children: React.ReactNode }) {
   return (
-    <div className="bg-card border-line rounded-[20px] border p-4">
-      <div className="mb-2 flex items-center gap-2">{icon && <span className="bg-brand-soft text-brand grid h-7 w-7 place-items-center rounded-lg"><Icon name={icon} size={14} /></span>}<p className="text-ink text-sm font-extrabold">{title}</p></div>
+    <div className="bg-card border-line rounded-[20px] border p-4 sm:p-5">
+      <div className="mb-3 flex items-center gap-2">{icon && <span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name={icon} size={15} /></span>}<p className="text-ink text-sm font-extrabold">{title}{count != null ? ` (${count})` : ""}</p></div>
       {children}
     </div>
   );
 }
-
-function Stat({ label, value, icon, tone = "text-brand-strong" }: { label: string; value: string; icon: string; tone?: string }) {
+function HeroStat({ label, value, tone, border }: { label: string; value: number; tone: string; border?: boolean }) {
   return (
-    <div className="bg-card border-line rounded-2xl border p-3">
-      <span className={cn("mb-1 inline-flex", tone)}><Icon name={icon} size={16} /></span>
-      <p className="text-ink text-lg font-black">{value}</p>
-      <p className="text-muted text-[11px] font-bold">{label}</p>
+    <div className={`bg-card px-3 py-4 text-center ${border ? "border-line border-r" : ""}`}>
+      <p className={`text-2xl font-black ${tone}`}>{value}</p>
+      <p className="text-muted mt-0.5 text-[11px] font-bold">{label}</p>
     </div>
   );
+}
+function Empty({ text }: { text: string }) {
+  return <p className="text-muted text-sm">{text}</p>;
 }
