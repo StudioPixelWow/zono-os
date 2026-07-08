@@ -22,7 +22,6 @@ import { PropertyDetailView } from "./PropertyDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
 import { ApprovalBundleSection } from "@/components/approval-bundle/ApprovalBundleSection";
-import { RelationshipSection } from "@/components/graph/RelationshipSection";
 import { EntityRecommendationsPanel } from "@/components/recommendations/EntityRecommendationsPanel";
 import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 import { CreatePortalButton } from "@/components/portals/CreatePortalButton";
@@ -81,36 +80,50 @@ export default async function PropertyDetailsPage({
     context,
   };
 
-  return (
-    <div className="flex flex-col gap-6">
-      <PropertyDetailView
-        property={property}
-        activities={activities}
-        notes={notes}
-        documents={documents}
-        media={media}
-        tasks={tasks}
-        journey={journey}
-        commandCenter={commandCenter}
-        timeline={timeline}
-        relationships={relationships}
-        activitySummary={activitySummary}
-        recommendedBuyers={recommendedBuyers}
-        propertySellers={propertySellers}
-        sellerReadiness={sellerReadiness}
-      />
-      <EntityRecommendationsPanel entityType="property" entityId={id} recommendations={await listRecommendationsForEntity("property", id).catch(() => [])} />
-      <ContextPanel city={property.city} neighborhood={property.neighborhood} />
+  // Server-rendered sections are passed as SLOTS into the cockpit tabs (instead of
+  // stacking endlessly below). Every module is reused as-is; nothing changes logic.
+  const marketingSlot = (
+    <div className="flex flex-col gap-5">
       <PropertyMarketingActionCenter propertyId={id} />
       <PropertyMarketingLog propertyId={id} />
+      <CommunicationSection entityType="property" entityId={id} />
+    </div>
+  );
+  const calendarSlot = <EntityCalendarSection kind="property" id={id} />;
+  const documentsSlot = (
+    <div className="flex flex-wrap items-center gap-2">
       <CreatePortalButton entityType="property" entityId={id} portalType="property" label="צור פורטל נכס / מוכר" />
       <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
         <CreateLegalDocumentButton entityType="property" entityId={id} />
       </div>
-      <ApprovalBundleSection entityType="property" entityId={id} />
-      <EntityCalendarSection kind="property" id={id} />
-      <CommunicationSection entityType="property" entityId={id} />
-      <RelationshipSection entityType="property" entityId={id} />
     </div>
+  );
+  const approvalSlot = <ApprovalBundleSection entityType="property" entityId={id} />;
+  const recommendationsSlot = <EntityRecommendationsPanel entityType="property" entityId={id} recommendations={await listRecommendationsForEntity("property", id).catch(() => [])} />;
+  const contextSlot = <ContextPanel city={property.city} neighborhood={property.neighborhood} />;
+
+  return (
+    <PropertyDetailView
+      property={property}
+      activities={activities}
+      notes={notes}
+      documents={documents}
+      media={media}
+      tasks={tasks}
+      journey={journey}
+      commandCenter={commandCenter}
+      timeline={timeline}
+      relationships={relationships}
+      activitySummary={activitySummary}
+      recommendedBuyers={recommendedBuyers}
+      propertySellers={propertySellers}
+      sellerReadiness={sellerReadiness}
+      marketingSlot={marketingSlot}
+      calendarSlot={calendarSlot}
+      documentsSlot={documentsSlot}
+      approvalSlot={approvalSlot}
+      recommendationsSlot={recommendationsSlot}
+      contextSlot={contextSlot}
+    />
   );
 }
