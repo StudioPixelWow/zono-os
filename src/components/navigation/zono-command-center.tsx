@@ -121,7 +121,7 @@ export function ZonoCommandCenter() {
                 <h1 className="text-3xl font-black text-white sm:text-4xl">לאן תרצה לעבור?</h1>
                 <p className="mt-1.5 text-sm font-medium text-white/60">חפש, צור, נתח או נווט בכל מערכת ZONO ממקום אחד</p>
               </div>
-              <CommandSearch ref={inputRef} query={query} setQuery={setQuery} onGo={onGo} />
+              <CommandSearch ref={inputRef} query={query} setQuery={setQuery} onGo={onGo} onGoHref={onGoHref} />
             </header>
 
             {/* Dashboard surface (hidden while actively searching) */}
