@@ -36,6 +36,10 @@ export function assembleBuilderView(input: BuilderInput): BuilderView {
 
   if (c.status !== "published") notes.push("האתר במצב טיוטה — לא פורסם. פרסום דורש אישור.");
 
+  // Live preview URL — only a real, published site is publicly viewable.
+  const base = c.target === "agent" ? "/ai-agent" : "/ai-site";
+  const previewUrl = c.slug && c.status === "published" ? `${base}/${c.slug}` : null;
+
   return {
     version: WEBSITE_BUILDER_VERSION,
     target: c.target,
@@ -47,6 +51,13 @@ export function assembleBuilderView(input: BuilderInput): BuilderView {
     health,
     seo: { title: c.headline ?? c.title, description: c.description, ready: seo.ready, issues: seo.issues },
     analytics: input.analytics,
+    settings: {
+      theme: c.theme,
+      contact: { phone: c.phone, whatsapp: c.whatsapp, email: c.email },
+      askAiEnabled: c.sections["ask_ai"] ?? false,
+      previewUrl,
+      updatedAt: c.updatedAt,
+    },
     notes,
   };
 }

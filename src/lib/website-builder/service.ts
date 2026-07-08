@@ -9,8 +9,9 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
-import { getAgentWebsiteForAgent, getAgentWebsiteAnalytics, publishAgentWebsite } from "@/lib/agent-website/service";
-import { getOfficeWebsiteForManager, getOfficeWebsiteAnalytics, publishOfficeWebsite } from "@/lib/office-website/service";
+import { getAgentWebsiteForAgent, getAgentWebsiteAnalytics, publishAgentWebsite, unpublishAgentWebsite, updateAgentWebsite } from "@/lib/agent-website/service";
+import { getOfficeWebsiteForManager, getOfficeWebsiteAnalytics, publishOfficeWebsite, unpublishOfficeWebsite, updateOfficeWebsite } from "@/lib/office-website/service";
+import { isSiteTheme } from "@/lib/brokerage-site/branding";
 import { assembleBuilderView } from "./assemble";
 import { getTemplate, applyTemplate } from "./catalog";
 import { buildRecommendations, buildHealth, analyzeSeo } from "./recommend";
@@ -20,16 +21,23 @@ const TABLE = (t: BuilderTarget) => (t === "agent" ? "agent_websites" : "office_
 
 async function orgUser() { const s = await getSessionContext(); return { orgId: s.profile?.org_id ?? s.organization?.id ?? null, userId: s.user?.id ?? null }; }
 
-async function readThemeOrder(target: BuilderTarget, orgId: string, userId: string | null): Promise<string[]> {
+interface SiteMeta { order: string[]; preset: string | null; updatedAt: string | null }
+
+async function readSiteMeta(target: BuilderTarget, orgId: string, userId: string | null): Promise<SiteMeta> {
   try {
     const db = await createClient();
-    let q = db.from(TABLE(target) as never).select("theme" as never).eq("organization_id" as never, orgId as never);
+    let q = db.from(TABLE(target) as never).select("theme,updated_at" as never).eq("organization_id" as never, orgId as never);
     if (target === "agent" && userId) q = q.eq("user_id" as never, userId as never);
     const { data } = await q.limit(1).maybeSingle();
-    const theme = (data as { theme?: { order?: unknown } } | null)?.theme;
-    const order = theme?.order;
-    return Array.isArray(order) ? order.filter((x): x is string => typeof x === "string") : [];
-  } catch { return []; }
+    const row = data as { theme?: { order?: unknown; preset?: unknown }; updated_at?: unknown } | null;
+    const order = row?.theme?.order;
+    const preset = row?.theme?.preset;
+    return {
+      order: Array.isArray(order) ? order.filter((x): x is string => typeof x === "string") : [],
+      preset: typeof preset === "string" && preset ? preset : null,
+      updatedAt: typeof row?.updated_at === "string" ? row.updated_at : null,
+    };
+  } catch { return { order: [], preset: null, updatedAt: null }; }
 }
 
 async function loadConfig(target: BuilderTarget): Promise<{ config: SiteConfigLean | null; analytics: WebsiteAnalyticsLean }> {
@@ -40,17 +48,17 @@ async function loadConfig(target: BuilderTarget): Promise<{ config: SiteConfigLe
   if (target === "agent") {
     const [c, a] = await Promise.all([getAgentWebsiteForAgent().catch(() => null), getAgentWebsiteAnalytics().catch(() => emptyAnalytics)]);
     if (!c) return { config: null, analytics: emptyAnalytics };
-    const order = await readThemeOrder("agent", orgId, userId);
+    const meta = await readSiteMeta("agent", orgId, userId);
     return {
-      config: { target: "agent", slug: c.slug, status: c.status, title: c.display_name, headline: c.headline_hebrew, description: c.bio_hebrew, imageUrl: c.profile_image_url, sections: c.enabled_sections, order, featuredCount: c.featured_property_ids.length, viewCount: c.view_count },
+      config: { target: "agent", slug: c.slug, status: c.status, title: c.display_name, headline: c.headline_hebrew, description: c.bio_hebrew, imageUrl: c.profile_image_url ?? c.cover_image_url, sections: c.enabled_sections, order: meta.order, featuredCount: c.featured_property_ids.length, viewCount: c.view_count, theme: meta.preset, phone: c.phone, whatsapp: c.whatsapp, email: c.email, updatedAt: meta.updatedAt },
       analytics: { visitors: a.visitors, leads: a.leads, propertyViews: a.propertyViews, conversionRate: a.conversionRate, whatsappClicks: a.whatsappClicks, calls: a.calls },
     };
   }
   const [c, a] = await Promise.all([getOfficeWebsiteForManager().catch(() => null), getOfficeWebsiteAnalytics().catch(() => emptyAnalytics)]);
   if (!c) return { config: null, analytics: emptyAnalytics };
-  const order = await readThemeOrder("office", orgId, null);
+  const meta = await readSiteMeta("office", orgId, null);
   return {
-    config: { target: "office", slug: c.slug, status: c.status, title: c.office_name, headline: c.headline_hebrew, description: c.description_hebrew, imageUrl: c.logo_url ?? c.cover_image_url, sections: c.enabled_sections, order, featuredCount: c.featured_property_ids.length, viewCount: c.view_count },
+    config: { target: "office", slug: c.slug, status: c.status, title: c.office_name, headline: c.headline_hebrew, description: c.description_hebrew, imageUrl: c.logo_url ?? c.cover_image_url, sections: c.enabled_sections, order: meta.order, featuredCount: c.featured_property_ids.length, viewCount: c.view_count, theme: meta.preset, phone: c.phone, whatsapp: c.whatsapp, email: c.email, updatedAt: meta.updatedAt },
     analytics: { visitors: a.visitors, leads: a.leads, propertyViews: a.propertyViews, conversionRate: a.conversionRate, whatsappClicks: a.whatsappClicks, calls: a.calls },
   };
 }
@@ -92,6 +100,46 @@ export async function applyWebsiteTemplate(target: BuilderTarget, templateKey: s
 export async function publishWebsite(target: BuilderTarget): Promise<{ ok: boolean; error?: string }> {
   try { if (target === "agent") await publishAgentWebsite(); else await publishOfficeWebsite(); return { ok: true }; }
   catch (e) { return { ok: false, error: e instanceof Error ? e.message : "failed" }; }
+}
+
+/** Unpublish — reuses the existing unpublish functions (site goes back to draft). */
+export async function unpublishWebsite(target: BuilderTarget): Promise<{ ok: boolean; error?: string }> {
+  try { if (target === "agent") await unpublishAgentWebsite(); else await unpublishOfficeWebsite(); return { ok: true }; }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : "failed" }; }
+}
+
+/** Persist the chosen theme PRESET into the existing theme jsonb (merge — keeps order).
+ *  The public renderers read theme.preset via branding.theme, so it applies live. */
+export async function saveWebsiteTheme(target: BuilderTarget, preset: string): Promise<{ ok: boolean; error?: string }> {
+  if (!isSiteTheme(preset)) return { ok: false, error: "invalid theme" };
+  const { orgId, userId } = await orgUser();
+  if (!orgId) return { ok: false, error: "no org" };
+  try {
+    const db = await createClient();
+    let readQ = db.from(TABLE(target) as never).select("theme" as never).eq("organization_id" as never, orgId as never);
+    if (target === "agent" && userId) readQ = readQ.eq("user_id" as never, userId as never);
+    const { data } = await readQ.limit(1).maybeSingle();
+    const theme = { ...((data as { theme?: Record<string, unknown> } | null)?.theme ?? {}), preset };
+    let upd = db.from(TABLE(target) as never).update({ theme } as never).eq("organization_id" as never, orgId as never);
+    if (target === "agent" && userId) upd = upd.eq("user_id" as never, userId as never);
+    const { error } = await upd;
+    return error ? { ok: false, error: error.message } : { ok: true };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "failed" }; }
+}
+
+/** Persist contact channels (whatsapp/phone/email) — REUSES the existing website
+ *  update functions; these power the public lead CTA + contact block. */
+export async function saveWebsiteContact(target: BuilderTarget, contact: { phone?: string | null; whatsapp?: string | null; email?: string | null }): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const patch = {
+      ...(contact.phone !== undefined ? { phone: contact.phone ?? "" } : {}),
+      ...(contact.whatsapp !== undefined ? { whatsapp: contact.whatsapp ?? "" } : {}),
+      ...(contact.email !== undefined ? { email: contact.email ?? "" } : {}),
+    };
+    if (target === "agent") await updateAgentWebsite(patch);
+    else await updateOfficeWebsite(patch as Parameters<typeof updateOfficeWebsite>[0]);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "failed" }; }
 }
 
 // ── Broker /my summary (Part 14) ────────────────────────────────────────────

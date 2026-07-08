@@ -39,10 +39,12 @@ export async function resolveAgentSite(slug: string): Promise<AgentSite | "disab
     db.from("organizations").select("name").eq("id", orgId).maybeSingle(),
     db.from("office_websites").select("logo_url").eq("organization_id", orgId).maybeSingle(),
   ]);
+  const preset = (r.theme as { preset?: unknown } | null)?.preset;
   const branding: AgentBranding = {
     officeName: s((orgR.data as Row | null)?.name) || "המשרד", logo: sn((offR.data as Row | null)?.logo_url), cover: sn(r.cover_image_url),
     accent: "#0ea5e9", accent2: "#6366f1",
     phone: sn(r.phone), whatsapp: sn(r.whatsapp), email: sn(r.email), address: null,
+    ...(typeof preset === "string" && preset ? { theme: preset } : {}),
     brokerName: s(r.display_name) || "מתווך/ת", title: sn(r.title_hebrew), photo: sn(r.profile_image_url),
     bio: sn(r.bio_hebrew), languages: strArr(r.languages), specialties: strArr(r.specialties),
     yearsExperience: num(r.years_experience), calendarLink: sn(r.calendar_link), social: (r.social_links as Record<string, string>) ?? {},

@@ -14,6 +14,8 @@ export interface SiteBranding {
   officeName: string; logo: string | null; cover: string | null;
   accent: string; accent2: string;                 // hex; theme derives glass/gradients
   phone: string | null; whatsapp: string | null; email: string | null; address: string | null;
+  /** Optional SiteTheme preset key (e.g. "dark-prestige"); themeVars validates it. */
+  theme?: string;
 }
 
 // ── Public-safe intelligence badges (redacted presentations) ────────────────

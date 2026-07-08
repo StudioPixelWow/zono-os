@@ -33,6 +33,15 @@ export function buildRecommendations(c: SiteConfigLean, a: WebsiteAnalyticsLean)
     recs.push({ kind: "missing_section", title: `חסר סקשן: ${def.label}`, why: `${def.description} — סקשן חיוני שאינו מוצג.`, evidence: [`סקשן ${k} כבוי`], impact: def.key === "hero" || def.key === "contact" ? "high" : "medium", cta: { action: "enable_section", sectionKey: k } });
   }
 
+  // Missing hero image — the cinematic cover is the single biggest first impression.
+  if (!c.imageUrl) recs.push({ kind: "missing_image", title: "חסרה תמונת נושא (Hero)", why: "אין תמונת רקע/לוגו — ה-Hero נראה ריק והרושם הראשוני נפגע.", evidence: ["לא הוגדרה תמונת נושא"], impact: "high", cta: { action: "edit_branding", sectionKey: "hero" } });
+
+  // Missing contact channels — no WhatsApp/phone means the lead CTA can't convert.
+  if (!c.whatsapp && !c.phone) recs.push({ kind: "missing_contact", title: "אין ערוץ יצירת קשר", why: "לא הוגדרו וואטסאפ/טלפון — לגולש אין דרך ליצור קשר וה-CTA לא ממיר.", evidence: ["אין וואטסאפ", "אין טלפון"], impact: "high", cta: { action: "edit_contact", sectionKey: "contact" } });
+
+  // Missing featured properties — an empty listings grid looks unfinished.
+  if (c.featuredCount === 0 && on.has("featured_properties")) recs.push({ kind: "missing_featured", title: "לא נבחרו נכסים מובילים", why: "סקשן הנכסים המובילים פעיל אך ריק — כדאי לבחור נכסים איכותיים להצגה.", evidence: ["0 נכסים מובלטים"], impact: "medium", cta: { action: "edit_featured", sectionKey: "featured_properties" } });
+
   // Weak SEO.
   const seo = analyzeSeo(c);
   if (!seo.ready) recs.push({ kind: "weak_seo", title: "SEO חלש", why: "פרטי SEO חסרים — פוגע בדירוג ובחשיפה בגוגל.", evidence: seo.issues.map((i) => i.issue), impact: "high", cta: { action: "edit_seo", sectionKey: null } });

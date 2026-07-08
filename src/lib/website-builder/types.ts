@@ -36,7 +36,7 @@ export interface SiteTemplate {
 
 export interface WeakSeo { field: string; issue: string }
 export interface WebsiteRecommendation {
-  kind: "missing_section" | "weak_seo" | "missing_cta" | "missing_faq" | "low_content" | "poor_conversion";
+  kind: "missing_section" | "weak_seo" | "missing_cta" | "missing_faq" | "low_content" | "poor_conversion" | "missing_image" | "missing_contact" | "missing_featured";
   title: string; why: string; evidence: string[]; impact: Impact;
   cta: { action: string; sectionKey: string | null } | null;
 }
@@ -64,6 +64,21 @@ export interface SiteConfigLean {
   order: string[];
   featuredCount: number;
   viewCount: number;
+  theme: string | null;
+  phone: string | null; whatsapp: string | null; email: string | null;
+  updatedAt: string | null;
+}
+
+/** Live-editable contact channels that power the public lead CTA / contact block. */
+export interface SiteContact { phone: string | null; whatsapp: string | null; email: string | null }
+
+/** Control-center settings surfaced by the builder (theme, contact, preview, freshness). */
+export interface BuilderSettings {
+  theme: string | null;
+  contact: SiteContact;
+  askAiEnabled: boolean;
+  previewUrl: string | null;
+  updatedAt: string | null;
 }
 
 export interface BuilderView {
@@ -77,6 +92,7 @@ export interface BuilderView {
   health: WebsiteHealth;
   seo: { title: string | null; description: string | null; ready: boolean; issues: WeakSeo[] };
   analytics: WebsiteAnalyticsLean;
+  settings: BuilderSettings;
   notes: string[];
 }
 

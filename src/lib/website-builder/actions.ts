@@ -4,7 +4,7 @@
 // approval-gated publish functions. No auto-publish.
 // ============================================================================
 "use server";
-import { getWebsiteBuilder, saveWebsiteLayout, applyWebsiteTemplate, publishWebsite, answerWebsiteQuestion, type WebAnswer } from "./service";
+import { getWebsiteBuilder, saveWebsiteLayout, applyWebsiteTemplate, publishWebsite, unpublishWebsite, saveWebsiteTheme, saveWebsiteContact, answerWebsiteQuestion, type WebAnswer } from "./service";
 import type { BuilderTarget, BuilderView } from "./types";
 
 export async function getWebsiteBuilderAction(target: BuilderTarget = "agent"): Promise<{ ok: boolean; result?: BuilderView | { missing: true; target: BuilderTarget }; error?: string }> {
@@ -22,6 +22,18 @@ export async function applyWebsiteTemplateAction(target: BuilderTarget, template
 
 export async function publishWebsiteAction(target: BuilderTarget): Promise<{ ok: boolean; error?: string }> {
   return publishWebsite(target);
+}
+
+export async function unpublishWebsiteAction(target: BuilderTarget): Promise<{ ok: boolean; error?: string }> {
+  return unpublishWebsite(target);
+}
+
+export async function saveWebsiteThemeAction(target: BuilderTarget, preset: string): Promise<{ ok: boolean; error?: string }> {
+  return saveWebsiteTheme(target, preset);
+}
+
+export async function saveWebsiteContactAction(target: BuilderTarget, contact: { phone?: string | null; whatsapp?: string | null; email?: string | null }): Promise<{ ok: boolean; error?: string }> {
+  return saveWebsiteContact(target, contact);
 }
 
 export async function askWebsiteAction(question: string): Promise<{ ok: boolean; result?: WebAnswer; error?: string }> {

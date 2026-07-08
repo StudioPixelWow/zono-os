@@ -31,10 +31,12 @@ export async function resolveSiteOrg(slug: string): Promise<SiteOrg | "disabled"
   if (!data) return null;
   const r = data as Row;
   if (s(r.status) !== "published") return "disabled";
+  const preset = (r.theme as { preset?: unknown } | null)?.preset;
   const branding: SiteBranding = {
     officeName: s(r.office_name) || "המשרד שלי", logo: sn(r.logo_url), cover: sn(r.cover_image_url),
     accent: "#0ea5e9", accent2: "#6366f1",
     phone: sn(r.phone), whatsapp: sn(r.whatsapp), email: sn(r.email), address: sn(r.address),
+    ...(typeof preset === "string" && preset ? { theme: preset } : {}),
   };
   return { orgId: s(r.organization_id), branding };
 }
