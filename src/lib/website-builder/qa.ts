@@ -17,7 +17,8 @@ function cfg(o: Partial<SiteConfigLean> = {}): SiteConfigLean {
     target: "agent", slug: "agent-123", status: "draft",
     title: "יוסי כהן", headline: "יועץ נדל\"ן בכיר בחיפה והסביבה", description: "מלווה קונים ומוכרים בעסקאות נדל\"ן באזור חיפה עם ניסיון רב.",
     imageUrl: null, sections: { hero: true, featured_properties: true, about: true, contact: true, faq: false, cta: false, footer: true }, order: [],
-    featuredCount: 4, viewCount: 120, ...o,
+    featuredCount: 4, viewCount: 120,
+    theme: null, phone: "0500000000", whatsapp: "972500000000", email: "yossi@zono.co.il", updatedAt: null, ...o,
   };
 }
 
