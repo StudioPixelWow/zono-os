@@ -39,27 +39,38 @@ export default async function BuyerDetailsPage({
     getBuyerPropertyMatches(id).catch(() => []),
   ]);
 
-  return (
-    <div className="flex flex-col gap-6">
-      <BuyerDetailView
-        buyer={buyer}
-        activities={activities}
-        tasks={tasks}
-        notes={notes}
-        meetings={meetings}
-        commandCenter={commandCenter}
-        recommendations={recommendations}
-        buyerMatches={buyerMatches}
-      />
-      <EntityRecommendationsPanel entityType="buyer" entityId={id} recommendations={await listRecommendationsForEntity("buyer", id).catch(() => [])} />
+  // Server-rendered sections are passed as SLOTS into the buyer cockpit tabs
+  // (instead of stacking endlessly below). Every module reused as-is; no logic change.
+  const communicationSlot = <CommunicationSection entityType="buyer" entityId={id} />;
+  const calendarSlot = <EntityCalendarSection kind="buyer" id={id} name={buyer.full_name} />;
+  const documentsSlot = (
+    <div className="flex flex-wrap items-center gap-2">
       <CreatePortalButton entityType="buyer" entityId={id} portalType="buyer" label="צור פורטל קונה" />
       <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
         <CreateLegalDocumentButton entityType="buyer" entityId={id} />
       </div>
-      <ApprovalBundleSection entityType="buyer" entityId={id} />
-      <EntityCalendarSection kind="buyer" id={id} name={buyer.full_name} />
-      <CommunicationSection entityType="buyer" entityId={id} />
-      <RelationshipSection entityType="buyer" entityId={id} />
     </div>
+  );
+  const approvalSlot = <ApprovalBundleSection entityType="buyer" entityId={id} />;
+  const recommendationsSlot = <EntityRecommendationsPanel entityType="buyer" entityId={id} recommendations={await listRecommendationsForEntity("buyer", id).catch(() => [])} />;
+  const graphSlot = <RelationshipSection entityType="buyer" entityId={id} />;
+
+  return (
+    <BuyerDetailView
+      buyer={buyer}
+      activities={activities}
+      tasks={tasks}
+      notes={notes}
+      meetings={meetings}
+      commandCenter={commandCenter}
+      recommendations={recommendations}
+      buyerMatches={buyerMatches}
+      communicationSlot={communicationSlot}
+      calendarSlot={calendarSlot}
+      documentsSlot={documentsSlot}
+      approvalSlot={approvalSlot}
+      recommendationsSlot={recommendationsSlot}
+      graphSlot={graphSlot}
+    />
   );
 }
