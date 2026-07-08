@@ -313,7 +313,7 @@ export function ActivityRadarSection({ t, data }: { t: Translate; data: Dashboar
       {/* Right — AI opportunity radar */}
       <div className="bg-card border-line rounded-[24px] border p-5 shadow-[var(--shadow-card)]">
         <div className="mb-4 flex items-center gap-2">
-          <span className="zono-ai-gradient grid h-8 w-8 place-items-center rounded-xl text-white"><Icon name="Radar" size={16} /></span>
+          <span className="zono-ai-gradient grid h-8 w-8 place-items-center rounded-xl text-white"><Icon name="Locate" size={16} /></span>
           <h3 className="text-ink text-base font-black">AI Opportunity Radar</h3>
         </div>
         {data.opportunities.length === 0 ? (
