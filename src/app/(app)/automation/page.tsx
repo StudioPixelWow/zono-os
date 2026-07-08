@@ -1,4 +1,6 @@
 import { getAutomationCommandCenter, type AutomationCommandCenter } from "@/lib/automation/service";
+import { getAutomationHealth } from "@/lib/automation-os/service";
+import type { AutomationHealth } from "@/lib/automation-os/unify";
 import { AutomationView } from "./AutomationView";
 
 export const dynamic = "force-dynamic";
@@ -16,5 +18,8 @@ export default async function AutomationPage() {
   } catch (e) {
     console.error("[automation] load failed:", e);
   }
-  return <AutomationView cc={cc} />;
+  // Unified automation health (state / success + approval rates) — reused from
+  // Automation OS, never recomputed. Null on failure → honest fallback in the view.
+  const health: AutomationHealth | null = await getAutomationHealth().catch(() => null);
+  return <AutomationView cc={cc} health={health} />;
 }
