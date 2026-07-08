@@ -11,7 +11,7 @@ import { notFound } from "next/navigation";
 import { getHomeAi, seoForHome, themeVars } from "@/lib/brokerage-site";
 import { JsonLd, Glass, PropertyCard } from "@/components/brokerage-site/ui";
 import AskWidget from "@/components/brokerage-site/AskWidget";
-import { SiteNav, SiteHero, SiteSection, SiteFooter, SiteEmptyState } from "@/components/site-ui";
+import { SiteNav, SiteHero, SiteSection, SiteFooter, SiteEmptyState, SiteLeadCta } from "@/components/site-ui";
 import { buildSiteNav } from "@/lib/site-ui/nav";
 
 export const revalidate = 300;
@@ -45,17 +45,27 @@ export default async function AiSiteHome({ params }: { params: Promise<{ slug: s
           cover={branding.cover}
           headline={home.hero.headline}
           subtitle={home.hero.subtitle}
-          ctas={[{ label: "אודות המשרד", href: `/ai-site/${slug}/office`, variant: "primary" }, { label: "שאל את ZONO", href: "#ask", variant: "secondary" }]}
+          ctas={[{ label: "כל הנכסים", href: `/ai-site/${slug}/office`, variant: "primary" }, { label: "הצוות שלנו", href: `/ai-site/${slug}/office`, variant: "secondary" }, { label: "שאל את ZONO", href: "#ask", variant: "secondary" }]}
           stats={home.stats}
         />
 
+        {/* Prominent smart matching / lead — the office's front-door conversion */}
+        {(branding.whatsapp || branding.phone) && (
+          <div className="pt-2 sm:pt-4">
+            <SiteLeadCta name={branding.officeName} whatsapp={branding.whatsapp} phone={branding.phone}
+              headline="ספרו לנו מה אתם מחפשים — נמצא לכם את הנכס"
+              subtitle="כתבו בכמה מילים מה חשוב לכם (אזור, תקציב, חדרים) והצוות שלנו יחזור אליכם עם התאמות." />
+          </div>
+        )}
+
         {/* Featured properties */}
-        <SiteSection id="featured" eyebrow="המלאי שלנו" title="נכסים מובילים" subtitle="נבחרת הנכסים המובילים — מתעדכנת אוטומטית">
+        <SiteSection id="featured" eyebrow="המלאי שלנו" title="נכסים מובילים" subtitle="נבחרת הנכסים המובילים — מתעדכנת אוטומטית"
+          action={<Link href={`/ai-site/${slug}/office`} className="text-brand text-[12px] font-black">כל הנכסים ←</Link>}>
           {home.featured.length > 0 ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {home.featured.map((p) => <PropertyCard key={p.id} slug={slug} id={p.id} title={p.title} price={p.price} image={p.image} badge={p.badge} />)}
             </div>
-          ) : <SiteEmptyState icon="🏠" title="אין כרגע נכסים להצגה" hint="המלאי מתעדכן אוטומטית." />}
+          ) : <SiteEmptyState icon="🏠" title="אין כרגע נכסים להצגה" hint="המלאי מתעדכן אוטומטית — פנו אלינו ונשמח לעזור." />}
         </SiteSection>
 
         {/* Area expertise */}
