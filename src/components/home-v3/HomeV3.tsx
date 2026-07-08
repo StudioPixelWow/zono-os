@@ -77,52 +77,62 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
     <div dir="rtl" className="relative flex flex-col gap-10 sm:gap-12">
       {/* ── S1 · CINEMATIC HERO — arrival. "ZONO worked before you arrived." ── */}
       <Reveal>
-        <section className="zono-hero-cine relative rounded-[32px] p-6 text-white sm:p-9">
+        <section className="zono-hero-cine relative overflow-hidden rounded-[32px] p-6 text-white sm:p-10">
           <HeroParticles />
-          <div className="relative flex flex-col gap-7 lg:flex-row lg:items-center lg:gap-9">
-            {/* Orb — the living heart */}
-            <div className="flex items-center gap-4 lg:flex-col lg:items-center lg:gap-3">
-              <LiveOrb score={b?.dailyScore ?? null} size={132} />
-              <div className="lg:text-center">
-                <p className="text-[11px] font-bold text-brand-light">ZONO · הבוקר שלך</p>
-                <h1 className="mt-0.5 text-2xl font-black sm:text-3xl">{b?.greeting ?? "בוקר טוב"}</h1>
-              </div>
+          <div className="relative">
+            {/* Live status — the system just worked for you. */}
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/90 ring-1 ring-white/15 backdrop-blur-sm">
+                <span className="zono-live-dot inline-block h-2 w-2 rounded-full bg-emerald-400 text-emerald-400" /> ZONO עבד עבורך הבוקר · חי ומעודכן
+              </span>
+              <span className="hidden text-[11px] font-semibold text-white/55 sm:block">{new Date(now).toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}</span>
             </div>
 
-            {/* Digest — while you were away */}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-white/85">בזמן שלא היית, המשכתי לעבוד בשבילך:</p>
-              <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-                {(digest.length ? digest : [{ icon: "Sparkles", text: "אני מנתח את השוק ומכין לך את היום", tone: "text-brand-light" }]).map((it, i) => (
-                  <li key={i} className="zono-digest-line flex items-center gap-2.5 text-[14px] font-semibold" style={{ animationDelay: `${i * 110}ms` }}>
-                    <span className={cn("shrink-0", it.tone)}><Icon name={it.icon} size={16} /></span>
-                    <span className="text-white/95">{it.text}</span>
-                  </li>
-                ))}
-              </ul>
-              {b?.aiSummary && <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-white/70">{b.aiSummary}</p>}
-            </div>
-
-            {/* Commission + CTA + search */}
-            <div className="flex shrink-0 flex-col gap-3 lg:w-64">
-              {commission > 0 && (
-                <div className="rounded-2xl bg-white/10 p-4 text-center backdrop-blur-sm ring-1 ring-white/15">
-                  <p className="text-[11px] font-bold text-brand-light">עמלה פוטנציאלית היום</p>
-                  <CountUp value={commission} format={ils} className="zono-figure-glow mt-1 block text-3xl font-black text-white sm:text-4xl" />
+            <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:gap-9">
+              {/* Orb — the living heart */}
+              <div className="flex items-center gap-4 lg:flex-col lg:items-center lg:gap-3">
+                <LiveOrb score={b?.dailyScore ?? null} size={140} />
+                <div className="lg:text-center">
+                  <p className="text-[11px] font-bold text-brand-light">מוח הברוקר · ZONO</p>
+                  <h1 className="mt-0.5 text-3xl font-black leading-tight sm:text-[38px]">{b?.greeting ?? "בוקר טוב"}</h1>
                 </div>
-              )}
-              <Link href="/today" className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-1.5 rounded-2xl bg-white px-6 py-3.5 text-sm font-black text-[#2b1a5e] shadow-lg transition hover:bg-white/90">להתחיל את היום <span>←</span></Link>
-              <button onClick={openSearch} className="zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-5 py-3 text-[13px] font-bold text-white ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-white/15"><Icon name="Sparkles" size={15} /> חיפוש חכם · ⌘K</button>
+              </div>
+
+              {/* Digest — curated updates, as chips (feels prepared, not listed) */}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-white/90">{digest.length ? `סיכמתי עבורך ${digest.length} עדכונים בזמן שלא היית:` : "אני מנתח את השוק ומכין לך את היום…"}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(digest.length ? digest : [{ icon: "Sparkles", text: "מכין את היום שלך", tone: "text-brand-light" }]).map((it, i) => (
+                    <span key={i} className="zono-digest-line inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[13px] font-semibold text-white/95 ring-1 ring-white/10 backdrop-blur-sm" style={{ animationDelay: `${i * 90}ms` }}>
+                      <span className={cn("shrink-0", it.tone)}><Icon name={it.icon} size={15} /></span>
+                      {it.text}
+                    </span>
+                  ))}
+                </div>
+                {b?.aiSummary && <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-white/65">{b.aiSummary}</p>}
+              </div>
+
+              {/* Commission + CTA + search */}
+              <div className="flex shrink-0 flex-col gap-3 lg:w-64">
+                {commission > 0 && (
+                  <div className="rounded-2xl bg-white/10 p-4 text-center ring-1 ring-white/15 backdrop-blur-sm">
+                    <p className="text-[11px] font-bold text-brand-light">💰 עמלה פוטנציאלית שזיהיתי היום</p>
+                    <CountUp value={commission} format={ils} className="zono-figure-glow mt-1 block text-3xl font-black text-white sm:text-4xl" />
+                  </div>
+                )}
+                <Link href="/today" className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-1.5 rounded-2xl bg-white px-6 py-3.5 text-sm font-black text-[#2b1a5e] shadow-lg transition hover:-translate-y-0.5 hover:bg-white/90">להתחיל את היום <span>←</span></Link>
+                <button onClick={openSearch} className="zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-5 py-3 text-[13px] font-bold text-white ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-white/15"><Icon name="Sparkles" size={15} /> חיפוש חכם · ⌘K</button>
+              </div>
             </div>
           </div>
         </section>
       </Reveal>
 
-      {/* ── HERO DUO · 50/50 — Today's Mission ⟷ Property Spotlight ──
-          Two equal-weight cards: the decision (left) and the star property
-          (right). Tablet/mobile stack Mission-first. Existing data only. ── */}
+      {/* ── ACT 01 · HERO DUO · 50/50 — Today's Mission ⟷ Property Spotlight ── */}
       {(mission || spotlight) && (
         <Reveal>
+          <div className="flex flex-col gap-4">
+          <ActLabel n="01" title="ההחלטה של היום" hint="המשימה החשובה ביותר + הנכס שבמרכז" />
           <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
             {mission && (
               <Link href={mission.href} className="bg-card border-line hover:border-brand-light flex h-full min-h-[16rem] flex-col justify-between rounded-[28px] border p-6 shadow-[var(--shadow-card)] transition sm:min-h-[20rem]">
@@ -147,6 +157,7 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
             )}
             {spotlight && <Spotlight t={t} p={spotlight} />}
           </div>
+          </div>
         </Reveal>
       )}
 
@@ -164,6 +175,9 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
           </div>
         </section>
       </Reveal>
+
+      {/* ── ACT 02 · what's happening now ── */}
+      {daily && <Reveal><ActLabel n="02" title="מה קורה עכשיו" hint="ZONO ממשיך לעבוד ברקע — אנשים, פגישות ופעילות חיה" /></Reveal>}
 
       {/* ── S6 · AI FEED — alive: cycles through what ZONO noticed ── */}
       {daily && <AIFeed daily={daily} />}
@@ -201,6 +215,9 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
           </div>
         </Reveal>
       )}
+
+      {/* ── ACT 03 · your territory ── */}
+      <Reveal><ActLabel n="03" title="הטריטוריה שלך" hint="מפת השוק החיה, נכסים חמים והזדמנויות" /></Reveal>
 
       {/* ── S10 · TERRITORY SNAPSHOT — the loved live map + mood ── */}
       <HomeHeatmapSection />
@@ -255,6 +272,19 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
 }
 
 // ── Sub-components (all read from `daily`/props — no fetching) ────────────────
+/** Narrative "act" divider — turns the scroll into a story, not a dashboard. */
+function ActLabel({ n, title, hint }: { n: string; title: string; hint?: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="zono-gradient grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[12px] font-black text-white shadow-[var(--shadow-soft)]">{n}</span>
+      <div className="min-w-0">
+        <h2 className="text-ink text-[16px] font-black leading-none">{title}</h2>
+        {hint && <p className="text-muted mt-1 truncate text-[11px]">{hint}</p>}
+      </div>
+      <span className="bg-line ms-1 hidden h-px flex-1 sm:block" />
+    </div>
+  );
+}
 function SectionTitle({ icon, title, inline }: { icon: string; title: string; inline?: boolean }) {
   return <div className={cn("flex items-center gap-2", !inline && "mb-3")}><span className="text-brand"><Icon name={icon} size={16} /></span><h2 className="text-ink text-sm font-extrabold">{title}</h2></div>;
 }
