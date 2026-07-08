@@ -38,16 +38,17 @@ export function SiteHero({ logo, cover, headline, subtitle, ctas, stats, trustBa
           style={{ background: "linear-gradient(to top, rgba(0,0,0,var(--site-overlay,0.4)) 0%, rgba(0,0,0,calc(var(--site-overlay,0.4) * 0.5)) 45%, rgba(0,0,0,calc(var(--site-overlay,0.4) * 0.2)) 100%)" }}
         />
 
-        <div className="relative z-10 flex flex-col-reverse items-start gap-6 p-7 text-white sm:flex-row sm:items-center sm:justify-between sm:p-12">
+        {/* Cinematic poster band — content anchored to the bottom edge. */}
+        <div className="relative z-10 flex min-h-[440px] flex-col-reverse items-start justify-end gap-6 p-7 text-white sm:min-h-[560px] sm:flex-row sm:items-end sm:justify-between sm:p-12">
           <div className="min-w-0">
             {logo && !portrait && <img src={logo} alt="" className="mb-5 h-11 w-auto drop-shadow" />}
-            {eyebrow && <p className="text-[13px] font-bold text-white/80">{eyebrow}</p>}
+            {eyebrow && <p className="text-[13px] font-bold text-white/85">{eyebrow}</p>}
             {trustBadges.length > 0 && (
               <div className="mb-3 mt-1 flex flex-wrap gap-2">
                 {trustBadges.map((t) => <span key={t} className="zono-glass-dark rounded-full px-3 py-1 text-[11px] font-bold text-white">✓ {t}</span>)}
               </div>
             )}
-            <h1 className="max-w-3xl text-3xl font-black leading-[1.1] tracking-tight drop-shadow-sm sm:text-5xl">{headline}</h1>
+            <h1 className="mt-1 max-w-3xl text-4xl font-black leading-[1.05] tracking-tight drop-shadow-sm sm:text-6xl">{headline}</h1>
             <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-white/90 sm:text-lg">{subtitle}</p>
             {chips.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">

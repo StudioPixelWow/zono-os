@@ -13,7 +13,7 @@ import { getAgentHomeAi, seoForAgentHome } from "@/lib/agent-site";
 import { themeVars } from "@/lib/brokerage-site";
 import { JsonLd, Glass, PropertyCard } from "@/components/brokerage-site/ui";
 import AskWidget from "@/components/brokerage-site/AskWidget";
-import { SiteNav, SiteHero, SiteSection, SiteFooter, SiteEmptyState, type HeroCta } from "@/components/site-ui";
+import { SiteNav, SiteHero, SiteSection, SiteFooter, SiteEmptyState, SiteLeadCta, type HeroCta } from "@/components/site-ui";
 import { buildSiteNav, type SiteBrandingLite } from "@/lib/site-ui/nav";
 
 export const revalidate = 300;
@@ -72,8 +72,16 @@ export default async function AgentHomePage({ params }: { params: Promise<{ slug
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {home.featured.map((p) => <PropertyCard key={p.id} slug={slug} id={p.id} title={p.title} price={p.price} image={p.image} badge={p.badge} base="ai-agent" />)}
             </div>
-          ) : <SiteEmptyState icon="🏠" title="אין כרגע נכסים להצגה" hint="המלאי מתעדכן אוטומטית." />}
+          ) : <SiteEmptyState icon="🏠" title="אין כרגע נכסים להצגה" hint="המלאי מתעדכן אוטומטית — חזרו בקרוב או פנו אליי ישירות." />}
         </SiteSection>
+
+        {/* Premium conversion — smart matching → WhatsApp (real, no fake form) */}
+        {(branding.whatsapp || branding.phone) && (
+          <div className="pt-2 sm:pt-4">
+            <SiteLeadCta name={branding.brokerName} whatsapp={branding.whatsapp} phone={branding.phone}
+              headline={`ספר/י לי מה את/ה מחפש/ת — ${branding.brokerName} ימצא לך התאמה`} />
+          </div>
+        )}
 
         {/* About me + areas */}
         <SiteSection id="areas" eyebrow="קצת עליי" title="הסיפור והאזורים שלי">
