@@ -233,7 +233,7 @@ function classifyGraphError(error?: { message?: string; code?: number; type?: st
   const code = error?.code;
   const msg = error?.message ?? "graph error";
   if (code === 190 || code === 102 || code === 463 || code === 467) return { type: "expired", message: msg };
-  if (code === 200 || code === 10 || code === 3 || /permission|pages_show_list|instagram|leads_retrieval|read_insights/i.test(msg)) {
+  if (code === 200 || code === 10 || code === 3 || /permission|pages_show_list|instagram|leads_retrieval|read_insights|business_management|ads_read|ads_management/i.test(msg)) {
     return { type: "permission", message: msg };
   }
   return { type: "unknown", message: msg };
@@ -294,6 +294,48 @@ export async function fetchPermissions(cfg: MetaOAuthConfig, userToken: string):
   if (json.error) return { granted: [], error: classifyGraphError(json.error) };
   const granted = (json.data ?? []).filter((p) => p.status === "granted" && p.permission).map((p) => p.permission as string);
   return { granted };
+}
+
+// ── Business Manager + Ad Account discovery (real lifecycle) ──────────────────
+// Informational counts only — ZONO does NOT manage ads or businesses; it merely
+// reflects what the connected user granted. These edges require advanced
+// permissions (business_management / ads_read) that are usually NOT granted, so
+// the caller must surface an honest "not available in current permissions" state.
+export const BUSINESS_DISCOVERY_SCOPES = ["business_management"] as const;
+export const ADS_DISCOVERY_SCOPES = ["ads_read"] as const;
+
+export interface MetaBusiness { id: string; name: string }
+export interface FetchBusinessesResult { businesses: MetaBusiness[]; error?: { type: PagesErrorType; message: string } }
+
+/** GET /me/businesses — Business Managers the user belongs to. Never throws. */
+export async function fetchBusinesses(cfg: MetaOAuthConfig, userToken: string): Promise<FetchBusinessesResult> {
+  const url = graph(cfg, "/me/businesses") + "?" + new URLSearchParams({
+    fields: "id,name", limit: "100", access_token: userToken,
+  }).toString();
+  let json: { data?: Array<{ id?: string; name?: string }>; error?: { message?: string; code?: number } };
+  try { json = await (await fetch(url, { method: "GET" })).json(); }
+  catch { return { businesses: [], error: { type: "unknown", message: "network error" } }; }
+  if (json.error) return { businesses: [], error: classifyGraphError(json.error) };
+  const businesses = (json.data ?? []).filter((b) => !!b.id).map((b) => ({ id: b.id as string, name: b.name ?? "(ללא שם)" }));
+  return { businesses };
+}
+
+export interface MetaAdAccount { id: string; name: string | null; accountId: string | null }
+export interface FetchAdAccountsResult { adAccounts: MetaAdAccount[]; error?: { type: PagesErrorType; message: string } }
+
+/** GET /me/adaccounts — Ad Accounts the user can access. Never throws. */
+export async function fetchAdAccounts(cfg: MetaOAuthConfig, userToken: string): Promise<FetchAdAccountsResult> {
+  const url = graph(cfg, "/me/adaccounts") + "?" + new URLSearchParams({
+    fields: "id,name,account_id", limit: "100", access_token: userToken,
+  }).toString();
+  let json: { data?: Array<{ id?: string; name?: string; account_id?: string }>; error?: { message?: string; code?: number } };
+  try { json = await (await fetch(url, { method: "GET" })).json(); }
+  catch { return { adAccounts: [], error: { type: "unknown", message: "network error" } }; }
+  if (json.error) return { adAccounts: [], error: classifyGraphError(json.error) };
+  const adAccounts = (json.data ?? []).filter((a) => !!a.id).map((a) => ({
+    id: a.id as string, name: a.name ?? null, accountId: a.account_id ?? null,
+  }));
+  return { adAccounts };
 }
 
 // ── Facebook Page publishing (Part C) — official Graph API, page token ─────────

@@ -1,20 +1,24 @@
 "use client";
 // ============================================================================
-// 📘 ZONO — Facebook Onboarding Flow (client). State-driven product onboarding:
-//   STATE 1 disconnected → Meta OAuth hero + Connect
-//   STATE 2 connected     → "Connected" + Start first scan
-//   STATE 3 scanning      → live progress (Groups / Pages / BM / Ad Accounts)
-//   STATE 4 scanned       → import wizard (choose groups)
-// STATE 5 (dashboard) is rendered by the page ONLY after import. Real groups;
-// Pages/BM/Ad Accounts require the official Meta API (shown honestly, not faked).
+// 📘 ZONO — Facebook Onboarding Flow (client). State-driven across the REAL
+// Meta OAuth lifecycle:
+//   STATE 1 not-configured / not-live → internal setup card (never hits Meta's
+//            "App Not Active"); OR not-connected → premium Connect gate.
+//   STATE 2 connected, no sync → "Connected as {user}" + start first sync.
+//   STATE 3 syncing            → live progress.
+//   STATE 4 synced             → import wizard: REAL Pages / Business Managers /
+//            Ad Accounts counts + honest per-asset permission states; group
+//            import from the library; refresh; manual group fallback.
+// STATE 5 (dashboard) is rendered by the page ONLY after import.
+// Nothing here publishes. Manual/assisted publishing stays available throughout.
 // ============================================================================
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Spinner } from "@/components/ui/Button";
-import { fbConnectAction, fbScanAction, fbImportAction, fbResetAction } from "@/lib/facebook-onboarding/actions";
-import type { FbOnboardingState, FbDiscovery, FbDiscoveredGroup } from "@/lib/facebook-onboarding/service";
+import { fbConnectAction, fbScanAction, fbImportAction, fbResetAction, fbRefreshAction } from "@/lib/facebook-onboarding/actions";
+import type { FbOnboardingState, FbDiscovery, FbDiscoveredGroup, FbAssetStatus } from "@/lib/facebook-onboarding/service";
 
 type View = "disconnected" | "connected" | "scanning" | "scanned";
 const FB = "linear-gradient(135deg,#3b5998,#5b7bd5)";
@@ -25,14 +29,31 @@ const IMPORTS: { icon: string; title: string; body: string }[] = [
   { icon: "Layers", title: "Business Managers", body: "חשבונות הניהול העסקי המקושרים." },
   { icon: "BarChart3", title: "חשבונות מודעות", body: "Ad Accounts לתקצוב ומדידה." },
 ];
-const SCAN_CATS: { key: keyof FbDiscovery; icon: string; label: string }[] = [
+const SCAN_CATS: { key: string; icon: string; label: string }[] = [
   { key: "groups", icon: "Users", label: "קבוצות" },
   { key: "pages", icon: "Building2", label: "עמודים" },
   { key: "businessManagers", icon: "Layers", label: "Business Managers" },
   { key: "adAccounts", icon: "BarChart3", label: "חשבונות מודעות" },
 ];
 
-export function FacebookOnboardingFlow({ state, discovery, oauthReady = false, oauthReason = "not_configured" }: { state: FbOnboardingState; discovery: FbDiscovery | null; oauthReady?: boolean; oauthReason?: "ready" | "not_live" | "not_configured" }) {
+/** Honest short note for a non-OK asset status. */
+const STATUS_NOTE: Record<FbAssetStatus, string> = {
+  ok: "",
+  permission: "לא זמין בהרשאות",
+  expired: "החיבור פג",
+  unavailable: "לא זמין",
+};
+
+export function FacebookOnboardingFlow({
+  state, discovery, apiConnected = false, connectedUser = null, oauthReady = false, oauthReason = "not_configured",
+}: {
+  state: FbOnboardingState;
+  discovery: FbDiscovery | null;
+  apiConnected?: boolean;
+  connectedUser?: string | null;
+  oauthReady?: boolean;
+  oauthReason?: "ready" | "not_live" | "not_configured";
+}) {
   const router = useRouter();
   const [view, setView] = useState<View>(state === "scanned" ? "scanned" : state === "connected" ? "connected" : "disconnected");
   const [disc, setDisc] = useState<FbDiscovery | null>(discovery);
@@ -44,21 +65,29 @@ export function FacebookOnboardingFlow({ state, discovery, oauthReady = false, o
   useEffect(() => () => { if (scanTimer.current) clearInterval(scanTimer.current); }, []);
 
   // Simulated/demo connect (used only when official Meta OAuth env is not set).
-  // Wrapped so a transient failure shows an inline message — never a crash page.
   const connect = () => { setFlowErr(null); start(async () => { try { const r = await fbConnectAction(); if (r.ok) setView("connected"); else setFlowErr("החיבור נכשל. נסה שוב."); } catch { setFlowErr("החיבור נכשל. נסה שוב."); } }); };
-  const reset = () => start(async () => { try { await fbResetAction(); } catch { /* ignore */ } setView("disconnected"); setDisc(null); });
+  const reset = () => start(async () => { try { await fbResetAction(); } catch { /* ignore */ } setView("disconnected"); setDisc(null); router.refresh(); });
 
   const scan = () => {
-    setView("scanning"); setScanStep(0);
+    setView("scanning"); setScanStep(0); setFlowErr(null);
     if (scanTimer.current) clearInterval(scanTimer.current);
     scanTimer.current = setInterval(() => setScanStep((s) => Math.min(s + 1, SCAN_CATS.length)), 550);
     start(async () => {
-      const r = await fbScanAction();
-      if (scanTimer.current) clearInterval(scanTimer.current);
-      setScanStep(SCAN_CATS.length);
-      setTimeout(() => { setDisc(r.discovery); setView("scanned"); }, 350);
+      try {
+        const r = await fbScanAction();
+        if (scanTimer.current) clearInterval(scanTimer.current);
+        setScanStep(SCAN_CATS.length);
+        setTimeout(() => { setDisc(r.discovery); setView("scanned"); }, 350);
+      } catch {
+        if (scanTimer.current) clearInterval(scanTimer.current);
+        setFlowErr("הסנכרון נכשל. נסה שוב.");
+        setView("connected");
+      }
     });
   };
+
+  // Refresh the real connection (re-sync Pages / BM / Ad Accounts / permissions).
+  const refresh = () => start(async () => { try { const r = await fbRefreshAction(); setDisc(r.discovery); } catch { /* keep prior */ } });
 
   // ── STATE 1 — disconnected ────────────────────────────────────────────────
   if (view === "disconnected") {
@@ -83,7 +112,7 @@ export function FacebookOnboardingFlow({ state, discovery, oauthReady = false, o
               <div className="flex w-full max-w-md flex-col items-center gap-3">
                 <div className="bg-warning-soft/60 border-warning/30 w-full rounded-2xl border p-3.5 text-center">
                   <p className="text-ink text-[13px] font-black">
-                    {oauthReason === "not_live" ? "האפליקציה עדיין לא פעילה ב-Meta" : "חיבור Facebook עדיין לא פעיל בסביבת השרת"}
+                    {oauthReason === "not_live" ? "אפליקציית Meta עדיין לא פעילה או ממתינה לאישור" : "חיבור Facebook עדיין לא הוגדר בסביבת השרת"}
                   </p>
                   <p className="text-muted mt-0.5 text-[12px] leading-relaxed">
                     {oauthReason === "not_live"
@@ -119,31 +148,39 @@ export function FacebookOnboardingFlow({ state, discovery, oauthReady = false, o
     );
   }
 
-  // ── STATE 2 — connected, no scan ──────────────────────────────────────────
+  // ── STATE 2 — connected, no sync ──────────────────────────────────────────
   if (view === "connected") {
     return (
       <Shell>
         <section className="bg-card border-line relative overflow-hidden rounded-[28px] border p-8 text-center shadow-[var(--shadow-card)]">
           <span className="bg-success-soft text-success mx-auto grid h-16 w-16 place-items-center rounded-3xl"><Icon name="Check" size={32} /></span>
           <h1 className="text-ink mt-4 text-2xl font-black sm:text-3xl">חובר בהצלחה 🎉</h1>
-          <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-relaxed">חשבון ה-Facebook מחובר. כעת נריץ סריקה ראשונה כדי לזהות את הקבוצות, העמודים וחשבונות הניהול שלך.</p>
+          <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-relaxed">
+            {apiConnected && connectedUser
+              ? <>חשבון <span className="text-ink font-black">{connectedUser}</span> מחובר דרך Meta. כעת נריץ סנכרון ראשון כדי לזהות את העמודים, הקבוצות וחשבונות הניהול שלך.</>
+              : <>חשבון ה-Facebook מחובר. כעת נריץ סריקה ראשונה כדי לזהות את הקבוצות, העמודים וחשבונות הניהול שלך.</>}
+          </p>
+          {flowErr && <p className="text-danger mt-2 text-[12px] font-bold">{flowErr}</p>}
           <button onClick={scan} disabled={pending} className="btn-zono-primary zono-focus-ring mx-auto mt-5 inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-60">
-            <Icon name="Sparkles" size={18} /> התחל סריקה ראשונה
+            <Icon name="Sparkles" size={18} /> {apiConnected ? "התחל סנכרון ראשון" : "התחל סריקה ראשונה"}
           </button>
-          <div className="mt-4"><button onClick={reset} disabled={pending} className="text-muted text-[12px] font-bold underline-offset-2 hover:underline">התנתק</button></div>
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <button onClick={reset} disabled={pending} className="text-muted text-[12px] font-bold underline-offset-2 hover:underline">{apiConnected ? "התחל מחדש" : "התנתק"}</button>
+            {apiConnected && <Link href="/settings/distribution-connections" className="text-muted text-[12px] font-bold underline-offset-2 hover:underline">ניהול חיבור</Link>}
+          </div>
         </section>
       </Shell>
     );
   }
 
-  // ── STATE 3 — scanning ────────────────────────────────────────────────────
+  // ── STATE 3 — syncing ─────────────────────────────────────────────────────
   if (view === "scanning") {
     return (
       <Shell>
         <section className="bg-card border-line rounded-[28px] border p-6 shadow-[var(--shadow-card)] sm:p-8">
           <div className="flex items-center gap-3">
             <span className="grid h-12 w-12 place-items-center rounded-2xl text-white" style={{ background: FB }}><Spinner size={22} /></span>
-            <div><h1 className="text-ink text-xl font-black sm:text-2xl">סורק את חשבון ה-Facebook…</h1><p className="text-muted text-[13px]">מזהה נכסים זמינים — לא מתבצע פרסום.</p></div>
+            <div><h1 className="text-ink text-xl font-black sm:text-2xl">{apiConnected ? "מסנכרן את חשבון ה-Facebook…" : "סורק את חשבון ה-Facebook…"}</h1><p className="text-muted text-[13px]">מזהה נכסים זמינים — לא מתבצע פרסום.</p></div>
           </div>
           <div className="mt-5 flex flex-col gap-2.5">
             {SCAN_CATS.map((c, i) => {
@@ -162,17 +199,28 @@ export function FacebookOnboardingFlow({ state, discovery, oauthReady = false, o
     );
   }
 
-  // ── STATE 4 — scanned → import wizard ─────────────────────────────────────
-  return <ImportWizard discovery={disc} onReset={reset} onImported={() => router.refresh()} />;
+  // ── STATE 4 — synced → import wizard ──────────────────────────────────────
+  return <ImportWizard discovery={disc} onReset={reset} onRefresh={refresh} refreshing={pending} onImported={() => router.refresh()} />;
 }
 
-function ImportWizard({ discovery, onReset, onImported }: { discovery: FbDiscovery | null; onReset: () => void; onImported: () => void }) {
+function ImportWizard({ discovery, onReset, onRefresh, refreshing, onImported }: { discovery: FbDiscovery | null; onReset: () => void; onRefresh: () => void; refreshing: boolean; onImported: () => void }) {
   const groups = discovery?.groups ?? [];
+  const real = discovery?.mode === "real";
   const [selected, setSelected] = useState<Set<string>>(() => new Set(groups.map((g) => g.id)));
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const doImport = () => { setErr(null); start(async () => { const r = await fbImportAction([...selected]); if (r.ok) onImported(); else setErr("בחר לפחות קבוצה אחת לייבוא."); }); };
+
+  // Honest partial-permission warnings (real mode only).
+  const warnings: { icon: string; text: string }[] = [];
+  if (real) {
+    if (discovery?.health === "expired") warnings.push({ icon: "AlertTriangle", text: "תוקף החיבור פג. יש להתחבר מחדש ל-Meta כדי לרענן את הנתונים." });
+    if (discovery?.adAccountsStatus && discovery.adAccountsStatus !== "ok") warnings.push({ icon: "BarChart3", text: "חשבונות מודעות לא זמינים בהרשאות הנוכחיות." });
+    if (discovery?.businessesStatus && discovery.businessesStatus !== "ok") warnings.push({ icon: "Layers", text: "Business Manager לא זמין בהרשאות הנוכחיות." });
+    // Meta does not expose group discovery under current permissions — always manual.
+    warnings.push({ icon: "Users", text: "Meta לא מאפשרת לזהות קבוצות אוטומטית בהרשאות הנוכחיות. אפשר להוסיף קבוצות ידנית." });
+  }
 
   return (
     <Shell>
@@ -180,24 +228,54 @@ function ImportWizard({ discovery, onReset, onImported }: { discovery: FbDiscove
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="bg-success-soft text-success grid h-11 w-11 place-items-center rounded-2xl"><Icon name="Check" size={22} /></span>
-            <div><h1 className="text-ink text-xl font-black sm:text-2xl">הסריקה הסתיימה</h1><p className="text-muted text-[13px]">נמצאו {groups.length} קבוצות. בחר אילו לייבא ל-ZONO Distribution.</p></div>
+            <div>
+              <h1 className="text-ink text-xl font-black sm:text-2xl">{real ? "הסנכרון הסתיים" : "הסריקה הסתיימה"}</h1>
+              <p className="text-muted text-[13px]">
+                {real && discovery?.connectedUser && <>מחובר כ-<span className="text-ink font-bold">{discovery.connectedUser}</span> · </>}
+                נמצאו {groups.length} קבוצות בספרייה. בחר אילו לייבא ל-ZONO Distribution.
+              </p>
+            </div>
           </div>
-          <button onClick={onReset} disabled={pending} className="text-muted text-[12px] font-bold underline-offset-2 hover:underline">התחל מחדש</button>
+          <div className="flex items-center gap-3">
+            {real && (
+              <button onClick={onRefresh} disabled={refreshing} className="text-brand inline-flex items-center gap-1.5 text-[12px] font-bold underline-offset-2 hover:underline disabled:opacity-50">
+                {refreshing ? <Spinner size={13} /> : <Icon name="RefreshCw" size={13} />} רענן חיבור Facebook
+              </button>
+            )}
+            <button onClick={onReset} disabled={pending} className="text-muted text-[12px] font-bold underline-offset-2 hover:underline">התחל מחדש</button>
+          </div>
         </div>
 
-        {/* Honest asset summary */}
+        {/* Real asset summary — counts when available, honest status otherwise. */}
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <AssetTile icon="Building2" label="עמודים" count={discovery?.pages ?? null} status={real ? discovery?.pagesStatus : undefined} real={real} />
           <Tile icon="Users" label="קבוצות" value={String(groups.length)} tone="text-brand-strong" />
-          <Tile icon="Building2" label="עמודים" value="—" note="Meta רשמי" />
-          <Tile icon="Layers" label="Business" value="—" note="Meta רשמי" />
-          <Tile icon="BarChart3" label="מודעות" value="—" note="Meta רשמי" />
+          <AssetTile icon="Layers" label="Business" count={discovery?.businessManagers ?? null} status={real ? discovery?.businessesStatus : undefined} real={real} />
+          <AssetTile icon="BarChart3" label="מודעות" count={discovery?.adAccounts ?? null} status={real ? discovery?.adAccountsStatus : undefined} real={real} />
         </div>
+
+        {/* Partial-permission / health warnings */}
+        {warnings.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2">
+            {warnings.map((w, i) => (
+              <div key={i} className="bg-warning-soft/50 border-warning/30 flex items-start gap-2.5 rounded-2xl border p-3">
+                <span className="text-warning mt-0.5 shrink-0"><Icon name={w.icon} size={15} /></span>
+                <p className="text-ink text-[12px] font-semibold leading-relaxed">{w.text}</p>
+              </div>
+            ))}
+            {discovery?.health === "expired" && (
+              <a href="/api/oauth/meta/start" className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-2 self-start rounded-xl px-4 py-2 text-[12px] font-black text-white">
+                <Icon name="RefreshCw" size={14} /> התחבר מחדש ל-Meta
+              </a>
+            )}
+          </div>
+        )}
 
         {groups.length === 0 ? (
           <div className="border-line mt-5 rounded-2xl border p-8 text-center">
             <span className="bg-surface text-muted mx-auto grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Users" size={26} /></span>
-            <p className="text-ink mt-3 text-sm font-black">לא נמצאו קבוצות בחשבון</p>
-            <p className="text-muted mx-auto mt-1 max-w-sm text-[13px]">הוסף קבוצות לספרייה כדי לייבא אותן, ואז חזור לכאן.</p>
+            <p className="text-ink mt-3 text-sm font-black">לא נמצאו קבוצות בספרייה</p>
+            <p className="text-muted mx-auto mt-1 max-w-sm text-[13px]">הוסף קבוצות ידנית (הדבקת קישורים, עיר, שכונה, תיקייה) ואז חזור לכאן כדי לייבא אותן.</p>
             <Link href="/distribution/groups" className="btn-zono-primary zono-focus-ring mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black text-white">הוסף קבוצות ידנית</Link>
           </div>
         ) : (
@@ -216,6 +294,7 @@ function ImportWizard({ discovery, onReset, onImported }: { discovery: FbDiscove
             <button onClick={doImport} disabled={pending || selected.size === 0} className="btn-zono-primary zono-focus-ring mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-base font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-50">
               {pending ? <Spinner size={18} /> : <Icon name="Send" size={18} />} ייבא {selected.size} קבוצות ופתח דשבורד
             </button>
+            <Link href="/distribution/groups" className="text-muted mt-3 inline-flex items-center gap-1.5 text-[12px] font-bold underline-offset-2 hover:underline"><Icon name="Plus" size={13} /> הוסף עוד קבוצות ידנית</Link>
           </>
         )}
       </section>
@@ -232,6 +311,14 @@ function GroupRow({ g, checked, onToggle }: { g: FbDiscoveredGroup; checked: boo
       </button>
     </li>
   );
+}
+
+/** Asset tile that shows a real count when available, else an honest status. */
+function AssetTile({ icon, label, count, status, real }: { icon: string; label: string; count: number | null; status?: FbAssetStatus; real: boolean }) {
+  if (!real) return <Tile icon={icon} label={label} value="—" note="Meta רשמי" />;
+  if (status === "ok" && count !== null) return <Tile icon={icon} label={label} value={String(count)} tone={count > 0 ? "text-ink" : "text-muted"} />;
+  const note = status ? STATUS_NOTE[status] : "לא זמין";
+  return <Tile icon={icon} label={label} value="—" note={note} />;
 }
 
 function Tile({ icon, label, value, tone = "text-ink", note }: { icon: string; label: string; value: string; tone?: string; note?: string }) {

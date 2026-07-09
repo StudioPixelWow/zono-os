@@ -17,6 +17,15 @@ export async function fbScanAction(): Promise<{ ok: boolean; discovery: FbDiscov
   return { ok: true, discovery };
 }
 
+/** Re-run the real sync (Pages / Business Managers / Ad Accounts / permissions /
+ *  group library) and refresh the stored discovery + lastSync. Same safe path as
+ *  the first scan; nothing publishes. Used by "רענן חיבור Facebook". */
+export async function fbRefreshAction(): Promise<{ ok: boolean; discovery: FbDiscovery }> {
+  const discovery = await discoverFacebookAssets();
+  await patchOnboarding({ discovery, scannedAt: new Date().toISOString() });
+  return { ok: true, discovery };
+}
+
 export async function fbImportAction(groupIds: string[]): Promise<{ ok: boolean }> {
   const ids = Array.isArray(groupIds) ? groupIds.filter((x) => typeof x === "string") : [];
   if (ids.length === 0) return { ok: false };

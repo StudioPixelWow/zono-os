@@ -32,6 +32,12 @@ export async function GET(req: NextRequest) {
     console.log(`${LOG} STEP 9: redirecting back to ${SETTINGS}?${params} (elapsed ${Date.now() - t0}ms)`);
     return clearCookie(NextResponse.redirect(new URL(`${SETTINGS}?${params}`, origin)));
   };
+  // On SUCCESS we return the user to the Facebook Distribution OS (the product
+  // surface) in connected state — not the settings/management page.
+  const toFacebook = (params: string) => {
+    console.log(`${LOG} STEP 9: redirecting to /facebook?${params} (elapsed ${Date.now() - t0}ms)`);
+    return clearCookie(NextResponse.redirect(new URL(`/facebook?${params}`, origin)));
+  };
 
   // STEP 1 — the route was hit. Confirms /api/oauth/meta/callback is being called.
   const sp = req.nextUrl.searchParams;
@@ -144,9 +150,14 @@ export async function GET(req: NextRequest) {
     // connection immediately (both cards now read the same canonical source).
     try { revalidatePath(SETTINGS); } catch { /* noop */ }
 
+    // Revalidate the product surface too so the onboarding reflects the new
+    // connection immediately.
+    try { revalidatePath("/facebook"); } catch { /* noop */ }
+
     // Audit trail — identity + outcome only, NEVER token values.
     console.log(`${LOG} AUDIT user_id=${verifiedUserId} org_id=${verifiedOrgId} provider=facebook account_id=${identity.id} result=SUCCESS`);
-    return back("meta=connected");
+    // Land the user in the Facebook Distribution OS, connected + ready to sync.
+    return toFacebook("meta=connected");
   } catch (err) {
     // Never leak the token; log the failure cause and mark error honestly.
     const msg = err instanceof Error ? err.message : String(err);
