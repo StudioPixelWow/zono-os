@@ -15,14 +15,19 @@ export const dynamic = "force-dynamic";
 
 export default async function FacebookPage() {
   const ob = await getFacebookOnboarding().catch(() => ({ state: "disconnected" as const, connectedAt: null, scannedAt: null, discovery: null, importedGroupIds: [] }));
-  // Never throws — env-driven flag so the connect button either starts real Meta
-  // OAuth (configured) or shows a friendly setup message (not configured).
-  let oauthConfigured = false;
-  try { oauthConfigured = getMetaOAuthConfig().configured; } catch { oauthConfigured = false; }
+  // Never throws. `ready` = env configured AND app confirmed live. We only ever
+  // start real Meta OAuth when ready — otherwise the user hits "App Not Active".
+  let oauthReady = false;
+  let oauthReason: "ready" | "not_live" | "not_configured" = "not_configured";
+  try {
+    const cfg = getMetaOAuthConfig();
+    oauthReady = cfg.ready;
+    oauthReason = cfg.ready ? "ready" : cfg.configured ? "not_live" : "not_configured";
+  } catch { oauthReady = false; oauthReason = "not_configured"; }
 
   // Dashboard ONLY after import. Every state before that is onboarding.
   if (ob.state !== "imported") {
-    return <FacebookOnboardingFlow state={ob.state} discovery={ob.discovery} oauthConfigured={oauthConfigured} />;
+    return <FacebookOnboardingFlow state={ob.state} discovery={ob.discovery} oauthReady={oauthReady} oauthReason={oauthReason} />;
   }
 
   const data = await getFacebookHome();

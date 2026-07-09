@@ -22,9 +22,11 @@ export async function GET(req: NextRequest) {
   // Honest setup error if env is missing — never crash, never fake.
   const cfg = getMetaOAuthConfig();
   if (!cfg.configured) return back("meta=setup_required");
+  // App configured but NOT confirmed live → do NOT send the user to Facebook's
+  // "App Not Active" page. Bounce back with an honest "not live" notice.
+  if (!cfg.enabled) return back("meta=not_live");
 
-  const secret = process.env.META_APP_SECRET as string; // present (configured === true)
-  const { state, nonce } = createSignedState(profile.org_id, user.id, secret);
+  const { state, nonce } = createSignedState(profile.org_id, user.id, cfg.appSecret);
 
   const res = NextResponse.redirect(buildAuthorizeUrl(cfg, state));
   res.cookies.set("meta_oauth_nonce", nonce, {

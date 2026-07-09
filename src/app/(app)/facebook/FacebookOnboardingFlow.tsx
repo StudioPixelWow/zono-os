@@ -32,7 +32,7 @@ const SCAN_CATS: { key: keyof FbDiscovery; icon: string; label: string }[] = [
   { key: "adAccounts", icon: "BarChart3", label: "חשבונות מודעות" },
 ];
 
-export function FacebookOnboardingFlow({ state, discovery, oauthConfigured = false }: { state: FbOnboardingState; discovery: FbDiscovery | null; oauthConfigured?: boolean }) {
+export function FacebookOnboardingFlow({ state, discovery, oauthReady = false, oauthReason = "not_configured" }: { state: FbOnboardingState; discovery: FbDiscovery | null; oauthReady?: boolean; oauthReason?: "ready" | "not_live" | "not_configured" }) {
   const router = useRouter();
   const [view, setView] = useState<View>(state === "scanned" ? "scanned" : state === "connected" ? "connected" : "disconnected");
   const [disc, setDisc] = useState<FbDiscovery | null>(discovery);
@@ -72,21 +72,31 @@ export function FacebookOnboardingFlow({ state, discovery, oauthConfigured = fal
               <h1 className="text-ink text-3xl font-black sm:text-4xl">חבר את Facebook כדי להתחיל</h1>
               <p className="text-muted mx-auto mt-2 max-w-xl text-sm leading-relaxed sm:text-base">ZONO Distribution מתחיל בחיבור ל-Facebook. לאחר החיבור נזהה אוטומטית את הנכסים שלך — ותבחר בדיוק מה לייבא. עד אז לא מוצג דשבורד.</p>
             </div>
-            {oauthConfigured ? (
-              // Env configured → start the REAL Meta OAuth (route builds the correct URL).
+            {oauthReady ? (
+              // Env configured AND app confirmed LIVE → start the REAL Meta OAuth.
               <a href="/api/oauth/meta/start" className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)]">
                 <Icon name="Send" size={18} /> התחבר עם Facebook
               </a>
             ) : (
-              // Env NOT configured → friendly setup message + a demo path (no crash).
+              // NOT ready → internal ZONO setup state (never redirect to Meta's
+              // "App Not Active"). Distinguish "not live" from "not configured".
               <div className="flex w-full max-w-md flex-col items-center gap-3">
-                <div className="bg-warning-soft/60 border-warning/30 w-full rounded-2xl border p-3 text-center">
-                  <p className="text-ink text-[13px] font-black">חיבור Facebook עדיין לא הוגדר בסביבת השרת</p>
-                  <p className="text-muted mt-0.5 text-[12px]">המנהל צריך להגדיר את משתני Meta (App ID / Secret / Redirect). עד אז ניתן להתנסות במצב הדגמה.</p>
+                <div className="bg-warning-soft/60 border-warning/30 w-full rounded-2xl border p-3.5 text-center">
+                  <p className="text-ink text-[13px] font-black">
+                    {oauthReason === "not_live" ? "האפליקציה עדיין לא פעילה ב-Meta" : "חיבור Facebook עדיין לא פעיל בסביבת השרת"}
+                  </p>
+                  <p className="text-muted mt-0.5 text-[12px] leading-relaxed">
+                    {oauthReason === "not_live"
+                      ? "האפליקציה מוגדרת אך נמצאת במצב פיתוח/בדיקת Meta. ניתן לעבוד במצב ידני בינתיים; החיבור הרשמי ייפתח כשה-App יאושר ויוגדר META_OAUTH_ENABLED=true."
+                      : "יש להגדיר בשרת את META_APP_ID, META_APP_SECRET, META_OAUTH_REDIRECT_URI (ו-META_OAUTH_ENABLED=true כשה-App פעיל). עד אז ניתן לעבוד במצב ידני / הדגמה."}
+                  </p>
                 </div>
-                <button onClick={connect} disabled={pending} className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-60">
-                  {pending ? <Spinner size={18} /> : <Icon name="Send" size={18} />} המשך במצב הדגמה
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button onClick={connect} disabled={pending} className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-60">
+                    {pending ? <Spinner size={16} /> : <Icon name="Send" size={16} />} המשך במצב הדגמה
+                  </button>
+                  <a href="/distribution/groups" className="bg-card border-line text-ink hover:border-brand-light inline-flex items-center gap-1.5 rounded-2xl border px-5 py-3 text-sm font-bold transition"><Icon name="Users" size={15} /> פרסום ידני / קבוצות</a>
+                </div>
               </div>
             )}
             {flowErr && <p className="text-danger text-[12px] font-bold">{flowErr}</p>}

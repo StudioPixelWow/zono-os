@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 function metaNotice(sp: { meta?: string; reason?: string }): { tone: "ok" | "err"; text: string } | null {
   if (sp.meta === "connected") return { tone: "ok", text: "חשבון Meta חובר בהצלחה. ניתן כעת לסנכרן עמודים." };
   if (sp.meta === "setup_required") return { tone: "err", text: "נדרשת הגדרת Meta בשרת (META_APP_ID / META_APP_SECRET / META_OAUTH_REDIRECT_URI / META_GRAPH_VERSION) לפני חיבור." };
+  if (sp.meta === "not_live") return { tone: "err", text: "האפליקציה עדיין לא פעילה ב-Meta (מצב פיתוח / בדיקת App). ניתן לעבוד במצב ידני בינתיים; לאחר אישור ה-App יש להגדיר META_OAUTH_ENABLED=true." };
   if (sp.meta === "error") {
     const map: Record<string, string> = {
       state: "אימות אבטחת החיבור נכשל (state/CSRF). התחבר שוב מתוך ZONO.",

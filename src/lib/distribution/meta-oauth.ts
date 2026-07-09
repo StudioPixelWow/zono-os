@@ -18,6 +18,13 @@ export interface MetaOAuthConfig {
    *  Meta App's Login configuration, NOT requested ad-hoc via `scope`. */
   configId: string;
   configured: boolean;
+  /** Operator-confirmed that the Meta app is LIVE (out of dev mode / App Review
+   *  passed). We NEVER redirect to Meta unless this is true — otherwise the user
+   *  lands on Facebook's "App Not Active" page. Set META_OAUTH_ENABLED=true only
+   *  after the app is genuinely live. */
+  enabled: boolean;
+  /** Safe to start real OAuth: configured AND enabled. */
+  ready: boolean;
   missing: string[];
 }
 
@@ -33,19 +40,28 @@ export const DEFAULT_LOGIN_CONFIG_ID = "1334427291395263";
 
 const isReal = (v: string | undefined) => !!v && v.trim().length > 0;
 
-/** Read + validate Meta OAuth env. `configured` is false (not a throw) when missing. */
+/** Read + validate Meta OAuth env. Accepts META_* and FACEBOOK_* aliases.
+ *  `configured` = env present; `enabled` = operator confirmed the app is LIVE;
+ *  `ready` = configured && enabled (the only state where we redirect to Meta).
+ *  Never throws. */
 export function getMetaOAuthConfig(): MetaOAuthConfig {
-  const appId = process.env.META_APP_ID?.trim() ?? "";
-  const appSecret = process.env.META_APP_SECRET?.trim() ?? "";
-  const redirectUri = process.env.META_OAUTH_REDIRECT_URI?.trim() ?? "";
-  const graphVersion = (process.env.META_GRAPH_VERSION?.trim() || "v21.0");
-  const configId = (process.env.META_LOGIN_CONFIG_ID?.trim() || DEFAULT_LOGIN_CONFIG_ID);
+  const env = (...keys: string[]): string => { for (const k of keys) { const v = process.env[k]?.trim(); if (v) return v; } return ""; };
+  const appId = env("META_APP_ID", "FACEBOOK_APP_ID", "NEXT_PUBLIC_META_APP_ID");
+  const appSecret = env("META_APP_SECRET", "FACEBOOK_APP_SECRET");
+  const redirectUri = env("META_OAUTH_REDIRECT_URI", "META_REDIRECT_URI", "FACEBOOK_REDIRECT_URI");
+  const graphVersionRaw = env("META_GRAPH_VERSION", "FACEBOOK_GRAPH_VERSION");
+  const graphVersion = graphVersionRaw || "v21.0";
+  const configId = (env("META_LOGIN_CONFIG_ID", "FACEBOOK_LOGIN_CONFIG_ID") || DEFAULT_LOGIN_CONFIG_ID);
   const missing: string[] = [];
   if (!isReal(appId)) missing.push("META_APP_ID");
   if (!isReal(appSecret)) missing.push("META_APP_SECRET");
   if (!isReal(redirectUri)) missing.push("META_OAUTH_REDIRECT_URI");
-  if (!isReal(process.env.META_GRAPH_VERSION)) missing.push("META_GRAPH_VERSION");
-  return { appId, appSecret, redirectUri, graphVersion, configId, configured: missing.length === 0, missing };
+  if (!isReal(graphVersionRaw)) missing.push("META_GRAPH_VERSION");
+  const configured = missing.length === 0;
+  // Only "true"/"1" (explicit) means the operator confirmed the app is LIVE.
+  const enabledFlag = env("META_OAUTH_ENABLED", "FACEBOOK_OAUTH_ENABLED", "META_OAUTH_LIVE").toLowerCase();
+  const enabled = enabledFlag === "true" || enabledFlag === "1";
+  return { appId, appSecret, redirectUri, graphVersion, configId, configured, enabled, ready: configured && enabled, missing };
 }
 
 const graph = (cfg: MetaOAuthConfig, path: string) => `https://graph.facebook.com/${cfg.graphVersion}${path}`;
