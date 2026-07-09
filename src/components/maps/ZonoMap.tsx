@@ -72,10 +72,17 @@ export interface ZonoMapProps {
   focus?: { lat: number; lng: number; zoom?: number } | null;
 }
 
-// ZONO-purple heat ramp (transparent → lavender → violet → deep purple).
+// TRUE heat ramp: cold (transparent → blue) → warm (green → yellow) → hot
+// (orange → red → magenta). Low density stays near-transparent so ONLY areas
+// with real concentration glow — the map is never covered by one flat color.
 const HEAT_COLOR: [number, string][] = [
-  [0, "rgba(124,58,237,0)"], [0.2, "rgba(167,139,250,0.55)"], [0.4, "rgba(139,92,246,0.78)"],
-  [0.6, "rgba(124,58,237,0.9)"], [0.8, "rgba(91,33,182,0.96)"], [1, "rgba(67,20,140,1)"],
+  [0, "rgba(37,99,235,0)"],       // no data → transparent
+  [0.15, "rgba(37,99,235,0.45)"], // cold — blue
+  [0.35, "rgba(16,185,129,0.6)"], // cool — green
+  [0.55, "rgba(250,204,21,0.75)"],// warm — yellow
+  [0.75, "rgba(249,115,22,0.85)"],// hot — orange
+  [0.9, "rgba(239,68,68,0.92)"],  // hotter — red
+  [1, "rgba(190,24,93,0.98)"],    // hottest — magenta/crimson
 ];
 
 const esc = (s: string) =>
@@ -259,9 +266,15 @@ export function ZonoMap({
             paint: {
               // Weighted intelligence: each point contributes by its business value.
               "heatmap-weight": ["interpolate", ["linear"], ["get", "w"], 0, 0, 1, 1],
-              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 16, 2.4],
-              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 8, 16, 34],
-              "heatmap-opacity": 0.8,
+              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.7, 12, 1.6, 16, 2.6],
+              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 10, 12, 26, 16, 40],
+              // Strong when zoomed OUT (see the hot/cold story); fade near building
+              // zoom so property PINS read clearly (markersWithHeat reveals them).
+              "heatmap-opacity": ["interpolate", ["linear"], ["zoom"],
+                0, 0.85,
+                Math.max(2, markerRevealZoom - 2), 0.8,
+                markerRevealZoom + 0.5, 0.12,
+                19, 0],
               "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], ...HEAT_COLOR.flat()],
             },
           });
@@ -332,6 +345,13 @@ export function ZonoMap({
   return (
     <div className={cn(shell, heightClass, className)}>
       <div ref={ref} dir="ltr" className="absolute inset-0 h-full w-full" />
+      {heatmap && state === "ready" && (
+        <div dir="rtl" className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 shadow-lg backdrop-blur-sm">
+          <p className="mb-1 text-[10px] font-bold text-white/80">עוצמת פעילות</p>
+          <div className="h-2.5 w-36 rounded-full" style={{ background: "linear-gradient(to left, #2563eb, #10b981, #facc15, #f97316, #ef4444, #be185d)" }} />
+          <div className="mt-1 flex justify-between text-[9px] font-bold text-white/60"><span>קר</span><span>חם</span></div>
+        </div>
+      )}
       {state === "loading" && (
         <div className="bg-card/70 absolute inset-0 grid place-items-center backdrop-blur-sm">
           <span className="text-muted text-xs font-semibold">טוען מפה…</span>

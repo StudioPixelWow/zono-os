@@ -32,18 +32,21 @@ const SCAN_CATS: { key: keyof FbDiscovery; icon: string; label: string }[] = [
   { key: "adAccounts", icon: "BarChart3", label: "חשבונות מודעות" },
 ];
 
-export function FacebookOnboardingFlow({ state, discovery }: { state: FbOnboardingState; discovery: FbDiscovery | null }) {
+export function FacebookOnboardingFlow({ state, discovery, oauthConfigured = false }: { state: FbOnboardingState; discovery: FbDiscovery | null; oauthConfigured?: boolean }) {
   const router = useRouter();
   const [view, setView] = useState<View>(state === "scanned" ? "scanned" : state === "connected" ? "connected" : "disconnected");
   const [disc, setDisc] = useState<FbDiscovery | null>(discovery);
   const [pending, start] = useTransition();
   const [scanStep, setScanStep] = useState(0);
+  const [flowErr, setFlowErr] = useState<string | null>(null);
   const scanTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { if (scanTimer.current) clearInterval(scanTimer.current); }, []);
 
-  const connect = () => start(async () => { await fbConnectAction(); setView("connected"); });
-  const reset = () => start(async () => { await fbResetAction(); setView("disconnected"); setDisc(null); });
+  // Simulated/demo connect (used only when official Meta OAuth env is not set).
+  // Wrapped so a transient failure shows an inline message — never a crash page.
+  const connect = () => { setFlowErr(null); start(async () => { try { const r = await fbConnectAction(); if (r.ok) setView("connected"); else setFlowErr("החיבור נכשל. נסה שוב."); } catch { setFlowErr("החיבור נכשל. נסה שוב."); } }); };
+  const reset = () => start(async () => { try { await fbResetAction(); } catch { /* ignore */ } setView("disconnected"); setDisc(null); });
 
   const scan = () => {
     setView("scanning"); setScanStep(0);
@@ -69,9 +72,24 @@ export function FacebookOnboardingFlow({ state, discovery }: { state: FbOnboardi
               <h1 className="text-ink text-3xl font-black sm:text-4xl">חבר את Facebook כדי להתחיל</h1>
               <p className="text-muted mx-auto mt-2 max-w-xl text-sm leading-relaxed sm:text-base">ZONO Distribution מתחיל בחיבור ל-Facebook. לאחר החיבור נזהה אוטומטית את הנכסים שלך — ותבחר בדיוק מה לייבא. עד אז לא מוצג דשבורד.</p>
             </div>
-            <button onClick={connect} disabled={pending} className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-60">
-              {pending ? <Spinner size={18} /> : <Icon name="Send" size={18} />} התחבר עם Facebook
-            </button>
+            {oauthConfigured ? (
+              // Env configured → start the REAL Meta OAuth (route builds the correct URL).
+              <a href="/api/oauth/meta/start" className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)]">
+                <Icon name="Send" size={18} /> התחבר עם Facebook
+              </a>
+            ) : (
+              // Env NOT configured → friendly setup message + a demo path (no crash).
+              <div className="flex w-full max-w-md flex-col items-center gap-3">
+                <div className="bg-warning-soft/60 border-warning/30 w-full rounded-2xl border p-3 text-center">
+                  <p className="text-ink text-[13px] font-black">חיבור Facebook עדיין לא הוגדר בסביבת השרת</p>
+                  <p className="text-muted mt-0.5 text-[12px]">המנהל צריך להגדיר את משתני Meta (App ID / Secret / Redirect). עד אז ניתן להתנסות במצב הדגמה.</p>
+                </div>
+                <button onClick={connect} disabled={pending} className="btn-zono-primary zono-focus-ring inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-60">
+                  {pending ? <Spinner size={18} /> : <Icon name="Send" size={18} />} המשך במצב הדגמה
+                </button>
+              </div>
+            )}
+            {flowErr && <p className="text-danger text-[12px] font-bold">{flowErr}</p>}
             <p className="text-muted text-[12px]">התחברות מאובטחת. לא שומרים סיסמה, לא מבצעים scraping. חיבור Meta רשמי בכפוף לאישור.</p>
           </div>
         </section>

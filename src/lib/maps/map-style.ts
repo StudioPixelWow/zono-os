@@ -113,13 +113,15 @@ export function buildZonoMapStyle(): StyleSpecification {
         type: "raster",
         source: "osm",
         paint: {
-          // Darken + desaturate + shift hue toward ZONO violet (no green/yellow).
-          "raster-opacity": 0.92,
-          "raster-brightness-min": 0,
-          "raster-brightness-max": 0.5,
-          "raster-saturation": -0.12,
-          "raster-contrast": 0.08,
-          "raster-hue-rotate": 232,
+          // Keep the base map CLEAR and readable — a light ZONO tint only, NOT a
+          // dark/purple filter over everything. Brightness stays high so streets,
+          // parks and water read normally; the heat layer provides the color story.
+          "raster-opacity": 1,
+          "raster-brightness-min": 0.08,
+          "raster-brightness-max": 0.95,
+          "raster-saturation": -0.05,
+          "raster-contrast": 0.04,
+          "raster-hue-rotate": 8,
         },
       },
     ],
