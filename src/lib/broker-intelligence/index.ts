@@ -24,3 +24,7 @@ export type { BrokerIntelligenceQueue, QueueOptions } from "./aggregate-service"
 export { summarizeOffice } from "./office";
 export type { OfficeSummary } from "./office";
 export { getOfficeIntelligence } from "./office-service";
+// Broker OS · Phase 2 — Today Agenda (chronological workday from the queue).
+export { buildAgenda } from "./agenda";
+export type { AgendaSlot, BrokerAgenda, AgendaOptions } from "./agenda";
+export { getBrokerTodayAgenda } from "./agenda-service";

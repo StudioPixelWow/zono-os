@@ -241,5 +241,34 @@ const emptyOffice = summarizeOffice([]);
 check("office empty → nulls", emptyOffice.topOpportunity === null && emptyOffice.topRisk === null && emptyOffice.totalActionable === 0);
 check("office deterministic", JSON.stringify(summarizeOffice(officeQueue)) === JSON.stringify(summarizeOffice(officeQueue)));
 
-console.log(`\nBroker Intelligence · Areas1-6 + Global Queue QA — ${pass} passed, ${fail} failed`);
+// ── Phase 2 · Today Agenda (chronological workday from the shared queue) ─────
+import { buildAgenda } from "./agenda";
+
+const agendaQueue = bpq([
+  rec({ id: "a1", area: "seller", entityType: "seller", entityId: "s1", title: "התקשר למוכר היום — שימור", suggestedAction: "צור קשר", urgency: "critical", confidence: 92 }),
+  rec({ id: "a2", area: "buyer", entityType: "buyer", entityId: "b1", title: "שלח נכס מתאים לקונה", suggestedAction: "שלח נכס", urgency: "high", confidence: 80 }),
+  rec({ id: "a3", area: "deal", entityType: "deal", entityId: "d1", title: "סקור תמחור נכס", suggestedAction: "עדכן מחיר", urgency: "medium", confidence: 60 }),
+]);
+const agenda = buildAgenda(agendaQueue, { now: new Date(0) });
+check("agenda schedules every actionable item", agenda.slots.length === 3);
+check("agenda starts at 09:00", agenda.firstActionTime === "09:00");
+check("agenda highest priority is first slot", agenda.slots[0].rec.id === "a1");
+check("agenda slots are chronological", agenda.slots.every((s, i) => i === 0 || s.startTime >= agenda.slots[i - 1].endTime));
+check("agenda assigns kind per action class", agenda.slots[0].kind === "call" && agenda.slots[1].kind === "send" && agenda.slots[2].kind === "price");
+check("agenda durations by class", agenda.slots[0].durationMin === 20 && agenda.slots[1].durationMin === 15 && agenda.slots[2].durationMin === 30);
+check("agenda sums planned minutes", agenda.plannedMinutes === 65);
+// empty queue → honest empty day
+const emptyAgenda = buildAgenda([]);
+check("agenda empty → no slots", emptyAgenda.slots.length === 0 && emptyAgenda.firstActionTime === null);
+// maxSlots overflow is honest, not crammed
+const many = bpq(Array.from({ length: 12 }, (_, i) => rec({ id: `m${i}`, entityId: `e${i}`, title: "התקשר ללקוח", suggestedAction: "צור קשר", confidence: 90 - i })));
+const capped = buildAgenda(many, { maxSlots: 8 });
+check("agenda caps the visible day", capped.slots.length === 8 && capped.overflow === 4);
+// lunch is kept clear
+const lunchTest = buildAgenda(bpq(Array.from({ length: 8 }, (_, i) => rec({ id: `l${i}`, entityId: `le${i}`, title: "פגישה עם לקוח", suggestedAction: "קבע פגישה", confidence: 90 - i }))), { lunchHour: 13, maxSlots: 8 });
+check("agenda keeps lunch clear", lunchTest.slots.every((s) => !(s.startTime < "14:00" && s.endTime > "13:00")));
+// deterministic
+check("agenda deterministic", JSON.stringify(buildAgenda(agendaQueue, { now: new Date(0) })) === JSON.stringify(buildAgenda(agendaQueue, { now: new Date(0) })));
+
+console.log(`\nBroker Intelligence · Areas1-6 + Global Queue + Agenda QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
