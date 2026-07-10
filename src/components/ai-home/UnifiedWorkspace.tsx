@@ -8,7 +8,7 @@
 // ============================================================================
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { getAiHomeAction, askZonoAction, approveInboxItemAction, rejectInboxItemAction } from "@/lib/brokerage-data/actions";
+import { getAiHomeAction, askZonoAction, getAskHistoryAction, approveInboxItemAction, rejectInboxItemAction } from "@/lib/brokerage-data/actions";
 import type { AiHomeData, EntityRef, HomeChain, MissionRef } from "@/lib/ai-home/types";
 import type { AskZonoResponse, ChatTurn } from "@/lib/ask-zono";
 import { ENGINE_HE } from "@/lib/ask-zono/types";
@@ -276,19 +276,38 @@ function ContextDrawer({ ref_, onClose }: { ref_: { kind: string; id: string; na
   );
 }
 
-// Part 6/9 — Ask ZONO dock (session-only chat over the same action).
+// Batch 4.6 — stable per-browser chat session so the dock persists + resumes.
+const newDockSessionId = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `s_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const initDockSession = (): string => {
+  if (typeof window === "undefined") return "";
+  try {
+    let sid = localStorage.getItem("zono_ask_session") ?? "";
+    if (!sid) { sid = newDockSessionId(); localStorage.setItem("zono_ask_session", sid); }
+    return sid;
+  } catch { return newDockSessionId(); }
+};
+
+// Part 6/9 — Ask ZONO dock (persisted chat over the same action).
 function AskZonoDock({ questions }: { questions: string[] }) {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<{ role: "user" | "assistant"; text: string; resp?: AskZonoResponse; at: string }[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
+  const [sessionId] = useState<string>(initDockSession);
+
+  // Rehydrate this session's history from the EXISTING zono_ask_* store (async).
+  useEffect(() => {
+    if (!sessionId) return;
+    getAskHistoryAction(sessionId).then((turns) => { if (turns.length) setMsgs(turns.map((t) => ({ role: t.role, text: t.text, at: t.at }))); }).catch(() => {});
+  }, [sessionId]);
 
   const ask = async (q: string) => {
     const query = q.trim(); if (!query || pending) return;
     setInput(""); const now = new Date().toISOString();
     const history: ChatTurn[] = msgs.map((m) => ({ role: m.role, text: m.text, intent: m.resp?.understanding.intent, at: m.at }));
     setMsgs((p) => [...p, { role: "user", text: query, at: now }]); setPending(true);
-    try { const r = await askZonoAction(query, history); if (r.ok && r.result) setMsgs((p) => [...p, { role: "assistant", text: r.result!.answer.executiveAnswer, resp: r.result, at: new Date().toISOString() }]); }
+    try { const r = await askZonoAction(query, history, sessionId ? { sessionId } : undefined); if (r.ok && r.result) setMsgs((p) => [...p, { role: "assistant", text: r.result!.answer.executiveAnswer, resp: r.result, at: new Date().toISOString() }]); }
     finally { setPending(false); }
   };
 

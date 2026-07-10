@@ -55,6 +55,7 @@ import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/offic
 import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent-orchestrator";
 import { askZono, type AskZonoResponse, type ChatTurn, type AskContextInput } from "@/lib/ask-zono";
 import { groundEntityContext, type GroundedContext, type CanonicalFact } from "@/lib/ai-context";
+import { logAskExchange, getAskConversation } from "@/lib/platform-persistence";
 import { getAiHome, type AiHomeData } from "@/lib/ai-home";
 import { generateDraft, type DraftBundle, type DraftRequest, type DraftTarget } from "@/lib/draft-studio";
 import { listWorkflowTemplates, startPersistentWorkflow, advancePersistentWorkflow, getPersistentWorkflow, listActiveWorkflows, listCompletedWorkflows, listPendingApprovalWorkflows, listEntityWorkflows, type WorkflowTemplateSummary, type WorkflowTarget, type WorkflowSummaryRow } from "@/lib/workflow-builder";
@@ -406,8 +407,44 @@ export async function askZonoAction(
     const safeCtx: AskContextInput | undefined = ctx?.entityType && ctx?.entityId
       ? { surface: ctx.surface, entityType: ctx.entityType, entityId: ctx.entityId, mode: "internal_entity", userId: user?.id }
       : undefined;
-    return { ok: true, result: await askZono(profile.org_id, q, Array.isArray(history) ? history.slice(-8) : [], safeCtx) };
+    const result = await askZono(profile.org_id, q, Array.isArray(history) ? history.slice(-8) : [], safeCtx);
+
+    // Batch 4.6 — persist the exchange through the EXISTING zono_ask_* store
+    // (find-or-create conversation by session + append one message). Best-effort:
+    // logging must never break an answer, so it's fire-and-forget + never throws.
+    const sessionId = ctx?.sessionId?.trim();
+    if (sessionId) {
+      void logAskExchange({
+        orgId: profile.org_id, userId: user?.id ?? null, sessionId,
+        question: q, answer: result.answer.executiveAnswer,
+        intent: result.understanding.intent,
+        sourceEngines: result.answer.explain.sourceEngines,
+        evidence: result.answer.evidence,
+        confidence: result.answer.confidence,
+        limitations: result.answer.explain.limitations.join(" · ") || null,
+      }).catch(() => {});
+    }
+    return { ok: true, result };
   } catch (e) { console.error("[ask-zono] failed:", e); return { ok: false, error: "Ask ZONO נכשל." }; }
+}
+
+/**
+ * Batch 4.6 — rehydrate a chat session's history from the EXISTING zono_ask_*
+ * store (org-scoped by RLS). Each stored exchange becomes a user turn + an
+ * assistant turn so the dock can restore a conversation across reloads.
+ */
+export async function getAskHistoryAction(sessionId: string): Promise<ChatTurn[]> {
+  try {
+    const s = (sessionId ?? "").trim(); if (!s) return [];
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return [];
+    const msgs = await getAskConversation(profile.org_id, s, 50);
+    const turns: ChatTurn[] = [];
+    for (const m of msgs) {
+      if (m.question) turns.push({ role: "user", text: m.question, at: m.createdAt });
+      if (m.answer) turns.push({ role: "assistant", text: m.answer, at: m.createdAt });
+    }
+    return turns;
+  } catch (e) { console.error("[ask-zono] history failed:", e); return []; }
 }
 
 // ── Batch 4.5A — shared cockpit context (ONE assembler; every cockpit uses this) ─

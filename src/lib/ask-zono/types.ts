@@ -103,6 +103,9 @@ export interface AskContextInput {
   mode?: string;            // ContextMode; defaults chosen by the service
   userId?: string;
   conversationId?: string;
+  /** Stable per-chat session id (Batch 4.6) — used to persist + rehydrate the
+   *  conversation via the existing zono_ask_* store. Absent → no persistence. */
+  sessionId?: string;
 }
 
 export interface AskZonoResponse {

@@ -35,7 +35,7 @@ import {
   getContinuousSchedulerPlanAction, runContinuousLearningTickAction, getPromotionDebugAction,
   buildOfficeIntelligenceForCandidateAction, buildOfficeIntelligenceForCityAction, getBrandHierarchyAction,
   getCityTerritoryIntelligenceAction, getCityCompetitiveDashboardAction, getCityDecisionBriefingAction,
-  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction, getOfficeGrowthScorecardAction, getOrchestratorDashboardAction, askZonoAction,
+  getActionCenterAction, getChiefOfStaffAction, getTruthReportAction, getOrgMemoryAction, getRelationshipGraphAction, getBuyerTwinsAction, getSellerTwinsAction, getLeadTwinsAction, getCrmGraphAction, getCustomerJourneysAction, getAgentsDashboardAction, setAgentEnabledAction, approveInboxItemAction, rejectInboxItemAction, getListingScorecardsAction, getBuyerAgentScorecardsAction, getSellerAgentScorecardsAction, getLeadAgentScorecardsAction, getOfficeGrowthScorecardAction, getOrchestratorDashboardAction, askZonoAction, getAskHistoryAction,
   type CrmDashboardResult,
 } from "@/lib/brokerage-data/actions";
 import type { ChiefOfStaffReport } from "@/lib/chief-of-staff";
@@ -969,11 +969,36 @@ function SellerAgentPanel() {
 type AskMsg = { role: "user" | "assistant"; text: string; at: string; resp?: AskZonoResponse };
 const ASK_SUGGESTIONS = ["מה עליי לעשות היום?", "אילו מוכרים בסיכון נטישה?", "אילו קונים קרובים לסגירה?", "אילו נכסים דורשים הורדת מחיר?", "היכן לגייס מתווכים?", "אילו הזדמנויות עסקה פתוחות?"];
 
+// Batch 4.6 — a stable per-browser chat session so conversations persist + resume.
+const newAskSessionId = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `s_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const initAskSession = (): string => {
+  if (typeof window === "undefined") return "";
+  try {
+    let sid = localStorage.getItem("zono_ask_session") ?? "";
+    if (!sid) { sid = newAskSessionId(); localStorage.setItem("zono_ask_session", sid); }
+    return sid;
+  } catch { return newAskSessionId(); }
+};
+
 function AskZonoPanel() {
   const [messages, setMessages] = useState<AskMsg[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string>(initAskSession);
+
+  // Rehydrate this session's history from the EXISTING zono_ask_* store (async).
+  useEffect(() => {
+    if (!sessionId) return;
+    getAskHistoryAction(sessionId).then((turns) => { if (turns.length) setMessages(turns.map((t) => ({ role: t.role, text: t.text, at: t.at }))); }).catch(() => {});
+  }, [sessionId]);
+
+  const clearConversation = () => {
+    const sid = newAskSessionId();
+    try { localStorage.setItem("zono_ask_session", sid); } catch { /* ignore */ }
+    setSessionId(sid); setMessages([]);
+  };
 
   const ask = async (q: string) => {
     const query = q.trim(); if (!query || pending) return;
@@ -983,7 +1008,7 @@ function AskZonoPanel() {
     setMessages((prev) => [...prev, { role: "user", text: query, at: now }]);
     setPending(true);
     try {
-      const r = await askZonoAction(query, history);
+      const r = await askZonoAction(query, history, sessionId ? { sessionId } : undefined);
       if (r.ok && r.result) setMessages((prev) => [...prev, { role: "assistant", text: r.result!.answer.executiveAnswer, at: new Date().toISOString(), resp: r.result }]);
       else setErr(r.error ?? "נכשל");
     } catch (e) { setErr(e instanceof Error ? e.message : "שגיאה"); } finally { setPending(false); }
@@ -996,7 +1021,7 @@ function AskZonoPanel() {
           <h2 className="text-lg font-black text-sky-800">💬 Ask ZONO — שאל את המערכת</h2>
           <p className="text-muted mt-1 text-[12px]">ממשק שיחה אחד מעל כל המנועים. שאל בשפה חופשית — ZONO מזהה כוונה, טוען רק את המנועים הנדרשים, ומחזיר תשובה עם נימוק, ראיות, מקורות, ביטחון והצעות פעולה (לאישור בלבד — ללא ביצוע אוטומטי).</p>
         </div>
-        {messages.length > 0 && <button onClick={() => setMessages([])} className="text-muted rounded-lg border border-sky-300 px-3 py-1 text-[11px] font-bold">נקה שיחה</button>}
+        {messages.length > 0 && <button onClick={clearConversation} className="text-muted rounded-lg border border-sky-300 px-3 py-1 text-[11px] font-bold">נקה שיחה</button>}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1007,7 +1032,7 @@ function AskZonoPanel() {
         <div className="mt-3 flex flex-col gap-3">
           {messages.map((m, i) => (
             <div key={i} className={cn("rounded-xl px-3 py-2 text-[12px]", m.role === "user" ? "bg-sky-100/70 self-end max-w-[85%]" : "border-line bg-surface border")}>
-              {m.role === "user" ? <span className="text-ink font-bold">{m.text}</span> : <AskAnswerView resp={m.resp!} onFollowUp={ask} />}
+              {m.role === "user" ? <span className="text-ink font-bold">{m.text}</span> : m.resp ? <AskAnswerView resp={m.resp} onFollowUp={ask} /> : <span className="text-ink whitespace-pre-wrap">{m.text}</span>}
             </div>
           ))}
         </div>
