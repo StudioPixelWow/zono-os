@@ -57,3 +57,66 @@ export async function getKernelOutboxHealth(): Promise<KernelOutboxHealth> {
     return EMPTY;
   }
 }
+
+// ── Stage 2 · Timeline subscriber observability (internal, read-only) ────────
+export interface TimelineKernelHealth extends KernelOutboxHealth {
+  /** When the most recent event finished draining. */
+  lastProcessedAt: string | null;
+  /** Avg drain latency (ms) over a recent sample: processed_at − occurred_at. */
+  avgLatencyMs: number | null;
+  /** done / (done + failed) over the outbox — the subscriber success rate (0..1). */
+  subscriberSuccessRate: number | null;
+  /** Canonical timeline rows the kernel has projected (source='kernel'). */
+  kernelTimelineRows: number;
+}
+
+/**
+ * Richer kernel health for an internal admin surface (never shown to brokers).
+ * Adds drain latency, last-processed, subscriber success rate and projected
+ * timeline row count on top of the outbox status counts. Best-effort.
+ */
+export async function getTimelineKernelHealth(): Promise<TimelineKernelHealth> {
+  const base = await getKernelOutboxHealth();
+  const out: TimelineKernelHealth = {
+    ...base, lastProcessedAt: null, avgLatencyMs: null, subscriberSuccessRate: null, kernelTimelineRows: 0,
+  };
+  try {
+    const { profile } = await getSessionContext();
+    const orgId = profile?.org_id;
+    if (!orgId) return out;
+    const db = await createClient();
+
+    // Latest processed + a latency sample from recently-done events.
+    const { data: doneRows } = await db
+      .from("domain_events" as never)
+      .select("occurred_at,processed_at")
+      .eq("organization_id", orgId)
+      .eq("processing_status", "done")
+      .order("processed_at", { ascending: false })
+      .limit(100);
+    const rows = (doneRows as { occurred_at: string; processed_at: string | null }[] | null) ?? [];
+    if (rows.length) {
+      out.lastProcessedAt = rows[0].processed_at;
+      const lats = rows
+        .filter((r) => r.processed_at)
+        .map((r) => new Date(r.processed_at as string).getTime() - new Date(r.occurred_at).getTime())
+        .filter((n) => Number.isFinite(n) && n >= 0);
+      if (lats.length) out.avgLatencyMs = Math.round(lats.reduce((s, n) => s + n, 0) / lats.length);
+    }
+
+    const settled = base.done + base.failed;
+    out.subscriberSuccessRate = settled > 0 ? base.done / settled : null;
+
+    // Canonical timeline rows the kernel has projected for this org.
+    const { count } = await db
+      .from("activity_events")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("source" as never, "kernel" as never);
+    out.kernelTimelineRows = count ?? 0;
+
+    return out;
+  } catch {
+    return out;
+  }
+}

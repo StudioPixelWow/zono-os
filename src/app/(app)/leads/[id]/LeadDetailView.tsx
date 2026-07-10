@@ -72,6 +72,7 @@ export function LeadDetailView({
   calendarSlot,
   approvalSlot,
   graphSlot,
+  timelineSlot,
 }: {
   lead: LeadLite;
   twin: LeadTwin | null;
@@ -79,6 +80,7 @@ export function LeadDetailView({
   calendarSlot?: ReactNode;
   approvalSlot?: ReactNode;
   graphSlot?: ReactNode;
+  timelineSlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("qualification");
   const p = twin?.profile ?? null;
@@ -293,6 +295,8 @@ export function LeadDetailView({
               )}
               <div className="mt-4"><StartWorkflowButton entityType="lead" entityId={lead.id} entityName={lead.name} suggestedTemplate="lead_qualification" /></div>
             </div>
+            {/* Canonical kernel timeline for this lead (activity_events). */}
+            {timelineSlot && <div className="bg-card border-line rounded-[20px] border p-5">{timelineSlot}</div>}
             {approvalSlot}
           </div>
         )}

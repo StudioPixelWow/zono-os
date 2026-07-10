@@ -22,6 +22,11 @@ export type { MemoryEventUpsert } from "./memory-subscriber";
 // Stage 5A — Journey subscriber (pure; wiring reuses the journey service once domain_events is live).
 export { projectEventToJourneyTransition } from "./journey-subscriber";
 export type { JourneyTransition, JourneySubjectType } from "./journey-subscriber";
+// Stage 2 — Legacy timeline bridge + backfill (pure mappers + server sweep).
+export { syntheticEventId, bridgeLegacyActivity, bridgeJourneyEvent, bridgeDocumentAudit } from "./legacy-bridge";
+export type { BridgedProjection, LegacyActivityRow, JourneyEventRow, DocumentAuditRow } from "./legacy-bridge";
+export { backfillTimeline } from "./backfill-service";
+export type { BackfillResult, BackfillDiagnostics } from "./backfill-service";
 // Outbox observability (read-only health).
-export { getKernelOutboxHealth } from "./health";
-export type { KernelOutboxHealth } from "./health";
+export { getKernelOutboxHealth, getTimelineKernelHealth } from "./health";
+export type { KernelOutboxHealth, TimelineKernelHealth } from "./health";

@@ -140,5 +140,39 @@ check("deal.lost → closed_lost outcome", projectEventToJourneyTransition({ ...
 check("deal.won with no buyer → null", projectEventToJourneyTransition({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: {} }) === null);
 check("non-journey event → null", projectEventToJourneyTransition({ ...base, event_type: "property.price_changed", entity_type: "property" }) === null);
 
-console.log(`\nKernel Stage 2+3+4+5A QA — ${pass} passed, ${fail} failed`);
+// ── Stage 2 · Legacy bridge (pure) — historical milestones → canonical timeline ─
+import { bridgeLegacyActivity, bridgeJourneyEvent, bridgeDocumentAudit, syntheticEventId, type LegacyActivityRow, type JourneyEventRow, type DocumentAuditRow } from "./legacy-bridge";
+
+// synthetic id is a stable uuid shape, deterministic per seed
+const sid = syntheticEventId("activities:A1:buyer:B1");
+check("synthetic id is uuid-shaped", /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sid));
+check("synthetic id deterministic", sid === syntheticEventId("activities:A1:buyer:B1"));
+check("synthetic id differs per seed", sid !== syntheticEventId("activities:A1:seller:S1"));
+
+// legacy activity → resolves subject from entity FKs, source=backfill
+const la: LegacyActivityRow = { id: "A1", org_id: "ORG1", actor_id: "U1", type: "call", subject: "שיחה עם קונה", body: "עדכון", occurred_at: "2026-06-01T10:00:00Z", buyer_id: "B1", seller_id: null, lead_id: null, property_id: null, deal_id: null };
+const bla = bridgeLegacyActivity(la);
+check("legacy activity bridges to buyer timeline", bla?.entity_type === "buyer" && bla?.entity_id === "B1");
+check("legacy activity is source=backfill", bla?.source === "backfill" && bla?.visibility === "internal");
+check("legacy activity carries actor + title", bla?.actor_user_id === "U1" && bla?.title === "שיחה עם קונה");
+check("legacy activity idempotency id deterministic", bla?.event_id === syntheticEventId("activities:A1:buyer:B1"));
+// unresolved link (no entity FK) → null (caller counts unresolvedLinks)
+check("legacy activity with no entity → null", bridgeLegacyActivity({ ...la, buyer_id: null }) === null);
+// property takes precedence in subject resolution
+check("subject precedence property>buyer", bridgeLegacyActivity({ ...la, property_id: "P1" })?.entity_type === "property");
+
+// journey_events → entity timeline + journey relation
+const je: JourneyEventRow = { id: "J1", org_id: "ORG1", journey_id: "JR1", entity_type: "buyer", entity_id: "B1", event_type: "stage_changed", from_stage: "new", to_stage: "qualified", title: null, detail: null, occurred_at: "2026-06-02T10:00:00Z" };
+const bje = bridgeJourneyEvent(je);
+check("journey event bridges to entity timeline", bje?.entity_type === "buyer" && bje?.related_entity_type === "journey");
+check("journey event stage in description", bje?.description === "new ← qualified");
+check("journey event missing entity → null", bridgeJourneyEvent({ ...je, entity_id: null }) === null);
+
+// document audit → only milestones project (raw noise skipped)
+const da: DocumentAuditRow = { id: "DA1", organization_id: "ORG1", document_id: "DOC1", event: "signed", detail: null, actor_user_id: "U1", created_at: "2026-06-03T10:00:00Z" };
+check("document milestone bridges", bridgeDocumentAudit(da)?.entity_type === "document" && bridgeDocumentAudit(da)?.event_type === "document.signed");
+check("document non-milestone skipped", bridgeDocumentAudit({ ...da, event: "opened_settings" }) === null);
+check("document audit deterministic id", bridgeDocumentAudit(da)?.event_id === syntheticEventId("document_audit_logs:DA1"));
+
+console.log(`\nKernel Stage 2 (timeline+bridge) + 3+4+5A QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

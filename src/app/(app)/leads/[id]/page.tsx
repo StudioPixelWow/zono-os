@@ -14,6 +14,7 @@ import { CommunicationSection } from "@/components/communication/CommunicationSe
 import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
 import { ApprovalBundleSection } from "@/components/approval-bundle/ApprovalBundleSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
+import { EntityTimelineSection } from "@/components/activity/EntityTimelineSection";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const calendarSlot = <EntityCalendarSection kind="lead" id={id} name={lead.name} />;
   const approvalSlot = <ApprovalBundleSection entityType="lead" entityId={id} />;
   const graphSlot = <RelationshipSection entityType="lead" entityId={id} />;
+  const timelineSlot = <EntityTimelineSection entityType="lead" entityId={id} title="ציר זמן הליד" />;
 
   return (
     <LeadDetailView
@@ -61,6 +63,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       calendarSlot={calendarSlot}
       approvalSlot={approvalSlot}
       graphSlot={graphSlot}
+      timelineSlot={timelineSlot}
     />
   );
 }
