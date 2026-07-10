@@ -19,6 +19,9 @@ export type { GraphEdgeUpsert } from "./graph-subscriber";
 // Stage 4B — Org-Memory subscriber (pure; wired into the drain loop once domain_events is live).
 export { projectEventToMemory } from "./memory-subscriber";
 export type { MemoryEventUpsert } from "./memory-subscriber";
+// Stage 5A — Journey subscriber (pure; wiring reuses the journey service once domain_events is live).
+export { projectEventToJourneyTransition } from "./journey-subscriber";
+export type { JourneyTransition, JourneySubjectType } from "./journey-subscriber";
 // Outbox observability (read-only health).
 export { getKernelOutboxHealth } from "./health";
 export type { KernelOutboxHealth } from "./health";

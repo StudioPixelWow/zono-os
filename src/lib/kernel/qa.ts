@@ -109,5 +109,17 @@ check("property.sold → memory", projectEventToMemory({ ...base, event_type: "p
 check("routine buyer.updated → no memory", projectEventToMemory({ ...base, event_type: "buyer.updated", entity_type: "buyer" }) === null);
 check("memory carries entity + occurred", m1?.entity_id === "D1" && m1?.occurred_at === base.occurred_at);
 
-console.log(`\nKernel Stage 2+3+4 QA — ${pass} passed, ${fail} failed`);
+// ── Stage 5A · journey subscriber (pure) ────────────────────────────────────
+import { projectEventToJourneyTransition } from "./journey-subscriber";
+
+check("lead.created → open lead journey (new)", (() => { const j = projectEventToJourneyTransition(base); return j?.subjectType === "lead" && j?.stage === "new" && j?.outcome === "open"; })());
+check("buyer.stage_changed → buyer stage from payload", projectEventToJourneyTransition({ ...base, event_type: "buyer.stage_changed", entity_type: "buyer", entity_id: "B1", payload: { stage: "qualified" } })?.stage === "qualified");
+check("buyer.stage_changed with no stage → null", projectEventToJourneyTransition({ ...base, event_type: "buyer.stage_changed", entity_type: "buyer", entity_id: "B1", payload: {} }) === null);
+check("deal.created → buyer in_deal", (() => { const j = projectEventToJourneyTransition({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } }); return j?.subjectType === "buyer" && j?.subjectId === "B1" && j?.stage === "in_deal"; })());
+check("deal.won → closed_won outcome", projectEventToJourneyTransition({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })?.outcome === "won");
+check("deal.lost → closed_lost outcome", projectEventToJourneyTransition({ ...base, event_type: "deal.lost", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })?.outcome === "lost");
+check("deal.won with no buyer → null", projectEventToJourneyTransition({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: {} }) === null);
+check("non-journey event → null", projectEventToJourneyTransition({ ...base, event_type: "property.price_changed", entity_type: "property" }) === null);
+
+console.log(`\nKernel Stage 2+3+4+5A QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
