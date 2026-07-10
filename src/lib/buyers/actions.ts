@@ -68,6 +68,24 @@ export async function updateBuyerAction(
     console.error("[buyers] update failed:", e);
     return { error: `עדכון הקונה נכשל: ${msg}` };
   }
+  // STABILIZATION: emit buyer.updated with the salient facts so canonical memory
+  // ingests budget / preferred area / must-haves (the salience gate keys on these).
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    const mustHaves = [
+      input.mustHaveElevator ? "מעלית" : null,
+      input.mustHaveParking ? "חניה" : null,
+      input.mustHaveSafeRoom ? 'ממ"ד' : null,
+    ].filter(Boolean).join(", ");
+    await emitBusinessEvent({
+      type: DOMAIN_EVENTS.buyerUpdated, entityType: "buyer", entityId: id,
+      payload: {
+        budget: input.budgetMax ?? undefined,
+        preferred_area: input.preferredAreas?.[0] ?? undefined,
+        must_have: mustHaves || undefined,
+      },
+    });
+  } catch (e) { console.error("[buyers] update emit failed:", e); }
   revalidatePath(`/buyers/${id}`);
   revalidatePath("/buyers");
   redirect(`/buyers/${id}`);

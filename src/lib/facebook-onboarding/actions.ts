@@ -8,6 +8,16 @@ import { discoverFacebookAssets, patchOnboarding, type FbDiscovery } from "./ser
 
 export async function fbConnectAction(): Promise<{ ok: boolean }> {
   await patchOnboarding({ connected: true, connectedAt: new Date().toISOString() });
+  // STABILIZATION: emit facebook.connected → timeline (channel-connected milestone).
+  try {
+    const { getSessionContext } = await import("@/lib/auth/session");
+    const { profile, user } = await getSessionContext();
+    const orgId = profile?.org_id ?? null;
+    if (orgId) {
+      const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+      await emitBusinessEvent({ type: DOMAIN_EVENTS.facebookConnected, entityType: "organization", entityId: orgId, payload: { userId: user?.id ?? null } });
+    }
+  } catch (e) { console.error("[facebook] connect emit failed:", e); }
   return { ok: true };
 }
 

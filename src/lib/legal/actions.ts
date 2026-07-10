@@ -38,6 +38,17 @@ export async function updateLegalTemplateSectionAction(sectionId: string, patch:
 // ── Documents ─────────────────────────────────────────────────────────────────
 export async function createLegalDocumentAction(input: CreateFromTemplateInput): Promise<ActionResult<{ documentId: string }>> {
   const res = await createDocumentFromTemplate(input);
+  // STABILIZATION: emit document.created (was missing) → timeline / search / graph
+  // (relates_to edges from the linked property/buyer/seller/lead/deal). Best-effort.
+  if (res.ok && res.documentId) {
+    try {
+      const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+      await emitBusinessEvent({
+        type: DOMAIN_EVENTS.documentCreated, entityType: "document", entityId: res.documentId,
+        payload: { propertyId: input.propertyId ?? undefined, buyerId: input.buyerId ?? undefined, sellerId: input.sellerId ?? undefined, leadId: input.leadId ?? undefined, dealId: input.dealId ?? undefined },
+      });
+    } catch (e) { console.error("[legal] create emit failed:", e); }
+  }
   revalidate();
   return res.ok ? { ok: true, data: { documentId: res.documentId! } } : { ok: false, message: res.message };
 }
@@ -58,6 +69,14 @@ export async function changeLegalDocumentStatusAction(id: string, status: LegalD
 }
 export async function signLegalDocumentAction(id: string, signer: SignInput): Promise<ActionResult> {
   const res = await signDocumentManually(id, signer);
+  // STABILIZATION: emit document.signed (was missing) → timeline + canonical memory
+  // milestone. Best-effort; never blocks signing.
+  if (res.ok) {
+    try {
+      const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+      await emitBusinessEvent({ type: DOMAIN_EVENTS.documentSigned, entityType: "document", entityId: id });
+    } catch (e) { console.error("[legal] sign emit failed:", e); }
+  }
   revalidate();
   return res;
 }

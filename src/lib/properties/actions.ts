@@ -73,6 +73,12 @@ export async function createPropertyAction(
     console.error("[properties] create failed:", e);
     return { error: "יצירת הנכס נכשלה. נסה/י שוב." };
   }
+  // STABILIZATION: emit the canonical creation event (was missing) → timeline /
+  // search / graph. Best-effort; emit never throws, and must run before redirect().
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.propertyCreated, entityType: "property", entityId: id });
+  } catch (e) { console.error("[properties] create emit failed:", e); }
   revalidatePath("/properties");
   redirect(`/properties/${id}?created=property`);
 }
@@ -84,12 +90,29 @@ export async function updatePropertyAction(
   const err = validate(input);
   if (err) return { error: err };
 
+  // Detect a price change so we can emit the more-specific canonical event.
+  let priceChanged = false;
+  let oldPrice: number | null = null;
   try {
+    const { getPropertyById } = await import("./repository");
+    const prev = await getPropertyById(id).catch(() => null);
+    oldPrice = (prev?.price ?? null) as number | null;
     await updateProperty(id, input);
+    priceChanged = oldPrice != null && input.price != null && Number(oldPrice) !== Number(input.price);
   } catch (e) {
     console.error("[properties] update failed:", e);
     return { error: "עדכון הנכס נכשל. נסה/י שוב." };
   }
+  // STABILIZATION: emit EXACTLY ONE canonical event per mutation — price_changed
+  // is more specific than updated (mirrors the setPropertyStatusAction ternary).
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({
+      type: priceChanged ? DOMAIN_EVENTS.propertyPriceChanged : DOMAIN_EVENTS.propertyUpdated,
+      entityType: "property", entityId: id,
+      payload: priceChanged ? { oldPrice, newPrice: input.price } : {},
+    });
+  } catch (e) { console.error("[properties] update emit failed:", e); }
   revalidatePath(`/properties/${id}`);
   revalidatePath("/properties");
   redirect(`/properties/${id}`);

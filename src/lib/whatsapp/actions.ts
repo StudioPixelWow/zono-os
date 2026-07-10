@@ -9,7 +9,21 @@ export interface WaActionState { ok?: boolean; error?: string; message?: string 
 function revalidate() { try { revalidatePath("/whatsapp"); revalidatePath("/"); } catch { /* noop */ } }
 
 export async function connectWhatsappAction(): Promise<WaActionState> {
-  try { await connectWhatsapp(); revalidate(); return { ok: true, message: "מצב ארגז חול הופעל — ללא שמירת אסימון. מוכן לאינטגרציית Meta API." }; }
+  try {
+    await connectWhatsapp();
+    // STABILIZATION: emit whatsapp.connected → timeline (channel-connected milestone).
+    try {
+      const { getSessionContext } = await import("@/lib/auth/session");
+      const { profile, user } = await getSessionContext();
+      const orgId = profile?.org_id ?? null;
+      if (orgId) {
+        const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+        await emitBusinessEvent({ type: DOMAIN_EVENTS.whatsappConnected, entityType: "organization", entityId: orgId, payload: { userId: user?.id ?? null } });
+      }
+    } catch (e) { console.error("[whatsapp] connect emit failed:", e); }
+    revalidate();
+    return { ok: true, message: "מצב ארגז חול הופעל — ללא שמירת אסימון. מוכן לאינטגרציית Meta API." };
+  }
   catch (e) { return { error: e instanceof Error ? e.message : "החיבור נכשל" }; }
 }
 export async function recordInboundAction(input: { text: string; contactName?: string; conversationId?: string }): Promise<WaActionState> {
