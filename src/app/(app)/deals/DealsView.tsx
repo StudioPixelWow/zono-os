@@ -207,14 +207,21 @@ function Spotlight({ tag, icon, d, pending, run }: { tag: string; icon: string; 
 function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn: () => Promise<unknown>) => void }) {
   const ns = nextStage(d.deal_stage);
   const [closing, setClosing] = useState(false);
+  const [losing, setLosing] = useState(false);
   const [amount, setAmount] = useState("");
   const [commission, setCommission] = useState("");
+  const [lostReason, setLostReason] = useState("");
 
   const confirmClose = () => {
     const finalAmount = amount.trim() ? Number(amount.replace(/[^\d.]/g, "")) : null;
     const finalCommission = commission.trim() ? Number(commission.replace(/[^\d.]/g, "")) : null;
     run(() => advanceDealStageAction(d.id, "closed", { finalAmount, finalCommission }));
     setClosing(false); setAmount(""); setCommission("");
+  };
+
+  const confirmLost = () => {
+    run(() => advanceDealStageAction(d.id, "lost", { lostReason: lostReason.trim() || null }));
+    setLosing(false); setLostReason("");
   };
 
   return (
@@ -238,7 +245,7 @@ function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn:
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {ns && <button className="text-brand-strong text-[11px] font-bold" disabled={pending} onClick={() => run(() => advanceDealStageAction(d.id, ns))}>קדם ל{DEAL_STAGE_LABEL[ns]}</button>}
         <button className="text-success text-[11px] font-bold" disabled={pending} onClick={() => setClosing((v) => !v)}>סגור בהצלחה</button>
-        <button className="text-danger text-[11px] font-bold" disabled={pending} onClick={() => run(() => advanceDealStageAction(d.id, "lost"))}>אבד</button>
+        <button className="text-danger text-[11px] font-bold" disabled={pending} onClick={() => setLosing((v) => !v)}>אבד</button>
         {d.buyer_id && <Link href={`/buyers/${d.buyer_id}`} className="text-muted text-[11px] font-bold">קונה ↗</Link>}
         {d.property_id && <Link href={`/properties/${d.property_id}`} className="text-muted text-[11px] font-bold">נכס ↗</Link>}
       </div>
@@ -255,6 +262,19 @@ function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn:
           <div className="flex gap-2">
             <button className="text-success bg-success-soft rounded-lg px-3 py-1 text-[11px] font-bold" disabled={pending} onClick={confirmClose}>אשר סגירה</button>
             <button className="text-muted text-[11px] font-bold" onClick={() => setClosing(false)}>ביטול</button>
+          </div>
+        </div>
+      )}
+
+      {/* Lost-reason capture — optional, but recorded to the canonical ledger so
+          the office can learn why deals are lost. Leaving it blank still marks lost. */}
+      {losing && (
+        <div className="border-line mt-1 flex flex-col gap-2 rounded-xl border border-dashed p-2.5">
+          <p className="text-muted text-[11px] font-bold">סימון עסקה כאבודה — סיבה (לא חובה)</p>
+          <input value={lostReason} onChange={(e) => setLostReason(e.target.value)} placeholder="סיבת אובדן (למשל: הקונה בחר נכס אחר)" className="border-line bg-surface text-ink h-8 w-full rounded-lg border px-2 text-xs outline-none" />
+          <div className="flex gap-2">
+            <button className="text-danger bg-danger-soft rounded-lg px-3 py-1 text-[11px] font-bold" disabled={pending} onClick={confirmLost}>אשר אובדן</button>
+            <button className="text-muted text-[11px] font-bold" onClick={() => setLosing(false)}>ביטול</button>
           </div>
         </div>
       )}
