@@ -10,6 +10,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getBrokerWorkspace, askBrokerZono } from "@/lib/broker-workspace/service";
 import { getChiefOfStaff } from "@/lib/chief-of-staff/service";
 import { getCache, setCache } from "@/lib/platform-persistence";
+import { groundGlobalContext, toGroundedSummary } from "@/lib/ai-context";
 import type { Json } from "@/lib/supabase/types";
 import { assembleDailyOS, buildExecutiveDaily } from "./assemble";
 import type { DailyOS, ExecutiveDaily, ExecInput } from "./types";
@@ -28,8 +29,16 @@ export async function getDailyOS(): Promise<DailyOS> {
     const hit = await getCache<DailyOS>(orgId, "daily_os", key);
     if (hit) return hit.value;
   }
-  const workspace = await getBrokerWorkspace();
+  // Daily OS priority stays DETERMINISTIC (assembleDailyOS from the canonical
+  // Broker Intelligence queue). The shared assembler ONLY enriches the narrative
+  // (Morning Voice / "בזמן שלא היית" / The One Thing) with provenance — it never
+  // reorders recommendations. broker_private mode (personal daily surface).
+  const [workspace, grounded] = await Promise.all([
+    getBrokerWorkspace(),
+    groundGlobalContext("broker_private").catch(() => null),
+  ]);
   const os = assembleDailyOS(workspace);
+  if (grounded) os.grounding = toGroundedSummary(grounded);
   if (orgId) await setCache(orgId, "daily_os", key, os as unknown as Json, { ttlSeconds: 300, version: os.version });
   return os;
 }

@@ -13,6 +13,7 @@ import { assembleEntityContext } from "./assembler";
 import { renderContextText, hasContextSignal, type ProvenanceItem, type ContextDiagnostics } from "./render";
 import { modePolicy, type ContextMode } from "./modes";
 import { detectStaleMemory, type CanonicalFact, type StaleMemo } from "./stale";
+import type { GroundedSummary } from "./grounding-summary";
 
 export interface ProvenanceSummary {
   total: number;
@@ -110,4 +111,14 @@ export async function groundGlobalContext(
 /** Ground a recommendation's "why?" enrichment context (recommendation_explanation mode). */
 export async function groundRecommendationContext(entityType: string, entityId: string): Promise<GroundedContext> {
   return groundEntityContext(entityType, entityId, { mode: "recommendation_explanation" });
+}
+
+/** Map a GroundedContext to the ONE client-safe summary surfaces attach to their output. */
+export function toGroundedSummary(g: GroundedContext): GroundedSummary {
+  return {
+    mode: g.mode, contextText: g.contextText,
+    provenance: { total: g.provenanceSummary.total, explicit: g.provenanceSummary.explicit, derived: g.provenanceSummary.derived, inferred: g.provenanceSummary.inferred },
+    staleCount: g.staleMemory.length, failedLayers: g.diagnostics.failedLayers, truncated: g.diagnostics.truncated,
+    hasSignal: g.hasSignal,
+  };
 }

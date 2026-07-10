@@ -58,6 +58,19 @@ export interface DailyOS {
   approvals: ApprovalItem[];
   ask: string[];
   notes: string[];
+  grounding?: DailyGrounding | null;   // shared-assembler grounding (set by the service)
+}
+
+/** Client-safe grounding the Daily OS narrative (Morning Voice / The One Thing) is
+ *  traceable to — provenance counts + partial-context diagnostics from the ONE
+ *  assembler. Mirrors ai-context GroundedSummary (kept local to avoid a server import). */
+export interface DailyGrounding {
+  mode: string;
+  contextText: string;
+  provenance: { total: number; explicit: number; derived: number; inferred: number };
+  staleCount: number;
+  failedLayers: string[];
+  truncated: Record<string, number>;
 }
 
 // ── Executive mode (office managers) — mapped from the Chief-of-Staff ────────

@@ -15,6 +15,7 @@ export type {
 } from "./render";
 export { detectStaleMemory } from "./stale";
 export type { CanonicalFact, StaleMemo, StaleResult } from "./stale";
-export { groundEntityContext, groundGlobalContext, groundRecommendationContext } from "./surface";
+export { groundEntityContext, groundGlobalContext, groundRecommendationContext, toGroundedSummary } from "./surface";
 export type { GroundedContext, ProvenanceSummary } from "./surface";
+export type { GroundedSummary } from "./grounding-summary";
 export { canonicalFactsFor } from "./canonical-facts";
