@@ -7,8 +7,12 @@
 // ============================================================================
 import { getWhatsappCommandCenter, type WhatsappCommandCenter } from "@/lib/whatsapp/service";
 import { getWhatsappConnection, type WhatsappConnection } from "@/lib/whatsapp/connection";
+import { isQrProviderActive, getWhatsAppProvider } from "@/lib/whatsapp/provider/registry";
+import { resolveSessionCtx } from "@/lib/whatsapp/provider/session";
+import type { WaConnectionSnapshot } from "@/lib/whatsapp/provider/types";
 import { WhatsappView } from "./WhatsappView";
 import { WhatsappConnectionGate } from "./WhatsappConnectionGate";
+import { WhatsappQrConnect } from "./WhatsappQrConnect";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +29,25 @@ const FALLBACK_CONN: WhatsappConnection = {
   templatesStatus: "none", templatesCount: 0, appSecretConfigured: false, health: "down", conversationCount: 0, needsReplyCount: 0,
 };
 
+const OFFLINE_SNAP: WaConnectionSnapshot = { providerKind: "none", state: "unavailable", qr: null, displayName: null, phone: null, lastConnectedAt: null, error: null };
+
 export default async function WhatsappPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const sp = await searchParams;
   const forceManual = sp?.mode === "manual";
+
+  // TEMPORARY QR / WhatsApp-Web provider path (per broker). Active only when a
+  // bridge provider is configured; otherwise the Cloud-API gate below is used.
+  if (isQrProviderActive() && !forceManual) {
+    let snap: WaConnectionSnapshot = OFFLINE_SNAP;
+    try {
+      const ctx = await resolveSessionCtx();
+      if (ctx) snap = await getWhatsAppProvider().connectionState(ctx);
+    } catch (e) { console.error("[whatsapp] provider state failed:", e); }
+    if (snap.state !== "connected") return <WhatsappQrConnect initial={snap} />;
+    let cc: WhatsappCommandCenter = EMPTY;
+    try { cc = await getWhatsappCommandCenter(); } catch (e) { console.error("[whatsapp] load failed:", e); }
+    return <WhatsappView cc={cc} />;
+  }
 
   let conn: WhatsappConnection = FALLBACK_CONN;
   try {

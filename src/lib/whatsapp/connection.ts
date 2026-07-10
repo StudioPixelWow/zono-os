@@ -76,9 +76,11 @@ export async function getWhatsappConnection(): Promise<WhatsappConnection> {
     const orgId = profile?.org_id ?? null;
     if (orgId) {
       const db = await createClient();
+      // Cloud API gate reads the ORG-scoped cloud row only (per-user whatsapp_web
+      // QR sessions live in separate rows and are handled by the QR provider).
       const acc = await db.from("whatsapp_accounts")
         .select("connection_status,phone_number_id,display_phone_number,webhook_status,last_webhook_at,metadata")
-        .eq("organization_id", orgId).maybeSingle();
+        .eq("organization_id", orgId).eq("provider", "whatsapp_cloud").is("user_id", null).maybeSingle();
       account = (acc.data as AccountRow | null) ?? null;
       const conv = await db.from("whatsapp_conversations").select("id", { count: "exact", head: true }).eq("organization_id", orgId);
       conversationCount = conv.count ?? 0;
