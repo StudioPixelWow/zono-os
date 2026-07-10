@@ -108,5 +108,39 @@ check("canonical: property price extracted", canonicalFactsFor("property", { pri
 check("canonical: zero/absent dropped", canonicalFactsFor("buyer", { budget: 0 }).length === 0);
 check("canonical: unknown entity → empty", canonicalFactsFor("unknown", { x: 1 }).length === 0);
 
-console.log(`\nShared AI Context (render + modes + stale) QA — ${pass} passed, ${fail} failed`);
+// ── Public-safe isolation (PART: public-safe validation) — Batch 4.5F ────────
+// public_site must render NOTHING from memory/graph/recs even if items are present.
+const leaky: AssembledContext = {
+  entityType: "property", entityId: "P9", mode: "public_site",
+  truthLine: "מחיר: 2,000,000", truthSensitivity: "normal",
+  memory: [{ fact: "הערת סוכן פנימית", provenance: "explicit", sensitivity: "confidential", confidence: 90 }],
+  orgPreferences: [{ fact: "כלל פנימי", provenance: "explicit", sensitivity: "internal", confidence: 80 }],
+  userPreferences: [{ fact: "העדפת מתווך", provenance: "explicit", sensitivity: "restricted", confidence: 70 }],
+  timeline: [{ title: "פעילות פנימית", occurredAt: "2026-07-10T09:00:00Z" }],
+  relationships: [{ relationshipType: "owned_by", otherType: "seller", otherId: "S1" }],
+  recommendations: [{ title: "פעולה פנימית", why: "סיבה" }],
+};
+const pubText = renderContextText(leaky, { forBroadPrompt: modePolicy("public_site").forBroadPrompt });
+check("public-safe: internal memory never rendered", !pubText.includes("פנימית") || !pubText.includes("הערת"));
+check("public-safe: confidential memory dropped", !pubText.includes("הערת סוכן פנימית"));
+check("public-safe: restricted broker pref dropped", !pubText.includes("העדפת מתווך"));
+check("public-safe: normal public truth allowed", pubText.includes("2,000,000"));
+
+// ── Failure fallback + deterministic ordering — Batch 4.5F ────────────────────
+import { detectStaleMemory as _dsm } from "./stale";
+// A layer failing (empty) must never throw or fabricate — render still returns a string.
+const partial: AssembledContext = { entityType: "buyer", entityId: "B9", truthLine: null, memory: [], orgPreferences: [], userPreferences: [], timeline: [{ title: "רק ציר זמן", occurredAt: "" }], relationships: [], recommendations: [] };
+check("fallback: partial context still renders", typeof renderContextText(partial) === "string" && renderContextText(partial).includes("רק ציר זמן"));
+check("fallback: stale resolver on empty memory safe", _dsm([{ label: "מחיר", keywords: ["מחיר"], value: "1" }], []).stale.length === 0);
+check("deterministic: stale detection stable", JSON.stringify(_dsm([{ label: "מחיר", keywords: ["מחיר"], value: "5" }], mem)) === JSON.stringify(_dsm([{ label: "מחיר", keywords: ["מחיר"], value: "5" }], mem)));
+
+// ── Deprecation registry — Batch 4.5F ────────────────────────────────────────
+import { contextRegistryCounts, CONTEXT_DEPRECATION_REGISTRY } from "./deprecation-registry";
+const rc = contextRegistryCounts();
+check("registry: no active duplicate builder on a migrated surface", rc.activeDuplicateOnMigratedSurface === 0);
+check("registry: all 5 required surfaces + Ask + public tracked", rc.onSharedAssembler + rc.enriched >= 7);
+check("registry: separate-domain context honestly recorded", rc.separateDomain === 1);
+check("registry: every record has a mode or explicit null", CONTEXT_DEPRECATION_REGISTRY.every((r) => r.mode !== undefined));
+
+console.log(`\nShared AI Context (render + modes + stale + public-safe + fallback + registry) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
