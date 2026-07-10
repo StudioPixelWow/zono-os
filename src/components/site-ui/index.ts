@@ -9,3 +9,4 @@ export { SiteFooter } from "./SiteFooter";
 export { SiteHero, type HeroCta } from "./SiteHero";
 export { SiteSection, StatBand, SiteEmptyState, SiteSkeleton } from "./SiteSection";
 export { SiteLeadCta } from "./SiteLeadCta";
+export { OfficeBrandMark } from "./OfficeBrandMark";

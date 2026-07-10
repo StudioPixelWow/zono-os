@@ -34,7 +34,7 @@ export async function resolveSiteOrg(slug: string): Promise<SiteOrg | "disabled"
   const preset = (r.theme as { preset?: unknown } | null)?.preset;
   const branding: SiteBranding = {
     officeName: s(r.office_name) || "המשרד שלי", logo: sn(r.logo_url), cover: sn(r.cover_image_url),
-    accent: "#0ea5e9", accent2: "#6366f1",
+    accent: "#7c3aed", accent2: "#a78bfa",
     phone: sn(r.phone), whatsapp: sn(r.whatsapp), email: sn(r.email), address: sn(r.address),
     ...(typeof preset === "string" && preset ? { theme: preset } : {}),
   };

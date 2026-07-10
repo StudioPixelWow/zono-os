@@ -42,6 +42,7 @@ export default async function AiSiteHome({ params }: { params: Promise<{ slug: s
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
         <SiteHero
           logo={branding.logo}
+          brandName={branding.officeName}
           cover={branding.cover}
           headline={home.hero.headline}
           subtitle={home.hero.subtitle}

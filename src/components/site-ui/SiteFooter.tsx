@@ -5,6 +5,7 @@
 // ============================================================================
 import Link from "next/link";
 import { buildSiteFooter, type SiteNavModel } from "@/lib/site-ui/nav";
+import { OfficeBrandMark } from "./OfficeBrandMark";
 
 export function SiteFooter({ nav, areas = [] }: { nav: SiteNavModel; areas?: { name: string; href: string }[] }) {
   const columns = buildSiteFooter(nav, areas);
@@ -13,8 +14,8 @@ export function SiteFooter({ nav, areas = [] }: { nav: SiteNavModel; areas?: { n
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
           <div>
-            <div className="text-ink text-[15px] font-black">{nav.brand.name}</div>
-            {nav.contact.address && <p className="text-muted mt-1 text-[12px]">{nav.contact.address}</p>}
+            <OfficeBrandMark name={nav.brand.name} logo={nav.brand.logo} variant="lockup" surface="light" size="sm" />
+            {nav.contact.address && <p className="text-muted mt-2 text-[12px]">{nav.contact.address}</p>}
             <a href={nav.cta.href} className="btn-zono-secondary mt-3 inline-block rounded-xl px-4 py-2 text-[12px] font-bold">{nav.cta.label}</a>
           </div>
           {columns.map((col) => (
@@ -34,8 +35,9 @@ export function SiteFooter({ nav, areas = [] }: { nav: SiteNavModel; areas?: { n
             </div>
           ))}
         </div>
-        <div className="border-line text-muted mt-8 border-t pt-5 text-center text-[11px]">
-          {nav.brand.name} · אתר מונע בינה מלאכותית של ZONO · המלאי מתעדכן אוטומטית
+        <div className="border-line mt-8 flex flex-col items-center gap-1 border-t pt-5 text-center">
+          <span className="text-muted text-[11px]">{nav.brand.name} · המלאי מתעדכן אוטומטית</span>
+          <span className="text-muted/70 text-[10.5px] font-semibold tracking-wide">Powered by ZONO</span>
         </div>
       </div>
     </footer>

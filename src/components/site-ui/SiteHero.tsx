@@ -4,9 +4,10 @@
 // dual CTA, trust badges + stat band. Uses --site-gradient/--site-accent (per-
 // office theme) over the official ZONO tokens. RTL, motion-friendly, a11y.
 // ============================================================================
-/* eslint-disable @next/next/no-img-element -- office logo/cover are external CDN urls */
+/* eslint-disable @next/next/no-img-element -- cover/portrait are external CDN urls */
 import Link from "next/link";
 import { StatBand } from "./SiteSection";
+import { OfficeBrandMark } from "./OfficeBrandMark";
 
 export interface HeroCta { label: string; href: string; variant: "primary" | "secondary" }
 
@@ -22,10 +23,12 @@ const isExternal = (href: string) => href.startsWith("#") || href.startsWith("ht
  * copy (personal agent site). `chips` are neutral tags; `trustBadges` are ✓
  * verified badges. Same component, one visual language.
  */
-export function SiteHero({ logo, cover, headline, subtitle, ctas, stats, trustBadges = [], portrait, eyebrow, chips = [] }: {
+export function SiteHero({ logo, cover, headline, subtitle, ctas, stats, trustBadges = [], portrait, eyebrow, chips = [], brandName = "" }: {
   logo: string | null; cover: string | null; headline: string; subtitle: string;
   ctas: HeroCta[]; stats: { label: string; value: string }[]; trustBadges?: string[];
   portrait?: string | null; eyebrow?: string; chips?: string[];
+  /** Office name — used as accessible alt / fallback for the hero brand mark. */
+  brandName?: string;
 }) {
   return (
     <section className="pt-6">
@@ -41,7 +44,7 @@ export function SiteHero({ logo, cover, headline, subtitle, ctas, stats, trustBa
         {/* Cinematic poster band — content anchored to the bottom edge. */}
         <div className="relative z-10 flex min-h-[440px] flex-col-reverse items-start justify-end gap-6 p-7 text-white sm:min-h-[560px] sm:flex-row sm:items-end sm:justify-between sm:p-12">
           <div className="min-w-0">
-            {logo && !portrait && <img src={logo} alt="" className="mb-5 h-11 w-auto drop-shadow" />}
+            {logo && !portrait && <div className="mb-5"><OfficeBrandMark name={brandName} logo={logo} surface="dark" size="lg" /></div>}
             {eyebrow && <p className="text-[13px] font-bold text-white/85">{eyebrow}</p>}
             {trustBadges.length > 0 && (
               <div className="mb-3 mt-1 flex flex-wrap gap-2">

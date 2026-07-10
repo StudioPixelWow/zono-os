@@ -5,10 +5,10 @@
 // tokens, keyboard-accessible, desktop + mobile. Consumes the pure nav model —
 // no data fetching, no duplication of the existing renderers.
 // ============================================================================
-/* eslint-disable @next/next/no-img-element -- office logo is an external CDN url */
 import { useState } from "react";
 import Link from "next/link";
 import type { SiteNavModel } from "@/lib/site-ui/nav";
+import { OfficeBrandMark } from "./OfficeBrandMark";
 
 export function SiteNav({ nav }: { nav: SiteNavModel }) {
   const [open, setOpen] = useState(false);
@@ -17,11 +17,9 @@ export function SiteNav({ nav }: { nav: SiteNavModel }) {
   return (
     <header dir="rtl" className="zono-glass sticky top-0 z-50 border-b border-white/40">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6" aria-label="ניווט ראשי">
-        {/* Brand */}
-        <Link href={nav.brand.href} className="zono-focus-ring flex items-center gap-2 rounded-xl" aria-label={nav.brand.name}>
-          {nav.brand.logo ? <img src={nav.brand.logo} alt={nav.brand.name} className="h-8 w-auto" /> : <span className="grid h-8 w-8 place-items-center rounded-lg text-white" style={{ background: "var(--site-gradient)" }}>Z</span>}
-          <span className="text-ink text-[15px] font-black">{nav.brand.name}</span>
-        </Link>
+        {/* Brand — shared OfficeBrandMark (logo or elegant typography fallback) */}
+        <OfficeBrandMark name={nav.brand.name} logo={nav.brand.logo} href={nav.brand.href} variant="lockup" surface="light" size="sm" />
+
 
         {/* Desktop links */}
         <div className="hidden items-center gap-1 md:flex">
