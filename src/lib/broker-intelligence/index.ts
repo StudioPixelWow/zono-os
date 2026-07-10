@@ -28,6 +28,9 @@ export { getLearningModel } from "./learning-service";
 // Broker OS · Phase 5 — recommendation explanation (why now / why this / …).
 export { explainRecommendation } from "./explain";
 export type { RecommendationExplanation, ExplainContext } from "./explain";
+// Batch 4.5E — grounded explanation (deterministic explain + shared-assembler provenance).
+export { explainRecommendationGrounded } from "./explain-grounded";
+export type { GroundedRecommendationExplanation } from "./explain-grounded";
 export { getBrokerIntelligenceQueue } from "./aggregate-service";
 export type { BrokerIntelligenceQueue, QueueOptions } from "./aggregate-service";
 // Area 6 — Office (manager summary over the shared queue).

@@ -11,6 +11,7 @@ import { getBrokerIntelligenceQueue, type QueueOptions } from "./aggregate-servi
 import type { Urgency } from "./types";
 import type { LifecycleAction } from "./lifecycle";
 import { recordRecommendationEvent } from "./recommendation-events-repository";
+import { explainRecommendationGrounded, type GroundedRecommendationExplanation } from "./explain-grounded";
 
 /** Client-safe slice of a prioritized recommendation for compact surfaces. */
 export interface QueueSuggestion {
@@ -51,6 +52,25 @@ export async function brokerQueueSuggestionsAction(opts: QueueOptions = {}): Pro
     }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch 4.5E — the GROUNDED "why?" for a queued recommendation. Finds the item in
+ * the SHARED priority queue (no recompute, ranking preserved), then enriches its
+ * deterministic explanation with shared-assembler provenance (recommendation_
+ * explanation mode). Returns null if the recommendation isn't in the live queue.
+ */
+export async function explainRecommendationGroundedAction(
+  recId: string,
+): Promise<GroundedRecommendationExplanation | null> {
+  try {
+    const { items, total } = await getBrokerIntelligenceQueue({ limit: 40 });
+    const idx = items.findIndex((r) => r.id === recId);
+    if (idx < 0) return null;
+    return await explainRecommendationGrounded(items[idx], { rank: idx + 1, total });
+  } catch {
+    return null;
   }
 }
 
