@@ -45,10 +45,15 @@ const TYPE_TO_KIND: Record<string, Picked["kind"]> = { properties: "property", b
 export function QuickCreate() {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>(null);
+  const [prefill, setPrefill] = useState<Picked | null>(null);
   const firstRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const mk = (k: Exclude<Kind, null>) => () => setKind(k);
+    const mk = (k: Exclude<Kind, null>) => (e: Event) => {
+      const detail = (e as CustomEvent).detail as { prefill?: Picked } | undefined;
+      setPrefill(detail?.prefill ?? null);
+      setKind(k);
+    };
     const handlers = (Object.keys(EVENTS) as Exclude<Kind, null>[]).map((k) => [EVENTS[k], mk(k)] as const);
     handlers.forEach(([ev, fn]) => window.addEventListener(ev, fn));
     return () => handlers.forEach(([ev, fn]) => window.removeEventListener(ev, fn));
@@ -81,7 +86,7 @@ export function QuickCreate() {
               <button onClick={close} aria-label="סגור" className="text-muted hover:text-ink"><Icon name="X" size={18} /></button>
             </div>
             {kind === "lead" && <LeadForm firstRef={firstRef} router={router} onDone={close} />}
-            {kind === "deal" && <DealForm firstRef={firstRef} router={router} onDone={close} />}
+            {kind === "deal" && <DealForm firstRef={firstRef} router={router} onDone={close} prefill={prefill} />}
             {kind === "meeting" && <MeetingForm firstRef={firstRef} router={router} onDone={close} />}
             {kind === "task" && <TaskForm firstRef={firstRef} router={router} onDone={close} />}
           </motion.div>
@@ -203,9 +208,12 @@ function LeadForm({ firstRef, router, onDone }: { firstRef: FirstRef; router: Ro
 }
 
 // ── DEAL ──────────────────────────────────────────────────────────────────────
-function DealForm({ firstRef, router, onDone }: { firstRef: FirstRef; router: RouterT; onDone: () => void }) {
-  const [title, setTitle] = useState(""); const [stage, setStage] = useState<string>("new");
-  const [prop, setProp] = useState<Picked | null>(null); const [buyer, setBuyer] = useState<Picked | null>(null); const [seller, setSeller] = useState<Picked | null>(null);
+function DealForm({ firstRef, router, onDone, prefill }: { firstRef: FirstRef; router: RouterT; onDone: () => void; prefill?: Picked | null }) {
+  const [title, setTitle] = useState(prefill?.kind === "buyer" ? `עסקה · ${prefill.label}` : "");
+  const [stage, setStage] = useState<string>("new");
+  const [prop, setProp] = useState<Picked | null>(prefill?.kind === "property" ? prefill : null);
+  const [buyer, setBuyer] = useState<Picked | null>(prefill?.kind === "buyer" ? prefill : null);
+  const [seller, setSeller] = useState<Picked | null>(prefill?.kind === "seller" ? prefill : null);
   const [value, setValue] = useState(""); const [commission, setCommission] = useState(""); const [close, setClose] = useState("");
   const [err, setErr] = useState<string | null>(null); const [ok, setOk] = useState(false); const [pending, start] = useTransition();
 
