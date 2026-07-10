@@ -13,7 +13,7 @@ import { getAgentHomeAi, seoForAgentHome } from "@/lib/agent-site";
 import { themeVars } from "@/lib/brokerage-site";
 import { JsonLd, Glass, PropertyCard } from "@/components/brokerage-site/ui";
 import AskWidget from "@/components/brokerage-site/AskWidget";
-import { SiteNav, SiteHero, SiteSection, SiteFooter, SiteEmptyState, SiteLeadCta, type HeroCta } from "@/components/site-ui";
+import { SiteNav, SiteHero, SiteSection, SiteFooter, SiteEmptyState, SiteLeadCta, OfficeBrandMark, type HeroCta } from "@/components/site-ui";
 import { buildSiteNav, type SiteBrandingLite } from "@/lib/site-ui/nav";
 
 export const revalidate = 300;
@@ -69,8 +69,13 @@ export default async function AgentHomePage({ params }: { params: Promise<{ slug
         <SiteSection id="featured" eyebrow="בייצוגי" title="נכסים מובילים" subtitle="נכסים נבחרים שאני מלווה — מתעדכן אוטומטית"
           action={<Link href={`/ai-agent/${slug}/properties`} className="text-brand text-[12px] font-black">כל הנכסים ←</Link>}>
           {home.featured.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {home.featured.map((p) => <PropertyCard key={p.id} slug={slug} id={p.id} title={p.title} price={p.price} image={p.image} badge={p.badge} base="ai-agent" />)}
+            <div className="flex flex-col gap-4">
+              <AgentSpotlight slug={slug} p={home.featured[0]} />
+              {home.featured.length > 1 && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {home.featured.slice(1, 7).map((p) => <PropertyCard key={p.id} slug={slug} id={p.id} title={p.title} price={p.price} image={p.image} badge={p.badge} base="ai-agent" />)}
+                </div>
+              )}
             </div>
           ) : <SiteEmptyState icon="🏠" title="אין כרגע נכסים להצגה" hint="המלאי מתעדכן אוטומטית — חזרו בקרוב או פנו אליי ישירות." />}
         </SiteSection>
@@ -83,17 +88,25 @@ export default async function AgentHomePage({ params }: { params: Promise<{ slug
           </div>
         )}
 
-        {/* About me + areas */}
-        <SiteSection id="areas" eyebrow="קצת עליי" title="הסיפור והאזורים שלי">
-          <Glass className="p-5">
-            <p className="text-ink text-[14px] leading-relaxed">{home.intro}</p>
-            {areas.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {areas.map((a) => <Link key={a.name} href={a.href} className="bg-card border-line text-ink hover:border-brand zono-focus-ring rounded-full border px-3 py-1.5 text-[12px] font-bold transition">{a.name}</Link>)}
-              </div>
-            )}
+        {/* About me + office affiliation (office logo adds trust, not dominates) */}
+        <SiteSection id="about" eyebrow="קצת עליי" title="הסיפור שלי">
+          <Glass className="p-5 sm:p-6">
+            <p className="text-ink text-[14px] leading-relaxed sm:text-[15px]">{home.intro}</p>
+            <div className="border-line mt-4 flex items-center gap-3 border-t pt-4">
+              <span className="text-muted text-[12px] font-bold">בשיתוף</span>
+              <OfficeBrandMark name={branding.officeName} logo={branding.logo} variant="lockup" surface="light" size="sm" />
+            </div>
           </Glass>
         </SiteSection>
+
+        {/* Areas of expertise — premium visual cards → area guides */}
+        {areas.length > 0 && (
+          <SiteSection id="areas" eyebrow="מומחיות מקומית" title="האזורים שלי" subtitle="היכרות מעמיקה עם השווקים שאני מלווה">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {areas.map((a) => <AgentAreaCard key={a.name} name={a.name} href={a.href} />)}
+            </div>
+          </SiteSection>
+        )}
 
         {/* AI insights — evidence-only */}
         {home.insights.length > 0 && (
@@ -118,5 +131,43 @@ export default async function AgentHomePage({ params }: { params: Promise<{ slug
 
       <SiteFooter nav={nav} areas={areas} />
     </div>
+  );
+}
+
+// ── Local luxury pieces (agent home only; real data, hide-when-empty) ─────────
+const fmtIls = (n: number | null) => (n == null ? null : `₪${n.toLocaleString("he-IL")}`);
+const A_GRADIENT = "var(--site-gradient, linear-gradient(135deg,#7c3aed,#a78bfa))";
+const A_ACCENT = "var(--site-accent, #7c3aed)";
+
+function AgentSpotlight({ slug, p }: { slug: string; p: { id: string; title: string; price: number | null; image: string | null; badge: string | null } }) {
+  return (
+    <Link href={`/ai-agent/${slug}/property/${p.id}`} className="group relative block overflow-hidden rounded-[26px] shadow-[var(--shadow-lift)]">
+      <div className="relative aspect-[16/10] w-full sm:aspect-[21/9]">
+        {p.image
+          /* eslint-disable-next-line @next/next/no-img-element -- external CDN listing photo */
+          ? <img src={p.image} alt={p.title} className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.04]" />
+          : <div className="absolute inset-0" style={{ background: A_GRADIENT }} />}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+        {p.badge && <span className="absolute end-4 top-4 rounded-full bg-white/92 px-3 py-1 text-[11px] font-black shadow-sm" style={{ color: A_ACCENT }}>{p.badge}</span>}
+        <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-7">
+          <p className="text-[12px] font-bold text-white/70">נכס נבחר</p>
+          <h3 className="mt-0.5 max-w-2xl text-xl font-black leading-tight drop-shadow-sm sm:text-3xl">{p.title}</h3>
+          {fmtIls(p.price) && <div className="mt-2 inline-flex items-baseline rounded-2xl bg-white/95 px-4 py-1.5 shadow-lg"><span className="text-xl font-black sm:text-2xl" style={{ color: A_ACCENT }}>{fmtIls(p.price)}</span></div>}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function AgentAreaCard({ name, href }: { name: string; href: string }) {
+  return (
+    <Link href={href} className="group relative flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-3xl border border-white/50 p-4 text-white shadow-[var(--shadow-card)] transition hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]" style={{ background: A_GRADIENT }}>
+      <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 to-transparent" />
+      <div className="relative">
+        <p className="text-[11px] font-bold text-white/75">מדריך אזור</p>
+        <p className="text-lg font-black leading-tight">{name}</p>
+      </div>
+    </Link>
   );
 }
