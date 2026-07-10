@@ -32,7 +32,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
     <div style={themeVars(branding) as CSSProperties}>
       <JsonLd data={seo.jsonLd} />
       <PropertyMicrosite property={p} slug={slug} base="ai-site" areaBase="neighborhood"
-        contactName={branding.officeName} whatsapp={branding.whatsapp} phone={branding.phone} />
+        contactName={branding.officeName} whatsapp={branding.whatsapp} phone={branding.phone} logo={branding.logo} />
     </div>
   );
 }

@@ -35,6 +35,7 @@ export default async function AgentPropertyPage({ params }: { params: Promise<{ 
       <PropertyMicrosite property={p} slug={slug} base="ai-agent" areaBase="area"
         contactName={branding.brokerName} whatsapp={branding.whatsapp} phone={branding.phone}
         calendarLink={branding.calendarLink} attribution={`בייצוג ${branding.brokerName}`}
+        logo={branding.logo} backHref={`/ai-agent/${slug}/properties`}
         askApiBase="agent-site" askTitle={`שאל את ${branding.brokerName}`} />
     </div>
   );
