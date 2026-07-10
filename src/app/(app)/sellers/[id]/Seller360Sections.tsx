@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { cn, formatShekels } from "@/lib/utils";
+import { formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
 import {
@@ -39,11 +39,6 @@ function Bar({ label, value }: { label: string; value: number }) {
 }
 
 const REL_LABELS: Record<string, string> = { owner: "בעלים", co_owner: "בעלים שותף", decision_maker: "מקבל החלטות", representative: "נציג", power_of_attorney: "מיופה כוח", lawyer: "עו״ד", family_member: "בן משפחה", investor: "משקיע", other: "אחר" };
-const DOC_TYPES = [
-  { key: "id_document", label: "תעודת זהות" }, { key: "ownership_proof", label: "הוכחת בעלות" }, { key: "tabu_extract", label: "נסח טאבו" },
-  { key: "arnona", label: "ארנונה" }, { key: "mortgage_statement", label: "אישור משכנתא" }, { key: "exclusivity_agreement", label: "הסכם בלעדיות" },
-];
-
 export function Seller360Sections({ seller: s, properties }: { seller: SellerRow; properties: OwnedProperty[] }) {
   return (
     <div className="flex flex-col gap-5">
@@ -105,20 +100,14 @@ export function Seller360Sections({ seller: s, properties }: { seller: SellerRow
         </Card>
 
         <Card title="מוכנות מסמכים" icon="Presentation">
-          <div className="mb-2 flex flex-wrap gap-2">
+          <div className="mb-3 flex flex-wrap gap-2">
             {s.has_signed_agreement ? <Badge tone="success" size="sm">הסכם חתום</Badge> : <Badge tone="warning" size="sm">אין הסכם חתום</Badge>}
             {s.allows_marketing ? <Badge tone="success" size="sm">מאשר שיווק</Badge> : <Badge tone="danger" size="sm">לא מאשר שיווק</Badge>}
             {s.allows_exclusive && <Badge tone="brand" size="sm">בלעדיות</Badge>}
           </div>
-          <ul className="flex flex-col gap-1">
-            {DOC_TYPES.map((d) => (
-              <li key={d.key} className="text-muted flex items-center justify-between border-line border-b py-1.5 last:border-0 text-xs">
-                <span className="text-ink">{d.label}</span>
-                <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", "bg-surface text-muted")}>חסר</span>
-              </li>
-            ))}
-          </ul>
-          <p className="text-muted mt-2 text-[11px]">חיבור העלאת מסמכים יתווסף דרך מודול המסמכים.</p>
+          <p className="text-muted text-[12px] leading-relaxed">
+            המסמכים המשפטיים של המוכר מנוהלים בלשונית <span className="text-ink font-bold">מסמכים</span> — שם ניתן ליצור, לערוך ולעקוב אחר סטטוס החתימה.
+          </p>
         </Card>
       </div>
     </div>
