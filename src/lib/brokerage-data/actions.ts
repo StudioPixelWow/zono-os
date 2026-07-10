@@ -53,7 +53,7 @@ import { getSellerAgentScorecards, type SellerAgentScorecardsOverview } from "@/
 import { getLeadAgentScorecards, type LeadAgentScorecardsOverview } from "@/lib/lead-agent";
 import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/office-agent";
 import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent-orchestrator";
-import { askZono, type AskZonoResponse, type ChatTurn } from "@/lib/ask-zono";
+import { askZono, type AskZonoResponse, type ChatTurn, type AskContextInput } from "@/lib/ask-zono";
 import { getAiHome, type AiHomeData } from "@/lib/ai-home";
 import { generateDraft, type DraftBundle, type DraftRequest, type DraftTarget } from "@/lib/draft-studio";
 import { listWorkflowTemplates, startPersistentWorkflow, advancePersistentWorkflow, getPersistentWorkflow, listActiveWorkflows, listCompletedWorkflows, listPendingApprovalWorkflows, listEntityWorkflows, type WorkflowTemplateSummary, type WorkflowTarget, type WorkflowSummaryRow } from "@/lib/workflow-builder";
@@ -386,12 +386,26 @@ export async function generateDraftAction(target: DraftTarget, request: DraftReq
 }
 
 // ── Phase 30.1 — Ask ZONO (conversational, multi-engine, approval-gated) ─────
-export async function askZonoAction(query: string, history: ChatTurn[] = []): Promise<{ ok: boolean; result?: AskZonoResponse; error?: string }> {
+// An optional `ctx` lets any entry point (Property/Buyer/Seller/Lead/Deal/Calendar
+// cockpits, Home, Executive, Marketing, public widgets) feed the ONE shared
+// context assembler. Internal callers default to internal_entity when an entity
+// is present; the mode is always resolved server-side so a client can never widen
+// its own permissions (e.g. a public widget cannot request an internal mode).
+export async function askZonoAction(
+  query: string,
+  history: ChatTurn[] = [],
+  ctx?: AskContextInput,
+): Promise<{ ok: boolean; result?: AskZonoResponse; error?: string }> {
   try {
     const q = (query ?? "").trim();
     if (!q) return { ok: false, error: "יש להזין שאלה." };
-    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
-    return { ok: true, result: await askZono(profile.org_id, q, Array.isArray(history) ? history.slice(-8) : []) };
+    const { profile, user } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    // Authenticated internal call: force an internal mode (never public/executive
+    // just because a client asked); attach the real userId for user-private layers.
+    const safeCtx: AskContextInput | undefined = ctx?.entityType && ctx?.entityId
+      ? { surface: ctx.surface, entityType: ctx.entityType, entityId: ctx.entityId, mode: "internal_entity", userId: user?.id }
+      : undefined;
+    return { ok: true, result: await askZono(profile.org_id, q, Array.isArray(history) ? history.slice(-8) : [], safeCtx) };
   } catch (e) { console.error("[ask-zono] failed:", e); return { ok: false, error: "Ask ZONO נכשל." }; }
 }
 
