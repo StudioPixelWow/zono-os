@@ -1112,6 +1112,11 @@ export async function promoteExternalListing(listingId: string): Promise<string>
   if (error) throw new Error(error.message);
   await supabase.from("external_listings").update({ promoted_property_id: data.id, status: "promoted", primary_property_id: data.id }).eq("id", listingId);
   await logActivityEvent({ eventType: "property.created", entityType: "property", entityId: data.id, title: `נכס חיצוני קודם ל-CRM (${listing.source})` });
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.externalListingPromoted, entityType: "external_listing", entityId: listingId, payload: { propertyId: data.id, source: listing.source } });
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.propertyCreated, entityType: "property", entityId: data.id, payload: { origin: "external_imported", source: listing.source } });
+  } catch (e) { console.error("[external] promote emit failed:", e); }
   return data.id;
 }
 

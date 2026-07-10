@@ -1,1 +1,0 @@
-{ "extends": "./tsconfig.json", "include": ["src/app/(app)/agent-website/AgentWebsiteView.tsx","src/app/(app)/my-profile/MyProfileView.tsx","src/lib/my-profile/service.ts","src/lib/my-profile/actions.ts","src/components/dashboard/Header.tsx","next-env.d.ts"] }
