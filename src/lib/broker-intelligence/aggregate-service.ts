@@ -7,15 +7,19 @@
 // engine — one failing engine never blanks the whole queue. Never throws.
 // ============================================================================
 import "server-only";
-import { buildPriorityQueue, type PrioritizedRecommendation } from "./priority";
+import { buildPriorityQueue } from "./priority";
 import type { Recommendation } from "./types";
 import { getAcquisitionIntelligence } from "./acquisition-service";
 import { getBuyerIntelligence } from "./buyer-service";
 import { getSellerIntelligence } from "./seller-service";
 import { getDealIntelligence } from "./deal-service";
+import { applyLifecycle, reduceLatestStates, type LifecycleAwareRecommendation } from "./lifecycle";
+import { loadRecommendationEvents } from "./recommendation-events-repository";
 
 export interface BrokerIntelligenceQueue {
-  items: PrioritizedRecommendation[];
+  /** Lifecycle-aware: dismissed/snoozed/completed items are removed; the rest
+   *  carry their current lifecycle state (e.g. "accepted" = in-progress). */
+  items: LifecycleAwareRecommendation[];
   /** How many actionable recommendations exist before the top-N cut. */
   total: number;
   generatedAt: string;
@@ -51,7 +55,15 @@ export async function getBrokerIntelligenceQueue(opts: QueueOptions = {}): Promi
     if (r.status === "fulfilled") recs = recs.concat(r.value.recommendations);
   }
 
-  let queue = buildPriorityQueue(recs);
+  const ranked = buildPriorityQueue(recs);
+
+  // Phase 3 — apply the broker's persisted lifecycle decisions to the live
+  // queue: dismissed / completed / done-elsewhere / rejected / actively-snoozed
+  // items drop out (nothing silently, the broker chose it); the rest carry their
+  // state. Best-effort — a persistence hiccup never blanks the queue.
+  const events = await loadRecommendationEvents();
+  let queue: LifecycleAwareRecommendation[] = applyLifecycle(ranked, reduceLatestStates(events));
+
   if (opts.areas?.length) queue = queue.filter((q) => opts.areas!.includes(q.area));
   if (opts.minPriority != null) queue = queue.filter((q) => q.priority >= opts.minPriority!);
 

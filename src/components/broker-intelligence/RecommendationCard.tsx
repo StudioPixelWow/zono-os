@@ -8,6 +8,9 @@
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import type { Recommendation, Urgency, DataSource } from "@/lib/broker-intelligence/types";
+import { recKey, actionClass } from "@/lib/broker-intelligence/priority";
+import type { LifecycleState } from "@/lib/broker-intelligence/lifecycle";
+import { RecommendationLifecycleControls } from "./RecommendationLifecycleControls";
 
 const URGENCY: Record<Urgency, { label: string; cls: string }> = {
   critical: { label: "קריטי", cls: "bg-danger-soft text-danger" },
@@ -22,7 +25,20 @@ const SOURCE_HE: Record<DataSource, string> = {
   deals: "עסקאות", documents: "מסמכים", meetings: "פגישות", journeys: "מסע לקוח",
 };
 
-export function RecommendationCard({ rec }: { rec: Recommendation }) {
+export function RecommendationCard({
+  rec,
+  enableLifecycle = false,
+  lifecycle = null,
+  priority,
+}: {
+  rec: Recommendation;
+  /** Show the Accept/Snooze/Complete/Dismiss controls (queue surfaces). */
+  enableLifecycle?: boolean;
+  /** The recommendation's persisted lifecycle state, if any. */
+  lifecycle?: LifecycleState | null;
+  /** Priority snapshot (from the prioritized queue) — recorded for learning. */
+  priority?: number;
+}) {
   const u = URGENCY[rec.urgency];
   return (
     <div className="bg-card border-line rounded-[18px] border p-4 shadow-[var(--shadow-soft)]">
@@ -61,6 +77,23 @@ export function RecommendationCard({ rec }: { rec: Recommendation }) {
           <Link href={rec.href} className="text-brand-strong shrink-0 text-[12px] font-bold">פתח ↗</Link>
         )}
       </div>
+
+      {/* Phase 3 lifecycle — only on actionable, evidence-backed recommendations. */}
+      {enableLifecycle && !rec.insufficientEvidence && (
+        <RecommendationLifecycleControls
+          lifecycle={lifecycle}
+          identity={{
+            recKey: recKey(rec),
+            entityType: rec.entityType,
+            entityId: rec.entityId,
+            area: rec.area,
+            actionClass: actionClass(rec),
+            title: rec.title,
+            confidence: rec.confidence,
+            priority: priority ?? null,
+          }}
+        />
+      )}
     </div>
   );
 }

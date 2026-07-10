@@ -28,7 +28,9 @@ export async function BrokerIntelligenceQueuePanel({
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {queue.items.map((rec) => <RecommendationCard key={rec.id} rec={rec} />)}
+        {queue.items.map((rec) => (
+          <RecommendationCard key={rec.id} rec={rec} enableLifecycle lifecycle={rec.lifecycle} priority={rec.priority} />
+        ))}
       </div>
     </div>
   );

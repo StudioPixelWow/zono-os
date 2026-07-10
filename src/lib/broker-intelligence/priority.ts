@@ -23,6 +23,16 @@ export interface PrioritizedRecommendation extends Recommendation {
 
 const URGENCY_SCORE: Record<Urgency, number> = { critical: 100, high: 75, medium: 50, low: 25 };
 
+/**
+ * The STABLE identity of a recommendation across reloads: entityType:entityId:
+ * actionClass. Recommendation `id`s can be regenerated each load, but this key
+ * stays constant for "the same action on the same entity" — so it's what we
+ * dedup on AND what we persist lifecycle state (dismiss/snooze/…) against.
+ */
+export function recKey(rec: Recommendation): string {
+  return `${rec.entityType}:${rec.entityId}:${actionClass(rec)}`;
+}
+
 /** Coarse action class so "call seller today" from two engines dedupes. */
 export function actionClass(rec: Recommendation): string {
   const t = `${rec.title} ${rec.suggestedAction}`;
@@ -62,7 +72,7 @@ export function buildPriorityQueue(recs: Recommendation[]): PrioritizedRecommend
   const byKey = new Map<string, PrioritizedRecommendation>();
 
   for (const r of actionable) {
-    const key = `${r.entityType}:${r.entityId}:${actionClass(r)}`;
+    const key = recKey(r);
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, {

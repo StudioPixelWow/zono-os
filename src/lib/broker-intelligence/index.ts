@@ -16,8 +16,11 @@ export type { SellerSignals } from "./seller";
 export { scoreDeal, rankDeals } from "./deal";
 export type { DealSignals } from "./deal";
 // Global integration — the ONE shared priority queue every surface consumes.
-export { buildPriorityQueue, actionClass } from "./priority";
+export { buildPriorityQueue, actionClass, recKey } from "./priority";
 export type { PrioritizedRecommendation } from "./priority";
+// Broker OS · Phase 3 — recommendation lifecycle (dismiss/snooze/complete/…).
+export { reduceLatestStates, applyLifecycle, isHidden } from "./lifecycle";
+export type { LifecycleAction, LifecycleEvent, LifecycleState, LifecycleAwareRecommendation } from "./lifecycle";
 export { getBrokerIntelligenceQueue } from "./aggregate-service";
 export type { BrokerIntelligenceQueue, QueueOptions } from "./aggregate-service";
 // Area 6 — Office (manager summary over the shared queue).

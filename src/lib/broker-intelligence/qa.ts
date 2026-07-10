@@ -270,5 +270,52 @@ check("agenda keeps lunch clear", lunchTest.slots.every((s) => !(s.startTime < "
 // deterministic
 check("agenda deterministic", JSON.stringify(buildAgenda(agendaQueue, { now: new Date(0) })) === JSON.stringify(buildAgenda(agendaQueue, { now: new Date(0) })));
 
-console.log(`\nBroker Intelligence · Areas1-6 + Global Queue + Agenda QA — ${pass} passed, ${fail} failed`);
+// ── Phase 3 · Recommendation lifecycle (dismiss/snooze/complete/…) ──────────
+import { reduceLatestStates, applyLifecycle, isHidden, type LifecycleEvent } from "./lifecycle";
+import { recKey } from "./priority";
+
+const lcQueue = bpq([
+  rec({ id: "q1", area: "seller", entityType: "seller", entityId: "s1", title: "התקשר למוכר היום", suggestedAction: "צור קשר", urgency: "critical", confidence: 90 }),
+  rec({ id: "q2", area: "buyer", entityType: "buyer", entityId: "b1", title: "שלח נכס מתאים", suggestedAction: "שלח נכס", urgency: "high", confidence: 80 }),
+  rec({ id: "q3", area: "deal", entityType: "deal", entityId: "d1", title: "סקור תמחור", suggestedAction: "עדכן מחיר", urgency: "medium", confidence: 60 }),
+]);
+const kSeller = recKey(lcQueue[0]);
+const kBuyer = recKey(lcQueue[1]);
+const kDeal = recKey(lcQueue[2]);
+
+// recKey is the stable identity (three colon-separated parts)
+check("recKey format", kSeller.split(":").length === 3 && kSeller.startsWith("seller:s1:"));
+
+// latest event wins per key
+const states = reduceLatestStates([
+  { recKey: kSeller, action: "accepted", at: "2026-07-10T08:00:00Z" },
+  { recKey: kSeller, action: "dismissed", at: "2026-07-10T09:00:00Z" },
+] as LifecycleEvent[]);
+check("reduce keeps latest", states.get(kSeller)?.action === "dismissed");
+
+// dismissed + completed + rejected + done_elsewhere are all hidden
+const now = new Date("2026-07-10T10:00:00Z");
+for (const a of ["dismissed", "completed", "rejected", "done_elsewhere"] as const) {
+  check(`${a} hides`, isHidden({ recKey: "x", action: a, at: "" }, now));
+}
+// accepted stays visible (in-progress)
+check("accepted stays visible", !isHidden({ recKey: "x", action: "accepted", at: "" }, now));
+// snoozed hides only until snoozeUntil
+check("snooze future hides", isHidden({ recKey: "x", action: "snoozed", at: "", snoozeUntil: "2026-07-10T12:00:00Z" }, now));
+check("snooze expired resurfaces", !isHidden({ recKey: "x", action: "snoozed", at: "", snoozeUntil: "2026-07-10T09:00:00Z" }, now));
+
+// applyLifecycle removes hidden, annotates the rest, preserves order
+const applied = applyLifecycle(lcQueue, reduceLatestStates([
+  { recKey: kSeller, action: "dismissed", at: "2026-07-10T09:00:00Z" },
+  { recKey: kBuyer, action: "accepted", at: "2026-07-10T09:00:00Z" },
+] as LifecycleEvent[]), now);
+check("dismissed drops from queue", !applied.some((r) => r.entityId === "s1"));
+check("accepted stays, annotated", applied.find((r) => r.entityId === "b1")?.lifecycle?.action === "accepted");
+check("untouched has null lifecycle", applied.find((r) => r.entityId === "d1")?.lifecycle === null);
+check("applyLifecycle preserves order", applied[0].entityId === "b1" && applied[1].entityId === "d1");
+void kDeal;
+// deterministic
+check("lifecycle deterministic", JSON.stringify(applyLifecycle(lcQueue, states, now)) === JSON.stringify(applyLifecycle(lcQueue, states, now)));
+
+console.log(`\nBroker Intelligence · Areas1-6 + Queue + Agenda + Lifecycle QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
