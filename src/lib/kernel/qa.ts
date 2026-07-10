@@ -99,5 +99,15 @@ check("buyer.updated → 0 edges", projectEventToGraphEdges({ ...base, event_typ
 // snake_case payload keys tolerated
 check("snake_case payload works", projectEventToGraphEdges({ ...base, event_type: "seller.linked_to_property", entity_type: "seller", entity_id: "S1", payload: { property_id: "P9" } })[0]?.target_entity_id === "P9");
 
-console.log(`\nKernel Stage 2+3+4A QA — ${pass} passed, ${fail} failed`);
+// ── Stage 4B · memory subscriber (pure) ─────────────────────────────────────
+import { projectEventToMemory } from "./memory-subscriber";
+
+const m1 = projectEventToMemory({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1" });
+check("deal.won → memory milestone", m1 !== null && m1.impact === "positive" && m1.source_module === "kernel");
+check("deal.lost → negative memory", projectEventToMemory({ ...base, event_type: "deal.lost", entity_type: "deal" })?.impact === "negative");
+check("property.sold → memory", projectEventToMemory({ ...base, event_type: "property.sold", entity_type: "property" })?.title === "נכס נמכר");
+check("routine buyer.updated → no memory", projectEventToMemory({ ...base, event_type: "buyer.updated", entity_type: "buyer" }) === null);
+check("memory carries entity + occurred", m1?.entity_id === "D1" && m1?.occurred_at === base.occurred_at);
+
+console.log(`\nKernel Stage 2+3+4 QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
