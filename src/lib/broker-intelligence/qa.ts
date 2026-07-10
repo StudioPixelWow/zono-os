@@ -139,5 +139,51 @@ check("ranked seller: insufficient last", rankedS[rankedS.length - 1].insufficie
 const sInp: SellerSignals = { ...sBare, churnRisk: 60, daysSinceContact: 20, marketPosition: 35 };
 check("seller deterministic", JSON.stringify(scoreSeller(sInp)) === JSON.stringify(scoreSeller(sInp)));
 
-console.log(`\nBroker Intelligence · Acq+Buyer+Seller QA — ${pass} passed, ${fail} failed`);
+// ── Global priority queue (dedup + merge + ranking) ─────────────────────────
+import { buildPriorityQueue, actionClass } from "./priority";
+import type { Recommendation } from "./types";
+
+const rec = (over: Partial<Recommendation>): Recommendation => ({
+  id: "r", area: "seller", entityType: "seller", entityId: "s1", title: "t", why: "w",
+  evidence: [{ label: "e1", source: "crm" }], confidence: 50, urgency: "medium",
+  expectedImpact: "i", suggestedAction: "a", href: null, insufficientEvidence: false, ...over,
+});
+
+// insufficient-evidence items never enter the actionable queue
+check("queue drops insufficient", buildPriorityQueue([rec({ insufficientEvidence: true })]).length === 0);
+
+// higher priority ranks first (critical+high-confidence over low)
+const q1 = buildPriorityQueue([
+  rec({ id: "low", entityId: "a", urgency: "low", confidence: 30 }),
+  rec({ id: "hi", entityId: "b", urgency: "critical", confidence: 90 }),
+]);
+check("queue ranks by priority", q1[0].id === "hi");
+check("priority is 0..100", q1.every(q => q.priority >= 0 && q.priority <= 100));
+
+// dedup: same entity + same action class → ONE item, merged evidence + sources
+const dedup = buildPriorityQueue([
+  rec({ id: "seller_call", area: "seller", entityId: "s9", title: "התקשר למוכר היום — שימור", suggestedAction: "צור קשר", confidence: 60, evidence: [{ label: "סיכון נטישה", source: "crm" }] }),
+  rec({ id: "deal_call", area: "deal", entityType: "seller", entityId: "s9", title: "התקשר למוכר היום", suggestedAction: "צור קשר", confidence: 70, evidence: [{ label: "מו״מ תקוע", source: "deals" }] }),
+]);
+check("dedup merges same entity+action to one", dedup.length === 1);
+check("dedup keeps highest confidence", dedup[0].confidence === 70);
+check("dedup merges evidence lines", dedup[0].evidence.length === 2);
+check("dedup unions data sources", dedup[0].contributingSources.includes("crm") && dedup[0].contributingSources.includes("deals"));
+check("dedup records mergedCount", dedup[0].mergedCount === 2);
+
+// different action classes on same entity do NOT merge
+const noMerge = buildPriorityQueue([
+  rec({ id: "call", entityId: "s5", title: "התקשר למוכר", suggestedAction: "צור קשר" }),
+  rec({ id: "price", entityId: "s5", title: "סקור תמחור", suggestedAction: "עדכן מחיר" }),
+]);
+check("distinct actions stay separate", noMerge.length === 2);
+
+// actionClass is deterministic + keyword-driven
+check("actionClass call", actionClass(rec({ title: "התקשר למוכר היום" })) === "call");
+check("actionClass price", actionClass(rec({ title: "סקור תמחור" })) === "price");
+
+// deterministic queue
+check("queue deterministic", JSON.stringify(buildPriorityQueue([rec({ id: "x" })])) === JSON.stringify(buildPriorityQueue([rec({ id: "x" })])));
+
+console.log(`\nBroker Intelligence · Areas1-3 + Global Queue QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
