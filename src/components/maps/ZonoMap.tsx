@@ -85,6 +85,32 @@ const HEAT_COLOR: [number, string][] = [
   [1, "rgba(190,24,93,0.98)"],    // hottest — magenta/crimson
 ];
 
+// ── Robust (percentile) weight normalization ─────────────────────────────────
+// The MapLibre heat accumulates a kernel density that is then scaled by
+// heatmap-intensity. Feeding absolute weights (or a constant 1) makes any
+// normally-dense area saturate to the top of the colour ramp. Instead we scale
+// each point's weight against the DATASET's 95th percentile so the top ~5% form
+// the true hotspots and low/medium values keep a visible gradient — the standard
+// GIS approach (a single outlier can no longer flatten the rest of the map).
+type HeatInput = { lat: number; lng: number; weight?: number };
+
+function percentile(sortedAsc: number[], p: number): number {
+  if (sortedAsc.length === 0) return 1;
+  const idx = Math.min(sortedAsc.length - 1, Math.max(0, Math.round((p / 100) * (sortedAsc.length - 1))));
+  return sortedAsc[idx];
+}
+
+/** Build heat GeoJSON features with 95th-percentile-normalized weights (0..1). */
+function heatFeatures(points: HeatInput[]) {
+  const ws = points.map((p) => (typeof p.weight === "number" && Number.isFinite(p.weight) ? p.weight : 1));
+  const p95 = Math.max(1e-6, percentile([...ws].sort((a, b) => a - b), 95));
+  return points.map((p, i) => ({
+    type: "Feature" as const,
+    properties: { w: Math.max(0, Math.min(1, ws[i] / p95)) },
+    geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] as [number, number] },
+  }));
+}
+
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
@@ -257,17 +283,22 @@ export function ZonoMap({
         if (heatmap && realPoints.length) {
           map.addSource("zono-heat", {
             type: "geojson",
-            data: { type: "FeatureCollection", features: realPoints.map((p) => ({ type: "Feature" as const, properties: { w: typeof p.weight === "number" ? p.weight : 1 }, geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] } })) },
+            data: { type: "FeatureCollection", features: heatFeatures(realPoints) },
           });
           map.addLayer({
             id: "zono-heat-layer",
             type: "heatmap",
             source: "zono-heat",
             paint: {
-              // Weighted intelligence: each point contributes by its business value.
+              // Weighted intelligence: each point contributes by its (percentile-
+              // normalized) business value — the top ~5% form the true hotspots.
               "heatmap-weight": ["interpolate", ["linear"], ["get", "w"], 0, 0, 1, 1],
-              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.7, 12, 1.6, 16, 2.6],
-              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 10, 12, 26, 16, 40],
+              // Restrained intensity + radius so accumulated density does NOT
+              // saturate across normally-dense areas: most of the map stays light,
+              // only genuine clusters glow. Still zoom-aware so hotspots expand
+              // naturally (never one giant blob).
+              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 12, 0.9, 16, 1.3],
+              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 8, 12, 17, 16, 28],
               // Strong when zoomed OUT (see the hot/cold story); fade near building
               // zoom so property PINS read clearly (markersWithHeat reveals them).
               "heatmap-opacity": ["interpolate", ["linear"], ["zoom"],
@@ -318,7 +349,7 @@ export function ZonoMap({
     const apply = () => {
       const src = m.getSource("zono-heat") as import("maplibre-gl").GeoJSONSource | undefined;
       if (!src) return;
-      src.setData({ type: "FeatureCollection", features: realPoints.map((p) => ({ type: "Feature" as const, properties: { w: typeof p.weight === "number" ? p.weight : 1 }, geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] } })) });
+      src.setData({ type: "FeatureCollection", features: heatFeatures(realPoints) });
     };
     if (m.isStyleLoaded()) apply(); else m.once("idle", apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
