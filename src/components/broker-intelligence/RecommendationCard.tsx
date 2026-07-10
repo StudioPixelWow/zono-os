@@ -10,6 +10,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import type { Recommendation, Urgency, DataSource } from "@/lib/broker-intelligence/types";
 import { recKey, actionClass } from "@/lib/broker-intelligence/priority";
 import type { LifecycleState } from "@/lib/broker-intelligence/lifecycle";
+import type { RecommendationExplanation } from "@/lib/broker-intelligence/explain";
 import { RecommendationLifecycleControls } from "./RecommendationLifecycleControls";
 
 const URGENCY: Record<Urgency, { label: string; cls: string }> = {
@@ -30,6 +31,7 @@ export function RecommendationCard({
   enableLifecycle = false,
   lifecycle = null,
   priority,
+  explanation = null,
 }: {
   rec: Recommendation;
   /** Show the Accept/Snooze/Complete/Dismiss controls (queue surfaces). */
@@ -38,6 +40,8 @@ export function RecommendationCard({
   lifecycle?: LifecycleState | null;
   /** Priority snapshot (from the prioritized queue) — recorded for learning. */
   priority?: number;
+  /** Phase 5 — full explanation (why now / why this / why first / if ignored). */
+  explanation?: RecommendationExplanation | null;
 }) {
   const u = URGENCY[rec.urgency];
   return (
@@ -78,6 +82,22 @@ export function RecommendationCard({
         )}
       </div>
 
+      {/* Phase 5 explanation — expandable "why now / why this / why first". */}
+      {explanation && !rec.insufficientEvidence && (
+        <details className="group mt-2">
+          <summary className="text-brand-strong flex cursor-pointer list-none items-center gap-1 text-[12px] font-bold">
+            <Icon name="HelpCircle" size={13} /> למה עכשיו? הסבר מלא
+          </summary>
+          <div className="text-ink mt-2 flex flex-col gap-1.5 text-[12px] leading-relaxed">
+            <ExplainLine label="למה עכשיו" value={explanation.whyNow} />
+            <ExplainLine label="למה זה" value={explanation.whyThis} />
+            <ExplainLine label="למה לפני האחרים" value={explanation.whyBeforeOthers} />
+            <ExplainLine label="אם אתעלם" value={explanation.ifIgnored} danger />
+            <ExplainLine label="ערך צפוי" value={explanation.expectedValue} />
+          </div>
+        </details>
+      )}
+
       {/* Phase 3 lifecycle — only on actionable, evidence-backed recommendations. */}
       {enableLifecycle && !rec.insufficientEvidence && (
         <RecommendationLifecycleControls
@@ -95,5 +115,14 @@ export function RecommendationCard({
         />
       )}
     </div>
+  );
+}
+
+function ExplainLine({ label, value, danger = false }: { label: string; value: string; danger?: boolean }) {
+  return (
+    <p>
+      <span className={`font-bold ${danger ? "text-danger" : "text-muted"}`}>{label}: </span>
+      {value}
+    </p>
   );
 }

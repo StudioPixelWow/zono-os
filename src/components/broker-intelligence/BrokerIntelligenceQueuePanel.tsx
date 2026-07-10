@@ -8,6 +8,7 @@
 // ============================================================================
 import { Icon } from "@/components/dashboard/Icon";
 import { getBrokerIntelligenceQueue, type QueueOptions } from "@/lib/broker-intelligence/aggregate-service";
+import { explainRecommendation } from "@/lib/broker-intelligence/explain";
 import { RecommendationCard } from "./RecommendationCard";
 
 export async function BrokerIntelligenceQueuePanel({
@@ -28,8 +29,15 @@ export async function BrokerIntelligenceQueuePanel({
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {queue.items.map((rec) => (
-          <RecommendationCard key={rec.id} rec={rec} enableLifecycle lifecycle={rec.lifecycle} priority={rec.priority} />
+        {queue.items.map((rec, i) => (
+          <RecommendationCard
+            key={rec.id}
+            rec={rec}
+            enableLifecycle
+            lifecycle={rec.lifecycle}
+            priority={rec.priority}
+            explanation={explainRecommendation(rec, { rank: i + 1, total: queue.total })}
+          />
         ))}
       </div>
     </div>

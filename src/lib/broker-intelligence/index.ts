@@ -25,6 +25,9 @@ export type { LifecycleAction, LifecycleEvent, LifecycleState, LifecycleAwareRec
 export { summarizeOutcomes, applyLearning, learnedAdjustment, MIN_SAMPLES, MAX_ADJUSTMENT } from "./learning";
 export type { LearningModel, OutcomeAgg, OutcomeSample } from "./learning";
 export { getLearningModel } from "./learning-service";
+// Broker OS · Phase 5 — recommendation explanation (why now / why this / …).
+export { explainRecommendation } from "./explain";
+export type { RecommendationExplanation, ExplainContext } from "./explain";
 export { getBrokerIntelligenceQueue } from "./aggregate-service";
 export type { BrokerIntelligenceQueue, QueueOptions } from "./aggregate-service";
 // Area 6 — Office (manager summary over the shared queue).

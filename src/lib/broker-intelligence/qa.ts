@@ -356,5 +356,39 @@ const unchanged = applyLearning(lqueue, neutral);
 check("neutral model doesn't reorder", unchanged[0].id === lqueue[0].id && unchanged.every((r) => r.learningAdjustment === 0));
 check("learning deterministic", JSON.stringify(applyLearning(lqueue, mixModel)) === JSON.stringify(applyLearning(lqueue, mixModel)));
 
-console.log(`\nBroker Intelligence · Areas1-6 + Queue + Agenda + Lifecycle + Learning QA — ${pass} passed, ${fail} failed`);
+// ── Phase 5 · Recommendation explanation (why now / why this / why first) ───
+import { explainRecommendation } from "./explain";
+
+const exQueue = bpq([
+  rec({
+    id: "ex1", area: "seller", entityType: "seller", entityId: "s1",
+    title: "התקשר למוכר היום — שימור", suggestedAction: "צור קשר", why: "המוכר לא עודכן שבועיים.",
+    urgency: "critical", confidence: 88, expectedImpact: "שימור בלעדיות + מניעת נטישה",
+    evidence: [
+      { label: "סיכון נטישה גבוה", source: "crm", weight: 34 },
+      { label: "אין קשר 14 יום", source: "timeline", weight: 20 },
+    ],
+  }),
+  rec({ id: "ex2", area: "buyer", entityType: "buyer", entityId: "b1", title: "שלח נכס", suggestedAction: "שלח נכס", confidence: 70 }),
+]);
+const ex = explainRecommendation(exQueue[0], { rank: 1, total: 2 });
+check("explain answers why now (urgency)", ex.whyNow.includes("מיידי"));
+check("explain why-now folds timing evidence", ex.whyNow.includes("14 יום"));
+check("explain why-this cites strongest evidence", ex.whyThis.includes("סיכון נטישה"));
+check("explain why-before-others cites rank", ex.whyBeforeOthers.includes("#1 מתוך 2"));
+check("explain if-ignored is area-specific (seller)", ex.ifIgnored.includes("בלעדיות") || ex.ifIgnored.includes("מוכר"));
+check("explain expected value passes through", ex.expectedValue.includes("שימור"));
+check("explain carries evidence + confidence", ex.evidence.length === 2 && ex.confidence === 88);
+// corroboration + learning surfaced when present
+const merged = bpq([
+  rec({ id: "m1", entityType: "seller", entityId: "s9", title: "התקשר למוכר", suggestedAction: "צור קשר", confidence: 60, evidence: [{ label: "a", source: "crm" }] }),
+  rec({ id: "m2", area: "deal", entityType: "seller", entityId: "s9", title: "התקשר למוכר", suggestedAction: "צור קשר", confidence: 70, evidence: [{ label: "b", source: "deals" }] }),
+]);
+const exMerged = explainRecommendation({ ...merged[0], learningAdjustment: 6 }, { rank: 1, total: 1 });
+check("explain notes corroboration", exMerged.whyBeforeOthers.includes("מנועי מודיעין"));
+check("explain notes positive learning", exMerged.whyBeforeOthers.includes("נוטה לפעול"));
+// deterministic
+check("explain deterministic", JSON.stringify(explainRecommendation(exQueue[0], { rank: 1, total: 2 })) === JSON.stringify(explainRecommendation(exQueue[0], { rank: 1, total: 2 })));
+
+console.log(`\nBroker Intelligence · Areas1-6 + Queue + Agenda + Lifecycle + Learning + Explain QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
