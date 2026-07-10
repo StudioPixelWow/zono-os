@@ -40,7 +40,16 @@ function rowToMemory(row: Row): AiMemory {
 export async function listMemories(): Promise<AiMemory[]> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase.from("ai_memory").select("*").neq("status", "deleted").order("created_at", { ascending: false }).limit(300);
+    // Defense-in-depth (STABILIZATION): never rely on RLS alone — only return
+    // office/org/system memory, or private memory the CALLER owns. A private row
+    // belonging to another broker can never be returned even if RLS regresses.
+    const { data: authData } = await supabase.auth.getUser();
+    const uid = authData.user?.id ?? null;
+    let q = supabase.from("ai_memory").select("*").neq("status", "deleted");
+    q = uid
+      ? q.or(`visibility.in.(office,organization,system),user_id.eq.${uid}`)
+      : q.in("visibility", ["office", "organization", "system"]);
+    const { data, error } = await q.order("created_at", { ascending: false }).limit(300);
     if (error) { console.error("[ai-memory] list failed:", error.message); return []; }
     return (data ?? []).map((r) => rowToMemory(r as Row));
   } catch (e) { console.error("[ai-memory] list error:", e); return []; }
