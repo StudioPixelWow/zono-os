@@ -21,6 +21,10 @@ export type { PrioritizedRecommendation } from "./priority";
 // Broker OS · Phase 3 — recommendation lifecycle (dismiss/snooze/complete/…).
 export { reduceLatestStates, applyLifecycle, isHidden } from "./lifecycle";
 export type { LifecycleAction, LifecycleEvent, LifecycleState, LifecycleAwareRecommendation } from "./lifecycle";
+// Broker OS · Phase 4 — learning loop (re-rank from REAL historical outcomes).
+export { summarizeOutcomes, applyLearning, learnedAdjustment, MIN_SAMPLES, MAX_ADJUSTMENT } from "./learning";
+export type { LearningModel, OutcomeAgg, OutcomeSample } from "./learning";
+export { getLearningModel } from "./learning-service";
 export { getBrokerIntelligenceQueue } from "./aggregate-service";
 export type { BrokerIntelligenceQueue, QueueOptions } from "./aggregate-service";
 // Area 6 — Office (manager summary over the shared queue).

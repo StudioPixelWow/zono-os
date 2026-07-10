@@ -15,6 +15,8 @@ import { getSellerIntelligence } from "./seller-service";
 import { getDealIntelligence } from "./deal-service";
 import { applyLifecycle, reduceLatestStates, type LifecycleAwareRecommendation } from "./lifecycle";
 import { loadRecommendationEvents } from "./recommendation-events-repository";
+import { applyLearning } from "./learning";
+import { getLearningModel } from "./learning-service";
 
 export interface BrokerIntelligenceQueue {
   /** Lifecycle-aware: dismissed/snoozed/completed items are removed; the rest
@@ -57,12 +59,18 @@ export async function getBrokerIntelligenceQueue(opts: QueueOptions = {}): Promi
 
   const ranked = buildPriorityQueue(recs);
 
+  // Phase 4 — re-rank with the broker's REAL historical behavior (not AI guess):
+  // recommendation kinds they consistently act on rise; kinds they consistently
+  // dismiss sink. Bounded so evidence still leads; neutral until enough history.
+  const model = await getLearningModel();
+  const learned = applyLearning(ranked, model);
+
   // Phase 3 — apply the broker's persisted lifecycle decisions to the live
   // queue: dismissed / completed / done-elsewhere / rejected / actively-snoozed
   // items drop out (nothing silently, the broker chose it); the rest carry their
   // state. Best-effort — a persistence hiccup never blanks the queue.
   const events = await loadRecommendationEvents();
-  let queue: LifecycleAwareRecommendation[] = applyLifecycle(ranked, reduceLatestStates(events));
+  let queue: LifecycleAwareRecommendation[] = applyLifecycle(learned, reduceLatestStates(events));
 
   if (opts.areas?.length) queue = queue.filter((q) => opts.areas!.includes(q.area));
   if (opts.minPriority != null) queue = queue.filter((q) => q.priority >= opts.minPriority!);

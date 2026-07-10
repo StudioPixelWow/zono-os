@@ -19,6 +19,9 @@ export interface PrioritizedRecommendation extends Recommendation {
   mergedCount: number;
   /** All data sources that contributed evidence (deduped, for transparency). */
   contributingSources: DataSource[];
+  /** Phase 4 — how much the broker's own historical behavior nudged priority
+   *  (signed, bounded). 0/absent when there's no learned signal yet. */
+  learningAdjustment?: number;
 }
 
 const URGENCY_SCORE: Record<Urgency, number> = { critical: 100, high: 75, medium: 50, low: 25 };

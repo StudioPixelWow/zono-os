@@ -317,5 +317,44 @@ void kDeal;
 // deterministic
 check("lifecycle deterministic", JSON.stringify(applyLifecycle(lcQueue, states, now)) === JSON.stringify(applyLifecycle(lcQueue, states, now)));
 
-console.log(`\nBroker Intelligence · Areas1-6 + Queue + Agenda + Lifecycle QA — ${pass} passed, ${fail} failed`);
+// ── Phase 4 · Learning loop (re-rank from real historical outcomes) ─────────
+import { summarizeOutcomes, applyLearning, MIN_SAMPLES, MAX_ADJUSTMENT, type OutcomeSample } from "./learning";
+
+// below MIN_SAMPLES → no adjustment (honest, won't learn from noise)
+const thin = summarizeOutcomes([{ area: "seller", actionClass: "call", action: "completed" }]);
+check("thin history → zero area adj", thin.byArea["seller"].adjustment === 0);
+
+// consistent positive on an area → positive, bounded adjustment
+const posSamples: OutcomeSample[] = Array.from({ length: 6 }, () => ({ area: "buyer", actionClass: "send", action: "completed" as const }));
+const posModel = summarizeOutcomes(posSamples);
+check("consistent positive → positive adj", posModel.byArea["buyer"].adjustment > 0);
+check("adjustment bounded", posModel.byArea["buyer"].adjustment <= MAX_ADJUSTMENT && MIN_SAMPLES === 3);
+
+// consistent dismiss on an area → negative adjustment
+const negModel = summarizeOutcomes(Array.from({ length: 5 }, () => ({ area: "acquisition", actionClass: "call", action: "dismissed" as const })));
+check("consistent dismiss → negative adj", negModel.byArea["acquisition"].adjustment < 0);
+
+// applyLearning re-ranks: a learned-preferred item can overtake a slightly higher base
+const lqueue = bpq([
+  rec({ id: "base_hi", area: "acquisition", entityType: "external_listing", entityId: "x1", title: "גיוס", suggestedAction: "צור קשר", urgency: "high", confidence: 70 }),
+  rec({ id: "learn_up", area: "buyer", entityType: "buyer", entityId: "b1", title: "שלח נכס", suggestedAction: "שלח נכס", urgency: "high", confidence: 66 }),
+]);
+const beforeTop = lqueue[0].id;
+// buyer/send is loved, acquisition/call is disliked → order should flip
+const mixModel = summarizeOutcomes([
+  ...Array.from({ length: 6 }, () => ({ area: "buyer", actionClass: "send", action: "completed" as const })),
+  ...Array.from({ length: 6 }, () => ({ area: "acquisition", actionClass: "call", action: "dismissed" as const })),
+]);
+const relearned = applyLearning(lqueue, mixModel);
+check("learning re-ranks by real behavior", beforeTop === "base_hi" && relearned[0].id === "learn_up");
+check("learning records adjustment", relearned.every((r) => typeof r.learningAdjustment === "number"));
+check("learning keeps priority 0..100", relearned.every((r) => r.priority >= 0 && r.priority <= 100));
+
+// neutral model → identity (no reordering, zero adjustments)
+const neutral = summarizeOutcomes([]);
+const unchanged = applyLearning(lqueue, neutral);
+check("neutral model doesn't reorder", unchanged[0].id === lqueue[0].id && unchanged.every((r) => r.learningAdjustment === 0));
+check("learning deterministic", JSON.stringify(applyLearning(lqueue, mixModel)) === JSON.stringify(applyLearning(lqueue, mixModel)));
+
+console.log(`\nBroker Intelligence · Areas1-6 + Queue + Agenda + Lifecycle + Learning QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
