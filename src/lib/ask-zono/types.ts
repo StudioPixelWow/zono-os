@@ -77,6 +77,34 @@ export interface AskAnswer {
 // ── Part 8 — session chat ───────────────────────────────────────────────────
 export interface ChatTurn { role: "user" | "assistant"; text: string; intent?: IntentType; at: string }
 
+// The shared AI-context envelope carried with every internal Ask response —
+// assembled ONCE by the canonical ai-context assembler, permission-safe, with a
+// provenance summary + partial-context diagnostics. Also carries the request
+// meta Batch 4.6 will persist (no second conversation store).
+export interface SharedContextEnvelope {
+  mode: string;
+  surface: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  organizationId: string | null;
+  userId: string | null;
+  conversationId: string | null;
+  text: string;                        // rendered, permission-safe context block
+  provenanceCount: number;             // summary only (never raw chain-of-thought)
+  failedLayers: string[];
+  truncated: Record<string, number>;
+}
+
+/** Optional context a caller passes so Ask uses the shared assembler for its surface. */
+export interface AskContextInput {
+  surface?: string;
+  entityType?: string;
+  entityId?: string;
+  mode?: string;            // ContextMode; defaults chosen by the service
+  userId?: string;
+  conversationId?: string;
+}
+
 export interface AskZonoResponse {
   version: string; generatedAt: string;
   understanding: QueryUnderstanding;
@@ -84,4 +112,5 @@ export interface AskZonoResponse {
   results: EngineResult[];
   answer: AskAnswer;
   notes: string[];
+  sharedContext?: SharedContextEnvelope; // present when a surface passes entity context
 }

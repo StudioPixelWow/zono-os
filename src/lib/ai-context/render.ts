@@ -14,9 +14,30 @@ export interface CtxTimeline { title: string; occurredAt: string }
 export interface CtxRelationship { relationshipType: string; otherType: string; otherId: string }
 export interface CtxRecommendation { title: string; why: string }
 
+/** One structured provenance record (PART 10 — powers "למה?" + stale detection). */
+export interface ProvenanceItem {
+  layer: "truth" | "timeline" | "graph" | "memory" | "recommendation" | "preference" | "document";
+  entityType: string;
+  entityId: string;
+  sourceId: string | null;      // event / memory / relationship id
+  timestamp: string | null;
+  confidence: number | null;
+  sensitivity: Sensitivity | null;
+  provenance: Provenance | null; // explicit | derived | inferred
+}
+
+/** Per-layer partial/truncation diagnostics (internal only, never fabricated). */
+export interface ContextDiagnostics {
+  failedLayers: string[];       // layers that errored (context still returned)
+  truncated: Record<string, number>; // layer → items dropped by the cap
+}
+
 export interface AssembledContext {
   entityType: string;
   entityId: string;
+  mode?: string;                    // the ContextMode this was assembled under
+  provenance?: ProvenanceItem[];    // structured evidence per item (PART 10)
+  diagnostics?: ContextDiagnostics; // partial/truncation (PART 11 / PART 9)
   truthLine: string | null;         // one-line current-state summary
   truthSensitivity?: Sensitivity;   // sensitivity of the truth line (for broad-prompt gating)
   memory: CtxMemory[];

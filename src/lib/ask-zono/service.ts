@@ -15,7 +15,10 @@ import { getSellerAgentScorecards } from "@/lib/seller-agent";
 import { getLeadAgentScorecards } from "@/lib/lead-agent";
 import { getOfficeGrowthScorecard } from "@/lib/office-agent";
 import { understandAndPlan, composeResponse } from "./ask";
-import type { EngineId, EngineResult, EngineItem, QueryUnderstanding, AskZonoResponse, ChatTurn } from "./types";
+import { assembleEntityContext } from "@/lib/ai-context/assembler";
+import { renderContextText } from "@/lib/ai-context/render";
+import { modePolicy, type ContextMode } from "@/lib/ai-context/modes";
+import type { EngineId, EngineResult, EngineItem, QueryUnderstanding, AskZonoResponse, ChatTurn, AskContextInput, SharedContextEnvelope } from "./types";
 
 const empty = (engine: EngineId, headline: string): EngineResult => ({ engine, headline, items: [], evidence: [], confidence: 40 });
 const item = (title: string, detail: string, score: number | null): EngineItem => ({ title, detail, score });
@@ -94,11 +97,47 @@ async function runEngine(engine: EngineId, orgId: string | null, u: QueryUnderst
   }
 }
 
-/** Ask ZONO end-to-end: understand → plan → execute planned engines → synthesize. */
-export async function askZono(orgId: string | null, query: string, history: ChatTurn[] = []): Promise<AskZonoResponse> {
+const VALID_MODES = new Set<ContextMode>(["internal_entity", "internal_global", "executive", "broker_private", "public_site", "document_scoped", "recommendation_explanation"]);
+
+/**
+ * Build the shared-context envelope for an Ask request through the ONE canonical
+ * assembler (no screen-local context). Entity present → mode-scoped entity
+ * context; public surfaces use public_site (public-safe only). Best-effort:
+ * a context failure never breaks Ask (partial diagnostics recorded instead).
+ */
+async function buildSharedContext(orgId: string | null, ctx: AskContextInput): Promise<SharedContextEnvelope | undefined> {
+  if (!ctx.entityType || !ctx.entityId) return undefined;
+  const mode: ContextMode = VALID_MODES.has(ctx.mode as ContextMode) ? (ctx.mode as ContextMode) : "internal_entity";
+  try {
+    const assembled = await assembleEntityContext({ mode, entityType: ctx.entityType, entityId: ctx.entityId });
+    const text = renderContextText(assembled, { forBroadPrompt: modePolicy(mode).forBroadPrompt });
+    return {
+      mode, surface: ctx.surface ?? null, entityType: ctx.entityType, entityId: ctx.entityId,
+      organizationId: orgId, userId: ctx.userId ?? null, conversationId: ctx.conversationId ?? null,
+      text, provenanceCount: assembled.provenance?.length ?? 0,
+      failedLayers: assembled.diagnostics?.failedLayers ?? [], truncated: assembled.diagnostics?.truncated ?? {},
+    };
+  } catch {
+    // Never fabricate context — surface the failure as an empty, honest envelope.
+    return {
+      mode, surface: ctx.surface ?? null, entityType: ctx.entityType, entityId: ctx.entityId,
+      organizationId: orgId, userId: ctx.userId ?? null, conversationId: ctx.conversationId ?? null,
+      text: "", provenanceCount: 0, failedLayers: ["assembler"], truncated: {},
+    };
+  }
+}
+
+/** Ask ZONO end-to-end: understand → plan → execute planned engines → synthesize.
+ *  When a surface passes entity context, the shared assembler enriches the answer
+ *  (memory + timeline + graph + recommendations), permission-safe per mode. */
+export async function askZono(orgId: string | null, query: string, history: ChatTurn[] = [], ctx?: AskContextInput): Promise<AskZonoResponse> {
   const { understanding, plan } = understandAndPlan(query, history);
-  const results = plan.engines.length
-    ? (await Promise.all(plan.engines.map((e) => runEngine(e, orgId, understanding).catch(() => empty(e, "המנוע נכשל"))))).filter((r) => r.items.length > 0 || r.evidence.length > 0)
-    : [];
-  return composeResponse(understanding, plan, results);
+  const [results, sharedContext] = await Promise.all([
+    plan.engines.length
+      ? Promise.all(plan.engines.map((e) => runEngine(e, orgId, understanding).catch(() => empty(e, "המנוע נכשל")))).then((rs) => rs.filter((r) => r.items.length > 0 || r.evidence.length > 0))
+      : Promise.resolve([] as EngineResult[]),
+    ctx ? buildSharedContext(orgId, ctx) : Promise.resolve(undefined),
+  ]);
+  const response = composeResponse(understanding, plan, results);
+  return sharedContext ? { ...response, sharedContext } : response;
 }

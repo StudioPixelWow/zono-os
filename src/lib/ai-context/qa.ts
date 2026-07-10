@@ -48,5 +48,40 @@ check("render deterministic", renderContextText(ctx, { forBroadPrompt: true }) =
 // timeline cap respected
 check("timeline capped", renderContextText({ ...ctx, timeline: Array.from({ length: 20 }, (_, i) => ({ title: `t${i}`, occurredAt: "" })) }, { maxTimeline: 3 }).match(/• t\d/g)?.length === 3);
 
-console.log(`\nShared AI Context (render) QA — ${pass} passed, ${fail} failed`);
+// ── Context modes: policy + sensitivity ceilings (PART 8) ────────────────────
+import { modePolicy, sensitivityAllowed } from "./modes";
+
+// public_site: strict — truth only, NO memory/graph/recs/docs/user-private
+const pub = modePolicy("public_site");
+check("public_site excludes memory", !pub.includeMemory);
+check("public_site excludes graph", !pub.includeGraph);
+check("public_site excludes recommendations", !pub.includeRecommendations);
+check("public_site excludes documents", !pub.includeDocuments);
+check("public_site excludes user-private", !pub.includeUserPrivate);
+check("public_site ceiling = normal", pub.sensitivityCeiling === "normal");
+check("public_site allows only normal sensitivity", sensitivityAllowed("public_site", "normal") && !sensitivityAllowed("public_site", "internal") && !sensitivityAllowed("public_site", "confidential"));
+
+// executive: org memory yes, broker-PRIVATE never
+const exec = modePolicy("executive");
+check("executive includes memory", exec.includeMemory);
+check("executive EXCLUDES user-private (broker memory)", !exec.includeUserPrivate);
+check("executive ceiling = confidential (not restricted)", exec.sensitivityCeiling === "confidential" && !sensitivityAllowed("executive", "restricted"));
+
+// internal_entity: full sensitivity + own private
+const ent = modePolicy("internal_entity");
+check("internal_entity full ceiling (restricted)", ent.sensitivityCeiling === "restricted" && sensitivityAllowed("internal_entity", "restricted"));
+check("internal_entity includes user-private", ent.includeUserPrivate);
+
+// document_scoped includes documents; recommendation_explanation caps small
+check("document_scoped includes documents", modePolicy("document_scoped").includeDocuments);
+check("recommendation_explanation excludes documents + preferences", !modePolicy("recommendation_explanation").includeDocuments && !modePolicy("recommendation_explanation").includePreferences);
+
+// every mode defines hard caps (no unbounded layer)
+for (const m of ["internal_entity", "internal_global", "executive", "broker_private", "public_site", "document_scoped", "recommendation_explanation"] as const) {
+  const c = modePolicy(m).caps;
+  check(`${m} has finite caps`, [c.timeline, c.graph, c.memory, c.recommendations, c.preferences].every((n) => Number.isFinite(n) && n >= 0));
+}
+check("mode policy deterministic", JSON.stringify(modePolicy("executive")) === JSON.stringify(modePolicy("executive")));
+
+console.log(`\nShared AI Context (render + modes) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
