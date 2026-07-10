@@ -1,12 +1,20 @@
 // ============================================================================
 // 🧠 ZONO OS 2.0 — Stage 2 · Event Kernel · Outbox processor (server-only).
-// Drains the append-only domain_events outbox and projects each pending event
-// into the unified activity timeline (the first Kernel subscriber). Runs under
-// the service role (cron / worker) — no user session. Idempotent per row:
-//   pending  → project → insert activity_events → mark 'done' + processed_at
-//   skipped  → mark 'done' (no projection for this type)
-//   error    → increment retry_count; keep 'pending' until MAX, then 'failed'
-// Best-effort per row: one bad row never blocks the batch.
+// Drains the append-only domain_events outbox and projects each event into the
+// ONE canonical activity timeline (idempotently, with related-entity fan-out).
+// Runs under the service role (cron / worker) — no user session.
+//
+// State machine per row:
+//   pending / failed / stale-processing
+//     → claim ('processing')
+//     → project → upsert activity_events (idempotent per target timeline)
+//     → mark 'done' + processed_at
+//   duplicate projection (already present) → counted, NOT an error
+//   error → retry_count+1; keep 'pending' until MAX_RETRIES, then 'failed'
+//           (dead-letter) with error_summary (last_error)
+// Best-effort per row: one bad row never blocks the batch. Self-healing: a row
+// stuck in 'processing' (crashed mid-drain) is re-scanned and reprocessed —
+// safe because the timeline projection is idempotent.
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
@@ -19,55 +27,85 @@ const MAX_RETRIES = 5;
 
 export interface DrainResult {
   scanned: number;
-  projected: number;
-  skipped: number;
+  projected: number;       // domain events that produced ≥1 timeline row
+  timelineRows: number;    // total activity_events rows written (fan-out counted)
+  duplicateSkips: number;  // idempotent no-ops (already projected)
+  skipped: number;         // events with no timeline projection
   notified: number;
   graphEdges: number;
   memoryRows: number;
   failed: number;
 }
 
+type Row = DomainEventLike & { id: string; retry_count: number };
+
 /**
- * Process up to `limit` pending domain events into the timeline.
- * Safe to call repeatedly (cron) — it only ever touches rows still pending.
+ * Process up to `limit` unprocessed domain events into the timeline.
+ * Safe to call repeatedly (cron) — only touches unprocessed / stuck rows.
  */
 export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
   const db = createServiceRoleClient();
-  const out: DrainResult = { scanned: 0, projected: 0, skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0, failed: 0 };
+  const out: DrainResult = {
+    scanned: 0, projected: 0, timelineRows: 0, duplicateSkips: 0,
+    skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0, failed: 0,
+  };
 
-  // Oldest-first so the timeline stays chronological. Only unprocessed rows.
+  // Oldest-first so the timeline stays chronological. 'processing' is included
+  // so a row stuck by a crashed drain self-heals (idempotent reprocess).
   const { data, error } = await db
     .from("domain_events" as never)
-    .select("id,event_type,event_version,organization_id,actor_user_id,entity_type,entity_id,payload,occurred_at,retry_count")
-    .in("processing_status", ["pending", "failed"] as never)
+    .select("id,event_type,event_version,organization_id,actor_user_id,entity_type,entity_id,payload,metadata,occurred_at,retry_count")
+    .in("processing_status", ["pending", "failed", "processing"] as never)
     .order("occurred_at", { ascending: true })
     .limit(limit);
 
   if (error || !data) return out;
-  const rows = data as unknown as (DomainEventLike & { id: string; retry_count: number })[];
+  const rows = data as unknown as Row[];
+  if (rows.length === 0) return out;
+
+  // Claim the batch → 'processing' (best-effort; idempotency covers double-drain).
+  await db
+    .from("domain_events" as never)
+    .update({ processing_status: "processing" } as never)
+    .in("id", rows.map((r) => r.id) as never);
 
   for (const row of rows) {
     out.scanned++;
     try {
-      const projection = projectEventToTimeline(row);
-      if (!projection) {
+      const projections = projectEventToTimeline(row);
+      if (projections.length === 0) {
         await markDone(db, row.id);
         out.skipped++;
         continue;
       }
-      const { error: insErr } = await db.from("activity_events").insert({
-        org_id: projection.org_id,
-        event_type: projection.event_type,
-        entity_type: projection.entity_type,
-        entity_id: projection.entity_id,
-        title: projection.title,
-        actor_id: projection.actor_id,
-        occurred_at: projection.occurred_at,
-      } as never);
-      if (insErr) throw new Error(insErr.message);
 
-      // Stage 3 · Notification subscriber — SECONDARY + best-effort. A failure
-      // here must never fail the event (the timeline projection already landed).
+      // Idempotent projection: one row per (event_id, target entity). A repeat
+      // is a unique-violation we swallow and count — never a duplicate row.
+      for (const p of projections) {
+        const { error: insErr } = await db.from("activity_events").insert({
+          org_id: p.org_id,
+          event_id: p.event_id,
+          event_type: p.event_type,
+          entity_type: p.entity_type,
+          entity_id: p.entity_id,
+          related_entity_type: p.related_entity_type,
+          related_entity_id: p.related_entity_id,
+          title: p.title,
+          description: p.description,
+          actor_user_id: p.actor_user_id,
+          occurred_at: p.occurred_at,
+          visibility: p.visibility,
+          source: p.source,
+          metadata: p.metadata,
+        } as never);
+        if (insErr) {
+          if (isDuplicate(insErr)) { out.duplicateSkips++; continue; }
+          throw new Error(insErr.message);
+        }
+        out.timelineRows++;
+      }
+
+      // Stage 3 · Notification subscriber — SECONDARY + best-effort.
       try {
         const note = projectEventToNotification(row);
         if (note) {
@@ -82,8 +120,7 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
         }
       } catch { /* notification is non-critical */ }
 
-      // Stage 4A · Graph subscriber — SECONDARY + best-effort. Edge dupes on a
-      // rare reprocess are tolerated (graph readers dedupe on read).
+      // Stage 4A · Graph subscriber — SECONDARY + best-effort.
       try {
         for (const edge of projectEventToGraphEdges(row)) {
           const { error: gErr } = await db.from("entity_relationships").insert(edge as never);
@@ -105,14 +142,23 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
     } catch (e) {
       out.failed++;
       const nextRetry = (row.retry_count ?? 0) + 1;
-      const status = nextRetry >= MAX_RETRIES ? "failed" : "pending";
+      const status = nextRetry >= MAX_RETRIES ? "failed" : "pending"; // 'failed' = dead-letter
       await db
         .from("domain_events" as never)
-        .update({ retry_count: nextRetry, processing_status: status, error_summary: e instanceof Error ? e.message.slice(0, 500) : "project failed" } as never)
+        .update({
+          retry_count: nextRetry,
+          processing_status: status,
+          error_summary: e instanceof Error ? e.message.slice(0, 500) : "project failed",
+        } as never)
         .eq("id", row.id);
     }
   }
   return out;
+}
+
+/** Postgres unique-violation (idempotent no-op), not a real failure. */
+function isDuplicate(err: { code?: string; message?: string }): boolean {
+  return err.code === "23505" || (err.message ?? "").toLowerCase().includes("duplicate key");
 }
 
 async function markDone(db: ReturnType<typeof createServiceRoleClient>, id: string): Promise<void> {

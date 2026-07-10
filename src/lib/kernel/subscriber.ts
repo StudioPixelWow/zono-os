@@ -1,13 +1,25 @@
 // ============================================================================
 // 🧠 ZONO OS 2.0 — Stage 2 · Event Kernel · Timeline subscriber (PURE).
-// Projects a durable domain_events row into a unified activity-timeline entry.
-// Pure + deterministic: no I/O, fully offline-testable. The processor (server)
-// feeds rows in and writes the returned projection to activity_events.
-// A null return = "no timeline projection for this type" (skip, mark done).
+// Projects a durable domain_events row into the ONE canonical activity timeline.
+// Pure + deterministic + offline-testable: no I/O. The processor (server) feeds
+// rows in and writes the returned projections to activity_events.
+//
+// Stage-2 upgrades:
+//  • Returns an ARRAY of projections — one per timeline the event belongs on
+//    (the subject PLUS any related entities found in the payload/metadata), so a
+//    single event (e.g. deal.won) appears on Deal + Property + Buyer + Seller
+//    timelines WITHOUT duplicating the canonical event (idempotency key includes
+//    the target entity, so each timeline gets exactly one row).
+//  • Carries event_id (idempotency), source ('kernel'), visibility, description,
+//    related-entity link and metadata.
+//  • Uses actor_user_id (the real activity_events column — the old actor_id was
+//    a silent write bug).
+//  • Empty array = "no timeline projection for this type" (skip, mark done).
 // ============================================================================
 
 /** The minimal shape the projector needs from a domain_events row. */
 export interface DomainEventLike {
+  id: string;
   event_type: string;
   entity_type: string;
   entity_id: string;
@@ -15,23 +27,31 @@ export interface DomainEventLike {
   organization_id: string;
   actor_user_id: string | null;
   payload: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
 }
 
-/** A ready-to-insert activity_events projection. */
+export type TimelineVisibility = "internal" | "private" | "shared" | "public";
+
+/** A ready-to-insert activity_events projection (one timeline row). */
 export interface TimelineProjection {
   org_id: string;
-  event_type: string;      // reuse the domain event_type verbatim (activity event_type is free text)
-  entity_type: string;
+  event_id: string;                    // originating domain_events.id (idempotency)
+  event_type: string;                  // domain event_type verbatim (free text)
+  entity_type: string;                 // the timeline this row belongs on
   entity_id: string;
-  title: string;           // Hebrew, human-facing timeline line
-  actor_id: string | null;
+  related_entity_type: string | null;  // the most relevant other party (context)
+  related_entity_id: string | null;
+  title: string;                       // Hebrew, human-facing line
+  description: string | null;
+  actor_user_id: string | null;
   occurred_at: string;
+  visibility: TimelineVisibility;
+  source: "kernel";
+  metadata: Record<string, unknown>;
 }
 
-// Human, Hebrew titles per domain event type. Kept in sync with DOMAIN_EVENTS
-// (src/lib/kernel/events.ts). Unmapped types fall through to a generic title.
+// Human, Hebrew titles per domain event type. Kept in sync with DOMAIN_EVENTS.
 const TITLES: Record<string, string> = {
-  // organization / agents
   "organization.created": "ארגון נוצר",
   "organization.updated": "פרטי ארגון עודכנו",
   "agent.invited": "סוכן הוזמן",
@@ -39,25 +59,21 @@ const TITLES: Record<string, string> = {
   "agent.deactivated": "סוכן הושבת",
   "agent.role_changed": "תפקיד סוכן שונה",
   "agent.profile_updated": "פרופיל סוכן עודכן",
-  // buyers
   "buyer.created": "נוצר קונה חדש",
   "buyer.updated": "פרטי קונה עודכנו",
   "buyer.stage_changed": "שלב הקונה השתנה",
   "buyer.archived": "קונה הועבר לארכיון",
-  // sellers
   "seller.created": "נוצר מוכר חדש",
   "seller.updated": "פרטי מוכר עודכנו",
   "seller.linked_to_property": "מוכר קושר לנכס",
   "seller.unlinked_from_property": "מוכר נותק מנכס",
   "seller.risk_changed": "סיכון מוכר השתנה",
-  // leads
   "lead.created": "נוצר ליד חדש",
   "lead.updated": "פרטי ליד עודכנו",
   "lead.stage_changed": "שלב הליד השתנה",
   "lead.assigned": "ליד שויך",
   "lead.converted_to_buyer": "ליד הומר לקונה",
   "lead.converted_to_seller": "ליד הומר למוכר",
-  // properties
   "property.created": "נוצר נכס חדש",
   "property.updated": "פרטי נכס עודכנו",
   "property.published": "נכס פורסם",
@@ -65,35 +81,26 @@ const TITLES: Record<string, string> = {
   "property.status_changed": "סטטוס הנכס השתנה",
   "property.sold": "נכס נמכר",
   "property.archived": "נכס הועבר לארכיון",
-  // external listings
   "external_listing.ingested": "מודעה חיצונית נקלטה",
-  "external_listing.updated": "מודעה חיצונית עודכנה",
   "external_listing.promoted": "מודעה חיצונית קודמה לנכס",
-  "external_listing.disappeared": "מודעה חיצונית נעלמה",
-  "external_listing.returned": "מודעה חיצונית חזרה",
-  // deals
   "deal.created": "נוצרה עסקה חדשה",
   "deal.stage_changed": "שלב העסקה השתנה",
   "deal.won": "עסקה נסגרה בהצלחה",
   "deal.lost": "עסקה אבדה",
   "deal.updated": "פרטי עסקה עודכנו",
-  // tasks
   "task.created": "נוצרה משימה",
   "task.assigned": "משימה שויכה",
   "task.completed": "משימה הושלמה",
   "task.overdue": "משימה באיחור",
-  // meetings
   "meeting.created": "נקבעה פגישה",
   "meeting.rescheduled": "פגישה נדחתה למועד אחר",
   "meeting.completed": "פגישה הושלמה",
   "meeting.cancelled": "פגישה בוטלה",
   "meeting.no_show": "אי-הגעה לפגישה",
-  // journeys
   "journey.created": "מסע לקוח נפתח",
   "journey.stage_changed": "שלב במסע הלקוח השתנה",
   "journey.completed": "מסע לקוח הושלם",
   "journey.blocked": "מסע לקוח נחסם",
-  // documents
   "document.created": "נוצר מסמך",
   "document.approval_requested": "התבקש אישור למסמך",
   "document.approved": "מסמך אושר",
@@ -102,35 +109,133 @@ const TITLES: Record<string, string> = {
   "document.signed": "מסמך נחתם",
   "document.completed": "מסמך הושלם",
   "document.failed": "טיפול במסמך נכשל",
+  "facebook.connected": "חשבון פייסבוק חובר",
+  "facebook.disconnected": "חשבון פייסבוק נותק",
+  "whatsapp.connected": "וואטסאפ חובר",
+  "whatsapp.disconnected": "וואטסאפ נותק",
+  "automation.activated": "אוטומציה הופעלה",
+  "automation.run_completed": "ריצת אוטומציה הושלמה",
+  "automation.run_failed": "ריצת אוטומציה נכשלה",
 };
 
-/** Domain event types we deliberately do NOT project to the timeline (noise). */
+/**
+ * Types we deliberately do NOT project to the timeline. Channel history
+ * (communication.*) is kept in its own ledgers and bridged as milestones only —
+ * never duplicated here. The rest are low-signal noise.
+ */
 const SKIP = new Set<string>([
-  "external_listing.ingested",
+  "communication.received",
+  "communication.sent",
   "external_listing.updated",
+  "external_listing.disappeared",
+  "external_listing.returned",
+  "automation.run_requested",
 ]);
 
-/**
- * Project a domain event into a timeline entry, or null to skip it.
- * Deterministic: same input → same output.
- */
-export function projectEventToTimeline(evt: DomainEventLike): TimelineProjection | null {
-  if (!evt.event_type || !evt.entity_type || !evt.entity_id || !evt.organization_id) return null;
-  if (SKIP.has(evt.event_type)) return null;
-  const title = TITLES[evt.event_type] ?? genericTitle(evt.event_type);
-  if (!title) return null;
-  return {
-    org_id: evt.organization_id,
-    event_type: evt.event_type,
-    entity_type: evt.entity_type,
-    entity_id: evt.entity_id,
-    title,
-    actor_id: evt.actor_user_id,
-    occurred_at: evt.occurred_at,
-  };
+// Payload/metadata keys that name a related entity, mapped to its entity type.
+const RELATION_KEYS: { keys: string[]; type: string }[] = [
+  { keys: ["propertyId", "property_id"], type: "property" },
+  { keys: ["buyerId", "buyer_id"], type: "buyer" },
+  { keys: ["sellerId", "seller_id"], type: "seller" },
+  { keys: ["leadId", "lead_id"], type: "lead" },
+  { keys: ["dealId", "deal_id"], type: "deal" },
+  { keys: ["meetingId", "meeting_id"], type: "meeting" },
+  { keys: ["documentId", "document_id"], type: "document" },
+  { keys: ["journeyId", "journey_id"], type: "journey" },
+  { keys: ["externalListingId", "external_listing_id"], type: "external_listing" },
+  { keys: ["taskId", "task_id"], type: "task" },
+];
+
+interface EntityRef { type: string; id: string }
+
+function readString(src: Record<string, unknown> | null | undefined, key: string): string | null {
+  const v = src?.[key];
+  return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-/** Fallback title for a type absent from the map: "<entity>: <verb>". */
+/** All related entities named in the event's payload/metadata (subject excluded). */
+export function relatedEntities(evt: DomainEventLike): EntityRef[] {
+  const out: EntityRef[] = [];
+  const seen = new Set<string>([`${evt.entity_type}:${evt.entity_id}`]);
+  for (const { keys, type } of RELATION_KEYS) {
+    for (const k of keys) {
+      const id = readString(evt.payload, k) ?? readString(evt.metadata, k);
+      if (!id) continue;
+      const dedup = `${type}:${id}`;
+      if (seen.has(dedup)) continue;
+      seen.add(dedup);
+      out.push({ type, id });
+    }
+  }
+  return out;
+}
+
+/** Optional Hebrew detail line from the payload (never exposes internals). */
+function descriptionFor(evt: DomainEventLike): string | null {
+  const p = evt.payload ?? {};
+  switch (evt.event_type) {
+    case "property.price_changed": {
+      const from = p.oldPrice ?? p.from ?? p.previous;
+      const to = p.newPrice ?? p.to ?? p.price;
+      if (from != null && to != null) return `מ-${from} ל-${to}`;
+      return null;
+    }
+    case "property.status_changed":
+    case "deal.stage_changed":
+    case "buyer.stage_changed":
+    case "lead.stage_changed":
+    case "journey.stage_changed": {
+      const from = p.fromStage ?? p.from ?? p.previous;
+      const to = p.toStage ?? p.to ?? p.stage ?? p.status;
+      if (from != null && to != null) return `${from} ← ${to}`;
+      if (to != null) return `${to}`;
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Project a domain event into one timeline row per relevant entity (subject +
+ * related). Empty array = skip. Deterministic: same input → same output.
+ */
+export function projectEventToTimeline(evt: DomainEventLike): TimelineProjection[] {
+  if (!evt.id || !evt.event_type || !evt.entity_type || !evt.entity_id || !evt.organization_id) return [];
+  if (SKIP.has(evt.event_type)) return [];
+  const title = TITLES[evt.event_type] ?? genericTitle(evt.event_type);
+  if (!title) return [];
+
+  const description = descriptionFor(evt);
+  const related = relatedEntities(evt);
+  const subject: EntityRef = { type: evt.entity_type, id: evt.entity_id };
+  const timelines: EntityRef[] = [subject, ...related];
+
+  return timelines.map((t) => {
+    // Context link: on the subject's own row, point to the primary related
+    // entity; on a related entity's row, point back to the subject.
+    const link: EntityRef | null =
+      t.type === subject.type && t.id === subject.id ? (related[0] ?? null) : subject;
+    return {
+      org_id: evt.organization_id,
+      event_id: evt.id,
+      event_type: evt.event_type,
+      entity_type: t.type,
+      entity_id: t.id,
+      related_entity_type: link?.type ?? null,
+      related_entity_id: link?.id ?? null,
+      title,
+      description,
+      actor_user_id: evt.actor_user_id,
+      occurred_at: evt.occurred_at,
+      visibility: "internal" as const,
+      source: "kernel" as const,
+      metadata: { domainEventType: evt.event_type },
+    };
+  });
+}
+
+/** Fallback title for a type absent from the map: "<entity> · <verb>". */
 function genericTitle(eventType: string): string {
   const parts = eventType.split(".");
   return parts.length === 2 ? `${parts[0]} · ${parts[1].replace(/_/g, " ")}` : eventType;

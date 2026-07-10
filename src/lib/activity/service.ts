@@ -14,6 +14,7 @@ import {
   timelineRepository,
   type ActivityEventRow,
   type RelationshipRow,
+  type TimelineQuery,
 } from "./repository";
 import { EVENT_TYPES, type ActivitySummary, type LogActivityInput } from "./types";
 
@@ -80,12 +81,18 @@ export async function createRelationship(input: CreateRelationshipInput): Promis
   }
 }
 
+/**
+ * The single entity-timeline read every cockpit uses. Backward compatible: pass
+ * a number for a simple limit, or a TimelineQuery for pagination + date /
+ * event-type / actor / visibility filtering.
+ */
 export function getEntityTimeline(
   entityType: string,
   entityId: string,
-  limit = 100,
+  limitOrQuery: number | TimelineQuery = 100,
 ): Promise<ActivityEventRow[]> {
-  return timelineRepository.getEntityTimeline(entityType, entityId, limit);
+  const q: TimelineQuery = typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery;
+  return timelineRepository.getEntityTimeline(entityType, entityId, q);
 }
 
 export function getEntityRelationships(

@@ -12,6 +12,7 @@ function check(name: string, cond: boolean) {
 }
 
 const base: DomainEventLike = {
+  id: "EVT1",
   event_type: "lead.created",
   entity_type: "lead",
   entity_id: "L1",
@@ -21,33 +22,51 @@ const base: DomainEventLike = {
   payload: { source: "website" },
 };
 
-// 1) mapped type → Hebrew title
+// 1) mapped type → Hebrew title, one projection (subject only, no related ids)
 const p1 = projectEventToTimeline(base);
-check("lead.created projects", p1 !== null);
-check("lead.created title is Hebrew mapped", p1?.title === "נוצר ליד חדש");
-check("carries org/entity/actor/occurred", p1?.org_id === "ORG1" && p1?.entity_id === "L1" && p1?.actor_id === "U1" && p1?.occurred_at === base.occurred_at);
-check("reuses event_type verbatim", p1?.event_type === "lead.created");
+check("lead.created projects one row", p1.length === 1);
+check("lead.created title is Hebrew mapped", p1[0]?.title === "נוצר ליד חדש");
+check("carries org/entity/actor/occurred/event_id", p1[0]?.org_id === "ORG1" && p1[0]?.entity_id === "L1" && p1[0]?.actor_user_id === "U1" && p1[0]?.occurred_at === base.occurred_at && p1[0]?.event_id === "EVT1");
+check("reuses event_type verbatim", p1[0]?.event_type === "lead.created");
+check("kernel source + internal visibility", p1[0]?.source === "kernel" && p1[0]?.visibility === "internal");
 
 // 2) deal.won + deal.lost
-check("deal.won title", projectEventToTimeline({ ...base, event_type: "deal.won", entity_type: "deal" })?.title === "עסקה נסגרה בהצלחה");
-check("deal.lost title", projectEventToTimeline({ ...base, event_type: "deal.lost", entity_type: "deal" })?.title === "עסקה אבדה");
+check("deal.won title", projectEventToTimeline({ ...base, event_type: "deal.won", entity_type: "deal" })[0]?.title === "עסקה נסגרה בהצלחה");
+check("deal.lost title", projectEventToTimeline({ ...base, event_type: "deal.lost", entity_type: "deal" })[0]?.title === "עסקה אבדה");
 
-// 3) explicitly-skipped noisy type → null
-check("external_listing.ingested is skipped", projectEventToTimeline({ ...base, event_type: "external_listing.ingested", entity_type: "external_listing" }) === null);
+// 2b) RELATED-ENTITY FAN-OUT: deal.won with buyer+seller+property → 4 timelines,
+//     one canonical event_id shared, distinct dedup key per target.
+const won = projectEventToTimeline({ ...base, id: "EVTW", event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: { propertyId: "P1", buyerId: "B1", sellerId: "S1" } });
+check("deal.won fans onto 4 timelines", won.length === 4);
+check("fan-out covers deal+property+buyer+seller", ["deal:D1", "property:P1", "buyer:B1", "seller:S1"].every((k) => won.some((r) => `${r.entity_type}:${r.entity_id}` === k)));
+check("all share the same canonical event_id", won.every((r) => r.event_id === "EVTW"));
+const keys = won.map((r) => `${r.event_id}:${r.entity_type}:${r.entity_id}`);
+check("dedup keys are distinct per timeline", new Set(keys).size === won.length);
+check("related links populated for context", won.find((r) => r.entity_type === "property")?.related_entity_type === "deal");
+
+// 2c) price_changed carries a description from the payload
+check("price_changed has description", projectEventToTimeline({ ...base, event_type: "property.price_changed", entity_type: "property", entity_id: "P1", payload: { oldPrice: 100, newPrice: 90 } })[0]?.description === "מ-100 ל-90");
+
+// 3) explicitly-skipped noisy / channel types → []
+check("external_listing.updated is skipped", projectEventToTimeline({ ...base, event_type: "external_listing.updated", entity_type: "external_listing" }).length === 0);
+check("communication.received is skipped (channel)", projectEventToTimeline({ ...base, event_type: "communication.received", entity_type: "communication" }).length === 0);
+check("external_listing.ingested IS projected (required)", projectEventToTimeline({ ...base, event_type: "external_listing.ingested", entity_type: "external_listing", entity_id: "X1" }).length === 1);
 
 // 4) unknown type → generic non-empty title (never crashes)
 const pu = projectEventToTimeline({ ...base, event_type: "widget.frobnicated", entity_type: "widget" });
-check("unknown type still projects with a generic title", pu !== null && !!pu.title && pu.title.length > 0);
+check("unknown type still projects with a generic title", pu.length === 1 && !!pu[0].title && pu[0].title.length > 0);
 
-// 5) missing required fields → null
-check("missing entity_id → null", projectEventToTimeline({ ...base, entity_id: "" }) === null);
-check("missing org → null", projectEventToTimeline({ ...base, organization_id: "" }) === null);
+// 5) missing required fields → []
+check("missing entity_id → []", projectEventToTimeline({ ...base, entity_id: "" }).length === 0);
+check("missing org → []", projectEventToTimeline({ ...base, organization_id: "" }).length === 0);
+check("missing event id → []", projectEventToTimeline({ ...base, id: "" }).length === 0);
 
 // 6) determinism
 check("deterministic", JSON.stringify(projectEventToTimeline(base)) === JSON.stringify(projectEventToTimeline(base)));
 
-// 7) null actor tolerated
-check("null actor tolerated", projectEventToTimeline({ ...base, actor_user_id: null })?.actor_id === null);
+// 7) null actor tolerated + cross-org isolation carried
+check("null actor tolerated", projectEventToTimeline({ ...base, actor_user_id: null })[0]?.actor_user_id === null);
+check("org carried onto every projection (no leakage)", won.every((r) => r.org_id === "ORG1"));
 
 // ── Stage 3 · notification subscriber ───────────────────────────────────────
 // high-signal event with an actor → a notification
