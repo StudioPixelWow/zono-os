@@ -28,6 +28,7 @@ import { projectEventToRecommendationRefresh } from "./recommendation-subscriber
 import { recordDelivery } from "./subscriber-deliveries";
 import { classifyEventForSearch } from "@/lib/search-projection/subscriber";
 import { indexEntity, softDeleteEntity } from "@/lib/search-projection/indexer";
+import { ingestMemoryForEvent } from "@/lib/memory-canonical/ingest";
 
 const MAX_RETRIES = 5;
 
@@ -44,6 +45,7 @@ export interface DrainResult {
   recommendationRefreshes: number; // events that invalidated a live-read cache
   cachesInvalidated: number;    // daily_os / executive_os invalidations issued
   searchIndexed: number;        // search_documents upserts/soft-deletes applied
+  memoriesIngested: number;     // canonical ai_memory create/reinforce/supersede
   failed: number;
 }
 
@@ -59,7 +61,7 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
   const out: DrainResult = {
     scanned: 0, projected: 0, timelineRows: 0, duplicateSkips: 0,
     skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0,
-    automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, searchIndexed: 0, failed: 0,
+    automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, searchIndexed: 0, memoriesIngested: 0, failed: 0,
   };
 
   // Oldest-first so the timeline stays chronological. 'processing' is included
@@ -206,14 +208,28 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
     if (applied) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "graph", status: "done", latencyMs: Date.now() - t0 });
   } catch { /* graph is non-critical */ }
 
-  // ── Org-Memory — milestones only. ───────────────────────────────────────────
+  // ── Org-Memory (LEGACY milestone ledger) — kept for compatibility; no delivery
+  //    is recorded here (the canonical memory subscriber below owns 'memory'). ────
   try {
     const mem = projectEventToMemory(row);
-    if (mem) {
-      const { error: mErr } = await db.from("zono_org_memory_events" as never).insert(mem as never);
-      if (!mErr) { out.memoryRows++; await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "memory", status: "done", latencyMs: Date.now() - t0 }); }
+    if (mem) { const { error: mErr } = await db.from("zono_org_memory_events" as never).insert(mem as never); if (!mErr) out.memoryRows++; }
+  } catch { /* legacy memory is non-critical */ }
+
+  // ── Canonical AI Memory — event-driven ingestion into ai_memory (create /
+  //    reinforce / supersede / skip), idempotent per identity + source event. ────
+  try {
+    const r = await ingestMemoryForEvent(db, row);
+    const touched = r.created + r.reinforced + r.superseded;
+    out.memoriesIngested += touched;
+    if (touched > 0 || r.skipped > 0 || r.failed > 0) {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "memory",
+        status: r.failed > 0 && touched === 0 ? "failed" : touched > 0 ? "done" : "skipped",
+        latencyMs: Date.now() - t0,
+        metadata: { created: r.created, reinforced: r.reinforced, superseded: r.superseded, skipped: r.skipped, failed: r.failed },
+      });
     }
-  } catch { /* memory is non-critical */ }
+  } catch { /* canonical memory is non-critical */ }
 
   // ── Automation — CLASSIFY ONLY (never execute). The candidate surfaces via the
   //    stateless approval-bundle inbox on next read; here we just record it. ────
