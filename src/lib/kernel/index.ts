@@ -13,3 +13,6 @@ export type { DrainResult } from "./processor";
 // Stage 3 — Notification subscriber (second consumer of the outbox).
 export { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
 export type { NotificationProjection, NotificationLevel } from "./notification-subscriber";
+// Outbox observability (read-only health).
+export { getKernelOutboxHealth } from "./health";
+export type { KernelOutboxHealth } from "./health";
