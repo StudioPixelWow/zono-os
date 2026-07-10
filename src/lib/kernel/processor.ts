@@ -12,6 +12,8 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { projectEventToTimeline, type DomainEventLike } from "./subscriber";
 import { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
+import { projectEventToGraphEdges } from "./graph-subscriber";
+import { projectEventToMemory } from "./memory-subscriber";
 
 const MAX_RETRIES = 5;
 
@@ -20,6 +22,8 @@ export interface DrainResult {
   projected: number;
   skipped: number;
   notified: number;
+  graphEdges: number;
+  memoryRows: number;
   failed: number;
 }
 
@@ -29,7 +33,7 @@ export interface DrainResult {
  */
 export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
   const db = createServiceRoleClient();
-  const out: DrainResult = { scanned: 0, projected: 0, skipped: 0, notified: 0, failed: 0 };
+  const out: DrainResult = { scanned: 0, projected: 0, skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0, failed: 0 };
 
   // Oldest-first so the timeline stays chronological. Only unprocessed rows.
   const { data, error } = await db
@@ -77,6 +81,24 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
           if (!nErr) out.notified++;
         }
       } catch { /* notification is non-critical */ }
+
+      // Stage 4A · Graph subscriber — SECONDARY + best-effort. Edge dupes on a
+      // rare reprocess are tolerated (graph readers dedupe on read).
+      try {
+        for (const edge of projectEventToGraphEdges(row)) {
+          const { error: gErr } = await db.from("entity_relationships").insert(edge as never);
+          if (!gErr) out.graphEdges++;
+        }
+      } catch { /* graph is non-critical */ }
+
+      // Stage 4B · Org-Memory subscriber — SECONDARY + best-effort. Milestones only.
+      try {
+        const mem = projectEventToMemory(row);
+        if (mem) {
+          const { error: mErr } = await db.from("zono_org_memory_events" as never).insert(mem as never);
+          if (!mErr) out.memoryRows++;
+        }
+      } catch { /* memory is non-critical */ }
 
       await markDone(db, row.id);
       out.projected++;
