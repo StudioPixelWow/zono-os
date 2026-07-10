@@ -131,6 +131,27 @@ export async function createBuyerTaskAction(
   return {};
 }
 
+/** Add a note to a buyer (first real writer of the notes table) + timeline. */
+export async function addBuyerNoteAction(buyerId: string, body: string): Promise<BuyerActionState> {
+  if (!body.trim()) return { error: "נא להזין הערה." };
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile) return { error: "לא מחובר/ת." };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("notes").insert({
+      org_id: profile.org_id, author_id: user.id, buyer_id: buyerId, body: body.trim(),
+    });
+    if (error) throw new Error(error.message);
+    const { logActivityEvent } = await import("@/lib/activity/service");
+    await logActivityEvent({ eventType: "note.created", entityType: "buyer", entityId: buyerId, title: "נוספה הערה" });
+  } catch (e) {
+    console.error("[buyers] note create failed:", e);
+    return { error: e instanceof Error ? e.message : "שמירת ההערה נכשלה." };
+  }
+  revalidatePath(`/buyers/${buyerId}`);
+  return {};
+}
+
 export async function setBuyerTaskStatusAction(
   buyerId: string,
   taskId: string,

@@ -20,6 +20,7 @@ import {
 } from "@/lib/buyers/labels";
 import { STAGE_LABELS, type BuyerStage } from "@/lib/buyer-intelligence/playbook";
 import { BuyerTasksPanel } from "./BuyerTasksPanel";
+import { BuyerNoteComposer } from "./BuyerNoteComposer";
 import type { Database } from "@/lib/supabase/types";
 import { BuyerCommandCenter } from "./BuyerCommandCenter";
 import type { BuyerCommandCenter as BuyerCCData } from "@/lib/buyer-intelligence/service";
@@ -314,6 +315,7 @@ export function BuyerDetailView({
             </div>
             <div className="bg-card border-line rounded-[20px] border p-5">
               <p className="text-ink mb-3 text-sm font-extrabold">הערות</p>
+              <BuyerNoteComposer buyerId={b.id} />
               {notes.length === 0 ? (
                 <p className="text-muted text-sm">אין הערות לקונה זה.</p>
               ) : (
