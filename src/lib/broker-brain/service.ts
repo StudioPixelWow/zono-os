@@ -14,9 +14,10 @@ import { getTerritoryOS } from "@/lib/territory-os/service";
 import { getDayPlan } from "@/lib/calendar-os/service";
 import { buildBundleForEvent } from "@/lib/approval-bundle/service";
 import type { BundleEntityType, BundleEventType } from "@/lib/approval-bundle/types";
+import { groundGlobalContext } from "@/lib/ai-context";
 import { classifyGoal } from "./router";
 import { assembleBrokerPlan } from "./planner";
-import type { BrokerBrainContext, BrokerPlan, CtxEntity, CtxRec, Impact, ResolvedBundle } from "./types";
+import type { BrokerBrainContext, BrokerGrounding, BrokerPlan, CtxEntity, CtxRec, Impact, ResolvedBundle } from "./types";
 
 // ── Engine → normalized-context mappers (defensive; degrade gracefully) ───────
 type ScoredLike = { kind: string; id: string; name: string; score: number | null; reason: string | null; riskLabel: string | null; href: string };
@@ -87,9 +88,23 @@ async function buildContext(intent: string, city: string | null): Promise<Broker
 /** Compose the AI Broker Brain plan for a strategic goal (approval-gated actions resolved). */
 export async function getBrokerBrainPlan(goalText: string): Promise<BrokerPlan> {
   const goal = classifyGoal(goalText);
-  const ctx = await buildContext(goal.intent, goal.city);
+  // Broker Brain is a broker's PERSONAL reasoning surface → broker_private mode
+  // (may include the broker's own private memory; org memory + org-wide recs).
+  // Grounded through the ONE shared assembler; a context failure never breaks the plan.
+  const [ctx, grounded] = await Promise.all([
+    buildContext(goal.intent, goal.city),
+    groundGlobalContext("broker_private").catch(() => null),
+  ]);
   const plan = assembleBrokerPlan(goal, ctx);
   plan.generatedAt = new Date().toISOString();
+  if (grounded) {
+    const g: BrokerGrounding = {
+      mode: grounded.mode, contextText: grounded.contextText,
+      provenance: { total: grounded.provenanceSummary.total, explicit: grounded.provenanceSummary.explicit, derived: grounded.provenanceSummary.derived, inferred: grounded.provenanceSummary.inferred },
+      staleCount: grounded.staleMemory.length, failedLayers: grounded.diagnostics.failedLayers, truncated: grounded.diagnostics.truncated,
+    };
+    plan.grounding = g;
+  }
 
   // Resolve approval bundles for the top executable actions (reuse 44.0). Bounded.
   const executable = plan.actions.filter((a) => a.bundleRequest).slice(0, 5);

@@ -104,6 +104,17 @@ export interface SuccessMetric { label: string; target: string; basis: string }
 export interface ProgressStep { label: string; done: boolean }
 export interface ProgressModel { goalKey: string; steps: ProgressStep[]; completionPct: number; note: string }
 
+/** Client-safe grounding summary: the plan's link to the ONE shared assembler —
+ *  provenance counts + partial-context diagnostics (no raw private content). */
+export interface BrokerGrounding {
+  mode: string;
+  contextText: string;                    // permission-safe rendered block (or "")
+  provenance: { total: number; explicit: number; derived: number; inferred: number };
+  staleCount: number;
+  failedLayers: string[];
+  truncated: Record<string, number>;
+}
+
 export interface BrokerPlan {
   version: string;
   goal: string;
@@ -122,6 +133,7 @@ export interface BrokerPlan {
   reasons: string[];
   hasPlan: boolean;
   notes: string[];
+  grounding?: BrokerGrounding | null;   // set by the service from the shared assembler
 }
 
 export const APPROVAL_ONLY_NOTE =
