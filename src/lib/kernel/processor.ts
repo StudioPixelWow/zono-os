@@ -26,6 +26,8 @@ import { projectEventToMemory } from "./memory-subscriber";
 import { projectEventToAutomation } from "./automation-subscriber";
 import { projectEventToRecommendationRefresh } from "./recommendation-subscriber";
 import { recordDelivery } from "./subscriber-deliveries";
+import { classifyEventForSearch } from "@/lib/search-projection/subscriber";
+import { indexEntity, softDeleteEntity } from "@/lib/search-projection/indexer";
 
 const MAX_RETRIES = 5;
 
@@ -41,6 +43,7 @@ export interface DrainResult {
   automationCandidates: number; // events classified into a downstream automation
   recommendationRefreshes: number; // events that invalidated a live-read cache
   cachesInvalidated: number;    // daily_os / executive_os invalidations issued
+  searchIndexed: number;        // search_documents upserts/soft-deletes applied
   failed: number;
 }
 
@@ -56,7 +59,7 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
   const out: DrainResult = {
     scanned: 0, projected: 0, timelineRows: 0, duplicateSkips: 0,
     skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0,
-    automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, failed: 0,
+    automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, searchIndexed: 0, failed: 0,
   };
 
   // Oldest-first so the timeline stays chronological. 'processing' is included
@@ -201,6 +204,23 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       });
     }
   } catch { /* automation classification is non-critical */ }
+
+  // ── Search — keep the canonical search_documents projection event-driven. ────
+  try {
+    const intent = classifyEventForSearch(row);
+    if (intent) {
+      const status = intent.action === "soft_delete"
+        ? await softDeleteEntity(db, row.organization_id, intent.entityType, intent.entityId, row.id)
+        : await indexEntity(db, row.organization_id, intent.entityType, intent.entityId, row.id);
+      if (status === "done") out.searchIndexed++;
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "search",
+        status: status === "done" ? "done" : status === "error" ? "failed" : "skipped",
+        latencyMs: Date.now() - t0,
+        metadata: { action: intent.action, entityType: intent.entityType, result: status },
+      });
+    }
+  } catch { /* search projection is non-critical */ }
 
   // ── Recommendation — keep Daily OS / Executive event-driven (no polling). ────
   try {

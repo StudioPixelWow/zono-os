@@ -138,7 +138,7 @@ export interface SubscriberHealth {
   totalRetries: number;
 }
 
-const SUBSCRIBERS = ["timeline", "notification", "automation", "recommendation", "graph", "memory"] as const;
+const SUBSCRIBERS = ["timeline", "notification", "automation", "recommendation", "search", "graph", "memory"] as const;
 
 /**
  * Per-subscriber delivery metrics for the current org, from
