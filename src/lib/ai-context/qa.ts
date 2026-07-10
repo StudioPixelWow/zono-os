@@ -83,5 +83,30 @@ for (const m of ["internal_entity", "internal_global", "executive", "broker_priv
 }
 check("mode policy deterministic", JSON.stringify(modePolicy("executive")) === JSON.stringify(modePolicy("executive")));
 
-console.log(`\nShared AI Context (render + modes) QA — ${pass} passed, ${fail} failed`);
+// ── Stale-conflict resolver (canonical truth wins) — Batch 4.5A ──────────────
+import { detectStaleMemory } from "./stale";
+import type { CtxMemory } from "./render";
+
+const mem: CtxMemory[] = [
+  { fact: "מחיר מבוקש: 2,000,000", provenance: "explicit", sensitivity: "internal", confidence: 80 },
+  { fact: "אזור מועדף: חיפה", provenance: "explicit", sensitivity: "normal", confidence: 90 },
+  { fact: "תקציב סביב 3.5 מיליון", provenance: "inferred", sensitivity: "internal", confidence: 40 },
+];
+const canon = [{ label: "מחיר", keywords: ["מחיר", "price"], value: "2,500,000" }];
+const res = detectStaleMemory(canon, mem);
+check("stale: contradicting price flagged stale", res.stale.some((s) => s.fact.includes("2,000,000")));
+check("stale: matching-dimension non-conflict kept", res.fresh.some((f) => f.fact.includes("חיפה")));
+check("stale: non-referencing memory kept fresh", res.fresh.some((f) => f.fact.includes("תקציב")));
+check("stale: provenance preserved on stale item", res.stale[0]?.provenance === "explicit");
+check("stale: empty canonical → all fresh", detectStaleMemory([], mem).fresh.length === 3 && detectStaleMemory([], mem).stale.length === 0);
+// agreeing value is NOT stale
+check("stale: agreeing price NOT flagged", detectStaleMemory([{ label: "מחיר", keywords: ["מחיר"], value: "2,000,000" }], mem).stale.length === 0);
+
+// ── Canonical-fact extraction — Batch 4.5A ───────────────────────────────────
+import { canonicalFactsFor } from "./canonical-facts";
+check("canonical: property price extracted", canonicalFactsFor("property", { price: 2500000, status: "active" }).some((f) => f.label === "מחיר" && f.value === "2500000"));
+check("canonical: zero/absent dropped", canonicalFactsFor("buyer", { budget: 0 }).length === 0);
+check("canonical: unknown entity → empty", canonicalFactsFor("unknown", { x: 1 }).length === 0);
+
+console.log(`\nShared AI Context (render + modes + stale) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

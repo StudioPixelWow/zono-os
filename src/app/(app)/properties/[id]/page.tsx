@@ -30,6 +30,8 @@ import { EntityLegalDocuments } from "@/components/legal/EntityLegalDocuments";
 import { ContextPanel } from "@/components/intelligence/ContextPanel";
 import { PropertyMarketingLog } from "@/components/property/PropertyMarketingLog";
 import { PropertyMarketingActionCenter } from "@/components/property/PropertyMarketingActionCenter";
+import { EntityAIContextSection } from "@/components/ai-context/EntityAIContextSection";
+import { canonicalFactsFor } from "@/lib/ai-context";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +105,12 @@ export default async function PropertyDetailsPage({
     </div>
   );
   const approvalSlot = <ApprovalBundleSection entityType="property" entityId={id} />;
-  const recommendationsSlot = <EntityRecommendationsPanel entityType="property" entityId={id} recommendations={await listRecommendationsForEntity("property", id).catch(() => [])} />;
+  const recommendationsSlot = (
+    <div className="flex flex-col gap-3">
+      <EntityAIContextSection entityType="property" entityId={id} canonicalTruth={canonicalFactsFor("property", property as unknown as Record<string, unknown>)} />
+      <EntityRecommendationsPanel entityType="property" entityId={id} recommendations={await listRecommendationsForEntity("property", id).catch(() => [])} />
+    </div>
+  );
   const contextSlot = <ContextPanel city={property.city} neighborhood={property.neighborhood} />;
 
   return (

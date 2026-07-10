@@ -21,15 +21,21 @@ import { renderContextText, hasContextSignal } from "./render";
 
 export interface ContextRequest {
   mode: ContextMode;
-  entityType: string;
-  entityId: string;
+  // Entity is optional: when present → entity-scoped context (cockpits/Ask); when
+  // absent → GLOBAL context (Broker Brain / Daily / Executive) — org memory +
+  // org-wide recommendations, no entity truth/graph. ONE assembler, both shapes.
+  entityType?: string;
+  entityId?: string;
 }
 
 const capMem = (m: MemoryView) => ({ fact: m.fact, provenance: m.provenance, sensitivity: m.sensitivity, confidence: m.confidence });
 
 /** Assemble the canonical reasoning context under a mode. Never throws. */
 export async function assembleEntityContext(req: ContextRequest): Promise<AssembledContext> {
-  const { mode, entityType, entityId } = req;
+  const { mode } = req;
+  const isEntity = !!(req.entityType && req.entityId);
+  const entityType = req.entityType ?? "org";
+  const entityId = req.entityId ?? "*";
   const pol = modePolicy(mode);
   const provenance: ProvenanceItem[] = [];
   const diag: ContextDiagnostics = { failedLayers: [], truncated: {} };
@@ -51,11 +57,17 @@ export async function assembleEntityContext(req: ContextRequest): Promise<Assemb
   };
 
   const [memRaw, orgRaw, userRaw, tlRaw, relRaw, queue] = await Promise.all([
-    settle("memory", pol.includeMemory, () => getEntityMemory(entityType, entityId, { maxSensitivity: pol.sensitivityCeiling }), [] as MemoryView[]),
+    // Memory layer: entity memory for a cockpit; org memory for a global surface.
+    settle("memory", pol.includeMemory,
+      () => isEntity
+        ? getEntityMemory(entityType, entityId, { maxSensitivity: pol.sensitivityCeiling })
+        : getOrgMemory({ maxSensitivity: pol.sensitivityCeiling, limit: pol.caps.memory + 8 }),
+      [] as MemoryView[]),
     settle("preferences", pol.includePreferences, () => getOrgMemory({ memoryTypes: ["business_rule", "office_preference"], maxSensitivity: pol.sensitivityCeiling }), [] as MemoryView[]),
     settle("preferences", pol.includePreferences && pol.includeUserPrivate, () => getUserMemory({ memoryTypes: ["broker_preference", "preference"], maxSensitivity: pol.sensitivityCeiling }), [] as MemoryView[]),
-    settle("timeline", pol.includeTimeline, () => getEntityTimeline(entityType, entityId, { limit: pol.caps.timeline + 4 }), [] as { title: string; occurred_at: string; id?: string }[]),
-    settle("graph", pol.includeGraph, () => getEntityRelationships(entityType, entityId), [] as { source_entity_type: string; source_entity_id: string; target_entity_type: string; target_entity_id: string; relationship_type: string; status: string; id?: string }[]),
+    // Timeline + graph are entity-only (global surfaces bring their own via engines).
+    settle("timeline", pol.includeTimeline && isEntity, () => getEntityTimeline(entityType, entityId, { limit: pol.caps.timeline + 4 }), [] as { title: string; occurred_at: string; id?: string }[]),
+    settle("graph", pol.includeGraph && isEntity, () => getEntityRelationships(entityType, entityId), [] as { source_entity_type: string; source_entity_id: string; target_entity_type: string; target_entity_id: string; relationship_type: string; status: string; id?: string }[]),
     settle<{ items: { entityType: string; entityId: string; title: string; why: string; id?: string }[] }>(
       "recommendations", pol.includeRecommendations,
       async () => { const q = await getBrokerIntelligenceQueue({ limit: 30 }); return { items: q.items.map((i) => ({ entityType: i.entityType, entityId: i.entityId, title: i.title, why: i.why, id: i.id })) }; },
@@ -77,8 +89,9 @@ export async function assembleEntityContext(req: ContextRequest): Promise<Assemb
 
   const timeline = cap("timeline", tlRaw.map((t) => ({ title: t.title, occurredAt: t.occurred_at, id: t.id })), pol.caps.timeline);
 
+  // Entity surfaces get their own recommendations; a global surface gets the org-wide queue.
   const recommendations = cap("recommendations",
-    (queue.items ?? []).filter((i) => i.entityType === entityType && i.entityId === entityId).map((i) => ({ title: i.title, why: i.why, id: i.id })),
+    (queue.items ?? []).filter((i) => !isEntity || (i.entityType === entityType && i.entityId === entityId)).map((i) => ({ title: i.title, why: i.why, id: i.id })),
     pol.caps.recommendations);
 
   // ── Provenance (PART 10) — one record per included item. ────────────────────

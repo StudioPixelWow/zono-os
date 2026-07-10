@@ -54,6 +54,7 @@ import { getLeadAgentScorecards, type LeadAgentScorecardsOverview } from "@/lib/
 import { getOfficeGrowthScorecard, type OfficeGrowthOverview } from "@/lib/office-agent";
 import { getOrchestratorDashboard, type OrchestratorOverview } from "@/lib/agent-orchestrator";
 import { askZono, type AskZonoResponse, type ChatTurn, type AskContextInput } from "@/lib/ask-zono";
+import { groundEntityContext, type GroundedContext, type CanonicalFact } from "@/lib/ai-context";
 import { getAiHome, type AiHomeData } from "@/lib/ai-home";
 import { generateDraft, type DraftBundle, type DraftRequest, type DraftTarget } from "@/lib/draft-studio";
 import { listWorkflowTemplates, startPersistentWorkflow, advancePersistentWorkflow, getPersistentWorkflow, listActiveWorkflows, listCompletedWorkflows, listPendingApprovalWorkflows, listEntityWorkflows, type WorkflowTemplateSummary, type WorkflowTarget, type WorkflowSummaryRow } from "@/lib/workflow-builder";
@@ -407,6 +408,25 @@ export async function askZonoAction(
       : undefined;
     return { ok: true, result: await askZono(profile.org_id, q, Array.isArray(history) ? history.slice(-8) : [], safeCtx) };
   } catch (e) { console.error("[ask-zono] failed:", e); return { ok: false, error: "Ask ZONO נכשל." }; }
+}
+
+// ── Batch 4.5A — shared cockpit context (ONE assembler; every cockpit uses this) ─
+// Grounds an entity's AI surface (summary / NBA explanation / "למה?") through the
+// canonical shared assembler in internal_entity mode. Mode is FORCED server-side so
+// a client cannot escalate context scope. The caller passes the entity's current
+// canonical facts (from the already-loaded record) so stale/contradicting memory is
+// demoted (current truth wins) while provenance is preserved. RLS blocks cross-org.
+export async function getEntityContextAction(
+  entityType: string,
+  entityId: string,
+  canonicalTruth: CanonicalFact[] = [],
+): Promise<{ ok: boolean; result?: GroundedContext; error?: string }> {
+  try {
+    if (!entityType || !entityId) return { ok: false, error: "חסרה ישות." };
+    const { profile } = await getSessionContext(); if (!profile?.org_id) return { ok: false, error: "יש להתחבר." };
+    const result = await groundEntityContext(entityType, entityId, { mode: "internal_entity", canonicalTruth });
+    return { ok: true, result };
+  } catch (e) { console.error("[entity-context] failed:", e); return { ok: false, error: "טעינת ההקשר נכשלה." }; }
 }
 
 // ── Phase 27.9 — Relationship Intelligence & Universal Entity Graph ──────────

@@ -15,6 +15,8 @@ import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 import { CreatePortalButton } from "@/components/portals/CreatePortalButton";
 import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
 import { EntityLegalDocuments } from "@/components/legal/EntityLegalDocuments";
+import { EntityAIContextSection } from "@/components/ai-context/EntityAIContextSection";
+import { canonicalFactsFor } from "@/lib/ai-context";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +73,12 @@ export default async function SellerDetailPage({
     </div>
   );
   const approvalSlot = <ApprovalBundleSection entityType="seller" entityId={id} />;
-  const recommendationsSlot = <EntityRecommendationsPanel entityType="seller" entityId={id} recommendations={await listRecommendationsForEntity("seller", id).catch(() => [])} />;
+  const recommendationsSlot = (
+    <div className="flex flex-col gap-3">
+      <EntityAIContextSection entityType="seller" entityId={id} canonicalTruth={canonicalFactsFor("seller", seller as unknown as Record<string, unknown>)} />
+      <EntityRecommendationsPanel entityType="seller" entityId={id} recommendations={await listRecommendationsForEntity("seller", id).catch(() => [])} />
+    </div>
+  );
   const graphSlot = <RelationshipSection entityType="seller" entityId={id} />;
 
   return (

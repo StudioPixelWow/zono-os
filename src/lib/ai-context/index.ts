@@ -13,3 +13,8 @@ export type {
   AssembledContext, CtxMemory, CtxTimeline, CtxRelationship, CtxRecommendation,
   ProvenanceItem, ContextDiagnostics,
 } from "./render";
+export { detectStaleMemory } from "./stale";
+export type { CanonicalFact, StaleMemo, StaleResult } from "./stale";
+export { groundEntityContext, groundGlobalContext, groundRecommendationContext } from "./surface";
+export type { GroundedContext, ProvenanceSummary } from "./surface";
+export { canonicalFactsFor } from "./canonical-facts";

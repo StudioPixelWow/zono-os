@@ -15,6 +15,8 @@ import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSecti
 import { ApprovalBundleSection } from "@/components/approval-bundle/ApprovalBundleSection";
 import { RelationshipSection } from "@/components/graph/RelationshipSection";
 import { EntityTimelineSection } from "@/components/activity/EntityTimelineSection";
+import { EntityAIContextSection } from "@/components/ai-context/EntityAIContextSection";
+import { canonicalFactsFor } from "@/lib/ai-context";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +54,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const communicationSlot = <CommunicationSection entityType="lead" entityId={id} />;
   const calendarSlot = <EntityCalendarSection kind="lead" id={id} name={lead.name} />;
   const approvalSlot = <ApprovalBundleSection entityType="lead" entityId={id} />;
-  const graphSlot = <RelationshipSection entityType="lead" entityId={id} />;
+  const graphSlot = (
+    <div className="flex flex-col gap-3">
+      <EntityAIContextSection entityType="lead" entityId={id} canonicalTruth={canonicalFactsFor("lead", row)} />
+      <RelationshipSection entityType="lead" entityId={id} />
+    </div>
+  );
   const timelineSlot = <EntityTimelineSection entityType="lead" entityId={id} title="ציר זמן הליד" />;
 
   return (
