@@ -18,10 +18,14 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { invalidateCache } from "@/lib/platform-persistence/compute-cache";
 import { projectEventToTimeline, type DomainEventLike } from "./subscriber";
 import { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
 import { projectEventToGraphEdges } from "./graph-subscriber";
 import { projectEventToMemory } from "./memory-subscriber";
+import { projectEventToAutomation } from "./automation-subscriber";
+import { projectEventToRecommendationRefresh } from "./recommendation-subscriber";
+import { recordDelivery } from "./subscriber-deliveries";
 
 const MAX_RETRIES = 5;
 
@@ -34,10 +38,14 @@ export interface DrainResult {
   notified: number;
   graphEdges: number;
   memoryRows: number;
+  automationCandidates: number; // events classified into a downstream automation
+  recommendationRefreshes: number; // events that invalidated a live-read cache
+  cachesInvalidated: number;    // daily_os / executive_os invalidations issued
   failed: number;
 }
 
 type Row = DomainEventLike & { id: string; retry_count: number };
+type Db = ReturnType<typeof createServiceRoleClient>;
 
 /**
  * Process up to `limit` unprocessed domain events into the timeline.
@@ -47,7 +55,8 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
   const db = createServiceRoleClient();
   const out: DrainResult = {
     scanned: 0, projected: 0, timelineRows: 0, duplicateSkips: 0,
-    skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0, failed: 0,
+    skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0,
+    automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, failed: 0,
   };
 
   // Oldest-first so the timeline stays chronological. 'processing' is included
@@ -71,9 +80,13 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
 
   for (const row of rows) {
     out.scanned++;
+    const t0 = Date.now();
     try {
       const projections = projectEventToTimeline(row);
       if (projections.length === 0) {
+        await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "timeline", status: "skipped", latencyMs: Date.now() - t0 });
+        // A timeline-skipped event can still drive automation / recommendations.
+        await runDownstreamSubscribers(db, row, out, t0);
         await markDone(db, row.id);
         out.skipped++;
         continue;
@@ -104,38 +117,12 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
         }
         out.timelineRows++;
       }
+      await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "timeline", status: "done", latencyMs: Date.now() - t0 });
 
-      // Stage 3 · Notification subscriber — SECONDARY + best-effort.
-      try {
-        const note = projectEventToNotification(row);
-        if (note) {
-          const fkCol = notificationEntityColumn(note.entityType);
-          const noteRow: Record<string, unknown> = {
-            org_id: note.org_id, user_id: note.user_id, level: note.level,
-            category: note.category, title: note.title, href: note.href,
-          };
-          if (fkCol) noteRow[fkCol] = note.entityId;
-          const { error: nErr } = await db.from("notifications").insert(noteRow as never);
-          if (!nErr) out.notified++;
-        }
-      } catch { /* notification is non-critical */ }
-
-      // Stage 4A · Graph subscriber — SECONDARY + best-effort.
-      try {
-        for (const edge of projectEventToGraphEdges(row)) {
-          const { error: gErr } = await db.from("entity_relationships").insert(edge as never);
-          if (!gErr) out.graphEdges++;
-        }
-      } catch { /* graph is non-critical */ }
-
-      // Stage 4B · Org-Memory subscriber — SECONDARY + best-effort. Milestones only.
-      try {
-        const mem = projectEventToMemory(row);
-        if (mem) {
-          const { error: mErr } = await db.from("zono_org_memory_events" as never).insert(mem as never);
-          if (!mErr) out.memoryRows++;
-        }
-      } catch { /* memory is non-critical */ }
+      // All other subscribers (notification / graph / memory / automation /
+      // recommendation) — SECONDARY + best-effort; a failure here never fails
+      // the event (the timeline projection already landed).
+      await runDownstreamSubscribers(db, row, out, t0);
 
       await markDone(db, row.id);
       out.projected++;
@@ -154,6 +141,81 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
     }
   }
   return out;
+}
+
+/**
+ * Run every SECONDARY subscriber for one event (notification, graph, memory,
+ * automation, recommendation). Each is independently best-effort and records its
+ * own per-subscriber delivery. Automation NEVER executes — it classifies the
+ * event into a downstream candidate that surfaces via the stateless approval
+ * inbox. Recommendation keeps Daily OS / Executive event-driven by invalidating
+ * their compute caches (replacing polling). Idempotent: notifications dedupe on
+ * (org_id,event_id); cache invalidation + delivery inserts are safe on reprocess.
+ */
+async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: number): Promise<void> {
+  // ── Notification — idempotent via notifications(org_id, event_id). ──────────
+  try {
+    const note = projectEventToNotification(row);
+    if (note) {
+      const fkCol = notificationEntityColumn(note.entityType);
+      const noteRow: Record<string, unknown> = {
+        org_id: note.org_id, user_id: note.user_id, level: note.level,
+        category: note.category, title: note.title, href: note.href, event_id: row.id,
+      };
+      if (fkCol) noteRow[fkCol] = note.entityId;
+      const { error: nErr } = await db.from("notifications").insert(noteRow as never);
+      if (!nErr) { out.notified++; await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "done", latencyMs: Date.now() - t0 }); }
+      else if (isDuplicate(nErr)) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "duplicate", latencyMs: Date.now() - t0 });
+    }
+  } catch { /* notification is non-critical */ }
+
+  // ── Graph — best-effort edges. ──────────────────────────────────────────────
+  try {
+    let edges = 0;
+    for (const edge of projectEventToGraphEdges(row)) {
+      const { error: gErr } = await db.from("entity_relationships").insert(edge as never);
+      if (!gErr) { out.graphEdges++; edges++; }
+    }
+    if (edges) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "graph", status: "done", latencyMs: Date.now() - t0 });
+  } catch { /* graph is non-critical */ }
+
+  // ── Org-Memory — milestones only. ───────────────────────────────────────────
+  try {
+    const mem = projectEventToMemory(row);
+    if (mem) {
+      const { error: mErr } = await db.from("zono_org_memory_events" as never).insert(mem as never);
+      if (!mErr) { out.memoryRows++; await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "memory", status: "done", latencyMs: Date.now() - t0 }); }
+    }
+  } catch { /* memory is non-critical */ }
+
+  // ── Automation — CLASSIFY ONLY (never execute). The candidate surfaces via the
+  //    stateless approval-bundle inbox on next read; here we just record it. ────
+  try {
+    const intent = projectEventToAutomation(row);
+    if (intent) {
+      out.automationCandidates++;
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "automation", status: "done",
+        latencyMs: Date.now() - t0,
+        metadata: { journeyTrigger: intent.journeyTrigger, bundleEventType: intent.bundleEventType, requiresApproval: intent.requiresApproval },
+      });
+    }
+  } catch { /* automation classification is non-critical */ }
+
+  // ── Recommendation — keep Daily OS / Executive event-driven (no polling). ────
+  try {
+    const refresh = projectEventToRecommendationRefresh(row);
+    if (refresh) {
+      out.recommendationRefreshes++;
+      if (refresh.refreshDaily) { if (await invalidateCache(row.organization_id, "daily_os")) out.cachesInvalidated++; }
+      if (refresh.refreshExecutive) { if (await invalidateCache(row.organization_id, "executive_os")) out.cachesInvalidated++; }
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "recommendation", status: "done",
+        latencyMs: Date.now() - t0,
+        metadata: { areas: refresh.affectedAreas, refreshDaily: refresh.refreshDaily, refreshExecutive: refresh.refreshExecutive },
+      });
+    }
+  } catch { /* recommendation refresh is non-critical */ }
 }
 
 /** Postgres unique-violation (idempotent no-op), not a real failure. */

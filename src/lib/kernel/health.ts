@@ -120,3 +120,79 @@ export async function getTimelineKernelHealth(): Promise<TimelineKernelHealth> {
     return out;
   }
 }
+
+// ── Stage 3 · Per-subscriber delivery metrics (PART 7, internal read-only) ───
+export interface SubscriberMetrics {
+  subscriber: string;
+  processed: number;   // status='done'
+  duplicates: number;  // status='duplicate' (idempotent no-ops)
+  failed: number;      // status='failed'
+  skipped: number;     // status='skipped'
+  avgLatencyMs: number | null;
+  lastProcessedAt: string | null;
+}
+
+export interface SubscriberHealth {
+  perSubscriber: SubscriberMetrics[];
+  /** Outbox-level retry pressure (domain_events.retry_count sum for the org). */
+  totalRetries: number;
+}
+
+const SUBSCRIBERS = ["timeline", "notification", "automation", "recommendation", "graph", "memory"] as const;
+
+/**
+ * Per-subscriber delivery metrics for the current org, from
+ * domain_event_deliveries. Best-effort (returns zeros pre-migration).
+ */
+export async function getSubscriberHealth(): Promise<SubscriberHealth> {
+  const empty: SubscriberHealth = {
+    perSubscriber: SUBSCRIBERS.map((s) => ({ subscriber: s, processed: 0, duplicates: 0, failed: 0, skipped: 0, avgLatencyMs: null, lastProcessedAt: null })),
+    totalRetries: 0,
+  };
+  try {
+    const { profile } = await getSessionContext();
+    const orgId = profile?.org_id;
+    if (!orgId) return empty;
+    const db = await createClient();
+
+    const perSubscriber: SubscriberMetrics[] = [];
+    for (const s of SUBSCRIBERS) {
+      const m: SubscriberMetrics = { subscriber: s, processed: 0, duplicates: 0, failed: 0, skipped: 0, avgLatencyMs: null, lastProcessedAt: null };
+      for (const status of ["done", "duplicate", "failed", "skipped"] as const) {
+        const { count } = await db
+          .from("domain_event_deliveries" as never)
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId).eq("subscriber", s).eq("status", status);
+        const n = count ?? 0;
+        if (status === "done") m.processed = n;
+        else if (status === "duplicate") m.duplicates = n;
+        else if (status === "failed") m.failed = n;
+        else m.skipped = n;
+      }
+      // Latency sample + last processed from recent rows.
+      const { data } = await db
+        .from("domain_event_deliveries" as never)
+        .select("latency_ms,processed_at")
+        .eq("organization_id", orgId).eq("subscriber", s)
+        .order("processed_at", { ascending: false }).limit(100);
+      const rows = (data as { latency_ms: number | null; processed_at: string }[] | null) ?? [];
+      if (rows.length) {
+        m.lastProcessedAt = rows[0].processed_at;
+        const lats = rows.map((r) => r.latency_ms).filter((n): n is number => typeof n === "number" && n >= 0);
+        if (lats.length) m.avgLatencyMs = Math.round(lats.reduce((a, b) => a + b, 0) / lats.length);
+      }
+      perSubscriber.push(m);
+    }
+
+    // Retry pressure from the outbox.
+    let totalRetries = 0;
+    const { data: retryRows } = await db
+      .from("domain_events" as never)
+      .select("retry_count").eq("organization_id", orgId).gt("retry_count", 0).limit(500);
+    for (const r of (retryRows as { retry_count: number }[] | null) ?? []) totalRetries += r.retry_count ?? 0;
+
+    return { perSubscriber, totalRetries };
+  } catch {
+    return empty;
+  }
+}

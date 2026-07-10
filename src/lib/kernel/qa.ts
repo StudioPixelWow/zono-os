@@ -174,5 +174,34 @@ check("document milestone bridges", bridgeDocumentAudit(da)?.entity_type === "do
 check("document non-milestone skipped", bridgeDocumentAudit({ ...da, event: "opened_settings" }) === null);
 check("document audit deterministic id", bridgeDocumentAudit(da)?.event_id === syntheticEventId("document_audit_logs:DA1"));
 
-console.log(`\nKernel Stage 2 (timeline+bridge) + 3+4+5A QA — ${pass} passed, ${fail} failed`);
+// ── Stage 3 · Automation subscriber (classify → journey trigger + bundle) ────
+import { projectEventToAutomation } from "./automation-subscriber";
+
+const aBuyer = projectEventToAutomation({ ...base, event_type: "buyer.created", entity_type: "buyer", entity_id: "B1" });
+check("buyer.created → new_buyer bundle candidate", aBuyer?.bundleEventType === "new_buyer" && aBuyer?.requiresApproval === true);
+check("automation never auto-executes (requiresApproval)", aBuyer?.requiresApproval === true);
+check("automation carries dedupKey = event id", aBuyer?.dedupKey === "EVT1");
+const aPrice = projectEventToAutomation({ ...base, event_type: "property.price_changed", entity_type: "property", entity_id: "P1" });
+check("price_changed → journey price_drop + bundle price_opportunity", aPrice?.journeyTrigger === "price_drop" && aPrice?.bundleEventType === "price_opportunity");
+const aMeeting = projectEventToAutomation({ ...base, event_type: "meeting.completed", entity_type: "meeting", entity_id: "M1" });
+check("meeting.completed → journey + bundle", aMeeting?.journeyTrigger === "meeting_completed" && aMeeting?.bundleEventType === "meeting_completed");
+check("non-automation event → null", projectEventToAutomation({ ...base, event_type: "document.viewed", entity_type: "document", entity_id: "D1" }) === null);
+check("automation missing event id → null", projectEventToAutomation({ ...base, id: "", event_type: "buyer.created" }) === null);
+check("automation deterministic", JSON.stringify(projectEventToAutomation({ ...base, event_type: "buyer.created" })) === JSON.stringify(projectEventToAutomation({ ...base, event_type: "buyer.created" })));
+
+// ── Stage 3 · Recommendation subscriber (event → areas + cache refresh) ──────
+import { projectEventToRecommendationRefresh } from "./recommendation-subscriber";
+
+const rWon = projectEventToRecommendationRefresh({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1" });
+check("deal.won affects deal+office", !!(rWon?.affectedAreas.includes("deal") && rWon?.affectedAreas.includes("office")));
+check("deal.won refreshes daily + executive", rWon?.refreshDaily === true && rWon?.refreshExecutive === true);
+const rBuyer = projectEventToRecommendationRefresh({ ...base, event_type: "buyer.created", entity_type: "buyer", entity_id: "B1" });
+check("buyer.created refreshes daily only (not exec)", rBuyer?.refreshDaily === true && rBuyer?.refreshExecutive === false);
+const rSellerRisk = projectEventToRecommendationRefresh({ ...base, event_type: "seller.risk_changed", entity_type: "seller", entity_id: "S1" });
+check("seller.risk_changed → seller area + exec", !!(rSellerRisk?.affectedAreas.includes("seller") && rSellerRisk?.refreshExecutive === true));
+check("routine event → no recommendation impact", projectEventToRecommendationRefresh({ ...base, event_type: "agent.profile_updated", entity_type: "agent", entity_id: "A1" }) === null);
+check("recommendation cross-org carried", projectEventToRecommendationRefresh({ ...base, organization_id: "ORG9", event_type: "buyer.created" })?.entityId === base.entity_id);
+check("recommendation deterministic", JSON.stringify(projectEventToRecommendationRefresh({ ...base, event_type: "deal.won" })) === JSON.stringify(projectEventToRecommendationRefresh({ ...base, event_type: "deal.won" })));
+
+console.log(`\nKernel Stage 2+3 (timeline+bridge+automation+notification+recommendation) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

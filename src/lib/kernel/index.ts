@@ -13,6 +13,15 @@ export type { DrainResult } from "./processor";
 // Stage 3 — Notification subscriber (second consumer of the outbox).
 export { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
 export type { NotificationProjection, NotificationLevel } from "./notification-subscriber";
+// Stage 3 — Automation subscriber (classifies event → journey trigger + approval-bundle candidate; never executes).
+export { projectEventToAutomation } from "./automation-subscriber";
+export type { AutomationIntent } from "./automation-subscriber";
+// Stage 3 — Recommendation subscriber (event → affected areas + Daily/Executive cache refresh).
+export { projectEventToRecommendationRefresh } from "./recommendation-subscriber";
+export type { RecommendationRefresh, RecommendationArea } from "./recommendation-subscriber";
+// Stage 3 — Per-subscriber delivery ledger (observability + idempotency).
+export { recordDelivery } from "./subscriber-deliveries";
+export type { SubscriberName, DeliveryStatus, DeliveryInput } from "./subscriber-deliveries";
 // Stage 4A — Graph subscriber (pure; wired into the drain loop once domain_events is live).
 export { projectEventToGraphEdges } from "./graph-subscriber";
 export type { GraphEdgeUpsert } from "./graph-subscriber";
