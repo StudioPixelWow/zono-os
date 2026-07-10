@@ -78,7 +78,8 @@ const GROUPS: NavGroup[] = [
     { label: "Voice AI", href: "/voice", icon: "Mic" },
     { label: "Self-Learning", href: "/learning", icon: "Sparkles" },
   ]},
-  { key: "system", title: "ניהול מערכת", desc: "צוות • חיבורים • מסמכים • הגדרות", icon: "Settings", accent: "slate", items: [
+  { key: "system", title: "ניהול מערכת", desc: "האזור האישי • צוות • חיבורים • הגדרות", icon: "Settings", accent: "slate", items: [
+    { label: "האזור האישי", href: "/my-profile", icon: "UserCircle" },
     { label: "צוות וסוכנים", href: "/team", icon: "UserCheck" },
     { label: "חיבורים", href: "/settings/distribution-connections", icon: "Send" },
     { label: "מסמכים", href: "/documents", icon: "FileText" },

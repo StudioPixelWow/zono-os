@@ -41,35 +41,28 @@ export function Header() {
             <span className="bg-danger absolute end-2.5 top-2.5 h-2 w-2 rounded-full ring-2 ring-white" />
           </Link>
 
-          <div className="bg-card border-line hidden items-center gap-2.5 rounded-2xl border py-1.5 pe-1.5 ps-3 sm:flex">
+          {/* User block — clicking opens the Agent Personal Area (/my-profile). */}
+          <Link
+            href="/my-profile"
+            className="group bg-card border-line hover:border-brand-light hidden items-center gap-2.5 rounded-2xl border py-1.5 pe-1.5 ps-3 transition focus:outline-none focus:ring-2 focus:ring-brand/25 sm:flex"
+            aria-label="האזור האישי"
+            title="האזור האישי"
+          >
             <div className="leading-tight">
               <p className="text-ink text-sm font-bold">{displayName}</p>
               <p className="text-muted text-[11px]">{roleLabel}</p>
             </div>
-            {/* Agent avatar — circular, thin purple-gradient frame. Click → edit profile. */}
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="from-brand to-brand-light h-9 w-9 rounded-full bg-gradient-to-br p-[2px] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-brand/30"
-              aria-label="עריכת פרופיל"
-              title="עריכת פרופיל"
-            >
-              <div className="bg-card grid h-full w-full place-items-center overflow-hidden rounded-full">
+            <span className="from-brand to-brand-light h-9 w-9 rounded-full bg-gradient-to-br p-[2px] transition group-hover:brightness-110">
+              <span className="bg-card grid h-full w-full place-items-center overflow-hidden rounded-full">
                 {avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={avatarUrl}
-                    alt={displayName}
-                    className="h-full w-full rounded-full object-cover"
-                    referrerPolicy="no-referrer"
-                    draggable={false}
-                  />
+                  <img src={avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" referrerPolicy="no-referrer" draggable={false} />
                 ) : (
                   <span className="text-brand text-sm font-black">{displayName.charAt(0)}</span>
                 )}
-              </div>
-            </button>
-          </div>
+              </span>
+            </span>
+          </Link>
         </div>
       </div>
 

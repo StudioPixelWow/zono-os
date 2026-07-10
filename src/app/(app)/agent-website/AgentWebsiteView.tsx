@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
@@ -44,8 +45,13 @@ export function AgentWebsiteView({ config, analytics }: { config: AgentWebsiteCo
           <h1 className="text-ink mt-1 text-2xl font-black">האתר האישי שלי</h1>
           <p className="text-muted mt-1 text-sm">אתר אישי שמתעדכן אוטומטית מ-ZONO: הנכסים שלך, האזורים שלך, עסקאות ולידים — ישירות אליך.</p>
         </div>
-        <div className="flex items-center gap-2">{pending && <Spinner size={15} />}{!config && <Button onClick={() => run(createAgentWebsiteAction)} disabled={pending} leadingIcon={<Icon name="Send" size={16} />}>צור אתר אישי</Button>}</div>
+        <div className="flex items-center gap-2">
+          <Link href="/my-profile" className="bg-card border-line hover:border-brand-light inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-bold transition"><Icon name="UserCircle" size={15} /> האזור האישי</Link>
+          {pending && <Spinner size={15} />}
+          {!config && <Button onClick={() => run(createAgentWebsiteAction)} disabled={pending} leadingIcon={<Icon name="Send" size={16} />}>צור אתר אישי</Button>}
+        </div>
       </div>
+      <p className="text-muted -mt-3 px-1 text-[12px]">כל התוכן כאן מגיע מ<Link href="/my-profile" className="text-brand font-bold">האזור האישי</Link> — מקור האמת האחד לפרופיל ולאתר הסוכן.</p>
 
       {note && <p className="bg-card border-line text-ink rounded-xl border px-3 py-2 text-sm font-semibold break-all">{note}</p>}
 
