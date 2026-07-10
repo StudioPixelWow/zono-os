@@ -1,193 +1,248 @@
 "use client";
-
-import { useState } from "react";
+// ============================================================================
+// 🧭 ZONO — Journey Center. Shows the REAL journey state of every buyer, seller,
+// lead and property already in ZONO (derived from the existing twins + listing
+// scorecards). Summary KPIs, filters, premium journey cards, a detail drawer,
+// and HONEST distinct empty states. Read-only; CTAs open the entity cockpit.
+// ============================================================================
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
-import { Button } from "@/components/ui/Button";
-import { useActionRunner } from "@/components/ui/useActionRunner";
-import { ActionFeedback } from "@/components/ui/ActionFeedback";
-import { recomputeAllJourneysAction } from "@/lib/journey-intelligence/actions";
-import type { JourneyCommandCenter, JourneyCard, RiskCard, OppCard } from "@/lib/journey-intelligence/service";
+import { STAGE_LABELS, STAGE_ORDER, ENTITY_HE, type JourneyCenter, type JourneyEntityType, type JourneyFlag, type UnifiedJourney } from "@/lib/journey-center/types";
 
-type Tab = "buyers" | "sellers" | "stuck" | "ready" | "risks" | "opportunities" | "milestones" | "analytics";
-const SEV_TONE: Record<string, string> = { high: "bg-danger-soft text-danger", medium: "bg-warning-soft text-warning", low: "bg-surface text-muted" };
-const VEL_TONE: Record<string, string> = { fast: "bg-success-soft text-success", normal: "bg-surface text-muted", slow: "bg-warning-soft text-warning", stuck: "bg-danger-soft text-danger", regression: "bg-danger-soft text-danger" };
-const fmtMoney = (n: number | null) => n && n > 0 ? `₪${n.toLocaleString("he-IL")}` : "—";
-const hrefFor = (t: string, id: string) => t === "seller" ? `/sellers/${id}` : t === "buyer" ? `/buyers/${id}` : "#";
+const ENTITY_ICON: Record<JourneyEntityType, string> = { buyer: "Users", seller: "Handshake", lead: "MessageCircle", property: "Building2" };
+type FilterKey = "all" | JourneyEntityType | "at_risk" | "waiting" | "advancing" | "no_activity";
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "all", label: "הכל" }, { key: "buyer", label: "קונים" }, { key: "seller", label: "מוכרים" },
+  { key: "lead", label: "לידים" }, { key: "property", label: "נכסים" }, { key: "at_risk", label: "בסיכון" },
+  { key: "waiting", label: "ממתין לפעולה" }, { key: "advancing", label: "מתקדם" }, { key: "no_activity", label: "ללא פעילות" },
+];
 
-export function JourneysView({ cc }: { cc: JourneyCommandCenter }) {
-  const [tab, setTab] = useState<Tab>("buyers");
-  const r = useActionRunner();
-  const wrap = (fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>, id: string, pending?: string) =>
-    r.run(async () => { const res = await fn(); if (res.error) throw new Error(res.error); return res; }, { id, pendingMessage: pending, success: (x) => x.message ?? null });
+const timeAgo = (iso: string | null) => {
+  if (!iso) return null;
+  const d = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
+  return d <= 0 ? "היום" : d === 1 ? "אתמול" : `לפני ${d} ימים`;
+};
+const dateHe = (iso: string) => new Date(iso).toLocaleDateString("he-IL", { day: "numeric", month: "short" });
 
-  const tabs: { id: Tab; label: string; icon: string; n?: number }[] = [
-    { id: "buyers", label: "קונים", icon: "Users", n: cc.buyers.length },
-    { id: "sellers", label: "מוכרים", icon: "Handshake", n: cc.sellers.length },
-    { id: "stuck", label: "תקועים", icon: "AlertTriangle", n: cc.stuck.length },
-    { id: "ready", label: "מוכנים", icon: "Flame", n: cc.ready.length },
-    { id: "risks", label: "סיכונים", icon: "TrendingDown", n: cc.risks.length },
-    { id: "opportunities", label: "הזדמנויות", icon: "TrendingUp", n: cc.opportunities.length },
-    { id: "milestones", label: "אבני דרך", icon: "MapPin", n: cc.milestones.length },
-    { id: "analytics", label: "אנליטיקה", icon: "BarChart3" },
+export function JourneysView({ data, error }: { data: JourneyCenter | null; error: boolean }) {
+  const router = useRouter();
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [open, setOpen] = useState<UnifiedJourney | null>(null);
+
+  const journeys = useMemo(() => data?.journeys ?? [], [data]);
+  const filtered = useMemo(() => journeys.filter((j) => {
+    if (filter === "all") return true;
+    if (filter === "buyer" || filter === "seller" || filter === "lead" || filter === "property") return j.entityType === filter;
+    return j.flags.includes(filter as JourneyFlag);
+  }), [journeys, filter]);
+
+  // ── Honest empty states ─────────────────────────────────────────────────────
+  if (error) return <Shell><EmptyState icon="AlertTriangle" title="לא הצלחנו לטעון את המסעות כרגע." hint="ייתכן שהייתה תקלה זמנית." action={<button onClick={() => router.refresh()} className="btn-zono-primary rounded-xl px-4 py-2 text-sm font-black text-white">נסה שוב</button>} /></Shell>;
+  if (journeys.length === 0 && !data?.hasEntities) return <Shell><EmptyState icon="Users" title="עדיין אין קונים, מוכרים, לידים או נכסים במערכת." hint="הוסיפו ישות ראשונה כדי לראות את המסע שלה כאן." action={<CreateButtons />} /></Shell>;
+  if (journeys.length === 0) return <Shell><EmptyState icon="Route" title="יש ישויות במערכת, אך עדיין לא נוצרה פעילות שמאפשרת לבנות מסע." hint="ברגע שתתחיל פעילות (הודעה, פגישה, משימה) המסע יופיע כאן." action={<CreateButtons />} /></Shell>;
+
+  const k = data!.kpis;
+  const kpis: { label: string; value: number; icon: string; tone: string; f?: FilterKey }[] = [
+    { label: "מסעות פעילים", value: k.active, icon: "Route", tone: "text-brand-strong" },
+    { label: "בסיכון", value: k.atRisk, icon: "AlertTriangle", tone: "text-danger", f: "at_risk" },
+    { label: "ממתין לפעולה", value: k.waiting, icon: "Clock", tone: "text-warning", f: "waiting" },
+    { label: "מתקדם היום", value: k.advancing, icon: "Sparkles", tone: "text-success", f: "advancing" },
+    { label: "ללא פעילות", value: k.noActivity, icon: "Clock", tone: "text-muted", f: "no_activity" },
+    { label: "פגישות קרובות", value: k.upcomingMeetings, icon: "Calendar", tone: "text-brand" },
   ];
 
-  // A journey only exists for a real buyer/seller row. When the org has none at
-  // all, show one strong, honest empty state instead of a wall of zeroed KPIs
-  // and empty tabs.
-  const hasAnyJourney =
-    cc.buyers.length > 0 ||
-    cc.sellers.length > 0 ||
-    cc.stuck.length > 0 ||
-    cc.ready.length > 0;
-
   return (
-    <main dir="rtl" className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="bg-brand text-white grid h-9 w-9 place-items-center rounded-xl"><Icon name="Route" size={18} /></span>
-            <h1 className="text-ink text-2xl font-black">מודיעין מסעות</h1>
-          </div>
-          <p className="text-muted text-sm">לכל קונה, מוכר וליד יש מסע חי — לא רק סטטוס. ZONO יודע איפה הם, באיזה קצב הם נעים, מה חוסם אותם, מה צריך לקרות הבא, ומי יניב את ההכנסה הגבוהה ביותר.</p>
+    <Shell>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-ink text-2xl font-black sm:text-3xl">מסעות לקוח</h1>
+          <p className="text-muted text-[13px]">{data!.totals.buyers} קונים · {data!.totals.sellers} מוכרים · {data!.totals.leads} לידים · {data!.totals.properties} נכסים</p>
         </div>
-        <Button size="sm" variant="ghost" loading={r.busyId === "recompute"} onClick={() => wrap(() => recomputeAllJourneysAction(), "recompute", "מחשב מסעות...")}>
-          <Icon name="Sparkles" size={14} />חשב מסעות מחדש
-        </Button>
-      </header>
-
-      <ActionFeedback runner={r} />
-
-      {!hasAnyJourney ? (
-        <div className="bg-card border-line flex flex-col items-center gap-3 rounded-3xl border px-6 py-16 text-center shadow-sm">
-          <span className="bg-brand-soft text-brand-strong grid h-16 w-16 place-items-center rounded-2xl"><Icon name="Route" size={30} /></span>
-          <h2 className="text-ink text-xl font-black">אין עדיין מסעות פעילים</h2>
-          <p className="text-muted max-w-md text-sm">מסעות יווצרו אוטומטית לאחר יצירת נכס, קונה, מוכר או ליד.</p>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            <Link href="/buyers/new" className="bg-brand text-white rounded-xl px-4 py-2 text-sm font-bold">הוסף קונה</Link>
-            <Link href="/sellers/new" className="bg-surface text-ink border-line rounded-xl border px-4 py-2 text-sm font-bold">הוסף מוכר</Link>
-            <Link href="/properties/new" className="bg-surface text-ink border-line rounded-xl border px-4 py-2 text-sm font-bold">הוסף נכס</Link>
-          </div>
-        </div>
-      ) : (
-      <>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Kpi label="קונים מוכנים" value={cc.kpis.readyBuyers} tone="text-success" />
-        <Kpi label="מוכרים מוכנים" value={cc.kpis.readySellers} tone="text-success" />
-        <Kpi label="מסעות תקועים" value={cc.kpis.stuckJourneys} tone="text-danger" />
-        <Kpi label="סיכוני מסע" value={cc.kpis.journeyRisks} tone="text-danger" />
-        <Kpi label="הזדמנויות" value={cc.kpis.journeyOpportunities} tone="text-warning" />
-        <Kpi label="עמלה צפויה (מוכנים)" value={fmtMoney(cc.kpis.expectedCommission)} tone="text-brand-strong" />
+        <CreateButtons />
       </div>
 
-      <nav className="border-line flex gap-1 overflow-x-auto border-b">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-bold ${tab === t.id ? "text-brand-strong border-brand border-b-2" : "text-muted"}`}>
-            <Icon name={t.icon} size={15} />{t.label}{t.n ? <span className="bg-surface text-muted rounded-full px-1.5 text-[10px]">{t.n}</span> : null}
+      {/* KPIs */}
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+        {kpis.map((x) => (
+          <button key={x.label} onClick={() => x.f && setFilter(x.f)} className={`bg-card border-line rounded-2xl border p-3 text-right shadow-sm transition ${x.f ? "hover:border-brand-light" : "cursor-default"}`}>
+            <div className="text-muted flex items-center gap-1.5 text-[11px] font-bold"><Icon name={x.icon} size={12} /> {x.label}</div>
+            <p className={`mt-0.5 text-2xl font-black tabular-nums ${x.tone}`}>{x.value}</p>
           </button>
         ))}
-      </nav>
+      </div>
 
-      {tab === "buyers" && <JourneyList list={cc.buyers} empty="אין מסעות קונים פעילים" />}
-      {tab === "sellers" && <JourneyList list={cc.sellers} empty="אין מסעות מוכרים פעילים" />}
-      {tab === "stuck" && <JourneyList list={cc.stuck} empty="אין מסעות תקועים — מצוין!" />}
-      {tab === "ready" && <JourneyList list={cc.ready} empty="אין לקוחות בשלים לסגירה כרגע" />}
-      {tab === "risks" && (cc.risks.length === 0 ? <Empty text="אין סיכוני מסע פעילים" /> : <div className="flex flex-col gap-2">{cc.risks.map((x) => <RiskRow key={x.id} x={x} />)}</div>)}
-      {tab === "opportunities" && (cc.opportunities.length === 0 ? <Empty text="אין הזדמנויות פתוחות" /> : <div className="flex flex-col gap-2">{cc.opportunities.map((o) => <OppRow key={o.id} o={o} />)}</div>)}
-      {tab === "milestones" && (cc.milestones.length === 0 ? <Empty text="אין אבני דרך שהושגו" /> : <div className="flex flex-col gap-2">{cc.milestones.map((m, i) => <div key={i} className="bg-card border-line flex items-center justify-between gap-2 rounded-2xl border p-3 shadow-sm"><span className="text-ink text-sm font-bold"><Icon name="MapPin" size={14} /> {m.milestone_label}</span><span className="text-muted text-[11px]">{m.reached_at ? new Date(m.reached_at).toLocaleDateString("he-IL") : ""}</span></div>)}</div>)}
-      {tab === "analytics" && <Analytics cc={cc} />}
-      </>
+      {/* Filters */}
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => (
+          <button key={f.key} onClick={() => setFilter(f.key)} className={`rounded-full px-3 py-1.5 text-[12px] font-bold transition ${filter === f.key ? "bg-brand text-white" : "bg-surface text-muted hover:text-ink"}`}>{f.label}</button>
+        ))}
+      </div>
+
+      {/* Grid / no-filter-results */}
+      {filtered.length === 0 ? (
+        <EmptyState icon="Filter" title="אין מסעות שתואמים למסנן הנוכחי." hint="נסה מסנן אחר." action={<button onClick={() => setFilter("all")} className="btn-zono-secondary rounded-xl px-4 py-2 text-sm font-bold">נקה מסנן</button>} />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((j) => <JourneyCard key={j.journeyId} j={j} onOpen={() => setOpen(j)} />)}
+        </div>
       )}
-    </main>
+
+      {open && <JourneyDrawer j={open} onClose={() => setOpen(null)} />}
+    </Shell>
   );
 }
 
-function Kpi({ label, value, tone }: { label: string; value: number | string; tone: string }) {
-  return <div className="bg-card border-line flex flex-col gap-0.5 rounded-2xl border p-3 shadow-sm"><span className="text-muted text-[11px] font-bold">{label}</span><span className={`text-xl font-black ${tone}`}>{value}</span></div>;
-}
-function Empty({ text }: { text: string }) { return <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">{text}</div>; }
-
-function JourneyList({ list, empty }: { list: JourneyCard[]; empty: string }) {
-  if (list.length === 0) return <Empty text={empty} />;
-  return <div className="flex flex-col gap-2">{list.map((j) => <JourneyRow key={j.id} j={j} />)}</div>;
-}
-function JourneyRow({ j }: { j: JourneyCard }) {
-  return (
-    <a href={hrefFor(j.entity_type, j.entity_id)} className="bg-card border-line block rounded-2xl border p-4 shadow-sm hover:border-brand">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-ink font-black">{j.label}</span>
-            <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{j.stage_label}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${VEL_TONE[j.velocity_state] ?? "bg-surface text-muted"}`}>{j.velocity_label}</span>
-            {j.days_since_activity != null && <span className="text-muted text-[11px]">{j.days_since_activity} ימים מאז פעילות</span>}
-          </div>
-          {j.next_best_action && <p className="text-brand-strong mt-1 text-[12px]">← {j.next_best_action}</p>}
-          <div className="bg-surface mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full"><div className="bg-brand h-full rounded-full" style={{ width: `${j.progress}%` }} /></div>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5 text-left">
-          <span className="text-success text-lg font-black">{j.conversion_score}</span>
-          <span className="text-muted text-[10px]">המרה</span>
-          {j.probability_convert != null && <span className="text-muted text-[11px]">{j.probability_convert}% סיכוי</span>}
-          {j.expected_commission != null && <span className="text-brand-strong text-[11px]">{fmtMoney(j.expected_commission)}</span>}
-        </div>
-      </div>
-    </a>
-  );
+function Shell({ children }: { children: React.ReactNode }) {
+  return <div dir="rtl" className="mx-auto w-full max-w-[1400px]">{children}</div>;
 }
 
-function RiskRow({ x }: { x: RiskCard }) {
+function CreateButtons() {
+  const dispatch = (ev: string) => () => { try { window.dispatchEvent(new Event(ev)); } catch { /* noop */ } };
   return (
-    <a href={hrefFor(x.entity_type, x.entity_id)} className="bg-card border-line block rounded-2xl border p-4 shadow-sm hover:border-brand">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><span className="text-ink font-bold">{x.risk_type}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${SEV_TONE[x.severity] ?? "bg-surface text-muted"}`}>{x.severity === "high" ? "גבוה" : x.severity === "medium" ? "בינוני" : "נמוך"}</span></div>
-        <span className="text-danger text-lg font-black">{x.score}</span>
-      </div>
-      {x.reason && <p className="text-muted mt-1 text-[12px]">{x.reason}</p>}
-      {x.recommended_action && <p className="text-brand-strong mt-0.5 text-[12px]">← {x.recommended_action}</p>}
-    </a>
-  );
-}
-function OppRow({ o }: { o: OppCard }) {
-  return (
-    <a href={hrefFor(o.entity_type, o.entity_id)} className="bg-card border-line block rounded-2xl border p-4 shadow-sm hover:border-brand">
-      <div className="flex items-center justify-between gap-2"><span className="text-ink font-bold">{o.opportunity_type}</span><span className="text-success text-lg font-black">{o.score}</span></div>
-      {o.reason && <p className="text-muted mt-1 text-[12px]">{o.reason}</p>}
-      {o.recommended_action && <p className="text-brand-strong mt-0.5 text-[12px]">← {o.recommended_action}</p>}
-    </a>
-  );
-}
-
-function Analytics({ cc }: { cc: JourneyCommandCenter }) {
-  const a = cc.analytics;
-  const maxB = Math.max(1, ...a.byStageBuyer.map((s) => s.count));
-  const maxS = Math.max(1, ...a.byStageSeller.map((s) => s.count));
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Kpi label="המרה ממוצעת" value={a.avgConversion} tone="text-success" />
-        <Kpi label="בריאות ממוצעת" value={a.avgHealth} tone="text-brand-strong" />
-        <Kpi label="מסעות פעילים" value={cc.kpis.activeJourneys} tone="text-ink" />
-      </div>
-      <Funnel title="משפך קונים" rows={a.byStageBuyer} max={maxB} />
-      <Funnel title="משפך מוכרים" rows={a.byStageSeller} max={maxS} />
+    <div className="flex flex-wrap gap-2">
+      <Link href="/buyers/new" className="bg-card border-line text-ink hover:border-brand-light inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-bold"><Icon name="Plus" size={14} /> קונה</Link>
+      <Link href="/sellers/new" className="bg-card border-line text-ink hover:border-brand-light inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-bold"><Icon name="Plus" size={14} /> מוכר</Link>
+      <button onClick={dispatch("zono:new-lead")} className="bg-card border-line text-ink hover:border-brand-light inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-bold"><Icon name="Plus" size={14} /> ליד</button>
+      <Link href="/properties/new" className="bg-card border-line text-ink hover:border-brand-light inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-bold"><Icon name="Plus" size={14} /> נכס</Link>
     </div>
   );
 }
-function Funnel({ title, rows, max }: { title: string; rows: { stage: string; label: string; count: number }[]; max: number }) {
+
+function progressTone(j: UnifiedJourney) {
+  if (j.flags.includes("closed")) return "bg-line";
+  if (j.flags.includes("at_risk")) return "bg-danger";
+  if (j.flags.includes("advancing")) return "bg-success";
+  return "bg-brand";
+}
+function FlagBadge({ f }: { f: JourneyFlag }) {
+  const map: Record<JourneyFlag, { label: string; cls: string } | null> = {
+    at_risk: { label: "בסיכון", cls: "bg-danger-soft text-danger" },
+    waiting: { label: "ממתין", cls: "bg-warning-soft text-warning" },
+    advancing: { label: "מתקדם", cls: "bg-success-soft text-success" },
+    no_activity: { label: "ללא פעילות", cls: "bg-surface text-muted" },
+    closed: { label: "הושלם", cls: "bg-line/70 text-muted" },
+    active: null,
+  };
+  const m = map[f]; if (!m) return null;
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${m.cls}`}>{m.label}</span>;
+}
+
+function JourneyCard({ j, onOpen }: { j: UnifiedJourney; onOpen: () => void }) {
   return (
-    <div className="bg-card border-line rounded-2xl border p-4 shadow-sm">
-      <p className="text-ink mb-2 text-sm font-black">{title}</p>
-      <div className="flex flex-col gap-1.5">
-        {rows.map((s) => (
-          <div key={s.stage} className="flex items-center gap-2">
-            <span className="text-muted w-28 shrink-0 text-[12px]">{s.label}</span>
-            <div className="bg-surface h-4 flex-1 overflow-hidden rounded-full"><div className="bg-brand h-full rounded-full" style={{ width: `${(s.count / max) * 100}%` }} /></div>
-            <span className="text-ink w-6 text-left text-[12px] font-bold">{s.count}</span>
+    <div className="bg-card border-line hover:border-brand-light flex flex-col gap-2.5 rounded-2xl border p-4 shadow-sm transition">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="bg-brand-soft text-brand-strong grid h-9 w-9 shrink-0 place-items-center rounded-xl"><Icon name={ENTITY_ICON[j.entityType]} size={17} /></span>
+          <div className="min-w-0">
+            <p className="text-ink truncate text-sm font-black">{j.entityName}</p>
+            <p className="text-muted text-[11px] font-bold">{ENTITY_HE[j.entityType]} · {j.stageLabel}</p>
           </div>
-        ))}
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">{j.flags.map((f) => <FlagBadge key={f} f={f} />)}</div>
       </div>
+
+      {/* progress */}
+      <div>
+        <div className="bg-surface h-1.5 w-full overflow-hidden rounded-full"><div className={`h-full rounded-full ${progressTone(j)}`} style={{ width: `${j.progress}%` }} /></div>
+        <div className="text-muted mt-1 flex items-center justify-between text-[10.5px] font-bold"><span>{j.progress}%</span>{j.lastActivityAt && <span>פעילות אחרונה: {timeAgo(j.lastActivityAt)}</span>}</div>
+      </div>
+
+      {j.nextAction && (
+        <div className="bg-surface flex items-start gap-2 rounded-xl p-2.5">
+          <span className="text-brand mt-0.5 shrink-0"><Icon name="Sparkles" size={14} /></span>
+          <p className="text-ink line-clamp-2 text-[12px] font-semibold leading-relaxed">{j.nextAction}</p>
+        </div>
+      )}
+
+      <div className="text-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold">
+        {j.openTasks > 0 && <span className="inline-flex items-center gap-1"><Icon name="ListChecks" size={12} /> {j.openTasks} משימות</span>}
+        {j.upcomingMeetingAt && <span className="inline-flex items-center gap-1"><Icon name="Calendar" size={12} /> {dateHe(j.upcomingMeetingAt)}</span>}
+        {j.risk >= 60 && <span className="text-danger inline-flex items-center gap-1"><Icon name="AlertTriangle" size={12} /> סיכון {j.risk}</span>}
+      </div>
+
+      <div className="border-line mt-1 flex items-center justify-between gap-2 border-t pt-2.5">
+        <button onClick={onOpen} className="text-brand text-[12px] font-black">פרטי המסע</button>
+        <Link href={j.href} className="btn-zono-primary zono-focus-ring inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-black text-white">פתח כרטיס {ENTITY_HE[j.entityType]} <Icon name="ChevronLeft" size={13} /></Link>
+      </div>
+    </div>
+  );
+}
+
+function JourneyDrawer({ j, onClose }: { j: UnifiedJourney; onClose: () => void }) {
+  const order = STAGE_ORDER[j.entityType];
+  return (
+    <div className="fixed inset-0 z-[60] flex justify-start bg-black/40" onClick={onClose}>
+      <div dir="rtl" onClick={(e) => e.stopPropagation()} className="bg-card border-line ms-auto flex h-full w-full max-w-md flex-col overflow-y-auto border-s p-5 shadow-[var(--shadow-lift)]">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="bg-brand-soft text-brand-strong grid h-10 w-10 place-items-center rounded-xl"><Icon name={ENTITY_ICON[j.entityType]} size={19} /></span>
+            <div><p className="text-ink text-base font-black">{j.entityName}</p><p className="text-muted text-[11px] font-bold">{ENTITY_HE[j.entityType]} · {j.stageLabel}</p></div>
+          </div>
+          <button onClick={onClose} aria-label="סגור" className="text-muted hover:text-ink"><Icon name="X" size={18} /></button>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">{j.flags.map((f) => <FlagBadge key={f} f={f} />)}</div>
+
+        {/* stage timeline */}
+        <div className="mt-4">
+          <p className="text-muted mb-2 text-[12px] font-black">שלבי המסע</p>
+          <ol className="flex flex-col gap-1.5">
+            {order.map((s, i) => {
+              const done = i < j.stageIndex, current = i === j.stageIndex;
+              return (
+                <li key={s} className="flex items-center gap-2.5">
+                  <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${current ? "bg-brand text-white" : done ? "bg-success-soft text-success" : "bg-surface text-muted"}`}>{done ? "✓" : i + 1}</span>
+                  <span className={`text-[13px] ${current ? "text-ink font-black" : done ? "text-muted" : "text-muted/70"}`}>{STAGE_LABELS[j.entityType][s] ?? s}</span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        {/* health + risk */}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="bg-surface rounded-xl p-3 text-center"><p className="text-ink text-xl font-black">{j.healthScore}</p><p className="text-muted text-[11px] font-bold">בריאות{j.healthLabel ? ` · ${j.healthLabel}` : ""}</p></div>
+          <div className="bg-surface rounded-xl p-3 text-center"><p className={`text-xl font-black ${j.risk >= 60 ? "text-danger" : "text-ink"}`}>{j.risk}</p><p className="text-muted text-[11px] font-bold">סיכון</p></div>
+        </div>
+
+        {j.nextAction && (
+          <div className="bg-brand-soft/50 border-brand/20 mt-4 rounded-2xl border p-3.5">
+            <p className="text-brand-strong text-[12px] font-black">הצעד הבא</p>
+            <p className="text-ink mt-1 text-[13px] font-semibold leading-relaxed">{j.nextAction}</p>
+            {j.nextActionReason && <p className="text-muted mt-1 text-[12px] leading-relaxed">{j.nextActionReason}</p>}
+          </div>
+        )}
+
+        {(j.openTasks > 0 || j.upcomingMeetingAt || j.lastActivityAt) && (
+          <div className="text-muted mt-4 flex flex-col gap-1.5 text-[12px] font-bold">
+            {j.lastActivityAt && <span className="inline-flex items-center gap-1.5"><Icon name="Activity" size={13} /> פעילות אחרונה: {timeAgo(j.lastActivityAt)}</span>}
+            {j.openTasks > 0 && <span className="inline-flex items-center gap-1.5"><Icon name="ListChecks" size={13} /> {j.openTasks} משימות פתוחות</span>}
+            {j.upcomingMeetingAt && <span className="inline-flex items-center gap-1.5"><Icon name="Calendar" size={13} /> פגישה קרובה: {dateHe(j.upcomingMeetingAt)}</span>}
+          </div>
+        )}
+
+        {j.evidence.length > 0 && (
+          <div className="mt-4">
+            <p className="text-muted mb-1.5 text-[12px] font-black">ראיות / למה</p>
+            <ul className="text-ink flex list-inside list-disc flex-col gap-0.5 text-[12px]">{j.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul>
+          </div>
+        )}
+
+        <Link href={j.href} className="btn-zono-primary zono-focus-ring mt-5 inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-sm font-black text-white">פתח כרטיס {ENTITY_HE[j.entityType]}</Link>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, hint, action }: { icon: string; title: string; hint?: string; action?: React.ReactNode }) {
+  return (
+    <div className="bg-card border-line flex flex-col items-center gap-3 rounded-3xl border px-6 py-16 text-center shadow-sm">
+      <span className="bg-brand-soft text-brand-strong grid h-16 w-16 place-items-center rounded-2xl"><Icon name={icon} size={30} /></span>
+      <h2 className="text-ink text-xl font-black">{title}</h2>
+      {hint && <p className="text-muted max-w-md text-sm">{hint}</p>}
+      {action && <div className="mt-2 flex flex-wrap items-center justify-center gap-2">{action}</div>}
     </div>
   );
 }

@@ -1,17 +1,19 @@
-import { getJourneyCommandCenter, type JourneyCommandCenter } from "@/lib/journey-intelligence/service";
+// ============================================================================
+// 🧭 ZONO — Journey Center page (/journeys). Reads the UNIFIED journey model
+// (composition over the existing buyer/seller/lead twins + listing scorecards);
+// never the sparsely-seeded `journeys` table. Distinguishes load-error from a
+// true empty state. No writes, no journey creation.
+// ============================================================================
+import { getJourneyCenter } from "@/lib/journey-center/service";
+import type { JourneyCenter } from "@/lib/journey-center/types";
 import { JourneysView } from "./JourneysView";
 
 export const dynamic = "force-dynamic";
 
-const EMPTY: JourneyCommandCenter = {
-  kpis: { readyBuyers: 0, readySellers: 0, stuckJourneys: 0, journeyRisks: 0, journeyOpportunities: 0, activeJourneys: 0, expectedCommission: 0 },
-  buyers: [], sellers: [], stuck: [], ready: [], risks: [], opportunities: [], milestones: [],
-  analytics: { byStageBuyer: [], byStageSeller: [], avgConversion: 0, avgHealth: 0 }, isManager: false,
-};
-
 export default async function JourneysPage() {
-  let cc: JourneyCommandCenter = EMPTY;
-  try { cc = await getJourneyCommandCenter(); }
-  catch (e) { console.error("[journeys] load failed:", e); }
-  return <JourneysView cc={cc} />;
+  let data: JourneyCenter | null = null;
+  let error = false;
+  try { data = await getJourneyCenter(); }
+  catch (e) { console.error("[journeys] load failed:", e); error = true; }
+  return <JourneysView data={data} error={error} />;
 }
