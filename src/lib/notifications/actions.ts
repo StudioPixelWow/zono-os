@@ -2,6 +2,17 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { getNotificationFeed } from "./service";
+
+/** Real unread count for the header bell badge (0 => no dot). */
+export async function getUnreadCountAction(): Promise<{ unread: number }> {
+  try {
+    const feed = await getNotificationFeed();
+    return { unread: feed.unread };
+  } catch {
+    return { unread: 0 };
+  }
+}
 
 export async function setNotificationStateAction(itemKey: string, state: "read" | "archived" | "pinned" | "clear") {
   const { user, profile } = await getSessionContext();

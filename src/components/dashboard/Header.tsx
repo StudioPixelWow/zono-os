@@ -1,15 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 import { useCurrentUser } from "./DashboardDataProvider";
 import { ProfileEditPopup } from "./ProfileEditPopup";
+import { getUnreadCountAction } from "@/lib/notifications/actions";
 
 /** Top bar: search, notifications, profile. */
 export function Header() {
   const user = useCurrentUser();
   const [editOpen, setEditOpen] = useState(false);
+  const [unread, setUnread] = useState<number | null>(null);
+
+  // Real unread count for the bell — no hardcoded dot.
+  useEffect(() => {
+    let alive = true;
+    getUnreadCountAction().then((r) => { if (alive) setUnread(r.unread); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const displayName = user?.fullName?.trim() || "משתמש";
   const roleLabel = user?.roleLabel || "סוכן";
@@ -38,7 +47,11 @@ export function Header() {
             aria-label="מרכז ההתראות"
           >
             <Icon name="Bell" size={20} />
-            <span className="bg-danger absolute end-2.5 top-2.5 h-2 w-2 rounded-full ring-2 ring-white" />
+            {unread != null && unread > 0 && (
+              unread > 9
+                ? <span className="bg-danger absolute -end-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-black text-white ring-2 ring-white">9+</span>
+                : <span className="bg-danger absolute -end-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-black text-white ring-2 ring-white">{unread}</span>
+            )}
           </Link>
 
           {/* User block — clicking opens the Agent Personal Area (/my-profile). */}
