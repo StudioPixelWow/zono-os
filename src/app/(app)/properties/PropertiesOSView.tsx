@@ -37,8 +37,9 @@ const TERMINAL = new Set(["sold", "rented", "withdrawn", "archived", "draft"]);
 function coverFor(p: PropertyRow, covers: Record<string, string>): string | null {
   return covers[p.id] ?? p.primary_image_url ?? null;
 }
-function scoreOf(p: PropertyRow): number {
-  return p.zono_score ?? p.quality_score ?? 70;
+/** Real listing score only — never a fabricated fallback. null = not scored yet. */
+function scoreOf(p: PropertyRow): number | null {
+  return p.zono_score ?? p.quality_score ?? null;
 }
 function daysSince(iso: string | null): number {
   if (!iso) return 0;
@@ -266,7 +267,7 @@ const STUDIO_LINKS = (id: string) => [
 
 function HotPropertyCard({ p, cover }: { p: PropertyRow; cover: string | null }) {
   const score = scoreOf(p);
-  const tone = scoreTone(score);
+  const tone = scoreTone(score ?? 0);
   const statusTone = (PROPERTY_STATUS_TONES[p.status] ?? "neutral") as BadgeTone;
   return (
     <div className="bg-card border-line flex min-w-[300px] max-w-[320px] flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
@@ -278,7 +279,7 @@ function HotPropertyCard({ p, cover }: { p: PropertyRow; cover: string | null })
           <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Building2" size={34} /></div>
         )}
         <span className="absolute start-3 top-3"><Badge tone={statusTone} size="sm">{PROPERTY_STATUS_LABELS[p.status]}</Badge></span>
-        <span className={cn("bg-card absolute end-3 top-3 grid h-11 w-11 place-items-center rounded-full text-sm font-black ring-2", tone.ring, tone.text)}>{score}</span>
+        {score != null && <span className={cn("bg-card absolute end-3 top-3 grid h-11 w-11 place-items-center rounded-full text-sm font-black ring-2", tone.ring, tone.text)}>{score}</span>}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <p className="text-ink text-base font-extrabold leading-snug">{p.title}</p>
@@ -390,7 +391,7 @@ function PropertyPipeline({ properties, covers }: { properties: PropertyRow[]; c
                   <p className="text-ink truncate text-xs font-bold">{p.title}</p>
                   <p className="text-brand-strong text-[11px] font-black">{p.price ? ilsCompact(p.price) : "—"}</p>
                 </div>
-                <span className="text-success text-[11px] font-black">{scoreOf(p)}</span>
+                <span className="text-success text-[11px] font-black">{scoreOf(p) ?? "—"}</span>
               </Link>
               );
             })}
@@ -420,7 +421,7 @@ function PropertyStudio({ top }: { top: PropertyRow | null }) {
           <span className="text-muted text-[11px] font-bold">נכס נבחר</span>
           <p className="text-ink text-base font-extrabold">{top ? `${propertyAddressLine(top)}` : "בחר נכס"}</p>
           <div className="flex items-center gap-2">
-            <span className="text-success text-2xl font-black">{top ? scoreOf(top) : "—"}</span>
+            <span className="text-success text-2xl font-black">{top && scoreOf(top) != null ? scoreOf(top) : "—"}</span>
             <span className="text-muted text-xs">/ 100</span>
           </div>
           <Link href={id ? `/properties/${id}` : "/properties"} className="bg-brand text-white mt-1 rounded-lg px-3 py-2 text-center text-[13px] font-bold">כניסה לנכס</Link>
@@ -555,14 +556,14 @@ export function PropertiesOSView({
   children: ReactNode;
 }) {
   const activeProps = useMemo(() => properties.filter((p) => !TERMINAL.has(p.status)), [properties]);
-  const hot = useMemo(() => [...properties].sort((a, b) => scoreOf(b) - scoreOf(a)).slice(0, 8), [properties]);
+  const hot = useMemo(() => [...properties].sort((a, b) => (scoreOf(b) ?? -1) - (scoreOf(a) ?? -1)).slice(0, 8), [properties]);
   const attention = useMemo(() => buildAttention(properties, covers), [properties, covers]);
   const needMarketing = useMemo(() => properties.filter((p) => !TERMINAL.has(p.status) && !coverFor(p, covers)).length, [properties, covers]);
   const potentialCommission = useMemo(() => activeProps.reduce((s, p) => s + (p.price ?? 0) * 0.02, 0), [activeProps]);
 
   const kpis: Kpi[] = [
     { label: "נכסים פעילים", value: String(activeProps.length), icon: "Building2", tone: "bg-brand-soft text-brand-strong", delta: "מהחודש שעבר", deltaUp: true, highlight: true },
-    { label: "נכסים חמים", value: String(properties.filter((p) => scoreOf(p) >= 85).length), icon: "Flame", tone: "bg-danger-soft text-danger" },
+    { label: "נכסים חמים", value: String(properties.filter((p) => (scoreOf(p) ?? 0) >= 85).length), icon: "Flame", tone: "bg-danger-soft text-danger" },
     { label: "דורשים טיפול", value: String(attention.length), icon: "AlertTriangle", tone: "bg-warning-soft text-warning" },
     { label: "עמלות פוטנציאליות", value: ilsCompact(potentialCommission), icon: "Wallet", tone: "bg-success-soft text-success", delta: "החודש", deltaUp: true },
   ];
