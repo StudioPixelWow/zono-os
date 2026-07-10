@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getPublicAgentProperties, type PublicAgentProperty } from "@/lib/agent-website/service";
+import { headers } from "next/headers";
+import { getPublicAgentProperties, logAgentSiteEvent, type PublicAgentProperty } from "@/lib/agent-website/service";
 
 export const dynamic = "force-dynamic";
 const money = (n: number | null | undefined) => typeof n === "number" && n > 0 ? `₪${n.toLocaleString("he-IL")}` : "";
@@ -7,6 +8,8 @@ const money = (n: number | null | undefined) => typeof n === "number" && n > 0 ?
 export default async function AgentPropertiesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const props = await getPublicAgentProperties(slug).catch(() => []);
+  // Record the property-listing view so the agent-site "צפיות בנכסים" metric is real.
+  try { const h = await headers(); await logAgentSiteEvent(slug, "property_view", { path: "/properties", userAgent: h.get("user-agent") ?? undefined, ip: (h.get("x-forwarded-for") ?? "").split(",")[0] || undefined }); } catch { /* never block render */ }
   return (
     <div dir="rtl" className="min-h-screen bg-white text-[#0f172a]">
       <nav className="border-b border-[#eef0f4] bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3"><Link href={`/agent/${slug}`} className="font-black text-[#1e1b4b]">← חזרה לאתר</Link><h1 className="text-lg font-black">כל הנכסים</h1></div></nav>

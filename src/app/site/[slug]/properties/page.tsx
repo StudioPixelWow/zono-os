@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getPublicOfficeProperties, type PublicProperty } from "@/lib/office-website/service";
+import { headers } from "next/headers";
+import { getPublicOfficeProperties, logSiteEvent, type PublicProperty } from "@/lib/office-website/service";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,8 @@ const money = (n: number | null | undefined) => typeof n === "number" && n > 0 ?
 export default async function OfficeSitePropertiesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const props = await getPublicOfficeProperties(slug).catch(() => []);
+  // Record the property-listing view so the "צפיות בנכסים" analytics metric is real.
+  try { const h = await headers(); await logSiteEvent(slug, "property_view", { path: "/properties", userAgent: h.get("user-agent") ?? undefined, ip: (h.get("x-forwarded-for") ?? "").split(",")[0] || undefined }); } catch { /* never block render */ }
 
   return (
     <div dir="rtl" className="min-h-screen bg-white text-[#0f172a]">
