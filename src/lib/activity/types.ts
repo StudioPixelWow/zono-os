@@ -26,6 +26,7 @@ export const EVENT_TYPES = {
   propertyCreated: "property.created",
   propertyUpdated: "property.updated",
   propertyStageChanged: "property.stage_changed",
+  propertySold: "property.sold",
   propertyIntelligenceInitialized: "property.intelligence_initialized",
   propertyScoreChanged: "property.score_changed",
   propertyRiskCreated: "property.risk_created",

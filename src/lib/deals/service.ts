@@ -12,6 +12,7 @@ import {
   buildDealAi, computeDealScores, DEAL_STAGE_LABEL, expectedCloseDate, matchStageToDealStage,
   negotiationGap, nextDealAction, OBJECTION_LABEL, type DealStage,
 } from "./engine";
+import { syncPropertyOnDealWon } from "./deal-property-sync";
 
 type DB = Database["public"]["Tables"];
 const DAY = 86_400_000;
@@ -218,6 +219,13 @@ export async function advanceDealStage(dealId: string, stage: DealStage, outcome
   if (stage === "closed" || stage === "lost") {
     try { await syncCanonicalDealOnClose(supabase, orgId, dealId, stage === "closed" ? "won" : "lost", outcome ?? {}); }
     catch (e) { console.error("[deals] canonical sync failed:", e); }
+  }
+  // Stage 0.2: a WON deal marks its linked property sold/rented (idempotent).
+  if (stage === "closed") {
+    try {
+      const { data: pr } = await supabase.from("deal_profiles").select("property_id").eq("id", dealId).eq("organization_id", orgId).maybeSingle();
+      await syncPropertyOnDealWon(supabase, orgId, (pr?.property_id as string | null) ?? null);
+    } catch (e) { console.error("[deals] property sync failed:", e); }
   }
 }
 

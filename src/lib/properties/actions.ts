@@ -10,6 +10,43 @@ import {
   updateProperty,
   type PropertyInput,
 } from "./repository";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
+import { findOpenDealsForProperty, type OpenDealLite } from "@/lib/deals/deal-property-sync";
+import { advanceDealStage } from "@/lib/deals/service";
+import { logActivityEvent } from "@/lib/activity/service";
+import { EVENT_TYPES } from "@/lib/activity/types";
+
+/** Read the open deals linked to a property (for a future explicit sold-confirmation UI). */
+export async function getPropertyOpenDealsAction(propertyId: string): Promise<{ deals: OpenDealLite[] }> {
+  const { profile } = await getSessionContext();
+  if (!profile?.org_id) return { deals: [] };
+  const db = await createClient();
+  return { deals: await findOpenDealsForProperty(db, profile.org_id, propertyId) };
+}
+
+/** Stage 0.2 · property marked sold/rented → reconcile the linked deal(s).
+ *  - exactly one active linked deal → close it as won (property already sold ⇒ deal's
+ *    own property-sync is a no-op, so no divergence, no double-apply).
+ *  - multiple → do NOT auto-close any (never close the wrong deal); flag on the timeline.
+ *  - none → nothing to reconcile. */
+async function reconcileDealsOnPropertySold(propertyId: string): Promise<void> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return;
+    const db = await createClient();
+    const open = await findOpenDealsForProperty(db, profile.org_id, propertyId);
+    if (open.length === 1) {
+      await advanceDealStage(open[0].profileId, "closed");
+    } else if (open.length > 1) {
+      await logActivityEvent({
+        eventType: EVENT_TYPES.propertySold, entityType: "property", entityId: propertyId,
+        title: "הנכס סומן כנמכר — יש לבחור ידנית איזו עסקה לסגור",
+        description: `${open.length} עסקאות פתוחות מקושרות לנכס`, metadata: { via: "manual", ambiguous: true },
+      });
+    }
+  } catch (e) { console.error("[properties] deal reconcile failed:", e); }
+}
 
 export interface PropertyActionState {
   error?: string;
@@ -80,6 +117,11 @@ export async function setPropertyStatusAction(
   } catch (e) {
     console.error("[properties] status change failed:", e);
     return { error: "שינוי הסטטוס נכשל." };
+  }
+  // Stage 0.2: a manual sold/rented must reconcile the linked deal (no divergence).
+  if (status === "sold" || status === "rented") {
+    await reconcileDealsOnPropertySold(id);
+    revalidatePath("/deals");
   }
   revalidatePath(`/properties/${id}`);
   revalidatePath("/properties");
