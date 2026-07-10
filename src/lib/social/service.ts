@@ -84,7 +84,7 @@ export async function reviewSocialLead(id: string, status: string, opts?: { agen
 }
 
 // ── Conversion: social lead → CRM lead + buyer twin + intel + graph ──────────
-export interface ConversionResult { leadId: string; buyerId: string }
+export interface ConversionResult { leadId: string; buyerId?: string; sellerId?: string }
 
 export async function convertSocialLeadToLead(socialLeadId: string): Promise<ConversionResult> {
   const { userId, orgId } = await ctx();
@@ -105,19 +105,33 @@ export async function convertSocialLeadToLead(socialLeadId: string): Promise<Con
   } as never).select("id").single();
   if (!lead?.id) throw new Error("יצירת הליד נכשלה");
 
-  // 2) Buyer twin.
-  const { data: buyer } = await supabase.from("buyers").insert({
-    org_id: orgId, full_name: name, owner_id: sl.assigned_agent_id, notes: `נוצר מליד חברתי (${sl.platform ?? "social"}) · ${INTENT_LABEL[intent]}`,
-    temperature: sl.lead_quality_score >= 75 ? "hot" : sl.lead_quality_score >= 50 ? "warm" : "cold",
-    preferred_areas: communityCity ? [communityCity] : [], readiness: sl.lead_quality_score,
-  } as never).select("id").single();
-  if (!buyer?.id) throw new Error("יצירת הקונה נכשלה");
-
-  // 3) Buyer Intelligence init (minimal twin row; full recompute is separate).
-  await supabase.from("buyer_intelligence_profiles").insert({ org_id: orgId, buyer_id: buyer.id } as never);
+  // 2) Twin — INTENT-AWARE (Stage 0.5 fix): seller-intent creates a SELLER, not a buyer.
+  const isSeller = leadIntent === "seller";
+  let buyerId: string | null = null;
+  let sellerId: string | null = null;
+  const twinType: "buyer" | "seller" = isSeller ? "seller" : "buyer";
+  if (isSeller) {
+    const { data: seller } = await supabase.from("sellers").insert({
+      org_id: orgId, full_name: name, owner_id: sl.assigned_agent_id,
+    } as never).select("id").single();
+    if (!seller?.id) throw new Error("יצירת המוכר נכשלה");
+    sellerId = seller.id as string;
+    await supabase.from("seller_intelligence_profiles").insert({ org_id: orgId, seller_id: sellerId } as never);
+  } else {
+    const { data: buyer } = await supabase.from("buyers").insert({
+      org_id: orgId, full_name: name, owner_id: sl.assigned_agent_id, notes: `נוצר מליד חברתי (${sl.platform ?? "social"}) · ${INTENT_LABEL[intent]}`,
+      temperature: sl.lead_quality_score >= 75 ? "hot" : sl.lead_quality_score >= 50 ? "warm" : "cold",
+      preferred_areas: communityCity ? [communityCity] : [], readiness: sl.lead_quality_score,
+    } as never).select("id").single();
+    if (!buyer?.id) throw new Error("יצירת הקונה נכשלה");
+    buyerId = buyer.id as string;
+    // 3) Buyer Intelligence init (minimal twin row; full recompute is separate).
+    await supabase.from("buyer_intelligence_profiles").insert({ org_id: orgId, buyer_id: buyerId } as never);
+  }
+  const twinId = (buyerId ?? sellerId) as string;
 
   // 4) Activity events.
-  await logActivityEvent({ eventType: "social_lead.converted", entityType: "buyer", entityId: buyer.id, title: "המרה מליד חברתי", description: sl.ai_summary, relatedEntityType: "lead", relatedEntityId: lead.id, metadata: { socialLeadId, community: sl.community_id, platform: sl.platform } });
+  await logActivityEvent({ eventType: "social_lead.converted", entityType: twinType, entityId: twinId, title: "המרה מליד חברתי", description: sl.ai_summary, relatedEntityType: "lead", relatedEntityId: lead.id, metadata: { socialLeadId, community: sl.community_id, platform: sl.platform } });
 
   // 5) Attribution chain (Community → Social Lead → Lead → Buyer).
   if (sl.community_id) await supabase.from("community_lead_attribution").insert({
@@ -129,24 +143,25 @@ export async function convertSocialLeadToLead(socialLeadId: string): Promise<Con
 
   // 6) Knowledge Graph links.
   const rels: DB["entity_relationships"]["Insert"][] = [
-    { org_id: orgId, source_entity_type: "lead", source_entity_id: lead.id, target_entity_type: "buyer", target_entity_id: buyer.id, relationship_type: "converted_to", strength_score: 90, status: "active" } as never,
+    { org_id: orgId, source_entity_type: "lead", source_entity_id: lead.id, target_entity_type: twinType, target_entity_id: twinId, relationship_type: "converted_to", strength_score: 90, status: "active" } as never,
   ];
   if (sl.community_id) rels.push({ org_id: orgId, source_entity_type: "community", source_entity_id: sl.community_id, target_entity_type: "lead", target_entity_id: lead.id, relationship_type: "generated_lead", strength_score: clamp(sl.lead_quality_score), status: "active" } as never);
-  if (sl.property_id) rels.push({ org_id: orgId, source_entity_type: "buyer", source_entity_id: buyer.id, target_entity_type: "property", target_entity_id: sl.property_id, relationship_type: "interested_in", strength_score: 70, status: "active" } as never);
+  if (sl.property_id) rels.push({ org_id: orgId, source_entity_type: twinType, source_entity_id: twinId, target_entity_type: "property", target_entity_id: sl.property_id, relationship_type: "interested_in", strength_score: 70, status: "active" } as never);
   await supabase.from("entity_relationships").insert(rels as never);
 
-  // 7) Update social lead.
-  await supabase.from("social_leads").update({ status: "converted", lead_id: lead.id, converted_buyer_id: buyer.id, reviewed_by: userId, reviewed_at: new Date().toISOString() } as never).eq("id", socialLeadId);
+  // 7) Update social lead (converted_buyer_id only when a buyer was created) + link canonical lead.
+  await supabase.from("social_leads").update({ status: "converted", lead_id: lead.id, converted_buyer_id: buyerId, reviewed_by: userId, reviewed_at: new Date().toISOString() } as never).eq("id", socialLeadId);
+  await supabase.from("leads").update({ stage: "converted", converted_buyer_id: buyerId, converted_seller_id: sellerId } as never).eq("id", lead.id).eq("org_id", orgId);
 
-  // 8) Open the converted buyer's customer journey (real buyer row; best-effort).
+  // 8) Open the converted twin's customer journey (real row; best-effort).
   try {
     const { ensureJourney } = await import("@/lib/journey-intelligence/service");
-    await ensureJourney("buyer", buyer.id);
+    await ensureJourney(twinType, twinId);
   } catch (e) {
     console.error("[social] journey ensure on conversion failed:", e);
   }
 
-  return { leadId: lead.id, buyerId: buyer.id };
+  return { leadId: lead.id, buyerId: buyerId ?? undefined, sellerId: sellerId ?? undefined };
 }
 
 // ── Follow-up generation ─────────────────────────────────────────────────────

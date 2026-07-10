@@ -49,5 +49,11 @@ export async function createLeadAction(input: NewLeadInput): Promise<{ ok: boole
   } as never).select("id").single();
 
   if (error || !data) return { ok: false, error: error?.message ?? "יצירת הליד נכשלה." };
-  return { ok: true, id: (data as { id: string }).id };
+  const leadId = (data as { id: string }).id;
+  // Stage 0.5: put lead creation on the unified timeline (was previously silent).
+  try {
+    const { logActivityEvent } = await import("@/lib/activity/service");
+    await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: `ליד חדש: ${name}` });
+  } catch (e) { console.error("[leads] activity log failed:", e); }
+  return { ok: true, id: leadId };
 }

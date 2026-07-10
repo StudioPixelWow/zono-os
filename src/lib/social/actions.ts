@@ -29,8 +29,10 @@ export async function reviewSocialLeadAction(id: string, status: string, agentId
 export async function convertSocialLeadAction(id: string): Promise<SocialActionState> {
   try {
     const r = await convertSocialLeadToLead(id);
-    revalidate(); revalidatePath("/buyers"); revalidatePath(`/buyers/${r.buyerId}`);
-    return { ok: true, message: "הומר לליד + קונה במערכת" };
+    revalidate();
+    if (r.buyerId) { revalidatePath("/buyers"); revalidatePath(`/buyers/${r.buyerId}`); }
+    if (r.sellerId) { revalidatePath("/sellers"); revalidatePath(`/sellers/${r.sellerId}`); }
+    return { ok: true, message: r.sellerId ? "הומר לליד + מוכר במערכת" : "הומר לליד + קונה במערכת" };
   } catch (e) { return { error: e instanceof Error ? e.message : "ההמרה נכשלה" }; }
 }
 
