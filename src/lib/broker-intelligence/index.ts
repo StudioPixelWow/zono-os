@@ -11,3 +11,5 @@ export { scoreAcquisition, rankAcquisition } from "./acquisition";
 export type { AcquisitionSignals } from "./acquisition";
 export { scoreBuyer, rankBuyers } from "./buyer";
 export type { BuyerSignals } from "./buyer";
+export { scoreSeller, rankSellers } from "./seller";
+export type { SellerSignals } from "./seller";

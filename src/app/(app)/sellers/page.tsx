@@ -3,6 +3,7 @@ import { listSellerBoard } from "@/lib/seller-intelligence/service";
 import { sellerIntelligenceRepository } from "@/lib/seller-intelligence/repository";
 import type { SellerIntel } from "@/lib/sellers/insights";
 import { SellersWorkspace, type IntelMembership } from "./components/SellersWorkspace";
+import { SellerIntelligencePanel } from "@/components/broker-intelligence/SellerIntelligencePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -40,12 +41,15 @@ export default async function SellersPage() {
   }
 
   return (
-    <SellersWorkspace
-      sellers={sellers}
-      profiles={profiles}
-      counts={counts}
-      intel={intel}
-      error={error}
-    />
+    <div className="flex flex-col gap-5">
+      <SellerIntelligencePanel />
+      <SellersWorkspace
+        sellers={sellers}
+        profiles={profiles}
+        counts={counts}
+        intel={intel}
+        error={error}
+      />
+    </div>
   );
 }

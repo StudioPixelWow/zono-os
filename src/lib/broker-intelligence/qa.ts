@@ -95,5 +95,49 @@ check("ranked buyer: insufficient last", rankedB[rankedB.length - 1].insufficien
 const bInp: BuyerSignals = { ...bBare, topMatchProbability: 75, topMatchPropertyId: "p1", conversionProbability: 60 };
 check("buyer deterministic", JSON.stringify(scoreBuyer(bInp)) === JSON.stringify(scoreBuyer(bInp)));
 
-console.log(`\nBroker Intelligence · Acquisition+Buyer QA — ${pass} passed, ${fail} failed`);
+// ── Area 3 · Seller ─────────────────────────────────────────────────────────
+import { scoreSeller, rankSellers, type SellerSignals } from "./seller";
+
+const sBare: SellerSignals = {
+  sellerId: "s1", name: "יוסי", hasSignedAgreement: true, allowsMarketing: true,
+  churnRisk: null, trust: null, satisfaction: null, engagement: null, daysSinceContact: null,
+  propertyId: null, listingMomentum: null, listingExposure: null, marketPosition: null, marketingScore: null,
+};
+
+// high churn + comm gap → retention call today
+const sChurn = scoreSeller({ ...sBare, churnRisk: 72, daysSinceContact: 30, trust: 38 });
+check("high churn → retention call", sChurn.title.includes("שימור") || sChurn.suggestedAction.includes("שימור"));
+check("high churn not insufficient", !sChurn.insufficientEvidence);
+check("high churn urgency high/critical", sChurn.urgency === "high" || sChurn.urgency === "critical");
+check("churn evidence cites crm", sChurn.evidence.some(e => e.source === "crm" && (e.weight ?? 0) > 0));
+
+// pricing resistance → review pricing
+const sPrice = scoreSeller({ ...sBare, marketPosition: 32, listingMomentum: 30 });
+check("pricing resistance → review pricing", sPrice.title.includes("תמחור") || sPrice.suggestedAction.includes("מחיר"));
+
+// stagnating listing / marketing fatigue → refresh marketing
+const sStag = scoreSeller({ ...sBare, listingMomentum: 28, marketingScore: 30, propertyId: "p1", marketPosition: 70 });
+check("stagnating → refresh marketing", sStag.title.includes("שיווק") || sStag.suggestedAction.includes("קמפיין"));
+check("stagnating evidence cites marketing", sStag.evidence.some(e => e.source === "marketing"));
+
+// bare seller, no intel → insufficient + honest
+const sCold = scoreSeller(sBare);
+check("bare seller insufficient", sCold.insufficientEvidence);
+check("bare seller honest why", sCold.why.includes("אין מספיק"));
+
+// missing agreement is a caution but not a driver alone
+const sNoAgr = scoreSeller({ ...sBare, hasSignedAgreement: false });
+check("no-agreement caution present", sNoAgr.evidence.some(e => e.label.includes("הסכם")));
+check("no-agreement alone insufficient", sNoAgr.insufficientEvidence);
+
+// ranking: sufficient first; higher confidence first
+const rankedS = rankSellers([sBare, { ...sBare, sellerId: "s2", churnRisk: 75, daysSinceContact: 40, trust: 30 }]);
+check("ranked seller: real first", rankedS[0].entityId === "s2");
+check("ranked seller: insufficient last", rankedS[rankedS.length - 1].insufficientEvidence);
+
+// determinism
+const sInp: SellerSignals = { ...sBare, churnRisk: 60, daysSinceContact: 20, marketPosition: 35 };
+check("seller deterministic", JSON.stringify(scoreSeller(sInp)) === JSON.stringify(scoreSeller(sInp)));
+
+console.log(`\nBroker Intelligence · Acq+Buyer+Seller QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
