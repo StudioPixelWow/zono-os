@@ -45,6 +45,24 @@ export function phoneTail(input: string | null | undefined): string | null {
   return p ? p.slice(-7) : null;
 }
 
+// Hebrew final-form letters → base forms, so a token matches regardless of
+// whether it sits at the end of a word ("ירושלים" ↔ mid-string forms).
+const FINAL_FORMS: Record<string, string> = { "ך": "כ", "ם": "מ", "ן": "נ", "ף": "פ", "ץ": "צ" };
+// Common address-type abbreviations → canonical, so "רח׳ הרצל" ↔ "רחוב הרצל".
+const ADDRESS_SYNONYMS: Record<string, string> = { "רח": "רחוב", "שד": "שדרות", "סמ": "סמטה", "שכ": "שכונה" };
+
+/**
+ * The MATCH form of text: normalizeText + Hebrew final-letter folding + address
+ * abbreviation folding. Used for BOTH the stored haystack (normalized_text /
+ * keywords) and the query, so they always compare on equal footing.
+ */
+export function foldForMatch(input: string | null | undefined): string {
+  const base = normalizeText(input);
+  if (!base) return "";
+  const folded = base.replace(/[ךםןףץ]/g, (c) => FINAL_FORMS[c] ?? c);
+  return folded.split(" ").map((t) => ADDRESS_SYNONYMS[t] ?? t).join(" ").trim();
+}
+
 /** Split normalized text into distinct word tokens (length ≥ 2). */
 export function tokenize(normalized: string): string[] {
   if (!normalized) return [];
@@ -57,7 +75,7 @@ export function tokenize(normalized: string): string[] {
  */
 export function buildKeywords(parts: (string | null | undefined)[], phones: (string | null | undefined)[] = []): string[] {
   const out = new Set<string>();
-  for (const p of parts) for (const t of tokenize(normalizeText(p))) out.add(t);
+  for (const p of parts) for (const t of tokenize(foldForMatch(p))) out.add(t);
   for (const ph of phones) {
     const full = normalizePhone(ph);
     const tail = phoneTail(ph);
@@ -72,7 +90,7 @@ export function buildKeywords(parts: (string | null | undefined)[], phones: (str
  * column trigram/full-text indexes run over — safe fields only.
  */
 export function buildNormalizedText(parts: (string | null | undefined)[], phones: (string | null | undefined)[] = []): string {
-  const words = parts.map((p) => normalizeText(p)).filter(Boolean);
+  const words = parts.map((p) => foldForMatch(p)).filter(Boolean);
   const phoneForms: string[] = [];
   for (const ph of phones) {
     const full = normalizePhone(ph);

@@ -62,5 +62,54 @@ check("missing event id → null", classifyEventForSearch({ ...base, id: "" }) =
 check("classifier carries org (cross-org isolation)", classifyEventForSearch({ ...base, organization_id: "ORG9" })?.entityId === "B1");
 check("classifier deterministic", JSON.stringify(classifyEventForSearch(base)) === JSON.stringify(classifyEventForSearch(base)));
 
-console.log(`\nSearch Projection (normalize + document + subscriber) QA — ${pass} passed, ${fail} failed`);
+// ── Batch 4.2 · Ranking (exact > prefix > token-AND > partial) ───────────────
+import { rankSearchDocs, prepareQuery } from "./rank";
+import { foldForMatch } from "./normalize";
+
+check("foldForMatch folds final letters", foldForMatch("ירושלים") === "ירושלימ");
+check("foldForMatch folds address abbrev", foldForMatch("רח הרצל") === "רחוב הרצל");
+check("foldForMatch collapses whitespace + niqqud + finals", foldForMatch("  שָׁלוֹם   דן ") === "שלומ דנ");
+
+const doc = (o: Partial<RankableDocT> & { entity_id: string; title: string }): RankableDocT => ({
+  entity_type: "buyer", subtitle: null, normalized_text: foldForMatch(o.title), route: `/buyers/${o.entity_id}`, source_updated_at: null, ...o,
+});
+type RankableDocT = import("./rank").RankableDoc;
+
+const { folded, tokens } = prepareQuery("דן כהן");
+const ranked = rankSearchDocs([
+  doc({ entity_id: "B3", title: "דן כהן לוי", normalized_text: "דן כהן לוי" }),      // token-AND (tier 2)
+  doc({ entity_id: "B1", title: "דן כהן", normalized_text: "דן כהן" }),               // exact (tier 0)
+  doc({ entity_id: "B2", title: "דן כהן אברהם", normalized_text: "דן כהן אברהם" }),   // prefix (tier 1)
+  doc({ entity_id: "B4", title: "מיכל", normalized_text: "רק דן מופיע כאן" }),          // partial-ish (only one token) → tier 3 or drop
+], folded, tokens);
+check("exact ranks first", ranked.hits[0]?.entity_id === "B1");
+check("prefix ranks above token-AND", ranked.hits[1]?.entity_id === "B2" && ranked.hits[2]?.entity_id === "B3");
+check("exact-before-fuzzy tiers", ranked.hits[0].tier === 0 && ranked.hits[1].tier === 1);
+
+// dedup by (entity_type, entity_id) — same entity twice keeps best tier
+const dedup = rankSearchDocs([
+  doc({ entity_id: "B1", title: "דן כהן משהו", normalized_text: "דן כהן משהו" }),  // tier 2
+  doc({ entity_id: "B1", title: "דן כהן", normalized_text: "דן כהן" }),            // tier 0
+], folded, tokens);
+check("dedup keeps single best-tier row", dedup.hits.length === 1 && dedup.hits[0].tier === 0);
+
+// broken route skipped + counted
+const broken = rankSearchDocs([
+  { entity_type: "buyer", entity_id: "B1", title: "דן כהן", subtitle: null, normalized_text: "דן כהן", route: "", source_updated_at: null },
+  { entity_type: "buyer", entity_id: "B2", title: "דן כהן", subtitle: null, normalized_text: "דן כהן", route: "notaroute", source_updated_at: null },
+], folded, tokens);
+check("broken routes skipped + counted", broken.hits.length === 0 && broken.skippedBrokenRoutes === 2);
+
+// stable order: equal tier → newer source_updated_at first, then id
+const stable = rankSearchDocs([
+  doc({ entity_id: "B2", title: "דן כהן", normalized_text: "דן כהן", source_updated_at: "2026-07-01T00:00:00Z" }),
+  doc({ entity_id: "B1", title: "דן כהן", normalized_text: "דן כהן", source_updated_at: "2026-07-10T00:00:00Z" }),
+], folded, tokens);
+check("equal tier → newer first (stable)", stable.hits[0]?.entity_id === "B1");
+check("rank deterministic", JSON.stringify(rankSearchDocs([doc({ entity_id: "B1", title: "דן כהן" })], folded, tokens)) === JSON.stringify(rankSearchDocs([doc({ entity_id: "B1", title: "דן כהן" })], folded, tokens)));
+
+// phone query normalization → matchable token
+check("phone query prepares digit token", prepareQuery("054-123-4567").folded.replace(/\s/g, "").includes("0541234567") || prepareQuery("054-123-4567").tokens.join("").includes("054"));
+
+console.log(`\nSearch Projection (normalize + document + subscriber + rank) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
