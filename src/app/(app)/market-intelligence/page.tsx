@@ -11,6 +11,7 @@ import { loadMarketListings } from "@/lib/external-listings/market-listings-data
 import { ExternalListingsView } from "../properties/ExternalListingsView";
 import { WorkspaceHeader, WorkspaceLinks, type WorkspaceLink } from "@/components/workspace/WorkspaceHeader";
 import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
+import { AcquisitionIntelligencePanel } from "@/components/broker-intelligence/AcquisitionIntelligencePanel";
 
 export const dynamic = "force-dynamic";
 // ExternalListingsView's "Sync Now" runs as a server action from THIS page, so
@@ -41,6 +42,7 @@ export default async function MarketIntelligencePage() {
       />
       <MarketIntelNav active="listings" crumbs={[{ label: "מודעות שוק", href: "/market-intelligence/listings" }]} />
       <WorkspaceLinks links={MARKET_LINKS} />
+      <AcquisitionIntelligencePanel />
       <ExternalListingsView listings={listings} marketStats={marketStats} isAdmin={isAdmin} matches={matches} />
     </div>
   );
