@@ -13,3 +13,6 @@ export { ingestMemoryForEvent } from "./ingest";
 export type { MemoryIngestResult } from "./ingest";
 export { backfillMemory } from "./backfill";
 export type { MemoryBackfillResult, MemoryBackfillDiagnostics } from "./backfill";
+// Batch 4.5 — canonical memory READ (RLS-scoped, sensitivity-filterable).
+export { getEntityMemory, getOrgMemory, getUserMemory } from "./read";
+export type { MemoryView, MemoryReadOptions } from "./read";
