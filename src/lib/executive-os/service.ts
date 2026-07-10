@@ -17,6 +17,7 @@ import { getTeamAvailability } from "@/lib/calendar-os/service";
 import { getInboxBundles } from "@/lib/approval-bundle/service";
 import { getDailyOS } from "@/lib/daily-os/service";
 import { getAutomationHealth } from "@/lib/automation-os/service";
+import { groundGlobalContext, toGroundedSummary } from "@/lib/ai-context";
 import { composeExecutive, answerExecutive } from "./compose";
 import type { ExecutiveOS, ExecutiveInput, ExecItem, ExecDimension, ExecTimelineItem, OfficeTrend, BrokerCompareRow } from "./types";
 
@@ -34,12 +35,15 @@ export async function getExecutiveOS(): Promise<ExecutiveOS> {
   const { orgId } = await ctx();
   if (orgId) { const hit = await getCache<ExecutiveOS>(orgId, "executive_os", ["v45"]); if (hit) return hit.value; }
 
-  const [cos, cal, bundles, daily, team] = await Promise.all([
+  const [cos, cal, bundles, daily, team, grounded] = await Promise.all([
     getChiefOfStaff(orgId),
     getWeekIntelligence().catch(() => null),
     getInboxBundles().catch(() => []),
     getDailyOS().catch(() => null),
     getTeamAvailability().catch(() => []),
+    // Executive mode: org memory + org-wide recs; broker-PRIVATE memory is NEVER
+    // included (enforced by the mode policy). Best-effort — failure never breaks the OS.
+    groundGlobalContext("executive").catch(() => null),
   ]);
 
   // Dimensions — REUSED from Chief-of-Staff score dims + calendar health (+ honest "insufficient").
@@ -77,6 +81,7 @@ export async function getExecutiveOS(): Promise<ExecutiveOS> {
 
   const os = composeExecutive(input);
   os.automation = await getAutomationHealth().catch(() => null);   // 46.0 — Executive OS receives unified automation health
+  if (grounded) os.grounding = toGroundedSummary(grounded);        // 4.5D — shared assembler (executive mode)
   if (orgId) await setCache(orgId, "executive_os", ["v45"], os as unknown as Parameters<typeof setCache>[3], { ttlSeconds: 600 });
   return os;
 }

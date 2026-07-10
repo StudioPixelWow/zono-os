@@ -57,6 +57,19 @@ export interface ExecutiveOS {
   approvalCenter: ExecApprovalCenter;
   brokerComparison: BrokerCompareRow[];
   notes: string[];
+  grounding?: ExecGrounding | null;   // shared-assembler grounding (executive mode)
+}
+
+/** Client-safe grounding for Executive AI — executive mode NEVER includes broker-
+ *  private memory (enforced by the assembler's mode policy). Provenance counts +
+ *  partial-context diagnostics; no raw private content. */
+export interface ExecGrounding {
+  mode: string;
+  contextText: string;
+  provenance: { total: number; explicit: number; derived: number; inferred: number };
+  staleCount: number;
+  failedLayers: string[];
+  truncated: Record<string, number>;
 }
 
 /** Everything the pure compose consumes — filled by the service from existing engines. */
