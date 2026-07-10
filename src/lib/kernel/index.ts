@@ -10,3 +10,6 @@ export { projectEventToTimeline } from "./subscriber";
 export type { DomainEventLike, TimelineProjection } from "./subscriber";
 export { drainDomainEvents } from "./processor";
 export type { DrainResult } from "./processor";
+// Stage 3 — Notification subscriber (second consumer of the outbox).
+export { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
+export type { NotificationProjection, NotificationLevel } from "./notification-subscriber";

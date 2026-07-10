@@ -11,6 +11,7 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { projectEventToTimeline, type DomainEventLike } from "./subscriber";
+import { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
 
 const MAX_RETRIES = 5;
 
@@ -18,6 +19,7 @@ export interface DrainResult {
   scanned: number;
   projected: number;
   skipped: number;
+  notified: number;
   failed: number;
 }
 
@@ -27,7 +29,7 @@ export interface DrainResult {
  */
 export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
   const db = createServiceRoleClient();
-  const out: DrainResult = { scanned: 0, projected: 0, skipped: 0, failed: 0 };
+  const out: DrainResult = { scanned: 0, projected: 0, skipped: 0, notified: 0, failed: 0 };
 
   // Oldest-first so the timeline stays chronological. Only unprocessed rows.
   const { data, error } = await db
@@ -59,6 +61,23 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
         occurred_at: projection.occurred_at,
       } as never);
       if (insErr) throw new Error(insErr.message);
+
+      // Stage 3 · Notification subscriber — SECONDARY + best-effort. A failure
+      // here must never fail the event (the timeline projection already landed).
+      try {
+        const note = projectEventToNotification(row);
+        if (note) {
+          const fkCol = notificationEntityColumn(note.entityType);
+          const noteRow: Record<string, unknown> = {
+            org_id: note.org_id, user_id: note.user_id, level: note.level,
+            category: note.category, title: note.title, href: note.href,
+          };
+          if (fkCol) noteRow[fkCol] = note.entityId;
+          const { error: nErr } = await db.from("notifications").insert(noteRow as never);
+          if (!nErr) out.notified++;
+        }
+      } catch { /* notification is non-critical */ }
+
       await markDone(db, row.id);
       out.projected++;
     } catch (e) {

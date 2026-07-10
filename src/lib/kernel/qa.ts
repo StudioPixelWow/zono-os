@@ -3,6 +3,7 @@
 // No DB, no network. Run: npx tsx src/lib/kernel/qa.ts
 // ============================================================================
 import { projectEventToTimeline, type DomainEventLike } from "./subscriber";
+import { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
 
 let pass = 0;
 let fail = 0;
@@ -48,5 +49,27 @@ check("deterministic", JSON.stringify(projectEventToTimeline(base)) === JSON.str
 // 7) null actor tolerated
 check("null actor tolerated", projectEventToTimeline({ ...base, actor_user_id: null })?.actor_id === null);
 
-console.log(`\nKernel Stage 2 QA — ${pass} passed, ${fail} failed`);
+// ── Stage 3 · notification subscriber ───────────────────────────────────────
+// high-signal event with an actor → a notification
+const n1 = projectEventToNotification({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1" });
+check("deal.won raises a notification", n1 !== null);
+check("deal.won notification is success level", n1?.level === "success");
+check("deal.won notification carries actor as user", n1?.user_id === "U1");
+check("deal.won maps entity → deal", n1?.entityType === "deal" && n1?.entityId === "D1");
+check("deal FK column resolves", notificationEntityColumn("deal") === "deal_id");
+
+// low-signal event → no notification (timeline only)
+check("buyer.updated raises no notification", projectEventToNotification({ ...base, event_type: "buyer.updated", entity_type: "buyer" }) === null);
+
+// high-signal but NO actor → null (notifications.user_id is NOT NULL)
+check("no actor → no notification", projectEventToNotification({ ...base, event_type: "deal.won", entity_type: "deal", actor_user_id: null }) === null);
+
+// unmapped entity column → null (processor omits the FK, still inserts)
+check("unmapped entity column → null", notificationEntityColumn("widget") === null);
+
+// lead.created notifies + links lead FK
+check("lead.created notifies", projectEventToNotification(base)?.category === "new_lead");
+check("lead FK column", notificationEntityColumn("lead") === "lead_id");
+
+console.log(`\nKernel Stage 2+3 QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
