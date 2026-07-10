@@ -38,6 +38,10 @@ export async function syncPropertyOnDealWon(supabase: SB, orgId: string, propert
     title: `הנכס סומן כ${newStatus === "rented" ? "מושכר" : "נמכר"}: ${prop.title ?? ""}`,
     metadata: { via: "deal_won" },
   });
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.propertySold, entityType: "property", entityId: propertyId, payload: { status: newStatus, via: "deal_won" } });
+  } catch { /* best-effort */ }
   await touchJourney(propertyId).catch(() => {});
 }
 

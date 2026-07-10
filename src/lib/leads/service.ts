@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 import { EVENT_TYPES } from "@/lib/activity/types";
+import { emitBusinessEvent, DOMAIN_EVENTS } from "@/lib/kernel";
 
 type SB = Awaited<ReturnType<typeof createClient>>;
 export const LEAD_STAGES = ["new", "contacted", "qualified", "nurturing", "converted", "lost", "disqualified"] as const;
@@ -69,6 +70,7 @@ export async function setLeadStage(leadId: string, stage: LeadStage): Promise<Le
   const { error } = await db.from("leads").update({ stage, last_activity_at: nowIso() } as never).eq("id", leadId).eq("org_id", orgId);
   if (error) return { ok: false, error: error.message };
   await logActivityEvent({ eventType: EVENT_TYPES.leadStageChanged, entityType: "lead", entityId: leadId, title: `שלב הליד עודכן: ${stage}` });
+  await emitBusinessEvent({ type: DOMAIN_EVENTS.leadStageChanged, entityType: "lead", entityId: leadId, payload: { stage } });
   return { ok: true };
 }
 
@@ -157,5 +159,7 @@ export async function convertLead(leadId: string, input: ConvertLeadInput = {}):
     eventType: EVENT_TYPES.leadConverted, entityType: "lead", entityId: leadId,
     title: `הליד הומר ${label}`, metadata: { buyerId, sellerId, source: lead.source ?? null },
   });
+  if (buyerId) await emitBusinessEvent({ type: DOMAIN_EVENTS.leadConvertedToBuyer, entityType: "lead", entityId: leadId, payload: { buyerId }, idempotencyKey: `lead_conv_buyer:${leadId}` });
+  if (sellerId) await emitBusinessEvent({ type: DOMAIN_EVENTS.leadConvertedToSeller, entityType: "lead", entityId: leadId, payload: { sellerId }, idempotencyKey: `lead_conv_seller:${leadId}` });
   return { ok: true, buyerId: buyerId ?? undefined, sellerId: sellerId ?? undefined };
 }

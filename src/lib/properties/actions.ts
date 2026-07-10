@@ -118,6 +118,12 @@ export async function setPropertyStatusAction(
     console.error("[properties] status change failed:", e);
     return { error: "שינוי הסטטוס נכשל." };
   }
+  // Stage 1: emit the property status change through the kernel.
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    const evt = status === "sold" || status === "rented" ? DOMAIN_EVENTS.propertySold : status === "published" ? DOMAIN_EVENTS.propertyPublished : DOMAIN_EVENTS.propertyStatusChanged;
+    await emitBusinessEvent({ type: evt, entityType: "property", entityId: id, payload: { status } });
+  } catch (e) { console.error("[properties] emit failed:", e); }
   // Stage 0.2: a manual sold/rented must reconcile the linked deal (no divergence).
   if (status === "sold" || status === "rented") {
     await reconcileDealsOnPropertySold(id);

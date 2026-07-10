@@ -13,6 +13,7 @@ import {
   negotiationGap, nextDealAction, OBJECTION_LABEL, type DealStage,
 } from "./engine";
 import { syncPropertyOnDealWon } from "./deal-property-sync";
+import { emitBusinessEvent, DOMAIN_EVENTS } from "@/lib/kernel";
 
 type DB = Database["public"]["Tables"];
 const DAY = 86_400_000;
@@ -227,6 +228,9 @@ export async function advanceDealStage(dealId: string, stage: DealStage, outcome
       await syncPropertyOnDealWon(supabase, orgId, (pr?.property_id as string | null) ?? null);
     } catch (e) { console.error("[deals] property sync failed:", e); }
   }
+  // Stage 1: emit the deal lifecycle event through the kernel.
+  const evt = stage === "closed" ? DOMAIN_EVENTS.dealWon : stage === "lost" ? DOMAIN_EVENTS.dealLost : DOMAIN_EVENTS.dealStageChanged;
+  await emitBusinessEvent({ type: evt, entityType: "deal", entityId: dealId, payload: { stage } });
 }
 
 /** Upsert the canonical `deals` row for a closed/lost deal_profile (linked via

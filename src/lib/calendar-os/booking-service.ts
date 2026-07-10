@@ -84,6 +84,10 @@ export async function confirmBooking(input: ConfirmBookingInput): Promise<Confir
         property_id: (created.property_id as string | null) ?? null,
         buyer_id: (created.buyer_id as string | null) ?? null,
       });
+      try {
+        const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+        await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingCreated, entityType: "meeting", entityId: String(created.id), payload: { kind: input.kind, entity: input.entity ?? null } });
+      } catch { /* best-effort */ }
     }
     return { ok: true, meetingId: s(created?.id) ?? undefined, event: event ?? undefined };
   } catch (err) { return { ok: false, error: err instanceof Error ? err.message : "קביעת הפגישה נכשלה." }; }

@@ -54,6 +54,8 @@ export async function createLeadAction(input: NewLeadInput): Promise<{ ok: boole
   try {
     const { logActivityEvent } = await import("@/lib/activity/service");
     await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: `ליד חדש: ${name}` });
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: input.source, intent: input.intent ?? "unknown" } });
   } catch (e) { console.error("[leads] activity log failed:", e); }
   return { ok: true, id: leadId };
 }

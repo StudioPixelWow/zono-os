@@ -71,5 +71,10 @@ export async function createDealAction(input: NewDealInput): Promise<{ ok: boole
     } as never);
   } catch { /* projection is best-effort; getDealsBoard reconciles as a fallback */ }
 
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.dealCreated, entityType: "deal", entityId: dealId, payload: { stage, propertyId: input.propertyId ?? null, buyerId: input.buyerId ?? null } });
+  } catch (e) { console.error("[deals] emit failed:", e); }
+
   return { ok: true, id: dealId };
 }

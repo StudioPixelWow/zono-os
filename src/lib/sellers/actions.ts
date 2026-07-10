@@ -43,9 +43,12 @@ export async function createSeller360Action(
     const seller = await createSeller360(input, profile.org_id, user.id);
     id = seller.id;
     await logActivityEvent({ eventType: "seller.created", entityType: "seller", entityId: id, title: "נוצר מוכר חדש (360)" });
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.sellerCreated, entityType: "seller", entityId: id });
     if (propertyId) {
       await propertySellerRepository.link(profile.org_id, { propertyId, sellerId: id, relationshipType: "owner", isPrimary: true, isDecisionMaker: true, canSign: true });
       await logActivityEvent({ eventType: "seller.linked_to_property", entityType: "property", entityId: propertyId, relatedEntityType: "seller", relatedEntityId: id, title: "מוכר קושר לנכס" });
+      await emitBusinessEvent({ type: DOMAIN_EVENTS.sellerLinkedToProperty, entityType: "property", entityId: propertyId, payload: { sellerId: id } });
     }
     await initializeSellerIntelligence(id).catch((e) => console.error("[seller] auto-init failed:", e));
     // Open the seller's customer journey from this real seller row (idempotent,

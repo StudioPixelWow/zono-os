@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { logMeetingLifecycle } from "@/lib/activity/service";
 import { EVENT_TYPES } from "@/lib/activity/types";
+import { emitBusinessEvent, DOMAIN_EVENTS } from "@/lib/kernel";
 
 type Row = Record<string, unknown>;
 const MEETING_COLS = "id,org_id,title,status,start_at,end_at,type,buyer_id,seller_id,lead_id,property_id,deal_id";
@@ -53,6 +54,7 @@ export async function rescheduleMeeting(meetingId: string, startAt: string, endA
       .eq("id", meetingId).eq("org_id", orgId);
     if (error) return { ok: false, error: error.message };
     await logMeetingLifecycle(EVENT_TYPES.meetingRescheduled, meetingRef(m), `הפגישה נדחתה: ${meetingRef(m).title}`);
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingRescheduled, entityType: "meeting", entityId: meetingId, payload: { startAt, endAt: endAt ?? null } });
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "הדחייה נכשלה." }; }
 }
@@ -70,6 +72,7 @@ export async function cancelMeeting(meetingId: string, reason?: string | null): 
       .eq("id", meetingId).eq("org_id", orgId);
     if (error) return { ok: false, error: error.message };
     await logMeetingLifecycle(EVENT_TYPES.meetingCancelled, meetingRef(m), `הפגישה בוטלה: ${meetingRef(m).title}`, reason ?? null);
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingCancelled, entityType: "meeting", entityId: meetingId, payload: { reason: reason ?? null } });
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "הביטול נכשל." }; }
 }
@@ -87,6 +90,7 @@ export async function markNoShow(meetingId: string, note?: string | null): Promi
       .eq("id", meetingId).eq("org_id", orgId);
     if (error) return { ok: false, error: error.message };
     await logMeetingLifecycle(EVENT_TYPES.meetingNoShow, meetingRef(m), `הלקוח לא הגיע: ${meetingRef(m).title}`, note ?? null);
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingNoShow, entityType: "meeting", entityId: meetingId, payload: { note: note ?? null } });
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "העדכון נכשל." }; }
 }
@@ -123,6 +127,7 @@ export async function completeMeeting(
     if (error) return { ok: false, error: error.message };
 
     await logMeetingLifecycle(EVENT_TYPES.meetingCompleted, meetingRef(m), `הפגישה הושלמה: ${meetingRef(m).title}`, input.outcome ?? null);
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingCompleted, entityType: "meeting", entityId: meetingId, payload: { outcome: input.outcome ?? null, followUpTaskId: followUpTaskId ?? null } });
     return { ok: true, followUpTaskId };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "עדכון הפגישה נכשל." }; }
 }

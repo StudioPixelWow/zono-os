@@ -41,6 +41,8 @@ export async function createBuyerAction(
   try {
     const { logActivityEvent } = await import("@/lib/activity/service");
     await logActivityEvent({ eventType: "buyer.created", entityType: "buyer", entityId: id, title: "נוצר קונה חדש" });
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.buyerCreated, entityType: "buyer", entityId: id });
     const { initializeBuyerIntelligence } = await import("@/lib/buyer-intelligence/service");
     await initializeBuyerIntelligence(id);
     // Open the buyer's customer journey from this real buyer row (idempotent).
