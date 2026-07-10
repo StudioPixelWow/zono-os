@@ -43,7 +43,7 @@ export function buildInsights(d: AreaData): AreaInsight[] {
   if (m.demandLevel === "high" && m.supplyLevel === "low")
     out.push({ kind: "buy", title: "הזדמנות קנייה", body: `${name} מציג ביקוש גבוה מול היצע מצומצם — נכסים איכותיים נחטפים מהר. כדאי לפעול במהירות על הזדמנויות.`, evidence: ev });
   if (m.priceReductions >= 3 || m.supplyLevel === "high")
-    out.push({ kind: "buy", title: "מרחב למשא ומתן", body: `יש ${m.priceReductions} ירידות מחיר ו${SUPPLY_HE(m)} ב${name} — סביבה נוחה לקונים ולמשא ומתן.`, evidence: ev });
+    out.push({ kind: "buy", title: "מרחב למשא ומתן", body: m.priceReductions > 0 ? `יש ${m.priceReductions} ירידות מחיר ו${SUPPLY_HE(m)} ב${name} — סביבה נוחה לקונים ולמשא ומתן.` : `${SUPPLY_HE(m)} ב${name} — סביבה נוחה לקונים ולמשא ומתן.`, evidence: ev });
 
   if (m.demandLevel === "high" || (m.priceTrendPct ?? 0) > 3)
     out.push({ kind: "sell", title: "הזדמנות מכירה", body: `${TREND_HE(m)} ו${DEMAND_HE(m)} ב${name} — תנאים תומכים למוכרים. תמחור נכון עשוי למקסם את הערך.`, evidence: ev });
