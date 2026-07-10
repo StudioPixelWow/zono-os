@@ -8,6 +8,7 @@
 // ============================================================================
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { DEAL_TO_PROFILE_STAGE } from "./service";
 
 /** Valid deal_stage enum values (Hebrew labels in UI). */
 export const DEAL_STAGE_OPTIONS = ["new", "qualified", "negotiation", "agreement", "contract", "closing"] as const;
@@ -50,5 +51,25 @@ export async function createDealAction(input: NewDealInput): Promise<{ ok: boole
   } as never).select("id").single();
 
   if (error || !data) return { ok: false, error: error?.message ?? "יצירת העסקה נכשלה." };
-  return { ok: true, id: (data as { id: string }).id };
+  const dealId = (data as { id: string }).id;
+
+  // Stage 0.1: initialize the 1:1 projection so the deal appears in Deals OS
+  // immediately (unique index on deal_id makes this idempotent on retries).
+  try {
+    await db.from("deal_profiles").insert({
+      organization_id: profile.org_id,
+      deal_id: dealId,
+      buyer_id: input.buyerId || null,
+      seller_id: input.sellerId || null,
+      property_id: input.propertyId || null,
+      assigned_agent_id: user.id,
+      deal_stage: DEAL_TO_PROFILE_STAGE[stage] ?? "new_opportunity",
+      deal_value: value ?? 0,
+      commission_value: commission ?? 0,
+      deal_probability: 0,
+      status: "active",
+    } as never);
+  } catch { /* projection is best-effort; getDealsBoard reconciles as a fallback */ }
+
+  return { ok: true, id: dealId };
 }

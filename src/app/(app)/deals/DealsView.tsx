@@ -259,7 +259,8 @@ function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn:
         </div>
       )}
       <div className="mt-1">
-        <CreateLegalDocumentButton entityType="deal" entityId={d.id} label="מסמך משפטי" />
+        {/* Stage 0.1: legal docs reference the CANONICAL public.deals id (d.deal_id), not the projection id. */}
+        <CreateLegalDocumentButton entityType="deal" entityId={d.deal_id ?? d.id} label="מסמך משפטי" />
       </div>
     </div>
   );

@@ -17,6 +17,87 @@ type DB = Database["public"]["Tables"];
 const DAY = 86_400_000;
 const NEGOTIATING = new Set<DealStage>(["negotiation", "offer_sent", "offer_received", "agreement_draft"]);
 
+// ── Stage 0.1 · Canonical Deal identity ──────────────────────────────────────
+// public.deals is canonical; deal_profiles is a 1:1 projection linked by deal_id.
+// Maps bridge the two stage vocabularies (deals.stage enum ↔ profile deal_stage text).
+const PROFILE_TO_DEAL_STAGE: Record<string, string> = {
+  new_opportunity: "new", contacted: "new", meeting_scheduled: "qualified", property_visit: "qualified",
+  negotiation: "negotiation", offer_sent: "negotiation", offer_received: "negotiation",
+  agreement_draft: "agreement", legal_review: "contract", signed: "closing",
+};
+const DEAL_TO_PROFILE_STAGE: Record<string, string> = {
+  new: "new_opportunity", qualified: "meeting_scheduled", negotiation: "negotiation",
+  agreement: "agreement_draft", contract: "legal_review", closing: "signed",
+};
+
+type SB = Awaited<ReturnType<typeof createClient>>;
+
+/** Build the canonical open-deal row for a projection (no fabricated realized revenue). */
+function canonicalDealRowFromProfile(orgId: string, p: Record<string, unknown>): Record<string, unknown> {
+  return {
+    org_id: orgId,
+    owner_id: (p.assigned_agent_id as string | null) ?? null,
+    title: p.locality ? `עסקה · ${p.locality as string}` : "עסקה",
+    type: "sale",
+    status: "open",
+    stage: PROFILE_TO_DEAL_STAGE[(p.deal_stage as string) ?? "new_opportunity"] ?? "new",
+    probability: Math.max(0, Math.min(100, (p.deal_probability as number | null) ?? 0)),
+    buyer_id: (p.buyer_id as string | null) ?? null,
+    seller_id: (p.seller_id as string | null) ?? null,
+    property_id: (p.property_id as string | null) ?? null,
+    expected_close_date: (p.expected_close_date as string | null) ?? null,
+  };
+}
+
+/** Ensure a canonical public.deals row exists for a projection; returns the canonical id. Idempotent. */
+export async function ensureCanonicalDeal(profileId: string): Promise<string | null> {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  const { data: p } = await supabase.from("deal_profiles")
+    .select("id,deal_id,buyer_id,seller_id,property_id,assigned_agent_id,locality,deal_stage,deal_probability,expected_close_date")
+    .eq("id", profileId).eq("organization_id", orgId).maybeSingle();
+  if (!p) return null;
+  if (p.deal_id) return p.deal_id;
+  const { data: created } = await supabase.from("deals").insert(canonicalDealRowFromProfile(orgId, p as Record<string, unknown>) as never).select("id").single();
+  const newId = (created as { id: string } | null)?.id ?? null;
+  if (newId) await supabase.from("deal_profiles").update({ deal_id: newId } as never).eq("id", profileId);
+  return newId;
+}
+
+/** Make canonical deals ⇄ projections 1:1 for the org. Only touches drift rows; idempotent. */
+async function reconcileDealIdentity(supabase: SB, orgId: string): Promise<void> {
+  // (1) active projections lacking a canonical deal → create + backlink.
+  const { data: unlinked } = await supabase.from("deal_profiles")
+    .select("id,buyer_id,seller_id,property_id,assigned_agent_id,locality,deal_stage,deal_probability,expected_close_date")
+    .eq("organization_id", orgId).eq("status", "active").is("deal_id", null).limit(500);
+  for (const p of unlinked ?? []) {
+    try {
+      const { data: created } = await supabase.from("deals").insert(canonicalDealRowFromProfile(orgId, p as Record<string, unknown>) as never).select("id").single();
+      const id = (created as { id: string } | null)?.id;
+      if (id) await supabase.from("deal_profiles").update({ deal_id: id } as never).eq("id", (p as { id: string }).id);
+    } catch { /* best-effort */ }
+  }
+  // (2) open canonical deals with NO projection → create a projection (so Deals OS never hides them).
+  const { data: linkedRows } = await supabase.from("deal_profiles").select("deal_id").eq("organization_id", orgId).not("deal_id", "is", null);
+  const linked = new Set((linkedRows ?? []).map((r) => r.deal_id as string));
+  const { data: openDeals } = await supabase.from("deals")
+    .select("id,owner_id,buyer_id,seller_id,property_id,stage,value,commission_amount,probability")
+    .eq("org_id", orgId).eq("status", "open").limit(500);
+  const missing = (openDeals ?? []).filter((d) => !linked.has(d.id));
+  if (missing.length) {
+    const projRows = missing.map((d) => ({
+      organization_id: orgId, deal_id: d.id, buyer_id: d.buyer_id ?? null, seller_id: d.seller_id ?? null,
+      property_id: d.property_id ?? null, assigned_agent_id: d.owner_id ?? null,
+      deal_stage: DEAL_TO_PROFILE_STAGE[d.stage as string] ?? "new_opportunity",
+      deal_value: (d.value as number | null) ?? 0, commission_value: (d.commission_amount as number | null) ?? 0,
+      deal_probability: (d.probability as number | null) ?? 0, status: "active",
+    }));
+    try { await supabase.from("deal_profiles").insert(projRows as never); } catch { /* unique index guards races */ }
+  }
+}
+
+export { DEAL_TO_PROFILE_STAGE };
+
 async function ctx() {
   const { user, profile } = await getSessionContext();
   if (!user || !profile) throw new Error("not authenticated");
@@ -220,6 +301,8 @@ export interface DealsBoard {
 
 export async function getDealsBoard(): Promise<DealsBoard> {
   const supabase = await createClient();
+  // Stage 0.1: guarantee canonical deals ⇄ projections 1:1 so no deal is hidden.
+  try { const { orgId } = await ctx(); await reconcileDealIdentity(supabase, orgId); } catch { /* best-effort */ }
   const [dealRes, negRes, objRes, taskRes] = await Promise.all([
     supabase.from("deal_profiles").select("*").eq("status", "active").order("deal_value", { ascending: false }).limit(500),
     supabase.from("deal_negotiations").select("*").order("created_at", { ascending: false }).limit(40),
