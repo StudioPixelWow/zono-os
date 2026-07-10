@@ -312,13 +312,15 @@ export function SellerCommandCenter({ sellerId, sellerName, data, interestedBuye
         <EntityTimeline items={data.timeline} title="" emptyStateText="אין פעילות מתועדת עדיין." />
       </SectionCard>
 
-      {/* 14) AI insights placeholder */}
+      {/* 14) AI insights — real seller-intelligence summaries (null → honest dash) */}
       <SectionCard title="תובנות ZONO" icon="Sparkles">
         <div className="flex flex-col gap-2 text-sm">
           <p className="text-ink"><span className="text-muted">סיכום: </span>{p.ai_summary ?? "—"}</p>
           <p className="text-ink"><span className="text-muted">סיכונים: </span>{p.ai_risk_summary ?? "—"}</p>
           <p className="text-ink"><span className="text-muted">הזדמנות: </span>{p.ai_opportunity_summary ?? "—"}</p>
-          <p className="text-muted text-[11px]">ניתוח עומק מבוסס-AI יתווסף בשלב הבא.</p>
+          {!p.ai_summary && !p.ai_risk_summary && !p.ai_opportunity_summary && (
+            <p className="text-muted text-[11px]">התובנות יתמלאו לאחר איסוף פעילות ונתונים על המוכר.</p>
+          )}
         </div>
       </SectionCard>
     </div>
