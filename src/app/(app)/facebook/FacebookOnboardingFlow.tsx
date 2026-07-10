@@ -98,8 +98,8 @@ export function FacebookOnboardingFlow({
           <div className="relative flex flex-col items-center gap-5 text-center">
             <span className="grid h-16 w-16 place-items-center rounded-3xl text-white shadow-[0_10px_30px_rgba(59,89,152,0.45)]" style={{ background: FB }}><Icon name="Megaphone" size={30} /></span>
             <div>
-              <h1 className="text-ink text-3xl font-black sm:text-4xl">חבר את Facebook כדי להתחיל</h1>
-              <p className="text-muted mx-auto mt-2 max-w-xl text-sm leading-relaxed sm:text-base">ZONO Distribution מתחיל בחיבור ל-Facebook. לאחר החיבור נזהה אוטומטית את הנכסים שלך — ותבחר בדיוק מה לייבא. עד אז לא מוצג דשבורד.</p>
+              <h1 className="text-ink text-3xl font-black sm:text-4xl">חבר את חשבון Facebook שלך</h1>
+              <p className="text-muted mx-auto mt-2 max-w-xl text-sm leading-relaxed sm:text-base">כל סוכן מחבר את החשבון האישי שלו כדי ש-ZONO יזהה את הקבוצות, הדפים והרשאות הפרסום שלו. לאחר החיבור תבחר בדיוק מה לייבא — עד אז לא מוצג דשבורד.</p>
             </div>
             {oauthReady ? (
               // Env configured AND app confirmed LIVE → start the REAL Meta OAuth.
@@ -157,8 +157,8 @@ export function FacebookOnboardingFlow({
           <h1 className="text-ink mt-4 text-2xl font-black sm:text-3xl">חובר בהצלחה 🎉</h1>
           <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-relaxed">
             {apiConnected && connectedUser
-              ? <>חשבון <span className="text-ink font-black">{connectedUser}</span> מחובר דרך Meta. כעת נריץ סנכרון ראשון כדי לזהות את העמודים, הקבוצות וחשבונות הניהול שלך.</>
-              : <>חשבון ה-Facebook מחובר. כעת נריץ סריקה ראשונה כדי לזהות את הקבוצות, העמודים וחשבונות הניהול שלך.</>}
+              ? <>מחובר כ-<span className="text-ink font-black">{connectedUser}</span>. זהו החיבור האישי שלך — סוכנים אחרים צריכים להתחבר בנפרד. כעת נריץ סנכרון ראשון כדי לזהות את העמודים, הקבוצות וחשבונות הניהול שלך.</>
+              : <>חשבון ה-Facebook האישי שלך מחובר. כעת נריץ סריקה ראשונה כדי לזהות את הקבוצות, העמודים וחשבונות הניהול שלך.</>}
           </p>
           {flowErr && <p className="text-danger mt-2 text-[12px] font-bold">{flowErr}</p>}
           <button onClick={scan} disabled={pending} className="btn-zono-primary zono-focus-ring mx-auto mt-5 inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-60">
@@ -231,7 +231,7 @@ function ImportWizard({ discovery, onReset, onRefresh, refreshing, onImported }:
             <div>
               <h1 className="text-ink text-xl font-black sm:text-2xl">{real ? "הסנכרון הסתיים" : "הסריקה הסתיימה"}</h1>
               <p className="text-muted text-[13px]">
-                {real && discovery?.connectedUser && <>מחובר כ-<span className="text-ink font-bold">{discovery.connectedUser}</span> · </>}
+                {real && discovery?.connectedUser && <>מחובר כ-<span className="text-ink font-bold">{discovery.connectedUser}</span> (החיבור האישי שלך) · </>}
                 נמצאו {groups.length} קבוצות בספרייה. בחר אילו לייבא ל-ZONO Distribution.
               </p>
             </div>

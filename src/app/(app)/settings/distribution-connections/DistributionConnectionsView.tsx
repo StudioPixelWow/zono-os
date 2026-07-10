@@ -195,11 +195,11 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
           <PathCard
             path={paths.meta}
             icon="Globe"
-            cta={!metaConfigured ? "נדרשת הגדרת Meta" : paths.meta.status === "connected" ? "התחבר מחדש" : paths.meta.status === "expired" || paths.meta.status === "error" ? "התחבר מחדש" : "חבר Meta"}
+            cta={!metaConfigured ? "נדרשת הגדרת Meta" : paths.meta.status === "connected" ? "חבר מחדש את החשבון שלי" : paths.meta.status === "expired" || paths.meta.status === "error" ? "חבר מחדש את החשבון שלי" : "חבר את חשבון Facebook שלי"}
             href={metaConfigured ? "/api/oauth/meta/start" : undefined}
             disabled={!metaConfigured}
-            detail={paths.meta.status === "connected" ? (typeof paths.meta.metadata.account_name === "string" ? `מחובר: ${paths.meta.metadata.account_name}` : "מחובר") : undefined}
-            note={metaConfigured ? "חיבור שרת-לשרת רשמי דרך Meta. הטוקנים נשמרים מוצפנים בצד ZONO — בכפוף לאישור Meta." : "כדי להפעיל חיבור Meta יש להגדיר META_APP_ID, META_APP_SECRET, META_OAUTH_REDIRECT_URI, META_GRAPH_VERSION."}
+            detail={paths.meta.status === "connected" ? (typeof paths.meta.metadata.account_name === "string" ? `החיבור האישי שלך: ${paths.meta.metadata.account_name}` : "מחובר (חשבון אישי)") : undefined}
+            note={metaConfigured ? "חיבור אישי לכל סוכן — כל סוכן מחבר את חשבון ה-Facebook שלו בנפרד. הטוקנים נשמרים מוצפנים בצד ZONO, ולעולם אינם משותפים בין סוכנים." : "כדי להפעיל חיבור Meta יש להגדיר META_APP_ID, META_APP_SECRET, META_OAUTH_REDIRECT_URI, META_GRAPH_VERSION."}
             runner={runner}
           />
           <PathCard

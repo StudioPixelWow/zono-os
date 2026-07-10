@@ -33,6 +33,8 @@ export interface ProviderConnectionRow {
   connection_mode: ConnectionMode; display_name: string | null; external_account_id: string | null;
   access_token_encrypted: string | null; refresh_token_encrypted: string | null; token_expires_at: string | null;
   scopes: string[]; metadata: Record<string, unknown>; last_validated_at: string | null;
+  /** Owner of a USER-scoped connection (Facebook). NULL for org-scoped providers. */
+  user_id: string | null;
   created_by: string | null; created_at: string; updated_at: string;
 }
 
@@ -93,16 +95,46 @@ async function scope(): Promise<{ db: DB; orgId: string; userId: string | null }
 }
 const list = <T>(d: unknown): T[] => (d ?? []) as T[];
 
+// ── Connection SCOPE ──────────────────────────────────────────────────────────
+// The Facebook OAuth identity + token belong to the INDIVIDUAL broker who
+// connected — not the office. So the `facebook` provider is USER-scoped (rows
+// keyed by org_id + provider + user_id). Every other provider stays ORG-scoped
+// (one row per org, user_id IS NULL). Never let one broker read another's row.
+const USER_SCOPED_PROVIDERS: ConnectionProvider[] = ["facebook"];
+export function isUserScopedProvider(provider: ConnectionProvider): boolean {
+  return USER_SCOPED_PROVIDERS.includes(provider);
+}
+
 // ── Repository ────────────────────────────────────────────────────────────────
 export const providerConnectionRepository = {
+  /** Org-scoped rows + the CURRENT user's user-scoped rows (e.g. their own
+   *  Facebook connection). Never returns another broker's Facebook row. */
   async getProviderConnections(): Promise<ProviderConnectionRow[]> {
     const s = await scope(); if (!s) return [];
-    const { data } = await s.db.from(TABLE as never).select("*").eq("org_id", s.orgId);
-    return list<ProviderConnectionRow>(data);
+    let q = s.db.from(TABLE as never).select("*").eq("org_id", s.orgId);
+    // Only my own user-scoped rows; all org-scoped (user_id IS NULL) rows.
+    q = s.userId ? q.or(`user_id.is.null,user_id.eq.${s.userId}`) : q.is("user_id", null);
+    const { data } = await q;
+    const rows = list<ProviderConnectionRow>(data);
+    // Prefer the current user's row per provider (drop stray org-scoped facebook).
+    const byProvider = new Map<string, ProviderConnectionRow>();
+    for (const r of rows) {
+      const prev = byProvider.get(r.provider);
+      if (!prev) { byProvider.set(r.provider, r); continue; }
+      const rOwned = isUserScopedProvider(r.provider) && r.user_id === s.userId;
+      if (rOwned) byProvider.set(r.provider, r);
+    }
+    return [...byProvider.values()];
   },
+  /** Read one provider connection, scoped to the current user for user-scoped
+   *  providers (Facebook) and to the org for org-scoped providers. */
   async getProviderConnection(provider: ConnectionProvider): Promise<ProviderConnectionRow | null> {
     const s = await scope(); if (!s) return null;
-    const { data } = await s.db.from(TABLE as never).select("*").eq("org_id", s.orgId).eq("provider", provider).maybeSingle();
+    const userScoped = isUserScopedProvider(provider);
+    if (userScoped && !s.userId) return null; // cron/no-user has no personal row
+    let q = s.db.from(TABLE as never).select("*").eq("org_id", s.orgId).eq("provider", provider);
+    q = userScoped ? q.eq("user_id", s.userId as string) : q.is("user_id", null);
+    const { data } = await q.maybeSingle();
     return (data as unknown as ProviderConnectionRow) ?? null;
   },
   async upsertProviderConnection(input: {
@@ -110,19 +142,35 @@ export const providerConnectionRepository = {
     displayName?: string | null; scopes?: string[]; metadata?: Record<string, unknown>;
   }): Promise<ProviderConnectionRow | null> {
     const s = await scope(); if (!s) return null;
-    const { data, error } = await s.db.from(TABLE as never).upsert({
-      org_id: s.orgId, provider: input.provider,
+    const userScoped = isUserScopedProvider(input.provider);
+    if (userScoped && !s.userId) return null;
+    const uid = userScoped ? s.userId : null;
+    // Manual upsert scoped by (org, provider, user_id) — partial unique indexes
+    // preclude a single supabase onConflict target, so we select-then-write.
+    let sel = s.db.from(TABLE as never).select("id").eq("org_id", s.orgId).eq("provider", input.provider);
+    sel = userScoped ? sel.eq("user_id", uid as string) : sel.is("user_id", null);
+    const existing = (await sel.maybeSingle()).data as { id: string } | null;
+    const payload = {
+      org_id: s.orgId, provider: input.provider, user_id: uid,
       status: input.status ?? "not_connected", connection_mode: input.connectionMode ?? "manual",
       display_name: input.displayName ?? null, scopes: input.scopes ?? [],
       metadata: input.metadata ?? {}, created_by: s.userId,
-    } as never, { onConflict: "org_id,provider" } as never).select("*").single();
+    };
+    const q = existing
+      ? s.db.from(TABLE as never).update(payload as never).eq("id", existing.id).select("*").single()
+      : s.db.from(TABLE as never).insert(payload as never).select("*").single();
+    const { data, error } = await q;
     if (error) { console.error("[provider-connections] upsert:", error.message); return null; }
     return data as unknown as ProviderConnectionRow;
   },
   async updateProviderStatus(provider: ConnectionProvider, status: ConnectionStatus, patch: Partial<{ connection_mode: ConnectionMode; last_validated_at: string; metadata: Record<string, unknown> }> = {}): Promise<boolean> {
     const s = await scope(); if (!s) return false;
-    const { error } = await s.db.from(TABLE as never).update({ status, ...patch } as never)
+    const userScoped = isUserScopedProvider(provider);
+    if (userScoped && !s.userId) return false;
+    let q = s.db.from(TABLE as never).update({ status, ...patch } as never)
       .eq("org_id", s.orgId).eq("provider", provider);
+    q = userScoped ? q.eq("user_id", s.userId as string) : q.is("user_id", null);
+    const { error } = await q;
     return !error;
   },
   /**
@@ -150,14 +198,25 @@ export const providerConnectionRepository = {
       `token_present=${input.accessTokenEncrypted ? "yes(encrypted)" : "no"} ` +
       `token_expires_at=${input.tokenExpiresAt ?? "null"}`,
     );
-    const { data, error } = await s.db.from(TABLE as never).upsert({
-      org_id: s.orgId, provider: "facebook", status: "connected", connection_mode: "api",
+    // Facebook is USER-scoped — bind the connection to the connecting broker.
+    if (!s.userId) {
+      console.error("[provider-connections] storeMetaConnection: NO USER — cannot bind personal Facebook connection");
+      return false;
+    }
+    const existingSel = await s.db.from(TABLE as never).select("id")
+      .eq("org_id", s.orgId).eq("provider", "facebook").eq("user_id", s.userId).maybeSingle();
+    const existingId = (existingSel.data as { id: string } | null)?.id ?? null;
+    const payload = {
+      org_id: s.orgId, provider: "facebook", user_id: s.userId, status: "connected", connection_mode: "api",
       display_name: input.displayName, external_account_id: input.externalAccountId,
       access_token_encrypted: input.accessTokenEncrypted,
       refresh_token_encrypted: input.refreshTokenEncrypted ?? null,
       token_expires_at: input.tokenExpiresAt ?? null,
       scopes: input.scopes, last_validated_at: new Date().toISOString(), created_by: s.userId,
-    } as never, { onConflict: "org_id,provider" } as never).select("id").maybeSingle();
+    };
+    const { data, error } = await (existingId
+      ? s.db.from(TABLE as never).update(payload as never).eq("id", existingId).select("id").maybeSingle()
+      : s.db.from(TABLE as never).insert(payload as never).select("id").maybeSingle());
     if (error) {
       // Log the real failure cause (code/message/details/hint) — never the token.
       // A common cause is RLS: the insert/update policy requires has_min_role('agent').
@@ -199,15 +258,27 @@ export const providerConnectionRepository = {
       console.error("[provider-connections] storeMetaConnectionServiceRole: SERVICE ROLE NOT CONFIGURED — cannot persist");
       return false;
     }
+    if (!userId) {
+      console.error("[provider-connections] storeMetaConnectionServiceRole: missing userId — Facebook is user-scoped, refusing write");
+      return false;
+    }
     const db = createServiceRoleClient();
-    const { data, error } = await db.from(TABLE as never).upsert({
-      org_id: orgId, provider: "facebook", status: "connected", connection_mode: "api",
+    // User-scoped: one Facebook connection PER broker. Select-then-write keyed on
+    // (org, facebook, user) — the connection belongs only to this broker.
+    const existingSel = await db.from(TABLE as never).select("id")
+      .eq("org_id", orgId).eq("provider", "facebook").eq("user_id", userId).maybeSingle();
+    const existingId = (existingSel.data as { id: string } | null)?.id ?? null;
+    const payload = {
+      org_id: orgId, provider: "facebook", user_id: userId, status: "connected", connection_mode: "api",
       display_name: input.displayName, external_account_id: input.externalAccountId,
       access_token_encrypted: input.accessTokenEncrypted,
       refresh_token_encrypted: input.refreshTokenEncrypted ?? null,
       token_expires_at: input.tokenExpiresAt ?? null,
       scopes: input.scopes, last_validated_at: new Date().toISOString(), created_by: userId,
-    } as never, { onConflict: "org_id,provider" } as never).select("id").maybeSingle();
+    };
+    const { data, error } = await (existingId
+      ? db.from(TABLE as never).update(payload as never).eq("id", existingId).select("id").maybeSingle()
+      : db.from(TABLE as never).insert(payload as never).select("id").maybeSingle());
     if (error) {
       console.error(
         `[provider-connections] storeMetaConnectionServiceRole FAILED on table=${TABLE} org_id=${orgId}: ` +
@@ -222,12 +293,16 @@ export const providerConnectionRepository = {
 
   async disconnectProvider(provider: ConnectionProvider): Promise<boolean> {
     const s = await scope(); if (!s) return false;
-    // Hard-clear any token material and mark disconnected (we never stored real tokens,
-    // but this guarantees the row holds nothing sensitive).
-    const { error } = await s.db.from(TABLE as never).update({
+    const userScoped = isUserScopedProvider(provider);
+    if (userScoped && !s.userId) return false;
+    // Hard-clear any token material and mark disconnected. Scoped to the current
+    // broker for user-scoped providers — never touches another broker's row.
+    let q = s.db.from(TABLE as never).update({
       status: "disconnected", connection_mode: "manual",
       access_token_encrypted: null, refresh_token_encrypted: null, token_expires_at: null,
     } as never).eq("org_id", s.orgId).eq("provider", provider);
+    q = userScoped ? q.eq("user_id", s.userId as string) : q.is("user_id", null);
+    const { error } = await q;
     return !error;
   },
 };
