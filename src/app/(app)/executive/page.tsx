@@ -8,6 +8,7 @@
 import { getExecutiveOS } from "@/lib/executive-os/service";
 import { getDealsBoard } from "@/lib/deals/service";
 import { ExecutiveOSView, type ExecDealsSummary } from "./ExecutiveOSView";
+import { OfficeIntelligencePanel } from "@/components/broker-intelligence/OfficeIntelligencePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -37,5 +38,10 @@ export default async function ExecutivePage() {
       }
     : null;
 
-  return <ExecutiveOSView os={os} deals={deals} />;
+  return (
+    <div className="flex flex-col gap-5">
+      <OfficeIntelligencePanel />
+      <ExecutiveOSView os={os} deals={deals} />
+    </div>
+  );
 }

@@ -20,3 +20,7 @@ export { buildPriorityQueue, actionClass } from "./priority";
 export type { PrioritizedRecommendation } from "./priority";
 export { getBrokerIntelligenceQueue } from "./aggregate-service";
 export type { BrokerIntelligenceQueue, QueueOptions } from "./aggregate-service";
+// Area 6 — Office (manager summary over the shared queue).
+export { summarizeOffice } from "./office";
+export type { OfficeSummary } from "./office";
+export { getOfficeIntelligence } from "./office-service";

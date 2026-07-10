@@ -220,5 +220,26 @@ check("ranked deal: insufficient last", rankedD[rankedD.length - 1].insufficient
 const dInp: DealSignals = { ...dHealthy, dealRisk: 65, dealVelocity: 30 };
 check("deal deterministic", JSON.stringify(scoreDeal(dInp)) === JSON.stringify(scoreDeal(dInp)));
 
-console.log(`\nBroker Intelligence · Areas1-4 + Global Queue QA — ${pass} passed, ${fail} failed`);
+// ── Area 6 · Office (manager summary over the shared queue) ─────────────────
+import { summarizeOffice } from "./office";
+import { buildPriorityQueue as bpq } from "./priority";
+
+const officeQueue = bpq([
+  rec({ id: "acq", area: "acquisition", entityType: "external_listing", entityId: "x1", title: "גיוס", urgency: "high", confidence: 85 }),
+  rec({ id: "sell", area: "seller", entityType: "seller", entityId: "s1", title: "שימור מוכר", urgency: "critical", confidence: 90 }),
+  rec({ id: "deal", area: "deal", entityType: "deal", entityId: "d1", title: "עסקה בסיכון", urgency: "high", confidence: 70 }),
+  rec({ id: "buy", area: "buyer", entityType: "buyer", entityId: "b1", title: "שלח נכס", urgency: "high", confidence: 80 }),
+]);
+const office = summarizeOffice(officeQueue);
+check("office picks top opportunity (acq/buyer)", office.topOpportunity?.area === "acquisition" || office.topOpportunity?.area === "buyer");
+check("office picks top risk (deal/seller)", office.topRisk?.area === "seller" || office.topRisk?.area === "deal");
+check("office picks biggest revenue (buyer/deal)", office.biggestRevenue?.area === "buyer" || office.biggestRevenue?.area === "deal");
+check("office picks retention (seller)", office.biggestRetention?.area === "seller");
+check("office totals count", office.totalActionable === 4);
+// honest nulls on empty queue
+const emptyOffice = summarizeOffice([]);
+check("office empty → nulls", emptyOffice.topOpportunity === null && emptyOffice.topRisk === null && emptyOffice.totalActionable === 0);
+check("office deterministic", JSON.stringify(summarizeOffice(officeQueue)) === JSON.stringify(summarizeOffice(officeQueue)));
+
+console.log(`\nBroker Intelligence · Areas1-6 + Global Queue QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
