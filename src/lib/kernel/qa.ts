@@ -71,5 +71,33 @@ check("unmapped entity column → null", notificationEntityColumn("widget") === 
 check("lead.created notifies", projectEventToNotification(base)?.category === "new_lead");
 check("lead FK column", notificationEntityColumn("lead") === "lead_id");
 
-console.log(`\nKernel Stage 2+3 QA — ${pass} passed, ${fail} failed`);
+// ── Stage 4A · graph subscriber (pure) ──────────────────────────────────────
+import { projectEventToGraphEdges } from "./graph-subscriber";
+
+// seller.linked_to_property → owns edge
+const g1 = projectEventToGraphEdges({ ...base, event_type: "seller.linked_to_property", entity_type: "seller", entity_id: "S1", payload: { propertyId: "P1" } });
+check("seller link → 1 owns edge", g1.length === 1 && g1[0].relationship_type === "owns" && g1[0].target_entity_id === "P1");
+
+// deal.created with buyer+property → 2 edges
+const g2 = projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1", propertyId: "P1" } });
+check("deal.created → buyer+property edges", g2.length === 2 && g2.some(e => e.relationship_type === "involves_buyer") && g2.some(e => e.relationship_type === "involves_property"));
+
+// property.sold with buyer → purchased edge (buyer→property)
+const g3 = projectEventToGraphEdges({ ...base, event_type: "property.sold", entity_type: "property", entity_id: "P1", payload: { buyerId: "B1" } });
+check("property.sold → purchased edge", g3.length === 1 && g3[0].source_entity_type === "buyer" && g3[0].target_entity_id === "P1");
+
+// lead.converted_to_buyer → became edge
+const g4 = projectEventToGraphEdges({ ...base, event_type: "lead.converted_to_buyer", entity_type: "lead", entity_id: "L1", payload: { buyerId: "B1" } });
+check("lead→buyer became edge", g4.length === 1 && g4[0].relationship_type === "became");
+
+// missing payload ids → no edges (never fabricate)
+check("deal.created with no parties → 0 edges", projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: {} }).length === 0);
+
+// non-linkage event → 0 edges
+check("buyer.updated → 0 edges", projectEventToGraphEdges({ ...base, event_type: "buyer.updated", entity_type: "buyer" }).length === 0);
+
+// snake_case payload keys tolerated
+check("snake_case payload works", projectEventToGraphEdges({ ...base, event_type: "seller.linked_to_property", entity_type: "seller", entity_id: "S1", payload: { property_id: "P9" } })[0]?.target_entity_id === "P9");
+
+console.log(`\nKernel Stage 2+3+4A QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

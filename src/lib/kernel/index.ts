@@ -13,6 +13,9 @@ export type { DrainResult } from "./processor";
 // Stage 3 — Notification subscriber (second consumer of the outbox).
 export { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
 export type { NotificationProjection, NotificationLevel } from "./notification-subscriber";
+// Stage 4A — Graph subscriber (pure; wired into the drain loop once domain_events is live).
+export { projectEventToGraphEdges } from "./graph-subscriber";
+export type { GraphEdgeUpsert } from "./graph-subscriber";
 // Outbox observability (read-only health).
 export { getKernelOutboxHealth } from "./health";
 export type { KernelOutboxHealth } from "./health";
