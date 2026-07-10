@@ -52,5 +52,48 @@ check("ranked sinks insufficient last", ranked[ranked.length - 1].insufficientEv
 const inp: AcquisitionSignals = { ...bare, privateOwner: true, priceReductions: 2, buyerMatches: 2 };
 check("deterministic", JSON.stringify(scoreAcquisition(inp)) === JSON.stringify(scoreAcquisition(inp)));
 
-console.log(`\nBroker Intelligence · Acquisition QA — ${pass} passed, ${fail} failed`);
+// ── Area 2 · Buyer (Next Best Action) ───────────────────────────────────────
+import { scoreBuyer, rankBuyers, type BuyerSignals } from "./buyer";
+
+const bBare: BuyerSignals = {
+  buyerId: "b1", name: "דנה", hasPreapproval: false, budgetComplete: true, temperature: null,
+  lastContactedDays: null, readinessScore: null, engagementScore: null, conversionProbability: null,
+  daysSinceActivity: null, openMatches: 0, topMatchProbability: null, topMatchPropertyId: null,
+};
+
+// strong ready match → "send property" is the ONE action
+const bMatch = scoreBuyer({ ...bBare, topMatchProbability: 82, topMatchPropertyId: "p9", conversionProbability: 65 });
+check("strong match → not insufficient", !bMatch.insufficientEvidence);
+check("strong match → send property action", bMatch.suggestedAction.includes("שלח") && bMatch.href === "/properties/p9");
+check("strong match → high confidence", bMatch.confidence >= 40);
+check("strong match evidence names matching source", bMatch.evidence.some(e => e.source === "matching" && (e.weight ?? 0) > 0));
+
+// high readiness, no financing → request mortgage
+const bReady = scoreBuyer({ ...bBare, readinessScore: 72, conversionProbability: 62, hasPreapproval: false });
+check("ready+no-preapproval → mortgage action", bReady.title.includes("משכנתא") || bReady.suggestedAction.includes("אישור עקרוני"));
+
+// slowing hot buyer → call today
+const bSlow = scoreBuyer({ ...bBare, temperature: "hot", daysSinceActivity: 40, conversionProbability: 55 });
+check("slowing hot → call today", bSlow.title.includes("התקשר") || bSlow.suggestedAction.includes("טלפוני"));
+check("slowing evidence cites timeline", bSlow.evidence.some(e => e.source === "timeline"));
+
+// bare buyer, no intel → insufficient + honest
+const bCold = scoreBuyer(bBare);
+check("bare buyer insufficient", bCold.insufficientEvidence);
+check("bare buyer honest why", bCold.why.includes("אין מספיק"));
+
+// incomplete budget → gather info action when insufficient
+const bInfo = scoreBuyer({ ...bBare, budgetComplete: false });
+check("incomplete budget → gather info", bInfo.suggestedAction.includes("תקציב") || bInfo.title.includes("השלם"));
+
+// ranking: real action beats insufficient; higher confidence first
+const rankedB = rankBuyers([bBare, { ...bBare, buyerId: "b2", topMatchProbability: 80, topMatchPropertyId: "p1", conversionProbability: 70 }]);
+check("ranked buyer: real first", rankedB[0].entityId === "b2");
+check("ranked buyer: insufficient last", rankedB[rankedB.length - 1].insufficientEvidence);
+
+// determinism
+const bInp: BuyerSignals = { ...bBare, topMatchProbability: 75, topMatchPropertyId: "p1", conversionProbability: 60 };
+check("buyer deterministic", JSON.stringify(scoreBuyer(bInp)) === JSON.stringify(scoreBuyer(bInp)));
+
+console.log(`\nBroker Intelligence · Acquisition+Buyer QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

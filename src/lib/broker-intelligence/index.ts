@@ -9,3 +9,5 @@ export type {
 export { clamp100, urgencyFromScore, MIN_EVIDENCE } from "./types";
 export { scoreAcquisition, rankAcquisition } from "./acquisition";
 export type { AcquisitionSignals } from "./acquisition";
+export { scoreBuyer, rankBuyers } from "./buyer";
+export type { BuyerSignals } from "./buyer";

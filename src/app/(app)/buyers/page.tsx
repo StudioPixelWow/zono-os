@@ -2,6 +2,7 @@ import { listBuyers, type BuyerRow } from "@/lib/buyers/repository";
 import { listBuyerMatchCounts, type BuyerMatchCounts } from "@/lib/buyers/matches";
 import { listBuyerIntelBoard } from "@/lib/buyer-intelligence/service";
 import { BuyersWorkspace, type IntelMembership } from "./components/BuyersWorkspace";
+import { BuyerIntelligencePanel } from "@/components/broker-intelligence/BuyerIntelligencePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -42,5 +43,10 @@ export default async function BuyersPage() {
     console.error("[buyers] match counts failed:", e);
   }
 
-  return <BuyersWorkspace buyers={rows} intel={intel} matchCounts={matchCounts} error={error} />;
+  return (
+    <div className="flex flex-col gap-5">
+      <BuyerIntelligencePanel />
+      <BuyersWorkspace buyers={rows} intel={intel} matchCounts={matchCounts} error={error} />
+    </div>
+  );
 }
