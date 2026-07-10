@@ -23,6 +23,7 @@ import type { AttentionItemRow, OpportunityRow } from "@/lib/decision-intelligen
 import { getDailyOS } from "@/lib/daily-os/service";
 import type { DailyOS } from "@/lib/daily-os/types";
 import { HomeV3 } from "@/components/home-v3/HomeV3";
+import { BrokerIntelligenceQueuePanel } from "@/components/broker-intelligence/BrokerIntelligenceQueuePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -82,5 +83,12 @@ export default async function Home() {
     attentionRows, opportunityRows, marketCells, competitorRows,
   });
 
-  return <HomeV3 dict={dict} data={data} daily={daily} />;
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Canonical intelligence layer: the shared, deduped, evidence-based
+          priority queue — the first thing the broker sees each morning. */}
+      <BrokerIntelligenceQueuePanel title="מה דורש טיפול היום" options={{ limit: 5 }} />
+      <HomeV3 dict={dict} data={data} daily={daily} />
+    </div>
+  );
 }
