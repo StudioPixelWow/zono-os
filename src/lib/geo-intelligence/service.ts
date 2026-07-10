@@ -8,13 +8,12 @@
 import "server-only";
 import { getCurrentMarketHeatmap } from "@/lib/market/service";
 import { cellToArea, globalInsights, type MarketCellInput } from "./derive";
-import { generateMockAreas } from "./mock";
 import { HEATMAP_LAYERS } from "./layers";
 import type { GeoIntelligence, GeoArea } from "./types";
 
 export async function getGeoIntelligence(): Promise<GeoIntelligence> {
   let areas: GeoArea[] = [];
-  let dataMode: GeoIntelligence["dataMode"] = "mock";
+  let dataMode: GeoIntelligence["dataMode"] = "empty";
   const notes: string[] = [];
 
   try {
@@ -25,13 +24,14 @@ export async function getGeoIntelligence(): Promise<GeoIntelligence> {
       notes.push("נתוני מחיר, ביקוש, היצע, עסקאות ובלעדיות מבוססים על נתוני השוק שלך. חלק מהשכבות (זמן מכירה, עליית מחירים, ROI לפרסום, פעילות משקיעים) מוערכות מתוך אותם אותות ומסומנות בהתאם.");
     }
   } catch {
-    notes.push("לא ניתן לטעון את נתוני השוק — מוצגים נתוני הדגמה.");
+    notes.push("לא ניתן לטעון את נתוני השוק כרגע.");
   }
 
   if (areas.length === 0) {
-    areas = generateMockAreas();
-    dataMode = "mock";
-    notes.push("אין עדיין נתוני שוק בארגון — מוצגת מפת הדגמה מסודרת. חשבו מדדי שוק כדי לראות נתונים אמיתיים.");
+    // No real market snapshots yet — show an HONEST empty state (never fabricated areas).
+    areas = [];
+    dataMode = "empty";
+    notes.push("אין עדיין נתוני שוק בארגון. חשבו מדדי שוק (/market) כדי לראות את מפת האזורים עם נתונים אמיתיים.");
   }
 
   return {

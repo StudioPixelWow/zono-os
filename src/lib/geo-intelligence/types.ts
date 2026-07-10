@@ -84,6 +84,6 @@ export interface GeoIntelligence {
   generatedAt: string;
   areas: GeoArea[];
   insights: GeoInsight[];
-  dataMode: "real" | "partial" | "mock";
+  dataMode: "real" | "partial" | "mock" | "empty";
   notes: string[];
 }

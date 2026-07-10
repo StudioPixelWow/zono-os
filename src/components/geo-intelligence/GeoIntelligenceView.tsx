@@ -16,11 +16,11 @@ import type { GeoArea, GeoInsight, GeoFilters } from "@/lib/geo-intelligence/typ
 interface Props {
   areas: GeoArea[];
   insights: GeoInsight[];
-  dataMode: "real" | "partial" | "mock";
+  dataMode: "real" | "partial" | "mock" | "empty";
   notes: string[];
 }
 
-const MODE_LABEL: Record<Props["dataMode"], string> = { real: "נתונים חיים", partial: "נתונים + הערכות", mock: "נתוני הדגמה" };
+const MODE_LABEL: Record<Props["dataMode"], string> = { real: "נתונים חיים", partial: "נתונים + הערכות", mock: "נתוני הדגמה", empty: "אין נתונים עדיין" };
 
 function readableText(hex: string): string {
   if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return "#0f172a";
@@ -68,7 +68,7 @@ export function GeoIntelligenceView({ areas, insights, dataMode, notes }: Props)
           <p className="text-muted mt-1 text-sm">בחרו שכבה כדי לראות איפה יקר, איפה יש ביקוש, איפה מעט היצע, איפה כדאי לפרסם ואיפה לגייס בלעדיות.</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={cn("rounded-full px-3 py-1 text-[11px] font-bold", dataMode === "mock" ? "bg-warning-soft text-warning" : "bg-success-soft text-success")}>{MODE_LABEL[dataMode]}</span>
+          <span className={cn("rounded-full px-3 py-1 text-[11px] font-bold", dataMode === "mock" || dataMode === "empty" ? "bg-warning-soft text-warning" : "bg-success-soft text-success")}>{MODE_LABEL[dataMode]}</span>
           <button onClick={() => setShowInsights((v) => !v)} className="bg-brand text-brand-fg inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#2563eb)" }}>
             <Icon name="Sparkles" size={15} /> תובנות AI
           </button>
