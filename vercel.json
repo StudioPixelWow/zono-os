@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/kernel-drain",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/zono-master-sync",
       "schedule": "0 1 * * *"
     },
