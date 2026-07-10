@@ -93,30 +93,59 @@ check("lead FK column", notificationEntityColumn("lead") === "lead_id");
 // ── Stage 4A · graph subscriber (pure) ──────────────────────────────────────
 import { projectEventToGraphEdges } from "./graph-subscriber";
 
-// seller.linked_to_property → owns edge
+// seller.linked_to_property → owns edge (upsert)
 const g1 = projectEventToGraphEdges({ ...base, event_type: "seller.linked_to_property", entity_type: "seller", entity_id: "S1", payload: { propertyId: "P1" } });
-check("seller link → 1 owns edge", g1.length === 1 && g1[0].relationship_type === "owns" && g1[0].target_entity_id === "P1");
+check("seller link → 1 owns upsert edge", g1.length === 1 && g1[0].relationship_type === "owns" && g1[0].target_entity_id === "P1" && g1[0].op === "upsert");
+check("edge carries source event provenance", g1[0].metadata?.sourceEventId === "EVT1");
 
-// deal.created with buyer+property → 2 edges
-const g2 = projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1", propertyId: "P1" } });
-check("deal.created → buyer+property edges", g2.length === 2 && g2.some(e => e.relationship_type === "involves_buyer") && g2.some(e => e.relationship_type === "involves_property"));
+// seller.unlinked_from_property → retire the owns edge (history kept)
+const gUnlink = projectEventToGraphEdges({ ...base, event_type: "seller.unlinked_from_property", entity_type: "seller", entity_id: "S1", payload: { propertyId: "P1" } });
+check("seller unlink → retire owns edge", gUnlink.length === 1 && gUnlink[0].op === "retire" && gUnlink[0].relationship_type === "owns");
+
+// deal.created → deal-property(relates_to) + deal-buyer/seller(involves) + agent-deal(assigned_to)
+const g2 = projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1", sellerId: "S1", propertyId: "P1", agentId: "A1" } });
+check("deal.created fan-out = 4 edges", g2.length === 4);
+check("deal→property relates_to", g2.some(e => e.target_entity_type === "property" && e.relationship_type === "relates_to"));
+check("deal→buyer + deal→seller involves", g2.filter(e => e.relationship_type === "involves").length === 2);
+check("agent→deal assigned_to", g2.some(e => e.source_entity_type === "agent" && e.target_entity_type === "deal" && e.relationship_type === "assigned_to"));
+
+// deal.won → deal-property becomes closed_on
+check("deal.won → closed_on edge", projectEventToGraphEdges({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: { propertyId: "P1" } }).some(e => e.relationship_type === "closed_on"));
+
+// deal.lost → RETIRE relations (keep history), never delete
+const gLost = projectEventToGraphEdges({ ...base, event_type: "deal.lost", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1", propertyId: "P1" } });
+check("deal.lost retires (keeps history)", gLost.length === 2 && gLost.every(e => e.op === "retire"));
+
+// external_listing.promoted → source→property promoted_to
+const gPromo = projectEventToGraphEdges({ ...base, event_type: "external_listing.promoted", entity_type: "external_listing", entity_id: "X1", payload: { propertyId: "P1" } });
+check("external listing promoted → promoted_to edge", gPromo.length === 1 && gPromo[0].source_entity_type === "external_listing" && gPromo[0].relationship_type === "promoted_to");
+
+// meeting.completed → involves linked entities (fan-out)
+const gMeet = projectEventToGraphEdges({ ...base, event_type: "meeting.completed", entity_type: "meeting", entity_id: "M1", payload: { buyerId: "B1", propertyId: "P1" } });
+check("meeting → involves fan-out", gMeet.length === 2 && gMeet.every(e => e.source_entity_type === "meeting" && e.relationship_type === "involves"));
+
+// document.signed → relates_to deal/property/parties
+const gDoc = projectEventToGraphEdges({ ...base, event_type: "document.signed", entity_type: "document", entity_id: "DOC1", payload: { dealId: "D1", buyerId: "B1" } });
+check("document → relates_to fan-out", gDoc.length === 2 && gDoc.every(e => e.source_entity_type === "document" && e.relationship_type === "relates_to"));
 
 // property.sold with buyer → purchased edge (buyer→property)
 const g3 = projectEventToGraphEdges({ ...base, event_type: "property.sold", entity_type: "property", entity_id: "P1", payload: { buyerId: "B1" } });
 check("property.sold → purchased edge", g3.length === 1 && g3[0].source_entity_type === "buyer" && g3[0].target_entity_id === "P1");
 
-// lead.converted_to_buyer → became edge
+// lead.converted_to_buyer → converted_to edge
 const g4 = projectEventToGraphEdges({ ...base, event_type: "lead.converted_to_buyer", entity_type: "lead", entity_id: "L1", payload: { buyerId: "B1" } });
-check("lead→buyer became edge", g4.length === 1 && g4[0].relationship_type === "became");
+check("lead→buyer converted_to edge", g4.length === 1 && g4[0].relationship_type === "converted_to");
 
-// missing payload ids → no edges (never fabricate)
+// missing payload ids → no edges (never fabricate) + honest skip
 check("deal.created with no parties → 0 edges", projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: {} }).length === 0);
-
-// non-linkage event → 0 edges
+check("agent.profile_updated → 0 edges (no relation)", projectEventToGraphEdges({ ...base, event_type: "agent.profile_updated", entity_type: "agent", entity_id: "A1" }).length === 0);
+check("organization.updated → 0 edges", projectEventToGraphEdges({ ...base, event_type: "organization.updated", entity_type: "organization", entity_id: "O1" }).length === 0);
 check("buyer.updated → 0 edges", projectEventToGraphEdges({ ...base, event_type: "buyer.updated", entity_type: "buyer" }).length === 0);
 
-// snake_case payload keys tolerated
+// org carried onto every edge (cross-org isolation) + snake_case tolerated
+check("edges carry event org (no cross-org)", g2.every(e => e.org_id === "ORG1"));
 check("snake_case payload works", projectEventToGraphEdges({ ...base, event_type: "seller.linked_to_property", entity_type: "seller", entity_id: "S1", payload: { property_id: "P9" } })[0]?.target_entity_id === "P9");
+check("graph deterministic", JSON.stringify(projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })) === JSON.stringify(projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })));
 
 // ── Stage 4B · memory subscriber (pure) ─────────────────────────────────────
 import { projectEventToMemory } from "./memory-subscriber";

@@ -172,14 +172,38 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
     }
   } catch { /* notification is non-critical */ }
 
-  // ── Graph — best-effort edges. ──────────────────────────────────────────────
+  // ── Graph — incremental edges on the canonical entity_relationships substrate.
+  //    upsert = create/refresh (idempotent on the 6-part key; reactivates a retired
+  //    edge); retire = inactivate (status→inactive, valid_to=now — history kept). ──
   try {
-    let edges = 0;
-    for (const edge of projectEventToGraphEdges(row)) {
-      const { error: gErr } = await db.from("entity_relationships").insert(edge as never);
-      if (!gErr) { out.graphEdges++; edges++; }
+    let applied = 0;
+    const now = new Date().toISOString();
+    for (const op of projectEventToGraphEdges(row)) {
+      if (op.op === "retire") {
+        const { error } = await db.from("entity_relationships")
+          .update({ status: "inactive", valid_to: now, last_seen_at: now } as never)
+          .eq("org_id", op.org_id)
+          .eq("source_entity_type", op.source_entity_type).eq("source_entity_id", op.source_entity_id)
+          .eq("target_entity_type", op.target_entity_type).eq("target_entity_id", op.target_entity_id)
+          .eq("relationship_type", op.relationship_type);
+        if (!error) applied++;
+      } else {
+        const { error } = await db.from("entity_relationships").upsert({
+          org_id: op.org_id,
+          source_entity_type: op.source_entity_type, source_entity_id: op.source_entity_id,
+          target_entity_type: op.target_entity_type, target_entity_id: op.target_entity_id,
+          relationship_type: op.relationship_type,
+          status: "active",
+          strength_score: op.strength ?? 0,
+          metadata: op.metadata ?? {},
+          last_seen_at: now,
+          valid_to: null, // reactivate if it had been retired
+          source_event_id: row.id,
+        } as never, { onConflict: "org_id,source_entity_type,source_entity_id,target_entity_type,target_entity_id,relationship_type" });
+        if (!error) { out.graphEdges++; applied++; }
+      }
     }
-    if (edges) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "graph", status: "done", latencyMs: Date.now() - t0 });
+    if (applied) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "graph", status: "done", latencyMs: Date.now() - t0 });
   } catch { /* graph is non-critical */ }
 
   // ── Org-Memory — milestones only. ───────────────────────────────────────────
