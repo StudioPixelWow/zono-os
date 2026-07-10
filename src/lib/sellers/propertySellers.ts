@@ -57,10 +57,17 @@ export const propertySellerRepository = {
       { onConflict: "org_id,property_id,seller_id,relationship_type" },
     );
     if (error) throw new Error(error.message);
+    // Stage 0.3 compatibility bridge: keep the legacy single-column
+    // properties.seller_id in sync with the PRIMARY seller (never co-owners),
+    // so the modules still reading the legacy column stay correct during the
+    // migration. Canonical multi-seller truth lives in property_sellers.
+    await syncLegacyPrimarySeller(supabase, input.propertyId);
   },
   async unlink(id: string): Promise<void> {
     const supabase = await createClient();
+    const { data: row } = await supabase.from("property_sellers").select("property_id").eq("id", id).maybeSingle();
     await supabase.from("property_sellers").update({ status: "removed" }).eq("id", id);
+    if (row?.property_id) await syncLegacyPrimarySeller(supabase, row.property_id as string);
   },
   async update(id: string, patch: Database["public"]["Tables"]["property_sellers"]["Update"]): Promise<void> {
     const supabase = await createClient();
@@ -72,8 +79,52 @@ export const propertySellerRepository = {
     const supabase = await createClient();
     await supabase.from("property_sellers").update({ is_primary: false }).eq("property_id", propertyId);
     await supabase.from("property_sellers").update({ is_primary: true }).eq("id", linkId);
+    await syncLegacyPrimarySeller(supabase, propertyId);
   },
 };
+
+/** Canonical-first resolver: primary seller id per property from property_sellers
+ *  (falls back to legacy properties.seller_id). Readers migrating off the legacy
+ *  column should use this. */
+export async function resolvePrimarySellerIds(propertyIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!propertyIds.length) return out;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("property_sellers")
+    .select("property_id,seller_id,is_primary,created_at")
+    .in("property_id", propertyIds)
+    .eq("status", "active")
+    .order("is_primary", { ascending: false })
+    .order("created_at", { ascending: true });
+  for (const r of data ?? []) {
+    const pid = r.property_id as string;
+    if (!out.has(pid)) out.set(pid, r.seller_id as string);   // first = primary (ordered)
+  }
+  // Legacy fallback for properties without a canonical link.
+  const missing = propertyIds.filter((id) => !out.has(id));
+  if (missing.length) {
+    const { data: legacy } = await supabase.from("properties").select("id,seller_id").in("id", missing).not("seller_id", "is", null);
+    for (const p of legacy ?? []) out.set(p.id as string, p.seller_id as string);
+  }
+  return out;
+}
+
+/** Recompute the legacy properties.seller_id from the canonical primary (compat only). */
+async function syncLegacyPrimarySeller(supabase: Awaited<ReturnType<typeof createClient>>, propertyId: string): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from("property_sellers")
+      .select("seller_id,is_primary,created_at")
+      .eq("property_id", propertyId)
+      .eq("status", "active")
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1);
+    const primary = (data ?? [])[0]?.seller_id ?? null;
+    await supabase.from("properties").update({ seller_id: primary } as never).eq("id", propertyId);
+  } catch { /* compat bridge is best-effort */ }
+}
 
 export interface SellerReadiness {
   ready: boolean;

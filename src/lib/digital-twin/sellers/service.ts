@@ -73,8 +73,9 @@ async function loadLinksAndActivities(ids: string[]): Promise<{ props: Map<strin
   // Linked property (best-effort). Estimated value requires a valuation join that
   // is not read here — price gap stays null until a valuation link is available.
   try {
-    const { data } = await db.from("properties").select("id,seller_id").in("seller_id", ids);
-    for (const p of (data ?? []) as Row[]) { const sid = s(p.seller_id); if (sid && !props.has(sid)) props.set(sid, { propertyId: s(p.id), estimatedValue: null }); }
+    // Stage 0.3: canonical seller↔property link (property_sellers), not legacy properties.seller_id.
+    const { data } = await db.from("property_sellers").select("property_id,seller_id").in("seller_id", ids).eq("status", "active");
+    for (const p of (data ?? []) as Row[]) { const sid = s(p.seller_id); if (sid && !props.has(sid)) props.set(sid, { propertyId: s(p.property_id), estimatedValue: null }); }
   } catch { /* none */ }
   // Activities (bulk).
   try {
