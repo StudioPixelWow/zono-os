@@ -26,6 +26,7 @@ import { EntityRecommendationsPanel } from "@/components/recommendations/EntityR
 import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 import { CreatePortalButton } from "@/components/portals/CreatePortalButton";
 import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
+import { EntityLegalDocuments } from "@/components/legal/EntityLegalDocuments";
 import { ContextPanel } from "@/components/intelligence/ContextPanel";
 import { PropertyMarketingLog } from "@/components/property/PropertyMarketingLog";
 import { PropertyMarketingActionCenter } from "@/components/property/PropertyMarketingActionCenter";
@@ -91,11 +92,14 @@ export default async function PropertyDetailsPage({
   );
   const calendarSlot = <EntityCalendarSection kind="property" id={id} />;
   const documentsSlot = (
-    <div className="flex flex-wrap items-center gap-2">
-      <CreatePortalButton entityType="property" entityId={id} portalType="property" label="צור פורטל נכס / מוכר" />
-      <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
-        <CreateLegalDocumentButton entityType="property" entityId={id} />
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <CreatePortalButton entityType="property" entityId={id} portalType="property" label="צור פורטל נכס / מוכר" />
+        <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
+          <CreateLegalDocumentButton entityType="property" entityId={id} />
+        </div>
       </div>
+      <EntityLegalDocuments entityType="property" entityId={id} />
     </div>
   );
   const approvalSlot = <ApprovalBundleSection entityType="property" entityId={id} />;
