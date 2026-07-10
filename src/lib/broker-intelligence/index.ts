@@ -13,6 +13,8 @@ export { scoreBuyer, rankBuyers } from "./buyer";
 export type { BuyerSignals } from "./buyer";
 export { scoreSeller, rankSellers } from "./seller";
 export type { SellerSignals } from "./seller";
+export { scoreDeal, rankDeals } from "./deal";
+export type { DealSignals } from "./deal";
 // Global integration — the ONE shared priority queue every surface consumes.
 export { buildPriorityQueue, actionClass } from "./priority";
 export type { PrioritizedRecommendation } from "./priority";

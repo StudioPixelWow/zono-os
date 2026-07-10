@@ -185,5 +185,40 @@ check("actionClass price", actionClass(rec({ title: "סקור תמחור" })) ==
 // deterministic queue
 check("queue deterministic", JSON.stringify(buildPriorityQueue([rec({ id: "x" })])) === JSON.stringify(buildPriorityQueue([rec({ id: "x" })])));
 
-console.log(`\nBroker Intelligence · Areas1-3 + Global Queue QA — ${pass} passed, ${fail} failed`);
+// ── Area 4 · Deal ───────────────────────────────────────────────────────────
+import { scoreDeal, rankDeals, type DealSignals } from "./deal";
+
+const dHealthy: DealSignals = {
+  dealId: "d1", title: "עסקה · הרצל 5", stage: "negotiation", status: "open",
+  dealRisk: 20, dealHealth: 80, dealVelocity: 70, dealProbability: 75, daysToExpectedClose: 10, openObjections: 0,
+};
+
+// healthy deal → no escalation (insufficient / nothing to nag)
+const dOk = scoreDeal(dHealthy);
+check("healthy deal not escalated", dOk.insufficientEvidence);
+check("healthy deal honest why", dOk.why.includes("אין צורך") || dOk.why.includes("אין סיכון"));
+
+// stalled + overdue → escalated with high urgency
+const dRisk = scoreDeal({ ...dHealthy, dealRisk: 72, dealVelocity: 25, dealHealth: 35, daysToExpectedClose: -20, dealProbability: 30 });
+check("risky deal escalated", !dRisk.insufficientEvidence);
+check("risky deal high/critical", dRisk.urgency === "high" || dRisk.urgency === "critical");
+check("risky deal evidence cites deals source", dRisk.evidence.some(e => e.source === "deals" && (e.weight ?? 0) > 0));
+check("risky deal overdue action", dRisk.title.includes("מועד") || dRisk.suggestedAction.includes("סגירה"));
+
+// open objections → objection-handling action
+const dObj = scoreDeal({ ...dHealthy, dealRisk: 60, openObjections: 2 });
+check("objections → handle objections", dObj.title.includes("התנגדויות") || dObj.suggestedAction.includes("התנגדויות"));
+
+// single weak signal → below escalation floor, insufficient
+const dWeak = scoreDeal({ ...dHealthy, dealProbability: 34 });
+check("single weak signal not escalated", dWeak.insufficientEvidence);
+
+// ranking + determinism
+const rankedD = rankDeals([dHealthy, { ...dHealthy, dealId: "d2", dealRisk: 75, dealVelocity: 20, dealHealth: 30 }]);
+check("ranked deal: real risk first", rankedD[0].entityId === "d2");
+check("ranked deal: insufficient last", rankedD[rankedD.length - 1].insufficientEvidence);
+const dInp: DealSignals = { ...dHealthy, dealRisk: 65, dealVelocity: 30 };
+check("deal deterministic", JSON.stringify(scoreDeal(dInp)) === JSON.stringify(scoreDeal(dInp)));
+
+console.log(`\nBroker Intelligence · Areas1-4 + Global Queue QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

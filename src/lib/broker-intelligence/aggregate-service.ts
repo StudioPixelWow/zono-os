@@ -12,6 +12,7 @@ import type { Recommendation } from "./types";
 import { getAcquisitionIntelligence } from "./acquisition-service";
 import { getBuyerIntelligence } from "./buyer-service";
 import { getSellerIntelligence } from "./seller-service";
+import { getDealIntelligence } from "./deal-service";
 
 export interface BrokerIntelligenceQueue {
   items: PrioritizedRecommendation[];
@@ -42,6 +43,7 @@ export async function getBrokerIntelligenceQueue(opts: QueueOptions = {}): Promi
     getAcquisitionIntelligence(perEngine),
     getBuyerIntelligence(perEngine),
     getSellerIntelligence(perEngine),
+    getDealIntelligence(perEngine),
   ]);
 
   let recs: Recommendation[] = [];
