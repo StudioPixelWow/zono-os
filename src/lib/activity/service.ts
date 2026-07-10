@@ -162,6 +162,34 @@ export function logMeetingScheduled(meeting: { id: string; title: string; proper
   });
 }
 
+/** Meeting lifecycle timeline events (completed / cancelled / rescheduled / no_show). */
+export function logMeetingLifecycle(
+  eventType: string,
+  meeting: { id: string; title: string; property_id?: string | null; buyer_id?: string | null; seller_id?: string | null; lead_id?: string | null },
+  title: string,
+  description?: string | null,
+): Promise<void> {
+  const entityType = meeting.property_id
+    ? "property"
+    : meeting.buyer_id
+      ? "buyer"
+      : meeting.seller_id
+        ? "seller"
+        : meeting.lead_id
+          ? "lead"
+          : "meeting";
+  const entityId = meeting.property_id ?? meeting.buyer_id ?? meeting.seller_id ?? meeting.lead_id ?? meeting.id;
+  return logActivityEvent({
+    eventType,
+    entityType,
+    entityId,
+    relatedEntityType: "meeting",
+    relatedEntityId: meeting.id,
+    title,
+    description: description ?? undefined,
+  });
+}
+
 export function logDocumentSent(doc: { id: string; title: string; property_id?: string | null }): Promise<void> {
   return logActivityEvent({
     eventType: EVENT_TYPES.documentSent,

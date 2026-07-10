@@ -13,6 +13,7 @@ import { normalizeMeeting } from "./engine";
 import { mergePrefs, type AvailabilityPrefs } from "./availability";
 import { generateBookingSlots, BOOKING_MEETING_TYPE, type BookingKind, type BookingSlot } from "./booking";
 import { getConnectorHealthAll, type ConnectorHealth } from "./connectors";
+import { logMeetingScheduled } from "@/lib/activity/service";
 import type { CalendarEvent, EntityKind } from "./types";
 
 type Row = Record<string, unknown>;
@@ -75,6 +76,15 @@ export async function confirmBooking(input: ConfirmBookingInput): Promise<Confir
     if (error) return { ok: false, error: error.message };
     const created = data as Row | null;
     const event = created ? normalizeMeeting(created) : null;
+    // Timeline + KPI: record the scheduling on the unified activity layer.
+    if (created?.id) {
+      await logMeetingScheduled({
+        id: String(created.id),
+        title: String(created.title ?? input.title),
+        property_id: (created.property_id as string | null) ?? null,
+        buyer_id: (created.buyer_id as string | null) ?? null,
+      });
+    }
     return { ok: true, meetingId: s(created?.id) ?? undefined, event: event ?? undefined };
   } catch (err) { return { ok: false, error: err instanceof Error ? err.message : "קביעת הפגישה נכשלה." }; }
 }

@@ -18,6 +18,7 @@ import type { BookingKind } from "@/lib/calendar-os/booking";
 import { getCalendarAction, optimizeRouteAction, askCalendarAction } from "@/lib/calendar-os/actions";
 import { getDayIntelligenceAction, getMeetingPrepAction } from "@/lib/calendar-os/intelligence-actions";
 import { confirmBookingAction } from "@/lib/calendar-os/booking-actions";
+import { MeetingLifecycleControls } from "./MeetingLifecycleControls";
 
 type CalView = "month" | "week" | "day" | "agenda";
 type IntelState = Awaited<ReturnType<typeof getDayIntelligenceAction>>["intel"] | null;
@@ -156,6 +157,7 @@ export function CalendarView({ plan, initialEvents, initialStartIso, initialEndI
         {/* RAIL — intelligence */}
         <aside className="flex flex-col gap-3">
           <MeetingPrepCard selected={selected} prep={prep} pending={prepPending} />
+          {selected?.source === "meeting" && <MeetingLifecycleControls eventId={selected.id} status={selected.status} />}
           <FreeSlotsCard intel={intel} />
           <FollowUpsCard events={allEvents} now={now} onEvent={onEventClick} />
           <RouteCard cursor={cursor} />
