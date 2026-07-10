@@ -17,6 +17,7 @@ import { EntityRecommendationsPanel } from "@/components/recommendations/EntityR
 import { listRecommendationsForEntity } from "@/lib/recommendations/service";
 import { CreatePortalButton } from "@/components/portals/CreatePortalButton";
 import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
+import { EntityLegalDocuments } from "@/components/legal/EntityLegalDocuments";
 
 export const dynamic = "force-dynamic";
 
@@ -44,11 +45,14 @@ export default async function BuyerDetailsPage({
   const communicationSlot = <CommunicationSection entityType="buyer" entityId={id} />;
   const calendarSlot = <EntityCalendarSection kind="buyer" id={id} name={buyer.full_name} />;
   const documentsSlot = (
-    <div className="flex flex-wrap items-center gap-2">
-      <CreatePortalButton entityType="buyer" entityId={id} portalType="buyer" label="צור פורטל קונה" />
-      <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
-        <CreateLegalDocumentButton entityType="buyer" entityId={id} />
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <CreatePortalButton entityType="buyer" entityId={id} portalType="buyer" label="צור פורטל קונה" />
+        <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[16px] border p-3">
+          <CreateLegalDocumentButton entityType="buyer" entityId={id} />
+        </div>
       </div>
+      <EntityLegalDocuments entityType="buyer" entityId={id} />
     </div>
   );
   const approvalSlot = <ApprovalBundleSection entityType="buyer" entityId={id} />;
