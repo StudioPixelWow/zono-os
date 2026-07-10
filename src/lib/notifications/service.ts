@@ -33,7 +33,7 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
   const orgId = profile.org_id;
   const supabase = await createClient();
 
-  const [attention, opps, fc, leak, radar, comp, mkt, state] = await Promise.all([
+  const [attention, opps, fc, leak, radar, comp, mkt, kernel, state] = await Promise.all([
     supabase.from("attention_items").select("id,title,reason,recommended_action,attention_score,entity_type,entity_id,status,detected_at").eq("org_id", orgId).eq("status", "open").order("attention_score", { ascending: false }).limit(30),
     supabase.from("opportunity_signals").select("id,title,opportunity_score,entity_type,entity_id,created_at").eq("org_id", orgId).order("opportunity_score", { ascending: false }).limit(20),
     supabase.from("deal_forecast_signals").select("id,signal_type,title,description,impact_score,created_at").eq("organization_id", orgId).eq("status", "new").order("impact_score", { ascending: false }).limit(20),
@@ -41,6 +41,8 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
     supabase.from("transaction_opportunity_radar_alerts").select("id,opportunity_type,city_name,reason_hebrew,opportunity_score,property_listing_id,created_at").eq("organization_id", orgId).in("status", ["new", "reviewing"]).order("opportunity_score", { ascending: false }).limit(20),
     supabase.from("competitor_signals").select("id,signal_type,title,description,confidence_score,created_at").eq("organization_id", orgId).order("created_at", { ascending: false }).limit(12),
     supabase.from("marketing_opportunity_signals").select("id,signal_type,title,description,impact_score,entity_type,entity_id,created_at").eq("organization_id", orgId).order("impact_score", { ascending: false }).limit(12),
+    // Stage 3 · event-driven notifications from the Event Kernel subscriber.
+    supabase.from("notifications").select("id,level,category,title,body,href,is_read,created_at").eq("org_id", orgId).eq("user_id", user.id).order("created_at", { ascending: false }).limit(30),
     supabase.from("notification_state").select("item_key,state").eq("user_id", user.id).limit(2000),
   ]);
 
@@ -61,6 +63,30 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
   for (const r of radar.data ?? []) add(`radar:${r.id}`, "opportunity", "רדאר עסקאות", r.reason_hebrew ?? r.opportunity_type, r.city_name, r.property_listing_id ? `/properties/${r.property_listing_id}` : "/transactions/radar", r.opportunity_score, r.created_at);
   for (const c of comp.data ?? []) add(`comp:${c.id}`, "warning", "מתחרים", c.title, c.description, "/competitors", c.confidence_score, c.created_at);
   for (const m of mkt.data ?? []) add(`mkt:${m.id}`, "opportunity", "שיווק", m.title, m.description, "/marketing", m.impact_score, m.created_at);
+
+  // Stage 3 · kernel event notifications (event → subscriber → notifications table
+  // → here → Attention Center → header badge). Idempotent upstream (one row per
+  // event), so no duplicates. Read state overlays notification_state AND the row's
+  // own is_read.
+  const KLEVEL_CAT: Record<string, NotifCategory> = { critical: "warning", warning: "warning", success: "opportunity", info: "system" };
+  const KLEVEL_SCORE: Record<string, number> = { critical: 90, warning: 70, success: 60, info: 40 };
+  for (const n of (kernel.data ?? []) as { id: string; level: string; category: string | null; title: string; body: string | null; href: string | null; is_read: boolean | null; created_at: string }[]) {
+    const key = `notif:${n.id}`;
+    const st = stateMap.get(key);
+    if (st === "archived") continue;
+    items.push({
+      key,
+      category: KLEVEL_CAT[n.level] ?? "system",
+      source: "עדכונים",
+      title: n.title,
+      subtitle: n.body,
+      href: n.href ?? "/notifications",
+      score: KLEVEL_SCORE[n.level] ?? 40,
+      createdAt: n.created_at,
+      read: st === "read" || st === "pinned" || n.is_read === true,
+      pinned: st === "pinned",
+    });
+  }
 
   const filtered = category ? items.filter((i) => i.category === category) : items;
   filtered.sort((a, b) => (Number(b.pinned) - Number(a.pinned)) || (b.score - a.score) || b.createdAt.localeCompare(a.createdAt));
