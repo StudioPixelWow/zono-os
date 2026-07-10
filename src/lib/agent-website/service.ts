@@ -185,7 +185,11 @@ export async function submitAgentLead(slug: string, input: { sourceSection: stri
     timeline: input.timeline ?? null, message: input.message ?? null, intent,
   } as never);
   await admin.from("agent_website_events").insert({ organization_id: s.organization_id, agent_website_id: s.id, event_type: "lead", path: input.sourceSection } as never);
-  if (leadId) { try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר הסוכן" }); } catch { /* best-effort */ } }
+  if (leadId) {
+    try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר הסוכן" }); } catch { /* best-effort */ }
+    // Emit the canonical kernel event so downstream subscribers react to agent-site leads too.
+    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "agent_website", intent } }); } catch { /* best-effort */ }
+  }
   return { ok: true };
 }
 

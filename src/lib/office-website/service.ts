@@ -218,7 +218,11 @@ export async function submitWebsiteLead(slug: string, input: { sourceSection: st
     property_type: input.propertyType ?? null, rooms: input.rooms ?? null, message: input.message ?? null, intent,
   } as never);
   await admin.from("office_website_events").insert({ organization_id: orgId, website_id: siteRow.id, event_type: "lead", path: input.sourceSection } as never);
-  if (leadId) { try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר המשרד" }); } catch { /* best-effort */ } }
+  if (leadId) {
+    try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר המשרד" }); } catch { /* best-effort */ }
+    // Emit the canonical kernel event so downstream subscribers react to website leads too.
+    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "website", intent } }); } catch { /* best-effort */ }
+  }
   return { ok: true };
 }
 
