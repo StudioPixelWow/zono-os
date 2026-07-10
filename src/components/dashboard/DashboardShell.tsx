@@ -4,6 +4,7 @@ import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
 import { CommandPalette } from "@/components/search/CommandPalette";
 import { ZonoCommandCenter } from "@/components/navigation/zono-command-center";
+import { QuickCreate } from "@/components/navigation/QuickCreate";
 import { ZIWidget } from "@/components/zi-expert/ZIWidget";
 import { PageTransition } from "./PageTransition";
 
@@ -26,6 +27,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <MobileNav />
       <CommandPalette />
       <ZonoCommandCenter />
+      <QuickCreate />
       <ZIWidget />
     </div>
   );

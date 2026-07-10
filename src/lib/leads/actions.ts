@@ -1,0 +1,53 @@
+"use server";
+// ============================================================================
+// 📇 ZONO — CRM Lead creation (Command Center quick action).
+// Reuses the EXISTING `leads` table + session org/owner scoping (mirrors the
+// public-intake insert). No new lead model, no auto-workflows. RLS enforces
+// authorization; org_id + owner_id come from the verified session.
+// ============================================================================
+import { createClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
+
+/** Valid lead_source enum values surfaced in the picker (Hebrew labels in UI). */
+export const LEAD_SOURCE_OPTIONS = ["website", "facebook", "instagram", "referral", "open_house", "sign_call", "cold_outreach", "portal", "partner", "other"] as const;
+export const LEAD_INTENT_OPTIONS = ["buyer", "seller", "both", "investor", "renter", "unknown"] as const;
+
+export interface NewLeadInput {
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  source: string;
+  intent?: string;
+  area?: string | null;
+  budget?: string | null;
+  propertyId?: string | null;
+  notes?: string | null;
+}
+
+export async function createLeadAction(input: NewLeadInput): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile?.org_id) return { ok: false, error: "אין הרשאה — התחבר מחדש." };
+  const name = input.fullName?.trim();
+  if (!name) return { ok: false, error: "יש להזין שם." };
+  if (!input.phone?.trim() && !input.email?.trim()) return { ok: false, error: "יש להזין טלפון או אימייל." };
+
+  const message = [input.notes?.trim(), input.budget?.trim() ? `תקציב: ${input.budget.trim()}` : null, input.area?.trim() ? `אזור: ${input.area.trim()}` : null]
+    .filter(Boolean).join(" · ") || null;
+
+  const db = await createClient();
+  const { data, error } = await db.from("leads").insert({
+    org_id: profile.org_id,
+    owner_id: user.id,
+    full_name: name,
+    phone: input.phone?.trim() || null,
+    email: input.email?.trim() || null,
+    source: input.source,
+    intent: input.intent || "unknown",
+    stage: "new",
+    message,
+    property_id: input.propertyId || null,
+  } as never).select("id").single();
+
+  if (error || !data) return { ok: false, error: error?.message ?? "יצירת הליד נכשלה." };
+  return { ok: true, id: (data as { id: string }).id };
+}
