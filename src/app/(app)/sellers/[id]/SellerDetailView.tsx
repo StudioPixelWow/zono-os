@@ -154,6 +154,10 @@ export function SellerDetailView({
           <div className="flex flex-wrap items-center gap-2">
             {wa && <a href={wa} target="_blank" rel="noopener noreferrer"><Button leadingIcon={<Icon name="MessageCircle" size={16} />}>וואטסאפ</Button></a>}
             {s.phone && <a href={`tel:${s.phone}`}><Button variant="secondary" leadingIcon={<Icon name="MessageCircle" size={16} />}>התקשר</Button></a>}
+            <Button variant="secondary" leadingIcon={<Icon name="Briefcase" size={16} />}
+              onClick={() => window.dispatchEvent(new CustomEvent("zono:new-deal", { detail: { prefill: { kind: "seller", id: s.id, label: s.full_name } } }))}>
+              צור עסקה
+            </Button>
             <Link href={`/sellers/${s.id}/edit`}><Button variant="ghost" leadingIcon={<Icon name="Settings" size={16} />}>עריכה</Button></Link>
           </div>
         </div>
