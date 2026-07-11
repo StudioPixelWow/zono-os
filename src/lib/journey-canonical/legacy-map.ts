@@ -101,17 +101,45 @@ export const LEGACY_SELLER_STAGE_MAP: Record<string, LegacyStageMapping> = {
   lost: m("lost"),
 };
 
-// ── DEAL: the live `deal_stage` enum written by deals/create-actions.ts ──────
-// Added in Batch 5.2: `deal.stage_changed` carries these raw values, so the
-// canonical machine needs a translation. (deal_journeys is still 0 rows — this
-// maps the EVENT vocabulary, not a legacy table.)
+// ── DEAL: ZONO runs TWO deal-stage vocabularies, and both reach the kernel ────
+//
+// LIVE EVIDENCE (Batch 5.2 runtime verification, 2026-07-11 12:30 UTC):
+//   · `deals.stage`            = DEAL_STAGE_OPTIONS (deals/options.ts) — carried by
+//                                deal.created, written by the ⌘K quick-create.
+//   · `deal_profiles.deal_stage` = DealStage (deals/engine.ts) — carried by
+//                                deal.stage_changed / deal.won / deal.lost, written
+//                                by advanceDealStage(), which is what the Deals OS
+//                                board actually calls.
+// The first version of this map only covered the FIRST vocabulary, so a real
+// stage advance ("קדם ליצירת קשר" → `contacted`) was honestly skipped as
+// `unmappable_stage` and the deal journey could never move. Observed live:
+//   deal.stage_changed → journey delivery status=skipped reason=unmappable_stage
+//                        detail="contacted"
+// Both vocabularies are mapped below. They collide on exactly one key
+// (`negotiation`) and agree on its target, so one map is safe.
 export const LEGACY_DEAL_STAGE_MAP: Record<string, LegacyStageMapping> = {
+  // deals.stage (deal.created)
   new: m("initiated"),
   qualified: m("qualification"),
-  negotiation: m("negotiation"),
   agreement: m("signing", { approximate: true, note: "terms agreed → moving to signature" }),
   contract: m("legal", { approximate: true, note: "contract drafting/review is the legal phase" }),
   closing: m("closing"),
+  // deal_profiles.deal_stage (deal.stage_changed / won / lost) — the vocabulary
+  // the live Deals OS board emits.
+  new_opportunity: m("initiated"),
+  contacted: m("qualification", { approximate: true, note: "first real contact opens the qualification phase; the canonical machine has no separate 'contacted' rung" }),
+  meeting_scheduled: m("qualification", { approximate: true, note: "still qualifying — the deal machine has no meeting stage (meetings are buyer/lead journey evidence)" }),
+  property_visit: m("qualification", { approximate: true, note: "a visit inside a deal is still qualification; viewings live on the buyer/property journeys" }),
+  negotiation: m("negotiation"),
+  offer_sent: m("offer"),
+  offer_received: m("offer"),
+  agreement_draft: m("legal", { approximate: true, note: "drafting the agreement is the legal phase; `signed` is the signing rung" }),
+  legal_review: m("legal"),
+  signed: m("signing"),
+  // Defensive: these two are emitted as deal.won / deal.lost (not stage_changed),
+  // so the subscriber handles them directly — mapped anyway so no vocabulary hole.
+  closed: m("won"),
+  lost: m("lost"),
 };
 
 const MAPS: Partial<Record<JourneyType, Record<string, LegacyStageMapping>>> = {
@@ -231,6 +259,16 @@ export const JOURNEY_DEPRECATION_REGISTRY: JourneyLegacySource[] = [
     retiredIn: "5.3 / legacy-retirement",
     note:
       "Observed live during the runtime gate: one lead.created produced TWO timeline rows — a direct app write at 11:24:12 (event_id NULL, source NULL) and the kernel projection at 11:30:22 (event_id set, source 'kernel'). Not a kernel duplicate (the idempotency index is per event_id) but the same fact is shown twice. Do NOT fix this by hiding kernel rows. Required order: inventory every imperative writer, map each to its canonical event, prove kernel parity, THEN retire the direct write. Historical rows are preserved.",
+  },
+  {
+    // ── Batch 5.2 live-verification finding (2026-07-11 12:30 UTC). ──────────
+    id: "DEAL DUAL IDENTITY — deals.id vs deal_profiles.id on the same business deal",
+    kind: "table",
+    liveRows: 1,
+    status: "active_pending_migration",
+    retiredIn: "5.3",
+    note:
+      "A deal exists twice: `deals` (canonical, written by createDealAction) and `deal_profiles` (the Deals OS board, 1:1 via deal_profiles.deal_id). deal.created carried deals.id while advanceDealStage() carried deal_profiles.id — the SAME deal under TWO entity ids. The canonical journey opened by deal.created could therefore never be advanced, and a mappable stage would have opened a SECOND deal journey keyed on the profile id. FIXED at the emitter (deals/service.ts now resolves deal_profiles.deal_id and emits the canonical deals.id, with dealProfileId kept in the payload). Batch 5.3 must still: (a) sweep any pre-fix deal.* events whose entity_id is a profile id, (b) decide whether deal_profiles rows with deal_id NULL get a canonical deals row (ensureCanonicalDeal already exists), and (c) collapse the two deal-stage vocabularies (deals.stage vs deal_profiles.deal_stage) into one.",
   },
 ];
 

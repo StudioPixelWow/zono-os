@@ -10,8 +10,8 @@ import {
   buildTransition, isNoop, statusForKind, timestampFieldForKind, validateTransition,
 } from "./transitions";
 import {
-  JOURNEY_DEPRECATION_REGISTRY, LEGACY_PROPERTY_STAGE_MAP, journeyRegistryCounts,
-  legacyMapsAreSound, mapLegacyStage, resolveLegacyPropertyClosed,
+  JOURNEY_DEPRECATION_REGISTRY, LEGACY_DEAL_STAGE_MAP, LEGACY_PROPERTY_STAGE_MAP,
+  journeyRegistryCounts, legacyMapsAreSound, mapLegacyStage, resolveLegacyPropertyClosed,
 } from "./legacy-map";
 import type { JourneyType } from "./types";
 
@@ -155,12 +155,42 @@ check("deal_stage 'contract' → legal (approximate)", mapLegacyStage("deal", "c
 check("deal_stage 'closing' → closing", mapLegacyStage("deal", "closing")!.canonical === "closing");
 check("unknown deal stage → null", mapLegacyStage("deal", "banana") === null);
 
+// ── 5.2 LIVE-VERIFICATION FIX. advanceDealStage() (the only stage control the
+//    Deals OS board exposes) emits deal_profiles.deal_stage — the `DealStage`
+//    vocabulary — NOT deals.stage. The first map covered only deals.stage, so a
+//    real advance ("קדם ליצירת קשר" → `contacted`) was skipped as
+//    `unmappable_stage` and the deal journey could never move. Observed live at
+//    2026-07-11 12:30:30 UTC. EVERY DealStage value must now map.
+const LIVE_DEAL_STAGES = [
+  "new_opportunity", "contacted", "meeting_scheduled", "property_visit",
+  "negotiation", "offer_sent", "offer_received", "agreement_draft",
+  "legal_review", "signed", "closed", "lost",
+];
+check(
+  "every live DealStage (deal_profiles.deal_stage) maps to a canonical deal stage",
+  LIVE_DEAL_STAGES.every((s) => {
+    const m = mapLegacyStage("deal", s);
+    return !!m && isValidStage("deal", m.canonical);
+  }),
+);
+check("deal_stage 'contacted' → qualification (the live regression)", mapLegacyStage("deal", "contacted")!.canonical === "qualification");
+check("deal_stage 'offer_sent' → offer", mapLegacyStage("deal", "offer_sent")!.canonical === "offer");
+check("deal_stage 'offer_received' → offer", mapLegacyStage("deal", "offer_received")!.canonical === "offer");
+check("deal_stage 'legal_review' → legal (exact, not approximate)", mapLegacyStage("deal", "legal_review")!.canonical === "legal" && !mapLegacyStage("deal", "legal_review")!.approximate);
+check("deal_stage 'signed' → signing", mapLegacyStage("deal", "signed")!.canonical === "signing");
+check("deal_stage 'closed' → won", mapLegacyStage("deal", "closed")!.canonical === "won");
+check("both deal vocabularies agree on the one colliding key (negotiation)", mapLegacyStage("deal", "negotiation")!.canonical === "negotiation");
+check("every approximate deal mapping explains itself", Object.values(LEGACY_DEAL_STAGE_MAP).every((m) => !m.approximate || !!m.note));
+
 // the live property rows only use these two stages — both must map cleanly
 check("live property stage 'new' maps", mapLegacyStage("property", "new") !== null);
 check("live property stage 'active_marketing' maps", mapLegacyStage("property", "active_marketing") !== null);
 
 // ── 8. deprecation registry (one Journey system, enforced over time) ────────
-check("registry is populated", JOURNEY_DEPRECATION_REGISTRY.length === 8);
+check("registry is populated", JOURNEY_DEPRECATION_REGISTRY.length === 9);
+// 5.2 live verification found a THIRD live conflict: the same deal exists under
+// two ids (deals.id vs deal_profiles.id). Fixed at the emitter; registered for 5.3.
+check("registry names the deal dual-identity split", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("DEAL DUAL IDENTITY") && r.retiredIn === "5.3"));
 // 5.2 registered the two conflicts the live runtime surfaced:
 check("registry names ensureJourney as a SECOND writer of the canonical table", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.includes("ensureJourney") && r.id.includes("SECOND WRITER") && r.retiredIn.startsWith("5.3")));
 check("registry names the timeline dual-write for retirement", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("TIMELINE DUAL-WRITE")));

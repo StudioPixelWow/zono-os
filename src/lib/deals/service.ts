@@ -229,8 +229,26 @@ export async function advanceDealStage(dealId: string, stage: DealStage, outcome
     } catch (e) { console.error("[deals] property sync failed:", e); }
   }
   // Stage 1: emit the deal lifecycle event through the kernel.
+  //
+  // IDENTITY (fixed after Batch 5.2 live verification — this was a real split):
+  // `dealId` here is a deal_profiles.id, but deal.created (create-actions.ts)
+  // emits the canonical `deals`.id. Emitting the profile id made deal.created and
+  // deal.stage_changed describe the SAME business deal under TWO entity ids — so
+  // the canonical journey opened by deal.created could never be advanced, and a
+  // mappable stage would have opened a SECOND deal journey keyed on the profile.
+  // The event contract says entityType "deal", so it must carry the canonical
+  // deals.id. We resolve it from the 1:1 link and fall back to the profile id
+  // only when no canonical row exists yet (recorded honestly in the payload).
+  const { data: link } = await supabase
+    .from("deal_profiles").select("deal_id").eq("id", dealId).eq("organization_id", orgId).maybeSingle();
+  const canonicalDealId = (link as { deal_id: string | null } | null)?.deal_id ?? null;
   const evt = stage === "closed" ? DOMAIN_EVENTS.dealWon : stage === "lost" ? DOMAIN_EVENTS.dealLost : DOMAIN_EVENTS.dealStageChanged;
-  await emitBusinessEvent({ type: evt, entityType: "deal", entityId: dealId, payload: { stage } });
+  await emitBusinessEvent({
+    type: evt,
+    entityType: "deal",
+    entityId: canonicalDealId ?? dealId,
+    payload: { stage, dealProfileId: dealId, canonicalDealId },
+  });
 }
 
 /** Upsert the canonical `deals` row for a closed/lost deal_profile (linked via

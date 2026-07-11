@@ -164,9 +164,18 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
  */
 async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: number): Promise<void> {
   // ── Notification — idempotent via notifications(org_id, event_id). ──────────
+  //    ALWAYS records a delivery (see the graph subscriber below for why silence
+  //    is unacceptable): `skipped` + reason when the event is not notifiable, or
+  //    when the insert errored for a non-duplicate reason.
   try {
     const note = projectEventToNotification(row);
-    if (note) {
+    if (!note) {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "notification",
+        status: "skipped", latencyMs: Date.now() - t0,
+        metadata: { reason: "event_not_notifiable" },
+      });
+    } else {
       const fkCol = notificationEntityColumn(note.entityType);
       const noteRow: Record<string, unknown> = {
         org_id: note.org_id, user_id: note.user_id, level: note.level,
@@ -176,6 +185,7 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       const { error: nErr } = await db.from("notifications").insert(noteRow as never);
       if (!nErr) { out.notified++; await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "done", latencyMs: Date.now() - t0 }); }
       else if (isDuplicate(nErr)) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "duplicate", latencyMs: Date.now() - t0 });
+      else await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "failed", latencyMs: Date.now() - t0, error: nErr.message });
     }
   } catch { /* notification is non-critical */ }
 
@@ -307,7 +317,13 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
   //    stateless approval-bundle inbox on next read; here we just record it. ────
   try {
     const intent = projectEventToAutomation(row);
-    if (intent) {
+    if (!intent) {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "automation",
+        status: "skipped", latencyMs: Date.now() - t0,
+        metadata: { reason: "no_automation_for_event" },
+      });
+    } else {
       out.automationCandidates++;
       await recordDelivery(db, {
         orgId: row.organization_id, eventId: row.id, subscriber: "automation", status: "done",
@@ -320,7 +336,13 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
   // ── Search — keep the canonical search_documents projection event-driven. ────
   try {
     const intent = classifyEventForSearch(row);
-    if (intent) {
+    if (!intent) {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "search",
+        status: "skipped", latencyMs: Date.now() - t0,
+        metadata: { reason: "event_not_searchable" },
+      });
+    } else {
       const status = intent.action === "soft_delete"
         ? await softDeleteEntity(db, row.organization_id, intent.entityType, intent.entityId, row.id)
         : await indexEntity(db, row.organization_id, intent.entityType, intent.entityId, row.id);
@@ -337,7 +359,13 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
   // ── Recommendation — keep Daily OS / Executive event-driven (no polling). ────
   try {
     const refresh = projectEventToRecommendationRefresh(row);
-    if (refresh) {
+    if (!refresh) {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "recommendation",
+        status: "skipped", latencyMs: Date.now() - t0,
+        metadata: { reason: "no_affected_recommendation_area" },
+      });
+    } else {
       out.recommendationRefreshes++;
       if (refresh.refreshDaily) { if (await invalidateCache(row.organization_id, "daily_os")) out.cachesInvalidated++; }
       if (refresh.refreshExecutive) { if (await invalidateCache(row.organization_id, "executive_os")) out.cachesInvalidated++; }
