@@ -9,7 +9,7 @@
 // for those subscribers + the outbox worker.
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { DomainEventType, DomainEntityType } from "./events";
 
@@ -37,6 +37,11 @@ export async function emitBusinessEvent(input: EmitEventInput): Promise<EmitResu
   try {
     let orgId = input.orgId ?? null;
     let actorId = input.actorUserId ?? null;
+    // Explicit orgId ⇒ service-role / webhook / background context (no request
+    // cookies). Session-derived orgId ⇒ request context (insert under the broker's
+    // RLS). Using the cookie client in a background context throws "cookies outside
+    // request scope", so pick the client to match the context.
+    const serviceContext = !!input.orgId;
     if (!orgId) {
       const { user, profile } = await getSessionContext();
       orgId = profile?.org_id ?? null;
@@ -45,7 +50,7 @@ export async function emitBusinessEvent(input: EmitEventInput): Promise<EmitResu
     if (!orgId) return { ok: false, error: "no org context" };
     if (!input.entityId) return { ok: false, error: "missing entityId" };
 
-    const db = await createClient();
+    const db = serviceContext ? createServiceRoleClient() : await createClient();
     const row = {
       event_type: input.type,
       event_version: input.version ?? 1,
