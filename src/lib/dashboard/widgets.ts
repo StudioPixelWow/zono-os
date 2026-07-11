@@ -8,7 +8,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { listMatchBoard } from "@/lib/matching-intelligence/service";
 import { buildMarketAnalysis } from "@/lib/external-listings/service";
-import { STAGE_DEFS } from "@/lib/journey/stages";
+import { ladder, stageDef, stageLabel } from "@/lib/journey-canonical";
 import { formatShekels } from "@/lib/utils";
 import {
   buyerMatches as mockMatches, hotOpportunities as mockOpps, journeyProperties as mockJourneyProps,
@@ -85,33 +85,41 @@ export async function getMatchWidgets(): Promise<{ matches: BuyerMatch[]; note: 
   return { matches, note: `${board.total} התאמות פעילות · צנרת ${formatShekels(board.revenuePipeline)}` };
 }
 
-// ── Property journeys (property_journeys + journey board) ────────────────────
-const RAIL_KEYS: { key: string; state?: "done" | "active" | "risk" | "upcoming" }[] = [
-  { key: "new" }, { key: "information_collection" }, { key: "marketing_preparation" }, { key: "published" },
-  { key: "active_marketing" }, { key: "negotiation" }, { key: "deal_signed" }, { key: "closed" },
-];
+// ── Property journeys — Batch 5.5F: THE CANONICAL SPINE ──────────────────────
+// This rail used to be built from `property_journeys` and the retired 8-value
+// journey_stage enum. 5.5E removed the last writer to that table, so every day it
+// stays wired here the dashboard drifts further from what the app actually believes.
+// The rail is now the canonical PROPERTY ladder, read from `journeys`.
+const RAIL_KEYS = ladder("property").map((s) => ({ key: s.key, label: s.label }));
 
 export async function getJourneyWidgets(): Promise<{ stages: JourneyRailStage[]; properties: JourneyProperty[] }> {
   const supabase = await createClient();
   const [{ data: journeys }, { data: props }] = await Promise.all([
-    supabase.from("property_journeys").select("property_id,current_stage,last_activity_at"),
+    supabase.from("journeys")
+      .select("entity_id,current_stage,last_activity_at")
+      .eq("entity_type", "property"),
     supabase.from("properties").select("id,title,city,status").neq("status", "archived").limit(200),
   ]);
   if (!journeys?.length) return { stages: mockJourneyStages, properties: mockJourneyProps };
 
+  const rows = (journeys as { entity_id: string; current_stage: string; last_activity_at: string | null }[])
+    .map((j) => ({ property_id: j.entity_id, current_stage: j.current_stage, last_activity_at: j.last_activity_at }));
+
   const counts = new Map<string, number>();
-  for (const j of journeys) counts.set(j.current_stage, (counts.get(j.current_stage) ?? 0) + 1);
+  for (const j of rows) counts.set(j.current_stage, (counts.get(j.current_stage) ?? 0) + 1);
   const firstActive = RAIL_KEYS.find((k) => (counts.get(k.key) ?? 0) > 0)?.key;
   const stages: JourneyRailStage[] = RAIL_KEYS.map((k) => {
-    const def = STAGE_DEFS[k.key as keyof typeof STAGE_DEFS];
     const count = counts.get(k.key) ?? 0;
-    const state: JourneyRailStage["state"] = k.key === "closed" ? (count > 0 ? "done" : "upcoming") : count === 0 ? "upcoming" : k.key === firstActive ? "active" : "done";
-    return { key: k.key, label: def?.label ?? k.key, count, state };
+    const state: JourneyRailStage["state"] =
+      count === 0 ? "upcoming" : k.key === firstActive ? "active" : "done";
+    return { key: k.key, label: k.label, count, state };
   });
 
   const propMap = new Map((props ?? []).map((p) => [p.id, p]));
-  const activeJourneys = journeys
-    .filter((j) => j.current_stage !== "closed")
+  // "Active" = not on a terminal canonical stage (sold / rented / archived). Terminal-ness
+  // is a property of the stage in the machine — never a hand-typed string comparison.
+  const activeJourneys = rows
+    .filter((j) => !stageDef("property", j.current_stage)?.terminal)
     .sort((a, b) => (b.last_activity_at ?? "").localeCompare(a.last_activity_at ?? ""))
     .slice(0, 4);
 
@@ -129,10 +137,10 @@ export async function getJourneyWidgets(): Promise<{ stages: JourneyRailStage[];
 
   const properties: JourneyProperty[] = activeJourneys.map((j, i) => {
     const p = propMap.get(j.property_id);
-    const def = STAGE_DEFS[j.current_stage as keyof typeof STAGE_DEFS];
+    const label = stageLabel("property", j.current_stage);
     return {
       id: j.property_id, address: p ? `${p.title}${p.city ? ` · ${p.city}` : ""}` : "נכס",
-      stage: def?.label ?? j.current_stage, progressLabel: def?.label ?? "", score: 0,
+      stage: label, progressLabel: label, score: 0,
       nextAction: "המשך תהליך", gradient: grad(i),
       imageUrl: jImage.get(j.property_id) ?? null, href: `/properties/${j.property_id}`,
     };

@@ -13,6 +13,7 @@ import { activityEventRepository } from "@/lib/activity/repository";
 import { createRelationship, logActivityEvent, logScoreChanged } from "@/lib/activity/service";
 import { EVENT_TYPES, RELATIONSHIP_TYPES } from "@/lib/activity/types";
 import { latestResearchForProperties } from "@/lib/transactions/service";
+import { stageDef } from "@/lib/journey-canonical";
 import { computeAllScores, type ScoreContext, type ScoreSet } from "./scoring";
 import {
   defaultCalendar,
@@ -68,7 +69,11 @@ async function gatherContext(
       supabase.from("meetings").select("type,status,start_at").eq("property_id", id),
       supabase.from("property_exposure_channels").select("status,views_count,clicks_count,leads_count").eq("property_id", id),
       supabase.from("property_seller_touchpoints").select("created_at,touchpoint_type,sentiment").eq("property_id", id),
-      supabase.from("property_journeys").select("current_stage,last_activity_at").eq("property_id", id).maybeSingle(),
+      // Batch 5.5F — the CANONICAL spine, not `property_journeys`. The legacy table is
+      // no longer written by anything (5.5E retired the last writer), so reading it here
+      // would show the command center a stage frozen at whatever it was that day.
+      supabase.from("journeys").select("current_stage,last_activity_at")
+        .eq("entity_type", "property").eq("entity_id", id).maybeSingle(),
       activityEventRepository.listForEntity("property", id, 200),
       property.seller_id
         ? supabase.from("seller_intelligence_profiles").select("seller_trust_score,seller_churn_risk_score").eq("seller_id", property.seller_id).maybeSingle()
@@ -127,9 +132,12 @@ async function gatherContext(
     hasVideo: mediaRows.some((m) => m.type === "video"),
     hasFloorPlan: mediaRows.some((m) => m.type === "floor_plan"),
     documentCount: docs.count ?? 0,
+    // 5.5F — canonical property stages (PROPERTY_MACHINE), not the retired journey_stage
+    // enum. "Published" means the listing is live or past it: active → … → sold/rented.
     stagePublished:
       property.status === "published" ||
-      ["published", "active_marketing", "negotiation", "deal_signed", "closed"].includes(stage ?? ""),
+      ["active", "marketing", "viewings", "offers", "negotiation", "under_contract", "sold", "rented"]
+        .includes(stage ?? ""),
     hasPriceHistory: property.price_before_discount != null,
     hasPricePerSqm: property.price_per_sqm != null,
     activeChannels: exposureRows.filter((c) => c.status === "published").length,
@@ -148,7 +156,8 @@ async function gatherContext(
     daysSinceActivity: daysBetween(lastActivity) ?? 0,
     openRisks: [],
     overdueTasks: taskRows.filter((t) => t.status !== "done" && t.due_at && t.due_at < new Date().toISOString()).length,
-    stalled: (daysBetween(lastActivity) ?? 0) >= 14 && stage !== "closed",
+    // Terminal-ness is a property of the canonical stage — never a hand-typed list.
+    stalled: (daysBetween(lastActivity) ?? 0) >= 14 && !stageDef("property", stage ?? "")?.terminal,
     sellerProfileTrust: sellerProfile?.seller_trust_score ?? null,
     sellerChurnRisk: sellerProfile?.seller_churn_risk_score ?? null,
     hasLinkedSeller,

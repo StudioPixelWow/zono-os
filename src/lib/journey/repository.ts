@@ -1,16 +1,17 @@
 /**
- * Property Journey repository — RLS-scoped authenticated access.
+ * Property Journey repository — what is LEFT of it after Batch 5.5.
  *
- * Reads/writes go through the cookie server client so Postgres RLS enforces the
- * org boundary. Stage transitions also log a row into public.activities so the
- * journey timeline and the property activity feed stay in sync.
+ * The lifecycle moved to the canonical spine (`journeys` + `journey_events`). This file
+ * no longer reads or writes a property's STAGE: getJourney() and setJourneyStage() are
+ * gone, and touchJourney() now stamps the canonical row.
+ *
+ * What remains is not lifecycle at all — it is the ASSET CHECKLIST context (does the
+ * listing have a price, photos, a description) plus one orphaned board read.
  *
  * Server-only. Never import from a Client Component.
  */
 import { createClient } from "@/lib/supabase/server";
-import { getSessionContext } from "@/lib/auth/session";
-import type { Database, JourneyStage } from "@/lib/supabase/types";
-import { STAGE_DEFS, stageProgress } from "./stages";
+import type { Database } from "@/lib/supabase/types";
 import type { JourneyContext } from "./stages";
 
 export type JourneyRow = Database["public"]["Tables"]["property_journeys"]["Row"];
@@ -73,87 +74,43 @@ export async function getMediaCount(propertyId: string): Promise<number> {
   return count ?? 0;
 }
 
-export async function getJourney(propertyId: string): Promise<JourneyRow | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("property_journeys")
-    .select("*")
-    .eq("property_id", propertyId)
-    .maybeSingle();
-  return data ?? null;
-}
+// ── RETIRED IN BATCH 5.5 ─────────────────────────────────────────────────────
+// getJourney()      — read `property_journeys`. The cockpit now reads the canonical
+//                     spine through getCockpitJourney() (lib/journey-cockpit/service).
+// setJourneyStage() — WROTE `property_journeys` from the UI. This was THE second
+//                     lifecycle writer: no buildTransition(), no journey_events, no
+//                     domain event. It is gone. Stage changes are commanded by
+//                     emitting `property.stage_changed` and letting the kernel apply
+//                     the transition to `journeys`. See lib/journey-cockpit/actions.ts.
+// Both had zero callers when removed (grep-verified).
 
 /**
- * Transition a property to a new journey stage. Updates the journey row
- * (stage, timestamps, progress, history) and logs a status_change activity.
+ * Touch the journey's last-activity timestamp (this is what clears a "stalled" flag).
+ *
+ * Batch 5.5F — repointed to the CANONICAL spine. Completing a task or syncing a deal
+ * used to stamp `property_journeys.last_activity_at`, a column nothing reads any more.
+ * Meanwhile `journeys.last_activity_at` — the one the cockpit and the Journey Center
+ * actually use to decide whether a property is stalled — never moved. A broker could
+ * work a listing all week and still be told it was stuck for 14 days.
  */
-export async function setJourneyStage(
-  propertyId: string,
-  stage: JourneyStage,
-): Promise<void> {
-  const { user, profile } = await getSessionContext();
-  if (!user || !profile) throw new Error("not authenticated");
-
-  const supabase = await createClient();
-  const current = await getJourney(propertyId);
-  const now = new Date().toISOString();
-
-  const prevEntry = current
-    ? [{ stage: current.current_stage, left_at: now }]
-    : [];
-  const history = Array.isArray(current?.stage_history)
-    ? [...(current!.stage_history as unknown[]), ...prevEntry]
-    : prevEntry;
-
-  const { error } = await supabase
-    .from("property_journeys")
-    .update({
-      current_stage: stage,
-      stage_entered_at: now,
-      last_activity_at: now,
-      progress: stageProgress(stage),
-      stage_history: history as Database["public"]["Tables"]["property_journeys"]["Row"]["stage_history"],
-    })
-    .eq("property_id", propertyId);
-  if (error) throw new Error(error.message);
-
-  const fromLabel = current ? STAGE_DEFS[current.current_stage].label : "—";
-  const toLabel = STAGE_DEFS[stage].label;
-  await supabase.from("activities").insert({
-    org_id: profile.org_id,
-    actor_id: user.id,
-    type: "status_change",
-    direction: "internal",
-    subject: `שלב המסע עודכן: ${fromLabel} ← ${toLabel}`,
-    property_id: propertyId,
-    occurred_at: now,
-  });
-
-  // Unified activity layer
-  const { logActivityEvent } = await import("@/lib/activity/service");
-  const { EVENT_TYPES } = await import("@/lib/activity/types");
-  await logActivityEvent({
-    eventType: EVENT_TYPES.propertyStageChanged,
-    entityType: "property",
-    entityId: propertyId,
-    title: `שלב המסע עודכן: ${fromLabel} ← ${toLabel}`,
-    status: stage,
-  });
-}
-
-/** Touch the journey's last-activity timestamp (clears a stalled flag). */
 export async function touchJourney(propertyId: string): Promise<void> {
   const supabase = await createClient();
   await supabase
-    .from("property_journeys")
+    .from("journeys")
     .update({ last_activity_at: new Date().toISOString() })
-    .eq("property_id", propertyId);
+    .eq("entity_type", "property")
+    .eq("entity_id", propertyId);
 }
 
 /**
+ * ⚠️ DEPRECATED (Batch 5.5F) — reads `property_journeys`, which nothing writes any more.
+ * It has ZERO callers today (its only consumer, JourneyBoardWidgets, is itself orphaned),
+ * so it is left standing rather than ripped out mid-batch — but do NOT wire it to
+ * anything. The canonical board lives in the Journey Center (lib/journey-center/service).
+ * It goes when the table goes.
+ *
  * Dashboard board: all active journeys for the org, bucketed into
- * needing-action / stalled / recently-updated. Two RLS-scoped reads joined in
- * JS (keeps the hand-written Database typing simple and the queries cheap).
+ * needing-action / stalled / recently-updated.
  */
 export async function listJourneyBoard(): Promise<JourneyBoard> {
   const supabase = await createClient();
