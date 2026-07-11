@@ -4,7 +4,7 @@
 // approval-gated createLeadFromCommentAction (no new create path). No publish.
 // ============================================================================
 "use server";
-import { getFacebookHome, answerFacebookQuestion, type BrokerFacebook, type FbAnswer } from "./service";
+import { getFacebookHome, answerFacebookQuestion, type FbAnswer } from "./service";
 import type { FacebookHome } from "./types";
 
 export async function getFacebookHomeAction(): Promise<{ ok: boolean; result?: FacebookHome; error?: string }> {
@@ -19,4 +19,8 @@ export async function askFacebookAction(question: string): Promise<{ ok: boolean
   catch (e) { return { ok: false, error: e instanceof Error ? e.message : "failed" }; }
 }
 
-export type { BrokerFacebook };
+// NOTE: `export type { BrokerFacebook }` used to live here and it CRASHED /facebook
+// with `ReferenceError: BrokerFacebook is not defined` at module evaluation:
+// Next's "use server" transform emits a RUNTIME re-export for the binding, but a
+// type-only import has no runtime value. A "use server" module must export only
+// async functions — types included. Import BrokerFacebook from "./service".
