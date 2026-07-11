@@ -39,6 +39,13 @@ export const DOMAIN_EVENTS = {
   propertyPublished: "property.published",
   propertyPriceChanged: "property.price_changed",
   propertyStatusChanged: "property.status_changed",
+  /**
+   * Batch 5.5E — the MISSING SIBLING of buyer/lead/deal.stage_changed. Its absence
+   * is why the property cockpit wrote `property_journeys` directly: there was no
+   * canonical event a broker's "advance stage" click could ride. Now there is, and
+   * the UI never touches a journey table again.
+   */
+  propertyStageChanged: "property.stage_changed",
   propertySold: "property.sold",
   propertyArchived: "property.archived",
   // External listing

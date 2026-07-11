@@ -218,6 +218,31 @@ export function projectEventToJourney(evt: DomainEventLike): JourneyProjection {
       add("property", e, m.canonical, "property.status_changed", { raw, canonical: m.canonical });
       break;
     }
+    /**
+     * Batch 5.5E — a BROKER moved the property on the cockpit. Until now the
+     * property machine had no stage_changed sibling (buyer / lead / deal all had
+     * one), so the UI wrote `property_journeys` directly and the canonical spine
+     * never heard about it. This case is the whole cure: the click becomes a
+     * domain event, the event becomes a canonical intent, and journey-applier
+     * writes the spine — buildTransition, journey_events, timeline and all.
+     * Accepts a canonical stage first; a legacy value is resolved, never guessed.
+     */
+    case "property.stage_changed": {
+      const raw = pick(p, "stage", "toStage", "to_stage");
+      if (!raw) return { kind: "skip", reason: "no_stage_evidence" };
+      if (isValidStage("property", raw)) {
+        add("property", e, raw, "property.stage_changed", { raw, target: raw, manual: true });
+        break;
+      }
+      const m = mapLegacyStage("property", raw);
+      if (!m) return { kind: "skip", reason: "unmappable_stage", detail: raw };
+      // `closed` means sold OR rented OR archived — the event alone cannot say which.
+      if (m.ambiguous) {
+        return { kind: "skip", reason: "no_stage_evidence", detail: `ambiguous legacy stage '${raw}'` };
+      }
+      add("property", e, m.canonical, "property.stage_changed", { raw, target: m.canonical, manual: true });
+      break;
+    }
     case "property.sold":
       add("property", e, "sold", "property.sold", { source: "sold" });
       break;

@@ -77,6 +77,20 @@ check("4. active→sold is a close", buildTransition("property", "active", "sold
 check("4. status_changed(active_marketing) → marketing", one(evt("property.status_changed", "property", "P1", { status: "active_marketing" }))?.targetStage === "marketing");
 check("4. ambiguous legacy `closed` is REFUSED, not guessed", skipReason(evt("property.status_changed", "property", "P1", { status: "closed" })) === "no_stage_evidence");
 
+// ── 4b. Batch 5.5E — property.stage_changed: the broker's own hand on the spine.
+// The property machine was the only one WITHOUT a stage_changed sibling, which is
+// precisely why the property cockpit wrote `property_journeys` directly. It has one now.
+const pManual = one(evt("property.stage_changed", "property", "P1", { stage: "negotiation" }));
+check("4b. property.stage_changed(canonical) → that exact stage", pManual?.targetStage === "negotiation");
+check("4b. it is marked manual (a human moved it, not an inference)", (pManual?.evidence as { manual?: boolean })?.manual === true);
+check("4b. owner carried from the acting broker", pManual?.ownerUserId === "user-1");
+check("4b. it does NOT createOnly — a manual move must actually move the journey", pManual?.createOnly === false);
+// A legacy enum value from the old cockpit ladder is RESOLVED, never guessed:
+check("4b. legacy `active_marketing` resolves to marketing", one(evt("property.stage_changed", "property", "P1", { stage: "active_marketing" }))?.targetStage === "marketing");
+check("4b. ambiguous legacy `closed` is still REFUSED", skipReason(evt("property.stage_changed", "property", "P1", { stage: "closed" })) === "no_stage_evidence");
+check("4b. an unknown stage is a skip, never a fabricated transition", skipReason(evt("property.stage_changed", "property", "P1", { stage: "banana" })) === "unmappable_stage");
+check("4b. no stage in the payload ⇒ honest skip", skipReason(evt("property.stage_changed", "property", "P1", {})) === "no_stage_evidence");
+
 // ── 5. deal.created → stage_changed → won ──────────────────────────────────
 const d1 = intents(evt("deal.created", "deal", "D1", { buyerId: "B1", sellerId: "S1", propertyId: "P1" }));
 check("5. deal.created → deal at initiated", d1.some((i) => i.journeyType === "deal" && i.targetStage === "initiated"));
