@@ -126,7 +126,7 @@ check("10. buyer.updated with preapproval → financing (beats qualification)", 
 check("10. unsupported event → unsupported_event", skipReason(evt("whatsapp.connected", "whatsapp", "W1")) === "unsupported_event");
 check("10. property.price_changed carries no stage → unsupported", skipReason(evt("property.price_changed", "property", "P1", { price: 9 })) === "unsupported_event");
 check("10. missing entity id → missing_entity_id", skipReason({ ...evt("buyer.created", "buyer", "X"), entity_id: "" }) === "missing_entity_id");
-check("10. seller.linked_to_property without propertyId → missing_linked_entity", skipReason(evt("seller.linked_to_property", "seller", "S1", {})) === "missing_linked_entity");
+check("10. seller.linked_to_property without sellerId → missing_linked_entity", skipReason(evt("seller.linked_to_property", "property", "P1", {})) === "missing_linked_entity");
 check("10. meeting with no buyer/lead → missing_linked_entity", skipReason(evt("meeting.created", "meeting", "M1", {})) === "missing_linked_entity");
 check("10. unmappable stage → unmappable_stage", skipReason(evt("deal.stage_changed", "deal", "D1", { stage: "banana" })) === "unmappable_stage");
 check("10. buyer.stage_changed without stage → no_stage_evidence", skipReason(evt("buyer.stage_changed", "buyer", "B1", {})) === "no_stage_evidence");
@@ -151,7 +151,15 @@ check("13. a skip never throws", (() => { try { projectEventToJourney(evt("nonse
 check("13. a malformed payload never throws", (() => { try { projectEventToJourney({ ...evt("buyer.updated", "buyer", "B1"), payload: null }); return true; } catch { return false; } })());
 
 // ── extra: seller + meeting mappings ──────────────────────────────────────
-check("seller.linked_to_property → representation", one(evt("seller.linked_to_property", "seller", "S1", { propertyId: "P1" }))?.targetStage === "representation");
+// 5.3 LIVE FIX — the emitter keys this event on the PROPERTY and carries sellerId
+// in the payload. The subscriber used to read it inverted, so a real seller link
+// could never advance the seller (and would have keyed the journey on the property).
+const linked = one(evt("seller.linked_to_property", "property", "P1", { sellerId: "S1", propertyId: "P1" }));
+check("seller.linked_to_property → representation", linked?.targetStage === "representation");
+check("…on the SELLER journey, not the property", linked?.journeyType === "seller" && linked?.entityId === "S1");
+check("…and never keys the seller journey on the property id", linked?.entityId !== "P1");
+check("…propertyId is preserved as evidence", (linked?.evidence as { propertyId?: string })?.propertyId === "P1");
+check("…it still works when only sellerId is in the payload (entity_id IS the property)", one(evt("seller.linked_to_property", "property", "P9", { sellerId: "S9" }))?.entityId === "S9");
 check("property.published with sellerId → seller marketing", intents(evt("property.published", "property", "P1", { sellerId: "S1" })).some((i) => i.journeyType === "seller" && i.targetStage === "marketing"));
 check("meeting.created (buyer+property) → viewing_scheduled", intents(evt("meeting.created", "meeting", "M1", { buyerId: "B1", propertyId: "P1" })).some((i) => i.targetStage === "viewing_scheduled"));
 check("meeting.completed (buyer+property) → viewing_completed", intents(evt("meeting.completed", "meeting", "M1", { buyerId: "B1", propertyId: "P1" })).some((i) => i.targetStage === "viewing_completed"));

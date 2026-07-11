@@ -156,10 +156,19 @@ export function projectEventToJourney(evt: DomainEventLike): JourneyProjection {
 
     // ── SELLER ──────────────────────────────────────────────────────────────
     case "seller.linked_to_property": {
-      const propertyId = pick(p, "propertyId", "property_id");
-      if (!propertyId) return { kind: "skip", reason: "missing_linked_entity", detail: "no propertyId on seller.linked_to_property" };
+      // IDENTITY (fixed in 5.3 — the mapping was INVERTED against the emitter).
+      // sellers/actions.ts emits this with entityType "property":
+      //     entity_id = the PROPERTY, payload = { sellerId, propertyId }
+      // This case used to read `payload.propertyId` (which the create-flow emitter
+      // never sent → guaranteed `missing_linked_entity` skip) and then keyed the
+      // SELLER journey on `evt.entity_id` — i.e. on the PROPERTY's id. Same family
+      // of bug as the deal dual identity. A seller could therefore never reach
+      // `representation`, and if it had, it would have been the wrong journey.
+      const sellerId = pick(p, "sellerId", "seller_id");
+      const propertyId = pick(p, "propertyId", "property_id") ?? e;   // e IS the property
+      if (!sellerId) return { kind: "skip", reason: "missing_linked_entity", detail: "no sellerId on seller.linked_to_property" };
       // Linking a seller to a property IS the representation fact.
-      add("seller", e, "representation", "seller.linked_to_property", { propertyId });
+      add("seller", sellerId, "representation", "seller.linked_to_property", { propertyId });
       break;
     }
     case "seller.risk_changed": {

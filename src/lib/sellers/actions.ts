@@ -91,6 +91,21 @@ export async function linkSellerToPropertyAction(input: LinkSellerInput): Promis
   try {
     await propertySellerRepository.link(profile.org_id, input);
     await logActivityEvent({ eventType: "seller.linked_to_property", entityType: "property", entityId: input.propertyId, relatedEntityType: "seller", relatedEntityId: input.sellerId, title: "מוכר קושר לנכס" });
+    // BATCH 5.3 LIVE FINDING: this is the ONLY UI path that links an EXISTING
+    // seller to a property (the property cockpit's "קשר מוכר קיים"), and it never
+    // emitted a domain event — only a timeline row. So the representation fact
+    // never reached the kernel and the seller's journey could never advance.
+    // Proven live: the link row landed, `domain_events` stayed empty.
+    // The event is keyed on the PROPERTY (that is the entity_type the emitter
+    // declares) and carries BOTH ids, so the journey subscriber can key the
+    // seller journey on the seller — see kernel/journey-subscriber.ts.
+    await emitBusinessEvent({
+      type: DOMAIN_EVENTS.sellerLinkedToProperty,
+      entityType: "property",
+      entityId: input.propertyId,
+      payload: { sellerId: input.sellerId, propertyId: input.propertyId, relationshipType: input.relationshipType ?? null },
+      idempotencyKey: `seller_linked:${input.propertyId}:${input.sellerId}`,
+    });
     const { recalculatePropertyIntelligence } = await import("@/lib/intelligence/service");
     await recalculatePropertyIntelligence(input.propertyId).catch(() => {});
   } catch (e) {
