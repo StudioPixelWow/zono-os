@@ -18,6 +18,9 @@ const PROGRESS: Record<JourneyEntityType, Record<string, number>> = {
   seller: { new: 8, valuation: 25, pricing: 40, signing: 60, marketing: 75, negotiation: 88, deal: 100, churn_risk: 20 },
   lead: { new: 10, contacted: 30, qualified: 55, nurturing: 45, converted: 100, lost: 0, disqualified: 0 },
   property: { draft: 8, preparation: 22, ready: 38, marketed: 55, active: 60, under_offer: 80, negotiation: 88, sold: 100, stale: 20 },
+  // Deals have no DERIVED model — they only ever existed canonically, so this
+  // fallback table has nothing to say about them. Progress comes from the machine.
+  deal: {},
 };
 const TERMINAL_GOOD = new Set(["deal", "converted", "sold"]);
 const TERMINAL_BAD = new Set(["lost", "disqualified"]);

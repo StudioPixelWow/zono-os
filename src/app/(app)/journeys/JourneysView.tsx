@@ -15,12 +15,12 @@ import { Icon } from "@/components/dashboard/Icon";
 import { ladder, stageLabel as canonicalStageLabel, type JourneyType } from "@/lib/journey-canonical";
 import { ENTITY_HE, type JourneyCenter, type JourneyEntityType, type JourneyFlag, type UnifiedJourney } from "@/lib/journey-center/types";
 
-const ENTITY_ICON: Record<JourneyEntityType, string> = { buyer: "Users", seller: "Handshake", lead: "MessageCircle", property: "Building2" };
+const ENTITY_ICON: Record<JourneyEntityType, string> = { buyer: "Users", seller: "Handshake", lead: "MessageCircle", property: "Building2", deal: "Briefcase" };
 type FilterKey = "all" | JourneyEntityType | "at_risk" | "waiting" | "advancing" | "no_activity"
   | "canonical" | "fallback" | "stalled" | "blocked";
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "הכל" }, { key: "buyer", label: "קונים" }, { key: "seller", label: "מוכרים" },
-  { key: "lead", label: "לידים" }, { key: "property", label: "נכסים" },
+  { key: "lead", label: "לידים" }, { key: "property", label: "נכסים" }, { key: "deal", label: "עסקאות" },
   // Batch 5.4 — the operator can always see WHERE a row came from and what is stuck.
   { key: "canonical", label: "קנוני" }, { key: "fallback", label: "תאימות" },
   { key: "stalled", label: "תקוע" }, { key: "blocked", label: "חסום" },

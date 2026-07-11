@@ -5,7 +5,10 @@
 // Read-only: nothing is written, no journey rows are created. Client-importable.
 // ============================================================================
 
-export type JourneyEntityType = "buyer" | "seller" | "lead" | "property";
+// Batch 5.4 FIX (caught by the deployed build): `deal` was missing. Canonical DEAL
+// journeys are real — 5.2 proved one live end-to-end — so the Journey Center type
+// must admit them or the page silently cannot represent a whole journey type.
+export type JourneyEntityType = "buyer" | "seller" | "lead" | "property" | "deal";
 
 /** Lifecycle flags derived from real signals (an entity can carry several). */
 export type JourneyFlag = "active" | "at_risk" | "waiting" | "advancing" | "no_activity" | "closed";
@@ -133,6 +136,9 @@ export const STAGE_LABELS: Record<JourneyEntityType, Record<string, string>> = {
     draft: "טיוטה", preparation: "הכנה", ready: "מוכן לפרסום", marketed: "בשיווק",
     active: "פעיל", under_offer: "בהצעה", negotiation: "משא ומתן", sold: "נמכר/הושכר", stale: "תקוע",
   },
+  // Deals never had a DERIVED model — they only ever existed canonically. The map
+  // is empty on purpose: the canonical machine supplies every deal label.
+  deal: {},
 };
 
 export const STAGE_ORDER: Record<JourneyEntityType, string[]> = {
@@ -140,6 +146,7 @@ export const STAGE_ORDER: Record<JourneyEntityType, string[]> = {
   seller: ["new", "valuation", "pricing", "signing", "marketing", "negotiation", "deal", "churn_risk"],
   lead: ["new", "contacted", "qualified", "nurturing", "converted", "lost", "disqualified"],
   property: ["draft", "preparation", "ready", "marketed", "active", "under_offer", "negotiation", "sold", "stale"],
+  deal: [],   // canonical-only — see above
 };
 
-export const ENTITY_HE: Record<JourneyEntityType, string> = { buyer: "קונה", seller: "מוכר", lead: "ליד", property: "נכס" };
+export const ENTITY_HE: Record<JourneyEntityType, string> = { buyer: "קונה", seller: "מוכר", lead: "ליד", property: "נכס", deal: "עסקה" };

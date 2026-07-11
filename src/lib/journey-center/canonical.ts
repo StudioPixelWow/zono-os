@@ -180,6 +180,8 @@ export const FALLBACK_STAGE_MAP: Record<JourneyEntityType, Record<string, string
     // `stale` is a HEALTH flag the derived model modelled as a stage. It is not a
     // lifecycle position and has no canonical peer.
   },
+  // Deals have NO derived model — they exist only canonically. Nothing to map.
+  deal: {},
 };
 
 export interface FallbackResolution {
