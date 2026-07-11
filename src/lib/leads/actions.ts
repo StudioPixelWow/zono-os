@@ -7,10 +7,8 @@
 // ============================================================================
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
-
-/** Valid lead_source enum values surfaced in the picker (Hebrew labels in UI). */
-export const LEAD_SOURCE_OPTIONS = ["website", "facebook", "instagram", "referral", "open_house", "sign_call", "cold_outreach", "portal", "partner", "other"] as const;
-export const LEAD_INTENT_OPTIONS = ["buyer", "seller", "both", "investor", "renter", "unknown"] as const;
+// A "use server" module may export ONLY async functions — the picker options
+// live in ./options and are imported (never re-exported) from here.
 
 export interface NewLeadInput {
   fullName: string;

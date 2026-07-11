@@ -5,11 +5,13 @@ import type { TaskPriority, TaskStatus } from "@/lib/supabase/types";
 import { createPropertyTask, setTaskStatus } from "./repository";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+// A "use server" module may export ONLY async functions — the picker options
+// therefore live in ./options and are imported (never re-exported) here.
+import { TASK_PRIORITY_OPTIONS } from "./options";
 
 // ── Generic task creation (Command Center quick action) ───────────────────────
 // Generalizes createPropertyTask over the shared `tasks` table: optional single
 // related-entity ref, session org/owner scope, no workflow auto-creation.
-export const TASK_PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"] as const;
 export type TaskEntityKind = "property" | "buyer" | "seller" | "lead" | "deal";
 
 export interface NewTaskInput {

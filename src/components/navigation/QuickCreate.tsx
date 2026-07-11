@@ -13,9 +13,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Icon } from "@/components/dashboard/Icon";
 import { Spinner } from "@/components/ui/Button";
 import { globalSearchAction } from "@/lib/search/actions";
-import { createLeadAction, LEAD_SOURCE_OPTIONS, LEAD_INTENT_OPTIONS } from "@/lib/leads/actions";
-import { createDealAction, DEAL_STAGE_OPTIONS } from "@/lib/deals/create-actions";
-import { createTaskAction, TASK_PRIORITY_OPTIONS } from "@/lib/tasks/actions";
+import { createLeadAction } from "@/lib/leads/actions";
+import { createDealAction } from "@/lib/deals/create-actions";
+import { createTaskAction } from "@/lib/tasks/actions";
+// Picker options come from the PURE option modules — importing them from the
+// "use server" action files is what broke every server action (Next.js allows
+// a "use server" module to export only async functions).
+import { LEAD_SOURCE_OPTIONS, LEAD_INTENT_OPTIONS } from "@/lib/leads/options";
+import { DEAL_STAGE_OPTIONS } from "@/lib/deals/options";
+import { TASK_PRIORITY_OPTIONS } from "@/lib/tasks/options";
 import { confirmBookingAction } from "@/lib/calendar-os/booking-actions";
 import type { BookingKind } from "@/lib/calendar-os/booking";
 

@@ -9,9 +9,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { DEAL_TO_PROFILE_STAGE } from "./service";
-
-/** Valid deal_stage enum values (Hebrew labels in UI). */
-export const DEAL_STAGE_OPTIONS = ["new", "qualified", "negotiation", "agreement", "contract", "closing"] as const;
+// A "use server" module may export ONLY async functions — the picker options
+// live in ./options and are imported (never re-exported) from here.
+import { DEAL_STAGE_OPTIONS } from "./options";
 
 export interface NewDealInput {
   title?: string | null;
