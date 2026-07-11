@@ -180,7 +180,8 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
   try {
     let applied = 0;
     const now = new Date().toISOString();
-    for (const op of projectEventToGraphEdges(row)) {
+    const graphOps = projectEventToGraphEdges(row);
+    for (const op of graphOps) {
       if (op.op === "retire") {
         const { error } = await db.from("entity_relationships")
           .update({ status: "inactive", valid_to: now, last_seen_at: now } as never)
@@ -205,7 +206,17 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
         if (!error) { out.graphEdges++; applied++; }
       }
     }
-    if (applied) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "graph", status: "done", latencyMs: Date.now() - t0 });
+    // Always record a delivery — an honest `skipped` when the event legitimately
+    // yields no edges (e.g. lead.created: a brand-new lead has no relationships
+    // yet). Recording SILENCE would make "ran, nothing to do" indistinguishable
+    // from "never ran / crashed before recording", which is exactly what the
+    // delivery ledger exists to prevent.
+    await recordDelivery(db, {
+      orgId: row.organization_id, eventId: row.id, subscriber: "graph",
+      status: applied ? "done" : "skipped",
+      latencyMs: Date.now() - t0,
+      metadata: { edgesApplied: applied, opsPlanned: graphOps.length, reason: applied ? null : "no_edges_for_event" },
+    });
   } catch { /* graph is non-critical */ }
 
   // ── Org-Memory (LEGACY milestone ledger) — kept for compatibility; no delivery
@@ -221,14 +232,19 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
     const r = await ingestMemoryForEvent(db, row);
     const touched = r.created + r.reinforced + r.superseded;
     out.memoriesIngested += touched;
-    if (touched > 0 || r.skipped > 0 || r.failed > 0) {
-      await recordDelivery(db, {
-        orgId: row.organization_id, eventId: row.id, subscriber: "memory",
-        status: r.failed > 0 && touched === 0 ? "failed" : touched > 0 ? "done" : "skipped",
-        latencyMs: Date.now() - t0,
-        metadata: { created: r.created, reinforced: r.reinforced, superseded: r.superseded, skipped: r.skipped, failed: r.failed },
-      });
-    }
+    // Always record a delivery. When the event carries no salient fact the
+    // honest outcome is `skipped` WITH a reason — never an absent row (see the
+    // graph subscriber above for why silence is unacceptable in the ledger).
+    await recordDelivery(db, {
+      orgId: row.organization_id, eventId: row.id, subscriber: "memory",
+      status: r.failed > 0 && touched === 0 ? "failed" : touched > 0 ? "done" : "skipped",
+      latencyMs: Date.now() - t0,
+      metadata: {
+        created: r.created, reinforced: r.reinforced, superseded: r.superseded,
+        skipped: r.skipped, failed: r.failed,
+        reason: touched > 0 ? null : r.failed > 0 ? "ingest_failed" : "no_salient_fact_in_event",
+      },
+    });
   } catch { /* canonical memory is non-critical */ }
 
   // ── Automation — CLASSIFY ONLY (never execute). The candidate surfaces via the
