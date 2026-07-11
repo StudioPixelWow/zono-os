@@ -54,18 +54,40 @@ export interface JourneyCommandCenter {
 }
 
 // ── ensure + advance ────────────────────────────────────────────────────────
+/**
+ * BATCH 5.3 — COMPATIBILITY ADAPTER. This function no longer writes `journeys`.
+ *
+ * What it used to do (and why it had to stop): it inserted
+ * `stagesFor(jType)[0].key` straight into the canonical table. For a buyer that
+ * is `new`, which happens to be canonical. For a SELLER it is **`potential`**,
+ * which is NOT a canonical stage — and because `journeys_entity_uniq` means
+ * whichever writer lands first owns the row, and this runs synchronously inside
+ * the create action while the kernel drain runs up to 10 minutes later, the
+ * legacy writer ALWAYS won. buildTransition() would then see an unknown `from`
+ * and reject every subsequent move: the seller's journey would be frozen
+ * forever, silently.
+ *
+ * It is now a thin adapter over the ONE canonical creation service. It cannot
+ * choose a stage, cannot overwrite a kernel-created journey, and returns an
+ * honest error instead of writing a row the machine would not accept.
+ *
+ * The four live callers (buyers/actions, sellers/actions, leads/service,
+ * social/service) are unchanged — the signature is identical by design.
+ */
 export async function ensureJourney(entityType: string, entityId: string, journeyType?: string): Promise<{ id: string }> {
+  const { ensureCanonicalJourneyForSession } = await import("@/lib/journey-backfill/service");
+  const r = await ensureCanonicalJourneyForSession(entityType, entityId, journeyType);
+  if (!r.ok) throw new Error(r.error);
+
+  // The satellites (milestones, scores) are still legacy-shaped and still useful;
+  // they hang off the canonical journey id and touch no stage column.
   const { orgId, supabase } = await ctx();
   const jType = journeyType ?? (entityType === "seller" ? "seller" : "buyer");
-  const { data: existing } = await supabase.from("journeys").select("id").eq("org_id", orgId).eq("entity_type", entityType).eq("entity_id", entityId).maybeSingle();
-  if (existing) return { id: (existing as { id: string }).id };
-  const firstStage = stagesFor(jType)[0].key;
-  const { data, error } = await supabase.from("journeys").insert({ org_id: orgId, journey_type: jType, entity_type: entityType, entity_id: entityId, current_stage: firstStage }).select("id").single();
-  if (error || !data) throw new Error(error?.message ?? "יצירת המסע נכשלה");
-  const id = (data as { id: string }).id;
-  await seedMilestones(supabase, orgId, id, jType, entityType, entityId);
-  await recomputeJourney(supabase, orgId, id);
-  return { id };
+  if (r.created) {
+    await seedMilestones(supabase, orgId, r.id, jType, entityType, entityId);
+    await recomputeJourney(supabase, orgId, r.id);
+  }
+  return { id: r.id };
 }
 
 async function seedMilestones(supabase: DB, orgId: string, journeyId: string, journeyType: string, entityType: string, entityId: string) {
@@ -73,19 +95,76 @@ async function seedMilestones(supabase: DB, orgId: string, journeyId: string, jo
   try { await supabase.from("journey_milestones").insert(rows); } catch { /* best-effort */ }
 }
 
+/**
+ * BATCH 5.3 — every stage write now goes through the canonical machine.
+ *
+ * This used to accept any key from the LEGACY catalog (`stageDef` over
+ * BUYER_STAGES/SELLER_STAGES) and write it straight into `journeys.current_stage`
+ * — a second door into the canonical table through which `potential`, `proposal`,
+ * `budget_validation` and the rest could walk. It also wrote its own legacy
+ * status vocabulary ('completed' / 'dropped').
+ *
+ * Now: the requested stage is RESOLVED (legacy → canonical, with quality) and
+ * then VALIDATED by buildTransition() — the same function the kernel uses. An
+ * unmappable stage is an honest error, never a bad row. The head update carries
+ * the same `.eq(current_stage, from)` stale guard as the kernel applier.
+ */
 export async function advanceStage(journeyId: string, toStage: string): Promise<void> {
   const { orgId, supabase } = await ctx();
   const { data: j } = await supabase.from("journeys").select("journey_type,current_stage,stage_history,entity_type,entity_id").eq("org_id", orgId).eq("id", journeyId).maybeSingle();
   const row = j as { journey_type: string; current_stage: string; stage_history: Json; entity_type: string; entity_id: string } | null;
   if (!row) throw new Error("המסע לא נמצא");
-  const def = stageDef(row.journey_type, toStage);
-  if (!def) throw new Error("שלב לא חוקי");
-  const fromStage = row.current_stage;
+
+  const { buildTransition, isValidStage, isJourneyType, resolveLegacyStage } = await import("@/lib/journey-canonical");
+  if (!isJourneyType(row.journey_type)) throw new Error(`סוג מסע לא מוכר: ${row.journey_type}`);
+  const jt = row.journey_type;
+
+  // The caller may still speak the legacy vocabulary — resolve, never trust.
+  const vocab = jt === "seller" ? "journey_stages_seller" as const
+    : jt === "buyer" ? "journey_stages_buyer" as const
+      : jt === "deal" ? "deal_stage" as const
+        : jt === "lead" ? "leads_stage" as const
+          : "journey_stage_enum" as const;
+  const resolved = resolveLegacyStage(jt, vocab, toStage);
+  if (!resolved.canonical) throw new Error(`שלב לא חוקי: '${toStage}' — ${resolved.note ?? "אין מיפוי קנוני"}`);
+
+  // A journey still sitting on a pre-5.3 legacy stage cannot be moved by the
+  // machine. Report it instead of corrupting it further — Batch 5.3's backfill
+  // is what repairs those rows.
+  if (!isValidStage(jt, row.current_stage)) {
+    throw new Error(`המסע נמצא בשלב לא-קנוני '${row.current_stage}' — יש להריץ את ההשלמה (backfill) של 5.3 תחילה`);
+  }
+
+  const t = buildTransition(jt, row.current_stage, resolved.canonical, {
+    reason: "journey-intelligence:advanceStage",
+    evidence: { requested: toStage, resolved: resolved.canonical, quality: resolved.quality },
+  });
+  if (!t) throw new Error(`מעבר לא חוקי: ${row.current_stage} → ${resolved.canonical}`);
+
+  const now = new Date().toISOString();
   const history = Array.isArray(row.stage_history) ? [...(row.stage_history as unknown[])] : [];
-  history.push({ from: fromStage, to: toStage, at: new Date().toISOString() });
-  const status = def.terminal ? (def.won ? "completed" : "dropped") : "active";
-  await supabase.from("journeys").update({ current_stage: toStage, stage_entered_at: new Date().toISOString(), last_activity_at: new Date().toISOString(), status, stage_history: history.slice(-50) as Json }).eq("org_id", orgId).eq("id", journeyId);
-  await supabase.from("journey_events").insert({ org_id: orgId, journey_id: journeyId, entity_type: row.entity_type, entity_id: row.entity_id, event_type: "stage_change", from_stage: fromStage, to_stage: toStage, title: `מעבר ל${stageLabel(row.journey_type, toStage)}` });
+  history.push({ from: t.fromStage, to: t.toStage, at: now });
+
+  const patch: Record<string, unknown> = {
+    current_stage: t.toStage, status: t.status,
+    stage_entered_at: now, last_activity_at: now,
+    stage_history: history.slice(-50) as Json,
+  };
+  if (t.timestampField) patch[t.timestampField] = now;
+
+  const { data: moved } = await supabase.from("journeys").update(patch as never)
+    .eq("org_id", orgId).eq("id", journeyId)
+    .eq("current_stage", row.current_stage)     // stale-write guard
+    .select("id");
+  if (!moved || (moved as unknown[]).length === 0) throw new Error("המסע כבר קודם על ידי תהליך אחר — רענן ונסה שוב");
+
+  await supabase.from("journey_events").insert({
+    org_id: orgId, journey_id: journeyId,
+    entity_type: row.entity_type, entity_id: row.entity_id,
+    event_type: "stage_change", from_stage: t.fromStage, to_stage: t.toStage,
+    title: `מעבר ל${stageLabel(row.journey_type, t.toStage)}`,
+    reason: t.reason, evidence: t.evidence,
+  } as never);
   await recomputeJourney(supabase, orgId, journeyId);
 }
 

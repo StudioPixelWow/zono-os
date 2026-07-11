@@ -187,21 +187,26 @@ check("live property stage 'new' maps", mapLegacyStage("property", "new") !== nu
 check("live property stage 'active_marketing' maps", mapLegacyStage("property", "active_marketing") !== null);
 
 // ── 8. deprecation registry (one Journey system, enforced over time) ────────
-check("registry is populated", JOURNEY_DEPRECATION_REGISTRY.length === 9);
-// 5.2 live verification found a THIRD live conflict: the same deal exists under
-// two ids (deals.id vs deal_profiles.id). Fixed at the emitter; registered for 5.3.
-check("registry names the deal dual-identity split", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("DEAL DUAL IDENTITY") && r.retiredIn === "5.3"));
-// 5.2 registered the two conflicts the live runtime surfaced:
-check("registry names ensureJourney as a SECOND writer of the canonical table", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.includes("ensureJourney") && r.id.includes("SECOND WRITER") && r.retiredIn.startsWith("5.3")));
-check("registry names the timeline dual-write for retirement", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("TIMELINE DUAL-WRITE")));
-check("timeline dual-write must NOT be fixed by hiding kernel rows", JOURNEY_DEPRECATION_REGISTRY.find((r) => r.id.startsWith("TIMELINE DUAL-WRITE"))!.note.includes("Do NOT fix this by hiding kernel rows"));
-check("every registry entry names a retirement batch", JOURNEY_DEPRECATION_REGISTRY.every((r) => r.retiredIn.length > 0));
-check("property_journeys registered as compat input with 10 real rows", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "property_journeys" && r.liveRows === 10 && r.status === "compat_input"));
+check("registry is populated", JOURNEY_DEPRECATION_REGISTRY.length === 10);
+// ── Batch 5.3 (Part 10): nothing may remain hidden or undocumented. ─────────
+check("ensureJourney is RETIRED as a canonical writer", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.includes("ensureJourney") && r.status === "retired" && (r.activeWriters?.length ?? 1) === 0));
+check("advanceStage is RETIRED as an unvalidated writer", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.includes("advanceStage") && r.status === "retired"));
+check("property_journeys records the REAL live row count (9)", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "property_journeys" && r.liveRows === 9));
 check("journey_stages registered with 31 real rows", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "journey_stages" && r.liveRows === 31));
-check("deal_journeys registered as empty", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "deal_journeys" && r.liveRows === 0));
-check("the legacy advanceStage service is registered for migration", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.kind === "service" && r.status === "active_pending_migration"));
+check("deal_journeys registered as empty but still written", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "deal_journeys" && r.liveRows === 0 && (r.activeWriters?.length ?? 0) > 0));
+check("the deal dual identity is registered", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("DEAL DUAL IDENTITY")));
+check("the Journey Center read model is registered for the 5.4 cutover", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.kind === "read_model" && r.retiredIn === "5.4"));
+check("the timeline dual-write is registered as BLOCKED, with the reason stated", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("TIMELINE DUAL-WRITE") && r.removalEligibility === "blocked" && (r.remainingRisk ?? "").includes("DRAIN LATENCY")));
+check("the timeline dual-write lists every live writer it found", (JOURNEY_DEPRECATION_REGISTRY.find((r) => r.id.startsWith("TIMELINE DUAL-WRITE"))?.activeWriters?.length ?? 0) >= 7);
+check("timeline dual-write must NOT be fixed by hiding kernel rows", (JOURNEY_DEPRECATION_REGISTRY.find((r) => r.id.startsWith("TIMELINE DUAL-WRITE"))?.remainingRisk ?? "").includes("hiding kernel rows"));
+check("every registry entry names a retirement batch", JOURNEY_DEPRECATION_REGISTRY.every((r) => r.retiredIn.length > 0));
+check("every registry entry states its remaining risk", JOURNEY_DEPRECATION_REGISTRY.every((r) => !!r.remainingRisk));
+check("every registry entry names a replacement", JOURNEY_DEPRECATION_REGISTRY.every((r) => !!r.replacement));
+check("every registry entry declares removal eligibility", JOURNEY_DEPRECATION_REGISTRY.every((r) => !!r.removalEligibility));
+check("no RETIRED entry still has an active canonical writer", JOURNEY_DEPRECATION_REGISTRY.filter((r) => r.status === "retired").every((r) => (r.activeWriters ?? []).every((w) => !w.includes("journeys.insert"))));
 const counts = journeyRegistryCounts();
-check("registry counts sum to the registry size", counts.superseded + counts.compat_input + counts.active_pending_migration === JOURNEY_DEPRECATION_REGISTRY.length);
+check("registry counts sum to the registry size", counts.superseded + counts.compat_input + counts.active_pending_migration + counts.retired === JOURNEY_DEPRECATION_REGISTRY.length);
+check("exactly 2 writers were RETIRED in 5.3 (ensureJourney + advanceStage)", counts.retired === 2);
 
 // ── result ──────────────────────────────────────────────────────────────────
 console.log(`\njourney-canonical QA: ${pass} passed, ${fail} failed`);

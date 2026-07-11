@@ -183,22 +183,113 @@ export function legacyMapsAreSound(): boolean {
 // true over time instead of just at this commit.
 export interface JourneyLegacySource {
   id: string;
-  kind: "stage_catalog" | "table" | "service";
+  kind: "stage_catalog" | "table" | "service" | "read_model";
   /** Real row count read from the live DB on 2026-07-11 (null = not a table). */
   liveRows: number | null;
-  status: "superseded" | "compat_input" | "active_pending_migration";
+  status: "superseded" | "compat_input" | "active_pending_migration" | "retired";
   retiredIn: string;
   note: string;
+  // ── Batch 5.3 (Part 10): nothing may remain hidden or undocumented. ────────
+  /** What replaces it in the canonical world. */
+  replacement?: string;
+  /** Who still READS it today. */
+  activeReaders?: string[];
+  /** Who still WRITES it today. Empty = safe from a write standpoint. */
+  activeWriters?: string[];
+  /** Can it be deleted now, and if not, what blocks it. */
+  removalEligibility?: "now" | "after_backfill" | "after_ui_cutover" | "blocked";
+  /** The honest risk of leaving it in place. */
+  remainingRisk?: string;
 }
 
 export const JOURNEY_DEPRECATION_REGISTRY: JourneyLegacySource[] = [
+  // ══ RETIRED IN 5.3 ════════════════════════════════════════════════════════
+  {
+    id: "src/lib/journey-intelligence/service.ts (ensureJourney) — SECOND WRITER of the canonical `journeys` table",
+    kind: "service",
+    liveRows: null,
+    status: "retired",
+    retiredIn: "5.3 — DONE",
+    replacement: "journey-backfill/service.ts::openCanonicalJourney (the ONE command-side creator)",
+    activeReaders: [],
+    activeWriters: [],
+    removalEligibility: "now",
+    remainingRisk: "none — it no longer touches `journeys`; it is a signature-compatible adapter so its four callers were not disturbed.",
+    note:
+      "WAS: inserted stagesFor(type)[0].key straight into the canonical table — `new` for a buyer (canonical by luck) and `potential` for a SELLER (NOT canonical). It runs synchronously inside the create action while the kernel drain runs up to 10 minutes later, so it ALWAYS won the journeys_entity_uniq race; a seller journey opened at `potential` would then be rejected by buildTransition() on every future move and frozen forever, silently. NOW: a thin adapter over openCanonicalJourney(). It cannot choose a stage, cannot overwrite a kernel journey, and returns an honest error instead of writing a row the machine would refuse.",
+  },
+  {
+    id: "src/lib/journey-intelligence/service.ts (advanceStage) — second stage writer",
+    kind: "service",
+    liveRows: null,
+    status: "retired",
+    retiredIn: "5.3 — DONE",
+    replacement: "buildTransition() + the canonical machine (same validator the kernel uses)",
+    activeReaders: [],
+    activeWriters: ["journey-intelligence/actions.ts::advanceStageAction (now validated)"],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk: "low — it still writes `journeys`, but every stage now passes resolveLegacyStage() + buildTransition() and the head update carries the same stale-write guard as the kernel applier.",
+    note:
+      "WAS: accepted any key from the LEGACY catalog and wrote it straight into journeys.current_stage, plus its own legacy status vocabulary ('completed'/'dropped') — a second door through which `potential`, `proposal`, `budget_validation` could walk into the canonical table. NOW: resolved → validated → guarded. Refuses to move a journey that is still sitting on a pre-5.3 legacy stage, pointing the operator at the backfill instead of corrupting it further.",
+  },
+
+  // ══ COMPATIBILITY INPUTS — read-only sources for the backfill ══════════════
+  {
+    id: "property_journeys",
+    kind: "table",
+    liveRows: 9,
+    status: "compat_input",
+    retiredIn: "5.5 (reads)",
+    replacement: "journeys + journey_events (journey_type='property')",
+    activeReaders: ["src/lib/journey/repository.ts", "src/lib/intelligence/service.ts:71", "the property cockpit"],
+    activeWriters: ["src/lib/journey/repository.ts (property stage advance)"],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk:
+      "It keeps being written by the property cockpit, so it can drift again. It does NOT corrupt the canonical spine (the backfill never regresses and the kernel always wins), but until 5.5 points the cockpit at the canonical machine there are two property stage stores.",
+    note:
+      "The only legacy journey table with real data. LIVE (2026-07-11): 9 rows across 2 orgs, stages `new` (7) and `active_marketing` (2). EVERY row is STALE — stage_history is empty and updated_at has not moved since creation, while properties.status kept advancing. Backfilled in 5.3 using the more-advanced of (legacy stage, properties.status), never backward.",
+  },
+  {
+    id: "journey_stages",
+    kind: "table",
+    liveRows: 31,
+    status: "compat_input",
+    retiredIn: "5.5",
+    replacement: "BUYER_MACHINE / SELLER_MACHINE (code, not data)",
+    activeReaders: ["journey-intelligence/engine.ts (indirectly, via its own hardcoded catalogs)"],
+    activeWriters: [],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk: "none — it is a seed catalog nobody writes. Left in place so no live read 404s.",
+    note: "Seed catalog: buyer 16 keys, seller 15 keys. The canonical machines replace it as the source of truth. Untouched by 5.3 (the batch explicitly forbids altering it).",
+  },
+  {
+    id: "deal_journeys",
+    kind: "table",
+    liveRows: 0,
+    status: "compat_input",
+    retiredIn: "5.5",
+    replacement: "journey_events (journey_type='deal')",
+    activeReaders: ["deals/service.ts"],
+    activeWriters: ["deals/service.ts::advanceDealStage"],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk:
+      "Keyed by deal_profiles.id, so anything read from it must be resolved to public.deals.id first. The 5.3 backfill does exactly that and REFUSES to key a journey on a profile id.",
+    note: "Empty today (0 rows), but still actively written on every deal stage advance. The 5.3 backfill handles it correctly the moment it has rows.",
+  },
+
+  // ══ STILL ACTIVE — documented, scheduled, not yet safe to remove ═══════════
   {
     id: "src/lib/journey/stages.ts",
     kind: "stage_catalog",
     liveRows: null,
     status: "active_pending_migration",
     retiredIn: "5.5",
-    note: "Property stage catalog + checklist. Still drives property_journeys (10 rows) and the property cockpit; migrated onto PROPERTY_MACHINE in 5.5.",
+    replacement: "PROPERTY_MACHINE",
+    activeReaders: ["property cockpit", "journey/repository.ts"],
+    activeWriters: ["journey/repository.ts"],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk: "It is the vocabulary behind property_journeys; while the cockpit writes through it, property stage drift can recur.",
+    note: "Property stage catalog + checklist (the 8-value journey_stage enum). Migrated onto PROPERTY_MACHINE in 5.5.",
   },
   {
     id: "src/lib/journey-intelligence/engine.ts (BUYER_STAGES/SELLER_STAGES)",
@@ -206,74 +297,69 @@ export const JOURNEY_DEPRECATION_REGISTRY: JourneyLegacySource[] = [
     liveRows: null,
     status: "superseded",
     retiredIn: "5.5",
-    note: "Buyer/seller catalogs. Superseded by BUYER_MACHINE/SELLER_MACHINE; 0 journeys rows exist, so nothing depends on the old keys in data.",
+    replacement: "BUYER_MACHINE / SELLER_MACHINE",
+    activeReaders: ["journey-intelligence scoring/labels"],
+    activeWriters: [],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk:
+      "none for DATA — after 5.3 no code path can write these keys into `journeys`. They survive only as labels/scoring input.",
+    note: "The catalogs whose first seller key is `potential`. 5.3 severed them from the write path; 5.5 removes them.",
   },
   {
-    id: "property_journeys",
-    kind: "table",
-    liveRows: 10,
-    status: "compat_input",
-    retiredIn: "5.3 (backfill) / 5.5 (reads)",
-    note: "The only legacy journey table with real data. Backfilled into `journeys` via LEGACY_PROPERTY_STAGE_MAP.",
+    id: "src/lib/journey-center (derived read model)",
+    kind: "read_model",
+    liveRows: null,
+    status: "active_pending_migration",
+    retiredIn: "5.4",
+    replacement: "a canonical-first read over journeys + journey_events",
+    activeReaders: ["/journeys page"],
+    activeWriters: [],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk:
+      "It DERIVES stages from the digital twins instead of reading the canonical spine, so /journeys can disagree with journeys.current_stage. Harmless (read-only) but confusing — this is exactly what Batch 5.4 cuts over.",
+    note: "Built because `journeys` used to be empty. It no longer is. Batch 5.4 points it at the spine.",
   },
   {
-    id: "journey_stages",
-    kind: "table",
-    liveRows: 31,
-    status: "superseded",
-    retiredIn: "5.5",
-    note: "Seed catalog of buyer/seller stage definitions. The canonical machines replace it as the source of truth; rows stay for compatibility.",
-  },
-  {
-    id: "deal_journeys",
+    id: "DEAL DUAL IDENTITY — deals.id vs deal_profiles.id",
     kind: "table",
     liveRows: 0,
-    status: "superseded",
-    retiredIn: "5.3",
-    note: "Empty. Deal stage history moves to journey_events under DEAL_MACHINE.",
-  },
-  {
-    id: "src/lib/journey-intelligence/service.ts (advanceStage)",
-    kind: "service",
-    liveRows: null,
     status: "active_pending_migration",
     retiredIn: "5.5",
-    note: "Writes journeys/journey_events directly and still emits legacy status values ('completed'/'dropped'). Rewired onto buildTransition() in 5.5.",
+    replacement: "public.deals.id as the ONLY deal entity id",
+    activeReaders: ["Deals OS board (reads deal_profiles)"],
+    activeWriters: ["deals/create-actions.ts (deals + deal_profiles)", "deals/service.ts::advanceDealStage (deal_profiles)"],
+    removalEligibility: "after_ui_cutover",
+    remainingRisk:
+      "The EVENT layer is fixed (5.2: deal.* now carries deals.id) and the 5.3 backfill resolves deal_journeys through deal_profiles.deal_id, refusing rows where deal_id IS NULL. The two TABLES still coexist, so a deal_profile created without a canonical deal would be unanchorable — reported as a conflict, never guessed.",
+    note: "Found by 5.2 live verification: the same business deal existed under two ids. Fixed at the emitter; the table-level merge is a 5.5 concern.",
   },
   {
-    // ── Batch 5.2 finding — the highest-priority legacy conflict. ────────────
-    id: "src/lib/journey-intelligence/service.ts (ensureJourney) — SECOND WRITER of the canonical `journeys` table",
-    kind: "service",
-    liveRows: null,
-    status: "active_pending_migration",
-    retiredIn: "5.3 (must be first)",
-    note:
-      "LIVE-CALLED from buyers/actions.ts, sellers/actions.ts, leads/service.ts and social/service.ts. It inserts into the CANONICAL journeys table using the LEGACY stage vocabulary — a seller journey opens at 'potential', which is not a canonical stage. journeys_entity_uniq means whichever writer lands first owns the row; if the legacy one wins, the canonical subscriber sees an unknown from-stage and is blocked forever. The 5.2 applier therefore records an explicit 'legacy non-canonical stage' skip instead of guessing or overwriting. Batch 5.3 must (a) backfill these rows onto canonical stages via LEGACY_*_STAGE_MAP and (b) point ensureJourney at the canonical spine — before any further journey work.",
-  },
-  {
-    // ── Part 12: the timeline dual-write the Live Runtime Gate observed. ─────
     id: "TIMELINE DUAL-WRITE — imperative activity_events writers (event_id NULL) alongside the kernel projection",
     kind: "service",
     liveRows: null,
     status: "active_pending_migration",
-    retiredIn: "5.3 / legacy-retirement",
-    note:
-      "Observed live during the runtime gate: one lead.created produced TWO timeline rows — a direct app write at 11:24:12 (event_id NULL, source NULL) and the kernel projection at 11:30:22 (event_id set, source 'kernel'). Not a kernel duplicate (the idempotency index is per event_id) but the same fact is shown twice. Do NOT fix this by hiding kernel rows. Required order: inventory every imperative writer, map each to its canonical event, prove kernel parity, THEN retire the direct write. Historical rows are preserved.",
-  },
-  {
-    // ── Batch 5.2 live-verification finding (2026-07-11 12:30 UTC). ──────────
-    id: "DEAL DUAL IDENTITY — deals.id vs deal_profiles.id on the same business deal",
-    kind: "table",
-    liveRows: 1,
-    status: "active_pending_migration",
-    retiredIn: "5.3",
-    note:
-      "A deal exists twice: `deals` (canonical, written by createDealAction) and `deal_profiles` (the Deals OS board, 1:1 via deal_profiles.deal_id). deal.created carried deals.id while advanceDealStage() carried deal_profiles.id — the SAME deal under TWO entity ids. The canonical journey opened by deal.created could therefore never be advanced, and a mappable stage would have opened a SECOND deal journey keyed on the profile id. FIXED at the emitter (deals/service.ts now resolves deal_profiles.deal_id and emits the canonical deals.id, with dealProfileId kept in the payload). Batch 5.3 must still: (a) sweep any pre-fix deal.* events whose entity_id is a profile id, (b) decide whether deal_profiles rows with deal_id NULL get a canonical deals row (ensureCanonicalDeal already exists), and (c) collapse the two deal-stage vocabularies (deals.stage vs deal_profiles.deal_stage) into one.",
+    retiredIn: "deferred — see remainingRisk",
+    replacement: "the kernel timeline subscriber (activity_events with event_id set, source='kernel')",
+    activeReaders: ["every timeline surface"],
+    activeWriters: [
+      "leads/actions.ts:54 (lead.created) — kernel parity LIVE-PROVEN",
+      "leads/service.ts:72,105 (lead.stage_changed)",
+      "buyers/actions.ts:43 (buyer.created)",
+      "sellers/actions.ts:45,50 (seller.created / linked_to_property)",
+      "properties/actions.ts:42 (property.created / status_changed)",
+      "deals/deal-property-sync.ts:36 (property.sold)",
+      "office-website/service.ts:222 + agent-website/service.ts:189 (lead.created from public sites)",
+    ],
+    removalEligibility: "blocked",
+    remainingRisk:
+      "RETIREMENT IS BLOCKED BY DRAIN LATENCY, NOT BY PARITY. Kernel parity for lead.created is live-proven (5.2 gate: the same fact landed twice — a direct row at 11:24:12 with event_id NULL, and the kernel projection at 11:30:22 with event_id set). But the cron runs every 10 minutes, so deleting the direct write today means a broker creates a lead and sees NOTHING on the timeline for up to 10 minutes. That is a real product regression, so 5.3 does NOT retire it. Unblocking it needs either a near-real-time drain or an optimistic UI row that the kernel later reconciles. Do NOT 'fix' this by hiding kernel rows in the UI — that hides the duplicate instead of removing it. Historical rows are preserved either way.",
+    note: "Inventoried in full (10 call sites across 9 files). Classified. Not retired — and the reason is stated rather than dressed up.",
   },
 ];
 
+
 export function journeyRegistryCounts(): Record<JourneyLegacySource["status"], number> {
-  const out = { superseded: 0, compat_input: 0, active_pending_migration: 0 };
+  const out = { superseded: 0, compat_input: 0, active_pending_migration: 0, retired: 0 };
   for (const r of JOURNEY_DEPRECATION_REGISTRY) out[r.status]++;
   return out;
 }

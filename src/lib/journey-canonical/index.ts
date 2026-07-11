@@ -28,3 +28,11 @@ export {
   LEGACY_PROPERTY_STAGE_MAP, LEGACY_SELLER_STAGE_MAP, journeyRegistryCounts,
   legacyMapsAreSound, mapLegacyStage, resolveLegacyPropertyClosed,
 } from "./legacy-map";
+
+// Batch 5.3 — the ONE resolver every legacy value passes through, with an
+// explicit mapping quality and the never-move-backward rule.
+export type { LegacyVocabulary, MappingQuality, ResolvedStage } from "./legacy-resolve";
+export {
+  LEGACY_LEAD_STAGE_MAP, LEGACY_PROPERTY_STATUS_MAP,
+  compatOpenStage, isBackfillable, mostAdvancedStage, resolveLegacyStage, stagePosition,
+} from "./legacy-resolve";
