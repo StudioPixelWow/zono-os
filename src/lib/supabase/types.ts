@@ -4157,6 +4157,12 @@ type JourneysRow = {
   stage_entered_at: string; last_activity_at: string; progress: number; health_score: number; engagement_score: number;
   conversion_score: number; risk_score: number; velocity_score: number; velocity_state: string; status: string;
   next_best_action: string | null; ai_summary: string | null; stage_history: Json; started_at: string; created_at: string; updated_at: string;
+  // Batch 5.1 (migration 20260927120000) added these to the CANONICAL SPINE. They were
+  // applied to the live database but never mirrored here, so the type layer was lying
+  // about the one table Stage 5 is built on — `.select("owner_user_id")` type-errored
+  // against a schema that really does have the column. Verified against zono-dev.
+  owner_user_id: string | null; completed_at: string | null; paused_at: string | null;
+  lost_at: string | null; source: string; metadata: Json;
 };
 type JourneyStagesRow = {
   id: string; org_id: string | null; journey_type: string; stage_key: string; label: string; position: number; is_terminal: boolean; is_won: boolean; created_at: string;
@@ -4164,6 +4170,10 @@ type JourneyStagesRow = {
 type JourneyEventsRow = {
   id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; event_type: string;
   from_stage: string | null; to_stage: string | null; title: string | null; detail: string | null; occurred_at: string; metadata: Json; created_at: string;
+  // Batch 5.1 additions (same migration). `source_event_id` is what makes replaying a
+  // domain event idempotent (journey_events_source_transition_uniq); `reason` is what the
+  // Journey Center renders as real transition history. Both exist live.
+  source_event_id: string | null; actor_user_id: string | null; reason: string | null; evidence: Json;
 };
 type JourneyMilestonesRow = {
   id: string; org_id: string; journey_id: string | null; entity_type: string; entity_id: string; milestone_key: string; label: string;

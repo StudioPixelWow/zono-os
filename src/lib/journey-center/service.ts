@@ -74,23 +74,55 @@ async function batchExtras(orgId: string): Promise<{ tasks: Map<string, number>;
   return { tasks, meetings };
 }
 
-/** Entity titles for the canonical journeys — batched per table, never N+1. */
+/**
+ * Entity titles for the canonical journeys — batched per table, never N+1.
+ *
+ * Batch 5.4 FIX (caught by the deployed build): this used to dispatch through a
+ * `Record<string, { table: string }>` and call `db.from(spec.table)`. Supabase's
+ * client types the table name as a LITERAL union, so a `string` there does not
+ * type-check — and, worse, it means a typo in the map would only ever be found at
+ * runtime, as an empty title. The five entity types are a closed set, so they are
+ * now five explicitly-typed queries. Still batched (one query per type, `.in(ids)`),
+ * still no N+1, and now the table and column names are checked against the real
+ * schema at compile time.
+ */
 async function batchTitles(orgId: string, byType: Map<string, string[]>): Promise<Map<string, string>> {
   const db = await createClient();
   const out = new Map<string, string>();
-  const TABLE: Record<string, { table: string; col: string }> = {
-    buyer: { table: "buyers", col: "full_name" },
-    seller: { table: "sellers", col: "full_name" },
-    lead: { table: "leads", col: "full_name" },
-    property: { table: "properties", col: "title" },
-    deal: { table: "deals", col: "title" },
+
+  const collect = (t: string, col: string, rows: unknown) => {
+    for (const r of ((rows ?? []) as Record<string, unknown>[])) {
+      const id = r.id, v = r[col];
+      // A missing title stays MISSING — the assembler renders "—" rather than a guess.
+      if (typeof id === "string" && typeof v === "string" && v) out.set(`${t}:${id}`, v);
+    }
   };
+
   await Promise.all([...byType.entries()].map(async ([t, ids]) => {
-    const spec = TABLE[t];
-    if (!spec || !ids.length) return;
-    const { data } = await db.from(spec.table).select(`id,${spec.col}`).eq("org_id", orgId).in("id", ids);
-    for (const r of ((data ?? []) as Record<string, string>[])) {
-      if (r.id && r[spec.col]) out.set(`${t}:${r.id}`, r[spec.col]);
+    if (!ids.length) return;
+    switch (t) {
+      case "buyer": {
+        const { data } = await db.from("buyers").select("id,full_name").eq("org_id", orgId).in("id", ids);
+        return collect(t, "full_name", data);
+      }
+      case "seller": {
+        const { data } = await db.from("sellers").select("id,full_name").eq("org_id", orgId).in("id", ids);
+        return collect(t, "full_name", data);
+      }
+      case "lead": {
+        const { data } = await db.from("leads").select("id,full_name").eq("org_id", orgId).in("id", ids);
+        return collect(t, "full_name", data);
+      }
+      case "property": {
+        const { data } = await db.from("properties").select("id,title").eq("org_id", orgId).in("id", ids);
+        return collect(t, "title", data);
+      }
+      case "deal": {
+        const { data } = await db.from("deals").select("id,title").eq("org_id", orgId).in("id", ids);
+        return collect(t, "title", data);
+      }
+      default:
+        return; // unknown entity type — reported by the caller's diagnostics, never guessed
     }
   }));
   return out;
