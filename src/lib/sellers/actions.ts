@@ -99,6 +99,9 @@ export async function linkSellerToPropertyAction(input: LinkSellerInput): Promis
     // The event is keyed on the PROPERTY (that is the entity_type the emitter
     // declares) and carries BOTH ids, so the journey subscriber can key the
     // seller journey on the seller — see kernel/journey-subscriber.ts.
+    // Imported here, like createSellerAction above: a "use server" module must not
+    // pull the kernel into its top-level graph.
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
     await emitBusinessEvent({
       type: DOMAIN_EVENTS.sellerLinkedToProperty,
       entityType: "property",
