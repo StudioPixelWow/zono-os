@@ -20,8 +20,9 @@ import {
   archivePropertyAction,
   setPropertyStatusAction,
 } from "@/lib/properties/actions";
-import type { Database, JourneyStage, PropertyStatus } from "@/lib/supabase/types";
+import type { Database, PropertyStatus } from "@/lib/supabase/types";
 import type { JourneyContext } from "@/lib/journey/stages";
+import type { CockpitJourney } from "@/lib/journey-cockpit/types";
 import { scoreTone, type ScoreTone } from "@/lib/intelligence/scoring";
 import { JourneyPanel } from "./JourneyPanel";
 import { TasksPanel } from "./TasksPanel";
@@ -47,10 +48,13 @@ type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
 type MediaRow = Database["public"]["Tables"]["property_media"]["Row"];
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
 
+/**
+ * Batch 5.5E — the cockpit's journey is now the CANONICAL one (journeys +
+ * journey_events), assembled by @/lib/journey-cockpit. The old shape carried a
+ * legacy `journey_stage` enum value read straight off `property_journeys`.
+ */
 interface JourneyData {
-  stage: JourneyStage;
-  lastActivityAt: string | null;
-  stageEnteredAt: string | null;
+  journey: CockpitJourney;
   context: JourneyContext;
 }
 
@@ -468,9 +472,7 @@ export function PropertyDetailView({
             <div className="bg-card border-line rounded-[20px] border p-5">
               <JourneyPanel
                 propertyId={p.id}
-                stage={journey.stage}
-                lastActivityAt={journey.lastActivityAt}
-                stageEnteredAt={journey.stageEnteredAt}
+                journey={journey.journey}
                 context={journey.context}
                 activities={activities}
               />

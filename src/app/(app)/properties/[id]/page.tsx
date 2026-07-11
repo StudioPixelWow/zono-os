@@ -6,7 +6,12 @@ import {
   getPropertyNotes,
   listPropertyMedia,
 } from "@/lib/properties/repository";
-import { buildJourneyContext, getJourney } from "@/lib/journey/repository";
+import { buildJourneyContext } from "@/lib/journey/repository";
+// Batch 5.5E — the cockpit reads the CANONICAL spine (journeys + journey_events),
+// not `property_journeys`. getJourney() and journeyStageForStatusFallback() are gone
+// from this page: a stage borrowed from a legacy table is exactly the disagreement
+// Stage 5 exists to end.
+import { getCockpitJourney } from "@/lib/journey-cockpit/service";
 import { listPropertyTasks } from "@/lib/tasks/repository";
 import { getPropertyCommandCenter } from "@/lib/intelligence/service";
 import { recommendedBuyersForProperty } from "@/lib/matching-intelligence/service";
@@ -17,7 +22,6 @@ import {
   getEntityRelationships,
   getEntityTimeline,
 } from "@/lib/activity/service";
-import { journeyStageForStatusFallback } from "@/lib/journey/fallback";
 import { PropertyDetailView } from "./PropertyDetailView";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
@@ -50,7 +54,7 @@ export default async function PropertyDetailsPage({
     documents,
     media,
     tasks,
-    journeyRow,
+    cockpitJourney,
     context,
     commandCenter,
     timeline,
@@ -65,7 +69,7 @@ export default async function PropertyDetailsPage({
     getPropertyDocuments(id),
     listPropertyMedia(id),
     listPropertyTasks(id),
-    getJourney(id),
+    getCockpitJourney("property", id),
     buildJourneyContext(property),
     getPropertyCommandCenter(id),
     getEntityTimeline("property", id),
@@ -76,12 +80,8 @@ export default async function PropertyDetailsPage({
     validatePropertySellerReadiness(id),
   ]);
 
-  const journey = {
-    stage: journeyRow?.current_stage ?? journeyStageForStatusFallback(property.status),
-    lastActivityAt: journeyRow?.last_activity_at ?? property.updated_at,
-    stageEnteredAt: journeyRow?.stage_entered_at ?? property.created_at,
-    context,
-  };
+  // The canonical journey + the asset checklist context. No legacy stage anywhere.
+  const journey = { journey: cockpitJourney, context };
 
   // Server-rendered sections are passed as SLOTS into the cockpit tabs (instead of
   // stacking endlessly below). Every module is reused as-is; nothing changes logic.
