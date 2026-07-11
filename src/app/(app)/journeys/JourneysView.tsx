@@ -153,7 +153,17 @@ function JourneyCard({ j, onOpen }: { j: UnifiedJourney; onOpen: () => void }) {
           <span className="bg-brand-soft text-brand-strong grid h-9 w-9 shrink-0 place-items-center rounded-xl"><Icon name={ENTITY_ICON[j.entityType]} size={17} /></span>
           <div className="min-w-0">
             <p className="text-ink truncate text-sm font-black">{j.entityName}</p>
-            <p className="text-muted text-[11px] font-bold">{ENTITY_HE[j.entityType]} · {j.stageLabel}</p>
+            <p className="text-muted flex items-center gap-1.5 text-[11px] font-bold">
+              <span>{ENTITY_HE[j.entityType]} · {j.stageLabel}</span>
+              {/* 5.4 live-verification finding: a compatibility row was only marked once you
+                  OPENED it. In a list, "clearly marked" has to mean marked ON THE CARD —
+                  otherwise a broker scanning the board reads a derived guess as canonical truth. */}
+              {!j.canonical && (
+                <span className="bg-warning-soft text-warning rounded px-1.5 py-px text-[9.5px] font-black" title="רשומת תאימות — טרם נוצר מסע קנוני עבור ישות זו">
+                  תאימות
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1">{j.flags.map((f) => <FlagBadge key={f} f={f} />)}</div>
