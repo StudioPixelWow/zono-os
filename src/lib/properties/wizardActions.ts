@@ -74,6 +74,28 @@ export async function publishPropertyAction(
     return { error: `פרסום הנכס נכשל: ${msg}` };
   }
 
+  // ── Event Kernel ──────────────────────────────────────────────────────────
+  // Publish is the moment a draft becomes a real listing — the canonical
+  // business fact. Emit it here, because THIS is the path the property wizard
+  // actually uses; createPropertyAction (properties/actions.ts) emits too but is
+  // not reachable from the new-property UI, so without this the kernel never saw
+  // a single property. Best-effort by contract: emit never breaks publishing.
+  // A draft (createDraft/saveDraft) is deliberately NOT an event — it is not yet
+  // a business fact, and emitting on every autosave keystroke would flood the outbox.
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({
+      type: DOMAIN_EVENTS.propertyCreated,
+      entityType: "property",
+      entityId: id,
+      payload: { title: input.title ?? null, price: input.price ?? null, city: input.city ?? null, status: "published" },
+      // One published-property event per property, even if publish is retried.
+      idempotencyKey: `property.created:${id}`,
+    });
+  } catch (e) {
+    console.error("[kernel] property publish emit failed:", e);
+  }
+
   // Best-effort: initialize the property's intelligence on publish. Never
   // blocks publishing — the Command Center also has a manual activate button.
   try {
