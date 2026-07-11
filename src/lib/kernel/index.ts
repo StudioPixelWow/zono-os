@@ -28,9 +28,14 @@ export type { GraphEdgeUpsert } from "./graph-subscriber";
 // Stage 4B — Org-Memory subscriber (pure; wired into the drain loop once domain_events is live).
 export { projectEventToMemory } from "./memory-subscriber";
 export type { MemoryEventUpsert } from "./memory-subscriber";
-// Stage 5A — Journey subscriber (pure; wiring reuses the journey service once domain_events is live).
-export { projectEventToJourneyTransition } from "./journey-subscriber";
-export type { JourneyTransition, JourneySubjectType } from "./journey-subscriber";
+// Batch 5.2 — Journey subscriber: PURE projection (evidence → canonical intents)
+// + the server applier that performs them through buildTransition() and the 5.1
+// DB constraints. It replaces the Stage-5A sketch (projectEventToJourneyTransition),
+// whose ad-hoc stages ("in_deal", "closed_won") were never canonical.
+export { projectEventToJourney, isJourneyEvent } from "./journey-subscriber";
+export type { JourneyIntent, JourneyProjection, JourneySkipReason } from "./journey-subscriber";
+export { applyJourneyIntent } from "./journey-applier";
+export type { JourneyOutcome, JourneyApplyResult } from "./journey-applier";
 // Stage 2 — Legacy timeline bridge + backfill (pure mappers + server sweep).
 export { syntheticEventId, bridgeLegacyActivity, bridgeJourneyEvent, bridgeDocumentAudit } from "./legacy-bridge";
 export type { BridgedProjection, LegacyActivityRow, JourneyEventRow, DocumentAuditRow } from "./legacy-bridge";

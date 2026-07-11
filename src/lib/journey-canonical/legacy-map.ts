@@ -101,10 +101,24 @@ export const LEGACY_SELLER_STAGE_MAP: Record<string, LegacyStageMapping> = {
   lost: m("lost"),
 };
 
+// ── DEAL: the live `deal_stage` enum written by deals/create-actions.ts ──────
+// Added in Batch 5.2: `deal.stage_changed` carries these raw values, so the
+// canonical machine needs a translation. (deal_journeys is still 0 rows — this
+// maps the EVENT vocabulary, not a legacy table.)
+export const LEGACY_DEAL_STAGE_MAP: Record<string, LegacyStageMapping> = {
+  new: m("initiated"),
+  qualified: m("qualification"),
+  negotiation: m("negotiation"),
+  agreement: m("signing", { approximate: true, note: "terms agreed → moving to signature" }),
+  contract: m("legal", { approximate: true, note: "contract drafting/review is the legal phase" }),
+  closing: m("closing"),
+};
+
 const MAPS: Partial<Record<JourneyType, Record<string, LegacyStageMapping>>> = {
   property: LEGACY_PROPERTY_STAGE_MAP,
   buyer: LEGACY_BUYER_STAGE_MAP,
   seller: LEGACY_SELLER_STAGE_MAP,
+  deal: LEGACY_DEAL_STAGE_MAP,
 };
 
 /**
@@ -197,6 +211,26 @@ export const JOURNEY_DEPRECATION_REGISTRY: JourneyLegacySource[] = [
     status: "active_pending_migration",
     retiredIn: "5.5",
     note: "Writes journeys/journey_events directly and still emits legacy status values ('completed'/'dropped'). Rewired onto buildTransition() in 5.5.",
+  },
+  {
+    // ── Batch 5.2 finding — the highest-priority legacy conflict. ────────────
+    id: "src/lib/journey-intelligence/service.ts (ensureJourney) — SECOND WRITER of the canonical `journeys` table",
+    kind: "service",
+    liveRows: null,
+    status: "active_pending_migration",
+    retiredIn: "5.3 (must be first)",
+    note:
+      "LIVE-CALLED from buyers/actions.ts, sellers/actions.ts, leads/service.ts and social/service.ts. It inserts into the CANONICAL journeys table using the LEGACY stage vocabulary — a seller journey opens at 'potential', which is not a canonical stage. journeys_entity_uniq means whichever writer lands first owns the row; if the legacy one wins, the canonical subscriber sees an unknown from-stage and is blocked forever. The 5.2 applier therefore records an explicit 'legacy non-canonical stage' skip instead of guessing or overwriting. Batch 5.3 must (a) backfill these rows onto canonical stages via LEGACY_*_STAGE_MAP and (b) point ensureJourney at the canonical spine — before any further journey work.",
+  },
+  {
+    // ── Part 12: the timeline dual-write the Live Runtime Gate observed. ─────
+    id: "TIMELINE DUAL-WRITE — imperative activity_events writers (event_id NULL) alongside the kernel projection",
+    kind: "service",
+    liveRows: null,
+    status: "active_pending_migration",
+    retiredIn: "5.3 / legacy-retirement",
+    note:
+      "Observed live during the runtime gate: one lead.created produced TWO timeline rows — a direct app write at 11:24:12 (event_id NULL, source NULL) and the kernel projection at 11:30:22 (event_id set, source 'kernel'). Not a kernel duplicate (the idempotency index is per event_id) but the same fact is shown twice. Do NOT fix this by hiding kernel rows. Required order: inventory every imperative writer, map each to its canonical event, prove kernel parity, THEN retire the direct write. Historical rows are preserved.",
   },
 ];
 

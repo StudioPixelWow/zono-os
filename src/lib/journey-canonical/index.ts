@@ -24,7 +24,7 @@ export {
 
 export type { JourneyLegacySource, LegacyStageMapping } from "./legacy-map";
 export {
-  JOURNEY_DEPRECATION_REGISTRY, LEGACY_BUYER_STAGE_MAP, LEGACY_PROPERTY_STAGE_MAP,
-  LEGACY_SELLER_STAGE_MAP, journeyRegistryCounts, legacyMapsAreSound,
-  mapLegacyStage, resolveLegacyPropertyClosed,
+  JOURNEY_DEPRECATION_REGISTRY, LEGACY_BUYER_STAGE_MAP, LEGACY_DEAL_STAGE_MAP,
+  LEGACY_PROPERTY_STAGE_MAP, LEGACY_SELLER_STAGE_MAP, journeyRegistryCounts,
+  legacyMapsAreSound, mapLegacyStage, resolveLegacyPropertyClosed,
 } from "./legacy-map";

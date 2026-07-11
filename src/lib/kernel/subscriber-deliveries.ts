@@ -11,7 +11,7 @@ import type { createServiceRoleClient } from "@/lib/supabase/server";
 
 type Db = ReturnType<typeof createServiceRoleClient>;
 
-export type SubscriberName = "timeline" | "notification" | "automation" | "recommendation" | "graph" | "memory" | "search";
+export type SubscriberName = "timeline" | "notification" | "automation" | "recommendation" | "graph" | "memory" | "search" | "journey";
 export type DeliveryStatus = "done" | "duplicate" | "failed" | "skipped";
 
 export interface DeliveryInput {

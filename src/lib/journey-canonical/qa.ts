@@ -147,14 +147,24 @@ check("legacy buyer budget_validation is approximate", mapLegacyStage("buyer", "
 check("legacy seller potential → new", mapLegacyStage("seller", "potential")!.canonical === "new");
 check("legacy seller exclusive_discussion → representation", mapLegacyStage("seller", "exclusive_discussion")!.canonical === "representation");
 check("unknown legacy key → null (never invented)", mapLegacyStage("buyer", "banana") === null);
-check("no legacy map for deal (deal_journeys is empty)", mapLegacyStage("deal", "initiated") === null);
+// 5.2 added the deal_stage EVENT vocabulary map (deal.stage_changed carries these).
+check("deal_stage 'new' → initiated", mapLegacyStage("deal", "new")!.canonical === "initiated");
+check("deal_stage 'qualified' → qualification", mapLegacyStage("deal", "qualified")!.canonical === "qualification");
+check("deal_stage 'agreement' → signing (approximate)", mapLegacyStage("deal", "agreement")!.canonical === "signing" && mapLegacyStage("deal", "agreement")!.approximate);
+check("deal_stage 'contract' → legal (approximate)", mapLegacyStage("deal", "contract")!.canonical === "legal");
+check("deal_stage 'closing' → closing", mapLegacyStage("deal", "closing")!.canonical === "closing");
+check("unknown deal stage → null", mapLegacyStage("deal", "banana") === null);
 
 // the live property rows only use these two stages — both must map cleanly
 check("live property stage 'new' maps", mapLegacyStage("property", "new") !== null);
 check("live property stage 'active_marketing' maps", mapLegacyStage("property", "active_marketing") !== null);
 
 // ── 8. deprecation registry (one Journey system, enforced over time) ────────
-check("registry is populated", JOURNEY_DEPRECATION_REGISTRY.length === 6);
+check("registry is populated", JOURNEY_DEPRECATION_REGISTRY.length === 8);
+// 5.2 registered the two conflicts the live runtime surfaced:
+check("registry names ensureJourney as a SECOND writer of the canonical table", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.includes("ensureJourney") && r.id.includes("SECOND WRITER") && r.retiredIn.startsWith("5.3")));
+check("registry names the timeline dual-write for retirement", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("TIMELINE DUAL-WRITE")));
+check("timeline dual-write must NOT be fixed by hiding kernel rows", JOURNEY_DEPRECATION_REGISTRY.find((r) => r.id.startsWith("TIMELINE DUAL-WRITE"))!.note.includes("Do NOT fix this by hiding kernel rows"));
 check("every registry entry names a retirement batch", JOURNEY_DEPRECATION_REGISTRY.every((r) => r.retiredIn.length > 0));
 check("property_journeys registered as compat input with 10 real rows", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "property_journeys" && r.liveRows === 10 && r.status === "compat_input"));
 check("journey_stages registered with 31 real rows", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "journey_stages" && r.liveRows === 31));

@@ -29,6 +29,8 @@ import { recordDelivery } from "./subscriber-deliveries";
 import { classifyEventForSearch } from "@/lib/search-projection/subscriber";
 import { indexEntity, softDeleteEntity } from "@/lib/search-projection/indexer";
 import { ingestMemoryForEvent } from "@/lib/memory-canonical/ingest";
+import { projectEventToJourney } from "./journey-subscriber";
+import { applyJourneyIntent, type JourneyOutcome } from "./journey-applier";
 
 const MAX_RETRIES = 5;
 
@@ -46,6 +48,8 @@ export interface DrainResult {
   cachesInvalidated: number;    // daily_os / executive_os invalidations issued
   searchIndexed: number;        // search_documents upserts/soft-deletes applied
   memoriesIngested: number;     // canonical ai_memory create/reinforce/supersede
+  journeysCreated: number;      // canonical journeys opened from real events
+  journeysAdvanced: number;     // canonical stage transitions applied
   failed: number;
 }
 
@@ -61,7 +65,8 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
   const out: DrainResult = {
     scanned: 0, projected: 0, timelineRows: 0, duplicateSkips: 0,
     skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0,
-    automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, searchIndexed: 0, memoriesIngested: 0, failed: 0,
+    automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, searchIndexed: 0, memoriesIngested: 0,
+    journeysCreated: 0, journeysAdvanced: 0, failed: 0,
   };
 
   // Oldest-first so the timeline stays chronological. 'processing' is included
@@ -246,6 +251,57 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       },
     });
   } catch { /* canonical memory is non-critical */ }
+
+  // ── Journey (Batch 5.2) — canonical journeys created/advanced from real events.
+  //    The PURE subscriber decides WHAT (evidence only); the applier performs it
+  //    through buildTransition() + the 5.1 DB constraints. Every event yields a
+  //    delivery — created / advanced / completed / blocked / skipped / duplicate /
+  //    failed — never silence.
+  try {
+    const proj = projectEventToJourney(row);
+
+    if (proj.kind === "skip") {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "journey",
+        status: "skipped", latencyMs: Date.now() - t0,
+        metadata: { reason: proj.reason, detail: proj.detail ?? null },
+      });
+    } else {
+      const results: { outcome: JourneyOutcome; journeyId: string | null; from: string | null; to: string | null; reason: string; subject: string }[] = [];
+      for (const intent of proj.intents) {
+        const r = await applyJourneyIntent(db, row, intent);
+        if (r.outcome === "created") out.journeysCreated++;
+        if (r.outcome === "advanced" || r.outcome === "completed") out.journeysAdvanced++;
+        results.push({
+          outcome: r.outcome, journeyId: r.journeyId, from: r.fromStage, to: r.toStage,
+          reason: r.reason, subject: `${intent.journeyType}:${intent.entityId}`,
+        });
+      }
+      // One delivery per EVENT. With fan-out (e.g. deal.won touches deal+buyer+
+      // seller+property) the status is the worst real outcome, and every
+      // per-journey result is preserved in metadata — no detail is lost.
+      const anyFailed = results.some((r) => r.outcome === "failed");
+      const anyApplied = results.some((r) => r.outcome === "created" || r.outcome === "advanced" || r.outcome === "completed");
+      const allDuplicate = results.length > 0 && results.every((r) => r.outcome === "duplicate");
+      const status = anyFailed && !anyApplied ? "failed"
+        : anyApplied ? "done"
+          : allDuplicate ? "duplicate"
+            : "skipped";
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "journey",
+        status, latencyMs: Date.now() - t0,
+        error: anyFailed ? results.find((r) => r.outcome === "failed")?.reason : undefined,
+        metadata: { intents: results.length, results },
+      });
+    }
+  } catch (e) {
+    await recordDelivery(db, {
+      orgId: row.organization_id, eventId: row.id, subscriber: "journey",
+      status: "failed", latencyMs: Date.now() - t0,
+      error: e instanceof Error ? e.message : "journey subscriber crashed",
+    });
+    // Journey is non-critical to the rest of the drain — other subscribers ran.
+  }
 
   // ── Automation — CLASSIFY ONLY (never execute). The candidate surfaces via the
   //    stateless approval-bundle inbox on next read; here we just record it. ────

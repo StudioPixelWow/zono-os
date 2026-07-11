@@ -157,17 +157,21 @@ check("property.sold → memory", projectEventToMemory({ ...base, event_type: "p
 check("routine buyer.updated → no memory", projectEventToMemory({ ...base, event_type: "buyer.updated", entity_type: "buyer" }) === null);
 check("memory carries entity + occurred", m1?.entity_id === "D1" && m1?.occurred_at === base.occurred_at);
 
-// ── Stage 5A · journey subscriber (pure) ────────────────────────────────────
-import { projectEventToJourneyTransition } from "./journey-subscriber";
+// ── Batch 5.2 · journey subscriber (pure, canonical stages) ─────────────────
+// Smoke-level only — the full 66-check journey suite is src/lib/kernel/journey-qa.ts.
+import { projectEventToJourney, isJourneyEvent } from "./journey-subscriber";
 
-check("lead.created → open lead journey (new)", (() => { const j = projectEventToJourneyTransition(base); return j?.subjectType === "lead" && j?.stage === "new" && j?.outcome === "open"; })());
-check("buyer.stage_changed → buyer stage from payload", projectEventToJourneyTransition({ ...base, event_type: "buyer.stage_changed", entity_type: "buyer", entity_id: "B1", payload: { stage: "qualified" } })?.stage === "qualified");
-check("buyer.stage_changed with no stage → null", projectEventToJourneyTransition({ ...base, event_type: "buyer.stage_changed", entity_type: "buyer", entity_id: "B1", payload: {} }) === null);
-check("deal.created → buyer in_deal", (() => { const j = projectEventToJourneyTransition({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } }); return j?.subjectType === "buyer" && j?.subjectId === "B1" && j?.stage === "in_deal"; })());
-check("deal.won → closed_won outcome", projectEventToJourneyTransition({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })?.outcome === "won");
-check("deal.lost → closed_lost outcome", projectEventToJourneyTransition({ ...base, event_type: "deal.lost", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })?.outcome === "lost");
-check("deal.won with no buyer → null", projectEventToJourneyTransition({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: {} }) === null);
-check("non-journey event → null", projectEventToJourneyTransition({ ...base, event_type: "property.price_changed", entity_type: "property" }) === null);
+const jIntents = (e: DomainEventLike) => { const p = projectEventToJourney(e); return p.kind === "intents" ? p.intents : []; };
+const jSkip = (e: DomainEventLike) => { const p = projectEventToJourney(e); return p.kind === "skip" ? p.reason : null; };
+
+check("journey: lead.created → lead journey at canonical `new`", (() => { const i = jIntents(base)[0]; return i?.journeyType === "lead" && i.targetStage === "new" && i.createOnly; })());
+check("journey: deal.created fans out to the buyer at `deal`", jIntents({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } }).some((i) => i.journeyType === "buyer" && i.targetStage === "deal"));
+check("journey: deal.won → canonical `won`", jIntents({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: {} }).some((i) => i.journeyType === "deal" && i.targetStage === "won"));
+check("journey: deal.lost does NOT lose the buyer", jIntents({ ...base, event_type: "deal.lost", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } }).every((i) => i.journeyType === "deal"));
+check("journey: RECURSION — journey.* is skipped", jSkip({ ...base, event_type: "journey.stage_changed", entity_type: "journey", entity_id: "J1" }) === "journey_event_no_recurse");
+check("journey: isJourneyEvent guard", isJourneyEvent("journey.created") && !isJourneyEvent("lead.created"));
+check("journey: no stage evidence → honest skip", jSkip({ ...base, event_type: "buyer.updated", entity_type: "buyer", entity_id: "B1", payload: {} }) === "no_stage_evidence");
+check("journey: unsupported event → honest skip", jSkip({ ...base, event_type: "property.price_changed", entity_type: "property" }) === "unsupported_event");
 
 // ── Stage 2 · Legacy bridge (pure) — historical milestones → canonical timeline ─
 import { bridgeLegacyActivity, bridgeJourneyEvent, bridgeDocumentAudit, syntheticEventId, type LegacyActivityRow, type JourneyEventRow, type DocumentAuditRow } from "./legacy-bridge";
