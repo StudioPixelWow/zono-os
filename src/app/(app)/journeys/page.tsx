@@ -1,8 +1,11 @@
 // ============================================================================
-// 🧭 ZONO — Journey Center page (/journeys). Reads the UNIFIED journey model
-// (composition over the existing buyer/seller/lead twins + listing scorecards);
-// never the sparsely-seeded `journeys` table. Distinguishes load-error from a
-// true empty state. No writes, no journey creation.
+// 🧭 ZONO — Journey Center page (/journeys) · CANONICAL-FIRST (Batch 5.4).
+//
+// It used to read a DERIVED model and deliberately "never the sparsely-seeded
+// `journeys` table" — correct when that table was empty, wrong now that 5.2 fills
+// it from events and 5.3 backfilled the real property journeys. It now reads the
+// canonical spine first and falls back to the derived model ONLY for entities with
+// no canonical journey, always marked. No writes, no journey creation.
 // ============================================================================
 import { getJourneyCenter } from "@/lib/journey-center/service";
 import type { JourneyCenter } from "@/lib/journey-center/types";

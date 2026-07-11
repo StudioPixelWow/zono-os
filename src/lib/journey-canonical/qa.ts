@@ -195,7 +195,8 @@ check("property_journeys records the REAL live row count (9)", JOURNEY_DEPRECATI
 check("journey_stages registered with 31 real rows", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "journey_stages" && r.liveRows === 31));
 check("deal_journeys registered as empty but still written", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id === "deal_journeys" && r.liveRows === 0 && (r.activeWriters?.length ?? 0) > 0));
 check("the deal dual identity is registered", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("DEAL DUAL IDENTITY")));
-check("the Journey Center read model is registered for the 5.4 cutover", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.kind === "read_model" && r.retiredIn === "5.4"));
+check("the Journey Center read model's PRIMARY read is retired in 5.4", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.kind === "read_model" && r.retiredIn.startsWith("5.4") && r.status === "compat_input"));
+check("…and its remaining fallback risk is stated in full", (JOURNEY_DEPRECATION_REGISTRY.find((r) => r.kind === "read_model")?.remainingRisk ?? "").includes("never guessed"));
 check("the timeline dual-write is registered as BLOCKED, with the reason stated", JOURNEY_DEPRECATION_REGISTRY.some((r) => r.id.startsWith("TIMELINE DUAL-WRITE") && r.removalEligibility === "blocked" && (r.remainingRisk ?? "").includes("DRAIN LATENCY")));
 check("the timeline dual-write lists every live writer it found", (JOURNEY_DEPRECATION_REGISTRY.find((r) => r.id.startsWith("TIMELINE DUAL-WRITE"))?.activeWriters?.length ?? 0) >= 7);
 check("timeline dual-write must NOT be fixed by hiding kernel rows", (JOURNEY_DEPRECATION_REGISTRY.find((r) => r.id.startsWith("TIMELINE DUAL-WRITE"))?.remainingRisk ?? "").includes("hiding kernel rows"));

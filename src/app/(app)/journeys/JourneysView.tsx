@@ -1,21 +1,30 @@
 "use client";
 // ============================================================================
-// 🧭 ZONO — Journey Center. Shows the REAL journey state of every buyer, seller,
-// lead and property already in ZONO (derived from the existing twins + listing
-// scorecards). Summary KPIs, filters, premium journey cards, a detail drawer,
-// and HONEST distinct empty states. Read-only; CTAs open the entity cockpit.
+// 🧭 ZONO — Journey Center · CANONICAL-FIRST (Batch 5.4).
+//
+// It now renders the canonical spine (journeys + journey_events). A record marked
+// `fallback` is a compatibility row for an entity that has no canonical journey
+// yet — it is labelled as such and never shown alongside a canonical one for the
+// same entity. Stage names and the ladder come from the CANONICAL machines, not
+// from a private vocabulary. Read-only; CTAs open the real entity cockpit.
 // ============================================================================
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
-import { STAGE_LABELS, STAGE_ORDER, ENTITY_HE, type JourneyCenter, type JourneyEntityType, type JourneyFlag, type UnifiedJourney } from "@/lib/journey-center/types";
+import { ladder, stageLabel as canonicalStageLabel, type JourneyType } from "@/lib/journey-canonical";
+import { ENTITY_HE, type JourneyCenter, type JourneyEntityType, type JourneyFlag, type UnifiedJourney } from "@/lib/journey-center/types";
 
 const ENTITY_ICON: Record<JourneyEntityType, string> = { buyer: "Users", seller: "Handshake", lead: "MessageCircle", property: "Building2" };
-type FilterKey = "all" | JourneyEntityType | "at_risk" | "waiting" | "advancing" | "no_activity";
+type FilterKey = "all" | JourneyEntityType | "at_risk" | "waiting" | "advancing" | "no_activity"
+  | "canonical" | "fallback" | "stalled" | "blocked";
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "הכל" }, { key: "buyer", label: "קונים" }, { key: "seller", label: "מוכרים" },
-  { key: "lead", label: "לידים" }, { key: "property", label: "נכסים" }, { key: "at_risk", label: "בסיכון" },
+  { key: "lead", label: "לידים" }, { key: "property", label: "נכסים" },
+  // Batch 5.4 — the operator can always see WHERE a row came from and what is stuck.
+  { key: "canonical", label: "קנוני" }, { key: "fallback", label: "תאימות" },
+  { key: "stalled", label: "תקוע" }, { key: "blocked", label: "חסום" },
+  { key: "at_risk", label: "בסיכון" },
   { key: "waiting", label: "ממתין לפעולה" }, { key: "advancing", label: "מתקדם" }, { key: "no_activity", label: "ללא פעילות" },
 ];
 
@@ -35,6 +44,10 @@ export function JourneysView({ data, error }: { data: JourneyCenter | null; erro
   const filtered = useMemo(() => journeys.filter((j) => {
     if (filter === "all") return true;
     if (filter === "buyer" || filter === "seller" || filter === "lead" || filter === "property") return j.entityType === filter;
+    if (filter === "canonical") return j.canonical === true;
+    if (filter === "fallback") return j.canonical === false;
+    if (filter === "stalled") return (j.stageAgeDays ?? 0) >= 14 && !j.flags.includes("closed");
+    if (filter === "blocked") return (j.blockers?.length ?? 0) > 0;
     return j.flags.includes(filter as JourneyFlag);
   }), [journeys, filter]);
 
@@ -51,6 +64,9 @@ export function JourneysView({ data, error }: { data: JourneyCenter | null; erro
     { label: "מתקדם היום", value: k.advancing, icon: "Sparkles", tone: "text-success", f: "advancing" },
     { label: "ללא פעילות", value: k.noActivity, icon: "Clock", tone: "text-muted", f: "no_activity" },
     { label: "פגישות קרובות", value: k.upcomingMeetings, icon: "Calendar", tone: "text-brand" },
+    // Batch 5.4 — canonical coverage is a first-class number, not a footnote.
+    { label: "מסעות קנוניים", value: k.canonicalRecords ?? 0, icon: "ShieldCheck", tone: "text-success", f: "canonical" },
+    { label: "רשומות תאימות", value: k.fallbackRecords ?? 0, icon: "History", tone: "text-warning", f: "fallback" },
   ];
 
   return (
@@ -171,7 +187,9 @@ function JourneyCard({ j, onOpen }: { j: UnifiedJourney; onOpen: () => void }) {
 }
 
 function JourneyDrawer({ j, onClose }: { j: UnifiedJourney; onClose: () => void }) {
-  const order = STAGE_ORDER[j.entityType];
+  // The ladder is the CANONICAL machine's, never a private list.
+  const jt = (j.journeyType ?? j.entityType) as JourneyType;
+  const order = ladder(jt).map((s) => s.key);
   return (
     <div className="fixed inset-0 z-[60] flex justify-start bg-black/40" onClick={onClose}>
       <div dir="rtl" onClick={(e) => e.stopPropagation()} className="bg-card border-line ms-auto flex h-full w-full max-w-md flex-col overflow-y-auto border-s p-5 shadow-[var(--shadow-lift)]">
@@ -183,7 +201,25 @@ function JourneyDrawer({ j, onClose }: { j: UnifiedJourney; onClose: () => void 
           <button onClick={onClose} aria-label="סגור" className="text-muted hover:text-ink"><Icon name="X" size={18} /></button>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">{j.flags.map((f) => <FlagBadge key={f} f={f} />)}</div>
+        <div className="flex flex-wrap gap-1.5">
+          {j.flags.map((f) => <FlagBadge key={f} f={f} />)}
+          <span className={`rounded-lg px-2 py-0.5 text-[10px] font-black ${j.canonical ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
+            {j.canonical ? "מסע קנוני" : "רשומת תאימות"}
+          </span>
+          {typeof j.stageAgeDays === "number" && (
+            <span className="bg-surface text-muted rounded-lg px-2 py-0.5 text-[10px] font-black">{j.stageAgeDays} ימים בשלב</span>
+          )}
+        </div>
+
+        {/* real, observed blockers — never invented */}
+        {(j.blockers?.length ?? 0) > 0 && (
+          <div className="border-danger/30 bg-danger-soft/40 mt-3 rounded-xl border p-3">
+            <p className="text-danger mb-1 text-[12px] font-black">חסמים</p>
+            <ul className="text-ink flex flex-col gap-1 text-[12px]">
+              {j.blockers!.map((b, i) => <li key={i}>· {b}</li>)}
+            </ul>
+          </div>
+        )}
 
         {/* stage timeline */}
         <div className="mt-4">
@@ -194,7 +230,7 @@ function JourneyDrawer({ j, onClose }: { j: UnifiedJourney; onClose: () => void 
               return (
                 <li key={s} className="flex items-center gap-2.5">
                   <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${current ? "bg-brand text-white" : done ? "bg-success-soft text-success" : "bg-surface text-muted"}`}>{done ? "✓" : i + 1}</span>
-                  <span className={`text-[13px] ${current ? "text-ink font-black" : done ? "text-muted" : "text-muted/70"}`}>{STAGE_LABELS[j.entityType][s] ?? s}</span>
+                  <span className={`text-[13px] ${current ? "text-ink font-black" : done ? "text-muted" : "text-muted/70"}`}>{canonicalStageLabel(jt, s)}</span>
                 </li>
               );
             })}

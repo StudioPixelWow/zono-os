@@ -13,7 +13,11 @@ export type JourneyFlag = "active" | "at_risk" | "waiting" | "advancing" | "no_a
 export interface JourneyLinked { kind: JourneyEntityType; id: string; name: string }
 
 export interface UnifiedJourney {
-  journeyId: string;              // `${entityType}:${entityId}`
+  /** Batch 5.4: the REAL canonical journeys.id for canonical rows.
+   *  Fallback rows keep the synthetic `${entityType}:${entityId}` key. */
+  journeyId: string;
+  /** Batch 5.4 — the canonical journey type (equals entityType today). */
+  journeyType?: string;
   entityType: JourneyEntityType;
   entityId: string;
   entityName: string;
@@ -36,6 +40,18 @@ export interface UnifiedJourney {
   upcomingMeetingAt: string | null;
   linked: JourneyLinked[];
   evidence: string[];
+
+  // ── Batch 5.4 — canonical-first fields. Unknown stays NULL, never invented. ──
+  /** 'canonical' = read from the spine · 'fallback' = derived, no canonical row yet. */
+  source?: "canonical" | "fallback";
+  canonical?: boolean;
+  status?: string;
+  ownerUserId?: string | null;
+  ownerName?: string | null;
+  stageEnteredAt?: string | null;
+  stageAgeDays?: number | null;
+  /** Real, observed blockers only. */
+  blockers?: string[];
 }
 
 export interface JourneyKpis {
@@ -45,6 +61,38 @@ export interface JourneyKpis {
   advancing: number;     // recent activity → progressing
   noActivity: number;    // no meaningful activity recently
   upcomingMeetings: number;
+
+  // ── Batch 5.4 — KPI integrity. Computed from CANONICAL journeys only, except
+  //    `fallbackRecords`, which is exactly the count of records that are NOT.
+  //    No hardcoded counts, no fake funnel, no double counting. ────────────────
+  byType?: Record<string, number>;
+  byStage?: Record<string, number>;
+  /** Mean days in the CURRENT stage across open canonical journeys. null when none. */
+  avgDaysInStage?: number | null;
+  stalled?: number;
+  blocked?: number;
+  won?: number;
+  lostOrInactive?: number;
+  /** journeys per owner id — real workload, not an estimate. */
+  ownerWorkload?: Record<string, number>;
+  /** Mean stage-index advance per open canonical journey. null when unmeasurable. */
+  stageVelocity?: number | null;
+  canonicalRecords?: number;
+  fallbackRecords?: number;
+}
+
+/** Batch 5.4 — Journey Center filters (5.4E). */
+export interface JourneyFilters {
+  journeyType?: string;
+  stage?: string;
+  owner?: string;
+  status?: string;
+  entityType?: JourneyEntityType;
+  stalled?: boolean;
+  blocked?: boolean;
+  source?: "canonical" | "fallback";
+  fromDate?: string;
+  toDate?: string;
 }
 
 export interface JourneyCenter {
@@ -58,9 +106,16 @@ export interface JourneyCenter {
   /** True when at least one journey has meaningful lifecycle activity. */
   hasActivity: boolean;
   notes: string[];
+  /** Batch 5.4 — records that could NOT be shown, with the exact reason. Never hidden. */
+  diagnostics?: { entityType: string; entityId: string; reason: string }[];
 }
 
-// ── Stage vocabularies (reuse ZONO's existing stage language) ────────────────
+// ── LEGACY (Batch 5.4): this was journey-center's OWN stage vocabulary — a SIXTH
+// one, which disagreed with the canonical machines (e.g. property `marketed`,
+// `stale`). It is NO LONGER the display vocabulary: the UI reads the canonical
+// ladder, and canonical.ts maps these keys onto it. They survive only because
+// derive.ts (the fallback model) still emits them. Retired with derive.ts in 5.5.
+// ─────────────────────────────────────────────────────────────────────────────
 export const STAGE_LABELS: Record<JourneyEntityType, Record<string, string>> = {
   buyer: {
     new: "חדש", qualification: "הסמכה", matching: "התאמות", viewing: "סיורים",
