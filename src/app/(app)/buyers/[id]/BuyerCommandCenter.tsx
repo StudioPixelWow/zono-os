@@ -9,14 +9,13 @@ import { Button } from "@/components/ui/Button";
 import { EntityTimeline } from "@/components/activity/EntityTimeline";
 import { RecommendedMatches, type RecoItemView } from "@/components/activity/RecommendedMatches";
 import { readinessLabel, scoreTone, type Tone } from "@/lib/buyer-intelligence/scoring";
+// Batch 5.5 (Part 7): BUYER_STAGES / STAGE_LABELS / nextStage / stageIndex are the
+// INTELLIGENCE playbook's own stage vocabulary. They no longer drive a journey widget
+// here — the lifecycle is the canonical spine — so only the label maps this panel still
+// needs are imported.
 import {
-  BUYER_STAGES,
   OBJECTION_LABELS,
-  STAGE_LABELS,
   TOUCHPOINT_LABELS,
-  nextStage,
-  stageIndex,
-  type BuyerStage,
 } from "@/lib/buyer-intelligence/playbook";
 import {
   addBuyerObjectionAction,
@@ -28,7 +27,6 @@ import {
   resolveBuyerObjectionAction,
   resolveBuyerRiskAction,
   setBuyerCommitmentStatusAction,
-  setBuyerStageAction,
 } from "@/lib/buyer-intelligence/actions";
 import type { BuyerCommandCenter as BuyerCC } from "@/lib/buyer-intelligence/service";
 
@@ -102,8 +100,6 @@ export function BuyerCommandCenter({ buyerId, buyerName, data, recommendations =
   const p = data.profile;
   const openRisks = data.risks.filter((r) => r.status === "open");
   const openObjections = data.objections.filter((o) => !o.resolved);
-  const curStage = p.current_stage as BuyerStage;
-  const next = nextStage(p.current_stage);
   const tiles: { label: string; value: number; tone: Tone }[] = [
     { label: "בריאות קונה", value: p.buyer_health_score, tone: scoreTone(p.buyer_health_score) },
     { label: "מוכנות לרכישה", value: p.buyer_readiness_score, tone: scoreTone(p.buyer_readiness_score) },
@@ -136,23 +132,16 @@ export function BuyerCommandCenter({ buyerId, buyerName, data, recommendations =
         </div>
       </div>
 
-      {/* 2) Journey progress */}
-      <SectionCard title="מסע קונה" icon="Route">
-        <div className="no-scrollbar -mx-1 overflow-x-auto pb-1">
-          <div className="flex min-w-[680px] items-center gap-1 px-1">
-            {BUYER_STAGES.filter((s) => s !== "lost").map((s, i) => {
-              const idx = stageIndex(curStage);
-              const state = i < idx ? "done" : i === idx ? "active" : "upcoming";
-              return (
-                <div key={s} className="flex flex-1 items-center gap-1">
-                  <span className={cn("grid h-7 flex-1 place-items-center rounded-lg text-[10px] font-bold", state === "done" ? "bg-success-soft text-success" : state === "active" ? "bg-brand text-white" : "bg-surface text-muted")}>{STAGE_LABELS[s]}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {next && <Button size="sm" className="mt-3" onClick={() => run(() => setBuyerStageAction(buyerId, next))} disabled={pending} leadingIcon={<Icon name="ArrowUpRight" size={15} />}>קדם ל{STAGE_LABELS[next]}</Button>}
-      </SectionCard>
+      {/* Batch 5.5 (Part 7) — THE SECOND BUYER LIFECYCLE, REMOVED.
+          A "מסע קונה" ladder used to live here, drawn from
+          buyer_intelligence_profiles.current_stage and advanced by setBuyerStageAction —
+          which wrote that profile row and logged a timeline entry but NEVER emitted a
+          domain event. The canonical buyer journey therefore never moved: the same
+          two-lifecycles defect 5.5E found in the property cockpit, one entity over.
+          The buyer's lifecycle is now rendered ONCE, by the shared canonical journey
+          block, and advanced through the kernel. Everything below is INTELLIGENCE —
+          scores, risks, objections, matches. It informs the broker; it does not decide
+          the stage. */}
 
       {/* 3) Score grid */}
       <SectionCard title="ציוני קונה" icon="BarChart3">

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { EntityJourneySection } from "@/components/journey/EntityJourneySection";
 import { getSellerById } from "@/lib/sellers/repository";
 import { getPropertyById } from "@/lib/properties/repository";
 import { getSellerCommandCenter } from "@/lib/seller-intelligence/service";
@@ -81,8 +82,12 @@ export default async function SellerDetailPage({
   );
   const graphSlot = <RelationshipSection entityType="seller" entityId={id} />;
 
+  // Batch 5.5 (Part 10) — the ONE canonical journey block, shared by all five cockpits.
+  const journeySlot = <EntityJourneySection entityType="seller" entityId={id} />;
+
   return (
     <SellerDetailView
+      journeySlot={journeySlot}
       seller={seller}
       commandCenter={commandCenter}
       interestedBuyers={interestedBuyers}

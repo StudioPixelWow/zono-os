@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { EntityJourneySection } from "@/components/journey/EntityJourneySection";
 import {
   getBuyerActivities,
   getBuyerById,
@@ -66,8 +67,12 @@ export default async function BuyerDetailsPage({
   );
   const graphSlot = <RelationshipSection entityType="buyer" entityId={id} />;
 
+  // Batch 5.5 (Part 10) — the ONE canonical journey block, shared by all five cockpits.
+  const journeySlot = <EntityJourneySection entityType="buyer" entityId={id} />;
+
   return (
     <BuyerDetailView
+      journeySlot={journeySlot}
       buyer={buyer}
       activities={activities}
       tasks={tasks}

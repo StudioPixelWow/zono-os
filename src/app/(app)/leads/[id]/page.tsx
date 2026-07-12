@@ -6,6 +6,7 @@
 // no new business logic, no schema. Sections fold into cockpit tabs (no stacking).
 // ============================================================================
 import { notFound } from "next/navigation";
+import { EntityJourneySection } from "@/components/journey/EntityJourneySection";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { getLeadTwinById } from "@/lib/digital-twin/leads/service";
@@ -62,8 +63,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   );
   const timelineSlot = <EntityTimelineSection entityType="lead" entityId={id} title="ציר זמן הליד" />;
 
+  // Batch 5.5 (Part 10) — the ONE canonical journey block, shared by all five cockpits.
+  const journeySlot = <EntityJourneySection entityType="lead" entityId={id} />;
+
   return (
     <LeadDetailView
+      journeySlot={journeySlot}
       lead={lead}
       twin={twin}
       communicationSlot={communicationSlot}

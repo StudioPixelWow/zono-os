@@ -18,7 +18,6 @@ import {
   buyerRoomsLine,
   type BuyerRow,
 } from "@/lib/buyers/labels";
-import { STAGE_LABELS, type BuyerStage } from "@/lib/buyer-intelligence/playbook";
 import { BuyerTasksPanel } from "./BuyerTasksPanel";
 import { BuyerNoteComposer } from "./BuyerNoteComposer";
 import type { Database } from "@/lib/supabase/types";
@@ -86,6 +85,7 @@ export function BuyerDetailView({
   approvalSlot,
   recommendationsSlot,
   graphSlot,
+  journeySlot,
 }: {
   buyer: BuyerRow;
   activities: ActivityRow[];
@@ -101,6 +101,7 @@ export function BuyerDetailView({
   approvalSlot?: ReactNode;
   recommendationsSlot?: ReactNode;
   graphSlot?: ReactNode;
+  journeySlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const prefs = buyerPreferences(b);
@@ -116,7 +117,6 @@ export function BuyerDetailView({
   const readiness = prof?.buyer_readiness_score ?? null;
   const nextAction = prof?.next_best_action ?? null;
   const summary = prof?.intelligence_summary ?? prof?.ai_summary ?? null;
-  const stageLabel = prof ? STAGE_LABELS[prof.current_stage as BuyerStage] ?? null : null;
   const openRisks = commandCenter?.risks.filter((r) => r.status === "open").length ?? 0;
   const openTasks = tasks.filter((t) => t.status !== "done" && t.status !== "cancelled").length;
   const matchCount = buyerMatches.length || recommendations.length;
@@ -137,7 +137,10 @@ export function BuyerDetailView({
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-ink text-2xl font-black leading-tight">{b.full_name}</h1>
               {b.temperature && <Badge tone={TEMPERATURE_TONES[b.temperature]}>{TEMPERATURE_LABELS[b.temperature]}</Badge>}
-              {stageLabel && <span className="bg-card text-brand rounded-full px-2.5 py-1 text-[11px] font-bold">{stageLabel}</span>}
+              {/* Batch 5.5 (Part 7) — the intelligence profile's `current_stage` used to be
+                  shown here as if it were the buyer's lifecycle. It is not: the lifecycle is
+                  the canonical journey, rendered ONCE in the journey block. Two stage chips
+                  for one buyer is exactly the disagreement Stage 5 exists to end. */}
             </div>
             <p className="text-muted mt-1 text-sm">{b.phone ?? "—"}{b.email ? ` · ${b.email}` : ""}</p>
             {summary && <p className="text-ink mt-2 line-clamp-2 max-w-2xl text-[13px] leading-relaxed">{summary}</p>}
@@ -219,6 +222,11 @@ export function BuyerDetailView({
 
       {/* ── Panels ──────────────────────────────────────────────────────────── */}
       <div>
+        {/* Batch 5.5 (Part 7) — the CANONICAL buyer journey, from the spine. It sits
+            ABOVE the command center, which is now intelligence only: the scores inform,
+            they do not decide the lifecycle. */}
+        {tab === "command" && journeySlot}
+
         {tab === "command" && (
           <div className="flex flex-col gap-5">
             <BuyerCommandCenter buyerId={b.id} buyerName={b.full_name} data={commandCenter} recommendations={recommendations} />

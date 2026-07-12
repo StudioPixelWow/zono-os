@@ -70,6 +70,7 @@ export function SellerDetailView({
   approvalSlot,
   recommendationsSlot,
   graphSlot,
+  journeySlot,
 }: {
   seller: SellerRow;
   commandCenter: SellerCC | null;
@@ -82,6 +83,7 @@ export function SellerDetailView({
   approvalSlot?: ReactNode;
   recommendationsSlot?: ReactNode;
   graphSlot?: ReactNode;
+  journeySlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("command");
 
@@ -176,6 +178,12 @@ export function SellerDetailView({
 
       {/* ── Panels ──────────────────────────────────────────────────────────── */}
       <div>
+        {/* Batch 5.5 (Part 8) — the CANONICAL seller journey, from the spine. The command
+            center below it is INTELLIGENCE: churn / trust / engagement inform the broker,
+            they do not move the lifecycle. `churn_risk` becomes a real stage only when a real
+            persisted transition says so — never because a score crossed a threshold. */}
+        {tab === "command" && journeySlot}
+
         {tab === "command" && (
           <div className="flex flex-col gap-5">
             <SellerCommandCenter sellerId={s.id} sellerName={s.full_name} data={commandCenter} interestedBuyers={interestedBuyers} />

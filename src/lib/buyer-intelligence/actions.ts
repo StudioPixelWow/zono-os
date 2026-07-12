@@ -14,13 +14,10 @@ import {
   buyerObjectionRepository,
   buyerRiskRepository,
   buyerTouchpointRepository,
-  buyerIntelligenceRepository,
 } from "./repository";
 import {
-  STAGE_LABELS,
   TOUCHPOINT_IMPACTS,
   TOUCHPOINT_LABELS,
-  type BuyerStage,
 } from "./playbook";
 
 export interface BuyerIntelActionState {
@@ -54,18 +51,22 @@ export async function recalcBuyerIntelligenceAction(buyerId: string): Promise<Bu
   return {};
 }
 
-export async function setBuyerStageAction(buyerId: string, stage: BuyerStage): Promise<BuyerIntelActionState> {
-  try {
-    await buyerIntelligenceRepository.update(buyerId, { current_stage: stage });
-    await logActivityEvent({ eventType: "buyer.stage_changed", entityType: "buyer", entityId: buyerId, title: `שלב הקונה עודכן ל-${STAGE_LABELS[stage]}`, status: stage });
-    await recalculateBuyerIntelligence(buyerId);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
-    return { error: `עדכון השלב נכשל: ${msg}` };
-  }
-  revalidate(buyerId);
-  return {};
-}
+/**
+ * ⚠️ RETIRED — Batch 5.5 (Part 7).
+ *
+ * setBuyerStageAction() moved a buyer by writing buyer_intelligence_profiles.current_stage
+ * and logging a timeline row. It never emitted a DOMAIN event, so the kernel's journey
+ * subscriber never saw it and the canonical buyer journey never moved — the buyer's
+ * lifecycle lived in an intelligence table while the spine sat still. That is the same
+ * two-lifecycles defect 5.5E removed from the property cockpit.
+ *
+ * THE REPLACEMENT: requestEntityStageAction("buyer", id, stage) — lib/journey-cockpit/actions.
+ * It emits `buyer.stage_changed`, which the subscriber (which has ALWAYS had a case for it)
+ * projects into a canonical transition through buildTransition().
+ *
+ * buyer_intelligence_profiles.current_stage remains as INTELLIGENCE input — it is no longer
+ * written from the cockpit, and it is no longer displayed as the buyer's lifecycle.
+ */
 
 export async function logBuyerTouchpointAction(
   buyerId: string,

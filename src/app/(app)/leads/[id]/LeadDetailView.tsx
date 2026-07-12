@@ -73,6 +73,7 @@ export function LeadDetailView({
   approvalSlot,
   graphSlot,
   timelineSlot,
+  journeySlot,
 }: {
   lead: LeadLite;
   twin: LeadTwin | null;
@@ -81,6 +82,7 @@ export function LeadDetailView({
   approvalSlot?: ReactNode;
   graphSlot?: ReactNode;
   timelineSlot?: ReactNode;
+  journeySlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("qualification");
   const p = twin?.profile ?? null;
@@ -276,10 +278,16 @@ export function LeadDetailView({
 
         {tab === "journey" && (
           <div className="flex flex-col gap-5">
+            {/* Batch 5.5 (Part 9) — the CANONICAL lead journey. `leads.stage` used to be
+                rendered here as the lifecycle; it is SOURCE DATA that feeds the spine, not a
+                second journey. The stage, the ladder and the history now come from `journeys`
+                + `journey_events`, exactly as they do for every other entity. */}
+            {journeySlot}
+
             <div className="bg-card border-line rounded-[20px] border p-5">
-              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Route" size={16} /></span><h3 className="text-ink text-sm font-extrabold">מסע הליד</h3></div>
+              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Sparkles" size={16} /></span><h3 className="text-ink text-sm font-extrabold">אינטליגנציית ליד</h3></div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                <span className="text-ink font-bold">שלב נוכחי: <span className="text-brand-strong">{STAGE_HE[lead.stage] ?? lead.stage}</span></span>
+                <span className="text-muted font-semibold">שלב במקור (leads.stage): <span className="text-ink font-bold">{STAGE_HE[lead.stage] ?? lead.stage}</span></span>
                 {nextAction && <span className="text-ink font-bold">הצעד הבא: <span className="text-brand-strong">{nextAction}</span></span>}
               </div>
               {decisions.length > 0 && (
