@@ -20,7 +20,7 @@
 // ============================================================================
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { rankJourneys, type JourneySignals } from "./journey";
+import { rankJourneys, STALL_DAYS, type JourneySignals } from "./journey";
 import type { Recommendation } from "./types";
 import { isJourneyType, type JourneyType } from "@/lib/journey-canonical";
 import { SEARCH_CONFIG, SEARCH_TABLE_MAP, pick } from "@/lib/search-projection";
@@ -150,6 +150,23 @@ export async function getJourneyIntelligence(limit = 12): Promise<JourneyIntelli
 
     const ranked = rankJourneys(signals);
     const actionable = ranked.filter((r) => !r.insufficientEvidence).length;
+
+    // Batch 5.6E observability — the Journey source must be VISIBLE even when it
+    // honestly produces ZERO recommendations. aggregate-service fans engines out
+    // through Promise.allSettled and swallows failures by design, so without this
+    // line a legitimate evidence-gated zero is indistinguishable from a silently
+    // crashed engine. Counts only — no titles, no subject PII.
+    console.info(
+      "[broker-intelligence][journey]",
+      JSON.stringify({
+        scanned: signals.length,
+        actionable,
+        unverifiedStageEntry,
+        belowThreshold: signals.filter((s) => s.daysInStage != null && s.daysInStage < STALL_DAYS).length,
+        stallDays: STALL_DAYS,
+      }),
+    );
+
     return {
       recommendations: ranked.slice(0, limit),
       scanned: signals.length,

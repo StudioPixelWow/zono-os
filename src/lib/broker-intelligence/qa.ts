@@ -439,9 +439,26 @@ check("5.6E unknown stage → skip unknown_stage", evaluateJourney(js({ currentS
 
 // actionClass MUST be structural — a subject's own name must never reclassify it.
 check("5.6E journey actionClass is structural, not textual", actionClass(stalled.rec) === "journey");
+// Part 4 — a subject named after ANY regex-triggering word must not reclassify.
+// These words are real PROPERTY_MACHINE stage labels + real action keywords.
 check("5.6E subject named after a stage cannot hijack the class", (() => {
-  const trap = scoreJourney(js({ subjectTitle: "פרויקט שיווק — נכס יוקרה", currentStage: "marketing" }));
-  return actionClass(trap) === "journey";
+  const traps = [
+    "פרויקט שיווק — נכס יוקרה",   // → would regex to "marketing"
+    "מגדלי משא ומתן",              // → would regex to "price"
+    "בניין צפיות הכרמל",           // → "צפיות" is a PROPERTY_MACHINE stage
+    "נכס להתאמה — התקשר עכשיו",   // → would regex to "send"/"call"
+    "דירה עם פגישה וחתימה",        // → would regex to "meeting"/"document"
+  ];
+  return traps.every((subjectTitle) => actionClass(scoreJourney(js({ subjectTitle }))) === "journey");
+})());
+check("5.6E trap subjects also keep a stable subject-scoped recKey", (() => {
+  const a = recKey(scoreJourney(js({ subjectTitle: "פרויקט שיווק" })));
+  const b = recKey(scoreJourney(js({ subjectTitle: "מגדלי משא ומתן" })));
+  return a === "property:P1:journey" && b === "property:P1:journey";
+})());
+check("5.6E classification survives every canonical property stage label", (() => {
+  const openStages = ["draft", "preparation", "ready_to_publish", "active", "marketing", "viewings", "offers", "negotiation", "under_contract"];
+  return openStages.every((currentStage) => actionClass(scoreJourney(js({ currentStage }))) === "journey");
 })());
 check("5.6E structural guard is scoped to journey area only", actionClass(rec({ area: "seller", title: "רענן שיווק לנכס", suggestedAction: "פרסם קמפיין" })) === "marketing");
 check("5.6E journey recKey is stable + subject-scoped", recKey(stalled.rec) === "property:P1:journey");
@@ -481,6 +498,52 @@ check("5.6E rankJourneys puts actionable before skipped", (() => {
 })());
 check("5.6E rankJourneys deterministic", JSON.stringify(rankJourneys([js()])) === JSON.stringify(rankJourneys([js()])));
 check("5.6E all-unproven input → honest ZERO actionable", rankJourneys([js({ daysInStage: null }), js({ journeyId: "J2", daysInStage: null })]).filter((r) => !r.insufficientEvidence).length === 0);
+
+// ── Part 6 · Controlled future-eligibility proof (offline, no live mutation) ──
+// A journey with a REAL kernel-traceable stage-change event, stage age beyond
+// the threshold, and recent-activity evidence → exactly ONE recommendation.
+const eligible = js({
+  journeyId: "QA-ELIGIBLE", subjectId: "P-QA", subjectTitle: "נכס בדיקה",
+  href: "/properties/P-QA", currentStage: "marketing", status: "active",
+  daysInStage: 30, verifiedTransitions: 2, daysSinceLastTransition: 30,
+});
+const p6rec = rankJourneys([eligible]).filter((r) => !r.insufficientEvidence);
+check("Part6 eligible journey → exactly ONE recommendation", p6rec.length === 1);
+check("Part6 rec source is journeys", p6rec[0].evidence.some((e) => e.source === "journeys"));
+check("Part6 rec targets the real subject entity", p6rec[0].entityType === "property" && p6rec[0].entityId === "P-QA");
+check("Part6 rec has why-now with verified stage age", p6rec[0].why.includes("30 ימים"));
+check("Part6 rec carries latest-activity evidence", p6rec[0].evidence.some((e) => e.label.includes("לא נרשמה כל התקדמות")));
+check("Part6 rec carries evidence + confidence + action", p6rec[0].evidence.length >= 2 && p6rec[0].confidence > 0 && p6rec[0].suggestedAction.length > 0);
+check("Part6 rec urgency is derived, not fabricated", ["low", "medium", "high", "critical"].includes(p6rec[0].urgency));
+check("Part6 actionClass deterministic + structural", actionClass(p6rec[0]) === "journey");
+// Replay: the SAME journey evaluated twice must collapse to ONE queue item.
+const replay = bpq([...rankJourneys([eligible]), ...rankJourneys([eligible])].filter((r) => !r.insufficientEvidence));
+check("Part6 replay produces NO duplicate recommendation", replay.length === 1);
+check("Part6 replay is byte-identical (deterministic)", JSON.stringify(rankJourneys([eligible])) === JSON.stringify(rankJourneys([eligible])));
+check("Part6 eligible rec never cites an inert default score", !JSON.stringify(p6rec[0]).match(/health|velocity|progress|next_best_action|risk_score/i));
+
+// ── Part 5 · Regression: today's all-unproven journeys must not perturb the queue.
+// This is the live situation (9/9 journeys unbacked) reduced to a pure assertion:
+// the queue WITH the journey engine must be byte-identical to the queue WITHOUT it.
+const otherAreas = [
+  rec({ id: "a1", area: "acquisition", entityType: "external_listing", entityId: "L1", title: "הזדמנות גיוס", suggestedAction: "צור קשר עם בעלים", confidence: 80, urgency: "high", evidence: [{ label: "בעלים פרטי", source: "external_listings" }, { label: "3 הורדות מחיר", source: "market" }] }),
+  rec({ id: "b1", area: "buyer", entityType: "buyer", entityId: "B1", title: "שלח נכס לקונה", suggestedAction: "שלח נכס", confidence: 70, urgency: "medium", evidence: [{ label: "התאמה 82%", source: "matching" }, { label: "פעיל השבוע", source: "activity" }] }),
+  rec({ id: "s1", area: "seller", entityType: "seller", entityId: "S1", title: "התקשר למוכר — שימור", suggestedAction: "צור קשר", confidence: 88, urgency: "critical", evidence: [{ label: "סיכון נטישה", source: "crm" }, { label: "אין קשר 14 יום", source: "timeline" }] }),
+  rec({ id: "d1", area: "deal", entityType: "deal", entityId: "D1", title: "עסקה בסיכון", suggestedAction: "בדוק התנגדויות", confidence: 75, urgency: "high", evidence: [{ label: "התנגדות פתוחה", source: "deals" }, { label: "איחור בסגירה", source: "deals" }] }),
+];
+// Nine unproven journeys — exactly today's live shape (8 unverified + 1 too fresh).
+const liveShapedJourneys = rankJourneys([
+  ...Array.from({ length: 8 }, (_, i) => js({ journeyId: `LIVE${i}`, subjectId: `SUB${i}`, currentStage: "active", daysInStage: null, verifiedTransitions: 0, daysSinceLastTransition: null })),
+  js({ journeyId: "LIVE8", subjectId: "SUB8", currentStage: "marketing", daysInStage: 0, verifiedTransitions: 3, daysSinceLastTransition: 0 }),
+]);
+check("Part5 live-shaped journeys yield ZERO actionable", liveShapedJourneys.every((r) => r.insufficientEvidence));
+check("Part5 journey rows do NOT reorder unrelated recommendations", JSON.stringify(bpq([...otherAreas, ...liveShapedJourneys])) === JSON.stringify(bpq(otherAreas)));
+check("Part5 unrelated areas all survive intact", (() => {
+  const q = bpq([...otherAreas, ...liveShapedJourneys]);
+  return q.length === 4 && ["acquisition", "buyer", "seller", "deal"].every((a) => q.some((r) => r.area === a));
+})());
+check("Part5 top-of-queue is unchanged by journey presence", bpq([...otherAreas, ...liveShapedJourneys])[0].id === bpq(otherAreas)[0].id);
+check("Part5 agenda is unchanged by journey presence", JSON.stringify(buildAgenda(bpq([...otherAreas, ...liveShapedJourneys]))) === JSON.stringify(buildAgenda(bpq(otherAreas))));
 
 console.log(`\nBroker Intelligence · Areas1-6 + Journey + Queue + Agenda + Lifecycle + Learning + Explain QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
