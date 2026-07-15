@@ -3,7 +3,7 @@
 // Run: npx tsx src/lib/search-projection/qa.ts
 // ============================================================================
 import { normalizeText, normalizePhone, phoneTail, buildKeywords, buildNormalizedText } from "./normalize";
-import { buildSearchDocument } from "./document";
+import { buildSearchDocument, SEARCHABLE_ENTITY_TYPES } from "./document";
 import { classifyEventForSearch } from "./subscriber";
 import type { DomainEventLike } from "@/lib/kernel/subscriber";
 
@@ -61,6 +61,26 @@ check("unsupported entity type → null", classifyEventForSearch({ ...base, even
 check("missing event id → null", classifyEventForSearch({ ...base, id: "" }) === null);
 check("classifier carries org (cross-org isolation)", classifyEventForSearch({ ...base, organization_id: "ORG9" })?.entityId === "B1");
 check("classifier deterministic", JSON.stringify(classifyEventForSearch(base)) === JSON.stringify(classifyEventForSearch(base)));
+
+// ── Batch 5.6B · Journey events index the journey's OWN first-class document ──
+const jEvt = (over: Partial<DomainEventLike> = {}): DomainEventLike => ({
+  id: "JE1", event_type: "journey.stage_changed", entity_type: "journey", entity_id: "J1",
+  occurred_at: "2026-07-15T06:43:00Z", organization_id: "ORG1", actor_user_id: "U1",
+  payload: { subjectType: "property", subjectId: "P1", toStage: "viewings" },
+  metadata: { sourceEventType: "property.stage_changed" }, ...over,
+});
+check("journey is NOT in the generic SEARCH_CONFIG", !SEARCHABLE_ENTITY_TYPES.includes("journey"));
+check("generic builder refuses 'journey' (dedicated builder only)", buildSearchDocument("journey", "J1", "ORG1", { id: "J1", current_stage: "viewings" }, null) === null);
+check("journey.stage_changed → upsert the JOURNEY (entity_type=journey)", (() => {
+  const i = classifyEventForSearch(jEvt());
+  return i?.action === "upsert" && i.entityType === "journey" && i.entityId === "J1" && i.eventId === "JE1";
+})());
+check("journey.created → upsert journey", classifyEventForSearch(jEvt({ event_type: "journey.created" }))?.entityType === "journey");
+check("journey.completed → upsert journey", classifyEventForSearch(jEvt({ event_type: "journey.completed" }))?.entityType === "journey");
+check("journey.blocked → upsert journey", classifyEventForSearch(jEvt({ event_type: "journey.blocked" }))?.entityType === "journey");
+check("non-lifecycle journey.* event → null (no churn)", classifyEventForSearch(jEvt({ event_type: "journey.score_updated" })) === null);
+check("journey intent carries the journey id, not the subject", classifyEventForSearch(jEvt())?.entityId === "J1");
+check("journey classify deterministic", JSON.stringify(classifyEventForSearch(jEvt())) === JSON.stringify(classifyEventForSearch(jEvt())));
 
 // ── Batch 4.2 · Ranking (exact > prefix > token-AND > partial) ───────────────
 import { rankSearchDocs, prepareQuery } from "./rank";

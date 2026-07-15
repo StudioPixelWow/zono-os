@@ -31,9 +31,16 @@ const UPSERT_EVENTS = new Set<string>([
   "deal.created", "deal.updated", "deal.stage_changed", "deal.won", "deal.lost",
   "meeting.created", "meeting.rescheduled", "meeting.completed", "meeting.cancelled",
   "task.created", "task.completed",
-  "journey.created", "journey.stage_changed",
   "document.created", "document.sent", "document.completed", "document.signed",
   "agent.profile_updated",
+]);
+
+// Lifecycle-moving journey events that refresh the journey's OWN search document
+// (title from the subject, subtitle = type · stage). Unrelated journey.* churn
+// (e.g. score updates) never touches search. Batch 5.6B.
+const JOURNEY_UPSERT_EVENTS = new Set<string>([
+  "journey.created", "journey.stage_changed", "journey.completed",
+  "journey.blocked", "journey.paused", "journey.resumed", "journey.reopened",
 ]);
 
 const SOFT_DELETE_EVENTS = new Set<string>([
@@ -45,6 +52,16 @@ const SOFT_DELETE_EVENTS = new Set<string>([
 /** Classify a domain event into a search-index intent, or null. Deterministic. */
 export function classifyEventForSearch(evt: DomainEventLike): SearchIndexIntent | null {
   if (!evt.id || !evt.organization_id || !evt.entity_type || !evt.entity_id) return null;
+
+  // Journey events index the journey's OWN first-class document (entity_type=
+  // 'journey', entity_id = the journey id). The dedicated journey indexer
+  // resolves the subject entity to build the title/route. Handled BEFORE the
+  // generic searchable guard because 'journey' is not in SEARCH_CONFIG. 5.6B.
+  if (evt.event_type.startsWith("journey.")) {
+    if (!JOURNEY_UPSERT_EVENTS.has(evt.event_type)) return null;
+    return { action: "upsert", entityType: "journey", entityId: evt.entity_id, eventId: evt.id };
+  }
+
   if (!SEARCHABLE_ENTITY_TYPES.includes(evt.entity_type)) return null;
   if (SOFT_DELETE_EVENTS.has(evt.event_type)) {
     return { action: "soft_delete", entityType: evt.entity_type, entityId: evt.entity_id, eventId: evt.id };

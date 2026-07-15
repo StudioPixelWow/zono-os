@@ -343,15 +343,15 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
         metadata: { reason: "event_not_searchable" },
       });
     } else {
-      const status = intent.action === "soft_delete"
+      const oc = intent.action === "soft_delete"
         ? await softDeleteEntity(db, row.organization_id, intent.entityType, intent.entityId, row.id)
         : await indexEntity(db, row.organization_id, intent.entityType, intent.entityId, row.id);
-      if (status === "done") out.searchIndexed++;
+      if (oc.status === "done") out.searchIndexed++;
       await recordDelivery(db, {
         orgId: row.organization_id, eventId: row.id, subscriber: "search",
-        status: status === "done" ? "done" : status === "error" ? "failed" : "skipped",
+        status: oc.status === "done" ? "done" : oc.status === "error" ? "failed" : "skipped",
         latencyMs: Date.now() - t0,
-        metadata: { action: intent.action, entityType: intent.entityType, result: status },
+        metadata: { action: intent.action, entityType: intent.entityType, result: oc.status, reason: oc.reason ?? null },
       });
     }
   } catch { /* search projection is non-critical */ }

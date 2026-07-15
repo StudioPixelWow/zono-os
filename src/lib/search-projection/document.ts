@@ -116,13 +116,11 @@ export const SEARCH_CONFIG: Record<string, EntityConfig> = {
     updatedAt: ["updated_at", "created_at"],
     meta: ["status"],
   },
-  journey: {
-    route: () => `/journeys`,
-    title: ["title", "name"],
-    subtitle: ["stage", "status"],
-    updatedAt: ["updated_at", "created_at"],
-    meta: ["stage"],
-  },
+  // NOTE (Batch 5.6B): `journey` is NOT in this generic config. A journey has
+  // no title of its own — its title is derived from the SUBJECT entity — so it
+  // gets a DEDICATED builder (see ./journey-document.ts) that resolves the
+  // subject and produces a first-class `entity_type = journey` document,
+  // distinct from (and complementary to) the subject's own search result.
   document: {
     route: () => `/documents`,
     title: ["title", "name", "file_name", "template_name"],
@@ -142,7 +140,7 @@ export const SEARCH_CONFIG: Record<string, EntityConfig> = {
 /** All entity types the projection knows how to build. */
 export const SEARCHABLE_ENTITY_TYPES = Object.keys(SEARCH_CONFIG);
 
-function pick(row: Row, keys: string[] | undefined): string | null {
+export function pick(row: Row, keys: string[] | undefined): string | null {
   if (!keys) return null;
   for (const k of keys) {
     const v = row[k];
@@ -152,7 +150,7 @@ function pick(row: Row, keys: string[] | undefined): string | null {
   return null;
 }
 
-function pickAll(row: Row, keys: string[] | undefined): string[] {
+export function pickAll(row: Row, keys: string[] | undefined): string[] {
   if (!keys) return [];
   const out: string[] = [];
   for (const k of keys) {
