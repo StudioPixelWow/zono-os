@@ -67,6 +67,48 @@ check("conflict deterministic", JSON.stringify(resolveMemoryConflict(explicitExi
 check("missing org → 0", classifyMemory({ ...base, organization_id: "", payload: { budget: 1 } }).length === 0);
 check("missing event id → 0", classifyMemory({ ...base, id: "", payload: { budget: 1 } }).length === 0);
 
+// ── Batch 5.6D · Canonical Journey → AI memory ───────────────────────────────
+const jMem = (over: Partial<DomainEventLike> = {}): DomainEventLike => ({
+  ...base, event_type: "journey.completed", entity_type: "journey", entity_id: "J1",
+  payload: { journeyType: "property", subjectType: "property", subjectId: "P1", fromStage: "under_contract", toStage: "sold", reason: "journey_closed_won" },
+  ...over,
+});
+const jDone = classifyMemory(jMem());
+check("journey.completed → exactly 1 memory", jDone.length === 1);
+check("journey.completed → outcome memoryType", jDone[0]?.memoryType === "outcome");
+check("journey outcome dimension = journey_outcome", jDone[0]?.normalizedFactKey === "journey_outcome");
+check("journey memory is SUBJECT-scoped (not journey id)", jDone[0]?.scope === "entity" && jDone[0]?.entityType === "property" && jDone[0]?.entityId === "P1");
+check("journey memory fact is concise + canonical stage label", jDone[0]?.fact === "המסע הושלם בשלב נמכר");
+check("journey memory provenance = derived", jDone[0]?.provenance === "derived");
+check("journey memory sensitivity = internal", jDone[0]?.sensitivity === "internal");
+check("journey memory refs include journey + subject", (() => {
+  const r = jDone[0]?.sourceEntityRefs ?? [];
+  return r.some(x => x.type === "journey" && x.id === "J1") && r.some(x => x.type === "property" && x.id === "P1");
+})());
+// Deliberate omissions — these MUST stay unremembered (no second lifecycle truth).
+check("journey.stage_changed → 0 memories (deliberate)", classifyMemory(jMem({ event_type: "journey.stage_changed", payload: { journeyType: "property", subjectType: "property", subjectId: "P1", toStage: "marketing" } })).length === 0);
+check("journey.created → 0 memories (deliberate)", classifyMemory(jMem({ event_type: "journey.created", payload: { journeyType: "property", subjectType: "property", subjectId: "P1", toStage: "draft" } })).length === 0);
+// Blocked → risk (pure QA only; no live emitter exists today).
+const jBlocked = classifyMemory(jMem({ event_type: "journey.blocked", payload: { journeyType: "property", subjectType: "property", subjectId: "P1", toStage: "marketing" } }));
+check("journey.blocked → 1 risk memory", jBlocked.length === 1 && jBlocked[0].memoryType === "risk");
+check("journey blocked dimension = journey_blocked", jBlocked[0]?.normalizedFactKey === "journey_blocked");
+check("journey blocked fact concise", jBlocked[0]?.fact === "המסע נחסם בשלב שיווק");
+// Evidence guards.
+check("journey with missing subject → 0 (honest skip)", classifyMemory(jMem({ payload: { journeyType: "property", toStage: "sold" } })).length === 0);
+check("journey with unsupported type → 0", classifyMemory(jMem({ payload: { journeyType: "widget", subjectType: "widget", subjectId: "W1", toStage: "sold" } })).length === 0);
+check("journey memory never carries raw reason/evidence text", !JSON.stringify(jDone[0]).includes("journey_closed_won"));
+// Identity: journey outcome must NOT collide with deal.won / property.sold outcome.
+const dealWon = classifyMemory({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1", payload: {} });
+check("deal.won outcome uses a different dimension than journey_outcome", dealWon[0]?.normalizedFactKey === "outcome" && jDone[0]?.normalizedFactKey === "journey_outcome");
+check("journey outcome identity ≠ deal outcome identity", memoryIdentityKey("ORG1", jDone[0]) !== memoryIdentityKey("ORG1", dealWon[0]));
+check("journey outcome identity ≠ property.sold-style outcome identity on same subject", (() => {
+  const propOutcome: MemoryOpIntent = { ...jDone[0], memoryType: "outcome", normalizedFactKey: "outcome" };
+  return memoryIdentityKey("ORG1", jDone[0]) !== memoryIdentityKey("ORG1", propOutcome);
+})());
+check("journey outcome identity is stable across replay (idempotent)", memoryIdentityKey("ORG1", classifyMemory(jMem())[0]) === memoryIdentityKey("ORG1", classifyMemory(jMem())[0]));
+check("journey outcome identity is org-scoped (cross-org differs)", memoryIdentityKey("ORG1", jDone[0]) !== memoryIdentityKey("ORG9", jDone[0]));
+check("journey memory deterministic", JSON.stringify(classifyMemory(jMem())) === JSON.stringify(classifyMemory(jMem())));
+
 const _typecheck: MemoryOpIntent = budgetIntent; void _typecheck;
 
 console.log(`\nCanonical AI Memory (salience + identity + conflict) QA — ${pass} passed, ${fail} failed`);

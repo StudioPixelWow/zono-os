@@ -8,6 +8,7 @@
 // ============================================================================
 import type { DomainEventLike } from "@/lib/kernel/subscriber";
 import type { EntityRef, MemoryOpIntent, MemoryType, Provenance, Sensitivity } from "./types";
+import { isJourneyType, stageLabel, type JourneyType } from "@/lib/journey-canonical";
 
 function str(v: unknown): string | null { return typeof v === "string" && v.trim() ? v.trim() : null; }
 function numOrStr(v: unknown): string | null {
@@ -128,6 +129,43 @@ export function classifyMemory(evt: DomainEventLike): MemoryOpIntent[] {
     case "organization.updated": {
       const rule = pick(p, "businessRule", "business_rule", "policy", "branding", "brand");
       if (rule) org("business_rule", "org_rule", "כלל עסקי ארגוני", `${rule}`, "explicit", "internal");
+      break;
+    }
+    // ── Batch 5.6D — Canonical Journey → durable AI memory ────────────────────
+    // ONLY terminal outcomes (journey.completed) and blocks (journey.blocked)
+    // are remembered. journey.created / journey.stage_changed are DELIBERATELY
+    // NOT remembered: the current stage is transient state whose single source
+    // of truth is `journeys` + the shared Journey context layer — persisting
+    // every stage change would create a second, staleable lifecycle truth.
+    // Subject-scoped (the fact is about the property/buyer/…), never scoped to
+    // the journey id. Derived provenance (canonical spine, not user-stated).
+    case "journey.completed":
+    case "journey.blocked": {
+      const jtRaw = str(p.journeyType) ?? str(p.subjectType);
+      const subjectType = str(p.subjectType);
+      const subjectId = str(p.subjectId);
+      if (!jtRaw || !isJourneyType(jtRaw) || !subjectType || !subjectId) break; // missing subject → skip honestly
+      const jt = jtRaw as JourneyType;
+      const toStage = str(p.toStage);
+      const stageLbl = toStage ? stageLabel(jt, toStage) : null;
+      const blocked = evt.event_type === "journey.blocked";
+      // Source refs: the journey + the subject (evidence, never fabricated).
+      const jRefs: EntityRef[] = [{ type: "journey", id: evt.entity_id }, { type: subjectType, id: subjectId }];
+      out.push({
+        scope: "entity",
+        entityType: subjectType,          // the SUBJECT, not the journey id
+        entityId: subjectId,
+        userId: null,
+        memoryType: blocked ? "risk" : "outcome",
+        title: blocked ? "מסע נחסם" : "מסע הושלם",
+        // Concise + deterministic. No raw notes / transition evidence / payloads.
+        fact: `${blocked ? "המסע נחסם" : "המסע הושלם"}${stageLbl ? ` בשלב ${stageLbl}` : ""}`,
+        normalizedFactKey: blocked ? "journey_blocked" : "journey_outcome",
+        confidence: CONF.derived,
+        sensitivity: "internal",
+        provenance: "derived",
+        sourceEntityRefs: jRefs,
+      });
       break;
     }
     case "facebook.connected":
