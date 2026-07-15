@@ -11,6 +11,14 @@
 // never cross-org (org comes from the event), never from private/inferred data.
 // ============================================================================
 import type { DomainEventLike } from "./subscriber";
+import { isJourneyType, stageDef, stageLabel, statusForKind, type JourneyType } from "@/lib/journey-canonical";
+import { JOURNEY_TYPE_LABEL } from "@/lib/search-projection/journey-document";
+
+/** Lifecycle-moving journey events that maintain the canonical HAS_JOURNEY edge. */
+const JOURNEY_GRAPH_EVENTS = new Set<string>([
+  "journey.created", "journey.stage_changed", "journey.completed",
+  "journey.blocked", "journey.paused", "journey.resumed", "journey.reopened",
+]);
 
 /** One graph operation: upsert (create/refresh) or retire (inactivate) an edge. */
 export interface GraphEdgeUpsert {
@@ -134,8 +142,48 @@ export function projectEventToGraphEdges(evt: DomainEventLike): GraphEdgeUpsert[
       if (agentId) upsert("agent", agentId, evt.entity_type, evt.entity_id, "assigned_to");
       break;
     }
-    default:
+    // ── Batch 5.6C — Canonical Journey as a first-class graph node ────────────
+    // subject → has_journey → journey (entity_type='journey', id=journeys.id).
+    // Evidence-only: subject ids come from the journey event payload. Idempotent
+    // on the 6-part key — a stage change refreshes the SAME edge (never a new
+    // edge per stage). journey.completed preserves the edge and marks it
+    // terminal/inactive (history kept). Missing subject → skipped honestly.
+    default: {
+      if (!JOURNEY_GRAPH_EVENTS.has(evt.event_type)) break;
+      const jtRaw = str(p.journeyType) ?? str(p.subjectType);
+      const subjectType = str(p.subjectType);
+      const subjectId = str(p.subjectId);
+      if (!jtRaw || !isJourneyType(jtRaw) || !subjectType || !subjectId) break; // missing subject → skip
+      const jt = jtRaw as JourneyType;
+      const toStage = str(p.toStage);
+      const def = toStage ? stageDef(jt, toStage) : undefined;
+      const stageLbl = toStage ? stageLabel(jt, toStage) : null;
+      const terminal = def ? def.terminal : evt.event_type === "journey.completed";
+      const status = def ? statusForKind(def.kind) : (evt.event_type === "journey.completed" ? "won" : "active");
+      const blocked = evt.event_type === "journey.blocked";
+      // target_name feeds the EXISTING graph node-label reader (nameFrom) so the
+      // journey node renders "מסע נכס · שיווק" — never a raw UUID. The backfill
+      // enriches this to include the subject title. Reuses 5.6B label maps.
+      const jmeta: Record<string, unknown> = {
+        sourceEventId: evt.id,
+        journeyType: jt,
+        subjectType,
+        currentStage: toStage ?? null,
+        canonicalStageLabel: stageLbl,
+        status,
+        terminal,
+        blocked,
+        stageEnteredAt: evt.occurred_at ?? null,
+        target_name: `${JOURNEY_TYPE_LABEL[jt]}${stageLbl ? ` · ${stageLbl}` : ""}`,
+      };
+      ops.push({ op: "upsert", org_id: org, source_entity_type: subjectType, source_entity_id: subjectId, target_entity_type: "journey", target_entity_id: evt.entity_id, relationship_type: "has_journey", metadata: jmeta });
+      if (evt.event_type === "journey.completed") {
+        // Preserve the edge as historical/terminal — retire AFTER the metadata
+        // upsert (status→inactive, valid_to=now; never hard-deleted).
+        ops.push({ op: "retire", org_id: org, source_entity_type: subjectType, source_entity_id: subjectId, target_entity_type: "journey", target_entity_id: evt.entity_id, relationship_type: "has_journey", metadata: jmeta });
+      }
       break;
+    }
   }
   return ops;
 }

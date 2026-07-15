@@ -28,7 +28,7 @@ export const RELATION_HE: Record<string, string> = {
   represents: "מייצג", referred: "הפנה", introduced: "הכיר", collaborated: "שיתף פעולה",
   competed_with: "התחרה עם", sold: "מכר", bought: "קנה", assigned_to: "משויך ל",
   created: "יצר", completed: "השלים", supports: "תומך", conflicts_with: "בסתירה עם",
-  depends_on: "תלוי ב", related_to: "קשור ל",
+  depends_on: "תלוי ב", related_to: "קשור ל", has_journey: "מסע",
 };
 
 export type FreshnessLevel = "fresh" | "recent" | "stale" | "expired" | "unknown";

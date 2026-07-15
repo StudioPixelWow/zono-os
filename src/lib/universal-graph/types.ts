@@ -32,7 +32,7 @@ export const KIND_HE: Record<string, string> = {
   whatsapp: "וואטסאפ", facebook_comment: "תגובת פייסבוק", campaign: "קמפיין", creative: "קריאייטיב",
   meeting: "פגישה", mission: "משימה", workflow: "תהליך", deal: "עסקה", document: "מסמך",
   website: "אתר", landing: "דף נחיתה", territory: "טריטוריה", valuation: "הערכת שווי", market: "שוק",
-  listing: "ליסטינג", decision: "החלטה",
+  listing: "ליסטינג", decision: "החלטה", journey: "מסע",
 };
 
 /** Map raw persisted entity_type strings → a canonical UniversalKind. Permissive. */
@@ -65,6 +65,7 @@ export function entityHref(kind: string, id: string): string {
     conversation: () => `/whatsapp/inbox`, facebook_comment: () => `/facebook`, workflow: () => `/workflow-builder`,
     mission: () => `/today`, territory: () => `/territory`, neighborhood: () => `/territory`, street: () => `/territory`,
     website: () => `/office-website`, landing: () => `/office-website`, meeting: () => `/calendar`, broker: () => `/team`,
+    journey: () => `/journeys`,
   };
   const fn = routes[k];
   return fn ? fn(id) : "#";

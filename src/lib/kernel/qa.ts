@@ -147,6 +147,29 @@ check("edges carry event org (no cross-org)", g2.every(e => e.org_id === "ORG1")
 check("snake_case payload works", projectEventToGraphEdges({ ...base, event_type: "seller.linked_to_property", entity_type: "seller", entity_id: "S1", payload: { property_id: "P9" } })[0]?.target_entity_id === "P9");
 check("graph deterministic", JSON.stringify(projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })) === JSON.stringify(projectEventToGraphEdges({ ...base, event_type: "deal.created", entity_type: "deal", entity_id: "D1", payload: { buyerId: "B1" } })));
 
+// ── Batch 5.6C · Journey → HAS_JOURNEY graph edge ───────────────────────────
+const jGraphEvt = (over: Partial<DomainEventLike> = {}) => ({
+  ...base, event_type: "journey.stage_changed", entity_type: "journey", entity_id: "J1",
+  payload: { journeyType: "property", subjectType: "property", subjectId: "P1", toStage: "marketing" }, ...over,
+});
+const gjCreate = projectEventToGraphEdges(jGraphEvt({ event_type: "journey.created" }));
+check("journey.created → one HAS_JOURNEY edge", gjCreate.length === 1 && gjCreate[0].relationship_type === "has_journey");
+check("HAS_JOURNEY source = subject", gjCreate[0].source_entity_type === "property" && gjCreate[0].source_entity_id === "P1");
+check("HAS_JOURNEY target = journey node (journeys.id)", gjCreate[0].target_entity_type === "journey" && gjCreate[0].target_entity_id === "J1");
+check("HAS_JOURNEY is an upsert", gjCreate[0].op === "upsert");
+check("edge metadata carries journeyType/currentStage/label", (() => { const m = gjCreate[0].metadata as Record<string, unknown>; return m.journeyType === "property" && m.currentStage === "marketing" && m.canonicalStageLabel === "שיווק"; })());
+check("edge target_name is readable (no raw UUID)", (() => { const m = gjCreate[0].metadata as Record<string, unknown>; return m.target_name === "מסע נכס · שיווק"; })());
+check("stage_changed → same single upsert edge (no dup per stage)", (() => { const g = projectEventToGraphEdges(jGraphEvt({ payload: { journeyType: "property", subjectType: "property", subjectId: "P1", toStage: "viewings" } })); return g.length === 1 && g[0].op === "upsert" && (g[0].metadata as Record<string, unknown>).canonicalStageLabel === "צפיות"; })());
+check("journey.completed → upsert(terminal) + retire (preserved/inactive)", (() => { const g = projectEventToGraphEdges(jGraphEvt({ event_type: "journey.completed", payload: { journeyType: "property", subjectType: "property", subjectId: "P1", toStage: "sold" } })); return g.length === 2 && g[0].op === "upsert" && g[1].op === "retire" && (g[0].metadata as Record<string, unknown>).terminal === true && (g[0].metadata as Record<string, unknown>).status === "won"; })());
+check("journey.blocked → upsert with blocked metadata (edge stays)", (() => { const g = projectEventToGraphEdges(jGraphEvt({ event_type: "journey.blocked" })); return g.length === 1 && g[0].op === "upsert" && (g[0].metadata as Record<string, unknown>).blocked === true; })());
+check("journey.reopened → upsert (reactivates same edge)", (() => { const g = projectEventToGraphEdges(jGraphEvt({ event_type: "journey.reopened" })); return g.length === 1 && g[0].op === "upsert"; })());
+check("journey with missing subject → 0 edges (skipped honestly)", projectEventToGraphEdges(jGraphEvt({ payload: { journeyType: "property", toStage: "marketing" } })).length === 0);
+check("journey with unsupported type → 0 edges", projectEventToGraphEdges(jGraphEvt({ payload: { journeyType: "widget", subjectType: "widget", subjectId: "W1" } })).length === 0);
+check("non-lifecycle journey.* → 0 edges (no churn)", projectEventToGraphEdges(jGraphEvt({ event_type: "journey.score_updated" })).length === 0);
+check("journey edge carries event org (no cross-org)", gjCreate[0].org_id === "ORG1");
+check("buyer journey → has_journey (buyer subject)", (() => { const g = projectEventToGraphEdges(jGraphEvt({ payload: { journeyType: "buyer", subjectType: "buyer", subjectId: "B1", toStage: "new" } })); return g[0]?.source_entity_type === "buyer" && (g[0].metadata as Record<string, unknown>).target_name === "מסע קונה · קונה חדש"; })());
+check("journey graph deterministic", JSON.stringify(projectEventToGraphEdges(jGraphEvt())) === JSON.stringify(projectEventToGraphEdges(jGraphEvt())));
+
 // ── Stage 4B · memory subscriber (pure) ─────────────────────────────────────
 import { projectEventToMemory } from "./memory-subscriber";
 

@@ -22,7 +22,7 @@ import { isJourneyType, stageLabel, type JourneyType } from "@/lib/journey-canon
 type Row = Record<string, unknown>;
 
 /** Journey-type → Hebrew TITLE prefix ("מסע ה…" — used in the result title). */
-const JOURNEY_TITLE_PREFIX: Record<JourneyType, string> = {
+export const JOURNEY_TITLE_PREFIX: Record<JourneyType, string> = {
   property: "מסע הנכס",
   buyer: "מסע הקונה",
   seller: "מסע המוכר",
@@ -31,7 +31,7 @@ const JOURNEY_TITLE_PREFIX: Record<JourneyType, string> = {
 };
 
 /** Journey-type → Hebrew CATEGORY label ("מסע …" — used in the subtitle/haystack). */
-const JOURNEY_TYPE_LABEL: Record<JourneyType, string> = {
+export const JOURNEY_TYPE_LABEL: Record<JourneyType, string> = {
   property: "מסע נכס",
   buyer: "מסע קונה",
   seller: "מסע מוכר",
