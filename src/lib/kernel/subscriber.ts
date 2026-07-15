@@ -153,6 +153,60 @@ function readString(src: Record<string, unknown> | null | undefined, key: string
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
+// ── BATCH 5.6A — THE JOURNEY TIMELINE FACT ──────────────────────────────────
+//
+// THE DEFECT THIS FIXES (found by the 5.6 inventory, confirmed on live data):
+//
+// journey-applier emits `journey.*` with entityType "journey" and entityId = the
+// JOURNEY's id. The projector anchored the row on that id, so the lifecycle fact
+// landed on a timeline nobody reads — it did NOT appear on the buyer's or the
+// property's timeline — while the raw `buyer.stage_changed` command produced a
+// SECOND row for the very same business fact. One advance, two rows, and the
+// better one invisible. Live proof: for one buyer advance, activity_events held
+//   09:13:39  buyer.stage_changed    → entity_type=buyer
+//   09:13:42  journey.stage_changed  → entity_type=journey   ← nobody sees this
+//
+// THE RULE (deterministic, and it loses NOTHING):
+//   1. A journey fact is anchored on its SUBJECT (the buyer / property / …), read
+//      from the payload the applier already writes. The journey itself becomes the
+//      related link, so the row still points at the spine.
+//   2. `journey.stage_changed` is SUPPRESSED when — and only when — the event that
+//      caused it was itself a `*.stage_changed` COMMAND. That command already wrote
+//      this exact fact on this exact timeline; the journey row would be its echo.
+//      We know the cause because the applier records `metadata.sourceEventType`.
+//   3. Every other journey fact is kept and promoted: `journey.created`,
+//      `journey.completed`, and a stage change driven by real evidence
+//      (property.published, meeting.completed, deal.won …) is NOT a duplicate of
+//      the event that caused it — "the listing was published" and "the journey moved
+//      to active" are two different sentences, and a broker wants both.
+//
+// We suppress by PROVENANCE, not by string-matching two rows after the fact. A
+// dedupe that guesses is how duplicates get hidden instead of fixed.
+
+const JOURNEY_EVENT_PREFIX = "journey.";
+
+/** True for the applier's own output. */
+function isJourneyEventType(t: string): boolean {
+  return t.startsWith(JOURNEY_EVENT_PREFIX);
+}
+
+/** The entity a journey belongs to — the timeline a broker actually opens. */
+export function journeySubject(evt: DomainEventLike): EntityRef | null {
+  const type = readString(evt.payload, "subjectType");
+  const id = readString(evt.payload, "subjectId");
+  return type && id ? { type, id } : null;
+}
+
+/**
+ * Is this journey transition merely the echo of a stage COMMAND that already
+ * produced its own timeline row on the same entity?
+ */
+export function isEchoOfStageCommand(evt: DomainEventLike): boolean {
+  if (evt.event_type !== "journey.stage_changed") return false;
+  const src = readString(evt.metadata, "sourceEventType");
+  return !!src && src.endsWith(".stage_changed") && !isJourneyEventType(src);
+}
+
 /** All related entities named in the event's payload/metadata (subject excluded). */
 export function relatedEntities(evt: DomainEventLike): EntityRef[] {
   const out: EntityRef[] = [];
@@ -203,19 +257,34 @@ function descriptionFor(evt: DomainEventLike): string | null {
 export function projectEventToTimeline(evt: DomainEventLike): TimelineProjection[] {
   if (!evt.id || !evt.event_type || !evt.entity_type || !evt.entity_id || !evt.organization_id) return [];
   if (SKIP.has(evt.event_type)) return [];
+
+  // 5.6A — a journey transition that merely echoes a stage COMMAND is not a second
+  // fact. The command's own row already said it, on this same timeline.
+  if (isEchoOfStageCommand(evt)) return [];
+
   const title = TITLES[evt.event_type] ?? genericTitle(evt.event_type);
   if (!title) return [];
 
   const description = descriptionFor(evt);
   const related = relatedEntities(evt);
-  const subject: EntityRef = { type: evt.entity_type, id: evt.entity_id };
-  const timelines: EntityRef[] = [subject, ...related];
+
+  // 5.6A — anchor a journey fact on its SUBJECT, and LINK it back to the journey.
+  // The journey is context, not a timeline of its own: fanning out to the journey
+  // entity is what produced the row nobody could see. Without a subject in the
+  // payload we keep the old anchor rather than drop the fact — an ugly row beats a
+  // lost one.
+  const jSubject = isJourneyEventType(evt.event_type) ? journeySubject(evt) : null;
+  const journeyRef: EntityRef | null = jSubject ? { type: "journey", id: evt.entity_id } : null;
+  const subject: EntityRef = jSubject ?? { type: evt.entity_type, id: evt.entity_id };
+
+  const timelines: EntityRef[] = jSubject ? [subject] : [subject, ...related];
 
   return timelines.map((t) => {
     // Context link: on the subject's own row, point to the primary related
     // entity; on a related entity's row, point back to the subject.
     const link: EntityRef | null =
-      t.type === subject.type && t.id === subject.id ? (related[0] ?? null) : subject;
+      journeyRef ??
+      (t.type === subject.type && t.id === subject.id ? (related[0] ?? null) : subject);
     return {
       org_id: evt.organization_id,
       event_id: evt.id,

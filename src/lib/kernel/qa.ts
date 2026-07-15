@@ -173,6 +173,64 @@ check("journey: isJourneyEvent guard", isJourneyEvent("journey.created") && !isJ
 check("journey: no stage evidence → honest skip", jSkip({ ...base, event_type: "buyer.updated", entity_type: "buyer", entity_id: "B1", payload: {} }) === "no_stage_evidence");
 check("journey: unsupported event → honest skip", jSkip({ ...base, event_type: "property.price_changed", entity_type: "property" }) === "unsupported_event");
 
+// ── Batch 5.6A · THE JOURNEY TIMELINE FACT (anchor + echo suppression) ──────
+// Every check below is a rule the live database broke before 5.6A: the lifecycle
+// fact was anchored on the journey (invisible to brokers) AND duplicated by the
+// stage command that caused it.
+{
+  const jEvt = (over: Partial<DomainEventLike> = {}): DomainEventLike => ({
+    ...base,
+    event_type: "journey.stage_changed",
+    entity_type: "journey",
+    entity_id: "J1",
+    payload: { journeyType: "buyer", subjectType: "buyer", subjectId: "B1", fromStage: "new", toStage: "qualification", reason: "x" },
+    metadata: { sourceEventType: "property.published" },
+    ...over,
+  });
+
+  // 1. The fact lands on the SUBJECT's timeline — the one a broker actually opens.
+  const rows = projectEventToTimeline(jEvt());
+  check("5.6A: journey fact is anchored on the SUBJECT, not the journey",
+    rows.length === 1 && rows[0].entity_type === "buyer" && rows[0].entity_id === "B1");
+
+  // 2. …and still points at the spine it came from.
+  check("5.6A: the row links back to the journey",
+    rows[0]?.related_entity_type === "journey" && rows[0]?.related_entity_id === "J1");
+
+  // 3. No journey-anchored row is written any more (that was the invisible one).
+  check("5.6A: no journey-anchored timeline row",
+    !projectEventToTimeline(jEvt()).some((r) => r.entity_type === "journey"));
+
+  // 4. THE DUPLICATE: a transition caused by a stage COMMAND is suppressed — the
+  //    command already wrote that exact fact on that exact timeline.
+  check("5.6A: echo of buyer.stage_changed is suppressed",
+    projectEventToTimeline(jEvt({ metadata: { sourceEventType: "buyer.stage_changed" } })).length === 0);
+  check("5.6A: echo of property.stage_changed is suppressed",
+    projectEventToTimeline(jEvt({ metadata: { sourceEventType: "property.stage_changed" } })).length === 0);
+
+  // 5. …but a transition driven by EVIDENCE is a real, separate fact and is kept.
+  //    "the listing was published" and "the journey moved to active" are two sentences.
+  check("5.6A: evidence-driven transition (property.published) is KEPT",
+    projectEventToTimeline(jEvt({ metadata: { sourceEventType: "property.published" } })).length === 1);
+  check("5.6A: meeting-driven transition is KEPT",
+    projectEventToTimeline(jEvt({ metadata: { sourceEventType: "meeting.completed" } })).length === 1);
+
+  // 6. journey.created is never an echo — a journey opening has no command twin.
+  check("5.6A: journey.created is always kept",
+    projectEventToTimeline(jEvt({ event_type: "journey.created", metadata: { sourceEventType: "buyer.stage_changed" } })).length === 1);
+
+  // 7. NEVER LOSE A FACT: no subject in the payload ⇒ keep the old anchor rather
+  //    than drop the row. An ugly row beats a lost one.
+  const noSubject = projectEventToTimeline(jEvt({ payload: { fromStage: "new", toStage: "qualification" } }));
+  check("5.6A: missing subject ⇒ fact kept on the journey anchor (never dropped)",
+    noSubject.length === 1 && noSubject[0].entity_type === "journey");
+
+  // 8. Non-journey events are untouched by all of this.
+  const plain = projectEventToTimeline({ ...base, event_type: "buyer.stage_changed", entity_type: "buyer", entity_id: "B1", payload: { stage: "qualification" } });
+  check("5.6A: entity events keep their own anchor and are not suppressed",
+    plain.length >= 1 && plain[0].entity_type === "buyer");
+}
+
 // ── Stage 2 · Legacy bridge (pure) — historical milestones → canonical timeline ─
 import { bridgeLegacyActivity, bridgeJourneyEvent, bridgeDocumentAudit, syntheticEventId, type LegacyActivityRow, type JourneyEventRow, type DocumentAuditRow } from "./legacy-bridge";
 
