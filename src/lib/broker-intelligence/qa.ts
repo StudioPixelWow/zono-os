@@ -390,5 +390,97 @@ check("explain notes positive learning", exMerged.whyBeforeOthers.includes("נו
 // deterministic
 check("explain deterministic", JSON.stringify(explainRecommendation(exQueue[0], { rank: 1, total: 2 })) === JSON.stringify(explainRecommendation(exQueue[0], { rank: 1, total: 2 })));
 
-console.log(`\nBroker Intelligence · Areas1-6 + Queue + Agenda + Lifecycle + Learning + Explain QA — ${pass} passed, ${fail} failed`);
+// ── Batch 5.6E · Area 5 · Canonical Journey → shared queue ──────────────────
+import { evaluateJourney, rankJourneys, scoreJourney, STALL_DAYS, SEVERE_STALL_DAYS, type JourneySignals } from "./journey";
+
+const js = (over: Partial<JourneySignals> = {}): JourneySignals => ({
+  journeyId: "J1", journeyType: "property", subjectType: "property", subjectId: "P1",
+  subjectTitle: "דירת 4 חדרים בכרמל", href: "/properties/P1",
+  currentStage: "marketing", status: "active",
+  daysInStage: 30, verifiedTransitions: 3, daysSinceLastTransition: 30,
+  ...over,
+});
+
+// The headline rule: a backfill-seeded journey proves NOTHING about dwell time.
+const unproven = evaluateJourney(js({ daysInStage: null, verifiedTransitions: 0, daysSinceLastTransition: null }));
+check("5.6E unproven stage entry → insufficientEvidence (honest skip)", unproven.rec.insufficientEvidence === true);
+check("5.6E unproven stage entry → skipReason stage_entry_unverified", unproven.skipReason === "stage_entry_unverified");
+check("5.6E unproven stage entry emits ZERO evidence (no fabricated dwell)", unproven.rec.evidence.length === 0);
+check("5.6E unproven skip never claims a day count", !/\d+\s*ימים/.test(unproven.rec.why));
+
+// A proven stall is a real, actionable recommendation.
+const stalled = evaluateJourney(js({ daysInStage: SEVERE_STALL_DAYS, daysSinceLastTransition: SEVERE_STALL_DAYS }));
+check("5.6E proven stall → actionable", stalled.rec.insufficientEvidence === false && stalled.skipReason === undefined);
+check("5.6E proven stall → area journey", stalled.rec.area === "journey");
+check("5.6E stall is SUBJECT-scoped, not journey-scoped", stalled.rec.entityType === "property" && stalled.rec.entityId === "P1");
+check("5.6E severe stall → critical urgency", stalled.rec.urgency === "critical");
+check("5.6E evidence names the journeys source", stalled.rec.evidence.some((e) => e.source === "journeys"));
+check("5.6E every evidence line is journeys/timeline (never 'AI')", stalled.rec.evidence.every((e) => e.source === "journeys" || e.source === "timeline"));
+check("5.6E evidence cites canonical stage label", stalled.rec.evidence[0].label.includes("שיווק"));
+check("5.6E evidence cites canonical position out of machine size", stalled.rec.evidence.some((e) => e.label.includes("שלב 5 מתוך 13")));
+check("5.6E stall carries subject href", stalled.rec.href === "/properties/P1");
+check("5.6E meets MIN_EVIDENCE", stalled.rec.evidence.length >= 2);
+
+// Boundary: exactly at the threshold recommends; one day below is silent.
+check("5.6E at STALL_DAYS → actionable", scoreJourney(js({ daysInStage: STALL_DAYS })).insufficientEvidence === false);
+const moving = evaluateJourney(js({ daysInStage: STALL_DAYS - 1 }));
+check("5.6E below STALL_DAYS → skip journey_moving", moving.rec.insufficientEvidence === true && moving.skipReason === "journey_moving");
+check("5.6E stall severity scales with dwell", (() => {
+  const a = scoreJourney(js({ daysInStage: STALL_DAYS }));
+  const b = scoreJourney(js({ daysInStage: SEVERE_STALL_DAYS }));
+  return ["low", "medium"].includes(a.urgency) && b.urgency === "critical";
+})());
+
+// A finished / paused journey has nothing to advance.
+const done = evaluateJourney(js({ currentStage: "sold" }));
+check("5.6E terminal stage → skip terminal_stage", done.rec.insufficientEvidence === true && done.skipReason === "terminal_stage");
+check("5.6E non-active status → skip journey_not_active", evaluateJourney(js({ status: "paused" })).skipReason === "journey_not_active");
+check("5.6E unknown stage → skip unknown_stage", evaluateJourney(js({ currentStage: "not_a_stage" })).skipReason === "unknown_stage");
+
+// actionClass MUST be structural — a subject's own name must never reclassify it.
+check("5.6E journey actionClass is structural, not textual", actionClass(stalled.rec) === "journey");
+check("5.6E subject named after a stage cannot hijack the class", (() => {
+  const trap = scoreJourney(js({ subjectTitle: "פרויקט שיווק — נכס יוקרה", currentStage: "marketing" }));
+  return actionClass(trap) === "journey";
+})());
+check("5.6E structural guard is scoped to journey area only", actionClass(rec({ area: "seller", title: "רענן שיווק לנכס", suggestedAction: "פרסם קמפיין" })) === "marketing");
+check("5.6E journey recKey is stable + subject-scoped", recKey(stalled.rec) === "property:P1:journey");
+
+// The shared queue owns ranking/dedup — the engine invents no second queue.
+const jq = bpq([
+  stalled.rec,
+  unproven.rec,
+  rec({ id: "s1", area: "seller", entityType: "property", entityId: "P1", title: "התקשר לבעלים", suggestedAction: "צור קשר", confidence: 70, evidence: [{ label: "x", source: "crm" }] }),
+]);
+check("5.6E unbacked journey rec never reaches the queue", !jq.some((r) => r.insufficientEvidence));
+check("5.6E proven journey rec DOES reach the shared queue", jq.some((r) => r.area === "journey"));
+check("5.6E journey does NOT merge into an unrelated action on the same entity", jq.length === 2);
+check("5.6E queue exposes journeys as a contributing source", jq.find((r) => r.area === "journey")!.contributingSources.includes("journeys"));
+
+// Two engines agreeing on the same journey action DO merge (designed behavior).
+const jMerged = bpq([
+  stalled.rec,
+  { ...stalled.rec, id: "other", confidence: 95, evidence: [{ label: "ראיה נוספת", source: "timeline" as const }] },
+]);
+check("5.6E same journey action from 2 engines merges into one", jMerged.length === 1 && jMerged[0].mergedCount === 2);
+
+// The existing explain / agenda machinery must accept the new area unchanged.
+const jEx = explainRecommendation(bpq([stalled.rec])[0], { rank: 1, total: 1 });
+check("5.6E explain if-ignored is journey-specific", jEx.ifIgnored.includes("תקוע"));
+check("5.6E explain why-this cites the strongest journey evidence", jEx.whyThis.includes("ימים"));
+check("5.6E agenda schedules a journey slot with its own duration", (() => {
+  const ag = buildAgenda(bpq([stalled.rec]));
+  return ag.slots.length === 1 && ag.slots[0].kind === "journey" && ag.slots[0].durationMin === 25;
+})());
+
+// Determinism + ordering.
+check("5.6E scoreJourney deterministic", JSON.stringify(scoreJourney(js())) === JSON.stringify(scoreJourney(js())));
+check("5.6E rankJourneys puts actionable before skipped", (() => {
+  const r = rankJourneys([js({ journeyId: "A", daysInStage: null }), js({ journeyId: "B", daysInStage: SEVERE_STALL_DAYS })]);
+  return r[0].insufficientEvidence === false && r[1].insufficientEvidence === true;
+})());
+check("5.6E rankJourneys deterministic", JSON.stringify(rankJourneys([js()])) === JSON.stringify(rankJourneys([js()])));
+check("5.6E all-unproven input → honest ZERO actionable", rankJourneys([js({ daysInStage: null }), js({ journeyId: "J2", daysInStage: null })]).filter((r) => !r.insufficientEvidence).length === 0);
+
+console.log(`\nBroker Intelligence · Areas1-6 + Journey + Queue + Agenda + Lifecycle + Learning + Explain QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

@@ -49,6 +49,7 @@ const IGNORE_BY_AREA: Record<IntelligenceArea, string> = {
   deal: "העסקה עלולה להיתקע או להתפרק לפני הסגירה",
   daily: "המשימה תישאר פתוחה ותצטבר עם השאר",
   office: "ההשפעה ברמת המשרד תלך ותגדל אם לא יטופל",
+  journey: "המסע יישאר תקוע — זמן המחזור יתארך והלקוח עלול לנטוש",
 };
 
 /** Build the full explanation for one queued recommendation. Pure. */

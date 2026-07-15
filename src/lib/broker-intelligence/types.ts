@@ -7,7 +7,10 @@
 // says so honestly (insufficientEvidence=true) instead of guessing.
 // ============================================================================
 
-export type IntelligenceArea = "acquisition" | "buyer" | "seller" | "deal" | "daily" | "office";
+export type IntelligenceArea =
+  | "acquisition" | "buyer" | "seller" | "deal" | "daily" | "office"
+  // Batch 5.6E — the canonical Journey spine as a first-class intelligence area.
+  | "journey";
 
 /** How urgent / valuable — drives ranking and surfacing. */
 export type Urgency = "critical" | "high" | "medium" | "low";

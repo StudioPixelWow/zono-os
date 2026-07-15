@@ -59,6 +59,9 @@ const DURATION: Record<string, number> = {
   meeting: 45,
   document: 30,
   wait: 10,
+  // Batch 5.6E — unblocking a stalled canonical journey: review what's holding
+  // the stage, then advance it. Explicit rather than riding DEFAULT_DURATION.
+  journey: 25,
 };
 const DEFAULT_DURATION = 20;
 

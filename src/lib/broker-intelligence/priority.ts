@@ -38,6 +38,14 @@ export function recKey(rec: Recommendation): string {
 
 /** Coarse action class so "call seller today" from two engines dedupes. */
 export function actionClass(rec: Recommendation): string {
+  // Batch 5.6E — a Journey recommendation has ONE canonical action (advance the
+  // spine), so its class is STRUCTURAL, not textual. This guard matters: the
+  // regexes below read the title, which embeds a subject's name and a canonical
+  // stage label — and PROPERTY_MACHINE has stages literally named "שיווק" and
+  // "משא ומתן". Without it, a journey stalled in "שיווק" would silently
+  // classify as `marketing` and merge into an unrelated marketing action, i.e.
+  // the subject's own name could change how it dedupes. Structural wins.
+  if (rec.area === "journey") return "journey";
   const t = `${rec.title} ${rec.suggestedAction}`;
   if (/התקשר|טלפונ|שיחה|שימור/.test(t)) return "call";
   if (/מחיר|תמחור|הערכת שווי/.test(t)) return "price";

@@ -15,6 +15,11 @@ export { scoreSeller, rankSellers } from "./seller";
 export type { SellerSignals } from "./seller";
 export { scoreDeal, rankDeals } from "./deal";
 export type { DealSignals } from "./deal";
+// Batch 5.6E — Area 5 · the canonical Journey spine as an intelligence area.
+// Pure engine only: `getJourneyIntelligence` is server-only and, like the other
+// area services, is deep-imported rather than re-exported through this barrel.
+export { scoreJourney, rankJourneys, evaluateJourney, STALL_DAYS, SEVERE_STALL_DAYS } from "./journey";
+export type { JourneySignals, JourneyEvaluation, JourneySkipReason } from "./journey";
 // Global integration — the ONE shared priority queue every surface consumes.
 export { buildPriorityQueue, actionClass, recKey } from "./priority";
 export type { PrioritizedRecommendation } from "./priority";

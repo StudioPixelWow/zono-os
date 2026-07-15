@@ -13,6 +13,7 @@ import { getAcquisitionIntelligence } from "./acquisition-service";
 import { getBuyerIntelligence } from "./buyer-service";
 import { getSellerIntelligence } from "./seller-service";
 import { getDealIntelligence } from "./deal-service";
+import { getJourneyIntelligence } from "./journey-service";
 import { applyLifecycle, reduceLatestStates, type LifecycleAwareRecommendation } from "./lifecycle";
 import { loadRecommendationEvents } from "./recommendation-events-repository";
 import { applyLearning } from "./learning";
@@ -50,6 +51,8 @@ export async function getBrokerIntelligenceQueue(opts: QueueOptions = {}): Promi
     getBuyerIntelligence(perEngine),
     getSellerIntelligence(perEngine),
     getDealIntelligence(perEngine),
+    // Batch 5.6E — the canonical Journey spine, feeding the SAME shared queue.
+    getJourneyIntelligence(perEngine),
   ]);
 
   let recs: Recommendation[] = [];
