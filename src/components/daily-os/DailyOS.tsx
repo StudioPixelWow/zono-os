@@ -7,7 +7,7 @@
 // ============================================================================
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import type { DailyOS as DData, ActionItem, ExecutiveDaily } from "@/lib/daily-os/types";
+import type { DailyOS as DData, DailyAction, ExecutiveDaily } from "@/lib/daily-os/types";
 import type { ScoredEntity } from "@/lib/broker-workspace/types";
 import { getExecutiveDailyAction, askDailyAction } from "@/lib/daily-os/actions";
 
@@ -21,7 +21,12 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 const priCls: Record<string, string> = { high: "bg-danger-soft text-danger", medium: "bg-warning-soft text-warning", low: "bg-surface text-muted" };
 const priHe: Record<string, string> = { high: "דחוף", medium: "בינוני", low: "רגיל" };
 const scoreCls = (v: number) => (v >= 70 ? "bg-success-soft text-success" : v >= 45 ? "bg-warning-soft text-warning" : "bg-danger-soft text-danger");
-const kindIcon: Record<string, string> = { approve: "✅", reply_whatsapp: "💬", draft: "📝", facebook: "📘", mission: "🎯", acquisition: "🗺️", seller_risk: "⚠️", hot_buyer: "🔥" };
+// Batch 5.6F — keyed by canonical actionClass (structural), not by the retired
+// hand-rolled `kind` taxonomy. Unknown classes fall back safely.
+const kindIcon: Record<string, string> = { call: "📞", send: "📤", price: "💰", marketing: "📣", mortgage: "🏦", meeting: "🤝", document: "📄", wait: "⏳", journey: "🧭" };
+// Canonical urgency → badge. Replaces the 3-level `impRank` guess.
+const urgCls: Record<string, string> = { critical: "bg-danger-soft text-danger", high: "bg-danger-soft text-danger", medium: "bg-warning-soft text-warning", low: "bg-surface text-muted" };
+const urgHe: Record<string, string> = { critical: "קריטי", high: "דחוף", medium: "בינוני", low: "רגיל" };
 
 function Tile({ l, v }: { l: string; v: number | string }) { return <div className="bg-card border-line rounded-2xl border px-2 py-2.5 text-center shadow-[var(--shadow-card)]"><div className="text-brand text-xl font-black">{v}</div><div className="text-muted text-[10px] font-bold">{l}</div></div>; }
 function Empty({ t }: { t: string }) { return <div className="bg-card border-line text-muted rounded-2xl border p-6 text-center text-[13px]">{t}</div>; }
@@ -113,8 +118,11 @@ export function DailyOS({ data }: { data: DData }) {
   );
 }
 
-function ActionRow({ a }: { a: ActionItem }) {
-  return <Link href={a.href} className="bg-card border-line flex items-center gap-3 rounded-2xl border p-3"><span className="text-lg">{kindIcon[a.kind] ?? "•"}</span><div className="min-w-0 flex-1"><div className="text-ink line-clamp-1 text-[14px] font-bold">{a.title}</div><div className="text-muted line-clamp-1 text-[11px]">{a.why}</div></div><span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${priCls[a.priority]}`}>{priHe[a.priority]}</span></Link>;
+function ActionRow({ a }: { a: DailyAction }) {
+  // Batch 5.6F — renders the CANONICAL recommendation: structural actionClass
+  // icon, canonical urgency badge, and the scheduled slot time when the shared
+  // scheduler placed it. `href` is nullable on the canonical contract.
+  return <Link href={a.href ?? "/today"} className="bg-card border-line flex items-center gap-3 rounded-2xl border p-3"><span className="text-lg">{kindIcon[a.actionClass] ?? "•"}</span><div className="min-w-0 flex-1"><div className="text-ink line-clamp-1 text-[14px] font-bold">{a.title}</div><div className="text-muted line-clamp-1 text-[11px]">{a.why}</div></div>{a.startTime && <span className="text-muted shrink-0 text-[10px] font-bold tabular-nums">{a.startTime}</span>}<span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${urgCls[a.urgency]}`}>{urgHe[a.urgency]}</span></Link>;
 }
 function DealSec({ title, items }: { title: string; items: ScoredEntity[] }) {
   if (items.length === 0) return null;

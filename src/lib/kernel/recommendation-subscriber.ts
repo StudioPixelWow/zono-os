@@ -11,7 +11,10 @@
 import type { DomainEventLike } from "./subscriber";
 
 /** The intelligence areas a change can affect (mirrors broker-intelligence areas). */
-export type RecommendationArea = "acquisition" | "buyer" | "seller" | "deal" | "daily" | "office";
+export type RecommendationArea =
+  | "acquisition" | "buyer" | "seller" | "deal" | "daily" | "office"
+  // Batch 5.6E/5.6F — the canonical Journey spine is an intelligence area.
+  | "journey";
 
 export interface RecommendationRefresh {
   /** Which recommendation areas this event may change. */
@@ -50,6 +53,31 @@ const RULES: Record<string, Rule> = {
   "deal.stage_changed":     { areas: ["deal"], daily: true, reason: "שלב עסקה השתנה" },
   "deal.won":               { areas: ["deal", "office"], daily: true, exec: true, reason: "עסקה נסגרה — הזדמנות הכנסה מומשה" },
   "deal.lost":              { areas: ["deal", "office"], daily: true, exec: true, reason: "עסקה אבדה" },
+
+  // ── Batch 5.6F — canonical Journey events ────────────────────────────────
+  // Scoped by what each event can actually change in the Journey engine, so a
+  // low-value event never triggers a full recompute.
+  //
+  // `journey.created` is DELIBERATELY not a daily refresh: a brand-new journey
+  // has zero proven dwell time, so it cannot produce a recommendation — the
+  // 5.6E evidence gate skips it. Invalidating Daily/Home for it would recompute
+  // every surface to arrive at an identical answer.
+  "journey.created":        { areas: ["journey"], reason: "מסע נפתח — אין עדיין ראיית שהייה בשלב" },
+  // A stage change RESETS the dwell clock, so an existing stall recommendation
+  // may legitimately disappear. That changes the ranked feed → refresh Daily.
+  "journey.stage_changed":  { areas: ["journey"], daily: true, reason: "המסע עבר שלב — שעון השהייה אופס" },
+  // Terminal outcome: the journey leaves the eligible set entirely, and a won
+  // journey is a manager-level figure.
+  "journey.completed":      { areas: ["journey", "office"], daily: true, exec: true, reason: "מסע הושלם — יצא מקבוצת המסעות הפעילים" },
+  // Blocked/paused/resumed/reopened flip `status`, which the engine gates on
+  // (only `active` journeys are eligible). NOTE: `journey.blocked` has no
+  // emitter today (journey-applier returns the outcome without emitting) — the
+  // rule is registered so it works the moment that gap is closed, and costs
+  // nothing until then.
+  "journey.blocked":        { areas: ["journey"], daily: true, exec: true, reason: "מסע נחסם — סיכון לתקיעות" },
+  "journey.paused":         { areas: ["journey"], daily: true, reason: "מסע הושהה — אינו ממתין לפעולה" },
+  "journey.resumed":        { areas: ["journey"], daily: true, reason: "מסע חודש — חזר לקבוצת הפעילים" },
+  "journey.reopened":       { areas: ["journey"], daily: true, reason: "מסע נפתח מחדש" },
 };
 
 /**

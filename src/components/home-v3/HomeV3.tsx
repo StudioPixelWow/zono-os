@@ -22,8 +22,10 @@ import { HotPropertiesSection } from "@/components/dashboard-home/components/Hot
 import { HomeHeatmapSection } from "@/components/dashboard-home/components/HomeHeatmapSection";
 import { TodayAttentionSection } from "@/components/dashboard-home/components/TodayAttentionSection";
 
-const priCls: Record<string, string> = { high: "bg-danger-soft text-danger", medium: "bg-warning-soft text-warning", low: "bg-surface text-muted" };
-const priHe: Record<string, string> = { high: "דחוף", medium: "חשוב", low: "רגיל" };
+// Batch 5.6F — keyed by CANONICAL urgency (the queue's own band), not the
+// retired 3-level Impact guess. `critical` is new and must not fall through.
+const priCls: Record<string, string> = { critical: "bg-danger-soft text-danger", high: "bg-danger-soft text-danger", medium: "bg-warning-soft text-warning", low: "bg-surface text-muted" };
+const priHe: Record<string, string> = { critical: "קריטי", high: "דחוף", medium: "חשוב", low: "רגיל" };
 const ils = (n: number) => `₪${n.toLocaleString("he-IL")}`;
 const openSearch = () => { try { window.dispatchEvent(new CustomEvent("zono:open-search")); } catch { /* ignore */ } };
 
@@ -58,18 +60,40 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
     return Number.isFinite(n) ? n : 0;
   }, [data.kpis]);
 
-  // "While you were away" — a re-composition of numbers ZONO already produced.
+  // Batch 5.6F — "בזמן שלא היית" = WHAT HAPPENED. Persisted domain events only
+  // (daily.sinceYouWereAway), never the recommendation queue.
+  //
+  // The retired version derived this from recommendation/backlog counts and wrote
+  // them in the first person past tense — "מצאתי…", "הכנתי…", "ניסחתי…" — telling
+  // the broker ZONO had done work it had merely suggested. A pending draft is not
+  // a written draft; an unpublished post is not a publication. Those are now
+  // recommendations (section B) or operational reminders, and this section states
+  // only facts that are in the ledger.
+  const EVENT_ICON: Record<string, { icon: string; tone: string }> = {
+    "deal.won": { icon: "Star", tone: "text-success" },
+    "deal.lost": { icon: "AlertTriangle", tone: "text-warning" },
+    "journey.completed": { icon: "Star", tone: "text-success" },
+    "journey.blocked": { icon: "AlertTriangle", tone: "text-warning" },
+    "journey.stage_changed": { icon: "TrendingUp", tone: "text-brand-light" },
+    "property.price_changed": { icon: "TrendingUp", tone: "text-brand-light" },
+    "document.signed": { icon: "Star", tone: "text-success" },
+    "meeting.completed": { icon: "Calendar", tone: "text-brand-light" },
+    "lead.created": { icon: "Flame", tone: "text-brand-light" },
+    "whatsapp.message_received": { icon: "MessageCircle", tone: "text-brand-light" },
+    "automation.run_completed": { icon: "Sparkles", tone: "text-brand-light" },
+  };
   const digest = useMemo(() => {
-    const d: { icon: string; text: string; tone: string }[] = [];
-    if (deals?.hotBuyers.length) d.push({ icon: "Flame", text: `${deals.hotBuyers.length} קונים חמים מוכנים לפעולה`, tone: "text-brand-light" });
-    if ((perf?.conversionOpportunities ?? 0) > 0) d.push({ icon: "TrendingUp", text: `מצאתי ${perf!.conversionOpportunities} הזדמנויות המרה`, tone: "text-brand-light" });
-    const pubs = (daily?.marketing.groupsToPublish ?? 0) + (daily?.marketing.scheduledToday ?? 0);
-    if (pubs > 0) d.push({ icon: "Megaphone", text: `הכנתי ${pubs} פרסומים לשיווק`, tone: "text-brand-light" });
-    if (daily?.conversation.drafts.length) d.push({ icon: "MessageCircle", text: `ניסחתי ${daily.conversation.drafts.length} טיוטות WhatsApp`, tone: "text-brand-light" });
-    if (deals?.sellersAtRisk.length) d.push({ icon: "AlertTriangle", text: `${deals.sellersAtRisk.length} מוכרים דורשים תשומת לב`, tone: "text-warning" });
-    if (b?.biggestOpportunity) d.push({ icon: "Star", text: b.biggestOpportunity.label, tone: "text-success" });
-    return d;
-  }, [daily, deals, perf, b]);
+    const facts = daily?.sinceYouWereAway ?? [];
+    return facts.map((f) => {
+      const meta = EVENT_ICON[f.eventType] ?? { icon: "Activity", tone: "text-brand-light" };
+      return { icon: meta.icon, text: f.label, tone: meta.tone };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daily?.sinceYouWereAway]);
+  /** TRUE only when the ledger proves something actually happened. */
+  const hadActivity = digest.length > 0;
+  /** Section B — what ZONO RECOMMENDS now. Kept separate from what happened. */
+  const recCount = daily?.actionFeed?.length ?? 0;
 
   const spotlight = data.featuredProperty ?? data.hotProperties[0] ?? null;
 
@@ -82,8 +106,13 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
           <div className="relative">
             {/* Live status — the system just worked for you. */}
             <div className="mb-5 flex items-center justify-between gap-3">
+              {/* Batch 5.6F — "ZONO worked for you" is a CLAIM about work done.
+                  It may only be made when the persisted ledger proves it. With no
+                  recorded activity we state the honest thing: the system is live
+                  and watching — not that it did something. */}
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/90 ring-1 ring-white/15 backdrop-blur-sm">
-                <span className="zono-live-dot inline-block h-2 w-2 rounded-full bg-emerald-400 text-emerald-400" /> ZONO עבד עבורך הבוקר · חי ומעודכן
+                <span className="zono-live-dot inline-block h-2 w-2 rounded-full bg-emerald-400 text-emerald-400" />
+                {hadActivity ? "ZONO עבד עבורך · חי ומעודכן" : "ZONO פעיל ועוקב · חי ומעודכן"}
               </span>
               <span className="hidden text-[11px] font-semibold text-white/55 sm:block">{new Date(now).toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}</span>
             </div>
@@ -100,9 +129,18 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
 
               {/* Digest — curated updates, as chips (feels prepared, not listed) */}
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-white/90">{digest.length ? `סיכמתי עבורך ${digest.length} עדכונים בזמן שלא היית:` : "אני מנתח את השוק ומכין לך את היום…"}</p>
+                {/* A. WHAT HAPPENED (ledger) — kept distinct from B. what ZONO
+                    recommends now (the canonical queue, shown below + in the
+                    priority panel). No activity → say so plainly. */}
+                <p className="text-sm font-bold text-white/90">
+                  {hadActivity
+                    ? `${digest.length} דברים קרו בזמן שלא היית:`
+                    : recCount > 0
+                    ? `לא נרשמה פעילות חדשה — ${recCount} המלצות ממתינות לך:`
+                    : "לא נרשמה פעילות חדשה מאז הביקור האחרון."}
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {(digest.length ? digest : [{ icon: "Sparkles", text: "מכין את היום שלך", tone: "text-brand-light" }]).map((it, i) => (
+                  {digest.map((it, i) => (
                     <span key={i} className="zono-digest-line inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[13px] font-semibold text-white/95 ring-1 ring-white/10 backdrop-blur-sm" style={{ animationDelay: `${i * 90}ms` }}>
                       <span className={cn("shrink-0", it.tone)}><Icon name={it.icon} size={15} /></span>
                       {it.text}
@@ -135,11 +173,11 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
           <ActLabel n="01" title="ההחלטה של היום" hint="המשימה החשובה ביותר + הנכס שבמרכז" />
           <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
             {mission && (
-              <Link href={mission.href} className="bg-card border-line hover:border-brand-light flex h-full min-h-[16rem] flex-col justify-between rounded-[28px] border p-6 shadow-[var(--shadow-card)] transition sm:min-h-[20rem]">
+              <Link href={mission.href ?? "/today"} className="bg-card border-line hover:border-brand-light flex h-full min-h-[16rem] flex-col justify-between rounded-[28px] border p-6 shadow-[var(--shadow-card)] transition sm:min-h-[20rem]">
                 <div>
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-brand text-[11px] font-bold">⟡ המשימה של היום</p>
-                    <span className={cn("shrink-0 rounded-full px-3 py-1 text-[11px] font-bold", priCls[mission.priority] ?? priCls.low)}>{priHe[mission.priority] ?? "רגיל"}</span>
+                    <span className={cn("shrink-0 rounded-full px-3 py-1 text-[11px] font-bold", priCls[mission.urgency] ?? priCls.low)}>{priHe[mission.urgency] ?? "רגיל"}</span>
                   </div>
                   <p className="text-ink mt-2 text-xl font-black sm:text-2xl">{mission.title}</p>
                   {mission.why && <p className="text-muted mt-1.5 text-sm leading-relaxed">{mission.why}</p>}

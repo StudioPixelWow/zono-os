@@ -48,6 +48,19 @@ const str = (r: Row, k: string): string | null => {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 };
 
+/**
+ * Batch 5.6E/5.6F observability — the Journey source must be VISIBLE on EVERY
+ * path, including the zero paths. aggregate-service fans engines out through
+ * Promise.allSettled and swallows failures by design, so without a line on each
+ * exit an evidence-gated zero is indistinguishable from a crashed engine.
+ * Counts only — no titles, no subject PII.
+ */
+export type JourneyDiagReason = "no_visible_journeys" | "evaluated" | "error";
+
+function diag(reason: JourneyDiagReason, payload: Record<string, unknown> = {}): void {
+  console.info("[broker-intelligence][journey]", JSON.stringify({ reason, stallDays: STALL_DAYS, ...payload }));
+}
+
 /** Rank the canonical journeys that are provably stalled. Never throws. */
 export async function getJourneyIntelligence(limit = 12): Promise<JourneyIntelligence> {
   const empty: JourneyIntelligence = {
@@ -62,7 +75,13 @@ export async function getJourneyIntelligence(limit = 12): Promise<JourneyIntelli
       .eq("status", "active")
       .limit(500);
     const journeys = (jdata as unknown as Row[]) ?? [];
-    if (!journeys.length) return empty;
+    // Log BEFORE returning: "no journeys visible" is precisely the case the
+    // diagnostic exists to make visible. An early return that skips it would
+    // reproduce the exact blind spot this observability was added to close.
+    if (!journeys.length) {
+      diag("no_visible_journeys", { scanned: 0, actionable: 0, unverifiedStageEntry: 0, belowThreshold: 0 });
+      return empty;
+    }
 
     const journeyIds = journeys.map((j) => str(j, "id")).filter((x): x is string => !!x);
 
@@ -151,21 +170,12 @@ export async function getJourneyIntelligence(limit = 12): Promise<JourneyIntelli
     const ranked = rankJourneys(signals);
     const actionable = ranked.filter((r) => !r.insufficientEvidence).length;
 
-    // Batch 5.6E observability — the Journey source must be VISIBLE even when it
-    // honestly produces ZERO recommendations. aggregate-service fans engines out
-    // through Promise.allSettled and swallows failures by design, so without this
-    // line a legitimate evidence-gated zero is indistinguishable from a silently
-    // crashed engine. Counts only — no titles, no subject PII.
-    console.info(
-      "[broker-intelligence][journey]",
-      JSON.stringify({
-        scanned: signals.length,
-        actionable,
-        unverifiedStageEntry,
-        belowThreshold: signals.filter((s) => s.daysInStage != null && s.daysInStage < STALL_DAYS).length,
-        stallDays: STALL_DAYS,
-      }),
-    );
+    diag("evaluated", {
+      scanned: signals.length,
+      actionable,
+      unverifiedStageEntry,
+      belowThreshold: signals.filter((s) => s.daysInStage != null && s.daysInStage < STALL_DAYS).length,
+    });
 
     return {
       recommendations: ranked.slice(0, limit),
@@ -175,6 +185,9 @@ export async function getJourneyIntelligence(limit = 12): Promise<JourneyIntelli
       generatedAt: new Date().toISOString(),
     };
   } catch (e) {
+    // Emit on the SAME channel as the success paths, so "engine failed" and
+    // "engine found nothing" are never confused by their absence/presence.
+    diag("error", { error: e instanceof Error ? e.message : "unknown" });
     console.error("[broker-intelligence] journey failed:", e);
     return empty;
   }

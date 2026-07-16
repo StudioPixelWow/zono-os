@@ -11,9 +11,37 @@ import { getBrokerWorkspace, askBrokerZono } from "@/lib/broker-workspace/servic
 import { getChiefOfStaff } from "@/lib/chief-of-staff/service";
 import { getCache, setCache } from "@/lib/platform-persistence";
 import { groundGlobalContext, toGroundedSummary } from "@/lib/ai-context";
+import { getBrokerIntelligenceQueue } from "@/lib/broker-intelligence/aggregate-service";
+import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { assembleDailyOS, buildExecutiveDaily } from "./assemble";
-import type { DailyOS, ExecutiveDaily, ExecInput } from "./types";
+import { buildSinceYouWereAway, type ActivityEventRow } from "./activity";
+import type { DailyOS, ExecutiveDaily, ExecInput, ActivityFact } from "./types";
+
+/**
+ * Batch 5.6F — "בזמן שלא היית" reads the PERSISTED domain_events ledger (RLS-
+ * scoped, so cross-org rows are unreachable). Never the recommendation queue:
+ * a recommendation is not an event. Best-effort — no activity is a valid state
+ * and must degrade to silence, never to an invented overnight report.
+ */
+async function recentActivity(): Promise<ActivityFact[]> {
+  try {
+    const db = await createClient();
+    const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+    // `domain_events` is the kernel outbox and isn't in the generated Database
+    // types (it's kernel-internal) — same `as never` pattern the kernel modules
+    // use. RLS still scopes the read to the caller's org.
+    const { data } = await db
+      .from("domain_events" as never)
+      .select("event_type,entity_type,entity_id,occurred_at,payload")
+      .gte("occurred_at", since)
+      .order("occurred_at", { ascending: false })
+      .limit(100);
+    return buildSinceYouWereAway((data as unknown as ActivityEventRow[]) ?? []);
+  } catch {
+    return [];
+  }
+}
 
 async function ctx(): Promise<{ orgId: string | null; userId: string | null }> {
   const s = await getSessionContext();
@@ -29,15 +57,22 @@ export async function getDailyOS(): Promise<DailyOS> {
     const hit = await getCache<DailyOS>(orgId, "daily_os", key);
     if (hit) return hit.value;
   }
-  // Daily OS priority stays DETERMINISTIC (assembleDailyOS from the canonical
-  // Broker Intelligence queue). The shared assembler ONLY enriches the narrative
-  // (Morning Voice / "בזמן שלא היית" / The One Thing) with provenance — it never
-  // reorders recommendations. broker_private mode (personal daily surface).
-  const [workspace, grounded] = await Promise.all([
+  // Batch 5.6F — the CANONICAL Broker Intelligence queue is the ONLY ranked
+  // action source. Daily OS schedules and formats; it does not decide what
+  // matters. (Until 5.6F this comment claimed exactly that while
+  // `assembleDailyOS` actually ranked a hand-built feed off the workspace — a
+  // second, evidence-blind priority engine. It is retired.)
+  //
+  // The workspace still supplies labels, counts and operational context; the
+  // domain_events ledger supplies "בזמן שלא היית". Each degrades independently:
+  // a failed queue yields an honest empty feed, never a fabricated one.
+  const [queue, workspace, activity, grounded] = await Promise.all([
+    getBrokerIntelligenceQueue({ limit: 20 }).catch(() => ({ items: [], total: 0, generatedAt: new Date().toISOString() })),
     getBrokerWorkspace(),
+    recentActivity(),
     groundGlobalContext("broker_private").catch(() => null),
   ]);
-  const os = assembleDailyOS(workspace);
+  const os = assembleDailyOS(queue.items, workspace, Date.now(), activity);
   if (grounded) os.grounding = toGroundedSummary(grounded);
   if (orgId) await setCache(orgId, "daily_os", key, os as unknown as Json, { ttlSeconds: 300, version: os.version });
   return os;
