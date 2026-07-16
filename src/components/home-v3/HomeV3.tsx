@@ -183,7 +183,16 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
                   {mission.why && <p className="text-muted mt-1.5 text-sm leading-relaxed">{mission.why}</p>}
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     {commission > 0 && <Chip icon="Wallet" label={`עמלה משוערת ${ils(commission)}`} tone="text-success" />}
-                    {b && <Chip icon="Target" label={`ביטחון AI ${b.dailyScore}%`} />}
+                    {/* Batch 5.6F — the recommendation's OWN canonical confidence.
+                        This chip previously rendered `b.dailyScore` (the broker's
+                        day score) under the label "ביטחון AI", so Home claimed a
+                        confidence the queue never computed — the same item read
+                        43% here and 74% in the priority queue. The canonical
+                        contract now carries it, so the number is the real one. */}
+                    <Chip icon="Target" label={`ביטחון AI ${mission.confidence}%`} />
+                    {/* Corroboration is real provenance: how many independent
+                        engines converged on this exact action. */}
+                    {mission.mergedCount > 1 && <Chip icon="Layers" label={`${mission.mergedCount} מנועי מודיעין`} tone="text-success" />}
                     {perf && <Chip icon="TrendingUp" label={`שיעור מעקב ${perf.followUpRatePct}%`} />}
                   </div>
                 </div>
