@@ -42,6 +42,7 @@ export interface BrokerCompareRow { brokerId: string; name: string | null; score
 export interface ExecApprovalCenter { count: number; bundles: { bundleId: string; title: string; priority: number; entityHref: string | null }[] }
 
 import type { AutomationHealth } from "@/lib/automation-os/unify";
+import type { ExecJourneyProjection } from "./journey-projection";
 
 export interface ExecutiveOS {
   version: string; orgId: string | null; generatedAt: string;
@@ -56,6 +57,14 @@ export interface ExecutiveOS {
   decisions: ExecDecision[];
   approvalCenter: ExecApprovalCenter;
   brokerComparison: BrokerCompareRow[];
+  /**
+   * Batch 5.6G — canonical Journey PROJECTION. Attached after compose, never
+   * fed into it: Journey explains, it does not score. The full pure contract is
+   * preserved verbatim (never widened to unknown/any) so availability status,
+   * evidence coverage, audit trace and role visibility survive the service
+   * boundary. `null` only before the projection runs.
+   */
+  journey?: ExecJourneyProjection | null;
   notes: string[];
   grounding?: ExecGrounding | null;   // shared-assembler grounding (executive mode)
 }

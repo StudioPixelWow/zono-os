@@ -40,6 +40,17 @@ function Section({ title, icon, count, action, children }: { title: string; icon
 }
 function Empty({ t }: { t: string }) { return <p className="text-muted text-sm">{t}</p>; }
 
+/** Batch 5.6G — a plain canonical count. Deliberately unstyled by value: these
+ *  are measurements, not scores, so no red/green "health" tone is applied. */
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="border-line rounded-2xl border p-3 text-center">
+      <p className="text-ink text-xl font-black">{value}</p>
+      <p className="text-muted mt-0.5 text-[11px] font-bold">{label}</p>
+    </div>
+  );
+}
+
 function ItemBig({ it, kind }: { it: ExecItem; kind: "risk" | "opportunity" }) {
   const accent = kind === "risk" ? "bg-danger-soft text-danger" : "bg-success-soft text-success";
   return (
@@ -144,6 +155,103 @@ export function ExecutiveOSView({ os, deals }: { os: ExecutiveOS; deals: ExecDea
             )}
             <p className="text-muted mt-2 text-[10px]">מבוסס על זמינות ועומס מ-Calendar OS — ללא חישוב ציון חדש.</p>
           </Section>
+
+          {/* ── Batch 5.6G · Canonical Journey projection ──────────────────
+              A restrained MANAGEMENT projection, not a second Journey Center.
+              It distinguishes three states that are NOT the same thing:
+                · unavailable          — we could not measure
+                · insufficient_evidence — measured, but evidence too thin
+                · available + zero     — measured, and genuinely zero
+              Zero actionable never reads as "healthy". */}
+          {os.journey && (
+            <Section
+              title="מסעות — מבט ניהולי"
+              icon="Compass"
+              count={os.journey.counts.active}
+              action={<Link href="/journeys" className="text-brand text-[12px] font-bold">מרכז המסעות ←</Link>}
+            >
+              {os.journey.status === "unavailable" ? (
+                <Empty t="נתוני המסעות אינם זמינים כעת — לא ניתן להסיק מצב." />
+              ) : (
+                <div className="space-y-3">
+                  {/* A · overview — canonical counts only */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <Stat label="פעילים" value={os.journey.counts.active} />
+                    <Stat label="תקועים" value={os.journey.counts.stalled} />
+                    <Stat label="חסומים" value={os.journey.counts.blocked} />
+                  </div>
+
+                  {/* B · stage distribution — canonical counts, never a funnel */}
+                  {os.journey.stageDistribution.length > 0 && (
+                    <div className="border-line rounded-2xl border p-3">
+                      <p className="text-muted mb-2 text-[11px] font-bold">פיזור שלבים (ספירה קנונית)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {os.journey.stageDistribution.map((s) => (
+                          <span key={s.stage} className="bg-surface text-ink rounded-lg px-2 py-1 text-[11px] font-bold">
+                            {s.label} · {s.count}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-muted mt-2 text-[10px]">ספירה בלבד — אינה מייצגת שיעורי המרה בין שלבים.</p>
+                    </div>
+                  )}
+
+                  {/* C · evidence quality — source quality, NOT business health */}
+                  <div className="border-line rounded-2xl border p-3">
+                    <p className="text-muted mb-1 text-[11px] font-bold">{os.journey.coverage.label}</p>
+                    <p className="text-ink text-[13px] font-bold">
+                      {os.journey.coverage.value == null ? "—" : `${os.journey.coverage.value}%`}
+                      <span className="text-muted mr-1 text-[11px] font-normal">
+                        {" "}({os.journey.audit.canonicalRecords} קנוניות · {os.journey.audit.fallbackRecords} גיבוי)
+                      </span>
+                    </p>
+                    <p className="text-muted mt-1 text-[11px]">
+                      {os.journey.dwell.avgDaysInStage == null
+                        ? "ממוצע שהייה בשלב: אין ראיה מספקת — מסעות ללא מועד כניסה מאומת אינם נספרים כאפס."
+                        : `ממוצע שהייה בשלב: ${os.journey.dwell.avgDaysInStage} ימים (${os.journey.dwell.evidenceStatus === "verified" ? "ראיה מאומתת" : "ראיה חלקית"}).`}
+                    </p>
+                    <p className="text-muted mt-1 text-[10px]">מדד איכות מקור הנתונים — אינו ציון בריאות עסקית ואינו משפיע על ציון הארגון.</p>
+                  </div>
+
+                  {/* D · management attention — canonical queue only */}
+                  {os.journey.highestPriorityBlocked ? (
+                    <Link
+                      href={os.journey.highestPriorityBlocked.href}
+                      className="border-line hover:border-brand-light block rounded-2xl border p-3 transition"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-ink text-[13px] font-black">{os.journey.highestPriorityBlocked.title}</p>
+                        <span className="text-muted shrink-0 text-[11px] font-bold">
+                          עדיפות {os.journey.highestPriorityBlocked.priority} · ביטחון {os.journey.highestPriorityBlocked.confidence}%
+                        </span>
+                      </div>
+                      <p className="text-muted mt-1 text-[12px]">{os.journey.highestPriorityBlocked.why}</p>
+                    </Link>
+                  ) : (
+                    <div className="border-line rounded-2xl border p-3">
+                      <p className="text-ink text-[13px] font-bold">{os.journey.headline}</p>
+                      <p className="text-muted mt-1 text-[11px]">אפס המלצות אינו עדות לתקינות — הוא אומר שאין ראיה מספקת להתערבות.</p>
+                    </div>
+                  )}
+
+                  {/* E · owner workload — MANAGERS ONLY (gated at the service) */}
+                  {os.journey.workload.visible && os.journey.workload.rows.length > 0 && (
+                    <div className="border-line rounded-2xl border p-3">
+                      <p className="text-muted mb-2 text-[11px] font-bold">עומס מסעות לפי בעלים (מנהל)</p>
+                      <div className="space-y-1.5">
+                        {os.journey.workload.rows.map((r) => (
+                          <div key={r.ownerUserId} className="flex items-center justify-between gap-2">
+                            <span className="text-ink truncate text-[12px] font-bold">{r.name ?? "בעלים"}</span>
+                            <span className="text-muted text-[12px] font-bold">{r.active} מסעות</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Section>
+          )}
 
           <Section title="עסקאות בסיכון" icon="AlertTriangle" count={deals?.atRisk.length ?? 0} action={<Link href="/deals" className="text-brand text-[12px] font-bold">הכל ←</Link>}>
             {!deals || deals.atRisk.length === 0 ? <Empty t={deals ? "אין עסקאות בסיכון ✓" : "אין מספיק נתוני עסקאות."} /> : (
