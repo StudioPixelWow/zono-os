@@ -48,6 +48,13 @@ export interface CanonicalTransition {
   occurredAt: string | null;
   reason: string | null;
   actorUserId: string | null;
+  /**
+   * Batch 5.6G — the kernel `domain_events` id this transition came from.
+   * PRESENT = a real business event moved this journey. NULL = a synthetic
+   * seed (e.g. the 5.3 legacy backfill's `journey_opened`), which proves
+   * nothing about when the subject actually entered the stage.
+   */
+  sourceEventId?: string | null;
 }
 
 /** Everything the assembler needs that does not live on the journey row. */
@@ -82,7 +89,21 @@ export function fromCanonicalJourney(
   const def = stageDef(jt, j.currentStage);
   const idx = stages.findIndex((s) => s.key === j.currentStage);
 
-  const stageAgeDays = daysBetween(j.stageEnteredAt ?? j.startedAt, nowMs);
+  // ── Batch 5.6G — THE canonical dwell rule (one implementation, shared) ────
+  // `journeys.stage_entered_at` is NOT NULL DEFAULT now(), so a BACKFILLED row
+  // always carries one — recording when the backfill script ran, not when the
+  // subject entered the stage. The previous guard ("null → null") therefore
+  // never fired for backfilled rows, and live this produced 9.1 "days in stage"
+  // where the verified-only figure was 5.4, with 8 of 9 entries unproven.
+  //
+  // Dwell is now admissible ONLY when the canonical event ledger proves the
+  // entry: a transition INTO the current stage carrying `source_event_id`
+  // (traceable to `domain_events`). Anything else is null — unmeasurable, never
+  // zero, never estimated. Every consumer (Journey Center, Executive, Broker
+  // Intelligence) therefore shares one definition of dwell.
+  const entryVerified =
+    !!last && last.toStage === j.currentStage && !!last.sourceEventId && !!last.occurredAt;
+  const stageAgeDays = entryVerified ? daysBetween(last!.occurredAt, nowMs) : null;
   const daysSinceActivity = daysBetween(j.lastActivityAt ?? j.stageEnteredAt ?? j.startedAt, nowMs);
 
   const terminal = !!def?.terminal;
@@ -90,6 +111,19 @@ export function fromCanonicalJourney(
   const stalled = !terminal && stageAgeDays !== null && stageAgeDays >= STALL_DAYS;
 
   // BLOCKERS are only ever real, observed facts. We do not invent them.
+  //
+  // ── Batch 5.6G — BLOCKED SEMANTICS, made explicit so nobody mistakes this
+  // for a general blocker model. There is currently NO independent producer of
+  // a "real" blocker unrelated to dwell. The three producers below are:
+  //   1. the SYNTHETIC STALL blocker — derived from VERIFIED stalled dwell
+  //      only. For an active journey, `blocked` therefore currently collapses
+  //      into `stalled`: unverified dwell ⇒ stalled=false ⇒ no stall blocker
+  //      ⇒ blocked=false. Verified dwell ≥ STALL_DAYS ⇒ stalled=true AND
+  //      blocked=true, only because this synthetic blocker exists.
+  //   2. a non-canonical current stage — a real, observed vocabulary violation.
+  //   3. `status === "paused"` — a real row flag.
+  // Independent, broker-recorded blockers are a registered FUTURE Journey model
+  // enhancement; this batch does not invent blocker evidence or storage.
   const blockers: string[] = [];
   if (stalled) blockers.push(`תקוע ${stageAgeDays} ימים בשלב "${stageLabel(jt, j.currentStage)}"`);
   if (!isValidStage(jt, j.currentStage)) {

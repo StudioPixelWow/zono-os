@@ -118,6 +118,12 @@ export interface ExecJourneyInput {
   ownerNames?: Record<string, string | null>;
   /** Canonical stage labeller (injected to keep this file pure + client-safe). */
   stageLabel?: (journeyType: string, stageKey: string) => string;
+  // NOTE (5.6G): there is deliberately NO `verifiedStageEntries` here. The
+  // evidence gate lives in the SHARED provider (journey-center/canonical.ts),
+  // so `kpis.avgDaysInStage` is already null when dwell is unproven. Re-deriving
+  // verification in Executive would create a second definition of dwell — the
+  // exact thing this batch forbids. Executive preserves the meaning; it does
+  // not recompute it.
 }
 
 /**

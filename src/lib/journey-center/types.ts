@@ -52,6 +52,26 @@ export interface UnifiedJourney {
   ownerUserId?: string | null;
   ownerName?: string | null;
   stageEnteredAt?: string | null;
+  /**
+   * ── CANONICAL DWELL CONTRACT (Batch 5.6G) — the one definition ────────────
+   * Days spent in the CURRENT stage. THREE distinct states, and every consumer
+   * (Journey Center, Executive OS, Broker Intelligence, future Copilot) must
+   * preserve the distinction end-to-end:
+   *
+   *   number  → VERIFIED dwell. A transition into the current stage carries a
+   *             `source_event_id` traceable to the `domain_events` kernel.
+   *   null    → INSUFFICIENT CANONICAL EVIDENCE. Not "missing", not zero, not
+   *             loading. We cannot prove when this stage was entered.
+   *   (absent provider / thrown read) → PROVIDER FAILURE — a different state
+   *             again, surfaced by the caller as "unavailable", never as null.
+   *
+   * No consumer may substitute 0, an average, `created_at` age, or
+   * `stage_entered_at` age for a null — nor render "N/A" while still treating
+   * the journey as stalled. `stage_entered_at` is NOT NULL DEFAULT now(), so on
+   * backfilled rows it records when the backfill ran; deriving dwell from it
+   * produced a live 9.1-day figure against a verified-only 5.4 with 8/9 entries
+   * unproven. That is why the gate exists.
+   */
   stageAgeDays?: number | null;
   /** Real, observed blockers only. */
   blockers?: string[];

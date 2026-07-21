@@ -175,7 +175,7 @@ export async function getJourneyCenter(filters: JourneyFilters = {}): Promise<Jo
   if (canonicalRows.length) {
     const { data: evs } = await db
       .from("journey_events")
-      .select("journey_id,from_stage,to_stage,occurred_at,reason,actor_user_id,created_at")
+      .select("journey_id,from_stage,to_stage,occurred_at,reason,actor_user_id,created_at,source_event_id")
       .eq("org_id", orgId)
       .in("journey_id", canonicalRows.map((j) => j.id))
       .order("created_at", { ascending: false })
@@ -190,6 +190,7 @@ export async function getJourneyCenter(filters: JourneyFilters = {}): Promise<Jo
         occurredAt: (e.occurred_at as string | null) ?? null,
         reason: (e.reason as string | null) ?? null,
         actorUserId: (e.actor_user_id as string | null) ?? null,
+        sourceEventId: (e.source_event_id as string | null) ?? null,
       });
     }
   }
@@ -303,9 +304,13 @@ export async function getJourneyDetail(journeyId: string): Promise<{
     metadata: (r.metadata as Record<string, unknown> | null) ?? null,
   };
 
+  // 5.6G: `source_event_id` selected here too — without it the detail view
+  // would rebuild the journey from an evidence-blind transition and show a
+  // null dwell for journeys the LIST proves verified. Same query shape as the
+  // list path, same dwell, same state on both surfaces.
   const { data: evs } = await db
     .from("journey_events")
-    .select("journey_id,from_stage,to_stage,occurred_at,reason,actor_user_id")
+    .select("journey_id,from_stage,to_stage,occurred_at,reason,actor_user_id,source_event_id")
     .eq("org_id", orgId).eq("journey_id", journeyId)
     .order("created_at", { ascending: false }).limit(100);
 
@@ -316,6 +321,7 @@ export async function getJourneyDetail(journeyId: string): Promise<{
     occurredAt: (e.occurred_at as string | null) ?? null,
     reason: (e.reason as string | null) ?? null,
     actorUserId: (e.actor_user_id as string | null) ?? null,
+    sourceEventId: (e.source_event_id as string | null) ?? null,
   }));
 
   const extras = await batchExtras(orgId).catch(() => ({ tasks: new Map<string, number>(), meetings: new Map<string, string>() }));

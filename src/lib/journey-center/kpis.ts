@@ -23,8 +23,27 @@ const isNegativeTerminal = (j: UnifiedJourney) => {
   const k = stageDef((j.journeyType ?? j.entityType) as JourneyType, j.currentStage)?.kind;
   return k === "lost" || k === "inactive";
 };
+/**
+ * STALLED — Batch 5.6G: evidence-gated. `stageAgeDays` is a number ONLY when a
+ * verified canonical transition (source_event_id → domain_events) proves the
+ * stage entry (see canonical.ts). `null` means INSUFFICIENT EVIDENCE — such a
+ * journey is never stalled, never "0 days old", never healthy-by-default. The
+ * strict `typeof` check (not `?? 0`) keeps the three dwell states distinct.
+ */
 export const isStalled = (j: UnifiedJourney) =>
-  !isTerminal(j) && (j.stageAgeDays ?? 0) >= STALL_DAYS;
+  !isTerminal(j) && typeof j.stageAgeDays === "number" && j.stageAgeDays >= STALL_DAYS;
+/**
+ * BLOCKED — Batch 5.6G product decision, documented so it is not mistaken for a
+ * general blocker model: there is NO independent canonical blocker source today.
+ * `blockers` (canonical.ts) contains only OBSERVED facts:
+ *   · the synthetic stall blocker — produced ONLY from verified dwell ≥ STALL_DAYS,
+ *     so for active journeys `blocked` is currently COUPLED to verified `stalled`;
+ *   · `status === "paused"` — a real row flag;
+ *   · a non-canonical current stage — a real vocabulary violation.
+ * Unverified dwell produces NO blocker (stalled=false ⇒ blocked=false).
+ * Independent real blockers (e.g. a broker-recorded obstacle) are a FUTURE
+ * Journey model enhancement — not invented here.
+ */
 export const isBlocked = (j: UnifiedJourney) => (j.blockers?.length ?? 0) > 0;
 
 export function computeJourneyKpis(all: UnifiedJourney[]): JourneyKpis {
@@ -43,8 +62,11 @@ export function computeJourneyKpis(all: UnifiedJourney[]): JourneyKpis {
     if (j.ownerUserId) ownerWorkload[j.ownerUserId] = (ownerWorkload[j.ownerUserId] ?? 0) + 1;
   }
 
-  // Average days in the CURRENT stage — open canonical journeys with a real
-  // stage_entered_at. Journeys without one are excluded, not zero-filled.
+  // Average days in the CURRENT stage — open canonical journeys whose stage
+  // entry is VERIFIED by a canonical transition (5.6G: source_event_id-backed;
+  // `stage_entered_at` alone is NOT dwell evidence — on backfilled rows it
+  // records when the backfill ran). Unverified journeys are EXCLUDED from the
+  // mean, not zero-filled; zero verified entries ⇒ null, never a number.
   const ages = open.map((j) => j.stageAgeDays).filter((n): n is number => typeof n === "number");
   const avgDaysInStage = ages.length ? Math.round((ages.reduce((a, b) => a + b, 0) / ages.length) * 10) / 10 : null;
 
@@ -91,6 +113,12 @@ export function applyFilters(journeys: UnifiedJourney[], f: JourneyFilters): Uni
     if (f.owner && j.ownerUserId !== f.owner) return false;
     if (f.status && j.status !== f.status) return false;
     if (f.source && (j.source ?? "canonical") !== f.source) return false;
+    // 5.6G: `stalled` admits ONLY verified-dwell stalls (isStalled is the one
+    // evidence-gated definition — unverified dwell is never stalled). `blocked`
+    // follows the documented synthetic-blocker semantics above. A provider
+    // failure never reaches this code path (the service returns kpis=null
+    // upstream), and a journey with missing dwell is simply "not stalled" —
+    // it is NOT thereby claimed healthy (it stays visible in the active list).
     if (f.stalled === true && !isStalled(j)) return false;
     if (f.blocked === true && !isBlocked(j)) return false;
     if (f.fromDate && (!j.stageEnteredAt || j.stageEnteredAt < f.fromDate)) return false;
@@ -100,18 +128,35 @@ export function applyFilters(journeys: UnifiedJourney[], f: JourneyFilters): Uni
 }
 
 /**
- * Default order is BUSINESS PRIORITY, never alphabetical:
- *   blocked → stalled → priority score → stage age → most recent activity.
+ * Default order is BUSINESS PRIORITY, never alphabetical — and, since Batch
+ * 5.6G, EVIDENCE-AWARE. `stageAgeDays ?? -1` is gone: null is not "negative
+ * dwell", not "young", not "healthy", not "low priority" — it is a different
+ * claim ("insufficient canonical evidence") and gets its own explicit tier.
+ *
+ * Tiers (ascending rank = earlier in the list):
+ *   0 · verified stalled / blocked journeys (real, observed risk first)
+ *   1 · open journeys with VERIFIED dwell — descending stageAgeDays
+ *   2 · open journeys with INSUFFICIENT dwell evidence
+ *   3 · terminal journeys (nothing to act on — they sink)
+ * Within a tier: priority score → verified dwell (a number always outranks a
+ * null — evidence beats absence, comparing null as a sentinel is forbidden) →
+ * most recent activity → canonical journey id (deterministic, stable).
  */
 export function sortByBusinessPriority(journeys: UnifiedJourney[]): UnifiedJourney[] {
+  const tierOf = (j: UnifiedJourney): number => {
+    if (isTerminal(j)) return 3;
+    if (isBlocked(j) || isStalled(j)) return 0;
+    return typeof j.stageAgeDays === "number" ? 1 : 2;
+  };
   return [...journeys].sort((a, b) => {
-    const ba = isBlocked(a) ? 1 : 0, bb = isBlocked(b) ? 1 : 0;
-    if (ba !== bb) return bb - ba;
-    const sa = isStalled(a) ? 1 : 0, sb = isStalled(b) ? 1 : 0;
-    if (sa !== sb) return sb - sa;
+    const ta = tierOf(a), tb = tierOf(b);
+    if (ta !== tb) return ta - tb;
     if (b.priority !== a.priority) return b.priority - a.priority;
-    const aa = a.stageAgeDays ?? -1, ab = b.stageAgeDays ?? -1;
-    if (ab !== aa) return ab - aa;
-    return Date.parse(b.lastActivityAt ?? "0") - Date.parse(a.lastActivityAt ?? "0");
+    const na = typeof a.stageAgeDays === "number", nb = typeof b.stageAgeDays === "number";
+    if (na && nb && a.stageAgeDays !== b.stageAgeDays) return (b.stageAgeDays as number) - (a.stageAgeDays as number);
+    if (na !== nb) return na ? -1 : 1;              // verified dwell outranks unverified — explicitly, not via a sentinel
+    const la = Date.parse(a.lastActivityAt ?? "") || 0, lb = Date.parse(b.lastActivityAt ?? "") || 0;
+    if (la !== lb) return lb - la;
+    return a.journeyId < b.journeyId ? -1 : a.journeyId > b.journeyId ? 1 : 0;   // stable, canonical-id tie-breaker
   });
 }

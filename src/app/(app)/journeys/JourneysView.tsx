@@ -13,6 +13,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { ladder, stageLabel as canonicalStageLabel, type JourneyType } from "@/lib/journey-canonical";
+// 5.6G — the ONE evidence-gated definition of stalled/blocked (pure, client-safe).
+// The view must not re-derive stall from timestamps: null dwell is "insufficient
+// canonical evidence", never 0, never stalled, never healthy.
+import { isBlocked, isStalled } from "@/lib/journey-center/kpis";
 import { ENTITY_HE, type JourneyCenter, type JourneyEntityType, type JourneyFlag, type UnifiedJourney } from "@/lib/journey-center/types";
 
 const ENTITY_ICON: Record<JourneyEntityType, string> = { buyer: "Users", seller: "Handshake", lead: "MessageCircle", property: "Building2", deal: "Briefcase" };
@@ -46,8 +50,8 @@ export function JourneysView({ data, error }: { data: JourneyCenter | null; erro
     if (filter === "buyer" || filter === "seller" || filter === "lead" || filter === "property") return j.entityType === filter;
     if (filter === "canonical") return j.canonical === true;
     if (filter === "fallback") return j.canonical === false;
-    if (filter === "stalled") return (j.stageAgeDays ?? 0) >= 14 && !j.flags.includes("closed");
-    if (filter === "blocked") return (j.blockers?.length ?? 0) > 0;
+    if (filter === "stalled") return isStalled(j);      // verified dwell only — see kpis.ts (5.6G)
+    if (filter === "blocked") return isBlocked(j);      // documented synthetic-stall / paused / non-canonical semantics
     return j.flags.includes(filter as JourneyFlag);
   }), [journeys, filter]);
 
@@ -216,9 +220,13 @@ function JourneyDrawer({ j, onClose }: { j: UnifiedJourney; onClose: () => void 
           <span className={`rounded-lg px-2 py-0.5 text-[10px] font-black ${j.canonical ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
             {j.canonical ? "מסע קנוני" : "רשומת תאימות"}
           </span>
-          {typeof j.stageAgeDays === "number" && (
+          {typeof j.stageAgeDays === "number" ? (
             <span className="bg-surface text-muted rounded-lg px-2 py-0.5 text-[10px] font-black">{j.stageAgeDays} ימים בשלב</span>
-          )}
+          ) : j.canonical === true ? (
+            // 5.6G — the SAME dwell state Executive shows: no verified stage
+            // entry ⇒ insufficient evidence. Never 0, never a timestamp guess.
+            <span className="bg-surface text-muted rounded-lg px-2 py-0.5 text-[10px] font-black">שהייה בשלב: אין ראיה מספקת</span>
+          ) : null}
         </div>
 
         {/* real, observed blockers — never invented */}
