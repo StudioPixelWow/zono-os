@@ -53,6 +53,7 @@ for (const f of files) {
 const JOURNEY_ONLY_DIRS = [
   "src/lib/journey-center",
   "src/lib/journey-cockpit",
+  "src/lib/journey-coach",                        // 5.7 — the Coach is evidence-native by contract
   "src/components/journey",
   "src/components/dashboard/sections/JourneysDashboardSection.tsx",
   "src/app/(app)/journeys",

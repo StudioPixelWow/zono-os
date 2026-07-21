@@ -97,6 +97,10 @@ export function runSelfCheck(): AZSelfCheck {
   const jAns = askWithResults("אילו מסעות תקועים?", [res("customer_journey", "8 מסעות פעילים · 0 תקועים · 0 חסומים (ראיה קנונית בלבד)", ["מסע תקוע: דירה בקריית ביאליק"], 67)]);
   add("5.6H journey answer synthesized with evidence + no invented actions", jAns.answer.executiveAnswer.includes("מסעות פעילים") && jAns.answer.actions.length === 0, "");
   add("5.6H journey follow-ups are journey-scoped", jAns.answer.followUps.some((f) => f.includes("מסע")), jAns.answer.followUps.join(" | "));
+  // 5.7 — "איזה מסעות דורשים ממני טיפול?" routes to the SAME canonical journey
+  // engine (now Coach-backed) — no new intent, no second reasoning path.
+  const j5 = understandAndPlan("איזה מסעות דורשים ממני טיפול?");
+  add("5.7 care-question routes to JOURNEYS via the one canonical engine", j5.understanding.intent === "JOURNEYS" && j5.plan.engines.length === 1 && j5.plan.engines[0] === "customer_journey", j5.understanding.intent);
 
   const passed = checks.filter((c) => c.pass).length;
   return { ok: passed === checks.length, total: checks.length, passed, checks };

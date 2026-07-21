@@ -14,10 +14,11 @@ import { getBuyerAgentScorecards } from "@/lib/buyer-agent";
 import { getSellerAgentScorecards } from "@/lib/seller-agent";
 import { getLeadAgentScorecards } from "@/lib/lead-agent";
 import { getOfficeGrowthScorecard } from "@/lib/office-agent";
-// Batch 5.6H — the CANONICAL Journey Command provider (Journey Center KPIs +
-// Broker Intelligence queue through the one shared projection). The Copilot
-// must not own a second Journey reasoning path.
-import { getCanonicalJourneyCommand } from "@/lib/journey-center/command";
+// Batch 5.6H/5.7 — Journey answers come from the CANONICAL providers only.
+// 5.7: the Journey AI Coach is the reasoning layer — built on the same shared
+// projection + queue identity, adding evidence-referenced explanations and
+// never a second analytics path.
+import { getJourneyCoach } from "@/lib/journey-coach/service";
 import { understandAndPlan, composeResponse } from "./ask";
 import { assembleEntityContext } from "@/lib/ai-context/assembler";
 import { renderContextText } from "@/lib/ai-context/render";
@@ -97,26 +98,38 @@ async function runEngine(engine: EngineId, orgId: string | null, u: QueryUnderst
       return { engine, headline: `בריאות עסקית ${c.health.businessHealth} · צמיחה ${c.growthScore} · מלאי ${c.inventoryScore}`, items, evidence: c.risks.slice(0, 4).map((r) => r.title), confidence: c.aiConfidence };
     }
     case "customer_journey": {
-      // 5.6H — Journey answers come ONLY from the canonical projection. Every
-      // number below is traceable: counts/dwell to Journey Center's evidence-
-      // gated KPIs, items to canonical queue recommendations (own identity,
-      // own confidence). Nothing is re-derived or re-scored here, and per-owner
-      // workload never reaches the Copilot (the provider is member-safe).
-      const j = await getCanonicalJourneyCommand().catch(() => null);
-      if (!j || j.status === "unavailable") return empty(engine, "מרכז המסעות לא זמין — לא ניתן להסיק מצב");
-      const items = j.highestPriorityBlocked
-        ? [item(j.highestPriorityBlocked.title, j.highestPriorityBlocked.why, j.highestPriorityBlocked.priority)]
-        : [];
+      // 5.6H/5.7 — Journey answers come ONLY from the canonical providers.
+      // The Coach adds evidence-referenced explanations; every number remains
+      // traceable (counts/dwell to Journey Center's evidence-gated KPIs, items
+      // to queue recommendations with their own identity/confidence). Nothing
+      // is re-derived here, and workload never reaches the Copilot (the Coach
+      // is member-safe by construction).
+      const coach = await getJourneyCoach("SHORT").catch(() => null);
+      const j = coach?.projection ?? null;
+      if (!coach || !j || j.status === "unavailable") return empty(engine, "מרכז המסעות לא זמין — לא ניתן להסיק מצב");
+      // Journeys needing attention, explained by the Coach: queue-backed first
+      // (canonical identity + real confidence), then verified stalls/blockers.
+      const items = coach.briefings
+        .filter((b) => b.needsAttention)
+        .slice(0, 5)
+        .map((b) => item(
+          `${b.facts.entityName} · ${b.facts.stageLabel}`,
+          b.recommendedNextStep,
+          b.facts.recommendation?.priority ?? null,
+        ));
       const dwellLine = j.dwell.avgDaysInStage == null
         ? "ממוצע שהייה בשלב: אין ראיה מספקת — מסעות ללא מועד כניסה מאומת אינם נספרים כאפס"
         : `ממוצע שהייה בשלב: ${j.dwell.avgDaysInStage} ימים (${j.dwell.evidenceStatus === "verified" ? "ראיה מאומתת" : "ראיה חלקית"})`;
+      const coachLine = items.length === 0
+        ? "המאמן הקנוני: אין מסע הדורש טיפול על בסיס ראיות מאומתות — אפס כנה, לא עדות לתקינות."
+        : `המאמן הקנוני: ${coach.attentionCount} מסעות דורשים תשומת לב על בסיס ראיות מאומתות.`;
       return {
         engine,
         headline: `${j.counts.active} מסעות פעילים · ${j.counts.stalled} תקועים · ${j.counts.blocked} חסומים (ראיה קנונית בלבד)`,
         items,
         // The audit trace IS the evidence — every headline number explains its
         // canonical origin, including the honest zero-recommendation state.
-        evidence: [dwellLine, ...j.audit.trace.slice(0, 4), j.headline],
+        evidence: [dwellLine, coachLine, ...j.audit.trace.slice(0, 4), j.headline],
         // Data-quality coverage (canonical vs fallback records) — an evidence
         // measure, deliberately NOT an invented AI-confidence score.
         confidence: j.coverage.value ?? 40,

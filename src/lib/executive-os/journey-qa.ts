@@ -214,7 +214,9 @@ const exec = (s: string) => s.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\/
 check("H2 command provider = Journey Center + BI queue + shared projection", cmdSrc.includes("getJourneyCenter()") && cmdSrc.includes("getBrokerIntelligenceQueue(") && cmdSrc.includes("buildExecJourneyProjection(") && cmdSrc.includes("mapJourneyQueueItems("));
 check("H2 command provider is member-safe (workload can never leak)", cmdSrc.includes("isManager: false") && !cmdSrc.includes("ownerNames"));
 check("H2 dashboard section consumes the canonical provider, not journey-intelligence", exec(dashSrc).includes("getCanonicalJourneyCommand") && !exec(dashSrc).includes("journey-intelligence"));
-check("H2 Copilot consumes the canonical provider, not journey-intelligence", exec(askSrc).includes("getCanonicalJourneyCommand") && !exec(askSrc).includes("journey-intelligence"));
+// 5.7: the Copilot's journey engine consumes the Journey AI Coach — which is
+// itself built on the canonical providers + shared projection. Still ONE path.
+check("H2 Copilot consumes the canonical Coach, not journey-intelligence", exec(askSrc).includes("getJourneyCoach") && !exec(askSrc).includes("journey-intelligence"));
 check("H2 no forbidden schema column in command provider / dashboard / copilot",
   [cmdSrc, dashSrc, askSrc].every((s) => !FORBIDDEN_COLS.test(exec(s))) && [cmdSrc, dashSrc, askSrc].every((s) => !exec(s).includes("journey_predictions")));
 check("H2 provider failure renders NOTHING on the dashboard (no healthy-looking zeros)", dashSrc.includes('status === "unavailable"') && dashSrc.includes("return null"));
