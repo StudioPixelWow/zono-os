@@ -24,6 +24,7 @@ const FOLLOWUPS: Record<IntentType, string[]> = {
   GENERAL_STATUS: ["מה עליי לעשות היום?", "אילו סיכונים קריטיים?", "אילו הזדמנויות פתוחות?"],
   JOURNEYS: ["אילו מסעות תקועים עם ראיה מאומתת?", "אילו המלצות מסע עומדות ברף הראיות?", "מה מצב המסעות של הנכסים?"],
   EXEC_DECISIONS: ["מה שלוש ההחלטות הכי חשובות כרגע?", "אילו מסעות דורשים ממני טיפול?", "אילו מוכרים בסיכון נטישה?"],
+  EXEC_MEMORY: ["מה שלוש ההחלטות הכי חשובות כרגע?", "מה השתנה מאז הביקור האחרון?", "אילו מסעות דורשים ממני טיפול?"],
   UNKNOWN: ["מה עליי לעשות היום?", "אילו מוכרים בסיכון?", "אילו קונים קרובים לסגירה?"],
 };
 
@@ -46,6 +47,8 @@ function proposeActions(intent: IntentType, results: EngineResult[]): ProposedAc
     // 5.8 — same rule for decisions: the Decision Engine NEVER creates
     // recommendations, so the Copilot must not wrap its output in new ones.
     case "EXEC_DECISIONS": return [];
+    // 5.9 — Memory only OBSERVES change; it never proposes anything.
+    case "EXEC_MEMORY": return [];
     default: return [];
   }
 }

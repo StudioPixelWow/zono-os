@@ -4712,6 +4712,11 @@ type ZonoAskConversationsRow = {
   id: string; org_id: string; user_id: string | null; session_id: string; title: string | null;
   created_at: string; updated_at: string;
 };
+// Batch 5.9 (migration 20260928120000) — Executive Memory: immutable, append-
+// only snapshots of the Executive Decision Engine output per org + audience.
+type ExecutiveMemorySnapshotsRow = {
+  id: string; org_id: string; audience: string; taken_at: string; decisions: Json; created_at: string;
+};
 type ZonoAskMessagesRow = {
   id: string; org_id: string; conversation_id: string | null; session_id: string | null;
   user_id: string | null; question: string | null; answer: string | null; intent: string | null;
@@ -5411,6 +5416,7 @@ export interface Database {
       zono_compute_cache: TableShape<ZonoComputeCacheRow, "org_id" | "namespace" | "cache_key">;
       zono_ask_conversations: TableShape<ZonoAskConversationsRow, "org_id" | "session_id">;
       zono_ask_messages: TableShape<ZonoAskMessagesRow, "org_id">;
+      executive_memory_snapshots: TableShape<ExecutiveMemorySnapshotsRow, "org_id" | "audience" | "decisions">;
     };
     Views: { [_ in never]: never };
     Functions: {

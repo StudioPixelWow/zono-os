@@ -22,6 +22,8 @@ import { getJourneyCoach } from "@/lib/journey-coach/service";
 // Batch 5.8 — the canonical Executive Decision Engine (pure prioritization
 // over existing canonical evidence; top-3, inherited confidence).
 import { getExecutiveDecisions } from "@/lib/executive-decision/service";
+// Batch 5.9 — Executive Memory: immutable snapshot diffs over those decisions.
+import { getExecutiveMemory } from "@/lib/executive-memory/service";
 import { understandAndPlan, composeResponse } from "./ask";
 import { assembleEntityContext } from "@/lib/ai-context/assembler";
 import { renderContextText } from "@/lib/ai-context/render";
@@ -157,6 +159,30 @@ async function runEngine(engine: EngineId, orgId: string | null, u: QueryUnderst
         // Inherited-or-nothing: the max upstream confidence when one exists;
         // a neutral floor otherwise (understanding-weighting happens upstream).
         confidence: Math.max(0, ...d.decisions.map((dec) => dec.confidence ?? 0)) || 40,
+      };
+    }
+    case "executive_memory": {
+      // 5.9 — answers come ONLY from snapshot diffs. No recomputation, no
+      // reprioritization, no interpretation: every item is a detected change
+      // with its old/new snapshot references.
+      const m = await getExecutiveMemory().catch(() => null);
+      if (!m) return empty(engine, "הזיכרון הניהולי לא זמין — לא ניתן להשוות תמונות מצב");
+      const changes = [
+        ...m.newDecisions, ...m.resolvedDecisions, ...m.priorityChanges,
+        ...m.confidenceChanges, ...m.evidenceChanges, ...m.categoryChanges, ...m.actionChanges,
+      ];
+      const items = changes.slice(0, 6).map((c) => item(c.detail, `החלטה ${c.decisionId} · תמונת מצב ${c.oldSnapshotId ?? "—"} ← ${c.newSnapshotId}`, null));
+      return {
+        engine,
+        headline: m.summary,
+        items,
+        evidence: [
+          m.firstReview ? "סיור ביקורת ראשון — נשמרה תמונת מצב ראשונה" : `תמונת מצב קודמת: ${m.previousSnapshotAt ?? "—"}`,
+          `ציר זמן: ${m.timeline.length} תמונות מצב בחלון השמירה`,
+          ...m.timeline.slice(0, 3).map((t) => `${t.takenAt.slice(0, 16).replace("T", " ")} · ${t.noActionRequired ? "אין פעולה נדרשת" : `${t.decisionIds.length} החלטות`}`),
+        ],
+        // Data-freshness signal only — Memory computes no confidence of its own.
+        confidence: 60,
       };
     }
     default:

@@ -22,6 +22,8 @@ const PLAN: Record<string, EngineId[]> = {
   JOURNEYS: ["customer_journey"],
   // 5.8 — decision questions load ONLY the Executive Decision Engine.
   EXEC_DECISIONS: ["executive_decision"],
+  // 5.9 — change-since-last-review questions load ONLY Executive Memory.
+  EXEC_MEMORY: ["executive_memory"],
   UNKNOWN: [],
 };
 
@@ -40,6 +42,7 @@ const REASON: Record<string, string> = {
   GENERAL_STATUS: "סקירה כללית מגיעה מהצ׳יף אוף סטאף.",
   JOURNEYS: "מצב המסעות מגיע ממרכז המסעות הקנוני + תור המודיעין — ראיות מאומתות בלבד, ללא מדדים מומצאים.",
   EXEC_DECISIONS: "ההחלטות מגיעות ממנוע ההחלטות הניהולי — עד שלוש החלטות, עדיפויות וביטחון מורשים מהמקורות הקנוניים בלבד.",
+  EXEC_MEMORY: "השינויים מגיעים מהזיכרון הניהולי — השוואת תמונות מצב חתומות של ההחלטות, ללא חישוב מחדש וללא פרשנות.",
   UNKNOWN: "לא זוהתה כוונה ברורה — נדרש חידוד.",
 };
 

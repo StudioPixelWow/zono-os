@@ -23,7 +23,10 @@ export type IntentType =
   // Batch 5.8 — executive decision questions ("מה ההחלטות הכי חשובות?").
   // Answered ONLY by the canonical Executive Decision Engine (top-3, inherited
   // priorities/confidence) — additive intent, existing routing untouched.
-  | "EXEC_DECISIONS" | "UNKNOWN";
+  | "EXEC_DECISIONS"
+  // Batch 5.9 — "מה השתנה מאז הביקור האחרון?" Answered ONLY by Executive
+  // Memory (immutable snapshot diffs) — additive, existing routing untouched.
+  | "EXEC_MEMORY" | "UNKNOWN";
 
 export type EntityKind = "buyer" | "seller" | "listing" | "lead" | "office" | "broker" | "city" | "property";
 export interface DetectedEntity { kind: EntityKind; value: string }
@@ -46,12 +49,14 @@ export type EngineId =
   | "chief_of_staff" | "orchestrator" | "listing" | "buyer" | "seller" | "lead" | "office"
   | "valuation" | "competitive" | "territory" | "mission" | "decision" | "truth"
   | "customer_journey" | "relationship"
-  | "executive_decision";     // 5.8 — the canonical Executive Decision Engine
+  | "executive_decision"      // 5.8 — the canonical Executive Decision Engine
+  | "executive_memory";       // 5.9 — snapshot-diff memory over those decisions
 export const ENGINE_HE: Record<EngineId, string> = {
   chief_of_staff: "צ׳יף אוף סטאף", orchestrator: "מנצח הסוכנים", listing: "סוכן מודעות", buyer: "סוכן קונים", seller: "סוכן מוכרים",
   lead: "סוכן לידים", office: "סוכן צמיחת המשרד", valuation: "הערכת שווי", competitive: "מודיעין תחרותי", territory: "מודיעין טריטוריה",
   mission: "מנוע משימות", decision: "מנוע החלטות", truth: "מנוע אמת", customer_journey: "מסע לקוח", relationship: "גרף קשרים",
   executive_decision: "מנוע ההחלטות הניהולי",
+  executive_memory: "זיכרון ניהולי",
 };
 export interface ContextPlan { engines: EngineId[]; reason: string }
 

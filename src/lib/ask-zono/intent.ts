@@ -29,6 +29,9 @@ const INTENTS: { intent: IntentType; type: QuestionType; kw: string[]; priority:
   // Priority beats DAILY_PRIORITIES so a decisions question is not swallowed by
   // the generic what-to-do plan.
   { intent: "EXEC_DECISIONS", type: "what_to_do", priority: 92, kw: ["decision", "decisions", "executive decision", "החלטה", "החלטות", "ההחלטות הכי חשובות", "החלטות ניהוליות"] },
+  // Batch 5.9 — change-since-last-review questions. Priority beats
+  // EXEC_DECISIONS so "מה השתנה בהחלטות?" lands on Memory, not on a fresh list.
+  { intent: "EXEC_MEMORY", type: "status", priority: 94, kw: ["what changed", "since my last", "מה השתנה", "השתנה מאז", "מאז הביקור", "מאז שנכנסתי", "מה חדש מאז"] },
   { intent: "OFFICE_STATUS", type: "status", priority: 64, kw: ["office", "brokerage", "grow", "expansion", "inventory", "משרד", "עסק", "צמיחה", "הרחבה", "מלאי"] },
   { intent: "GENERAL_STATUS", type: "status", priority: 55, kw: ["status", "overview", "how are we", "summary", "מצב", "סקירה", "סיכום", "איך אנחנו"] },
 ];
