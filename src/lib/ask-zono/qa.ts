@@ -101,6 +101,15 @@ export function runSelfCheck(): AZSelfCheck {
   // engine (now Coach-backed) — no new intent, no second reasoning path.
   const j5 = understandAndPlan("איזה מסעות דורשים ממני טיפול?");
   add("5.7 care-question routes to JOURNEYS via the one canonical engine", j5.understanding.intent === "JOURNEYS" && j5.plan.engines.length === 1 && j5.plan.engines[0] === "customer_journey", j5.understanding.intent);
+  // 5.9 — Executive Memory routing (additive).
+  const m1 = understandAndPlan("מה השתנה מאז שנכנסתי בפעם האחרונה?");
+  add("5.9 memory question routes to EXEC_MEMORY, single engine", m1.understanding.intent === "EXEC_MEMORY" && m1.plan.engines.length === 1 && m1.plan.engines[0] === "executive_memory", m1.understanding.intent);
+  const m2 = understandAndPlan("מה השתנה בהחלטות?");
+  add("5.9 change-in-decisions routes to Memory, not a fresh decision list", m2.understanding.intent === "EXEC_MEMORY", m2.understanding.intent);
+  const m3 = understandAndPlan("מה שלוש ההחלטות הכי חשובות כרגע?");
+  add("5.9 plain decisions question still routes to EXEC_DECISIONS (no bleed)", m3.understanding.intent === "EXEC_DECISIONS", m3.understanding.intent);
+  const mAns = askWithResults("מה השתנה מאז שנכנסתי בפעם האחרונה?", [res("executive_memory", "מאז הביקור האחרון: 1 החלטות נוספו · 0 הוסרו", ["נוספה החלטה: עסקה בשלה לסגירה"], 60)]);
+  add("5.9 memory answer proposes NO wrapper actions (observation only)", mAns.answer.actions.length === 0, "");
 
   // ── Batch 5.8 — executive decision questions ──
   const d1 = understandAndPlan("מה שלוש ההחלטות הכי חשובות כרגע?");

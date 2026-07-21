@@ -55,6 +55,7 @@ const JOURNEY_ONLY_DIRS = [
   "src/lib/journey-cockpit",
   "src/lib/journey-coach",                        // 5.7 — the Coach is evidence-native by contract
   "src/lib/executive-decision",                   // 5.8 — the Decision Engine inherits, never reads legacy
+  "src/lib/executive-memory",                     // 5.9 — Memory diffs snapshots, never reads journey state
   "src/components/journey",
   "src/components/dashboard/sections/JourneysDashboardSection.tsx",
   "src/app/(app)/journeys",
