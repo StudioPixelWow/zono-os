@@ -23,6 +23,7 @@ const FOLLOWUPS: Record<IntentType, string[]> = {
   OFFICE_STATUS: ["מה בריאות המלאי?", "היכן לגייס מתווכים?", "אילו סיכונים עסקיים קיימים?"],
   GENERAL_STATUS: ["מה עליי לעשות היום?", "אילו סיכונים קריטיים?", "אילו הזדמנויות פתוחות?"],
   JOURNEYS: ["אילו מסעות תקועים עם ראיה מאומתת?", "אילו המלצות מסע עומדות ברף הראיות?", "מה מצב המסעות של הנכסים?"],
+  EXEC_DECISIONS: ["מה שלוש ההחלטות הכי חשובות כרגע?", "אילו מסעות דורשים ממני טיפול?", "אילו מוכרים בסיכון נטישה?"],
   UNKNOWN: ["מה עליי לעשות היום?", "אילו מוכרים בסיכון?", "אילו קונים קרובים לסגירה?"],
 };
 
@@ -42,6 +43,9 @@ function proposeActions(intent: IntentType, results: EngineResult[]): ProposedAc
     // lifecycle. Proposing a second wrapper action would duplicate the queue —
     // and a KPI must never be promoted into an action.
     case "JOURNEYS": return [];
+    // 5.8 — same rule for decisions: the Decision Engine NEVER creates
+    // recommendations, so the Copilot must not wrap its output in new ones.
+    case "EXEC_DECISIONS": return [];
     default: return [];
   }
 }

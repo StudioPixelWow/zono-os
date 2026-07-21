@@ -19,7 +19,11 @@ export type IntentType =
   | "OPPORTUNITIES" | "OFFICE_STATUS" | "GENERAL_STATUS"
   // Batch 5.6H — canonical Journey questions ("אילו מסעות תקועים?"). Answered
   // ONLY by the canonical Journey Command provider — never a second engine.
-  | "JOURNEYS" | "UNKNOWN";
+  | "JOURNEYS"
+  // Batch 5.8 — executive decision questions ("מה ההחלטות הכי חשובות?").
+  // Answered ONLY by the canonical Executive Decision Engine (top-3, inherited
+  // priorities/confidence) — additive intent, existing routing untouched.
+  | "EXEC_DECISIONS" | "UNKNOWN";
 
 export type EntityKind = "buyer" | "seller" | "listing" | "lead" | "office" | "broker" | "city" | "property";
 export interface DetectedEntity { kind: EntityKind; value: string }
@@ -41,11 +45,13 @@ export interface QueryUnderstanding {
 export type EngineId =
   | "chief_of_staff" | "orchestrator" | "listing" | "buyer" | "seller" | "lead" | "office"
   | "valuation" | "competitive" | "territory" | "mission" | "decision" | "truth"
-  | "customer_journey" | "relationship";
+  | "customer_journey" | "relationship"
+  | "executive_decision";     // 5.8 — the canonical Executive Decision Engine
 export const ENGINE_HE: Record<EngineId, string> = {
   chief_of_staff: "צ׳יף אוף סטאף", orchestrator: "מנצח הסוכנים", listing: "סוכן מודעות", buyer: "סוכן קונים", seller: "סוכן מוכרים",
   lead: "סוכן לידים", office: "סוכן צמיחת המשרד", valuation: "הערכת שווי", competitive: "מודיעין תחרותי", territory: "מודיעין טריטוריה",
   mission: "מנוע משימות", decision: "מנוע החלטות", truth: "מנוע אמת", customer_journey: "מסע לקוח", relationship: "גרף קשרים",
+  executive_decision: "מנוע ההחלטות הניהולי",
 };
 export interface ContextPlan { engines: EngineId[]; reason: string }
 

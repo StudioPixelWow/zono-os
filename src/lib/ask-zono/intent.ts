@@ -25,6 +25,10 @@ const INTENTS: { intent: IntentType; type: QuestionType; kw: string[]; priority:
   // alone (those belong to MISSIONS / generic filters): a journey question must
   // name the journey. Priority beats MISSIONS so "מסעות חסומים" routes here.
   { intent: "JOURNEYS", type: "status", priority: 80, kw: ["journey", "journeys", "stalled journey", "מסע", "מסעות", "מסע לקוח", "מסעות תקועים", "שלבי מסע", "שהייה בשלב"] },
+  // Batch 5.8 — executive decision questions ("מה ההחלטות הכי חשובות כרגע?").
+  // Priority beats DAILY_PRIORITIES so a decisions question is not swallowed by
+  // the generic what-to-do plan.
+  { intent: "EXEC_DECISIONS", type: "what_to_do", priority: 92, kw: ["decision", "decisions", "executive decision", "החלטה", "החלטות", "ההחלטות הכי חשובות", "החלטות ניהוליות"] },
   { intent: "OFFICE_STATUS", type: "status", priority: 64, kw: ["office", "brokerage", "grow", "expansion", "inventory", "משרד", "עסק", "צמיחה", "הרחבה", "מלאי"] },
   { intent: "GENERAL_STATUS", type: "status", priority: 55, kw: ["status", "overview", "how are we", "summary", "מצב", "סקירה", "סיכום", "איך אנחנו"] },
 ];

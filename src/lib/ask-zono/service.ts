@@ -19,6 +19,9 @@ import { getOfficeGrowthScorecard } from "@/lib/office-agent";
 // projection + queue identity, adding evidence-referenced explanations and
 // never a second analytics path.
 import { getJourneyCoach } from "@/lib/journey-coach/service";
+// Batch 5.8 — the canonical Executive Decision Engine (pure prioritization
+// over existing canonical evidence; top-3, inherited confidence).
+import { getExecutiveDecisions } from "@/lib/executive-decision/service";
 import { understandAndPlan, composeResponse } from "./ask";
 import { assembleEntityContext } from "@/lib/ai-context/assembler";
 import { renderContextText } from "@/lib/ai-context/render";
@@ -133,6 +136,27 @@ async function runEngine(engine: EngineId, orgId: string | null, u: QueryUnderst
         // Data-quality coverage (canonical vs fallback records) — an evidence
         // measure, deliberately NOT an invented AI-confidence score.
         confidence: j.coverage.value ?? 40,
+      };
+    }
+    case "executive_decision": {
+      // 5.8 — decisions come ONLY from the canonical Decision Engine: at most
+      // three, upstream priorities/confidence inherited verbatim, an honest
+      // single "no action required" when nothing meets the bar. Nothing is
+      // re-scored here.
+      const d = await getExecutiveDecisions().catch(() => null);
+      if (!d) return empty(engine, "מנוע ההחלטות לא זמין — לא ניתן להסיק החלטות");
+      const items = d.decisions.map((dec) =>
+        item(`${dec.priority}. ${dec.headline}`, `${dec.whyNow} ← ${dec.recommendedAction}`, dec.upstreamPriority));
+      return {
+        engine,
+        headline: d.noActionRequired
+          ? "אין פעולה ניהולית נדרשת כרגע (על בסיס כלל הראיות הקנוניות)"
+          : `${d.decisions.length} החלטות ניהוליות עומדות ברף הראיות (מתוך מקסימום 3)`,
+        items,
+        evidence: d.decisions.flatMap((dec) => dec.evidence.slice(0, 2).map((e) => `${e.label} · ${e.source}`)).slice(0, 8),
+        // Inherited-or-nothing: the max upstream confidence when one exists;
+        // a neutral floor otherwise (understanding-weighting happens upstream).
+        confidence: Math.max(0, ...d.decisions.map((dec) => dec.confidence ?? 0)) || 40,
       };
     }
     default:

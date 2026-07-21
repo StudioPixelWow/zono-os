@@ -20,6 +20,8 @@ const PLAN: Record<string, EngineId[]> = {
   GENERAL_STATUS: ["chief_of_staff"],
   // 5.6H — Journey questions load ONLY the canonical journey engine.
   JOURNEYS: ["customer_journey"],
+  // 5.8 — decision questions load ONLY the Executive Decision Engine.
+  EXEC_DECISIONS: ["executive_decision"],
   UNKNOWN: [],
 };
 
@@ -37,6 +39,7 @@ const REASON: Record<string, string> = {
   OFFICE_STATUS: "מצב העסק מגיע מסוכן צמיחת המשרד.",
   GENERAL_STATUS: "סקירה כללית מגיעה מהצ׳יף אוף סטאף.",
   JOURNEYS: "מצב המסעות מגיע ממרכז המסעות הקנוני + תור המודיעין — ראיות מאומתות בלבד, ללא מדדים מומצאים.",
+  EXEC_DECISIONS: "ההחלטות מגיעות ממנוע ההחלטות הניהולי — עד שלוש החלטות, עדיפויות וביטחון מורשים מהמקורות הקנוניים בלבד.",
   UNKNOWN: "לא זוהתה כוונה ברורה — נדרש חידוד.",
 };
 
