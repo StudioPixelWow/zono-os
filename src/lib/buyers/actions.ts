@@ -45,9 +45,12 @@ export async function createBuyerAction(
     await emitBusinessEvent({ type: DOMAIN_EVENTS.buyerCreated, entityType: "buyer", entityId: id });
     const { initializeBuyerIntelligence } = await import("@/lib/buyer-intelligence/service");
     await initializeBuyerIntelligence(id);
-    // Open the buyer's customer journey from this real buyer row (idempotent).
-    const { ensureJourney } = await import("@/lib/journey-intelligence/service");
-    await ensureJourney("buyer", id);
+    // Open the buyer's canonical journey immediately (idempotent). Batch 5.6I:
+    // straight to the ONE canonical creation service — the legacy
+    // journey-intelligence adapter (and its forbidden-field recompute) is retired.
+    const { ensureCanonicalJourneyForSession } = await import("@/lib/journey-backfill/service");
+    const jr = await ensureCanonicalJourneyForSession("buyer", id);
+    if (!jr.ok) console.error("[buyers] canonical journey ensure failed:", jr.error);
   } catch (e) {
     console.error("[buyers] intelligence auto-init failed:", e);
   }

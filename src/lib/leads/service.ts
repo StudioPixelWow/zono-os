@@ -131,8 +131,9 @@ export async function convertLead(leadId: string, input: ConvertLeadInput = {}):
       try {
         const { initializeBuyerIntelligence } = await import("@/lib/buyer-intelligence/service");
         await initializeBuyerIntelligence(buyerId);
-        const { ensureJourney } = await import("@/lib/journey-intelligence/service");
-        await ensureJourney("buyer", buyerId);
+        // 5.6I — canonical journey creation, not the retired legacy adapter.
+        const { ensureCanonicalJourneyForSession } = await import("@/lib/journey-backfill/service");
+        await ensureCanonicalJourneyForSession("buyer", buyerId);
       } catch (e) { console.error("[leads] buyer init failed:", e); }
     }
   }
@@ -142,8 +143,9 @@ export async function convertLead(leadId: string, input: ConvertLeadInput = {}):
       try {
         const { initializeSellerIntelligence } = await import("@/lib/seller-intelligence/service");
         await initializeSellerIntelligence(sellerId);
-        const { ensureJourney } = await import("@/lib/journey-intelligence/service");
-        await ensureJourney("seller", sellerId);
+        // 5.6I — canonical journey creation, not the retired legacy adapter.
+        const { ensureCanonicalJourneyForSession } = await import("@/lib/journey-backfill/service");
+        await ensureCanonicalJourneyForSession("seller", sellerId);
       } catch (e) { console.error("[leads] seller init failed:", e); }
     }
   }

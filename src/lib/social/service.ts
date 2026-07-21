@@ -153,10 +153,13 @@ export async function convertSocialLeadToLead(socialLeadId: string): Promise<Con
   await supabase.from("social_leads").update({ status: "converted", lead_id: lead.id, converted_buyer_id: buyerId, reviewed_by: userId, reviewed_at: new Date().toISOString() } as never).eq("id", socialLeadId);
   await supabase.from("leads").update({ stage: "converted", converted_buyer_id: buyerId, converted_seller_id: sellerId } as never).eq("id", lead.id).eq("org_id", orgId);
 
-  // 8) Open the converted twin's customer journey (real row; best-effort).
+  // 8) Open the converted twin's CANONICAL journey (real row; best-effort).
+  // 5.6I — straight to the one canonical creation service; the legacy
+  // journey-intelligence adapter is retired.
   try {
-    const { ensureJourney } = await import("@/lib/journey-intelligence/service");
-    await ensureJourney(twinType, twinId);
+    const { ensureCanonicalJourneyForSession } = await import("@/lib/journey-backfill/service");
+    const r = await ensureCanonicalJourneyForSession(twinType, twinId);
+    if (!r.ok) console.error("[social] canonical journey ensure failed:", r.error);
   } catch (e) {
     console.error("[social] journey ensure on conversion failed:", e);
   }

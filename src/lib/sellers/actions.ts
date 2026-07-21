@@ -51,10 +51,12 @@ export async function createSeller360Action(
       await emitBusinessEvent({ type: DOMAIN_EVENTS.sellerLinkedToProperty, entityType: "property", entityId: propertyId, payload: { sellerId: id } });
     }
     await initializeSellerIntelligence(id).catch((e) => console.error("[seller] auto-init failed:", e));
-    // Open the seller's customer journey from this real seller row (idempotent,
-    // best-effort — never blocks seller creation).
-    await import("@/lib/journey-intelligence/service")
-      .then((m) => m.ensureJourney("seller", id))
+    // Open the seller's canonical journey immediately (idempotent, best-effort —
+    // never blocks seller creation). Batch 5.6I: straight to the ONE canonical
+    // creation service; the legacy journey-intelligence adapter is retired.
+    await import("@/lib/journey-backfill/service")
+      .then((m) => m.ensureCanonicalJourneyForSession("seller", id))
+      .then((r) => { if (!r.ok) console.error("[seller] canonical journey ensure failed:", r.error); })
       .catch((e) => console.error("[seller] journey ensure failed:", e));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";

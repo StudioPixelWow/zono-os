@@ -481,42 +481,24 @@ export async function buildCommIntelAttentionRows(orgId: string): Promise<Attent
   return rows;
 }
 
-export async function buildJourneyAttentionRows(orgId: string): Promise<AttentionInsert[]> {
-  const supabase = await createClient();
-  const rows: AttentionInsert[] = [];
-  try {
-    // Ready buyers/sellers (high conversion, low risk)
-    const { data: ready } = await supabase.from("journeys")
-      .select("journey_type,entity_type,entity_id,conversion_score,risk_score,current_stage").eq("org_id", orgId).eq("status", "active").gte("conversion_score", 70).lt("risk_score", 45).order("conversion_score", { ascending: false }).limit(8);
-    for (const j of (ready ?? []) as { journey_type: string; entity_type: string; entity_id: string; conversion_score: number }[]) {
-      rows.push({ org_id: orgId, entity_type: j.entity_type, entity_id: j.entity_id,
-        attention_score: clamp(j.conversion_score), urgency_score: clamp(j.conversion_score - 4), impact_score: 70, confidence_score: 84, revenue_impact_score: clamp(j.conversion_score), relationship_impact_score: 28, churn_impact_score: 0,
-        title: j.journey_type === "buyer" ? "קונה בשל לסגירה" : "מוכר בשל לסגירה", reason: "מסע עם ציון המרה גבוה וסיכון נמוך", recommended_action: j.journey_type === "buyer" ? "הצע צעד סגירה היום" : "קדם לחתימה/סגירה", expected_outcome: "סגירת עסקה", status: "open" });
-    }
-    // Stuck journeys
-    const { data: stuck } = await supabase.from("journeys")
-      .select("journey_type,entity_type,entity_id,current_stage,velocity_state,risk_score").eq("org_id", orgId).eq("status", "active").in("velocity_state", ["stuck", "regression"]).limit(8);
-    for (const j of (stuck ?? []) as { journey_type: string; entity_type: string; entity_id: string; velocity_state: string; risk_score: number }[]) {
-      rows.push({ org_id: orgId, entity_type: j.entity_type, entity_id: j.entity_id,
-        attention_score: clamp(60 + j.risk_score * 0.3), urgency_score: 72, impact_score: 56, confidence_score: 80, revenue_impact_score: 46, relationship_impact_score: 40, churn_impact_score: clamp(j.risk_score),
-        title: j.journey_type === "buyer" ? "מסע קונה תקוע" : "מסע מוכר תקוע", reason: j.velocity_state === "regression" ? "המסע נסוג לשלב קודם" : "אין התקדמות בשלב הנוכחי", recommended_action: "צור קשר יזום והסר חסמים", expected_outcome: "החזרת מומנטום למסע", status: "open" });
-    }
-    // Journey risks (open, high)
-    const { data: risks } = await supabase.from("journey_risks")
-      .select("entity_type,entity_id,risk_type,score,reason,recommended_action").eq("org_id", orgId).eq("status", "open").gte("score", 55).order("score", { ascending: false }).limit(6);
-    for (const r of (risks ?? []) as { entity_type: string; entity_id: string; risk_type: string; score: number; reason: string | null; recommended_action: string | null }[]) {
-      rows.push({ org_id: orgId, entity_type: r.entity_type, entity_id: r.entity_id,
-        attention_score: clamp(r.score), urgency_score: clamp(r.score), impact_score: 54, confidence_score: 80, revenue_impact_score: 44, relationship_impact_score: 38, churn_impact_score: clamp(r.score),
-        title: `סיכון מסע — ${r.risk_type}`, reason: r.reason ?? "סיכון במסע הלקוח", recommended_action: r.recommended_action ?? "התערב במסע", expected_outcome: "מניעת נשירה", status: "open" });
-    }
-    // Journey opportunities (open, high)
-    const { data: opps } = await supabase.from("journey_opportunities")
-      .select("entity_type,entity_id,opportunity_type,score,reason,recommended_action").eq("org_id", orgId).eq("status", "open").gte("score", 65).order("score", { ascending: false }).limit(6);
-    for (const o of (opps ?? []) as { entity_type: string; entity_id: string; opportunity_type: string; score: number; reason: string | null; recommended_action: string | null }[]) {
-      rows.push({ org_id: orgId, entity_type: o.entity_type, entity_id: o.entity_id,
-        attention_score: clamp(o.score), urgency_score: clamp(o.score - 6), impact_score: 64, confidence_score: 82, revenue_impact_score: clamp(o.score), relationship_impact_score: 26, churn_impact_score: 0,
-        title: `הזדמנות מסע — ${o.opportunity_type}`, reason: o.reason ?? "הזדמנות במסע הלקוח", recommended_action: o.recommended_action ?? "פעל על ההזדמנות", expected_outcome: "האצת המרה", status: "open" });
-    }
-  } catch { /* journey signals are additive — never block the Decision Brain */ }
-  return rows;
+/**
+ * LEGACY — RETIRED (Batch 5.6I). DO NOT USE FOR CANONICAL JOURNEY REASONING.
+ *
+ * This used to fabricate "ready to close" / "stuck journey" attention items
+ * from journeys.conversion_score / risk_score / velocity_state and the
+ * journey_risks / journey_opportunities satellite tables — ALL written only by
+ * the deleted journey-intelligence engine. Those columns are schema defaults
+ * (or frozen history) now that the engine is gone; reading them would surface
+ * invented urgency from stale scores.
+ *
+ * Canonical journey attention already reaches brokers through the evidence-
+ * gated Broker Intelligence queue (stall recommendations with verified dwell)
+ * -> Daily OS / Home / Executive / Copilot. The Decision Brain therefore gets
+ * NO separate journey feed: an empty contribution is the honest one. The
+ * export survives so the composition stays stable; delete it together with the
+ * satellite tables once the schema cleanup batch lands.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature kept stable for the Decision Brain composition
+export async function buildJourneyAttentionRows(_orgId: string): Promise<AttentionInsert[]> {
+  return [];
 }

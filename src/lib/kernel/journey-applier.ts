@@ -128,18 +128,18 @@ export async function applyJourneyIntent(
     // ── 3. The journey exists ────────────────────────────────────────────────
     const from = journey.current_stage;
 
-    // LEGACY DUAL-WRITE GUARD (Batch 5.2 finding).
-    // journey-intelligence/service.ts::ensureJourney still writes THIS table
-    // directly (called from buyers/sellers/leads/social) using its own legacy
-    // vocabulary — e.g. a seller journey opens at 'potential', which is not a
-    // canonical stage. buildTransition() would then see an unknown `from` and
-    // reject every move, blocking the journey FOREVER and silently.
-    // We refuse to guess and refuse to overwrite: record an explicit, actionable
-    // skip. Batch 5.3's backfill maps these onto canonical stages (the maps
-    // already exist in journey-canonical/legacy-map.ts).
+    // LEGACY-STAGE GUARD (Batch 5.2 finding; writer deleted in 5.6I).
+    // The legacy journey-intelligence ensureJourney used to write THIS table
+    // directly with its own vocabulary (e.g. a seller journey opening at
+    // 'potential', which is not a canonical stage) — buildTransition() would
+    // then see an unknown `from` and block the journey forever, silently.
+    // 5.3 turned it into a compat adapter and 5.6I DELETED the module; the four
+    // create flows now call the canonical creation service directly. This guard
+    // stays for any pre-5.3 row the backfill has not repaired yet: we refuse to
+    // guess and refuse to overwrite — an explicit, actionable skip instead.
     if (!isValidStage(jt, from)) {
       return skip(
-        `legacy non-canonical stage '${from}' on this ${jt} journey (written by journey-intelligence ensureJourney) — awaiting Batch 5.3 backfill`,
+        `legacy non-canonical stage '${from}' on this ${jt} journey (pre-5.3 legacy writer) — awaiting the 5.3 backfill repair`,
         journey.id, from,
       );
     }
