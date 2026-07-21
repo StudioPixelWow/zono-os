@@ -102,6 +102,18 @@ export function runSelfCheck(): AZSelfCheck {
   const j5 = understandAndPlan("איזה מסעות דורשים ממני טיפול?");
   add("5.7 care-question routes to JOURNEYS via the one canonical engine", j5.understanding.intent === "JOURNEYS" && j5.plan.engines.length === 1 && j5.plan.engines[0] === "customer_journey", j5.understanding.intent);
 
+  // ── Batch 5.8 — executive decision questions ──
+  const d1 = understandAndPlan("מה שלוש ההחלטות הכי חשובות כרגע?");
+  add("5.8 decisions question → EXEC_DECISIONS + ONLY the decision engine", d1.understanding.intent === "EXEC_DECISIONS" && d1.plan.engines.length === 1 && d1.plan.engines[0] === "executive_decision", d1.understanding.intent + ":" + d1.plan.engines.join(","));
+  const d2 = understandAndPlan("What are the top executive decisions right now?");
+  add("5.8 decisions question (en) routes to EXEC_DECISIONS", d2.understanding.intent === "EXEC_DECISIONS", d2.understanding.intent);
+  add("5.8 plan reason states top-3 + inherited priorities", d1.plan.reason.includes("שלוש") && d1.plan.reason.includes("קנוני"), d1.plan.reason);
+  const dAns = askWithResults("מה שלוש ההחלטות הכי חשובות כרגע?", [res("executive_decision", "3 החלטות ניהוליות עומדות ברף הראיות (מתוך מקסימום 3)", ["1. מוכר בסיכון נטישה", "2. מסע תקוע", "3. עסקה בשלה"], 74)]);
+  add("5.8 decision answer synthesized with NO invented wrapper actions", dAns.answer.executiveAnswer.includes("החלטות") && dAns.answer.actions.length === 0, "");
+  // Daily-priorities question must NOT be swallowed by the decisions intent.
+  const d3 = understandAndPlan("מה עליי לעשות היום?");
+  add("5.8 daily-priorities question still routes to DAILY_PRIORITIES", d3.understanding.intent === "DAILY_PRIORITIES", d3.understanding.intent);
+
   const passed = checks.filter((c) => c.pass).length;
   return { ok: passed === checks.length, total: checks.length, passed, checks };
 }
