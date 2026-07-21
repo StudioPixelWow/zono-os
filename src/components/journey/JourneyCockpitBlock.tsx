@@ -61,8 +61,18 @@ export function JourneyCockpitBlock({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* FALLBACK — there is no canonical journey. We say so; we do not fake a stage. */}
-      {journey.fallback && (
+      {/* PROVIDER FAILURE — the READ failed. Unavailable ≠ "no journey yet";
+          we never render a failure as a healthy-looking gap (5.6I). */}
+      {journey.providerFailure ? (
+        <div className="bg-danger-soft text-danger flex items-start gap-2 rounded-2xl px-4 py-3 text-sm">
+          <Icon name="AlertTriangle" size={18} />
+          <div>
+            <p className="font-bold">נתוני המסע אינם זמינים כעת</p>
+            <p className="text-xs">קריאת המסע נכשלה — לא ניתן להסיק מצב. נסה לרענן.</p>
+          </div>
+        </div>
+      ) : journey.fallback ? (
+        /* FALLBACK — there is no canonical journey. We say so; we do not fake a stage. */
         <div className="bg-surface border-line text-muted flex items-start gap-2 rounded-2xl border border-dashed px-4 py-3 text-sm">
           <Icon name="AlertTriangle" size={18} />
           <div>
@@ -72,7 +82,7 @@ export function JourneyCockpitBlock({
             </p>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Stage + progress */}
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -101,14 +111,21 @@ export function JourneyCockpitBlock({
             <p className="text-brand-strong text-3xl font-black">{journey.progress}%</p>
             <p className="text-muted text-xs font-semibold">התקדמות במסע</p>
           </div>
-          {journey.stageAgeDays !== null && (
+          {journey.stageAgeDays !== null ? (
             <div className="text-end">
               <p className={cn("text-3xl font-black", stalled ? "text-danger" : "text-ink")}>
                 {journey.stageAgeDays}
               </p>
               <p className="text-muted text-xs font-semibold">ימים בשלב</p>
             </div>
-          )}
+          ) : !journey.fallback ? (
+            /* 5.6I — the SAME dwell state Journey Center and Executive show:
+               no verified stage entry ⇒ insufficient evidence. Never 0. */
+            <div className="text-end">
+              <p className="text-muted text-sm font-black">אין ראיה מספקת</p>
+              <p className="text-muted text-xs font-semibold">שהייה בשלב</p>
+            </div>
+          ) : null}
         </div>
       </div>
 

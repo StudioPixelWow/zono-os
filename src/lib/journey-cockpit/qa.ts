@@ -5,11 +5,13 @@
 // making. Runs with no database:  npx tsx src/lib/journey-cockpit/qa.ts
 // ============================================================================
 import type { CanonicalJourneyRow } from "@/lib/journey-center/canonical";
+import { fromCanonicalJourney, type CanonicalTransition, type EntityFacts } from "@/lib/journey-center/canonical";
 import {
   allowedCommandsFor, assembleCockpitJourney, buildHistory, buildLadder, fallbackCockpitJourney,
   lastLadderStage, NO_FACTS, progressFor, transitionSource,
   type CockpitEventRow,
 } from "./assemble";
+import { readFileSync } from "node:fs";
 
 export interface QaResult { name: string; pass: boolean; detail: string }
 
@@ -43,8 +45,14 @@ const ev = (over: Partial<CockpitEventRow> = {}): CockpitEventRow => ({
   reason: "seller.listing_published",
   actorUserId: "u-1",
   evidence: { sourceEvent: "property.published" },
+  // 5.6I — kernel-traceable by default; seed fixtures set this to null.
+  sourceEventId: "de-1",
   ...over,
 });
+/** A backfill SEED — stage_entered_at may exist on the row, but this proves
+ *  nothing about stage entry (no source_event_id). */
+const seed = (over: Partial<CockpitEventRow> = {}): CockpitEventRow =>
+  ev({ id: "e-seed", eventType: "journey_opened", fromStage: null, sourceEventId: null, evidence: { source: "legacy_backfill" }, ...over });
 
 export function runCockpitQa(): QaResult[] {
   const r: QaResult[] = [];
@@ -82,14 +90,21 @@ export function runCockpitQa(): QaResult[] {
       c.history.length === 0, `history=${c.history.length}`);
   }
 
-  // 4 — stageAgeDays is null when unmeasurable — NEVER 0.
+  // 4 — stageAgeDays is null when unmeasurable — NEVER 0, and NEVER a
+  //     stage_entered_at / started_at guess (5.6I: the timestamps may EXIST).
   {
-    const c = assembleCockpitJourney({
+    const noEvents = assembleCockpitJourney({
       journey: journey({ stageEnteredAt: null, startedAt: null }),
       events: [], facts: NO_FACTS, nowMs: NOW,
     });
-    ok("4 · unmeasurable stage age ⇒ null, not 0",
-      c.stageAgeDays === null, `stageAgeDays=${String(c.stageAgeDays)}`);
+    const backfilled = assembleCockpitJourney({
+      journey: journey({ stageEnteredAt: daysAgo(40), startedAt: daysAgo(40) }),
+      events: [seed({ toStage: "marketing", occurredAt: daysAgo(40) })],
+      facts: NO_FACTS, nowMs: NOW,
+    });
+    ok("4 · unverified stage age ⇒ null, not 0 and not a timestamp guess",
+      noEvents.stageAgeDays === null && backfilled.stageAgeDays === null && backfilled.stageEnteredAt === null,
+      `noEvents=${String(noEvents.stageAgeDays)} backfilled=${String(backfilled.stageAgeDays)}`);
   }
 
   // 5 — A kernel transition has a null actor. That is honest, not "System".
@@ -101,13 +116,16 @@ export function runCockpitQa(): QaResult[] {
       `actor=${String(c.history[0].actorUserId)}`);
   }
 
-  // 6 — STALLED is an observed fact (>= 14 days on the same stage).
+  // 6 — STALLED is an observed fact: >= 14 days proven by a VERIFIED transition
+  //     into the current stage (5.6I: never by stage_entered_at).
   {
     const c = assembleCockpitJourney({
-      journey: journey({ stageEnteredAt: daysAgo(21) }), events: [], facts: NO_FACTS, nowMs: NOW,
+      journey: journey({ stageEnteredAt: daysAgo(21) }),
+      events: [ev({ occurredAt: daysAgo(21) })],           // kernel-traceable entry
+      facts: NO_FACTS, nowMs: NOW,
     });
     const stalled = c.blockers.find((b) => b.kind === "stalled");
-    ok("6 · stalled blocker is observed, not guessed",
+    ok("6 · stalled blocker requires verified dwell evidence",
       !!stalled && c.stageAgeDays === 21, `age=${String(c.stageAgeDays)} blocker=${stalled?.kind}`);
   }
 
@@ -272,6 +290,93 @@ export function runCockpitQa(): QaResult[] {
   {
     const h = buildHistory("seller", [ev({ id: "e-null", toStage: null })]);
     ok("21 · destination-less events are dropped", h.length === 0, `history=${h.length}`);
+  }
+
+  // ══ Batch 5.6I — canonical dwell parity with Journey Center ═══════════════
+  const facts = (): EntityFacts => ({ title: "t", href: "/x", ownerName: null, openTasks: 0, upcomingMeetingAt: null, linked: [] });
+  const verifiedT = (at: number): CanonicalTransition => ({
+    journeyId: "j-1", fromStage: "pricing", toStage: "marketing",
+    occurredAt: daysAgo(at), reason: null, actorUserId: null, sourceEventId: "de-1",
+  });
+  const seedT = (at: number): CanonicalTransition => ({ ...verifiedT(at), sourceEventId: null });
+
+  // 22 — verified dwell is IDENTICAL in Cockpit and Journey Center.
+  {
+    const cockpit = assembleCockpitJourney({ journey: journey(), events: [ev({ occurredAt: daysAgo(3) })], facts: NO_FACTS, nowMs: NOW });
+    const center = fromCanonicalJourney(journey(), verifiedT(3), facts(), NOW);
+    ok("22 · 5.6I verified dwell: Cockpit === Journey Center",
+      cockpit.stageAgeDays === 3 && center.stageAgeDays === 3 && cockpit.stageAgeDays === center.stageAgeDays,
+      `cockpit=${String(cockpit.stageAgeDays)} center=${String(center.stageAgeDays)}`);
+  }
+
+  // 23 — unverified dwell is null in BOTH (and stalls NOWHERE).
+  {
+    const cockpit = assembleCockpitJourney({
+      journey: journey({ stageEnteredAt: daysAgo(40) }),
+      events: [seed({ toStage: "marketing", occurredAt: daysAgo(40) })],
+      facts: NO_FACTS, nowMs: NOW,
+    });
+    const center = fromCanonicalJourney(journey({ stageEnteredAt: daysAgo(40) }), seedT(40), facts(), NOW);
+    ok("23 · 5.6I unverified dwell: null in both, stalled in neither",
+      cockpit.stageAgeDays === null && center.stageAgeDays === null
+      && !cockpit.blockers.some((b) => b.kind === "stalled") && !(center.blockers ?? []).some((b) => b.includes("תקוע")),
+      `cockpit=${String(cockpit.stageAgeDays)} center=${String(center.stageAgeDays)}`);
+  }
+
+  // 24 — provider failure is a DISTINCT state: unavailable ≠ insufficient evidence.
+  {
+    const failed = fallbackCockpitJourney({
+      entityType: "seller", entityId: "s-1", reason: "קריאת המסע נכשלה",
+      canonicalStage: null, facts: NO_FACTS, nowMs: NOW, providerFailure: true,
+    });
+    const insufficient = assembleCockpitJourney({ journey: journey(), events: [], facts: NO_FACTS, nowMs: NOW });
+    const noJourneyYet = fallbackCockpitJourney({
+      entityType: "seller", entityId: "s-2", reason: "טרם נוצר מסע קנוני",
+      canonicalStage: null, facts: NO_FACTS, nowMs: NOW,
+    });
+    ok("24 · 5.6I provider failure ≠ insufficient evidence ≠ no-journey-yet",
+      failed.providerFailure === true && failed.stageAgeDays === null
+      && insufficient.providerFailure === false && insufficient.stageAgeDays === null
+      && noJourneyYet.providerFailure === false,
+      `failed=${failed.providerFailure} insufficient=${insufficient.providerFailure}`);
+  }
+
+  // 25 — a paused journey's duration is stated only from VERIFIED dwell.
+  {
+    const unverified = assembleCockpitJourney({
+      journey: journey({ status: "paused", stageEnteredAt: daysAgo(9) }),
+      events: [seed({ toStage: "marketing", occurredAt: daysAgo(9) })],
+      facts: NO_FACTS, nowMs: NOW,
+    });
+    const verified = assembleCockpitJourney({
+      journey: journey({ status: "paused" }),
+      events: [ev({ occurredAt: daysAgo(9) })],
+      facts: NO_FACTS, nowMs: NOW,
+    });
+    const uMsg = unverified.blockers.find((b) => b.kind === "paused")?.message ?? "";
+    const vMsg = verified.blockers.find((b) => b.kind === "paused")?.message ?? "";
+    ok("25 · 5.6I paused duration only from verified dwell",
+      uMsg === "המסע מושהה" && vMsg.includes("9"),
+      `unverified='${uMsg}' verified='${vMsg}'`);
+  }
+
+  // 26 — no timestamp dwell fallback survives in the assembler's executable code.
+  {
+    const src = readFileSync("src/lib/journey-cockpit/assemble.ts", "utf8")
+      .replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    ok("26 · 5.6I no `stageEnteredAt ?? startedAt` dwell fallback in cockpit source",
+      !src.includes("stageEnteredAt ?? j.startedAt") && !src.includes("j.stageEnteredAt ??")
+      && !src.includes("daysSince(") && src.includes("verifiedDwellDays("),
+      "source scan");
+  }
+
+  // 27 — the displayed stage-entry timestamp is the VERIFIED occurred_at or null.
+  {
+    const verified = assembleCockpitJourney({ journey: journey(), events: [ev({ occurredAt: daysAgo(3) })], facts: NO_FACTS, nowMs: NOW });
+    const unverified = assembleCockpitJourney({ journey: journey(), events: [seed({ toStage: "marketing" })], facts: NO_FACTS, nowMs: NOW });
+    ok("27 · 5.6I stageEnteredAt = verified occurred_at, else null",
+      verified.stageEnteredAt === daysAgo(3) && unverified.stageEnteredAt === null,
+      `verified=${String(verified.stageEnteredAt)} unverified=${String(unverified.stageEnteredAt)}`);
   }
 
   return r;

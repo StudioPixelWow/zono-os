@@ -75,6 +75,25 @@ const daysBetween = (iso: string | null, nowMs: number): number | null =>
 export const STALL_DAYS = 14;
 
 /**
+ * ── Batch 5.6G/5.6I — THE canonical dwell rule, as a shared pure function ────
+ * Dwell is admissible ONLY when the canonical ledger proves the stage entry: a
+ * transition INTO the current stage carrying `source_event_id` (traceable to
+ * `domain_events`) and a real `occurred_at`. Anything else is null —
+ * unmeasurable, never zero, never a `stage_entered_at`/`started_at` guess.
+ * 5.6I: the Journey Cockpit consumes THIS function too, so no surface owns a
+ * private dwell derivation.
+ */
+export function verifiedDwellDays(
+  currentStage: string,
+  last: CanonicalTransition | null,
+  nowMs: number,
+): number | null {
+  const entryVerified =
+    !!last && last.toStage === currentStage && !!last.sourceEventId && !!last.occurredAt;
+  return entryVerified ? daysBetween(last!.occurredAt, nowMs) : null;
+}
+
+/**
  * The ONE canonical journey → UI record mapping. Stage label, ladder position and
  * progress all come from the canonical machine — never from a private vocabulary.
  */
@@ -101,9 +120,7 @@ export function fromCanonicalJourney(
   // (traceable to `domain_events`). Anything else is null — unmeasurable, never
   // zero, never estimated. Every consumer (Journey Center, Executive, Broker
   // Intelligence) therefore shares one definition of dwell.
-  const entryVerified =
-    !!last && last.toStage === j.currentStage && !!last.sourceEventId && !!last.occurredAt;
-  const stageAgeDays = entryVerified ? daysBetween(last!.occurredAt, nowMs) : null;
+  const stageAgeDays = verifiedDwellDays(j.currentStage, last, nowMs);
   const daysSinceActivity = daysBetween(j.lastActivityAt ?? j.stageEnteredAt ?? j.startedAt, nowMs);
 
   const terminal = !!def?.terminal;

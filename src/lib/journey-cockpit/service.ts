@@ -108,9 +108,11 @@ export async function getCockpitJourney(
     };
 
     // 2. REAL HISTORY. Newest first; the assembler re-sorts and caps.
+    // 5.6I: `source_event_id` selected too — it is the ONLY admissible stage-
+    // entry evidence (the shared verified-dwell gate in the assembler needs it).
     const { data: evs } = await db
       .from("journey_events")
-      .select("id,journey_id,event_type,from_stage,to_stage,occurred_at,reason,actor_user_id,evidence")
+      .select("id,journey_id,event_type,from_stage,to_stage,occurred_at,reason,actor_user_id,evidence,source_event_id")
       .eq("org_id", orgId)
       .eq("journey_id", journey.id)
       .order("occurred_at", { ascending: false })
@@ -126,6 +128,7 @@ export async function getCockpitJourney(
       reason: (e.reason as string | null) ?? null,
       actorUserId: (e.actor_user_id as string | null) ?? null,
       evidence: (e.evidence as Record<string, unknown> | null) ?? null,
+      sourceEventId: (e.source_event_id as string | null) ?? null,
     }));
 
     return assembleCockpitJourney({
@@ -136,9 +139,12 @@ export async function getCockpitJourney(
     });
   } catch (err) {
     console.error("[journey-cockpit] read failed:", err);
+    // 5.6I: a FAILED read is "unavailable" — a different claim from "no
+    // canonical journey yet". The flag keeps the two distinct in the UI.
     return fallbackCockpitJourney({
       entityType, entityId, canonicalStage: null,
       reason: "קריאת המסע נכשלה", facts: noFacts, nowMs,
+      providerFailure: true,
     });
   }
 }

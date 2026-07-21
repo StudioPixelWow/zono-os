@@ -27,6 +27,11 @@ import {
   isValidStage, ladder, stageDef, stageLabel, stageProgress,
   type JourneyType,
 } from "@/lib/journey-canonical";
+// 5.6I — the ONE canonical dwell rule. The cockpit no longer derives dwell from
+// `stageEnteredAt ?? startedAt` (a backfill timestamp is not stage-entry
+// evidence); it applies the same verified-transition gate every other surface
+// uses, through the same shared function.
+import { verifiedDwellDays, type CanonicalTransition } from "@/lib/journey-center/canonical";
 import type { CanonicalJourneyRow } from "@/lib/journey-center/canonical";
 import type {
   CockpitBlocker, CockpitCommand, CockpitEntityType, CockpitFacts,
@@ -49,6 +54,10 @@ export interface CockpitEventRow {
   reason: string | null;
   actorUserId: string | null;
   evidence: Record<string, unknown> | null;
+  /** 5.6I — the kernel `domain_events` id (journey_events.source_event_id).
+   *  PRESENT = a real business event moved this journey; NULL = a synthetic
+   *  seed (e.g. the 5.3 backfill), which proves nothing about stage entry. */
+  sourceEventId: string | null;
 }
 
 export interface AssembleCanonicalInput {
@@ -68,9 +77,11 @@ export interface AssembleFallbackInput {
   canonicalStage: string | null;
   facts: CockpitFacts;
   nowMs: number;
+  /** 5.6I — TRUE only when the journey READ itself failed. A failed provider is
+   *  a DIFFERENT state from "no canonical journey yet" (insufficient evidence);
+   *  the UI must keep them distinct and never render failure as a healthy gap. */
+  providerFailure?: boolean;
 }
-
-const DAY = 86_400_000;
 
 /** A journey nobody has moved in this long is STALLED. Same threshold as 5.4. */
 export const STALL_DAYS = 14;
@@ -78,12 +89,8 @@ export const STALL_DAYS = 14;
 /** Max history rows a cockpit renders. Older transitions stay in journey_events. */
 export const HISTORY_LIMIT = 50;
 
-const daysSince = (iso: string | null | undefined, nowMs: number): number | null => {
-  if (!iso) return null;                                   // unmeasurable ⇒ null, NOT 0
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return null;
-  return Math.max(0, Math.floor((nowMs - t) / DAY));
-};
+// 5.6I: the timestamp-based `daysSince` dwell helper is GONE — dwell comes only
+// from `verifiedDwellDays` (journey-center/canonical), the shared canonical gate.
 
 const eventTime = (e: CockpitEventRow): number => {
   const t = e.occurredAt ? Date.parse(e.occurredAt) : NaN;
@@ -212,9 +219,11 @@ export function buildBlockers(
   j: CanonicalJourneyRow,
   stageAgeDays: number | null,
   terminal: boolean,
-  nowMs: number,
 ): CockpitBlocker[] {
   const out: CockpitBlocker[] = [];
+  // 5.6I — stalled is derived ONLY from verified canonical dwell (the caller
+  // computes stageAgeDays through the shared verified-transition gate). An
+  // unverified journey is never stalled — insufficient evidence is not "stuck".
   const stalled = !terminal && stageAgeDays !== null && stageAgeDays >= STALL_DAYS;
 
   if (stalled) {
@@ -224,10 +233,11 @@ export function buildBlockers(
     });
   }
   if (j.status === "paused") {
-    const since = daysSince(j.stageEnteredAt, nowMs);
+    // 5.6I: the paused duration is stated only when VERIFIED dwell proves it —
+    // never from the stage_entered_at timestamp (a backfill artifact).
     out.push({
       kind: "paused",
-      message: since === null ? "המסע מושהה" : `המסע מושהה (${since} ימים)`,
+      message: stageAgeDays === null ? "המסע מושהה" : `המסע מושהה (${stageAgeDays} ימים)`,
     });
   }
   if (!isValidStage(jt, j.currentStage)) {
@@ -284,9 +294,33 @@ export function assembleCockpitJourney(input: AssembleCanonicalInput): CockpitJo
   const def = stageDef(jt, j.currentStage);
   const terminal = !!def?.terminal;
 
-  const history = buildHistory(jt, events.filter((e) => e.journeyId === j.id));
-  const stageEnteredAt = j.stageEnteredAt ?? j.startedAt ?? null;
-  const stageAgeDays = daysSince(stageEnteredAt, nowMs);
+  const own = events.filter((e) => e.journeyId === j.id);
+  const history = buildHistory(jt, own);
+
+  // ── 5.6I — THE canonical dwell gate (shared with Journey Center) ──────────
+  // The newest real transition (destination-carrying, newest occurred_at) is
+  // the only admissible stage-entry evidence, and only when it is kernel-
+  // traceable (source_event_id) INTO the current stage. `stage_entered_at` and
+  // `started_at` are NOT dwell evidence — on backfilled rows they record when
+  // the backfill ran. Unverified ⇒ null: unmeasurable, never 0, never a guess.
+  const newest = [...own]
+    .filter((e) => !!e.toStage)
+    .sort((a, b) => eventTime(b) - eventTime(a))[0] ?? null;
+  const lastTransition: CanonicalTransition | null = newest
+    ? {
+        journeyId: j.id,
+        fromStage: newest.fromStage,
+        toStage: newest.toStage as string,
+        occurredAt: newest.occurredAt,
+        reason: newest.reason,
+        actorUserId: newest.actorUserId,
+        sourceEventId: newest.sourceEventId,
+      }
+    : null;
+  const stageAgeDays = verifiedDwellDays(j.currentStage, lastTransition, nowMs);
+  // The stage-entry timestamp shown to the broker is the VERIFIED one or null —
+  // never the row's stage_entered_at, never started_at.
+  const stageEnteredAt = stageAgeDays !== null ? (lastTransition?.occurredAt ?? null) : null;
 
   return {
     journeyId: j.id,                                       // the REAL spine id
@@ -309,9 +343,10 @@ export function assembleCockpitJourney(input: AssembleCanonicalInput): CockpitJo
     canonicalSource: j.source,                             // 'event' | 'compat' | 'legacy_backfill'
     fallback: false,
     fallbackReason: null,
+    providerFailure: false,                                // a real read succeeded
 
     history,
-    blockers: buildBlockers(jt, j, stageAgeDays, terminal, nowMs),
+    blockers: buildBlockers(jt, j, stageAgeDays, terminal),
     nextMilestone: nextMilestoneFor(jt, j.currentStage),
     recommendation: facts.recommendation,                  // null unless a real engine produced one
 
@@ -357,6 +392,7 @@ export function fallbackCockpitJourney(input: AssembleFallbackInput): CockpitJou
     canonicalSource: null,
     fallback: true,
     fallbackReason: reason,
+    providerFailure: input.providerFailure === true,       // failure ≠ "no journey yet"
 
     history: [],                                           // there are no real events. So: none.
     blockers: [{ kind: "non_canonical_stage", message: `אין מסע קנוני — ${reason}` }],

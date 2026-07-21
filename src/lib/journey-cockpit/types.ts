@@ -79,9 +79,14 @@ export interface CockpitJourney {
   status: string;                    // active | paused | won | lost | …
   terminal: boolean;
 
-  // time
-  stageEnteredAt: string | null;
-  stageAgeDays: number | null;       // null ⇒ unmeasurable, NOT 0
+  // time — CANONICAL DWELL CONTRACT (5.6G/5.6I, same as Journey Center):
+  //   number ⇒ VERIFIED dwell (a source_event_id-backed transition into the
+  //            current stage proves the entry; stageEnteredAt is its occurred_at)
+  //   null   ⇒ INSUFFICIENT CANONICAL EVIDENCE — never 0, never a
+  //            stage_entered_at / started_at / journey-age guess
+  //   provider failure ⇒ a DIFFERENT state again (see providerFailure below)
+  stageEnteredAt: string | null;     // the VERIFIED entry timestamp, or null
+  stageAgeDays: number | null;
   lastActivityAt: string | null;
 
   // provenance — the cockpit must never hide where its truth came from
@@ -89,6 +94,9 @@ export interface CockpitJourney {
   canonicalSource: string | null;    // journeys.source when canonical
   fallback: boolean;
   fallbackReason: string | null;
+  /** 5.6I — TRUE only when the journey READ failed. Unavailable ≠ insufficient
+   *  evidence ≠ zero; the UI renders these three states distinctly. */
+  providerFailure: boolean;
 
   // evidence
   history: CockpitTransition[];      // REAL journey_events, newest first
