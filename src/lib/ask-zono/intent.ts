@@ -21,6 +21,10 @@ const INTENTS: { intent: IntentType; type: QuestionType; kw: string[]; priority:
   { intent: "MISSIONS", type: "status", priority: 68, kw: ["mission", "missions", "tasks", "blocked", "waiting approval", "משימה", "משימות", "חסום", "ממתין לאישור"] },
   { intent: "LEADS", type: "which_entities", priority: 66, kw: ["lead", "leads", "duplicate", "new lead", "ליד", "לידים", "כפילות", "ליד חדש"] },
   { intent: "OPPORTUNITIES", type: "which_entities", priority: 76, kw: ["opportunity", "opportunities", "deal", "potential deal", "match", "הזדמנות", "הזדמנויות", "עסקה", "שידוך", "עסקה פוטנציאלית"] },
+  // Batch 5.6H — canonical Journey questions. Deliberately NO "חסום"/"תקוע"
+  // alone (those belong to MISSIONS / generic filters): a journey question must
+  // name the journey. Priority beats MISSIONS so "מסעות חסומים" routes here.
+  { intent: "JOURNEYS", type: "status", priority: 80, kw: ["journey", "journeys", "stalled journey", "מסע", "מסעות", "מסע לקוח", "מסעות תקועים", "שלבי מסע", "שהייה בשלב"] },
   { intent: "OFFICE_STATUS", type: "status", priority: 64, kw: ["office", "brokerage", "grow", "expansion", "inventory", "משרד", "עסק", "צמיחה", "הרחבה", "מלאי"] },
   { intent: "GENERAL_STATUS", type: "status", priority: 55, kw: ["status", "overview", "how are we", "summary", "מצב", "סקירה", "סיכום", "איך אנחנו"] },
 ];

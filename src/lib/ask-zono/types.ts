@@ -16,7 +16,10 @@ export type QuestionType = "what_to_do" | "which_entities" | "where" | "how_many
 export type IntentType =
   | "DAILY_PRIORITIES" | "SELLERS_AT_RISK" | "BUYERS_CLOSING" | "LISTINGS_PRICE_REDUCTION"
   | "RECRUIT_LOCATION" | "COMPETITION" | "VALUATION" | "MISSIONS" | "LEADS"
-  | "OPPORTUNITIES" | "OFFICE_STATUS" | "GENERAL_STATUS" | "UNKNOWN";
+  | "OPPORTUNITIES" | "OFFICE_STATUS" | "GENERAL_STATUS"
+  // Batch 5.6H — canonical Journey questions ("אילו מסעות תקועים?"). Answered
+  // ONLY by the canonical Journey Command provider — never a second engine.
+  | "JOURNEYS" | "UNKNOWN";
 
 export type EntityKind = "buyer" | "seller" | "listing" | "lead" | "office" | "broker" | "city" | "property";
 export interface DetectedEntity { kind: EntityKind; value: string }

@@ -106,6 +106,63 @@ export interface ExecJourneyProjection {
 
 const clamp100 = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
+/**
+ * ── Batch 5.6H — THE ONE queue→action mapping (pure, shared) ────────────────
+ * A journey-area recommendation from the canonical Broker Intelligence queue,
+ * as this projection consumes it. Structural on purpose: every consumer
+ * (Executive OS, the Home Journey Command section, the Ask-ZONO Copilot) maps
+ * queue items through THIS function, so the canonical identity (id, priority,
+ * confidence, evidence) can never drift between surfaces (the 5.6F rule).
+ */
+export interface JourneyQueueItemLike {
+  id: string;
+  area: string;
+  entityType: string;
+  entityId: string;
+  title: string;
+  why: string;
+  confidence: number;
+  priority: number;
+  urgency: string;
+  href: string | null;
+  evidence: { label: string; source: string }[];
+  mergedCount: number;
+  contributingSources: readonly string[];
+}
+
+/** Journey recommendation routing: the SUBJECT's real cockpit; `/journeys` is
+ *  the safe aggregate fallback — never a raw journey UUID, never a legacy
+ *  journey-intelligence screen. */
+export function journeySubjectHref(kind: string, id: string): string {
+  if (kind === "lead") return `/leads/${id}`;
+  if (kind === "buyer") return `/buyers/${id}`;
+  if (kind === "seller") return `/sellers/${id}`;
+  if (kind === "property") return `/properties/${id}`;
+  return kind === "deal" ? "/deals" : "/journeys";
+}
+
+/** Canonical queue items → ExecJourneyAction[]. Filters to the journey area and
+ *  PRESERVES identity — nothing re-scored, nothing re-derived, nothing added. */
+export function mapJourneyQueueItems(items: readonly JourneyQueueItemLike[]): ExecJourneyAction[] {
+  return items
+    .filter((r) => r.area === "journey")
+    .map((r) => ({
+      recommendationId: r.id,
+      recKey: `${r.entityType}:${r.entityId}:journey`,
+      subjectType: r.entityType,
+      subjectId: r.entityId,
+      title: r.title,
+      why: r.why,
+      confidence: r.confidence,
+      priority: r.priority,
+      urgency: r.urgency,
+      href: r.href ?? journeySubjectHref(r.entityType, r.entityId),
+      evidence: r.evidence.map((e) => ({ label: e.label, source: e.source })),
+      mergedCount: r.mergedCount,
+      contributingSources: [...r.contributingSources],
+    }));
+}
+
 /** Inputs the projection accepts. Note what is ABSENT: no derived score columns. */
 export interface ExecJourneyInput {
   /** Canonical KPIs from Journey Center. `null` = the provider failed. */

@@ -22,6 +22,7 @@ const FOLLOWUPS: Record<IntentType, string[]> = {
   OPPORTUNITIES: ["אילו עסקאות פוטנציאליות בעדיפות גבוהה?", "אילו קונפליקטים דורשים הכרעה?", "מה תוכנית הביצוע המאוחדת?"],
   OFFICE_STATUS: ["מה בריאות המלאי?", "היכן לגייס מתווכים?", "אילו סיכונים עסקיים קיימים?"],
   GENERAL_STATUS: ["מה עליי לעשות היום?", "אילו סיכונים קריטיים?", "אילו הזדמנויות פתוחות?"],
+  JOURNEYS: ["אילו מסעות תקועים עם ראיה מאומתת?", "אילו המלצות מסע עומדות ברף הראיות?", "מה מצב המסעות של הנכסים?"],
   UNKNOWN: ["מה עליי לעשות היום?", "אילו מוכרים בסיכון?", "אילו קונים קרובים לסגירה?"],
 };
 
@@ -36,6 +37,11 @@ function proposeActions(intent: IntentType, results: EngineResult[]): ProposedAc
     case "LEADS": return top.map((i) => mk("task", `הצעת מעקב ליד: ${i.title}`, "טיפול/ניתוב ליד", "LEAD_FOLLOWUP", "lead"));
     case "RECRUIT_LOCATION": case "OFFICE_STATUS": return top.map((i) => mk("mission", `הצעת החלטת משרד: ${i.title}`, "החלטת צמיחה", "OFFICE_DECISION", "office"));
     case "OPPORTUNITIES": case "DAILY_PRIORITIES": return top.map((i) => mk("mission", `הצעת פעולה: ${i.title}`, "פריט בעדיפות גבוהה", "ORCHESTRATED_PLAN", "office"));
+    // 5.6H — JOURNEYS deliberately proposes NOTHING new: journey items in the
+    // answer ARE canonical queue recommendations with their own identity and
+    // lifecycle. Proposing a second wrapper action would duplicate the queue —
+    // and a KPI must never be promoted into an action.
+    case "JOURNEYS": return [];
     default: return [];
   }
 }

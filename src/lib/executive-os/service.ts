@@ -22,7 +22,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getJourneyCenter } from "@/lib/journey-center/service";
 import { getBrokerIntelligenceQueue } from "@/lib/broker-intelligence/aggregate-service";
 import { stageLabel, isJourneyType, type JourneyType } from "@/lib/journey-canonical";
-import { buildExecJourneyProjection, type ExecJourneyAction } from "./journey-projection";
+import { buildExecJourneyProjection, mapJourneyQueueItems, type ExecJourneyAction } from "./journey-projection";
 import { composeExecutive, answerExecutive } from "./compose";
 import type { ExecutiveOS, ExecutiveInput, ExecItem, ExecDimension, ExecTimelineItem, OfficeTrend, BrokerCompareRow } from "./types";
 
@@ -127,23 +127,10 @@ export async function getExecutiveOS(): Promise<ExecutiveOS> {
 
   // Journey-area recommendations, carried with canonical identity intact so
   // Executive agrees with Queue / Daily / Home / Agenda (the 5.6F identity rule).
-  const journeyActions: ExecJourneyAction[] = (jq?.items ?? [])
-    .filter((r) => r.area === "journey")
-    .map((r) => ({
-      recommendationId: r.id,
-      recKey: `${r.entityType}:${r.entityId}:journey`,
-      subjectType: r.entityType,
-      subjectId: r.entityId,
-      title: r.title,
-      why: r.why,
-      confidence: r.confidence,
-      priority: r.priority,
-      urgency: r.urgency,
-      href: r.href ?? journeyHref(r.entityType, r.entityId),
-      evidence: r.evidence.map((e) => ({ label: e.label, source: e.source })),
-      mergedCount: r.mergedCount,
-      contributingSources: [...r.contributingSources],
-    }));
+  // 5.6H: the mapping is the ONE shared pure mapper (journey-projection.ts) —
+  // the Home Journey Command section and the Copilot use the SAME function, so
+  // no surface can re-derive or re-score a queue item differently.
+  const journeyActions: ExecJourneyAction[] = mapJourneyQueueItems(jq?.items ?? []);
 
   // Owner names are read ONLY for managers, and only for owners the org-scoped
   // canonical KPI already returned — no broader directory read.
@@ -188,15 +175,10 @@ function entityHref(kind: string, id: string): string | null {
   if (kind === "seller") return `/sellers/${id}`; if (kind === "property") return `/properties/${id}`;
   return null;
 }
-/**
- * Batch 5.6G — Journey recommendation routing. A journey rec's entityType is
- * always the SUBJECT, so it lands on a real cockpit. `/journeys` is the safe
- * aggregate fallback — never `/today`, never a raw journey UUID route, never a
- * legacy journey-intelligence screen.
- */
-function journeyHref(kind: string, id: string): string {
-  return entityHref(kind, id) ?? (kind === "deal" ? "/deals" : "/journeys");
-}
+// Batch 5.6G/5.6H — journey recommendation routing lives in the shared mapper
+// (journey-projection.ts::journeySubjectHref): the SUBJECT's real cockpit, with
+// `/journeys` as the safe aggregate fallback — never `/today`, never a raw
+// journey UUID route, never a legacy journey-intelligence screen.
 function availLabel(state: string): string {
   return state === "overloaded" ? "עמוס" : state === "free" ? "פנוי" : state === "meeting" ? "בפגישה" : state === "field" ? "בשטח" : "מאוזן";
 }

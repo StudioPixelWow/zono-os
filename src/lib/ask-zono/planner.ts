@@ -18,6 +18,8 @@ const PLAN: Record<string, EngineId[]> = {
   OPPORTUNITIES: ["orchestrator"],
   OFFICE_STATUS: ["office"],
   GENERAL_STATUS: ["chief_of_staff"],
+  // 5.6H — Journey questions load ONLY the canonical journey engine.
+  JOURNEYS: ["customer_journey"],
   UNKNOWN: [],
 };
 
@@ -34,6 +36,7 @@ const REASON: Record<string, string> = {
   OPPORTUNITIES: "שרשראות הזדמנות מגיעות ממנצח הסוכנים.",
   OFFICE_STATUS: "מצב העסק מגיע מסוכן צמיחת המשרד.",
   GENERAL_STATUS: "סקירה כללית מגיעה מהצ׳יף אוף סטאף.",
+  JOURNEYS: "מצב המסעות מגיע ממרכז המסעות הקנוני + תור המודיעין — ראיות מאומתות בלבד, ללא מדדים מומצאים.",
   UNKNOWN: "לא זוהתה כוונה ברורה — נדרש חידוד.",
 };
 

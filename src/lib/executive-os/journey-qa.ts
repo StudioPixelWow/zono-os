@@ -180,8 +180,9 @@ check("I12 no legacy journey-intelligence import in the executive path", !/from 
 check("I13 service never writes sourcesUsed / organizationScore", !svcCode.includes("sourcesUsed") && !/organizationScore\s*=/.test(svcCode));
 check("I13 journey is NOT part of ExecutiveInput (cannot reach compose)", !svcCode.includes("journey," + "\n    briefingHeadline"));
 
-// I15 · routing
-check("I15 journeyHref falls back to /journeys, never /today", svcCode.includes('kind === "deal" ? "/deals" : "/journeys"'));
+// I15 · routing — 5.6H: the fallback lives in the ONE shared mapper (journey-projection.ts)
+const projSrc = readFileSync("src/lib/executive-os/journey-projection.ts", "utf8");
+check("I15 journeySubjectHref falls back to /journeys, never /today", projSrc.includes('kind === "deal" ? "/deals" : "/journeys"') && !projSrc.includes('"/today"'));
 check("I15 UI drill-down points at Journey Center", view.includes('href="/journeys"'));
 
 // I17 · no speed language anywhere in the UI section
@@ -191,5 +192,35 @@ check("I17 UI states dwell evidence honestly when unmeasured", view.includes("א
 // I20 · public-safe — Executive is inside the authenticated (app) group
 check("I20 executive view is not a public route", view.includes("\"use client\"") || view.length > 0);
 
-console.log(`\nExecutive Journey projection + integration (5.6G) QA — ${pass} passed, ${fail} failed`);
+// ── Batch 5.6H · Canonical Journey Command — one mapping, one projection ────
+import { mapJourneyQueueItems, journeySubjectHref } from "./journey-projection";
+const qItem = (o: Partial<Parameters<typeof mapJourneyQueueItems>[0][number]> = {}) => ({
+  id: "rec-1", area: "journey", entityType: "property", entityId: "P1",
+  title: "מסע תקוע: דירה", why: "45 ימים ללא מעבר מאומת", confidence: 75, priority: 83,
+  urgency: "critical", href: null, evidence: [{ label: "e", source: "journeys" }],
+  mergedCount: 1, contributingSources: ["journeys"], ...o,
+});
+const mapped = mapJourneyQueueItems([qItem(), qItem({ id: "rec-2", area: "seller" })]);
+check("H1 mapper admits ONLY journey-area items", mapped.length === 1 && mapped[0].recommendationId === "rec-1");
+check("H1 mapper preserves canonical identity (id/priority/confidence untouched)", mapped[0].priority === 83 && mapped[0].confidence === 75 && mapped[0].recKey === "property:P1:journey");
+check("H1 mapper routes to the SUBJECT cockpit with /journeys fallback", mapped[0].href === "/properties/P1" && journeySubjectHref("unknown", "x") === "/journeys" && journeySubjectHref("deal", "d") === "/deals");
+check("H1 mapper never re-scores (evidence passthrough, no derived fields)", mapped[0].evidence.length === 1 && !("velocity" in mapped[0]) && !("healthScore" in (mapped[0] as unknown as Record<string, unknown>)));
+
+// H2 · every Journey Command consumer uses the canonical path — never legacy
+const cmdSrc = readFileSync("src/lib/journey-center/command.ts", "utf8");
+const dashSrc = readFileSync("src/components/dashboard/sections/JourneysDashboardSection.tsx", "utf8");
+const askSrc = readFileSync("src/lib/ask-zono/service.ts", "utf8");
+const exec = (s: string) => s.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+check("H2 command provider = Journey Center + BI queue + shared projection", cmdSrc.includes("getJourneyCenter()") && cmdSrc.includes("getBrokerIntelligenceQueue(") && cmdSrc.includes("buildExecJourneyProjection(") && cmdSrc.includes("mapJourneyQueueItems("));
+check("H2 command provider is member-safe (workload can never leak)", cmdSrc.includes("isManager: false") && !cmdSrc.includes("ownerNames"));
+check("H2 dashboard section consumes the canonical provider, not journey-intelligence", exec(dashSrc).includes("getCanonicalJourneyCommand") && !exec(dashSrc).includes("journey-intelligence"));
+check("H2 Copilot consumes the canonical provider, not journey-intelligence", exec(askSrc).includes("getCanonicalJourneyCommand") && !exec(askSrc).includes("journey-intelligence"));
+check("H2 no forbidden schema column in command provider / dashboard / copilot",
+  [cmdSrc, dashSrc, askSrc].every((s) => !FORBIDDEN_COLS.test(exec(s))) && [cmdSrc, dashSrc, askSrc].every((s) => !exec(s).includes("journey_predictions")));
+check("H2 provider failure renders NOTHING on the dashboard (no healthy-looking zeros)", dashSrc.includes('status === "unavailable"') && dashSrc.includes("return null"));
+check("H2 dashboard shows the insufficient-evidence dwell state, never a fabricated number", dashSrc.includes("אין ראיה מספקת"));
+check("H2 Copilot surfaces unavailability honestly", askSrc.includes("מרכז המסעות לא זמין"));
+check("H2 Executive service uses the SAME shared mapper (no drift between surfaces)", svcCode.includes("mapJourneyQueueItems(jq?.items ?? [])"));
+
+console.log(`\nExecutive Journey projection + integration (5.6G+5.6H) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

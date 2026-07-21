@@ -80,6 +80,24 @@ export function runSelfCheck(): AZSelfCheck {
   const followup = understandAndPlan("ומה לגבי המוכרים?", history);
   add("carry-over / new focus follow-up resolves", followup.understanding.intent === "SELLERS_AT_RISK" || followup.understanding.intent === "BUYERS_CLOSING", followup.understanding.intent);
 
+  // ── Batch 5.6H — canonical Journey questions ──
+  const j1 = understandAndPlan("אילו מסעות תקועים?");
+  add("5.6H journey intent (he) → ONLY the canonical journey engine", j1.understanding.intent === "JOURNEYS" && j1.plan.engines.length === 1 && j1.plan.engines[0] === "customer_journey", j1.plan.engines.join(","));
+  const j2 = understandAndPlan("Which journeys are stalled?");
+  add("5.6H journey intent (en)", j2.understanding.intent === "JOURNEYS" && j2.plan.engines[0] === "customer_journey", j2.understanding.intent);
+  add("5.6H plan reason states canonical evidence-only sourcing", j1.plan.reason.includes("קנוני") && j1.plan.reason.includes("ראיות"), j1.plan.reason);
+  // "מסעות חסומים" must beat MISSIONS (which owns bare "חסום").
+  const j3 = understandAndPlan("אילו מסעות חסומים יש לנו?");
+  add("5.6H blocked-journeys routes to JOURNEYS, not MISSIONS", j3.understanding.intent === "JOURNEYS", j3.understanding.intent);
+  // "אילו משימות חסומות" must STAY missions — no keyword bleed.
+  const j4 = understandAndPlan("אילו משימות חסומות?");
+  add("5.6H blocked-missions still routes to MISSIONS", j4.understanding.intent === "MISSIONS", j4.understanding.intent);
+  // Synthesis: journey answers propose NO new wrapper actions (queue owns
+  // actionability — a KPI is never promoted, a rec is never duplicated).
+  const jAns = askWithResults("אילו מסעות תקועים?", [res("customer_journey", "8 מסעות פעילים · 0 תקועים · 0 חסומים (ראיה קנונית בלבד)", ["מסע תקוע: דירה בקריית ביאליק"], 67)]);
+  add("5.6H journey answer synthesized with evidence + no invented actions", jAns.answer.executiveAnswer.includes("מסעות פעילים") && jAns.answer.actions.length === 0, "");
+  add("5.6H journey follow-ups are journey-scoped", jAns.answer.followUps.some((f) => f.includes("מסע")), jAns.answer.followUps.join(" | "));
+
   const passed = checks.filter((c) => c.pass).length;
   return { ok: passed === checks.length, total: checks.length, passed, checks };
 }
