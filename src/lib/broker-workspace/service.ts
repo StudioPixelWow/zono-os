@@ -166,11 +166,15 @@ export async function askBrokerZono(query: string): Promise<{ answer: string; co
   const scoped = `בהקשר של הסוכן "${brokerName}" בלבד (הרשומות שבטיפולו): ${query}`;
   const res = await askZono(orgId, scoped).catch(() => null);
   if (!res) return { answer: "לא ניתן לענות כרגע. נסה שוב.", confidence: null, limitations: "שגיאת מנוע", engines: [] };
-  const r = res as unknown as { answer?: string; summary?: string; confidence?: number; limitations?: string[] | string; enginesUsed?: string[]; engines?: string[] };
+  // 5.6H FIX (found by live verification): `AskZonoResponse.answer` is the
+  // structured AskAnswer OBJECT, not a string. The old loose cast returned the
+  // whole object as `answer`, and the workspace rendered it as a JSX child —
+  // React error #31, crashing the שאל tab on EVERY question. Map the real
+  // typed fields instead of casting the contract away.
   return {
-    answer: r.answer ?? r.summary ?? "אין תשובה זמינה.",
-    confidence: typeof r.confidence === "number" ? r.confidence : null,
-    limitations: Array.isArray(r.limitations) ? r.limitations.join(" · ") : (r.limitations ?? null),
-    engines: r.enginesUsed ?? r.engines ?? [],
+    answer: res.answer.executiveAnswer || "אין תשובה זמינה.",
+    confidence: typeof res.answer.confidence === "number" ? res.answer.confidence : null,
+    limitations: res.answer.explain.limitations.length ? res.answer.explain.limitations.join(" · ") : null,
+    engines: res.answer.explain.sourceEngines,
   };
 }

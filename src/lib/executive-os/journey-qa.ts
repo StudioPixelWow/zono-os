@@ -222,5 +222,12 @@ check("H2 dashboard shows the insufficient-evidence dwell state, never a fabrica
 check("H2 Copilot surfaces unavailability honestly", askSrc.includes("מרכז המסעות לא זמין"));
 check("H2 Executive service uses the SAME shared mapper (no drift between surfaces)", svcCode.includes("mapJourneyQueueItems(jq?.items ?? [])"));
 
+// H3 · broker-workspace Ask adapter — found broken by 5.6H live verification:
+// it cast AskZonoResponse away and returned the AskAnswer OBJECT as `answer`,
+// crashing the שאל tab (React #31) on every question. Lock the typed mapping.
+const bwSrc = readFileSync("src/lib/broker-workspace/service.ts", "utf8");
+check("H3 broker Ask adapter maps the typed executiveAnswer string", bwSrc.includes("res.answer.executiveAnswer"));
+check("H3 broker Ask adapter no longer casts the Ask contract away", !bwSrc.includes("r.answer ?? r.summary"));
+
 console.log(`\nExecutive Journey projection + integration (5.6G+5.6H) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
