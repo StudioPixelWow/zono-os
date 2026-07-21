@@ -195,7 +195,18 @@ export function completionPercent(
   return Math.round(((stageIndex(stage) + ratio) / total) * 100);
 }
 
-// ── Stall / overdue detection ────────────────────────────────────────────────
+// ── INACTIVITY / freshness detection (NOT canonical Journey dwell) ───────────
+//
+// ⚠️ Batch 5.6I — SEMANTIC BOUNDARY, QA-locked (executive-os/journey-qa H4):
+// this measures ACTIVITY RECENCY of the legacy property listing workflow
+// ("nobody touched this listing in 14 days"), from `last_activity_at`. It is
+// NOT canonical Journey stage dwell and MUST NOT feed the Journey Center /
+// Executive / Copilot "stalled" KPIs — those admit only VERIFIED canonical
+// stage-entry evidence (a source_event_id-backed transition; see
+// journey-center/canonical.ts::verifiedDwellDays). An activity timestamp can
+// never become canonical stage-entry evidence. The word "stalled" here is a
+// legacy name kept only to avoid churn across the property detail surfaces;
+// read it as "inactive".
 
 export const STALLED_DAYS = 14;
 
@@ -205,7 +216,8 @@ export function daysSince(iso: string | null): number {
   return Math.floor(ms / 86_400_000);
 }
 
-/** A non-terminal property with no activity for STALLED_DAYS is "stalled". */
+/** A non-terminal property with no ACTIVITY for STALLED_DAYS is "inactive"
+ *  (legacy name: "stalled"). Activity recency — never canonical stage dwell. */
 export function isStalled(lastActivityAt: string | null, stage: JourneyStage): boolean {
   if (stage === TERMINAL_STAGE) return false;
   return daysSince(lastActivityAt) >= STALLED_DAYS;

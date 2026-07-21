@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
+// STATUS (Batch 5.6I audit): this section is CANONICAL and currently UNMOUNTED —
+// no page composes it. It is kept (not deleted) because it is the ready-made
+// Home mounting point for the Journey Command projection, it adds no data-fetch
+// path beyond the shared provider, and it has zero legacy dependencies. Mounting
+// it is a deliberate product decision for a future batch — do not mount it
+// merely to prove it works.
 // Batch 5.6H — the CANONICAL Journey Command provider. This section previously
 // read the legacy journey-intelligence command center, which surfaced the
 // forbidden schema-default columns (conversion_score / health_score /

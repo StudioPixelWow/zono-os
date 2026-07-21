@@ -229,5 +229,27 @@ const bwSrc = readFileSync("src/lib/broker-workspace/service.ts", "utf8");
 check("H3 broker Ask adapter maps the typed executiveAnswer string", bwSrc.includes("res.answer.executiveAnswer"));
 check("H3 broker Ask adapter no longer casts the Ask contract away", !bwSrc.includes("r.answer ?? r.summary"));
 
+// ── Batch 5.6I · H4 — legacy retirement is IRREVERSIBLE ─────────────────────
+import { existsSync } from "node:fs";
+check("H4 the journey-intelligence module is DELETED", !existsSync("src/lib/journey-intelligence"));
+const CREATE_FLOWS = ["src/lib/buyers/actions.ts", "src/lib/sellers/actions.ts", "src/lib/leads/service.ts", "src/lib/social/service.ts"];
+check("H4 no production writer calls the retired ensureJourney adapter",
+  CREATE_FLOWS.every((f) => {
+    const s = exec(readFileSync(f, "utf8"));
+    return !s.includes("journey-intelligence") && s.includes("ensureCanonicalJourneyForSession");
+  }));
+const dsSrc = readFileSync("src/lib/system/decision-signals.ts", "utf8");
+check("H4 Decision Brain no longer fabricates journey attention from forbidden scores",
+  !exec(dsSrc).match(/conversion_score|velocity_state|journey_risks|journey_opportunities/) && dsSrc.includes("LEGACY — RETIRED (Batch 5.6I)"));
+check("H4 activity staleness stays out of canonical journey reasoning",
+  ["src/lib/journey-center/kpis.ts", "src/lib/journey-center/canonical.ts", "src/lib/journey-center/command.ts", "src/lib/journey-center/service.ts"]
+    .every((f) => !exec(readFileSync(f, "utf8")).includes("@/lib/journey/")));
+check("H4 the activity-staleness helper is documented as inactivity, not dwell",
+  readFileSync("src/lib/journey/stages.ts", "utf8").includes("NOT canonical Journey stage dwell"));
+check("H4 the boundary guard script exists and is wired into the gate",
+  existsSync("scripts/check-journey-boundaries.mjs") && readFileSync("package.json", "utf8").includes("check:journey-boundary"));
+check("H4 cockpit consumes the ONE shared dwell gate",
+  exec(readFileSync("src/lib/journey-cockpit/assemble.ts", "utf8")).includes("verifiedDwellDays("));
+
 console.log(`\nExecutive Journey projection + integration (5.6G+5.6H) QA — ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
