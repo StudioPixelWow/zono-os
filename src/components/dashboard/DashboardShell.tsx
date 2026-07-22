@@ -2,8 +2,7 @@ import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
-import { CommandPalette } from "@/components/search/CommandPalette";
-import { ZonoCommandCenter } from "@/components/navigation/zono-command-center";
+import { CommandPalette as CommandCenter } from "@/components/command-center/CommandPalette";
 import { QuickCreate } from "@/components/navigation/QuickCreate";
 import { ZIWidget } from "@/components/zi-expert/ZIWidget";
 import { PageTransition } from "./PageTransition";
@@ -25,8 +24,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <MobileNav />
-      <CommandPalette />
-      <ZonoCommandCenter />
+      {/* Batch 6.4 — THE one Command Center palette (⌘K everywhere). Replaces the
+          two ad-hoc overlays; it answers ⌘K + zono:command-open + zono:open-search. */}
+      <CommandCenter />
       <QuickCreate />
       <ZIWidget />
     </div>
