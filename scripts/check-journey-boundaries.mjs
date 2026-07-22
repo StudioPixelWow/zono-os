@@ -57,6 +57,7 @@ const JOURNEY_ONLY_DIRS = [
   "src/lib/executive-decision",                   // 5.8 — the Decision Engine inherits, never reads legacy
   "src/lib/executive-memory",                     // 5.9 — Memory diffs snapshots, never reads journey state
   "src/lib/executive-workspace",                  // 6.0 — Workspace COMPOSES canonical providers, never reads journey state
+  "src/lib/broker-home",                          // 6.1 — Broker Workspace COMPOSES broker-scoped providers, never reads journey state
   "src/components/journey",
   "src/components/dashboard/sections/JourneysDashboardSection.tsx",
   "src/app/(app)/journeys",
