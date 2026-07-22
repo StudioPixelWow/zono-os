@@ -128,7 +128,20 @@ export function toTimeline(snapshots: MemorySnapshot[]): MemoryTimelineItem[] {
     .sort((a, b) => (a.takenAt < b.takenAt ? 1 : a.takenAt > b.takenAt ? -1 : 0));
 }
 
+/** Canonical serialization of one entry — a FIXED field tuple, so equality is
+ *  independent of object key order. Postgres jsonb rewrites key order on
+ *  round-trip (length-then-alpha), so raw JSON.stringify over parsed rows
+ *  would NEVER equal freshly built entries — breaking append-only dedup and
+ *  writing a duplicate snapshot on every unchanged visit. */
+const canonEntry = (e: MemoryDecisionEntry) => JSON.stringify([
+  e.decisionId, e.category, e.priority, e.upstreamPriority, e.confidence,
+  e.headline, e.recommendedAction, e.evidenceIds,
+]);
+
 /** Two entry sets are equal ⇔ nothing to persist (append-only dedup). */
 export function entriesEqual(a: MemoryDecisionEntry[], b: MemoryDecisionEntry[]): boolean {
-  return JSON.stringify([...a].sort(byId)) === JSON.stringify([...b].sort(byId));
+  if (a.length !== b.length) return false;
+  const ca = [...a].sort(byId).map(canonEntry);
+  const cb = [...b].sort(byId).map(canonEntry);
+  return ca.every((s, i) => s === cb[i]);
 }

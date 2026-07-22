@@ -46,6 +46,17 @@ S("1. Snapshot integrity — pure selection, canonical identities, no recomputat
   check("1.3 entries are stably ordered by decision id", JSON.stringify(entries.map((e) => e.decisionId)) === JSON.stringify([...entries.map((e) => e.decisionId)].sort()));
   check("1.4 entriesEqual is order-insensitive and content-exact",
     entriesEqual(toMemoryEntries([D2, D1]), toMemoryEntries([D1, D2])) && !entriesEqual(toMemoryEntries([D1]), toMemoryEntries([D2])));
+  // Postgres jsonb rewrites object key order on round-trip (length-then-alpha).
+  // Dedup must be KEY-ORDER INSENSITIVE or every unchanged visit would write a
+  // duplicate snapshot (live bug found in 5.9 verification — locked here).
+  const roundTripped = toMemoryEntries([D1, D2]).map((e) => {
+    const reordered: Record<string, unknown> = {};
+    for (const k of Object.keys(e).sort((a, b) => a.length - b.length || (a < b ? -1 : 1))) reordered[k] = (e as unknown as Record<string, unknown>)[k];
+    return JSON.parse(JSON.stringify(reordered));
+  });
+  check("1.5 entriesEqual survives a jsonb key-order round-trip (append-only dedup works against stored rows)",
+    entriesEqual(roundTripped, toMemoryEntries([D1, D2]))
+    && !entriesEqual(roundTripped, toMemoryEntries([D1, dec({ ...D2, priority: 3 })])));
 }
 
 S("2. Change detection — all seven kinds, nothing else");
