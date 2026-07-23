@@ -26,4 +26,8 @@ export { deriveSentiment } from "./sentiment";
 export { detectAttention } from "./detect";
 export { recommendAction } from "./recommend";
 export { getAttentionFeed, type AttentionFeedItem } from "./feed";
+// Phase 3 — reply suggestions + timeline intelligence.
+export { generateReplySuggestions } from "./reply";
+export { detectMilestones, buildTimelineModel } from "./timeline";
+export { replyFreshnessHash, timelineFreshnessHash, buildReplyRows, buildMilestoneRows } from "./record";
 export type * from "./types";

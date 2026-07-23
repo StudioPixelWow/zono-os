@@ -21,9 +21,11 @@ export function toAnalysisView(conversation: Conversation, messages: Message[]):
     text: m.preview,
   }));
   const agentId = conversation.participants.find((p) => p.kind === "broker")?.id ?? null;
+  const clientName = conversation.participants.find((p) => p.kind === "person")?.displayName ?? null;
   return {
     conversationRef: conversation.id,
     agentId,
+    clientName,
     waiting: conversation.summary.waiting,
     unread: conversation.unreadCount,
     messageCount: transcript.length,

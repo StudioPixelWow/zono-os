@@ -11,7 +11,9 @@ import { summarizeConversation } from "./summarize";
 import { deriveSentiment } from "./sentiment";
 import { detectAttention } from "./detect";
 import { recommendAction } from "./recommend";
-import type { CopilotConversationView, ClassificationArtifact, SummaryArtifact, SentimentArtifact, RecommendedActionArtifact, AttentionFlag } from "./types";
+import { generateReplySuggestions } from "./reply";
+import { detectMilestones, buildTimelineModel } from "./timeline";
+import type { CopilotConversationView, ClassificationArtifact, SummaryArtifact, SentimentArtifact, RecommendedActionArtifact, AttentionFlag, ReplySuggestionArtifact, MilestoneArtifact, TimelineModel } from "./types";
 
 export interface CopilotPipelineResult {
   analysis: ConversationAnalysis;
@@ -20,6 +22,9 @@ export interface CopilotPipelineResult {
   sentiment: SentimentArtifact;
   attention: AttentionFlag[];
   recommendedAction: RecommendedActionArtifact;
+  replies: ReplySuggestionArtifact[];     // Phase 3 — approval-gated proposals
+  milestones: MilestoneArtifact[];        // Phase 3 — detected milestones
+  timeline: TimelineModel;                // Phase 3 — visualization model
 }
 
 export function runCopilotPipeline(view: CopilotConversationView, nowIso: string, opts: ClassifyOptions = {}): CopilotPipelineResult {
@@ -29,5 +34,8 @@ export function runCopilotPipeline(view: CopilotConversationView, nowIso: string
   const sentiment = deriveSentiment(analysis);
   const attention = detectAttention(analysis);
   const recommendedAction = recommendAction(analysis, classification.classification);
-  return { analysis, classification, summary, sentiment, attention, recommendedAction };
+  const replies = generateReplySuggestions(view, classification.classification, summary, recommendedAction, classification.explain.confidence);
+  const milestones = detectMilestones(analysis);
+  const timeline = buildTimelineModel(milestones);
+  return { analysis, classification, summary, sentiment, attention, recommendedAction, replies, milestones, timeline };
 }

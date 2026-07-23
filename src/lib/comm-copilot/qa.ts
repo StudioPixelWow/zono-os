@@ -18,8 +18,8 @@ import { analyzeConversation } from "./analyze";
 import { deriveSentiment } from "./sentiment";
 import { detectAttention } from "./detect";
 import { recommendAction } from "./recommend";
-import { deterministicHash, shouldRegenerate, buildSummaryRow, buildInsightRow, hashExtraOf } from "./record";
-import type { RecommendedActionKind } from "./types";
+import { deterministicHash, shouldRegenerate, buildSummaryRow, buildInsightRow, hashExtraOf, replyFreshnessHash, timelineFreshnessHash, buildReplyRows, buildMilestoneRows } from "./record";
+import type { RecommendedActionKind, ReplyTone } from "./types";
 
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -133,7 +133,7 @@ const NOW = "2026-07-23T12:00:00.000Z";
 type V = CopilotConversationView;
 function view(ref: string, msgs: { d: "inbound" | "outbound"; t: string }[], crm: Partial<V["crmLinks"]> = {}, last?: string, channel = "wa"): V {
   const transcript = msgs.map((m, i) => ({ seq: i, messageRef: `${channel}:${ref}:m${i + 1}`, direction: m.d, sentAt: `2026-07-23T1${i}:00:00.000Z`, text: m.t }));
-  return { conversationRef: `${channel}:${ref}`, agentId: "u_b", waiting: msgs[msgs.length - 1].d === "inbound", unread: 1, messageCount: transcript.length, lastActivityAt: last ?? transcript[transcript.length - 1].sentAt, transcript, crmLinks: { lead: null, buyer: null, seller: null, journey: null, deal: null, property: null, ...crm } };
+  return { conversationRef: `${channel}:${ref}`, agentId: "u_b", clientName: "דנה", waiting: msgs[msgs.length - 1].d === "inbound", unread: 1, messageCount: transcript.length, lastActivityAt: last ?? transcript[transcript.length - 1].sentAt, transcript, crmLinks: { lead: null, buyer: null, seller: null, journey: null, deal: null, property: null, ...crm } };
 }
 
 const NINE: [ConversationClassification, V][] = [
@@ -278,6 +278,73 @@ check("J11 feed reads only the Copilot's own table (source guard)", (() => {
   return feed.includes("copilot_conversation_insight") && !/whatsapp_conversations|whatsapp_messages|from\(["']journeys["']\)/.test(strip(feed)) && !/@\/lib\/whatsapp\//.test(feed);
 })());
 
-console.log(`\nAI Communication Copilot (6.7) Phase 0+1+2 SELF TEST: ${passed} passed, ${failed} failed`);
-console.log("(Timeline milestones + AI memory + LLM enrichment are Phase 3+; not asserted here.)\n");
+// ── K) PHASE 3 — reply suggestions + timeline intelligence ───────────────────
+const richMsgs: { d: "inbound" | "outbound"; t: string }[] = [
+  { d: "inbound", t: "מחפש לקנות דירת 4 חדרים בתל אביב בתקציב 3 מיליון" },
+  { d: "outbound", t: "הנה דירה שמתאימה, שולח לך נכס" },
+  { d: "inbound", t: "מתי אפשר לבוא לראות? ומה עם משכנתא?" },
+  { d: "inbound", t: "בוא נתקדם על המחיר, יש הצעה נגדית" },
+];
+const rp = runCopilotPipeline(view("t", richMsgs, { buyer: "b1" }), NOW);
+
+check("K1 exactly three tones: professional, friendly, persuasive", (() => {
+  const tones = rp.replies.map((r) => r.tone).sort();
+  const want: ReplyTone[] = ["friendly", "persuasive", "professional"];
+  return rp.replies.length === 3 && JSON.stringify(tones) === JSON.stringify(want);
+})());
+check("K2 approval invariant — every reply requiresApproval === true", rp.replies.every((r) => r.requiresApproval === true));
+check("K3 every reply is explained + deterministic (Phase 3 has no LLM)", rp.replies.every((r) => isExplained2(r.explain) && r.explain.llmContribution === null));
+check("K4 reuses Draft Studio composer (no new generation engine)", (() => {
+  const src = read("src/lib/comm-copilot/reply.ts");
+  return src.includes("@/lib/draft-studio/compose") && src.includes("composeBody");
+})());
+check("K5 reply source guard — Copilot never sends (no transport send import)", (() => {
+  const src = strip(read("src/lib/comm-copilot/reply.ts"));
+  return !/@\/lib\/whatsapp\/|sendMessage|sendText|personalSendAction/.test(src);
+})());
+
+check("K6 milestones detected (multiple) with chronological order", (() => {
+  const t = rp.timeline;
+  const ordered = t.milestones.every((m, i) => m.order === i) && t.milestones.every((m, i) => i === 0 || m.occurredAt >= t.milestones[i - 1].occurredAt);
+  return t.count >= 3 && ordered;
+})());
+check("K7 duplicate milestone prevention — one per kind", (() => {
+  const kinds = rp.milestones.map((m) => m.kind);
+  return new Set(kinds).size === kinds.length;
+})());
+check("K8 timeline model exposes icon/color/severity/completed/order", rp.timeline.milestones.every((m) => !!m.icon && !!m.color && !!m.severity && m.completed === true && typeof m.order === "number"));
+check("K9 every milestone is explained (timestamp + confidence + evidence + signals)", rp.milestones.every((m) => !!m.occurredAt && isExplained2(m.explain) && m.explain.evidenceMessageIds.length > 0));
+
+check("K10 reply freshness: stable on identical, changes on classification/sentiment/facts change", (() => {
+  const a = runCopilotPipeline(view("f1", richMsgs, { buyer: "b1" }), NOW);
+  const b = runCopilotPipeline(view("f1", richMsgs, { buyer: "b1" }), NOW);
+  const c = runCopilotPipeline(view("f1", [{ d: "inbound", t: "לא מעוניין יותר, תפסיק" }]), NOW);
+  return replyFreshnessHash(a) === replyFreshnessHash(b) && replyFreshnessHash(a) !== replyFreshnessHash(c);
+})());
+check("K11 timeline freshness: changes only when the milestone set changes", (() => {
+  const a = runCopilotPipeline(view("f2", richMsgs, { buyer: "b1" }), NOW);
+  const b = runCopilotPipeline(view("f2", [{ d: "inbound", t: "שלום" }]), NOW);
+  return timelineFreshnessHash(a) === timelineFreshnessHash(runCopilotPipeline(view("f2", richMsgs, { buyer: "b1" }), NOW)) && timelineFreshnessHash(a) !== timelineFreshnessHash(b);
+})());
+
+check("K12 transport-agnostic: identical replies + timeline across whatsapp/gmail", (() => {
+  const wa = runCopilotPipeline(view("x", richMsgs, { buyer: "b1" }, undefined, "whatsapp"), NOW);
+  const gm = runCopilotPipeline(view("x", richMsgs, { buyer: "b1" }, undefined, "gmail"), NOW);
+  const sig = (r: typeof wa) => JSON.stringify({ replies: r.replies.map((s) => [s.tone, s.body]), milestones: r.timeline.milestones.map((m) => [m.kind, m.order]) });
+  return sig(wa) === sig(gm);
+})());
+check("K13 persistence rows — 3 approval-gated replies + milestone rows with evidence", (() => {
+  const rr = buildReplyRows("org1", "wa:t", rp);
+  const mr = buildMilestoneRows("org1", "wa:t", rp);
+  return rr.length === 3 && rr.every((r) => r.requires_approval === true && !!r.tone && !!r.body) &&
+    mr.length === rp.milestones.length && mr.every((m) => !!m.milestone_kind && !!m.occurred_at);
+})());
+check("K14 Phase-3 persistence writes ONLY the two allowed sinks (source guard)", (() => {
+  const p = strip(read("src/lib/comm-copilot/persist.ts"));
+  return p.includes("copilot_reply_suggestion") && p.includes("copilot_timeline_milestone") &&
+    !/communication_os|whatsapp_conversations|whatsapp_messages|from\(["']journeys["']\)/.test(p);
+})());
+
+console.log(`\nAI Communication Copilot (6.7) Phase 0+1+2+3 SELF TEST: ${passed} passed, ${failed} failed`);
+console.log("(AI memory + LLM enrichment are Phase 4+; not asserted here.)\n");
 if (failed > 0) process.exit(1);

@@ -35,6 +35,7 @@ export interface AnalysisMessage {
 export interface CopilotConversationView {
   conversationRef: string;            // canonical id `${channel}:${sourceId}`
   agentId: string | null;             // assigned broker (from participants)
+  clientName: string | null;          // person participant display name (for replies)
   waiting: boolean;                   // canonical fact: newest msg inbound & unanswered
   unread: number;
   messageCount: number;
@@ -59,7 +60,35 @@ export type RecommendedActionKind =
   | "call" | "whatsapp" | "meeting" | "reminder" | "send_property" | "follow_up";
 
 export type MilestoneKind =
-  | "first_contact" | "offer" | "meeting" | "negotiation" | "document" | "appointment";
+  | "first_contact" | "qualification" | "active_buyer" | "active_seller" | "property_shared"
+  | "viewing_scheduled" | "viewing_completed" | "negotiation_started" | "offer_submitted" | "counter_offer"
+  | "documents_requested" | "documents_sent" | "financing_started" | "financing_approved"
+  | "reservation" | "contract_signed" | "closed" | "lost_lead" | "reactivated";
+
+/** A detected timeline milestone with its reasoning. */
+export interface MilestoneArtifact {
+  kind: MilestoneKind;
+  occurredAt: string;             // ISO — from the triggering message
+  explain: Explainability;
+}
+
+/** A UI-ready timeline milestone (visualization model — no UI here). */
+export interface TimelineMilestoneView {
+  kind: MilestoneKind;
+  label: string;                  // Hebrew label
+  icon: string;                   // icon token
+  color: string;                  // color token
+  severity: "info" | "success" | "warning" | "critical";
+  completed: boolean;
+  order: number;                  // chronological order (0-based)
+  occurredAt: string;
+  explain: Explainability;
+}
+
+export interface TimelineModel {
+  milestones: TimelineMilestoneView[];   // chronological, oldest → newest
+  count: number;
+}
 
 // ── Generated artifacts (each carries Explainability) ───────────────────────
 export interface ClassificationArtifact { classification: ConversationClassification; explain: Explainability }

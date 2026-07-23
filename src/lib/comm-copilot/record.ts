@@ -32,6 +32,30 @@ export function hashExtraOf(r: CopilotPipelineResult): HashExtra {
   return { sentiment: r.sentiment.sentiment, action: r.recommendedAction.action, attention: r.attention.map((f) => f.kind).sort() };
 }
 
+const sha1 = (s: string) => crypto.createHash("sha1").update(s).digest("hex");
+
+/** Reply-suggestion freshness — regenerate ONLY when the conversation, memory
+ *  (facts), classification, or sentiment changed (Phase 3 rule). */
+export function replyFreshnessHash(r: CopilotPipelineResult): string {
+  const lastInbound = [...r.analysis.transcript].reverse().find((m) => m.direction === "inbound")?.text ?? "";
+  return sha1(JSON.stringify({ c: r.classification.classification, sent: r.sentiment.sentiment, facts: r.summary.facts, act: r.recommendedAction.action, last: lastInbound }));
+}
+
+/** Timeline freshness — regenerate ONLY when the milestone set changes. */
+export function timelineFreshnessHash(r: CopilotPipelineResult): string {
+  return sha1(JSON.stringify(r.milestones.map((m) => [m.kind, m.occurredAt])));
+}
+
+export interface ReplyRow { org_id: string; conversation_ref: string; tone: string; body: string; requires_approval: true; status: string; explainability: unknown }
+export function buildReplyRows(orgId: string, ref: string, r: CopilotPipelineResult): ReplyRow[] {
+  return r.replies.map((s) => ({ org_id: orgId, conversation_ref: ref, tone: s.tone, body: s.body, requires_approval: true, status: "suggested", explainability: s.explain }));
+}
+
+export interface MilestoneRow { org_id: string; conversation_ref: string; milestone_kind: string; occurred_at: string; source_ref: string | null; detail: unknown }
+export function buildMilestoneRows(orgId: string, ref: string, r: CopilotPipelineResult): MilestoneRow[] {
+  return r.milestones.map((m) => ({ org_id: orgId, conversation_ref: ref, milestone_kind: m.kind, occurred_at: m.occurredAt, source_ref: m.explain.evidenceMessageIds[0] ?? null, detail: { explain: m.explain } }));
+}
+
 /** Regenerate when: forced (manual/reopen) OR the deterministic output changed.
  *  Never regenerates (and never runs an LLM) when the hash is unchanged. */
 export function shouldRegenerate(prevHash: string | null, nextHash: string, force: boolean): boolean {
@@ -68,6 +92,8 @@ export function buildInsightRow(orgId: string, r: CopilotPipelineResult, nowIso:
       recommendedAction: r.recommendedAction.explain,
       attention: r.attention,
       deterministicHash: deterministicHash(r.classification, r.summary, hashExtraOf(r)),
+      replyHash: replyFreshnessHash(r),           // Phase 3 freshness gates
+      timelineHash: timelineFreshnessHash(r),
     },
     analyzed_at: nowIso,
   };
