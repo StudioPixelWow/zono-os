@@ -137,7 +137,10 @@ export async function exchangeCodeForToken(cfg: GoogleOAuthConfig, code: string,
   const json = (await res.json()) as {
     access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; id_token?: string; error?: string; error_description?: string;
   };
-  if (!res.ok || !json.access_token) throw new Error(json.error_description || json.error || "google code exchange failed");
+  if (!res.ok || !json.access_token) {
+    // error/error_description are safe to surface — they never contain a token.
+    throw new Error([json.error, json.error_description].filter(Boolean).join(": ") || `google code exchange failed (http ${res.status})`);
+  }
   return {
     accessToken: json.access_token,
     refreshToken: json.refresh_token ?? null,
@@ -192,7 +195,7 @@ export async function revokeToken(token: string): Promise<boolean> {
 /** Fetch the connected account identity (sub/email/name only). */
 export async function fetchUserInfo(accessToken: string): Promise<GoogleUserInfo> {
   const res = await fetch(USERINFO_ENDPOINT, { headers: { authorization: `Bearer ${accessToken}` } });
-  const json = (await res.json()) as { sub?: string; email?: string; name?: string; error?: string };
-  if (!res.ok || !json.sub) throw new Error(json.error || "google userinfo failed");
+  const json = (await res.json()) as { sub?: string; email?: string; name?: string; error?: string; error_description?: string };
+  if (!res.ok || !json.sub) throw new Error([json.error, json.error_description].filter(Boolean).join(": ") || `google userinfo failed (http ${res.status})`);
   return { sub: json.sub, email: json.email ?? null, name: json.name ?? null };
 }
