@@ -34,6 +34,17 @@ export function personalConfigured(): boolean {
   return isEvolutionConfigured();
 }
 
+/** READ-ONLY worker liveness probe — a plain root GET, no instance/session
+ *  created or touched. Used by SRE synthetic monitoring for infra readiness. */
+export async function workerPing(): Promise<CompatResult<{ latencyMs: number }>> {
+  const cfg = evolutionConfig();
+  if (!cfg) return { ok: false, error: UNAVAILABLE };
+  const start = Date.now();
+  const res = await evoFetch<unknown>(cfg, "GET", "/");
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, data: { latencyMs: Date.now() - start } };
+}
+
 /** Create/register the per-agent session and ask for a QR. `webhookUrl` +
  *  `webhookToken` are ZONO's own inbound route + bearer (passed in — compat does
  *  not read ZONO env). */

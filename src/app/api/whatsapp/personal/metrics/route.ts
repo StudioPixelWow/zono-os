@@ -25,7 +25,9 @@ function authorized(req: NextRequest): boolean {
 export function GET(req: NextRequest) {
   if (!authorized(req)) return new NextResponse("forbidden", { status: 403 });
   setWorkerConfigured(personalTransportConfigured());         // reflect current config on scrape
-  return new NextResponse(registry.render(), {
+  // Synthetic series are owned by the /synthetic endpoint's own scrape job —
+  // exclude them here so the two jobs don't produce duplicate time series.
+  return new NextResponse(registry.render({ exclude: "wa_personal_synthetic" }), {
     status: 200,
     headers: { "content-type": "text/plain; version=0.0.4; charset=utf-8", "cache-control": "no-store" },
   });

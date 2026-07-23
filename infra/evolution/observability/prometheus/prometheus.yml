@@ -30,6 +30,20 @@ scrape_configs:
     static_configs:
       - targets: ["REPLACE_ZONO_HOST"]     # e.g. app.zono.example (no scheme)
 
+  # SRE synthetic monitor — hitting this RUNS the read-only readiness sweep and
+  # returns the synthetic metrics. 5-minute interval satisfies "every 5 minutes".
+  # It creates no session; it only validates infra readiness.
+  - job_name: zono-wa-personal-synthetic
+    scrape_interval: 5m
+    scrape_timeout: 30s
+    metrics_path: /api/whatsapp/personal/synthetic
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics_token
+    static_configs:
+      - targets: ["REPLACE_ZONO_HOST"]
+
   # Evolution container CPU/RAM + per-container session footprint (worker metrics).
   - job_name: cadvisor
     static_configs:

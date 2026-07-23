@@ -155,6 +155,40 @@ check("D8 span helper is OTel-shaped (trace_id/span_id/duration/status)", (() =>
   return /trace_id/.test(trace) && /span_id/.test(trace) && /duration_ms/.test(trace) && /status/.test(trace);
 })());
 
-console.log(`\nPersonal WhatsApp Bridge (6.6A + 6.6A.1) SELF TEST: ${passed} passed, ${failed} failed`);
+// ── E) SRE completion (6.6A.2) — synthetic monitoring + error budget ─────────
+const synthetic = read("src/lib/whatsapp/provider/personal/synthetic.ts");
+const synthRoute = read("src/app/api/whatsapp/personal/synthetic/route.ts");
+const metricsRoute2 = read("src/app/api/whatsapp/personal/metrics/route.ts");
+const rules = read("infra/evolution/observability/prometheus/rules.yml");
+const promCfg = read("infra/evolution/observability/prometheus/prometheus.yml");
+
+check("E1 render filter: include renders only matching family, exclude drops it", (() => {
+  const g = metricsRegistry.gauge("wa_personal_synthetic_up", "x"); g.set(1);
+  const inc = metricsRegistry.render({ include: "wa_personal_synthetic" });
+  const exc = metricsRegistry.render({ exclude: "wa_personal_synthetic" });
+  return inc.includes("wa_personal_synthetic_up") && !exc.includes("wa_personal_synthetic_up");
+})());
+check("E2 synthetic monitor NEVER creates a session (no connect/generateQR/createSession/sendMessage)",
+  !/generateQR|createSession|sendMessage|\bconnect\(/.test(strip(synthetic)));
+check("E3 synthetic checks all 7 readiness signals",
+  ["registry_resolution", "adapter_availability", "authentication_path", "webhook_endpoint", "metrics_endpoint", "worker_health", "kill_switch"].every((c) => synthetic.includes(c)));
+check("E4 synthetic uses the READ-ONLY neutral worker health (not a session op)",
+  synthetic.includes("personalWorkerHealth") && !synthetic.includes("personalConnectAction"));
+check("E5 synthetic route fail-closed bearer auth (403) + returns synthetic metrics only",
+  /if \(!token\) return false/.test(strip(synthRoute)) && synthRoute.includes("status: 403") && synthRoute.includes('include: "wa_personal_synthetic"'));
+check("E6 /metrics EXCLUDES synthetic series (no duplicate series across jobs)",
+  metricsRoute2.includes('exclude: "wa_personal_synthetic"'));
+check("E7 synthetic module is boundary-clean (no Evolution identifier)",
+  !/evolution|baileys/i.test(strip(synthetic + synthRoute)));
+check("E8 error-budget recording rules + 50% freeze + 100% stop alerts present",
+  rules.includes("error_budget_consumed30d") && rules.includes("PersonalErrorBudget50pct") && rules.includes("PersonalErrorBudget100pct"));
+check("E9 synthetic alerts defined (down / per-check / stale)",
+  rules.includes("PersonalSyntheticDown") && rules.includes("PersonalSyntheticCheckFailing") && rules.includes("PersonalSyntheticStale"));
+check("E10 prometheus scrapes the synthetic endpoint every 5m",
+  /job_name: zono-wa-personal-synthetic[\s\S]{0,120}scrape_interval: 5m/.test(promCfg) && promCfg.includes("/api/whatsapp/personal/synthetic"));
+check("E11 SRE is operations-only — no new provider/model, worker ping is read-only compat",
+  read("src/lib/whatsapp/provider/personal/compat/index.ts").includes("workerPing") && !/interface Conversation|interface Message/.test(synthetic));
+
+console.log(`\nPersonal WhatsApp Bridge (6.6A + 6.6A.1 + 6.6A.2) SELF TEST: ${passed} passed, ${failed} failed`);
 console.log("(Live pairing / inbound / outbound = BLOCKED — require a running Evolution worker + a real WhatsApp number.)\n");
 if (failed > 0) process.exit(1);

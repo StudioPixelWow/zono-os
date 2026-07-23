@@ -84,8 +84,15 @@ class Registry {
   counter(name: string, help: string): Counter { const m = new Counter(name, help); this.metrics.push(m); return m; }
   gauge(name: string, help: string): Gauge { const m = new Gauge(name, help); this.metrics.push(m); return m; }
   histogram(name: string, help: string, buckets?: number[]): Histogram { const m = new Histogram(name, help, buckets); this.metrics.push(m); return m; }
-  /** Render the full registry in Prometheus text exposition format. */
-  render(): string { return this.metrics.flatMap((m) => m.render()).join("\n") + "\n"; }
+  /** Render the registry in Prometheus text exposition format. Optional prefix
+   *  filters let callers render only (include) or all-but (exclude) a family —
+   *  e.g. the synthetic endpoint renders only "wa_personal_synthetic". */
+  render(opts: { include?: string; exclude?: string } = {}): string {
+    const chosen = this.metrics.filter((m) =>
+      (opts.include ? m.name.startsWith(opts.include) : true) &&
+      (opts.exclude ? !m.name.startsWith(opts.exclude) : true));
+    return chosen.flatMap((m) => m.render()).join("\n") + "\n";
+  }
 }
 
 export const registry = new Registry();

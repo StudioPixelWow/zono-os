@@ -110,3 +110,80 @@ groups:
         annotations:
           summary: "Personal transport p95 latency > 8s"
           description: "Operations are slow (worker/network). Playbook: PB-3."
+
+  # ── Error budget (6.6A.2) — 30d SLO consumption + freeze thresholds ────────
+  - name: wa_personal_error_budget
+    interval: 60s
+    rules:
+      # 30d success ratios.
+      - record: wa_personal:connect_success_ratio30d
+        expr: |
+          sum(rate(wa_personal_connect_total{outcome="connected"}[30d]))
+          / clamp_min(sum(rate(wa_personal_connect_total{outcome!="disabled"}[30d])), 1)
+      - record: wa_personal:outbound_success_ratio30d
+        expr: |
+          sum(rate(wa_personal_outbound_total{outcome="sent"}[30d]))
+          / clamp_min(sum(rate(wa_personal_outbound_total{outcome=~"sent|failed"}[30d])), 1)
+      - record: wa_personal:inbound_success_ratio30d
+        expr: |
+          sum(rate(wa_personal_inbound_total{outcome=~"message|status"}[30d]))
+          / clamp_min(sum(rate(wa_personal_inbound_total{outcome!~"disabled"}[30d])), 1)
+      # Budget consumed = observed error rate / allowed error rate (1 - SLO).
+      # SLOs: connect 95% (budget 5%), outbound 98% (2%), inbound 99% (1%).
+      - record: wa_personal:connect_error_budget_consumed30d
+        expr: (1 - wa_personal:connect_success_ratio30d) / 0.05
+      - record: wa_personal:outbound_error_budget_consumed30d
+        expr: (1 - wa_personal:outbound_success_ratio30d) / 0.02
+      - record: wa_personal:inbound_error_budget_consumed30d
+        expr: (1 - wa_personal:inbound_success_ratio30d) / 0.01
+      # Worst-case consumption across the three SLOs drives the freeze policy.
+      - record: wa_personal:error_budget_consumed30d
+        expr: |
+          max(
+            wa_personal:connect_error_budget_consumed30d
+            or wa_personal:outbound_error_budget_consumed30d
+            or wa_personal:inbound_error_budget_consumed30d
+          )
+
+      - alert: PersonalErrorBudget50pct
+        expr: wa_personal:error_budget_consumed30d > 0.5
+        for: 1h
+        labels: { severity: warning, transport: personal, policy: feature_freeze }
+        annotations:
+          summary: "Personal Beta error budget >50% consumed — FREEZE new features"
+          description: "More than 50% of the 30d error budget is spent. Policy: freeze new Personal QR features; prioritize reliability work. Playbook: PB-EB."
+
+      - alert: PersonalErrorBudget100pct
+        expr: wa_personal:error_budget_consumed30d >= 1.0
+        for: 1h
+        labels: { severity: critical, transport: personal, policy: feature_stop }
+        annotations:
+          summary: "Personal Beta error budget EXHAUSTED — STOP feature work"
+          description: "100% of the 30d error budget is consumed. Policy: stop ALL Personal QR feature work; reliability work only until the SLO is back within budget. Playbook: PB-EB."
+
+  # ── Synthetic monitoring (6.6A.2) — infra readiness alerts ─────────────────
+  - name: wa_personal_synthetic
+    rules:
+      - alert: PersonalSyntheticDown
+        expr: wa_personal_synthetic_up == 0
+        for: 10m
+        labels: { severity: critical, transport: personal }
+        annotations:
+          summary: "Personal synthetic monitor failing (infra not ready)"
+          description: "A critical synthetic check has failed for 10m — the personal transport plumbing is not ready even before any user tries it. Playbook: PB-SYN."
+
+      - alert: PersonalSyntheticCheckFailing
+        expr: wa_personal_synthetic_check == 0
+        for: 10m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal synthetic check {{ $labels.check }} failing"
+          description: "Synthetic check '{{ $labels.check }}' has been failing for 10m. Playbook: PB-SYN (per-check table)."
+
+      - alert: PersonalSyntheticStale
+        expr: (time() - wa_personal_synthetic_last_success_timestamp_seconds) > 900
+        for: 10m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal synthetic monitor has not passed in >15m"
+          description: "No fully-passing synthetic run in 15m — the monitor may not be running (scheduler/scrape down) or infra is persistently unready. Playbook: PB-SYN."

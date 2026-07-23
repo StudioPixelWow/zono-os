@@ -28,6 +28,14 @@ const switchTotal = registry.counter("wa_personal_transport_switch_total", "Per-
 const sessionUp = registry.gauge("wa_personal_session_up", "1 when an agent's personal session is connected, else 0");
 const workerConfigured = registry.gauge("wa_personal_worker_configured", "1 when the personal transport backend is configured");
 
+// ── SRE synthetic monitoring (6.6A.2) — infra readiness, never a real session ─
+const synthUp = registry.gauge("wa_personal_synthetic_up", "1 when the last synthetic run passed all critical checks");
+const synthCheck = registry.gauge("wa_personal_synthetic_check", "Per-check synthetic result (1 ok / 0 fail), by check");
+const synthRuns = registry.counter("wa_personal_synthetic_run_total", "Synthetic monitor runs by result");
+const synthDuration = registry.histogram("wa_personal_synthetic_duration_seconds", "Synthetic monitor run duration");
+const synthLastSuccess = registry.gauge("wa_personal_synthetic_last_success_timestamp_seconds", "Unix time of the last fully-passing synthetic run");
+const killSwitchState = registry.gauge("wa_personal_kill_switch_enabled", "1 when the Personal transport kill switch is ON (enabled)");
+
 const lbl = (ctx?: LogContext) => ({ org: ctx?.org ?? "unknown" });
 
 // ── Emit helpers (metric + structured log) ──────────────────────────────────
@@ -59,3 +67,18 @@ export function recordSessionUp(up: boolean, ctx?: LogContext): void {
   sessionUp.set(up ? 1 : 0, { org: ctx?.org ?? "unknown", agent: ctx?.agent ?? "unknown" });
 }
 export function setWorkerConfigured(configured: boolean): void { workerConfigured.set(configured ? 1 : 0); }
+
+/** Synthetic monitor result (SRE). Updates the synthetic gauges/counters and
+ *  logs a redacted line. `nowSec` is passed in (caller owns the clock). */
+export function recordSynthetic(
+  result: { ok: boolean; durationSec: number; checks: { name: string; ok: boolean }[]; killSwitchEnabled: boolean },
+  nowSec: number,
+): void {
+  synthUp.set(result.ok ? 1 : 0);
+  synthRuns.inc({ result: result.ok ? "pass" : "fail" });
+  synthDuration.observe(result.durationSec);
+  killSwitchState.set(result.killSwitchEnabled ? 1 : 0);
+  for (const c of result.checks) synthCheck.set(c.ok ? 1 : 0, { check: c.name });
+  if (result.ok) synthLastSuccess.set(nowSec);
+  (result.ok ? log.info : log.warn)("synthetic", {}, { ok: result.ok, failed: result.checks.filter((c) => !c.ok).map((c) => c.name).join(",") || "none" });
+}
