@@ -63,6 +63,8 @@ const JOURNEY_ONLY_DIRS = [
   "src/lib/command-center",                       // 6.4 — Command Center composes omnisearch + registry, never reads journey state
   "src/lib/commercial",                           // 6.4 — Commercial & Onboarding OS composes provisioning/subscriptions, never reads journey state
   "src/lib/google",                               // 6.5 — Google Workspace OS composes oauth/calendar/gmail/contacts/sync, never reads journey state
+  "src/lib/whatsapp/business",                    // 6.6 — WhatsApp Business Platform OS composes oauth/tokens/messages, never reads journey state
+  "src/lib/notify",                               // 6.6 — Notification delivery provider layer, never reads journey state
   "src/components/journey",
   "src/components/dashboard/sections/JourneysDashboardSection.tsx",
   "src/app/(app)/journeys",
