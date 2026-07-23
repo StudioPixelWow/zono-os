@@ -1,12 +1,17 @@
 // ============================================================================
-// 💬 ZONO — WhatsApp Cloud API webhook (/api/whatsapp/webhook). PHASE 48.0.
+// 💬 ZONO — WhatsApp Cloud API webhook (/api/whatsapp/webhook).
 // GET  = Meta subscription verification (hub.challenge).
-// POST = incoming messages + statuses → verified (X-Hub-Signature-256) →
-//        idempotent processing into the EXISTING whatsapp_* tables.
-// Tokens are read server-side only; nothing is ever auto-sent from here.
+// POST = incoming messages + statuses → FAIL-CLOSED signature verify
+//        (X-Hub-Signature-256) → EXACTLY-ONCE receipt gate → idempotent
+//        processing into the EXISTING whatsapp_* tables (frozen processWebhook).
+// Batch 6.6 hardening: signature now fails closed when no app secret is set, and
+// a unique (phone_number_id, event_id) receipt ledger drops Meta retries before
+// any side effect. Tokens are read server-side only; nothing is auto-sent here.
 // ============================================================================
 import type { NextRequest } from "next/server";
-import { verifyWebhook, verifySignature, processWebhook } from "@/lib/whatsapp/cloud/service";
+import { verifyWebhook, processWebhook } from "@/lib/whatsapp/cloud/service";
+import { parseWebhook } from "@/lib/whatsapp/cloud/core";
+import { verifySignatureStrict, recordReceiptOnce } from "@/lib/whatsapp/business/webhooks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,11 +25,25 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const raw = await req.text();
-  const sig = verifySignature(raw, req.headers.get("x-hub-signature-256"));
-  if (!sig.ok) return new Response("invalid signature", { status: 401 });
+  // FAIL-CLOSED: reject unless a configured app secret verifies the raw body.
+  if (!verifySignatureStrict(raw, req.headers.get("x-hub-signature-256"))) {
+    return new Response("invalid signature", { status: 401 });
+  }
   let payload: unknown;
   try { payload = JSON.parse(raw); } catch { return new Response("bad json", { status: 400 }); }
+
+  // EXACTLY-ONCE: record each event in the unique receipt ledger; only proceed
+  // when at least one event is new. Meta retries collapse to a no-op 200.
+  const parsed = parseWebhook(payload);
+  const events: { id: string; kind: "message" | "status" }[] = [
+    ...parsed.messages.map((m) => ({ id: m.waMessageId, kind: "message" as const })),
+    ...parsed.statuses.map((s) => ({ id: `${s.waMessageId}:${s.status}`, kind: "status" as const })),
+  ];
+  let fresh = 0;
+  for (const e of events) { if (await recordReceiptOnce(parsed.phoneNumberId, e.id, e.kind)) fresh += 1; }
+  if (events.length > 0 && fresh === 0) return Response.json({ ok: true, duplicate: true });
+
   const result = await processWebhook(payload).catch(() => null);
-  // Always 200 once accepted so Meta does not retry-storm; body is diagnostic only.
-  return Response.json({ ok: true, verified: sig.reason, ...(result ?? {}) });
+  // Always 200 once accepted + verified so Meta does not retry-storm.
+  return Response.json({ ok: true, verified: true, fresh, ...(result ?? {}) });
 }
