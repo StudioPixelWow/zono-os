@@ -13,4 +13,12 @@ export { loadConversationView } from "./read";
 export { toAnalysisView } from "./normalize";
 export { buildExplain, isExplained } from "./explain";
 export { computeFeedbackMetrics, FEEDBACK_PURPOSE } from "./feedback";
+// Phase 1 — conversation understanding (deterministic, transport-agnostic).
+export { analyzeConversation, type ConversationAnalysis } from "./analyze";
+export { classifyConversation } from "./classify";
+export { summarizeConversation } from "./summarize";
+export { runCopilotPipeline, type CopilotPipelineResult } from "./pipeline";
+export { deterministicHash, shouldRegenerate, buildInsightRow, buildSummaryRow } from "./record";
+export { conversationRefToUuid } from "./ids";
+export { generateConversationInsight, type FreshnessReason } from "./service";
 export type * from "./types";

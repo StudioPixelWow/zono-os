@@ -12,7 +12,10 @@ import type { Conversation, Message } from "@/lib/communication-os/types";
 import { toAnalysisView } from "./normalize";
 import { buildExplain, isExplained } from "./explain";
 import { computeFeedbackMetrics, FEEDBACK_PURPOSE } from "./feedback";
-import type { FeedbackRecord } from "./types";
+import type { FeedbackRecord, CopilotConversationView, ConversationClassification } from "./types";
+import { runCopilotPipeline } from "./pipeline";
+import { analyzeConversation } from "./analyze";
+import { deterministicHash, shouldRegenerate, buildSummaryRow, buildInsightRow } from "./record";
 
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -120,6 +123,100 @@ check("D6 boundary guard + migration + package scripts registered",
 check("D7 no forbidden derived-field literal in the module",
   !/velocity_score|velocity_state|health_score|engagement_score|conversion_score|next_best_action/.test(all));
 
-console.log(`\nAI Communication Copilot (6.7) Phase 0 SELF TEST: ${passed} passed, ${failed} failed`);
-console.log("(Analyzers — classification/summary/sentiment/NBA/timeline/memory — are Phase 1+; not asserted here.)\n");
+// ── E–K) PHASE 1 — conversation understanding ────────────────────────────────
+const isExplained2 = isExplained;
+const NOW = "2026-07-23T12:00:00.000Z";
+type V = CopilotConversationView;
+function view(ref: string, msgs: { d: "inbound" | "outbound"; t: string }[], crm: Partial<V["crmLinks"]> = {}, last?: string, channel = "wa"): V {
+  const transcript = msgs.map((m, i) => ({ seq: i, messageRef: `${channel}:${ref}:m${i + 1}`, direction: m.d, sentAt: `2026-07-23T1${i}:00:00.000Z`, text: m.t }));
+  return { conversationRef: `${channel}:${ref}`, agentId: "u_b", waiting: msgs[msgs.length - 1].d === "inbound", unread: 1, messageCount: transcript.length, lastActivityAt: last ?? transcript[transcript.length - 1].sentAt, transcript, crmLinks: { lead: null, buyer: null, seller: null, journey: null, deal: null, property: null, ...crm } };
+}
+
+const NINE: [ConversationClassification, V][] = [
+  ["new_lead", view("1", [{ d: "inbound", t: "שלום, מחפש דירה באזור" }])],
+  ["active_buyer", view("2", [{ d: "inbound", t: "מחפש לקנות דירה" }, { d: "outbound", t: "יש לי אפשרויות" }, { d: "inbound", t: "מה עם משכנתא ומימון?" }], { buyer: "b1" })],
+  ["active_seller", view("3", [{ d: "inbound", t: "אני רוצה למכור את הדירה שלי" }])],
+  ["negotiation", view("4", [{ d: "inbound", t: "בוא נתקדם על המחיר, יש הצעה נגדית" }])],
+  ["appointment", view("5", [{ d: "inbound", t: "מתי אפשר לבוא לראות את הנכס?" }])],
+  ["follow_up", view("6", [{ d: "inbound", t: "טוב תודה רבה" }, { d: "outbound", t: "אעדכן אותך בהמשך השבוע" }])],
+  ["document_exchange", view("7", [{ d: "inbound", t: "שלחתי לך את החוזה והמסמכים לחתימה" }])],
+  ["inactive", view("8", [{ d: "inbound", t: "מחפש דירה" }], {}, "2026-07-01T12:00:00.000Z")],
+  ["closed", view("9", [{ d: "inbound", t: "לא מעוניין יותר, תפסיק לפנות אליי" }])],
+];
+
+let allNine = true, allExplained = true, allDeterministic = true;
+for (const [want, v] of NINE) {
+  const { classification } = runCopilotPipeline(v, NOW);
+  if (classification.classification !== want) { allNine = false; console.error(`    · misclassified ${want} → ${classification.classification}`); }
+  if (!isExplained2(classification.explain)) allExplained = false;
+  if (classification.explain.llmContribution !== null) allDeterministic = false;
+}
+check("E1 all 9 labels classify correctly from deterministic fixtures", allNine);
+check("E2 every classification is explained (confidence + reasoning + signals)", allExplained);
+check("E3 Phase 1 is deterministic-only (llmContribution === null everywhere)", allDeterministic);
+check("E4 classification carries evidence message ids where signals exist", (() => {
+  const neg = runCopilotPipeline(NINE[3][1], NOW).classification;
+  return neg.explain.evidenceMessageIds.length > 0 && neg.explain.deterministicSignals.includes("intent:negotiation");
+})());
+
+// Summary with entities.
+const richView = view("10", [{ d: "inbound", t: "מחפש דירת 4 חדרים בתל אביב בתקציב 3 מיליון" }, { d: "outbound", t: "אעדכן אותך" }], { buyer: "b1" });
+const rich = runCopilotPipeline(richView, NOW);
+check("F1 summary composes stage/intent/facts/next-action + per-section contributions",
+  !!rich.summary.stage && !!rich.summary.intent && rich.summary.facts.length >= 2 && !!rich.summary.nextAction && rich.summary.contributions.length > 0);
+check("F2 NO hallucination — every FACT has ≥1 citing message id", (() => {
+  const factContribs = rich.summary.contributions.filter((c) => c.section === "facts");
+  return rich.summary.facts.length === factContribs.length && factContribs.every((c) => c.evidenceMessageIds.length > 0);
+})());
+check("F3 unsupported fact rejection — a city said ONLY by the agent is not a client fact", (() => {
+  const v = view("11", [{ d: "inbound", t: "מחפש דירה" }, { d: "outbound", t: "יש לי משהו יפה בתל אביב" }]);
+  const s = runCopilotPipeline(v, NOW).summary;
+  return !s.facts.some((f) => f.includes("תל אביב"));   // agent-only mention never becomes a client fact
+})());
+check("F4 summary is explained + deterministic", isExplained2(rich.summary.explain) && rich.summary.explain.llmContribution === null);
+check("F5 every contribution names its section + signals", rich.summary.contributions.every((c) => !!c.section && c.signals.length > 0));
+
+// Stale regeneration.
+check("G1 deterministicHash is stable for identical input", (() => {
+  const a = runCopilotPipeline(NINE[0][1], NOW), b = runCopilotPipeline(NINE[0][1], "2026-08-01T00:00:00.000Z");
+  return deterministicHash(a.classification, a.summary) === deterministicHash(b.classification, b.summary);  // time-independent
+})());
+check("G2 hash CHANGES when the conversation changes", (() => {
+  const a = runCopilotPipeline(NINE[0][1], NOW), b = runCopilotPipeline(NINE[3][1], NOW);
+  return deterministicHash(a.classification, a.summary) !== deterministicHash(b.classification, b.summary);
+})());
+check("G3 shouldRegenerate skips when hash unchanged (no rewrite / no LLM), regenerates on change",
+  shouldRegenerate("h1", "h1", false) === false && shouldRegenerate("h1", "h1", true) === false && shouldRegenerate("h1", "h2", false) === true);
+
+// Transport-agnostic identity (Business vs Personal WhatsApp vs Gmail).
+check("H1 identical content across transports → identical classification + summary + hash", (() => {
+  const msgs: { d: "inbound" | "outbound"; t: string }[] = [{ d: "inbound", t: "בוא נתקדם על המחיר, יש הצעה נגדית" }];
+  const biz = runCopilotPipeline(view("x", msgs, {}, undefined, "whatsapp"), NOW);
+  const personal = runCopilotPipeline(view("x", msgs, {}, undefined, "whatsapp"), NOW);   // same channel, personal transport feeds same canonical model
+  const gmail = runCopilotPipeline(view("x", msgs, {}, undefined, "gmail"), NOW);
+  const sig = (r: typeof biz) => JSON.stringify({ c: r.classification.classification, s: r.summary.stage, i: r.summary.intent, n: r.summary.nextAction });
+  return sig(biz) === sig(personal) && sig(biz) === sig(gmail) &&
+    deterministicHash(biz.classification, biz.summary) === deterministicHash(gmail.classification, gmail.summary);
+})());
+
+// Persistence payloads.
+check("I1 summary row is conversation-scoped with a deterministic uuid entity_id + contributions", (() => {
+  const row = buildSummaryRow("org1", rich.summary, "whatsapp:10", NOW);
+  const kp = row.key_points as { conversation_ref: string; contributions: unknown[] };
+  return row.entity_type === "conversation" && /^[0-9a-f-]{36}$/.test(row.entity_id) && kp.conversation_ref === "whatsapp:10" && Array.isArray(kp.contributions) && row.next_step === rich.summary.nextAction;
+})());
+check("I2 insight row carries classification + deterministic hash for freshness", (() => {
+  const a = analyzeConversation(richView, NOW);
+  const row = buildInsightRow("org1", a, rich.classification, rich.summary, NOW);
+  const ex = row.explainability as { deterministicHash?: string };
+  return row.classification === rich.classification.classification && typeof ex.deterministicHash === "string" && ex.deterministicHash.length === 40;
+})());
+check("I3 persistence writes ONLY the two allowed sinks (source guard)", (() => {
+  const persist = read("src/lib/comm-copilot/persist.ts");
+  return persist.includes("copilot_conversation_insight") && persist.includes("communication_summaries") &&
+    !/whatsapp_conversations|whatsapp_messages|from\(["']journeys["']\)/.test(strip(persist));
+})());
+
+console.log(`\nAI Communication Copilot (6.7) Phase 0+1 SELF TEST: ${passed} passed, ${failed} failed`);
+console.log("(Sentiment/NBA/timeline/memory + LLM enrichment are Phase 2+; not asserted here.)\n");
 if (failed > 0) process.exit(1);
