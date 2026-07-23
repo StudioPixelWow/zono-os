@@ -66,6 +66,16 @@ export interface ClassificationArtifact { classification: ConversationClassifica
 export interface SentimentArtifact { sentiment: CopilotSentiment; explain: Explainability }
 export interface RecommendedActionArtifact { action: RecommendedActionKind; explain: Explainability }
 
+// ── Missing-response / attention (Phase 2) ──────────────────────────────────
+export type AttentionKind = "waiting_too_long" | "unanswered_question" | "forgotten" | "urgent";
+export interface AttentionFlag {
+  kind: AttentionKind;
+  severity: "low" | "medium" | "high";
+  reason: string;
+  evidenceMessageIds: string[];
+  signals: string[];
+}
+
 export type ReplyTone = "professional" | "friendly" | "persuasive";
 export interface ReplySuggestionArtifact {
   tone: ReplyTone;

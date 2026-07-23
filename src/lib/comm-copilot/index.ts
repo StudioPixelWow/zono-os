@@ -18,7 +18,12 @@ export { analyzeConversation, type ConversationAnalysis } from "./analyze";
 export { classifyConversation } from "./classify";
 export { summarizeConversation } from "./summarize";
 export { runCopilotPipeline, type CopilotPipelineResult } from "./pipeline";
-export { deterministicHash, shouldRegenerate, buildInsightRow, buildSummaryRow } from "./record";
+export { deterministicHash, shouldRegenerate, buildInsightRow, buildSummaryRow, hashExtraOf } from "./record";
 export { conversationRefToUuid } from "./ids";
 export { generateConversationInsight, type FreshnessReason } from "./service";
+// Phase 2 — sentiment, missing-response detection, next-best-action, feed.
+export { deriveSentiment } from "./sentiment";
+export { detectAttention } from "./detect";
+export { recommendAction } from "./recommend";
+export { getAttentionFeed, type AttentionFeedItem } from "./feed";
 export type * from "./types";

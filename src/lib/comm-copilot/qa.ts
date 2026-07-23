@@ -15,7 +15,11 @@ import { computeFeedbackMetrics, FEEDBACK_PURPOSE } from "./feedback";
 import type { FeedbackRecord, CopilotConversationView, ConversationClassification } from "./types";
 import { runCopilotPipeline } from "./pipeline";
 import { analyzeConversation } from "./analyze";
-import { deterministicHash, shouldRegenerate, buildSummaryRow, buildInsightRow } from "./record";
+import { deriveSentiment } from "./sentiment";
+import { detectAttention } from "./detect";
+import { recommendAction } from "./recommend";
+import { deterministicHash, shouldRegenerate, buildSummaryRow, buildInsightRow, hashExtraOf } from "./record";
+import type { RecommendedActionKind } from "./types";
 
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -206,8 +210,7 @@ check("I1 summary row is conversation-scoped with a deterministic uuid entity_id
   return row.entity_type === "conversation" && /^[0-9a-f-]{36}$/.test(row.entity_id) && kp.conversation_ref === "whatsapp:10" && Array.isArray(kp.contributions) && row.next_step === rich.summary.nextAction;
 })());
 check("I2 insight row carries classification + deterministic hash for freshness", (() => {
-  const a = analyzeConversation(richView, NOW);
-  const row = buildInsightRow("org1", a, rich.classification, rich.summary, NOW);
+  const row = buildInsightRow("org1", rich, NOW);
   const ex = row.explainability as { deterministicHash?: string };
   return row.classification === rich.classification.classification && typeof ex.deterministicHash === "string" && ex.deterministicHash.length === 40;
 })());
@@ -217,6 +220,64 @@ check("I3 persistence writes ONLY the two allowed sinks (source guard)", (() => 
     !/whatsapp_conversations|whatsapp_messages|from\(["']journeys["']\)/.test(strip(persist));
 })());
 
-console.log(`\nAI Communication Copilot (6.7) Phase 0+1 SELF TEST: ${passed} passed, ${failed} failed`);
-console.log("(Sentiment/NBA/timeline/memory + LLM enrichment are Phase 2+; not asserted here.)\n");
+// ── J) PHASE 2 — sentiment, missing-response, next-best-action, feed ─────────
+const buyerV = view("b", [{ d: "inbound", t: "מחפש לקנות דירה" }, { d: "outbound", t: "יש אפשרויות" }, { d: "inbound", t: "מה עם משכנתא?" }], { buyer: "b1" });
+const closeV = view("c", [{ d: "inbound", t: "בוא נסגור, תכין חוזה" }]);
+const questionV = view("q", [{ d: "inbound", t: "כמה עולה הנכס?" }]);
+const oldHotV = (() => { const v = view("h", [{ d: "outbound", t: "שלחתי הצעה" }, { d: "inbound", t: "בוא נסגור, תכין חוזה" }, { d: "outbound", t: "מעולה" }], {}, "2026-07-01T12:00:00.000Z"); return v; })();
+
+check("J1 sentiment maps to 5 buckets; high_intent from ready_to_close", (() => {
+  const s = deriveSentiment(analyzeConversation(closeV, NOW));
+  const buckets = new Set(["positive", "neutral", "hesitant", "frustrated", "high_intent"]);
+  return s.sentiment === "high_intent" && buckets.has(s.sentiment) && isExplained2(s.explain);
+})());
+check("J2 unanswered_question fires when a question is left waiting", (() => {
+  const flags = detectAttention(analyzeConversation(questionV, NOW));
+  const f = flags.find((x) => x.kind === "unanswered_question");
+  return !!f && f.evidenceMessageIds.length > 0 && f.signals.includes("intent:question");
+})());
+check("J3 urgent fires on ready-to-close while waiting", (() => {
+  const flags = detectAttention(analyzeConversation(closeV, NOW));
+  return flags.some((x) => x.kind === "urgent" && x.severity === "high");
+})());
+check("J4 waiting_too_long / forgotten derive from the reused risk engine", (() => {
+  const flags = detectAttention(analyzeConversation(oldHotV, NOW));
+  return flags.some((x) => x.kind === "waiting_too_long" || x.kind === "forgotten");
+})());
+check("J5 next-best-action returns a valid kind + reasoning for every classification", (() => {
+  const kinds = new Set<RecommendedActionKind>(["call", "whatsapp", "meeting", "reminder", "send_property", "follow_up"]);
+  return NINE.every(([, v]) => { const a = analyzeConversation(v, NOW); const c = runCopilotPipeline(v, NOW).classification; const r = recommendAction(a, c.classification); return kinds.has(r.action) && r.explain.reasoning.length > 0 && isExplained2(r.explain); });
+})());
+check("J6 active buyer → send_property (deterministic mapping)", (() => {
+  const r = runCopilotPipeline(buyerV, NOW).recommendedAction;
+  return r.action === "send_property" && isExplained2(r.explain);
+})());
+check("J7 sentiment + attention + recommendation explained on every artifact", (() => {
+  const r = runCopilotPipeline(closeV, NOW);
+  return isExplained2(r.sentiment.explain) && isExplained2(r.recommendedAction.explain) && r.attention.every((f) => f.evidenceMessageIds !== undefined && f.signals.length > 0);
+})());
+check("J8 transport-agnostic: sentiment/attention/action identical across channels", (() => {
+  const msgs: { d: "inbound" | "outbound"; t: string }[] = [{ d: "inbound", t: "בוא נסגור, תכין חוזה" }];
+  const wa = runCopilotPipeline(view("z", msgs, {}, undefined, "whatsapp"), NOW);
+  const gm = runCopilotPipeline(view("z", msgs, {}, undefined, "gmail"), NOW);
+  const sig = (r: typeof wa) => JSON.stringify({ s: r.sentiment.sentiment, a: r.attention.map((f) => f.kind).sort(), n: r.recommendedAction.action });
+  return sig(wa) === sig(gm);
+})());
+check("J9 Phase-2 signals fold into the freshness hash", (() => {
+  const r = runCopilotPipeline(closeV, NOW);
+  const withExtra = deterministicHash(r.classification, r.summary, hashExtraOf(r));
+  const without = deterministicHash(r.classification, r.summary);
+  return withExtra !== without && hashExtraOf(r).action === r.recommendedAction.action;
+})());
+check("J10 insight row persists sentiment + recommended_action + attention", (() => {
+  const r = runCopilotPipeline(closeV, NOW); const row = buildInsightRow("org1", r, NOW);
+  return !!row.sentiment && !!row.recommended_action && Array.isArray(row.attention);
+})());
+check("J11 feed reads only the Copilot's own table (source guard)", (() => {
+  const feed = read("src/lib/comm-copilot/feed.ts");
+  return feed.includes("copilot_conversation_insight") && !/whatsapp_conversations|whatsapp_messages|from\(["']journeys["']\)/.test(strip(feed)) && !/@\/lib\/whatsapp\//.test(feed);
+})());
+
+console.log(`\nAI Communication Copilot (6.7) Phase 0+1+2 SELF TEST: ${passed} passed, ${failed} failed`);
+console.log("(Timeline milestones + AI memory + LLM enrichment are Phase 3+; not asserted here.)\n");
 if (failed > 0) process.exit(1);

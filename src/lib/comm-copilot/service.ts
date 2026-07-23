@@ -26,8 +26,8 @@ export async function generateConversationInsight(conversationRef: string, reaso
   if (!view) return { ok: false, error: "not_found" };
 
   const nowIso = new Date().toISOString();
-  const { analysis, classification, summary } = runCopilotPipeline(view, nowIso);
+  const result = runCopilotPipeline(view, nowIso);
   const force = reason === "manual" || reason === "reopened";
-  const r = await persistInsight(profile.org_id, analysis, classification, summary, nowIso, force);
+  const r = await persistInsight(profile.org_id, result, nowIso, force);
   return { ok: true, changed: r.changed, classification: r.classification };
 }

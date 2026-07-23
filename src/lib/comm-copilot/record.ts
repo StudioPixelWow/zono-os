@@ -9,17 +9,27 @@
 import crypto from "node:crypto";
 import { conversationRefToUuid } from "./ids";
 import type { ClassificationArtifact, SummaryArtifact } from "./types";
-import type { ConversationAnalysis } from "./analyze";
+import type { CopilotPipelineResult } from "./pipeline";
+
+/** Optional Phase-2 signals folded into the freshness hash so a sentiment /
+ *  recommendation / attention change also triggers regeneration. */
+export interface HashExtra { sentiment?: string; action?: string; attention?: string[] }
 
 /** Stable hash of the DETERMINISTIC output (excludes timestamps). Drives
  *  freshness: identical hash → nothing changed → skip regeneration + LLM. */
-export function deterministicHash(classification: ClassificationArtifact, summary: SummaryArtifact): string {
+export function deterministicHash(classification: ClassificationArtifact, summary: SummaryArtifact, extra: HashExtra = {}): string {
   const stable = JSON.stringify({
     c: classification.classification,
     cs: classification.explain.deterministicSignals,
     s: summary.stage, i: summary.intent, f: summary.facts, o: summary.objections, p: summary.promises, n: summary.nextAction,
+    sent: extra.sentiment ?? null, act: extra.action ?? null, att: extra.attention ?? [],
   });
   return crypto.createHash("sha1").update(stable).digest("hex");
+}
+
+/** Extra signals for a full pipeline result. */
+export function hashExtraOf(r: CopilotPipelineResult): HashExtra {
+  return { sentiment: r.sentiment.sentiment, action: r.recommendedAction.action, attention: r.attention.map((f) => f.kind).sort() };
 }
 
 /** Regenerate when: forced (manual/reopen) OR the deterministic output changed.
@@ -37,31 +47,27 @@ export interface InsightRow {
   waiting: boolean; attention: unknown; explainability: unknown; analyzed_at: string;
 }
 
-const SENTIMENT_MAP: Record<string, string> = {
-  positive: "positive", excited: "high_intent", urgent: "high_intent",
-  neutral: "neutral", cold: "hesitant", negative: "frustrated", frustrated: "frustrated",
-};
-
-export function buildInsightRow(
-  orgId: string, analysis: ConversationAnalysis, classification: ClassificationArtifact, summary: SummaryArtifact, nowIso: string,
-): InsightRow {
-  const topRisk = analysis.risks[0];
+/** Build the insight row from a full pipeline result (Phase 1 + 2). */
+export function buildInsightRow(orgId: string, r: CopilotPipelineResult, nowIso: string): InsightRow {
   return {
     org_id: orgId,
-    conversation_ref: analysis.ref,
+    conversation_ref: r.analysis.ref,
     agent_id: null,
-    classification: classification.classification,
-    classification_confidence: classification.explain.confidence,
-    sentiment: SENTIMENT_MAP[analysis.sentiment.sentiment] ?? "neutral",
-    sentiment_confidence: analysis.sentiment.score,
-    recommended_action: null,                              // Phase 2 (NBA) fills this
-    recommended_action_reason: topRisk?.recommended_action ?? summary.nextAction,
-    waiting: analysis.waiting,
-    attention: [],
+    classification: r.classification.classification,
+    classification_confidence: r.classification.explain.confidence,
+    sentiment: r.sentiment.sentiment,
+    sentiment_confidence: r.sentiment.explain.confidence,
+    recommended_action: r.recommendedAction.action,
+    recommended_action_reason: r.recommendedAction.explain.reasoning[0] ?? r.summary.nextAction,
+    waiting: r.analysis.waiting,
+    attention: r.attention,                                // detected attention flags (+ evidence)
     explainability: {
-      classification: classification.explain,
-      summary: summary.explain,
-      deterministicHash: deterministicHash(classification, summary),
+      classification: r.classification.explain,
+      summary: r.summary.explain,
+      sentiment: r.sentiment.explain,
+      recommendedAction: r.recommendedAction.explain,
+      attention: r.attention,
+      deterministicHash: deterministicHash(r.classification, r.summary, hashExtraOf(r)),
     },
     analyzed_at: nowIso,
   };

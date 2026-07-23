@@ -11,20 +11,19 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit/service";
 import { conversationRefToUuid } from "./ids";
-import { buildInsightRow, buildSummaryRow, deterministicHash, shouldRegenerate } from "./record";
-import type { ClassificationArtifact, SummaryArtifact } from "./types";
-import type { ConversationAnalysis } from "./analyze";
+import { buildInsightRow, buildSummaryRow, deterministicHash, hashExtraOf, shouldRegenerate } from "./record";
+import type { CopilotPipelineResult } from "./pipeline";
 
 export interface PersistResult { changed: boolean; classification: string }
 
 /** Persist the insight + summary for a conversation, hash-gated. */
 export async function persistInsight(
-  orgId: string, analysis: ConversationAnalysis, classification: ClassificationArtifact, summary: SummaryArtifact,
-  nowIso: string, force: boolean,
+  orgId: string, result: CopilotPipelineResult, nowIso: string, force: boolean,
 ): Promise<PersistResult> {
   const db = createServiceRoleClient();
-  const ref = analysis.ref;
-  const nextHash = deterministicHash(classification, summary);
+  const { classification, summary } = result;
+  const ref = result.analysis.ref;
+  const nextHash = deterministicHash(classification, summary, hashExtraOf(result));
 
   // Read the prior hash (org-scoped) to decide freshness.
   const prev = await db.from("copilot_conversation_insight" as never)
@@ -37,7 +36,7 @@ export async function persistInsight(
 
   // Upsert the insight (one current snapshot per conversation).
   await db.from("copilot_conversation_insight" as never)
-    .upsert(buildInsightRow(orgId, analysis, classification, summary, nowIso) as never, { onConflict: "org_id,conversation_ref" });
+    .upsert(buildInsightRow(orgId, result, nowIso) as never, { onConflict: "org_id,conversation_ref" });
 
   // Replace the conversation-scoped summary (delete prior, insert fresh) —
   // never touches relationship-scoped summaries written by other code.

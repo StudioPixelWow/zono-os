@@ -7,6 +7,12 @@
 // ============================================================================
 "use server";
 import { generateConversationInsight } from "./service";
+import { getAttentionFeed } from "./feed";
+
+/** Read the attention feed (Command Center / inbox seam). Read-only. */
+export async function attentionFeedAction(limit?: number) {
+  return getAttentionFeed(limit);
+}
 
 /** Manual "refresh" button. */
 export async function refreshConversationInsightAction(conversationRef: string) {
