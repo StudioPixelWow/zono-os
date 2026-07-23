@@ -8,6 +8,7 @@
 // ============================================================================
 import "server-only";
 import { bridgeProvider, bridgeConfig } from "./bridge-provider";
+import { personalTransportProvider, personalTransportConfigured } from "./personal";
 import type { WaProviderKind, WhatsAppProvider } from "./types";
 
 /** Which provider is active for this deployment. */
@@ -16,8 +17,9 @@ export function getWhatsAppProviderKind(): WaProviderKind {
   if (forced === "bridge") return "bridge";
   if (forced === "none") return "none";
   if (forced === "cloud") return "cloud";
-  // Default: bridge when a bridge URL/token is present, else none.
-  return bridgeConfig() ? "bridge" : "none";
+  // Default: bridge when a personal-transport backend (or generic bridge URL) is
+  // configured, else none.
+  return personalTransportConfigured() || bridgeConfig() ? "bridge" : "none";
 }
 
 /** The active provider instance. */
@@ -25,9 +27,11 @@ export function getWhatsAppProvider(): WhatsAppProvider {
   const kind = getWhatsAppProviderKind();
   switch (kind) {
     case "bridge":
-      return bridgeProvider;
+      // The Personal transport adapter is the concrete "bridge" implementation.
+      // Swapping the backend is a change to ./personal only (C3).
+      return personalTransportProvider;
     // "cloud" is served by the existing Cloud-API gate, not this QR interface.
-    // "none" falls back to the bridge shape but reports `unavailable`.
+    // "none" falls back to the generic bridge shape but reports `unavailable`.
     default:
       return bridgeProvider;
   }

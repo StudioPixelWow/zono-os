@@ -1,0 +1,80 @@
+# ============================================================================
+# ZONO — Personal WhatsApp (Beta) transport WORKER: self-hosted Evolution API.
+# ----------------------------------------------------------------------------
+# External infrastructure. Runs SEPARATELY from the ZONO Next.js app (never on
+# Vercel). Stateless app container + external Evolution-owned Postgres & Redis.
+# Consumed only through ZONO's Personal transport adapter (never forked — C7).
+#
+# RULES enforced here:
+#   · Official upstream image ONLY, pinned by DIGEST via ${EVOLUTION_IMAGE}
+#     (preflight refuses ':latest' or a tag without @sha256: — see scripts/).
+#   · No secrets in this file — all come from the environment / secret manager.
+#   · restart: always + healthcheck (liveness) — C5 automatic restart.
+# ============================================================================
+services:
+  evolution:
+    # MUST be a digest-pinned official reference, e.g.
+    #   evoapicloud/evolution-api:v2.3.7@sha256:<digest>
+    # Resolve the digest at deploy time and set EVOLUTION_IMAGE in the secret
+    # manager. scripts/preflight.sh refuses latest/undigested references.
+    image: ${EVOLUTION_IMAGE:?set EVOLUTION_IMAGE to a digest-pinned official image}
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SERVER_URL: ${EVOLUTION_SERVER_URL:?}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: ${EVOLUTION_DATABASE_URI:?}
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: ${EVOLUTION_REDIS_URI:?}
+      DEL_INSTANCE: "false"
+      # Global webhook fallback (per-instance webhook is set by the adapter):
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${EVOLUTION_PORT:-8080}:8080"   # bind localhost; TLS via the proxy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: ${EVOLUTION_MEM_LIMIT:-2g}       # cap; scale horizontally past ~50–100 sessions
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${PG_USER:?}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?}
+      POSTGRES_DB: ${PG_DB:-evolution}
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data          # Evolution-owned; ISOLATED from ZONO's DB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    volumes:
+      - evolution_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  evolution_pg:
+  evolution_redis:
