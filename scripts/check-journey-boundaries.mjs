@@ -61,6 +61,7 @@ const JOURNEY_ONLY_DIRS = [
   "src/lib/communication-os",                     // 6.2 — Communication runtime maps channels to a canonical model, never reads journey state
   "src/lib/communication-workspace",              // 6.3 — Communication Workspace composes the provider, never reads journey state
   "src/lib/command-center",                       // 6.4 — Command Center composes omnisearch + registry, never reads journey state
+  "src/lib/commercial",                           // 6.4 — Commercial & Onboarding OS composes provisioning/subscriptions, never reads journey state
   "src/components/journey",
   "src/components/dashboard/sections/JourneysDashboardSection.tsx",
   "src/app/(app)/journeys",
