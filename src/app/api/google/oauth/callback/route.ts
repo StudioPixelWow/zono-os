@@ -43,12 +43,9 @@ export async function GET(request: Request) {
   const cfg = getGoogleOAuthConfig();
   if (!cfg.configured) return done("google_error=not_configured");
 
-  let stage = "exchange";
   try {
     const tokens = await exchangeCodeForToken(cfg, code, decodeURIComponent(verifier));
-    stage = "userinfo";
     const identity = await fetchUserInfo(tokens.accessToken);
-    stage = "persist";
     const grantedScopes = tokens.scope ? tokens.scope.split(" ") : [...GOOGLE_SCOPES];
     await upsertConnectionTokens({
       orgId: sc.profile.org_id, userId: sc.user.id, googleSub: identity.sub, email: identity.email,
@@ -60,12 +57,8 @@ export async function GET(request: Request) {
       summary: `Google Workspace connected: ${identity.email ?? identity.sub}`,
       metadata: { scopes: grantedScopes.length, email: identity.email },   // NEVER any token
     });
-  } catch (e) {
-    // TEMPORARY diagnostics (Batch 6.5 OAuth bring-up). Secret-safe: client id +
-    // redirect uri are public; only LENGTHS of the secret/verifier/code are logged.
-    console.error(`[google/callback] failed stage=${stage} msg=${(e as Error).message}`);
-    console.error(`[google/callback] diag clientId=${cfg.clientId} redirectUri=${cfg.redirectUri} secretLen=${cfg.clientSecret.length} verifierLen=${decodeURIComponent(verifier).length} codeLen=${code.length}`);
-    return done(`google_error=exchange_failed&stage=${stage}`);
+  } catch {
+    return done("google_error=exchange_failed");
   }
 
   // Clear the one-time handshake cookies.
