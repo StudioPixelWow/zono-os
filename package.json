@@ -15,6 +15,7 @@
     "check:comm-copilot-boundary": "node scripts/check-comm-copilot-boundaries.mjs",
     "qa:whatsapp-personal": "tsx src/lib/whatsapp/provider/personal/qa.ts",
     "qa:comm-copilot": "tsx src/lib/comm-copilot/qa.ts",
+    "bench:comm-copilot": "tsx scripts/bench-comm-copilot.ts",
     "dev-check:platform": "tsx scripts/platform-dev-check.ts",
     "dev-check:launch": "tsx scripts/launch-dev-check.ts",
     "readiness": "tsx scripts/zono-production-readiness.ts",
