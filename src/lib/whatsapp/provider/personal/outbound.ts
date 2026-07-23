@@ -17,6 +17,9 @@ import type { RateLimitConfig } from "@/lib/platform/types";
 import type { WaSessionCtx } from "../types";
 import { isPersonalWhatsappEnabled, PERSONAL_DISABLED_REASON } from "../personal-flag";
 import { personalTransportProvider } from "./adapter";
+import { recordOutbound } from "./observability";
+
+const oc = (ctx: WaSessionCtx) => ({ org: ctx.orgId, agent: ctx.userId });
 
 /** Conservative Beta limits — intentionally low to reduce ban risk. */
 const PERSONAL_RATE: RateLimitConfig = { limit: 15, windowMs: 60_000 };  // 15 msgs / min / agent
@@ -55,8 +58,8 @@ export type PersonalSendResult =
 
 /** Send an approved, rate-limited, idempotent personal-transport message. */
 export async function sendPersonalText(ctx: WaSessionCtx, input: PersonalSendInput): Promise<PersonalSendResult> {
-  if (!isPersonalWhatsappEnabled()) return { ok: false, reason: PERSONAL_DISABLED_REASON };
-  if (!input.approved) return { ok: false, reason: "approval_required" };
+  if (!isPersonalWhatsappEnabled()) { recordOutbound("disabled", oc(ctx)); return { ok: false, reason: PERSONAL_DISABLED_REASON }; }
+  if (!input.approved) { recordOutbound("approval_required", oc(ctx)); return { ok: false, reason: "approval_required" }; }
   if (!input.toPhone.trim() || !input.text.trim()) return { ok: false, reason: "missing_fields" };
   if (!input.idempotencyKey.trim()) return { ok: false, reason: "missing_idempotency_key" };
 
@@ -65,9 +68,9 @@ export async function sendPersonalText(ctx: WaSessionCtx, input: PersonalSendInp
 
   // Cooldown + burst + sustained rate.
   const last = lastSendAt.get(agentKey) ?? 0;
-  if (now - last < COOLDOWN_MS) return { ok: false, reason: "cooldown", retryAfterMs: COOLDOWN_MS - (now - last) };
-  if (!windowCheck(bursts, agentKey, BURST, now)) return { ok: false, reason: "burst_limited", retryAfterMs: BURST.windowMs };
-  if (!windowCheck(windows, agentKey, PERSONAL_RATE, now)) return { ok: false, reason: "rate_limited", retryAfterMs: PERSONAL_RATE.windowMs };
+  if (now - last < COOLDOWN_MS) { recordOutbound("cooldown", oc(ctx)); return { ok: false, reason: "cooldown", retryAfterMs: COOLDOWN_MS - (now - last) }; }
+  if (!windowCheck(bursts, agentKey, BURST, now)) { recordOutbound("burst_limited", oc(ctx)); return { ok: false, reason: "burst_limited", retryAfterMs: BURST.windowMs }; }
+  if (!windowCheck(windows, agentKey, PERSONAL_RATE, now)) { recordOutbound("rate_limited", oc(ctx)); return { ok: false, reason: "rate_limited", retryAfterMs: PERSONAL_RATE.windowMs }; }
 
   const db = await createClient();
 
@@ -77,6 +80,7 @@ export async function sendPersonalText(ctx: WaSessionCtx, input: PersonalSendInp
     .filter("metadata->>idempotency_key", "eq", input.idempotencyKey).maybeSingle();
   if (existing.data) {
     const e = existing.data as { id: string; conversation_id: string };
+    recordOutbound("duplicate", oc(ctx));
     return { ok: true, duplicate: true, conversationId: e.conversation_id };
   }
 
@@ -97,7 +101,7 @@ export async function sendPersonalText(ctx: WaSessionCtx, input: PersonalSendInp
   // Send through the transport (kill-switch re-checked inside the provider).
   const sent = await personalTransportProvider.sendMessage(ctx, { toPhone: input.toPhone, text: input.text });
   lastSendAt.set(agentKey, now);
-  if (!sent.ok) return { ok: false, reason: sent.error ?? "send_failed" };
+  if (!sent.ok) { recordOutbound("failed", oc(ctx)); return { ok: false, reason: sent.error ?? "send_failed" }; }
 
   // Record the outbound message with idempotency key + transport metadata.
   if (convId) {
@@ -114,6 +118,7 @@ export async function sendPersonalText(ctx: WaSessionCtx, input: PersonalSendInp
     action: "whatsapp.personal.sent", category: "configuration", entityType: "whatsapp_conversation", entityId: convId ?? undefined,
     summary: "Personal WhatsApp message sent (approved)", metadata: { transport: "personal" }, // NEVER body/phone
   });
+  recordOutbound("sent", oc(ctx));
 
   return { ok: true, providerMessageId: sent.providerMessageId, conversationId: convId ?? undefined };
 }

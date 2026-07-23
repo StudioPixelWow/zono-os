@@ -21,6 +21,8 @@ import { fromSend, fromConnect, fromConnectionState } from "./compat/responses";
 import { normalizeWebhook } from "./compat/webhooks";
 import { classifyHttp } from "./compat/errors";
 import { instanceName, ctxFromInstance } from "./compat/instance";
+import { registry as metricsRegistry } from "./observability/metrics";
+import { safeFields } from "./observability/logger";
 
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -119,6 +121,40 @@ check("C13 NO new conversation/message model — personal reuses canonical table
 check("C14 personal transport registered in the journey Tier-A boundary (no journey reads)",
   read("scripts/check-journey-boundaries.mjs").includes('"src/lib/whatsapp/provider"'));
 
-console.log(`\nPersonal WhatsApp Bridge (6.6A) SELF TEST: ${passed} passed, ${failed} failed`);
+// ── D) Observability (6.6A.1) — visibility only, no architecture change ──────
+const metricsRoute = read("src/app/api/whatsapp/personal/metrics/route.ts");
+const obsIndex = read("src/lib/whatsapp/provider/personal/observability/index.ts");
+const metricsLib = read("src/lib/whatsapp/provider/personal/observability/metrics.ts");
+const logger = read("src/lib/whatsapp/provider/personal/observability/logger.ts");
+const webhookRt = read("src/app/api/whatsapp/personal/webhook/route.ts");
+
+check("D1 metrics registry renders Prometheus text with HELP/TYPE after inc", (() => {
+  const c = metricsRegistry.counter("wa_qa_probe_total", "probe"); c.inc({ outcome: "ok" }); c.inc({ outcome: "ok" });
+  const out = metricsRegistry.render();
+  return out.includes("# HELP wa_qa_probe_total") && out.includes("# TYPE wa_qa_probe_total counter") && /wa_qa_probe_total\{outcome="ok"\} 2/.test(out);
+})());
+check("D2 histogram buckets are cumulative + monotonic (le≥value counts 1, below counts 0, +Inf=count)", (() => {
+  const h = metricsRegistry.histogram("wa_qa_lat_seconds", "probe"); h.observe(0.2, { op: "x" });
+  const out = metricsRegistry.render();
+  const has = (le: string, n: number) => out.includes(`wa_qa_lat_seconds_bucket{le="${le}",op="x"} ${n}`);
+  return has("0.1", 0) && has("0.25", 1) && has("0.5", 1) && has("+Inf", 1) &&
+    out.includes('wa_qa_lat_seconds_sum{op="x"} 0.2') && out.includes('wa_qa_lat_seconds_count{op="x"} 1');
+})());
+check("D3 logger redaction strips secret-ish keys + message content", (() => {
+  const s = safeFields({ token: "abc", qr: "img", text: "hello", body: "x", outcome: "sent", org: "O" });
+  return s.token === "[redacted]" && s.qr === "[redacted]" && s.text === "[redacted]" && s.body === "[redacted]" && s.outcome === "sent" && s.org === "O";
+})());
+check("D4 metrics endpoint fail-closed bearer auth (403)", /if \(!token\) return false/.test(strip(metricsRoute)) && metricsRoute.includes("status: 403"));
+check("D5 observability is transport-generic (names no provider/Evolution)", !/evolution|baileys/i.test(strip(obsIndex + metricsLib + logger)));
+check("D6 entry points ARE instrumented (adapter connect + outbound + webhook + reconnect)",
+  adapter.includes("recordConnect(") && outbound.includes("recordOutbound(") && webhookRt.includes("recordInbound(") && read("src/lib/whatsapp/provider/personal/actions.ts").includes("recordReconnect("));
+check("D7 NO architecture change — kill switch + no model duplication still hold with instrumentation",
+  adapter.includes("isPersonalWhatsappEnabled") && !/interface Conversation|interface Message|create table/i.test(adapter + outbound + obsIndex));
+check("D8 span helper is OTel-shaped (trace_id/span_id/duration/status)", (() => {
+  const trace = read("src/lib/whatsapp/provider/personal/observability/trace.ts");
+  return /trace_id/.test(trace) && /span_id/.test(trace) && /duration_ms/.test(trace) && /status/.test(trace);
+})());
+
+console.log(`\nPersonal WhatsApp Bridge (6.6A + 6.6A.1) SELF TEST: ${passed} passed, ${failed} failed`);
 console.log("(Live pairing / inbound / outbound = BLOCKED — require a running Evolution worker + a real WhatsApp number.)\n");
 if (failed > 0) process.exit(1);

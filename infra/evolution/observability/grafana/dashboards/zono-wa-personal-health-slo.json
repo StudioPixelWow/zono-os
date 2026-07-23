@@ -1,0 +1,53 @@
+{
+  "uid": "wa-personal-health-slo",
+  "title": "WA Personal (Beta) — Health & SLOs",
+  "tags": ["zono", "whatsapp", "personal", "beta", "slo"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "stat", "title": "Connect success (SLO ≥ 95%)", "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.9 }, { "color": "green", "value": 0.95 }] } }, "overrides": [] },
+      "targets": [{ "expr": "wa_personal:connect_success_ratio5m", "refId": "A" }]
+    },
+    {
+      "type": "stat", "title": "Outbound success (SLO ≥ 98%)", "gridPos": { "h": 5, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.95 }, { "color": "green", "value": 0.98 }] } }, "overrides": [] },
+      "targets": [{ "expr": "wa_personal:outbound_success_ratio5m", "refId": "A" }]
+    },
+    {
+      "type": "stat", "title": "Inbound success (SLO ≥ 99%)", "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.97 }, { "color": "green", "value": 0.99 }] } }, "overrides": [] },
+      "targets": [{ "expr": "wa_personal:inbound_success_ratio5m", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "p95 operation latency by op (SLO < 5s)", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "expr": "wa_personal:op_latency_p95_5m", "legendFormat": "{{op}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "Operation errors by category (5m rate)", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum by (category) (rate(wa_personal_operation_errors_total[5m]))", "legendFormat": "{{category}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "Outbound failure ratio (10m)", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [{ "expr": "sum(rate(wa_personal_outbound_total{outcome=\"failed\"}[10m])) / clamp_min(sum(rate(wa_personal_outbound_total{outcome=~\"sent|failed\"}[10m])), 1)", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "Rate-limit / policy rejections (5m rate)", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum by (outcome) (rate(wa_personal_outbound_total{outcome=~\"rate_limited|burst_limited|cooldown|approval_required\"}[5m]))", "legendFormat": "{{outcome}}", "refId": "A" }]
+    }
+  ]
+}

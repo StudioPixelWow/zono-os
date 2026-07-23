@@ -1,0 +1,54 @@
+# ============================================================================
+# ZONO — Prometheus scrape config for the Personal WhatsApp (Beta) transport.
+# Scrapes: ZONO app transport metrics, Evolution worker container/host metrics
+# (via exporters), Postgres, Redis. Adds visibility only.
+# ============================================================================
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    stack: zono-wa-personal
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []          # set your Alertmanager target(s)
+
+scrape_configs:
+  # ZONO-side transport metrics (per-agent / session / QR / reconnect / outbound
+  # / inbound / failure-rate). Bearer-authenticated; scrape a LONG-LIVED ZONO
+  # instance (per-instance counters — see the observability README).
+  - job_name: zono-wa-personal
+    metrics_path: /api/whatsapp/personal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics_token
+    static_configs:
+      - targets: ["REPLACE_ZONO_HOST"]     # e.g. app.zono.example (no scheme)
+
+  # Evolution container CPU/RAM + per-container session footprint (worker metrics).
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # Host metrics for the worker box.
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Evolution-owned datastores.
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  # Prometheus self-monitoring.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

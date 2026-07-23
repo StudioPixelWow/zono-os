@@ -1,0 +1,11 @@
+# Grafana datasource provisioning — Prometheus for the WA Personal stack.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 30s

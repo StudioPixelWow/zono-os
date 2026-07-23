@@ -15,6 +15,7 @@ import { sendPersonalText } from "./outbound";
 import { acknowledgeDisclosure, hasAcknowledged } from "./disclosure";
 import { setTransportPreference, type TransportPreference } from "./transport";
 import { isPersonalWhatsappEnabled, PERSONAL_DISABLED_NOTICE } from "../personal-flag";
+import { recordReconnect, recordAck, recordSwitch } from "./observability";
 import type { WaConnectionSnapshot } from "../types";
 
 type Snap = WaConnectionSnapshot | { error: string };
@@ -42,6 +43,7 @@ export async function personalReconnectAction(): Promise<Snap> {
   if (!isPersonalWhatsappEnabled()) return { error: PERSONAL_DISABLED_NOTICE };
   const ctx = await resolveSessionCtx();
   if (!ctx) return { error: "אין הרשאה." };
+  recordReconnect("requested", { org: ctx.orgId, agent: ctx.userId });
   return personalTransportProvider.generateQR(ctx);
 }
 
@@ -70,14 +72,18 @@ export async function personalDeleteAction(): Promise<{ ok: boolean }> {
 export async function personalAcknowledgeAction(context: string): Promise<{ ok: boolean; error?: string }> {
   const ctx = await resolveSessionCtx();
   if (!ctx) return { ok: false, error: "אין הרשאה." };
-  return acknowledgeDisclosure(ctx, context || "settings/whatsapp/personal");
+  const r = await acknowledgeDisclosure(ctx, context || "settings/whatsapp/personal");
+  if (r.ok) recordAck({ org: ctx.orgId, agent: ctx.userId });
+  return r;
 }
 
 /** Choose this agent's active transport (Business default vs Personal Beta). */
 export async function personalSetTransportAction(pref: TransportPreference): Promise<{ ok: boolean; error?: string }> {
   const ctx = await resolveSessionCtx();
   if (!ctx) return { ok: false, error: "אין הרשאה." };
-  return setTransportPreference(ctx, pref);
+  const r = await setTransportPreference(ctx, pref);
+  if (r.ok) recordSwitch(pref, { org: ctx.orgId, agent: ctx.userId });
+  return r;
 }
 
 /** Send an approved personal message (human-in-the-loop; rate-limited; idempotent). */

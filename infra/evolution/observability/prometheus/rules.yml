@@ -1,0 +1,112 @@
+# ============================================================================
+# ZONO — Personal WhatsApp (Beta) SLO recording rules + ALERT definitions.
+# Goal: detect problems BEFORE users report them. Recording rules materialize
+# the SLO ratios; alerts fire on breach, storms, auth failures, and worker loss.
+# ============================================================================
+groups:
+  # ── SLO recording rules (5m windows) ─────────────────────────────────────
+  - name: wa_personal_slo
+    interval: 30s
+    rules:
+      # Connect success ratio (connected / all attempts, excluding disabled).
+      - record: wa_personal:connect_success_ratio5m
+        expr: |
+          sum(rate(wa_personal_connect_total{outcome="connected"}[5m]))
+          /
+          clamp_min(sum(rate(wa_personal_connect_total{outcome!="disabled"}[5m])), 1)
+
+      # Outbound delivery success ratio (sent / attempts that reached send,
+      # excluding policy rejections: approval/rate/burst/cooldown/disabled).
+      - record: wa_personal:outbound_success_ratio5m
+        expr: |
+          sum(rate(wa_personal_outbound_total{outcome="sent"}[5m]))
+          /
+          clamp_min(sum(rate(wa_personal_outbound_total{outcome=~"sent|failed"}[5m])), 1)
+
+      # Inbound webhook processing success ratio (message+status / all handled).
+      - record: wa_personal:inbound_success_ratio5m
+        expr: |
+          sum(rate(wa_personal_inbound_total{outcome=~"message|status"}[5m]))
+          /
+          clamp_min(sum(rate(wa_personal_inbound_total{outcome!~"disabled"}[5m])), 1)
+
+      # p95 operation latency (seconds) across personal-transport spans.
+      - record: wa_personal:op_latency_p95_5m
+        expr: histogram_quantile(0.95, sum(rate(wa_personal_span_duration_seconds_bucket[5m])) by (le, op))
+
+  # ── Alert definitions ────────────────────────────────────────────────────
+  - name: wa_personal_alerts
+    rules:
+      - alert: PersonalWorkerScrapeDown
+        expr: up{job="zono-wa-personal"} == 0
+        for: 3m
+        labels: { severity: critical, transport: personal }
+        annotations:
+          summary: "ZONO personal-transport metrics endpoint is down"
+          description: "Prometheus cannot scrape /api/whatsapp/personal/metrics for 3m. Personal transport observability is blind. Playbook: PB-1."
+
+      - alert: PersonalWorkerUnconfigured
+        expr: wa_personal_worker_configured == 0
+        for: 5m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal transport backend reports unconfigured"
+          description: "wa_personal_worker_configured=0 for 5m (Evolution URL/key missing or app can't see it). Playbook: PB-2."
+
+      - alert: PersonalHighOutboundFailureRate
+        expr: |
+          (sum(rate(wa_personal_outbound_total{outcome="failed"}[10m]))
+           / clamp_min(sum(rate(wa_personal_outbound_total{outcome=~"sent|failed"}[10m])), 1)) > 0.2
+        for: 10m
+        labels: { severity: critical, transport: personal }
+        annotations:
+          summary: "Personal outbound failure rate > 20%"
+          description: "Outbound sends are failing above SLO. Likely session drop / worker issue. Playbook: PB-3."
+
+      - alert: PersonalInboundProcessingErrors
+        expr: sum(rate(wa_personal_inbound_total{outcome=~"error|rejected_.*"}[10m])) > 0.1
+        for: 10m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal inbound webhook processing errors"
+          description: "Inbound events are erroring/being rejected. Check ownership/dedup + worker payloads. Playbook: PB-4."
+
+      - alert: PersonalQrFailureSpike
+        expr: sum(rate(wa_personal_qr_generated_total{outcome="error"}[10m])) > 0.1
+        for: 10m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal QR generation failures"
+          description: "QR pairing is failing — agents cannot connect. Playbook: PB-5."
+
+      - alert: PersonalReconnectStorm
+        expr: sum(rate(wa_personal_reconnect_total{outcome="requested"}[5m])) > 0.5
+        for: 5m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal reconnect storm"
+          description: "High reconnect request rate — sessions are flapping. Risk of worker/DB load + WhatsApp throttling. Playbook: PB-6."
+
+      - alert: PersonalWebhookAuthFailures
+        expr: sum(rate(wa_personal_webhook_auth_failures_total[5m])) > 0
+        for: 5m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal webhook auth failures (fail-closed)"
+          description: "Inbound webhooks are being rejected (403). Token drift or unauthorized caller. Playbook: PB-7."
+
+      - alert: PersonalConnectSuccessSLOBreach
+        expr: wa_personal:connect_success_ratio5m < 0.90
+        for: 15m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal connect success ratio below SLO (90%)"
+          description: "Connect SLO breached for 15m. Investigate worker/QR path. Playbook: PB-5."
+
+      - alert: PersonalOpLatencyHigh
+        expr: max(wa_personal:op_latency_p95_5m) > 8
+        for: 10m
+        labels: { severity: warning, transport: personal }
+        annotations:
+          summary: "Personal transport p95 latency > 8s"
+          description: "Operations are slow (worker/network). Playbook: PB-3."

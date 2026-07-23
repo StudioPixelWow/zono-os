@@ -1,0 +1,59 @@
+{
+  "uid": "wa-personal-overview",
+  "title": "WA Personal (Beta) — Operations Overview",
+  "tags": ["zono", "whatsapp", "personal", "beta"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "stat", "title": "Sessions connected", "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(wa_personal_session_up)", "refId": "A" }]
+    },
+    {
+      "type": "stat", "title": "Worker configured", "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "NO", "color": "red" }, "1": { "text": "YES", "color": "green" } } }] }, "overrides": [] },
+      "targets": [{ "expr": "max(wa_personal_worker_configured)", "refId": "A" }]
+    },
+    {
+      "type": "stat", "title": "Webhook auth failures (5m rate)", "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(rate(wa_personal_webhook_auth_failures_total[5m]))", "refId": "A" }]
+    },
+    {
+      "type": "stat", "title": "Reconnect req (5m rate)", "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(rate(wa_personal_reconnect_total{outcome=\"requested\"}[5m]))", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "Active session (per agent)", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "wa_personal_session_up", "legendFormat": "{{org}}/{{agent}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "QR generations by outcome (5m rate)", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum by (outcome) (rate(wa_personal_qr_generated_total[5m]))", "legendFormat": "{{outcome}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "Outbound by outcome (5m rate)", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum by (outcome) (rate(wa_personal_outbound_total[5m]))", "legendFormat": "{{outcome}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "Inbound by outcome (5m rate)", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum by (outcome) (rate(wa_personal_inbound_total[5m]))", "legendFormat": "{{outcome}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries", "title": "Connect attempts by outcome (5m rate)", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum by (outcome) (rate(wa_personal_connect_total[5m]))", "legendFormat": "{{outcome}}", "refId": "A" }]
+    }
+  ]
+}

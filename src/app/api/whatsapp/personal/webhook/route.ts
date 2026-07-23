@@ -17,6 +17,7 @@ import { ingestBridgeMessage, ingestBridgeStatus } from "@/lib/whatsapp/provider
 import { normalizePersonalWebhook } from "@/lib/whatsapp/provider/personal";
 import { personalWebhookToken } from "@/lib/whatsapp/provider/personal/webhook-url";
 import { isPersonalWhatsappEnabled } from "@/lib/whatsapp/provider/personal-flag";
+import { recordInbound, recordAuthFailure, recordSessionUp } from "@/lib/whatsapp/provider/personal/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ function authorized(req: NextRequest): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) return new NextResponse("forbidden", { status: 403 });
+  if (!authorized(req)) { recordAuthFailure(); return new NextResponse("forbidden", { status: 403 }); }
 
   let body: unknown;
   try { body = await req.json(); }
@@ -36,8 +37,7 @@ export async function POST(req: NextRequest) {
 
   // C10 disabled: authenticate, ack safely, NO side effects, minimal op log only.
   if (!isPersonalWhatsappEnabled()) {
-    const evt = (body as { event?: string } | null)?.event ?? "unknown";
-    console.log(`[wa-personal] disabled — acked event '${evt}' with no side effects`);
+    recordInbound("disabled");
     return NextResponse.json({ ok: true, disabled: true }, { status: 200 });
   }
 
@@ -45,14 +45,19 @@ export async function POST(req: NextRequest) {
     const norm = normalizePersonalWebhook(body, new Date().toISOString());
     if (norm.kind === "message") {
       const r = await ingestBridgeMessage(norm.ctx, norm.message);
+      recordInbound(r.ok ? "message" : `rejected_${r.reason ?? "unknown"}`, { org: norm.ctx.orgId, agent: norm.ctx.userId });
       return NextResponse.json({ ok: r.ok, reason: r.reason }, { status: 200 });
     }
     if (norm.kind === "status") {
       await ingestBridgeStatus(norm.ctx, norm.state, { displayName: null, phone: null, error: null });
+      recordInbound("status", { org: norm.ctx.orgId, agent: norm.ctx.userId });
+      recordSessionUp(norm.state === "connected", { org: norm.ctx.orgId, agent: norm.ctx.userId });
       return NextResponse.json({ ok: true }, { status: 200 });
     }
+    recordInbound(`ignored_${norm.reason}`);
     return NextResponse.json({ ok: false, reason: norm.reason }, { status: 200 });
   } catch (e) {
+    recordInbound("error");
     console.error("[wa-personal] ingest failed:", e instanceof Error ? e.message : e);
     return NextResponse.json({ ok: false, error: "ingest_failed" }, { status: 200 });
   }
