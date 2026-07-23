@@ -1,21 +1,51 @@
 // ============================================================================
-// 📡 Communication OS — Gmail adapter (contract stub). Batch 6.2.
+// 📡 Communication OS — Gmail adapter. Batch 6.2 (stub) → Batch 6.5 (LIVE).
 //
-// No live Gmail/email source is wired in the platform yet (the connector
-// catalog lists Google Workspace but no OAuth ingest exists). This adapter
-// establishes the canonical mapping CONTRACT so that the moment a live source
-// connects, Gmail threads map into the same Conversation model with no runtime
-// change. Until then it honestly returns empty — never fabricated conversations.
-//
-// The pure mapper (mapGmailConversation) is defined in ./mappers and proven in
-// QA, so "every channel maps into the canonical model" already holds for Gmail.
+// Batch 6.5 replaces the contract stub with a live Gmail source WITHOUT changing
+// the canonical model, the ChannelAdapter contract, or the provider registration
+// (those stay frozen). This adapter still ONLY maps facts: it pulls the connected
+// user's Gmail threads through src/lib/google/gmail and maps them into the SAME
+// Conversation/Message model via the existing mapGmailConversation mapper — no
+// new email model is introduced. When no Google account is connected it degrades
+// to the identical honest-empty behavior as before (never fabricated).
 // ============================================================================
 import "server-only";
-import type { ChannelAdapter } from "../types";
+import type { ChannelAdapter, Attachment, Conversation, Message } from "../types";
+import { canonicalId } from "../types";
+import { mapGmailConversation } from "./mappers";
+import { listThreadLikesForCurrentUser, loadThreadForCurrentUser } from "@/lib/google/gmail";
+import type { GmailMessage } from "@/lib/google/types";
+
+function mapMessage(m: GmailMessage): Message {
+  const attachments: Attachment[] = m.attachments.map((a) => ({
+    id: a.id, kind: "document", name: a.filename, mimeType: a.mimeType, url: null, sizeBytes: a.sizeBytes,
+  }));
+  return {
+    id: canonicalId("gmail", m.id),
+    conversationId: canonicalId("gmail", m.threadId),
+    channel: "gmail",
+    direction: m.outbound ? "outbound" : "inbound",
+    authorId: `gmail:person:${m.threadId}`,
+    sentAt: m.sentAt,
+    preview: m.snippet ?? m.subject ?? "",
+    attachments,
+    read: !m.unread,
+  };
+}
 
 export const gmailAdapter: ChannelAdapter = {
   channel: "gmail",
-  async listConversations() { return []; },      // no live source → honest empty
-  async loadConversation() { return null; },
-  async loadMessages() { return []; },
+  async listConversations() {
+    const threads = await listThreadLikesForCurrentUser(25);
+    return threads.map(mapGmailConversation);
+  },
+  async loadConversation(sourceId): Promise<Conversation | null> {
+    const threads = await listThreadLikesForCurrentUser(50);
+    const t = threads.find((x) => x.id === sourceId);
+    return t ? mapGmailConversation(t) : null;
+  },
+  async loadMessages(sourceId): Promise<Message[]> {
+    const msgs = await loadThreadForCurrentUser(sourceId);
+    return msgs.map(mapMessage);
+  },
 };
