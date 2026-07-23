@@ -23,7 +23,8 @@
     "validate:deploy": "node scripts/check-use-server-exports.mjs && tsx scripts/zono-deploy-validate.ts",
     "final-qa": "tsx scripts/zono-final-qa.ts",
     "import:localities": "tsx scripts/import-israel-localities.ts",
-    "seed:distribution": "tsx scripts/seed-distribution.ts"
+    "seed:distribution": "tsx scripts/seed-distribution.ts",
+    "bench:comm-copilot-concurrent": "tsx scripts/bench-comm-copilot-concurrent.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
