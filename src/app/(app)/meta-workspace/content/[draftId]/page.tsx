@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { getDraftEditor } from "@/lib/meta/content/service";
+import { ScheduleForm } from "../../_components/schedule-form";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,14 @@ export default async function DraftEditorPage({ params }: { params: Promise<{ dr
           <button disabled title={draft.status === "approved" ? "אין יעד מוכן לפרסום" : "יש לאשר את הטיוטה לפני פרסום"} className="ml-auto cursor-not-allowed rounded-lg border border-gray-200 px-4 py-2 text-gray-400" aria-disabled="true">פרסום (דורש אישור)</button>
         )}
       </div>
-      <p className="mt-2 text-xs text-gray-400">פרסום שולח את התוכן ל-Meta באופן מיידי. אין תזמון או פרסום ברקע בשלב זה.</p>
+      <p className="mt-2 text-xs text-gray-400">פרסום שולח את התוכן ל-Meta באופן מיידי, או ניתן לתזמן אותו למועד עתידי.</p>
+
+      {draft.status === "approved" && draft.targets.some((t) => t.enabled) && (
+        <div className="mt-6">
+          <ScheduleForm draftId={draft.id} targetIds={draft.targets.filter((t) => t.enabled).map((t) => t.id)} />
+          <p className="mt-2 text-xs text-gray-400"><Link href="/meta-workspace/scheduled" className="text-blue-600">צפייה בתור הפרסומים המתוזמנים ↗</Link></p>
+        </div>
+      )}
     </main>
   );
 }

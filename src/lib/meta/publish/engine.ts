@@ -71,7 +71,7 @@ const TARGET_EVENT: Record<"succeeded" | "failed" | "manual_review", MetaNotific
 };
 
 /** Execute one target independently. Never republishes a terminal success. */
-async function executeTarget(ports: PublishPorts, op: PublishOperationRow, target: PublishTargetRow, initiation: "initial" | "manual_retry", actor: string | null): Promise<PublishTargetRow> {
+async function executeTarget(ports: PublishPorts, op: PublishOperationRow, target: PublishTargetRow, initiation: "initial" | "manual_retry" | "automatic_retry", actor: string | null): Promise<PublishTargetRow> {
   if (!canExecuteTarget(target.status) && target.status !== "failed") return target;
   const startMs = ports.clock.nowMs();
   const attemptNumber = (await ports.store.listAttempts(op.orgId, target.id)).length + 1;
@@ -182,17 +182,17 @@ export function retryEligibility(target: PublishTargetRow, ctx: { actorCanPublis
 }
 
 /** Manually retry an eligible failed target (new attempt; never a new target). */
-export async function manualRetry(ports: PublishPorts, orgId: string, targetId: string, actor: string | null, ctx: { actorCanPublish: boolean; assetActive: boolean; capabilityAllowed: boolean; draftVersionMatches: boolean; mediaValid: boolean }): Promise<{ ok: boolean; error: string | null; target: PublishTargetRow | null; events: readonly MetaNotificationEvent[] }> {
+export async function manualRetry(ports: PublishPorts, orgId: string, targetId: string, actor: string | null, ctx: { actorCanPublish: boolean; assetActive: boolean; capabilityAllowed: boolean; draftVersionMatches: boolean; mediaValid: boolean }, initiation: "manual_retry" | "automatic_retry" = "manual_retry"): Promise<{ ok: boolean; error: string | null; target: PublishTargetRow | null; events: readonly MetaNotificationEvent[] }> {
   const target = await ports.store.getTarget(orgId, targetId);
   if (!target) return { ok: false, error: "not_found", target: null, events: [] };
   const elig = retryEligibility(target, ctx);
   if (!elig.eligible) return { ok: false, error: elig.reason, target, events: [] };
   const op = await ports.store.getOperation(orgId, target.operationId);
   if (!op) return { ok: false, error: "operation_not_found", target, events: [] };
-  await ports.audit.log({ action: "meta.publish.manual_retry_started", entityId: target.id, summary: "manual retry started", metadata: { platform: target.platform } });
+  await ports.audit.log({ action: `meta.publish.${initiation}_started`, entityId: target.id, summary: `${initiation} started`, metadata: { platform: target.platform } });
   const ready: PublishTargetRow = { ...target, status: "ready", revision: target.revision + 1 };
   await ports.store.updateTarget(ready);
-  const done = await executeTarget(ports, op, ready, "manual_retry", actor);
+  const done = await executeTarget(ports, op, ready, initiation, actor);
   const evName = (done as { _event?: MetaNotificationEventName })._event;
   const events: MetaNotificationEvent[] = evName ? [buildMetaNotificationEvent({ event: evName, orgId, occurredAt: ports.clock.nowIso(), assetRef: done.assetId, actorId: actor, correlationId: op.correlationId, data: { targetId: done.id, platform: done.platform, retry: true } })] : [];
   await refreshAggregate(ports, op);

@@ -262,7 +262,7 @@ async function main() {
 
   // C49 · Communication OS not modified (git) ; C64 · frozen modules unchanged
   { let ok = true; try { const out = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" });
-      const offenders = out.split("\n").map((l) => l.trim().replace(/^\S+\s+/, "")).filter(Boolean).filter((f) => !(f.startsWith("src/lib/meta/") || f.startsWith("src/app/api/meta/") || f.startsWith("src/app/(app)/meta-workspace/") || f === "package.json" || f === "scripts/check-meta-boundaries.mjs" || /supabase\/migrations\/(20261205120000|20261210120000)/.test(f)));
+      const offenders = out.split("\n").map((l) => l.trim().replace(/^\S+\s+/, "")).filter(Boolean).filter((f) => !(f.startsWith("src/lib/meta/") || f.startsWith("src/app/api/meta/") || f.startsWith("src/app/api/internal/meta/") || f.startsWith("src/app/(app)/meta-workspace/") || f === "package.json" || f === "scripts/check-meta-boundaries.mjs" || /supabase\/migrations\/(20261205120000|20261210120000|20261215120000)/.test(f)));
       ok = offenders.length === 0; if (!ok) console.error("   frozen offenders: " + offenders.join(", ")); } catch { ok = false; }
     check("C49/C64 frozen systems + Communication OS unchanged (git scoped)", ok);
   }

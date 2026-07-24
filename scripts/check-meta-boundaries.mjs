@@ -27,6 +27,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const META_DIR = "src/lib/meta";
 export const GRAPH_DIR = "src/lib/meta/provider/graph";
+// Phase 3B — the scheduling / queue / worker / retry / dead-letter module lives
+// ONLY here. It is the ONE place background publishing orchestration is allowed;
+// it must still route ALL provider work through the Phase-3A publish service seam
+// (never a Graph import, never a second publishing engine).
+export const SCHEDULE_DIR = "src/lib/meta/schedule";
+const inScheduleDir = (p) => p.replace(/\\/g, "/").includes("/schedule/");
 
 const strip = (s) => s.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 
@@ -160,19 +166,36 @@ export function runGuard() {
     failures.push(...scanContent(f, code));
   }
 
-  // Phase 3A structural: no publishing worker/scheduler/cron/queue (Phase 3B).
+  // Structural: a publishing worker/scheduler/cron/queue FILE is allowed ONLY
+  // inside the Phase-3B schedule module — never elsewhere under the Meta module.
   for (const f of files) {
-    if (/(worker|scheduler|cron|queue)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a publishing worker/scheduler/cron/queue is not allowed in Phase 3A (rule 8)`);
+    if (inScheduleDir(f)) continue;
+    if (/(worker|scheduler|cron|queue)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a publishing worker/scheduler/cron/queue outside src/lib/meta/schedule/ is not allowed (rule 8)`);
   }
-  // Phase 3A structural: safe read models must not surface a signed/provider URL.
+  // Structural: safe read models must not surface a signed/provider URL — nor,
+  // in Phase 3B, a durable LEASE TOKEN (a server-only fencing nonce).
   for (const f of files) {
-    if (/\/(read|dto)\.ts$/.test(f) && /signedUrl|signed_url|createSignedUrl/.test(readFileSync(f, "utf8"))) {
-      failures.push(`${f}: a signed/provider-delivery URL must not appear in a safe read model (rule 8)`);
+    if (/\/(read|dto)\.ts$/.test(f)) {
+      const c = readFileSync(f, "utf8");
+      if (/signedUrl|signed_url|createSignedUrl/.test(c)) failures.push(`${f}: a signed/provider-delivery URL must not appear in a safe read model (rule 8)`);
+      if (/leaseToken|lease_token/.test(c)) failures.push(`${f}: a durable lease token must not appear in a safe read model (rule 9)`);
     }
   }
-  // Phase 3A structural: no queue consumer / dead-letter processor under the module.
+  // Structural: a queue-consumer / dead-letter / reconciliation-worker FILE is
+  // allowed ONLY inside the Phase-3B schedule module (dead-letter.ts lives there).
   for (const f of files) {
-    if (/(queue-consumer|dead-letter|deadletter|reconcile-worker)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a queue consumer / dead-letter / reconciliation worker is not allowed in Phase 3A (rule 8)`);
+    if (inScheduleDir(f)) continue;
+    if (/(queue-consumer|dead-letter|deadletter|reconcile-worker)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a queue consumer / dead-letter / reconciliation worker outside src/lib/meta/schedule/ is not allowed (rule 8)`);
+  }
+  // Phase 3B structural: the schedule module must NEVER import the sealed Graph
+  // layer directly — all provider work goes through the Phase-3A publish service
+  // seam (no second publishing engine, no raw Graph call from the worker).
+  for (const f of files) {
+    if (!inScheduleDir(f) || isQa(f)) continue; // QA names the pattern in fixtures
+    const c = strip(readFileSync(f, "utf8"));
+    if (/from ["'][^"']*provider\/graph/.test(c) || /import\(["'][^"']*provider\/graph/.test(c)) {
+      failures.push(`${f}: the schedule module must not import provider/graph — drive publishing via the Phase-3A publish seam (rule 9)`);
+    }
   }
 
   // Rule 6 — the exported public surface (index.ts) must not expose a token field.

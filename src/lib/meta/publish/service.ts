@@ -91,8 +91,10 @@ import { evaluateMetaCapability } from "../capability/evaluate";
 import type { MetaCapabilityState } from "../capability/types";
 import { contentKind } from "../content/model";
 
-/** Resolve per-target runtime (capability + asset + connection + media) for gating. */
-async function resolveRuntime(orgId: string, assetId: string, requiredCapability: string): Promise<TargetRuntime> {
+/** Resolve per-target runtime (capability + asset + connection + media) for gating.
+ *  Exported (additive) so the Phase-3B scheduler can gate automatic retries with
+ *  the exact same runtime resolution — no second implementation. */
+export async function resolveRuntime(orgId: string, assetId: string, requiredCapability: string): Promise<TargetRuntime> {
   const db = createServiceRoleClient();
   let assetStatus = "unknown", grantedCaps: string[] = [];
   let connStatus = "unknown", connHealth = "unknown";
@@ -183,4 +185,88 @@ export async function retryTarget(orgId: string, userId: string, role: string, t
   if (!r.ok) return { ok: false, error: r.error ?? "retry_failed" };
   const detail = await getOperationDetail(orgId, target.operationId);
   return { ok: true, detail: detail ?? undefined };
+}
+
+// ── Phase 3B reuse hooks (additive) ──────────────────────────────────────────
+/**
+ * AUTOMATIC (background) retry of a single failed target — reuses the exact
+ * Phase-3A executor via `engine.manualRetry` with the `automatic_retry`
+ * initiation. No new publishing engine; no user gate (the scheduler already
+ * authorized the original operation). Returns a canonical, secret-free outcome
+ * the scheduler classifies. Ambiguous writes surface as manual_review_required
+ * and are never re-run automatically.
+ */
+export async function automaticRetryTarget(orgId: string, targetId: string): Promise<{ status: string; retryable: boolean; errorKind: string | null; ambiguous: boolean; retryAfterMs: number | null }> {
+  const ports = buildPublishPorts();
+  const target = await ports.store.getTarget(orgId, targetId);
+  if (!target) return { status: "not_found", retryable: false, errorKind: null, ambiguous: false, retryAfterMs: null };
+  const rt = await resolveRuntime(orgId, target.assetId, contentKind(target.contentKind)?.requiredCapability ?? "facebook.content.publish");
+  const r = await engine.manualRetry(ports, orgId, targetId, null, { actorCanPublish: true, assetActive: rt.assetStatus === "active", capabilityAllowed: rt.capability.allowed, draftVersionMatches: true, mediaValid: rt.mediaValid }, "automatic_retry");
+  const t = r.target;
+  if (!r.ok && !t) return { status: "failed", retryable: false, errorKind: r.error ?? null, ambiguous: false, retryAfterMs: null };
+  return { status: t?.status ?? "failed", retryable: Boolean(t?.retryable), errorKind: t?.safeErrorKind ?? null, ambiguous: t?.status === "manual_review_required", retryAfterMs: null };
+}
+
+/** Read a canonical target status (for the scheduler's pre-retry gating). */
+export async function readTargetStatus(orgId: string, targetId: string): Promise<{ status: string; retryable: boolean; safeErrorKind: string | null } | null> {
+  const t = await createSupabasePublishStore().getTarget(orgId, targetId);
+  return t ? { status: t.status, retryable: t.retryable, safeErrorKind: t.safeErrorKind } : null;
+}
+
+/** Per-target execution results for the scheduler after a whole-operation publish. */
+export async function executeOperationForSchedule(orgId: string, operationId: string): Promise<{ status: string; successful: number; failed: number; targets: ReadonlyArray<{ targetId: string; status: string; retryable: boolean; errorKind: string | null; ambiguous: boolean; retryAfterMs: number | null }> }> {
+  const ports = buildPublishPorts();
+  const exec = await engine.executeOperation(ports, orgId, operationId, { concurrency: targetConcurrency() });
+  const targets = await ports.store.listTargets(orgId, operationId);
+  return {
+    status: exec.operation.status,
+    successful: exec.operation.successfulTargetCount,
+    failed: exec.operation.failedTargetCount,
+    targets: targets.map((t) => ({ targetId: t.id, status: t.status, retryable: t.retryable, errorKind: t.safeErrorKind, ambiguous: t.status === "manual_review_required", retryAfterMs: null })),
+  };
+}
+
+/** Directly set an operation's lifecycle status (service-role; scheduler use). */
+export async function setOperationStatusRaw(orgId: string, operationId: string, status: string): Promise<void> {
+  const db = createServiceRoleClient();
+  await db.from("meta_publish_operation" as never).update({ status, updated_at: new Date().toISOString() } as never).eq("org_id", orgId).eq("id", operationId);
+}
+
+/** Flag a target as manual_review_required (ambiguous recovery; never auto-rerun). */
+export async function markTargetManualReviewRaw(orgId: string, targetId: string): Promise<void> {
+  const db = createServiceRoleClient();
+  await db.from("meta_publish_target" as never).update({ status: "manual_review_required", retryable: false, updated_at: new Date().toISOString() } as never).eq("org_id", orgId).eq("id", targetId);
+}
+
+/** Create a publish operation for a FUTURE run (scheduled mode) WITHOUT executing.
+ *  Reuses Phase-3A preconditions + snapshot + createOperation verbatim, then marks
+ *  the operation `scheduled`. Returns the operation id for the scheduler to bind a
+ *  job to. */
+export async function createScheduledOperation(orgId: string, userId: string, role: string, draftId: string, targetIds: readonly string[], schedule: { scheduledForIso: string; timezone: string; localDateTime: string; offsetMinutes: number }): Promise<{ ok: true; operationId: string; correlationId: string } | { ok: false; error: string; blocked?: unknown }> {
+  if (!canPublish(role)) return { ok: false, error: "forbidden" };
+  const content = createSupabaseContentStore();
+  const draft = await content.getDraft(orgId, draftId);
+  if (!draft) return { ok: false, error: "not_found" };
+  const approvals = await content.listApprovals(orgId, draftId);
+  const approved = approvals.filter((a) => a.status === "approved").sort((a, b) => b.draftVersionNumber - a.draftVersionNumber)[0];
+  const versions = await content.listVersions(orgId, draftId);
+  const approvedVersion = approved?.draftVersionNumber ?? draft.currentVersion;
+  const approvedContentHash = versions.find((v) => v.versionNumber === approvedVersion)?.contentHash ?? (draft.contentHash ?? "");
+  const runtimeById = new Map<string, TargetRuntime>();
+  for (const t of draft.targets.filter((x) => targetIds.includes(x.id))) {
+    const def = contentKind(t.contentKind);
+    runtimeById.set(t.id, await resolveRuntime(orgId, t.assetId, def?.requiredCapability ?? "facebook.content.publish"));
+  }
+  const pre = checkPublishPreconditions({ draft, approvedVersion, approvedContentHash, targetIds, runtime: (id) => runtimeById.get(id) ?? null, globalKillSwitch: false, orgKillSwitch: false, actorCanPublish: true });
+  if (!pre.ok) return { ok: false, error: pre.operationBlock ?? "blocked", blocked: pre.targets };
+  const mediaRows = await content.listMedia(orgId);
+  const mediaById = new Map(mediaRows.map((m) => [m.id, m]));
+  const correlationId = crypto.randomUUID();
+  const snapshot = buildPublishSnapshot({ draft, targetIds: pre.publishableTargetIds, media: (id) => { const m = mediaById.get(id); return m ? { mediaId: m.id, kind: m.mediaKind, storageRef: m.storageRef, mime: m.mimeType, width: m.width, height: m.height, durationMs: m.durationMs } : null; }, capability: (tid) => runtimeById.get(tid)!.capability, validation: () => ({ ok: true }), requestedBy: userId, correlationId, createdAt: new Date().toISOString() });
+  const ports = buildPublishPorts();
+  const created = await engine.createOperation(ports, snapshot, pre.publishableTargetIds);
+  // Mark the operation scheduled (out of the immediate active-unique window).
+  const db = createServiceRoleClient();
+  await db.from("meta_publish_operation" as never).update({ mode: "scheduled", status: "scheduled", scheduled_for: schedule.scheduledForIso, scheduled_timezone: schedule.timezone, scheduled_local_datetime: schedule.localDateTime, scheduled_offset_minutes: schedule.offsetMinutes, updated_at: new Date().toISOString() } as never).eq("org_id", orgId).eq("id", created.operation.id);
+  return { ok: true, operationId: created.operation.id, correlationId };
 }

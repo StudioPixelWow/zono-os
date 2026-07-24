@@ -40,7 +40,7 @@ export interface PublishTargetRow {
 
 export interface PublishAttemptRow {
   id: string; orgId: string; operationId: string; targetId: string; attemptNumber: number;
-  initiatedBy: string | null; initiationKind: "initial" | "manual_retry"; startedAt: string; completedAt: string | null;
+  initiatedBy: string | null; initiationKind: "initial" | "manual_retry" | "automatic_retry"; startedAt: string; completedAt: string | null;
   result: AttemptResult | null; safeErrorKind: string | null; retryable: boolean | null; retryClass: string | null;
   providerCodeCategory: string | null; providerRequestId: string | null; correlationId: string | null; durationMs: number | null;
 }
