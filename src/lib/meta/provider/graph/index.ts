@@ -103,3 +103,10 @@ export const graphProviderSkeleton: MetaProvider = {
 export function graphSkeletonVersion(): string {
   return graphApiVersion();
 }
+
+// ── Phase 1 · live Graph boundary (OAuth + discovery via the gateway port) ───
+// The connection engine performs real Graph I/O ONLY through this bridge; all
+// Graph literals + token shapes stay sealed in this directory.
+export { createGraphGateway } from "./gateway";
+export type { GraphOAuthConfig } from "./oauth";
+export type { GraphFetch } from "./client";

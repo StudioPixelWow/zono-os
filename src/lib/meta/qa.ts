@@ -101,12 +101,18 @@ void (async () => {
   check("A3 registry rejects duplicate registration", threwDup);
 }
 
-// ── A4 · Graph skeleton performs no network request ──────────────────────────
+// ── A4 · Graph SKELETON provider performs no network request ─────────────────
+// (Phase 1 adds real Graph I/O under provider/graph/, but ONLY via the injectable
+//  GraphFetch transport in client/oauth/discovery — the skeleton provider stays
+//  network-free, and every networking file threads a mockable `fetchImpl`.)
 {
-  const graphFiles = walk("src/lib/meta/provider/graph");
   const netRe = /\bfetch\s*\(|XMLHttpRequest|require\(["']https?["']\)|import\(["']node:https?["']\)|axios/;
-  const offenders = graphFiles.filter((f) => netRe.test(strip(readFileSync(f, "utf8"))));
-  check("A4 Graph skeleton issues no network call", offenders.length === 0);
+  const skeleton = strip(readFileSync("src/lib/meta/provider/graph/index.ts", "utf8"));
+  const skeletonClean = !netRe.test(skeleton);
+  // Any graph file that performs network I/O must accept an injectable transport.
+  const netFiles = walk("src/lib/meta/provider/graph").filter((f) => netRe.test(strip(readFileSync(f, "utf8"))));
+  const allInjectable = netFiles.every((f) => /GraphFetch|fetchImpl/.test(readFileSync(f, "utf8")));
+  check("A4 Graph skeleton network-free + all Graph I/O is injectable/mockable", skeletonClean && allInjectable);
 }
 
 // ── A5 · Graph operations return not_implemented ─────────────────────────────
@@ -245,7 +251,7 @@ check("A19 Facebook Groups always denied (excluded)",
   let ok = true;
   try {
     const out = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" });
-    const allow = (p: string) => p.startsWith("src/lib/meta/") || p === "scripts/check-meta-boundaries.mjs" || p === "package.json";
+    const allow = (p: string) => p.startsWith("src/lib/meta/") || p.startsWith("src/app/api/meta/") || p === "scripts/check-meta-boundaries.mjs" || p === "package.json" || p === "supabase/migrations/20261201120000_meta_workspace_phase1.sql";
     const offenders = out.split("\n").map((l) => l.trim()).filter(Boolean)
       .map((l) => l.replace(/^\S+\s+/, "").replace(/^.*->\s*/, ""))
       .filter((p) => !allow(p));

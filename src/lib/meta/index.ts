@@ -142,6 +142,20 @@ export type {
 } from "./integration/types";
 export { getMetaIntegrationDescriptor, buildMetaIntegrationDescriptor } from "./integration/descriptor";
 
+// ── Phase 1 · connection engine surface (pure; server wiring in service.ts) ──
+export {
+  createSignedState, verifySignedState, metaStateSecret,
+  getMetaConnectionConfig, getMetaOperatorFlags,
+  completeConnection, inspectConnectionHealth, disconnectConnection,
+  buildCapabilityState, gateCapabilities,
+  toConnectionDescriptor, withPermissionSnapshot, toBusinessAsset, toPageAsset, toInstagramAsset,
+} from "./connection";
+export type {
+  MetaStatePayload, MetaConnectionConfig, MetaOperatorFlags,
+  CompleteConnectionInput, ConnectionEngineResult, HealthResult, CapabilityGateFlags,
+  MetaConnectionPorts, MetaStore, SecretCipher, GraphGateway, AuditSink, Clock, IdGen,
+} from "./connection";
+
 /** Default registration: bind the non-network Graph skeleton to the registry. */
 import { metaProviderRegistry as _registry, graphProviderSkeleton as _graph } from "./provider";
 if (!_registry.has(_graph.key)) _registry.register(_graph);

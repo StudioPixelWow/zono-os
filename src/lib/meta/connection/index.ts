@@ -37,3 +37,22 @@ export function authorizationModeInfo(mode: MetaAuthorizationMode): MetaAuthoriz
 export function preferredOrgAutomationMode(): MetaAuthorizationMode {
   return "system_user";
 }
+
+// ── Phase 1 · pure connection surface (server wiring lives in service.ts) ────
+export { createSignedState, verifySignedState, metaStateSecret, type MetaStatePayload } from "./state";
+export { getMetaConnectionConfig, getMetaOperatorFlags, type MetaConnectionConfig, type MetaOperatorFlags } from "./config";
+export {
+  completeConnection, inspectConnectionHealth, disconnectConnection,
+  buildCapabilityState, gateCapabilities,
+  type CompleteConnectionInput, type ConnectionEngineResult, type HealthResult, type CapabilityGateFlags,
+} from "./engine";
+export {
+  toConnectionDescriptor, withPermissionSnapshot,
+  toBusinessAsset, toPageAsset, toInstagramAsset,
+} from "./read";
+export type {
+  MetaConnectionPorts, MetaStore, SecretCipher, GraphGateway, AuditSink, Clock, IdGen,
+  MetaConnectionRow, MetaBusinessRow, MetaPageRow, MetaInstagramRow,
+  MetaPermissionSnapshotRow, MetaTokenHealthRow,
+  DiscoveredBusiness, DiscoveredPage, DiscoveredInstagram, GraphTokenResult, GraphTokenInspection,
+} from "./ports";
