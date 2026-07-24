@@ -11,15 +11,16 @@
 // double-complete the job. The lease token is a server-only nonce; it is never
 // surfaced in a DTO, audit record, log line, or UI.
 // ============================================================================
-import type { JobStatus } from "./job-state";
-
 /** Bounded lease duration + heartbeat cadence. No unbounded env value feeds these. */
 export const DEFAULT_LEASE_MS = 120_000;      // a claim is valid for 2 minutes…
 export const DEFAULT_HEARTBEAT_MS = 30_000;   // …refreshed every 30s while working
 export const MAX_LEASE_MS = 600_000;          // absolute ceiling on any lease
 
+// `status` is a bare string so this generic lease model is reused verbatim by
+// BOTH the Phase-3B publish queue and the Phase-3C reconciliation queue (which
+// share the "claimed"/"executing" working states) — one lease model, not two.
 export interface LeaseState {
-  status: JobStatus;
+  status: string;
   leaseOwner: string | null;
   leaseToken: string | null;
   leaseExpiresAtMs: number | null;

@@ -113,3 +113,6 @@ export type { GraphFetch } from "./client";
 
 // ── Phase 3A · immediate publishing (FB + IG), sealed in this directory ──────
 export { publishToProvider, createPublishGateway, type PublishDeps } from "./publish";
+
+// ── Phase 3C · read-only provider inspection (verification), sealed here ─────
+export { inspectViaProvider, createInspectionGateway, type InspectDeps } from "./inspect";

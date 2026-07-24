@@ -99,6 +99,14 @@ const inGraphDir = (p) => p.replace(/\\/g, "/").includes("provider/graph/");
 /** Is a file the QA harness (may name banned things via escaped construction)? */
 const isQa = (p) => /qa\.ts$/.test(p);
 
+// ── Phase 3C — reconciliation must VERIFY, never mutate provider content, and
+//    never ingest comments/messaging/analytics. These function identifiers must
+//    not appear anywhere under the reconciliation / webhook surface. ────────────
+const inReconOrWebhook = (p) => { const n = p.replace(/\\/g, "/"); return n.includes("/lib/meta/reconcile/") || n.includes("/lib/meta/webhooks/"); };
+const PHASE3C_FORBIDDEN = /fetchComments|replyToComment|hideComment|deleteComment|fetchPostMetrics|sendMessage|normalizeInboundMessage|post_insights|fetchInsights|engagement_inbox|engagementInbox|recreatePost|republishObject|deleteProviderObject|editProviderObject|adAccount|campaignInsights/;
+// Raw webhook payload / signature / app secret must never reach a safe surface.
+const PHASE3C_LEAK = /rawBody\b|raw_payload|webhook_signature|signatureValue|x-hub-signature|app_secret|META_APP_SECRET/i;
+
 /**
  * Scan a single file's content and return violation strings. `path` is the
  * repo-relative path (used to decide whether Graph literals are allowed here).
@@ -136,6 +144,26 @@ export function scanContent(path, rawCode) {
       out.push(`${path}: Facebook Groups capability not marked "excluded" (rule 7)`);
     }
   }
+  // Rule 10 (Phase 3C) — reconciliation/webhook surface must never publish/edit/
+  // delete provider content nor ingest comments/messaging/analytics.
+  if (inReconOrWebhook(norm) && PHASE3C_FORBIDDEN.test(code)) {
+    out.push(`${path}: reconciliation must verify only — no provider write / comments / messaging / analytics (rule 10)`);
+  }
+  // Rule 11 (Phase 3C) — a Graph WRITE method may not appear in reconciliation
+  // (inspection is READ-ONLY) nor in the sealed inspection module itself.
+  if ((inReconOrWebhook(norm) || /provider\/graph\/inspect\.ts$/.test(norm)) && /method:\s*["'](POST|PUT|PATCH|DELETE)["']/.test(code)) {
+    out.push(`${path}: a write HTTP method in the read-only verification path is forbidden (rule 11)`);
+  }
+  // Rule 12 (Phase 3C) — the webhook payload parser must NOT read an org identity
+  // from the payload; the org is derived from trusted mappings only.
+  if (/webhooks\/normalize\.ts$/.test(norm) && /org_?id/i.test(code)) {
+    out.push(`${path}: webhook normalization must not read an org id from the payload (rule 12)`);
+  }
+  // Rule 10 (Phase 3C) — a safe read model must never surface a raw webhook
+  // payload / signature / app secret.
+  if (/\/(read|dto)\.ts$/.test(norm) && PHASE3C_LEAK.test(code)) {
+    out.push(`${path}: a raw webhook payload / signature / app secret must not appear in a safe read model (rule 10)`);
+  }
   return out;
 }
 
@@ -150,8 +178,8 @@ const walk = (dir, acc = []) => {
   return acc;
 };
 
-/** Extra dirs (Phase 2) scanned for the same leakage rules: routes + workspace UI. */
-export const EXTRA_DIRS = ["src/app/api/meta", "src/app/(app)/meta-workspace"];
+/** Extra dirs scanned for the same leakage rules: routes (incl. internal) + UI. */
+export const EXTRA_DIRS = ["src/app/api/meta", "src/app/api/internal/meta", "src/app/(app)/meta-workspace"];
 
 /** Walk the Meta module + assert public-surface / structural invariants. */
 export function runGuard() {
@@ -179,6 +207,30 @@ export function runGuard() {
       const c = readFileSync(f, "utf8");
       if (/signedUrl|signed_url|createSignedUrl/.test(c)) failures.push(`${f}: a signed/provider-delivery URL must not appear in a safe read model (rule 8)`);
       if (/leaseToken|lease_token/.test(c)) failures.push(`${f}: a durable lease token must not appear in a safe read model (rule 9)`);
+      if (PHASE3C_LEAK.test(strip(c))) failures.push(`${f}: a raw webhook payload / signature / app secret must not appear in a safe read model (rule 10)`);
+    }
+  }
+  // Phase 3C structural — the webhook route must read the RAW bytes and the
+  // ingestion service must VERIFY the signature before trusting any event.
+  {
+    const routeP = "src/app/api/meta/webhooks/route.ts";
+    if (existsSync(routeP)) {
+      const c = readFileSync(routeP, "utf8");
+      if (!/\.text\(\)/.test(c) || !/x-hub-signature/i.test(c)) failures.push(`${routeP}: webhook route must read the exact raw bytes + read the signature header (rule 10)`);
+    }
+    const svcP = "src/lib/meta/webhooks/service.ts";
+    if (existsSync(svcP)) {
+      const c = strip(readFileSync(svcP, "utf8"));
+      if (!/verifySignature/.test(c)) failures.push(`${svcP}: webhook ingestion must verify the signature before processing (rule 10)`);
+    }
+  }
+  // Phase 3C structural — reconciliation must not mutate immutable history
+  // (publish/reconciliation attempts + provider-object state are append-only).
+  for (const f of files) {
+    if (isQa(f) || !/\/lib\/meta\/reconcile\//.test(f.replace(/\\/g, "/"))) continue;
+    const c = strip(readFileSync(f, "utf8"));
+    if (/meta_(publish|reconciliation)_attempt[\s\S]{0,80}\.(update|delete)\b/.test(c) || /meta_provider_object_state[\s\S]{0,80}\.(update|delete)\b/.test(c)) {
+      failures.push(`${f}: immutable attempt / object-state history must not be updated or deleted (rule 10)`);
     }
   }
   // Structural: a queue-consumer / dead-letter / reconciliation-worker FILE is

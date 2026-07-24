@@ -51,3 +51,33 @@ export interface MetaNormalizedWebhookEvent {
   eventName: string;
   occurredAt: string;
 }
+
+// ── Phase 3C · richer canonical event for reconciliation (additive) ──────────
+export type MetaCanonicalEventType =
+  | "publish_confirmed" | "object_updated" | "object_deleted" | "object_hidden"
+  | "permission_change" | "connection_change" | "ignored" | "unsupported";
+export type MetaChangeClass = "created" | "updated" | "removed" | "hidden" | "permission" | "none";
+export type MetaMatchConfidence = "high" | "medium" | "low";
+
+/**
+ * A provider-neutral canonical webhook event for the reconciliation layer. It
+ * carries NO raw Graph field names or payload — only safe, normalized signals for
+ * the PUBLISHING lifecycle, provider-object existence/state, and connection /
+ * permission impact. Comments / messaging fields normalize to `ignored`/
+ * `unsupported` and NEVER activate any comments or messaging feature.
+ */
+export interface MetaCanonicalWebhookEvent {
+  provider: "meta";
+  platform: "facebook" | "instagram" | null;
+  eventType: MetaCanonicalEventType;
+  externalEventId: string | null;
+  fingerprint: string;
+  externalObjectId: string | null;
+  externalParentId: string | null;
+  assetExternalId: string | null;
+  providerEventTime: string | null;
+  changeClass: MetaChangeClass;
+  matchConfidence: MetaMatchConfidence;
+  sourceWebhookEventId: string | null;
+  correlationId: string | null;
+}

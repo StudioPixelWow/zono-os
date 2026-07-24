@@ -53,6 +53,13 @@ function assetResolver(): AssetPublishResolver {
   };
 }
 
+/** Resolve an asset's external id + decrypted credential (Phase-3C reuse: the
+ *  reconciliation inspector needs the same server-side credential resolution as
+ *  publishing — no second decryption path). Returns null if unavailable. */
+export async function resolveAssetCredential(orgId: string, assetId: string): Promise<{ externalId: string; tokenPlain: string } | null> {
+  return assetResolver().resolve(orgId, assetId);
+}
+
 /** Build production publish-engine ports. */
 export function buildPublishPorts(): PublishPorts {
   return {
