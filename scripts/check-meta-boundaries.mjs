@@ -67,6 +67,23 @@ const MODEL_ENDPOINT = /api\.openai\.com|api\.anthropic\.com|generativelanguage\
 // ── Rule 5 — Graph internals imported from outside GRAPH_DIR. ────────────────
 const GRAPH_INTERNAL_IMPORT = /provider\/graph\/(compat|errors|types)/;
 
+// ── Rule 8 (Phase 2) — content-prep must not leak publishing / storage secrets /
+//    raw media bytes / auto-send behavior. Applied everywhere under the Meta
+//    module + its routes/UI (Graph dir + QA exempt). ──────────────────────────
+const PHASE2_FORBIDDEN = new RegExp(
+  [
+    "scheduled_publish_time",   // Graph scheduled-publish field
+    "media_publish",            // IG publish edge
+    "publishToMeta", "executePublish", "publishNow", "runPublish", // functional publish
+    "createMediaContainer",     // IG container creation (Phase 3)
+    "autoPublish", "autoReply", // no automatic send behavior
+    "media_bytes", "file_bytes", "\\bbytea\\b", // raw media bytes in DB
+    "SUPABASE_SERVICE_ROLE_KEY", // storage/service secret exposure
+    "requiresApproval:\\s*false", // approval must not be bypassed
+    "graph_payload",            // raw Graph payload as draft data
+  ].join("|"),
+);
+
 /** Is a file path inside the sealed Graph directory? */
 const inGraphDir = (p) => p.replace(/\\/g, "/").includes("provider/graph/");
 /** Is a file the QA harness (may name banned things via escaped construction)? */
@@ -94,6 +111,10 @@ export function scanContent(path, rawCode) {
   if (!inGraphDir(norm) && GRAPH_INTERNAL_IMPORT.test(code)) {
     out.push(`${path}: imports Graph internals (compat/errors/types) outside provider/graph/ (rule 5)`);
   }
+  // Rule 8 (Phase 2) — no publishing / storage-secret / raw-bytes / auto-send leakage.
+  if (PHASE2_FORBIDDEN.test(code)) {
+    out.push(`${path}: Phase-2 forbidden token (publishing/storage-secret/raw-bytes/auto-send/approval-bypass) (rule 8)`);
+  }
   // Rule 7 — Facebook Groups capability lines must be classified excluded.
   const lines = code.split("\n");
   for (const line of lines) {
@@ -115,17 +136,28 @@ const walk = (dir, acc = []) => {
   return acc;
 };
 
+/** Extra dirs (Phase 2) scanned for the same leakage rules: routes + workspace UI. */
+export const EXTRA_DIRS = ["src/app/api/meta", "src/app/(app)/meta-workspace"];
+
 /** Walk the Meta module + assert public-surface / structural invariants. */
 export function runGuard() {
   const failures = [];
   const files = walk(META_DIR);
   if (files.length === 0) failures.push(`${META_DIR}: module missing`);
+  for (const d of EXTRA_DIRS) for (const f of walk(d)) files.push(f);
 
   for (const f of files) {
     if (isQa(f)) continue; // QA constructs banned literals via escaped strings
     const code = readFileSync(f, "utf8");
     failures.push(...scanContent(f, code));
   }
+
+  // Phase 2 structural: no publishing worker / scheduler / cron under the Meta module.
+  for (const f of files) {
+    if (/(publish|schedul).*(worker|cron|queue|scheduler)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a publishing worker/scheduler/cron is not allowed before Phase 3 (rule 8)`);
+  }
+  // Phase 2 structural: no functional publish route.
+  if (existsSync("src/app/api/meta/publish")) failures.push("src/app/api/meta/publish: a publish route is not allowed before Phase 3 (rule 8)");
 
   // Rule 6 — the exported public surface (index.ts) must not expose a token field.
   const idx = join(META_DIR, "index.ts");

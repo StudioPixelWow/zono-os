@@ -15,6 +15,7 @@ export type MetaNotificationEventName =
   | "meta.post.approval_requested"
   | "meta.post.approved"
   | "meta.post.rejected"
+  | "meta.post.changes_requested"
   | "meta.post.scheduled"
   | "meta.post.published"
   | "meta.post.failed"

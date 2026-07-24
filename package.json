@@ -27,7 +27,8 @@
     "bench:comm-copilot-concurrent": "tsx scripts/bench-comm-copilot-concurrent.ts",
     "check:meta-boundary": "node scripts/check-meta-boundaries.mjs",
     "qa:meta": "tsx src/lib/meta/qa.ts",
-    "qa:meta-connection": "tsx src/lib/meta/connection/qa.ts"
+    "qa:meta-connection": "tsx src/lib/meta/connection/qa.ts",
+    "qa:meta-content": "tsx src/lib/meta/content/qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

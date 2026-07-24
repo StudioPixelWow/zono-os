@@ -15,6 +15,7 @@ export const META_EVENT_SEVERITY: Record<MetaNotificationEventName, MetaNotifica
   "meta.post.approval_requested": "info",
   "meta.post.approved": "info",
   "meta.post.rejected": "info",
+  "meta.post.changes_requested": "info",
   "meta.post.scheduled": "info",
   "meta.post.published": "info",
   "meta.post.failed": "critical",
