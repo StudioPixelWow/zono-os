@@ -24,7 +24,9 @@
     "final-qa": "tsx scripts/zono-final-qa.ts",
     "import:localities": "tsx scripts/import-israel-localities.ts",
     "seed:distribution": "tsx scripts/seed-distribution.ts",
-    "bench:comm-copilot-concurrent": "tsx scripts/bench-comm-copilot-concurrent.ts"
+    "bench:comm-copilot-concurrent": "tsx scripts/bench-comm-copilot-concurrent.ts",
+    "check:meta-boundary": "node scripts/check-meta-boundaries.mjs",
+    "qa:meta": "tsx src/lib/meta/qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
