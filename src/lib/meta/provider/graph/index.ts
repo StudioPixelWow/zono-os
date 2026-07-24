@@ -110,3 +110,6 @@ export function graphSkeletonVersion(): string {
 export { createGraphGateway } from "./gateway";
 export type { GraphOAuthConfig } from "./oauth";
 export type { GraphFetch } from "./client";
+
+// ── Phase 3A · immediate publishing (FB + IG), sealed in this directory ──────
+export { publishToProvider, createPublishGateway, type PublishDeps } from "./publish";

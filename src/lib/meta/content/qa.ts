@@ -257,12 +257,12 @@ async function main() {
     check("C48 no comments/messaging ingestion implemented", !files.some((f) => /(comment-ingest|messenger-adapter|dm-adapter|engagement-ingest)/i.test(f)));
   }
 
-  // C45 · no Graph publish request anywhere under meta (outside graph, no publish endpoints)
-  { const files = walk("src/lib/meta").filter((f) => !/qa\.ts$/.test(f)); const leaked = files.filter((f) => /media_publish|scheduled_publish_time|createMediaContainer/.test(strip(readFileSync(f, "utf8")))); check("C45 no Graph publish request occurs", leaked.length === 0); }
+  // C45 · no Graph publish request OUTSIDE the sealed graph dir (Phase 3A adds publishing there).
+  { const files = walk("src/lib/meta").filter((f) => !/qa\.ts$/.test(f) && !f.replace(/\\/g, "/").includes("provider/graph/")); const leaked = files.filter((f) => /media_publish|scheduled_publish_time|createMediaContainer/.test(strip(readFileSync(f, "utf8")))); check("C45 no Graph publish request outside provider/graph/", leaked.length === 0); }
 
   // C49 · Communication OS not modified (git) ; C64 · frozen modules unchanged
   { let ok = true; try { const out = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" });
-      const offenders = out.split("\n").map((l) => l.trim().replace(/^\S+\s+/, "")).filter(Boolean).filter((f) => !(f.startsWith("src/lib/meta/") || f.startsWith("src/app/api/meta/") || f.startsWith("src/app/(app)/meta-workspace/") || f === "package.json" || f === "scripts/check-meta-boundaries.mjs" || /supabase\/migrations\/20261205120000/.test(f)));
+      const offenders = out.split("\n").map((l) => l.trim().replace(/^\S+\s+/, "")).filter(Boolean).filter((f) => !(f.startsWith("src/lib/meta/") || f.startsWith("src/app/api/meta/") || f.startsWith("src/app/(app)/meta-workspace/") || f === "package.json" || f === "scripts/check-meta-boundaries.mjs" || /supabase\/migrations\/(20261205120000|20261210120000)/.test(f)));
       ok = offenders.length === 0; if (!ok) console.error("   frozen offenders: " + offenders.join(", ")); } catch { ok = false; }
     check("C49/C64 frozen systems + Communication OS unchanged (git scoped)", ok);
   }
@@ -274,7 +274,7 @@ async function main() {
   }
 
   // C65 · Phase 3 not started (no publishing module)
-  check("C65 Phase 3 not started (no publish engine/module)", !existsSync("src/lib/meta/publish/engine.ts") && !existsSync("src/lib/meta/publish/worker.ts"));
+  check("C65 Phase 3B not started (no scheduler/worker/queue)", !existsSync("src/lib/meta/publish/worker.ts") && !existsSync("src/lib/meta/publish/scheduler.ts") && !existsSync("src/lib/meta/publish/queue.ts"));
 
   // ── Extra scenarios ────────────────────────────────────────────────────────
   const empty = await engine.createDraft(p, { orgId: "orgA", userId: "u1", internalName: "empty" });

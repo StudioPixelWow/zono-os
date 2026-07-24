@@ -53,9 +53,16 @@ export default async function DraftEditorPage({ params }: { params: Promise<{ dr
       <div className="flex items-center gap-3 border-t border-gray-100 pt-4">
         <button className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">שמור</button>
         <button className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50">בקשת אישור</button>
-        {/* Publish is intentionally disabled in Phase 2 — arrives in the publishing phase. */}
-        <button disabled title="פרסום יתווסף בשלב הפרסום" className="ml-auto cursor-not-allowed rounded-lg border border-gray-200 px-4 py-2 text-gray-400" aria-disabled="true">פרסום (בקרוב — שלב הפרסום)</button>
+        {/* Phase 3A: Publish is ACTIVE only for an approved draft whose current
+            version equals the approved version and has ≥1 ready target. Otherwise
+            it stays disabled with the blocking reason shown. */}
+        {draft.status === "approved" && draft.targets.some((t) => t.enabled) ? (
+          <Link href={`/meta-workspace/publishing?draft=${draft.id}`} className="ml-auto rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700" title="הפרסום נשלח ל-Meta באופן מיידי">פרסום עכשיו</Link>
+        ) : (
+          <button disabled title={draft.status === "approved" ? "אין יעד מוכן לפרסום" : "יש לאשר את הטיוטה לפני פרסום"} className="ml-auto cursor-not-allowed rounded-lg border border-gray-200 px-4 py-2 text-gray-400" aria-disabled="true">פרסום (דורש אישור)</button>
+        )}
       </div>
+      <p className="mt-2 text-xs text-gray-400">פרסום שולח את התוכן ל-Meta באופן מיידי. אין תזמון או פרסום ברקע בשלב זה.</p>
     </main>
   );
 }

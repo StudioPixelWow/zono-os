@@ -67,20 +67,24 @@ const MODEL_ENDPOINT = /api\.openai\.com|api\.anthropic\.com|generativelanguage\
 // ── Rule 5 — Graph internals imported from outside GRAPH_DIR. ────────────────
 const GRAPH_INTERNAL_IMPORT = /provider\/graph\/(compat|errors|types)/;
 
-// ── Rule 8 (Phase 2) — content-prep must not leak publishing / storage secrets /
-//    raw media bytes / auto-send behavior. Applied everywhere under the Meta
-//    module + its routes/UI (Graph dir + QA exempt). ──────────────────────────
+// Graph PUBLISH endpoint literals — allowed ONLY inside provider/graph/ (like
+// other Graph specifics); a leak elsewhere is a rule-8 violation.
+const GRAPH_PUBLISH_LITERALS = /scheduled_publish_time|media_publish|createMediaContainer|\/media_publish/;
+
+// ── Rule 8 (Phase 2/3A) — no storage-secret / raw-bytes / auto-send / auto-retry
+//    leakage. Applied everywhere under the Meta module + routes/UI (Graph + QA
+//    exempt for the publish-endpoint subset). ──────────────────────────────────
 const PHASE2_FORBIDDEN = new RegExp(
   [
-    "scheduled_publish_time",   // Graph scheduled-publish field
-    "media_publish",            // IG publish edge
     "publishToMeta", "executePublish", "publishNow", "runPublish", // functional publish
-    "createMediaContainer",     // IG container creation (Phase 3)
     "autoPublish", "autoReply", // no automatic send behavior
     "media_bytes", "file_bytes", "\\bbytea\\b", // raw media bytes in DB
     "SUPABASE_SERVICE_ROLE_KEY", // storage/service secret exposure
     "requiresApproval:\\s*false", // approval must not be bypassed
     "graph_payload",            // raw Graph payload as draft data
+    // Phase 3A — no automatic retry / background execution of publishing.
+    "autoRetry", "retryWorker", "retryMiddleware", "backgroundPoll", "\\bsetInterval\\b",
+    "scheduledPublish", "publishScheduler", "publishQueue", "publishWorker", "publishCron",
   ].join("|"),
 );
 
@@ -111,9 +115,13 @@ export function scanContent(path, rawCode) {
   if (!inGraphDir(norm) && GRAPH_INTERNAL_IMPORT.test(code)) {
     out.push(`${path}: imports Graph internals (compat/errors/types) outside provider/graph/ (rule 5)`);
   }
-  // Rule 8 (Phase 2) — no publishing / storage-secret / raw-bytes / auto-send leakage.
+  // Rule 8 (Phase 2/3A) — no storage-secret / raw-bytes / auto-send / auto-retry leakage.
   if (PHASE2_FORBIDDEN.test(code)) {
-    out.push(`${path}: Phase-2 forbidden token (publishing/storage-secret/raw-bytes/auto-send/approval-bypass) (rule 8)`);
+    out.push(`${path}: Phase-2/3A forbidden token (storage-secret/raw-bytes/auto-send/auto-retry/approval-bypass) (rule 8)`);
+  }
+  // Graph publish endpoint literals may live ONLY inside provider/graph/.
+  if (!inGraphDir(norm) && GRAPH_PUBLISH_LITERALS.test(code)) {
+    out.push(`${path}: Graph publish endpoint literal outside provider/graph/ (rule 8)`);
   }
   // Rule 7 — Facebook Groups capability lines must be classified excluded.
   const lines = code.split("\n");
@@ -152,12 +160,20 @@ export function runGuard() {
     failures.push(...scanContent(f, code));
   }
 
-  // Phase 2 structural: no publishing worker / scheduler / cron under the Meta module.
+  // Phase 3A structural: no publishing worker/scheduler/cron/queue (Phase 3B).
   for (const f of files) {
-    if (/(publish|schedul).*(worker|cron|queue|scheduler)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a publishing worker/scheduler/cron is not allowed before Phase 3 (rule 8)`);
+    if (/(worker|scheduler|cron|queue)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a publishing worker/scheduler/cron/queue is not allowed in Phase 3A (rule 8)`);
   }
-  // Phase 2 structural: no functional publish route.
-  if (existsSync("src/app/api/meta/publish")) failures.push("src/app/api/meta/publish: a publish route is not allowed before Phase 3 (rule 8)");
+  // Phase 3A structural: safe read models must not surface a signed/provider URL.
+  for (const f of files) {
+    if (/\/(read|dto)\.ts$/.test(f) && /signedUrl|signed_url|createSignedUrl/.test(readFileSync(f, "utf8"))) {
+      failures.push(`${f}: a signed/provider-delivery URL must not appear in a safe read model (rule 8)`);
+    }
+  }
+  // Phase 3A structural: no queue consumer / dead-letter processor under the module.
+  for (const f of files) {
+    if (/(queue-consumer|dead-letter|deadletter|reconcile-worker)\.(ts|tsx)$/i.test(f)) failures.push(`${f}: a queue consumer / dead-letter / reconciliation worker is not allowed in Phase 3A (rule 8)`);
+  }
 
   // Rule 6 — the exported public surface (index.ts) must not expose a token field.
   const idx = join(META_DIR, "index.ts");
