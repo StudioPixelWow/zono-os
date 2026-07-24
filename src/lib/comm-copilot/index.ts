@@ -37,4 +37,6 @@ export { buildClientMemoryRow, buildAiMemoryInputs, memoryEntityId } from "./mem
 export { memoryFreshnessHash } from "./record";
 export { emptyMemory } from "./memory-types";
 export type * from "./memory-types";
+// Phase 5 — LLM enrichment (deterministic-authoritative, via the Reasoning Gateway).
+export { decideEnrichment, validateEnrichedText, buildDeterministicRef, enrichmentCacheKey, estimateUsage, type EnrichKind, type EnrichDecision, type GatewayOutcome } from "./enrich-core";
 export type * from "./types";

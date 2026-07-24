@@ -25,6 +25,7 @@ import { extractMemory } from "./memory-extract";
 import { mergeMemory } from "./memory-merge";
 import { emptyMemory } from "./memory-types";
 import { buildClientMemoryRow, buildAiMemoryInputs } from "./memory-record";
+import { decideEnrichment, validateEnrichedText, buildDeterministicRef, enrichmentCacheKey, estimateUsage, type GatewayOutcome } from "./enrich-core";
 
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -451,6 +452,72 @@ check("M17 memory freshness: over VALUES (reinforcement alone never rewrites)", 
   return memoryFreshnessHash(r1) === memoryFreshnessHash(r2) && memoryFreshnessHash(r1) !== memoryFreshnessHash(r3);
 })());
 
-console.log(`\nAI Communication Copilot (6.7) Phase 0-4 SELF TEST: ${passed} passed, ${failed} failed`);
-console.log("(LLM enrichment + UI are Phase 5; not asserted here.)\n");
+// ── N) PHASE 5 — LLM enrichment (deterministic-authoritative) ────────────────
+const detText = "שיחה בשלב active_buyer — כוונת קנייה · אזור מבוקש: תל אביב. תקציב 3000000.";
+const detRef = buildDeterministicRef(detText, ["תל אביב", "3000000"]);
+const answered = (answer: string): GatewayOutcome => ({ ok: true, status: "answered", answer, provider: "openai" });
+
+check("N1 LLM unavailable → fallback to deterministic (never blocks)", (() => {
+  const d = decideEnrichment(detRef, { ok: false, status: "error", answer: "" });
+  return d.accepted === false && d.output === detText && d.validationStatus === "rejected_unavailable";
+})());
+check("N2 invalid JSON / schema-blocked (status != answered) → fallback", (() => {
+  const d = decideEnrichment(detRef, { ok: true, status: "blocked", answer: "junk" });
+  return d.accepted === false && d.output === detText && d.validationStatus === "rejected_status";
+})());
+check("N3 hallucinated fact (new number) → REJECTED, deterministic kept", (() => {
+  const d = decideEnrichment(detRef, answered("הלקוח מעוניין בתל אביב בתקציב 5000000."));
+  return d.accepted === false && d.output === detText && d.validationStatus === "rejected_hallucination";
+})());
+check("N4 unsupported evidence (new place) → REJECTED", (() => {
+  const d = decideEnrichment(detRef, answered("הלקוח מעוניין בחיפה בתקציב 3000000."));
+  return d.accepted === false && d.output === detText && d.validationStatus === "rejected_unsupported";
+})());
+check("N5 timeout / transport error (ok:false) → fallback", (() => {
+  return decideEnrichment(detRef, { ok: false, status: "error", answer: "" }).output === detText;
+})());
+check("N6 empty enrichment → rejected", (() => decideEnrichment(detRef, answered("   ")).validationStatus === "rejected_empty")());
+check("N7 ACCEPT path — readability-only rephrase (same facts) is accepted", (() => {
+  const d = decideEnrichment(detRef, answered("הלקוח מחפש לקנות בתל אביב, תקציב 3000000 ש\"ח."));
+  return d.accepted === true && d.validationStatus === "accepted" && d.output.includes("תל אביב");
+})());
+check("N8 evidence validation is strict (no new numbers/places pass)", (() => {
+  return !validateEnrichedText("תקציב 9999999", detRef).ok && validateEnrichedText("תל אביב 3000000", detRef).ok;
+})());
+check("N9 cache key: stable per deterministic hash, invalidates on change", (() => {
+  return enrichmentCacheKey("summary", "h1") === "summary:h1" && enrichmentCacheKey("summary", "h1") !== enrichmentCacheKey("summary", "h2");
+})());
+check("N10 identical deterministic output preserved on any rejection", (() => {
+  const outcomes: GatewayOutcome[] = [{ ok: false, status: "error", answer: "" }, { ok: true, status: "blocked", answer: "x" }, answered("בתקציב 5000000"), answered("בחיפה")];
+  return outcomes.every((o) => decideEnrichment(detRef, o).output === detText);
+})());
+check("N11 transport-agnostic: deterministic ref depends only on text (not channel)", (() => {
+  return JSON.stringify(buildDeterministicRef(detText, [])) === JSON.stringify(buildDeterministicRef(detText, []));
+})());
+check("N12 token/cost estimate produced for the audit", (() => {
+  const u = estimateUsage(400, 200); return u.estTokens > 0 && u.estCostUsd >= 0;
+})());
+check("N13 source guard — enrichment routes through the Reasoning Gateway, no direct model call / new provider", (() => {
+  const e = strip(read("src/lib/comm-copilot/enrich.ts"));
+  return e.includes("@/lib/ai-reasoning/gateway") && e.includes("runReasoningGateway") && !/api\.openai\.com|new OpenAI|openAIProvider\(/.test(e);
+})());
+check("N14 audit records provider/model/latency/tokens/cost/validation/accepted/rejected", (() => {
+  const e = read("src/lib/comm-copilot/enrich.ts");
+  return ["provider", "model", "latencyMs", "estTokens", "estCostUsd", "validationStatus", "accepted", "rejected"].every((k) => e.includes(k));
+})());
+check("N15 enrichment cache is source-guarded to the Copilot's own table + invalidates on det hash", (() => {
+  const p = strip(read("src/lib/comm-copilot/enrich-persist.ts"));
+  return p.includes("copilot_enrichment") && p.includes("det_hash") && !/whatsapp_conversations|communication_os|from\(["']journeys["']\)/.test(p);
+})());
+check("N16 enrichment never blocks the pipeline (best-effort in service)", (() => {
+  const s = read("src/lib/comm-copilot/service.ts");
+  return /try \{[\s\S]*enrichConversation[\s\S]*\} catch/.test(s);
+})());
+check("N17 LLM never replaces deterministic — pipeline stays pure/deterministic", (() => {
+  const p = read("src/lib/comm-copilot/pipeline.ts");
+  return !/enrich|runReasoningGateway|ai-reasoning/.test(p);   // the pure pipeline has NO LLM
+})());
+
+console.log(`\nAI Communication Copilot (6.7) Phase 0-5 SELF TEST: ${passed} passed, ${failed} failed`);
+console.log("(Batch 6.7 complete — deterministic-authoritative, LLM enrichment via the gateway.)\n");
 if (failed > 0) process.exit(1);

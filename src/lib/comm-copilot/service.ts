@@ -29,5 +29,13 @@ export async function generateConversationInsight(conversationRef: string, reaso
   const result = runCopilotPipeline(view, nowIso);
   const force = reason === "manual" || reason === "reopened";
   const r = await persistInsight(profile.org_id, result, nowIso, force);
+
+  // LLM enrichment — BEST-EFFORT, deterministic-authoritative. Never blocks the
+  // pipeline: any failure leaves the deterministic outputs (already persisted).
+  try {
+    const { enrichConversation } = await import("./enrich-persist");
+    await enrichConversation(profile.org_id, result, nowIso);
+  } catch { /* enrichment is optional — deterministic output already stands */ }
+
   return { ok: true, changed: r.changed, classification: r.classification };
 }
