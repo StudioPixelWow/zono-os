@@ -18,8 +18,13 @@ import { analyzeConversation } from "./analyze";
 import { deriveSentiment } from "./sentiment";
 import { detectAttention } from "./detect";
 import { recommendAction } from "./recommend";
-import { deterministicHash, shouldRegenerate, buildSummaryRow, buildInsightRow, hashExtraOf, replyFreshnessHash, timelineFreshnessHash, buildReplyRows, buildMilestoneRows } from "./record";
+import { deterministicHash, shouldRegenerate, buildSummaryRow, buildInsightRow, hashExtraOf, replyFreshnessHash, timelineFreshnessHash, buildReplyRows, buildMilestoneRows, memoryFreshnessHash } from "./record";
 import type { RecommendedActionKind, ReplyTone } from "./types";
+import { analyzeConversation as az } from "./analyze";
+import { extractMemory } from "./memory-extract";
+import { mergeMemory } from "./memory-merge";
+import { emptyMemory } from "./memory-types";
+import { buildClientMemoryRow, buildAiMemoryInputs } from "./memory-record";
 
 const ROOT = process.cwd();
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -345,6 +350,107 @@ check("K14 Phase-3 persistence writes ONLY the two allowed sinks (source guard)"
     !/communication_os|whatsapp_conversations|whatsapp_messages|from\(["']journeys["']\)/.test(p);
 })());
 
-console.log(`\nAI Communication Copilot (6.7) Phase 0+1+2+3 SELF TEST: ${passed} passed, ${failed} failed`);
-console.log("(AI memory + LLM enrichment are Phase 4+; not asserted here.)\n");
+// ── M) PHASE 4 — deterministic AI memory ─────────────────────────────────────
+const memView = (msgs: string[], ch = "wa"): CopilotConversationView => {
+  const tr = msgs.map((t, i) => ({ seq: i, messageRef: `${ch}:m${i + 1}`, direction: "inbound" as const, sentAt: `2026-07-20T1${i}:00:00.000Z`, text: t }));
+  return { conversationRef: `${ch}:1`, agentId: "u", clientName: "דנה", waiting: true, unread: 1, messageCount: tr.length, lastActivityAt: tr[tr.length - 1].sentAt, transcript: tr, crmLinks: { lead: null, buyer: "b1", seller: null, journey: null, deal: null, property: null } };
+};
+const extractOf = (msgs: string[]) => extractMemory(az(memView(msgs), NOW));
+const T1 = "2026-07-20T10:00:00.000Z", T2 = "2026-07-25T10:00:00.000Z";
+
+check("M1 extracts the full taxonomy (personal/property/financing/behavior)", (() => {
+  const e = extractOf(["אני נשוי עם 2 ילדים, מהנדס. מחפש דירת 4 חדרים בפלורנטין 3 מיליון, צריך משכנתא, מרפסת חובה, יש כלב"]);
+  return !!e.scalars["personal.familyStatus"] && !!e.scalars["personal.occupation"] && !!e.scalars["personal.pets"] &&
+    !!e.scalars["property.budget"] && !!e.scalars["property.rooms"] && !!e.scalars["property.balcony"] &&
+    !!e.scalars["financing.financingNeeded"] && !!e.lists["property.neighborhoods"];
+})());
+check("M2 every memory field carries confidence + source + evidence message ids", (() => {
+  const e = extractOf(["מחפש דירה בתל אביב בתקציב 3 מיליון"]);
+  const b = e.scalars["property.budget"];
+  return !!b && b.confidence > 0 && (b.source === "explicit" || b.source === "inferred") && b.evidenceMessageIds.length > 0;
+})());
+check("M3 budget evolution: explicit change pushes a new evolution point", (() => {
+  let m = mergeMemory(emptyMemory(T1), extractOf(["תקציב 3 מיליון"]), T1).memory;
+  m = mergeMemory(m, extractOf(["עדכון: התקציב עלה ל 3.5 מיליון"]), T2).memory;
+  return m.budgetEvolution.length === 2 && m.budgetEvolution[1].amount === 3500000 && m.scalars["property.budget"].value === "3500000";
+})());
+check("M4 budget rule: new EXPLICIT beats old INFERRED", (() => {
+  const prev = emptyMemory(T1); prev.scalars["property.budget"] = { value: "2000000", confidence: 60, source: "inferred", firstSeen: T1, lastUpdated: T1, evidenceMessageIds: ["mX"], version: 1 };
+  const r = mergeMemory(prev, extractOf(["תקציב 3 מיליון"]), T2);
+  return r.memory.scalars["property.budget"].value === "3000000" && r.memory.scalars["property.budget"].source === "explicit" &&
+    r.changes.some((c) => c.field === "property.budget" && c.why === "explicit_over_inferred");
+})());
+check("M5 neighborhood: explicit accumulates (preferences never removed)", (() => {
+  let m = mergeMemory(emptyMemory(T1), extractOf(["מעניין אותי פלורנטין"]), T1).memory;
+  m = mergeMemory(m, extractOf(["גם רמת אביב"]), T2).memory;
+  return m.lists["property.neighborhoods"].map((x) => x.value).sort().join(",") === "פלורנטין,רמת אביב";
+})());
+check("M6 family: latest explicit statement wins (+ contradiction tracked)", (() => {
+  let m = mergeMemory(emptyMemory(T1), extractOf(["אני נשוי"]), T1).memory;
+  const r = mergeMemory(m, extractOf(["התגרשתי"]), T2); m = r.memory;
+  return m.scalars["personal.familyStatus"].value === "גרוש" && r.changes.some((c) => c.field === "personal.familyStatus" && c.why === "latest_explicit") && m.contradictions.some((c) => c.field === "personal.familyStatus");
+})());
+check("M7 mortgage change: financing_approved captured as explicit high-confidence", (() => {
+  const e = extractOf(["אושרה המשכנתא"]);
+  return e.scalars["financing.financingApproved"].value === "approved" && e.scalars["financing.financingApproved"].source === "explicit" && e.scalars["financing.financingApproved"].confidence >= 85;
+})());
+check("M8 contradictions are TRACKED (not dropped)", (() => {
+  let m = mergeMemory(emptyMemory(T1), extractOf(["תקציב 3 מיליון"]), T1).memory;
+  m = mergeMemory(m, extractOf(["בעצם תקציב 4 מיליון"]), T2).memory;
+  return m.contradictions.some((c) => c.field === "property.budget" && c.from === "3000000" && c.to === "4000000");
+})());
+check("M9 confidence UPGRADE on reinforcement (same explicit value re-observed)", (() => {
+  let r = mergeMemory(emptyMemory(T1), extractOf(["אני נשוי"]), T1); const c1 = r.memory.scalars["personal.familyStatus"].confidence;
+  r = mergeMemory(r.memory, extractOf(["כן אני נשוי"]), T2); const c2 = r.memory.scalars["personal.familyStatus"].confidence;
+  return c2 > c1 && r.changes.some((c) => c.field === "personal.familyStatus" && c.why === "upgrade");
+})());
+check("M10 confidence DOWNGRADE — weaker inferred conflict keeps value, lowers confidence", (() => {
+  const prev = emptyMemory(T1); prev.scalars["property.budget"] = { value: "3000000", confidence: 80, source: "explicit", firstSeen: T1, lastUpdated: T1, evidenceMessageIds: ["m1"], version: 1 };
+  const weaker: import("./memory-types").PartialMemory = { scalars: { "property.budget": { value: "2000000", confidence: 60, source: "inferred", evidenceMessageIds: ["mX"] } }, lists: {}, budget: 2000000 };
+  const r = mergeMemory(prev, weaker, T2);
+  return r.memory.scalars["property.budget"].value === "3000000" && r.memory.scalars["property.budget"].confidence < 80 && r.changes.some((c) => c.why === "downgrade");
+})());
+check("M11 never overwrite stronger with weaker (explicit survives inferred conflict)", (() => {
+  const prev = emptyMemory(T1); prev.scalars["personal.familyStatus"] = { value: "נשוי", confidence: 85, source: "explicit", firstSeen: T1, lastUpdated: T1, evidenceMessageIds: ["m1"], version: 1 };
+  const weaker: import("./memory-types").PartialMemory = { scalars: { "personal.familyStatus": { value: "רווק", confidence: 65, source: "inferred", evidenceMessageIds: ["mX"] } }, lists: {}, budget: null };
+  return mergeMemory(prev, weaker, T2).memory.scalars["personal.familyStatus"].value === "נשוי";
+})());
+check("M12 duplicate prevention — re-merging identical facts adds no new list items", (() => {
+  let m = mergeMemory(emptyMemory(T1), extractOf(["פלורנטין"]), T1).memory;
+  const n1 = m.lists["property.neighborhoods"].length;
+  m = mergeMemory(m, extractOf(["פלורנטין"]), T2).memory;
+  return m.lists["property.neighborhoods"].length === n1;
+})());
+check("M13 versioning — value change bumps field + top version", (() => {
+  const r1 = mergeMemory(emptyMemory(T1), extractOf(["אני נשוי"]), T1);
+  const r2 = mergeMemory(r1.memory, extractOf(["התגרשתי"]), T2);
+  return r2.memory.scalars["personal.familyStatus"].version === 2 && r2.memory.version > r1.memory.version;
+})());
+check("M14 persists ONLY through existing stores (client_memory row + ai_memory inputs)", (() => {
+  const m = mergeMemory(emptyMemory(T1), extractOf(["אני נשוי, תקציב 3 מיליון בפלורנטין"]), T1).memory;
+  const row = buildClientMemoryRow("org1", "buyer", "b1", m, T2);
+  const inputs = buildAiMemoryInputs(m, "wa:1");
+  return row.entity_type === "buyer" && !!row.preferences && Array.isArray(row.desired_neighborhoods) &&
+    inputs.every((i) => i.sourceType === "conversation" && (i.confidence ?? 0) >= 80);
+})());
+check("M15 memory persistence is source-guarded to the two existing stores", (() => {
+  const p = strip(read("src/lib/comm-copilot/memory-persist.ts"));
+  return p.includes("client_memory") && p.includes("@/lib/ai-memory/service") && !/copilot_memory|create table|whatsapp_conversations/.test(p);
+})());
+check("M16 transport-agnostic: identical memory extraction across whatsapp/gmail", (() => {
+  const msgs = ["אני נשוי עם 2 ילדים, מחפש 4 חדרים בפלורנטין 3 מיליון, צריך משכנתא"];
+  const wa = extractMemory(az(memView(msgs, "whatsapp"), NOW));
+  const gm = extractMemory(az(memView(msgs, "gmail"), NOW));
+  const sig = (e: typeof wa) => JSON.stringify({ s: Object.entries(e.scalars).map(([k, v]) => [k, v.value]).sort(), l: Object.entries(e.lists).map(([k, v]) => [k, v.map((i) => i.value).sort()]).sort() });
+  return sig(wa) === sig(gm);
+})());
+check("M17 memory freshness: over VALUES (reinforcement alone never rewrites)", (() => {
+  const r1 = runCopilotPipeline(memView(["אני נשוי בפלורנטין 3 מיליון"]), NOW);
+  const r2 = runCopilotPipeline(memView(["אני נשוי בפלורנטין 3 מיליון"]), NOW);
+  const r3 = runCopilotPipeline(memView(["אני נשוי ברמת אביב 4 מיליון"]), NOW);
+  return memoryFreshnessHash(r1) === memoryFreshnessHash(r2) && memoryFreshnessHash(r1) !== memoryFreshnessHash(r3);
+})());
+
+console.log(`\nAI Communication Copilot (6.7) Phase 0-4 SELF TEST: ${passed} passed, ${failed} failed`);
+console.log("(LLM enrichment + UI are Phase 5; not asserted here.)\n");
 if (failed > 0) process.exit(1);

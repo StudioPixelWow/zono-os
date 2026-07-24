@@ -18,7 +18,7 @@ export type MemoryVisibility = "private" | "office" | "organization" | "system";
 export type MemoryStatus = "active" | "archived" | "expired" | "deleted";
 export type MemorySource =
   | "manual" | "reasoning_gateway" | "mission_planner" | "action_center"
-  | "broker_coach" | "decision_brain" | "user_action";
+  | "broker_coach" | "decision_brain" | "user_action" | "conversation";
 
 export interface AiMemory {
   id: string;

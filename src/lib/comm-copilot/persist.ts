@@ -11,10 +11,11 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit/service";
 import { conversationRefToUuid } from "./ids";
-import { buildInsightRow, buildSummaryRow, buildReplyRows, buildMilestoneRows, deterministicHash, hashExtraOf, replyFreshnessHash, timelineFreshnessHash, shouldRegenerate } from "./record";
+import { buildInsightRow, buildSummaryRow, buildReplyRows, buildMilestoneRows, deterministicHash, hashExtraOf, replyFreshnessHash, timelineFreshnessHash, memoryFreshnessHash, shouldRegenerate } from "./record";
+import { persistMemory } from "./memory-persist";
 import type { CopilotPipelineResult } from "./pipeline";
 
-export interface PersistResult { changed: boolean; insightChanged: boolean; repliesChanged: boolean; timelineChanged: boolean; classification: string }
+export interface PersistResult { changed: boolean; insightChanged: boolean; repliesChanged: boolean; timelineChanged: boolean; memoryChanged: boolean; classification: string }
 
 /** Persist the insight + summary + reply suggestions + timeline milestones for a
  *  conversation, with an INDEPENDENT freshness gate per sink. */
@@ -27,17 +28,19 @@ export async function persistInsight(
   const nextHash = deterministicHash(classification, summary, hashExtraOf(result));
   const nextReply = replyFreshnessHash(result);
   const nextTimeline = timelineFreshnessHash(result);
+  const nextMemory = memoryFreshnessHash(result);
 
   // Read prior hashes (org-scoped) to decide freshness per sink.
   const prev = await db.from("copilot_conversation_insight" as never)
     .select("explainability").eq("org_id", orgId).eq("conversation_ref", ref).maybeSingle();
-  const ex = (prev.data as { explainability?: { deterministicHash?: string; replyHash?: string; timelineHash?: string } } | null)?.explainability;
+  const ex = (prev.data as { explainability?: { deterministicHash?: string; replyHash?: string; timelineHash?: string; memoryHash?: string } } | null)?.explainability;
   const insightChanged = shouldRegenerate(ex?.deterministicHash ?? null, nextHash, force);
   const repliesChanged = shouldRegenerate(ex?.replyHash ?? null, nextReply, force);
   const timelineChanged = shouldRegenerate(ex?.timelineHash ?? null, nextTimeline, force);
+  const memoryChanged = shouldRegenerate(ex?.memoryHash ?? null, nextMemory, force);
 
-  if (!insightChanged && !repliesChanged && !timelineChanged) {
-    return { changed: false, insightChanged: false, repliesChanged: false, timelineChanged: false, classification: classification.classification };
+  if (!insightChanged && !repliesChanged && !timelineChanged && !memoryChanged) {
+    return { changed: false, insightChanged: false, repliesChanged: false, timelineChanged: false, memoryChanged: false, classification: classification.classification };
   }
 
   // Insight + summary — rewrite when anything changed (so stored hashes stay current).
@@ -60,10 +63,16 @@ export async function persistInsight(
     if (result.milestones.length) await db.from("copilot_timeline_milestone" as never).insert(buildMilestoneRows(orgId, ref, result) as never);
   }
 
+  // AI memory — merge + persist through the existing stores only when the
+  // extracted facts changed (reinforcement alone never rewrites).
+  if (memoryChanged) {
+    await persistMemory(orgId, ref, result.analysis.crmLinks, result.memoryExtract, nowIso);
+  }
+
   await logAudit({
     action: "copilot.insight_generated", category: "recommendation", entityType: "conversation", entityId: ref,
-    summary: `Copilot insight: ${classification.classification}`, metadata: { classification: classification.classification, replies: repliesChanged, timeline: timelineChanged },
+    summary: `Copilot insight: ${classification.classification}`, metadata: { classification: classification.classification, replies: repliesChanged, timeline: timelineChanged, memory: memoryChanged },
   });
 
-  return { changed: true, insightChanged, repliesChanged, timelineChanged, classification: classification.classification };
+  return { changed: true, insightChanged, repliesChanged, timelineChanged, memoryChanged, classification: classification.classification };
 }

@@ -30,4 +30,11 @@ export { getAttentionFeed, type AttentionFeedItem } from "./feed";
 export { generateReplySuggestions } from "./reply";
 export { detectMilestones, buildTimelineModel } from "./timeline";
 export { replyFreshnessHash, timelineFreshnessHash, buildReplyRows, buildMilestoneRows } from "./record";
+// Phase 4 — deterministic AI memory.
+export { extractMemory } from "./memory-extract";
+export { mergeMemory, type MergeResult } from "./memory-merge";
+export { buildClientMemoryRow, buildAiMemoryInputs, memoryEntityId } from "./memory-record";
+export { memoryFreshnessHash } from "./record";
+export { emptyMemory } from "./memory-types";
+export type * from "./memory-types";
 export type * from "./types";

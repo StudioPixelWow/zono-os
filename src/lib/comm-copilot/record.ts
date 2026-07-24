@@ -46,6 +46,14 @@ export function timelineFreshnessHash(r: CopilotPipelineResult): string {
   return sha1(JSON.stringify(r.milestones.map((m) => [m.kind, m.occurredAt])));
 }
 
+/** Memory freshness — over EXTRACTED values (not confidence), so reinforcement
+ *  alone never triggers a rewrite; only new/changed facts do. */
+export function memoryFreshnessHash(r: CopilotPipelineResult): string {
+  const scalars = Object.entries(r.memoryExtract.scalars).map(([k, v]) => [k, v.value]).sort();
+  const lists = Object.entries(r.memoryExtract.lists).map(([k, v]) => [k, v.map((i) => i.value).sort()]).sort();
+  return sha1(JSON.stringify({ scalars, lists, budget: r.memoryExtract.budget }));
+}
+
 export interface ReplyRow { org_id: string; conversation_ref: string; tone: string; body: string; requires_approval: true; status: string; explainability: unknown }
 export function buildReplyRows(orgId: string, ref: string, r: CopilotPipelineResult): ReplyRow[] {
   return r.replies.map((s) => ({ org_id: orgId, conversation_ref: ref, tone: s.tone, body: s.body, requires_approval: true, status: "suggested", explainability: s.explain }));
@@ -94,6 +102,7 @@ export function buildInsightRow(orgId: string, r: CopilotPipelineResult, nowIso:
       deterministicHash: deterministicHash(r.classification, r.summary, hashExtraOf(r)),
       replyHash: replyFreshnessHash(r),           // Phase 3 freshness gates
       timelineHash: timelineFreshnessHash(r),
+      memoryHash: memoryFreshnessHash(r),         // Phase 4 memory freshness
     },
     analyzed_at: nowIso,
   };
