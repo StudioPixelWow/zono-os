@@ -164,6 +164,12 @@ export function scanContent(path, rawCode) {
   if (/\/(read|dto)\.ts$/.test(norm) && PHASE3C_LEAK.test(code)) {
     out.push(`${path}: a raw webhook payload / signature / app secret must not appear in a safe read model (rule 10)`);
   }
+  // Rule 13 (6.9 Phase 1) — no browser→provider comment path: a route / UI file
+  // must not construct or call the sealed comments gateway. Moderation goes
+  // through the server action → approval → durable queue, never a direct call.
+  if (norm.startsWith("src/app/") && /createCommentsGateway|\.fetchComments\(|\.moderate\(/.test(code)) {
+    out.push(`${path}: a route/UI must not construct or call the comments gateway — moderate via the server + approval + queue (rule 13)`);
+  }
   return out;
 }
 
@@ -232,6 +238,16 @@ export function runGuard() {
     if (/meta_(publish|reconciliation)_attempt[\s\S]{0,80}\.(update|delete)\b/.test(c) || /meta_provider_object_state[\s\S]{0,80}\.(update|delete)\b/.test(c)) {
       failures.push(`${f}: immutable attempt / object-state history must not be updated or deleted (rule 10)`);
     }
+  }
+  // 6.9 Phase 1 structural — comment ingestion is capability-gated + moderation is
+  // approval-gated (reuse of the outbound-safety posture; never auto-executed).
+  {
+    const svc = "src/lib/meta/engagement/service.ts";
+    if (existsSync(svc) && !/commentsReadAllowed/.test(readFileSync(svc, "utf8"))) failures.push(`${svc}: comment ingestion must be capability-gated (rule 13)`);
+    const eng = "src/lib/meta/engagement/engine.ts";
+    if (existsSync(eng)) { const c = readFileSync(eng, "utf8"); if (!/isExecutable|approvalState/.test(c)) failures.push(`${eng}: moderation must be approval-gated before execution (rule 13)`); }
+    const mod = "src/lib/meta/engagement/moderation.ts";
+    if (existsSync(mod) && !/approvalRequired/.test(readFileSync(mod, "utf8"))) failures.push(`${mod}: moderation must declare approval is required (rule 13)`);
   }
   // Structural: a queue-consumer / dead-letter / reconciliation-worker FILE is
   // allowed ONLY inside the Phase-3B schedule module (dead-letter.ts lives there).

@@ -223,7 +223,7 @@ check("A19 Facebook Groups always denied (excluded)",
 
 // ── A24 · Notification contracts contain no secrets ──────────────────────────
 {
-  const has14 = META_EVENT_NAMES.length === 26; // +Phase 3B (3) +Phase 3C (verified,discrepancy_detected,provider_deleted,provider_hidden,ambiguous_resolved,verification_failed)
+  const has14 = META_EVENT_NAMES.length === 29; // +6.9 P1 (reply_published, moderated, moderation_failed)
   const evt = buildMetaNotificationEvent({ event: "meta.post.failed", orgId: "org1", occurredAt: "2026-07-24T00:00:00.000Z", assetRef: "page:1", data: { reason: "invalid_media" } });
   const json = JSON.stringify(evt);
   const clean = !json.includes(LIT_ACCESS_TOKEN) && evt.schemaVersion === 1 && evt.severity === "critical";
@@ -251,7 +251,7 @@ check("A19 Facebook Groups always denied (excluded)",
   let ok = true;
   try {
     const out = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" });
-    const allow = (p: string) => p.startsWith("src/lib/meta/") || p.startsWith("src/app/api/meta/") || p.startsWith("src/app/api/internal/meta/") || p.startsWith("src/app/(app)/meta-workspace/") || p === "scripts/check-meta-boundaries.mjs" || p === "package.json" || /^supabase\/migrations\/(2026120[15]120000_meta_workspace_phase[12]|2026121[05]120000_meta_workspace_phase3[ab]|20261220120000_meta_workspace_phase3c)\.sql$/.test(p);
+    const allow = (p: string) => p.startsWith("src/lib/meta/") || p.startsWith("src/app/api/meta/") || p.startsWith("src/app/api/internal/meta/") || p.startsWith("src/app/(app)/meta-workspace/") || p === "scripts/check-meta-boundaries.mjs" || p === "package.json" || /^supabase\/migrations\/(2026120[15]120000_meta_workspace_phase[12]|2026121[05]120000_meta_workspace_phase3[ab]|20261220120000_meta_workspace_phase3c|20261225120000_meta_workspace_6_9_phase1_comments)\.sql$/.test(p);
     const offenders = out.split("\n").map((l) => l.trim()).filter(Boolean)
       .map((l) => l.replace(/^\S+\s+/, "").replace(/^.*->\s*/, ""))
       .filter((p) => !allow(p));

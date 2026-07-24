@@ -116,3 +116,6 @@ export { publishToProvider, createPublishGateway, type PublishDeps } from "./pub
 
 // ── Phase 3C · read-only provider inspection (verification), sealed here ─────
 export { inspectViaProvider, createInspectionGateway, type InspectDeps } from "./inspect";
+
+// ── Batch 6.9 Phase 1 · comment read + moderation writes, sealed here ────────
+export { createCommentsGateway, type CommentsDeps } from "./comments";

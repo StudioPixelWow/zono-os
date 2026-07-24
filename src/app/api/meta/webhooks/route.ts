@@ -8,6 +8,7 @@
 // ============================================================================
 import { NextResponse, type NextRequest } from "next/server";
 import { handleChallenge, ingestWebhook } from "@/lib/meta/webhooks/service";
+import { handleCommentWebhook } from "@/lib/meta/engagement/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +26,13 @@ export async function POST(req: NextRequest) {
   const contentType = req.headers.get("content-type");
   // Read the EXACT raw bytes for signature verification.
   const raw = await req.text();
+  // Batch-6.8 publish-state topics (reconciliation) — unchanged.
   const result = await ingestWebhook(raw, signature, contentType);
-  // Always 200-acknowledge a well-formed delivery attempt so Meta does not retry a
-  // storm; a rejected signature returns 401 (never processed). Ack ≠ processed.
-  if (!result.accepted) return NextResponse.json({ ok: false }, { status: 401 });
+  // Batch-6.9 comment signals — enqueues bounded comment ingestion (capability-
+  // gated). Independently signature-verified; the 6.8 pipeline is not modified.
+  const comments = await handleCommentWebhook(raw, signature, contentType);
+  // Always 200-acknowledge a well-formed delivery so Meta does not retry-storm; a
+  // rejected signature returns 401 (never processed). Ack ≠ processed.
+  if (!result.accepted && !comments.accepted) return NextResponse.json({ ok: false }, { status: 401 });
   return NextResponse.json({ ok: true });
 }

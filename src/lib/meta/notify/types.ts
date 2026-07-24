@@ -32,6 +32,9 @@ export type MetaNotificationEventName =
   | "meta.post.verification_failed"
   | "meta.comment.received"
   | "meta.comment.urgent"
+  | "meta.comment.reply_published"
+  | "meta.comment.moderated"
+  | "meta.comment.moderation_failed"
   | "meta.message.received"
   | "meta.webhook.unhealthy"
   | "meta.rate_limit.warning";
