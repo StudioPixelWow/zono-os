@@ -35,6 +35,8 @@ export const META_EVENT_SEVERITY: Record<MetaNotificationEventName, MetaNotifica
   "meta.comment.reply_published": "info",
   "meta.comment.moderated": "info",
   "meta.comment.moderation_failed": "warning",
+  "meta.insights.refreshed": "info",
+  "meta.insights.refresh_failed": "warning",
   "meta.message.received": "info",
   "meta.webhook.unhealthy": "critical",
   "meta.rate_limit.warning": "warning",

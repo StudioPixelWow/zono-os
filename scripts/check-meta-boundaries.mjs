@@ -149,10 +149,12 @@ export function scanContent(path, rawCode) {
   if (inReconOrWebhook(norm) && PHASE3C_FORBIDDEN.test(code)) {
     out.push(`${path}: reconciliation must verify only — no provider write / comments / messaging / analytics (rule 10)`);
   }
-  // Rule 11 (Phase 3C) — a Graph WRITE method may not appear in reconciliation
-  // (inspection is READ-ONLY) nor in the sealed inspection module itself.
-  if ((inReconOrWebhook(norm) || /provider\/graph\/inspect\.ts$/.test(norm)) && /method:\s*["'](POST|PUT|PATCH|DELETE)["']/.test(code)) {
-    out.push(`${path}: a write HTTP method in the read-only verification path is forbidden (rule 11)`);
+  // Rule 11 (Phase 3C / 6.9 P2) — a Graph WRITE method may not appear in a READ-
+  // ONLY path: reconciliation, the sealed inspection module, the insights module,
+  // or the sealed insights gateway (analytics is strictly read-only).
+  const inInsights = norm.includes("/lib/meta/insights/") || /provider\/graph\/insights\.ts$/.test(norm);
+  if ((inReconOrWebhook(norm) || inInsights || /provider\/graph\/inspect\.ts$/.test(norm)) && /method:\s*["'](POST|PUT|PATCH|DELETE)["']/.test(code)) {
+    out.push(`${path}: a write HTTP method in a read-only path (verification/insights) is forbidden (rule 11)`);
   }
   // Rule 12 (Phase 3C) — the webhook payload parser must NOT read an org identity
   // from the payload; the org is derived from trusted mappings only.

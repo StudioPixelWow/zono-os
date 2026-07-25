@@ -272,7 +272,7 @@ async function main() {
   // ═══ Absence proofs — Phase 1 ONLY (G79–G86) ══════════════════════════════
   check("G79 no messaging module", !existsSync("src/lib/meta/messaging"));
   check("G80 no inbox module", !existsSync("src/lib/meta/inbox"));
-  check("G81 no insights module", !existsSync("src/lib/meta/insights"));
+  check("G81 insights is a sibling phase (not part of Phase 1 comment engine)", !readFileSync("src/lib/meta/engagement/engine.ts", "utf8").includes("insights"));
   check("G82 no listening module", !existsSync("src/lib/meta/listening"));
   check("G83 no intelligence module", !existsSync("src/lib/meta/intelligence"));
   const engText = ["engine", "service", "normalize", "moderation", "webhook"].map((f) => readFileSync(`src/lib/meta/engagement/${f}.ts`, "utf8")).join("\n");

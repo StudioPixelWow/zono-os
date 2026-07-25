@@ -119,3 +119,6 @@ export { inspectViaProvider, createInspectionGateway, type InspectDeps } from ".
 
 // ── Batch 6.9 Phase 1 · comment read + moderation writes, sealed here ────────
 export { createCommentsGateway, type CommentsDeps } from "./comments";
+
+// ── Batch 6.9 Phase 2 · read-only insight metrics, sealed here ───────────────
+export { createInsightsGateway, type InsightsDeps } from "./insights";

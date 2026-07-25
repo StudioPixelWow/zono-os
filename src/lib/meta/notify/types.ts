@@ -35,6 +35,8 @@ export type MetaNotificationEventName =
   | "meta.comment.reply_published"
   | "meta.comment.moderated"
   | "meta.comment.moderation_failed"
+  | "meta.insights.refreshed"
+  | "meta.insights.refresh_failed"
   | "meta.message.received"
   | "meta.webhook.unhealthy"
   | "meta.rate_limit.warning";
