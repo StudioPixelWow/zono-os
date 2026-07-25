@@ -289,6 +289,18 @@ export function scanContent(path, rawCode) {
   if (norm.startsWith("src/app/") && /createMessagingGateway|provider\/graph\/messaging/.test(code)) {
     out.push(`${path}: a route/UI must not reach the messaging gateway / Meta directly — use the messaging service (rule 17)`);
   }
+  // Rule 18 (Batch 7 · Production GA) — worker orchestration boundaries. Files
+  // under src/lib/meta/ops/ and the Meta cron entrypoints (src/app/api/cron/
+  // meta-*) may ONLY fan out to existing tick services: no provider/graph, no
+  // raw HTTP / provider call, no direct queue/claim/store/DB logic, no model/AI.
+  // They orchestrate; they never implement scheduling or provider behavior.
+  const inOpsOrMetaCron = norm.includes("/lib/meta/ops/") || /src\/app\/api\/cron\/meta-[a-z-]+\/route\.ts$/.test(norm);
+  if (inOpsOrMetaCron) {
+    if (/provider\/graph|graph\.facebook/.test(code)) out.push(`${path}: worker orchestration must not touch provider/graph — it only fans out to existing services (rule 18)`);
+    if (/\bfetch\s*\(|XMLHttpRequest|\baxios\b|node-fetch|got\(/.test(code)) out.push(`${path}: worker orchestration must not perform a raw HTTP / provider call (rule 18)`);
+    if (/claimDueJobs|createServiceRoleClient|createSupabase\w*Store|SKIP LOCKED|\.from\(["'][a-z_]*_job/.test(code)) out.push(`${path}: worker orchestration must not implement queue/claim/store logic — reuse the subsystem tick services (rule 18)`);
+    if (MODEL_ENDPOINT.test(code) || /@\/lib\/ai-reasoning|@\/lib\/comm-copilot/.test(code)) out.push(`${path}: worker orchestration must not reach AI/model providers (rule 18)`);
+  }
   return out;
 }
 

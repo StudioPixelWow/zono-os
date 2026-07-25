@@ -321,7 +321,7 @@ async function main() {
   check("D88 no comments/messaging ingestion", !metaFiles.some((f) => /(comment-ingest|messenger-adapter|dm-adapter|engagement-ingest|engagement-inbox|messaging\/adapter)/i.test(f)));
   { const sql = readFileSync("supabase/migrations/20261210120000_meta_workspace_phase3a.sql", "utf8"); check("D-migration: no scheduled/queued/dead_letter status", !/'scheduled'|'queued'|'retry_wait'|'dead_letter'/.test(sql) && /'immediate'/.test(sql)); }
   { let ok = true; try { const out = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" });
-      const off = out.split("\n").map((l) => l.trim().replace(/^\S+\s+/, "")).filter(Boolean).filter((f) => !(f.startsWith("src/lib/meta/") || f.startsWith("src/app/api/meta/") || f.startsWith("src/app/api/internal/meta/") || f.startsWith("src/app/(app)/meta-workspace/") || f === "package.json" || f === "scripts/check-meta-boundaries.mjs" || /supabase\/migrations\/(2026121[025]12|2026122[05]12|2026123[01]12|2027010[123]12)/.test(f)));
+      const off = out.split("\n").map((l) => l.trim().replace(/^\S+\s+/, "")).filter(Boolean).filter((f) => !(f.startsWith("src/lib/meta/") || f.startsWith("src/app/api/meta/") || f.startsWith("src/app/api/internal/meta/") || f.startsWith("src/app/(app)/meta-workspace/") || f.startsWith("src/app/api/cron/meta-") || f === "vercel.json" || f === "package.json" || f === "scripts/check-meta-boundaries.mjs" || /supabase\/migrations\/(2026121[025]12|2026122[05]12|2026123[01]12|2027010[123]12)/.test(f)));
       ok = off.length === 0; if (!ok) console.error("   frozen offenders: " + off.join(", ")); } catch { ok = false; }
     check("D89/D90 Communication OS + Copilot + frozen untouched (git scoped)", ok);
   }
