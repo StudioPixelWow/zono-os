@@ -173,7 +173,9 @@ async function main() {
   check("H51 insights does not reference the inbox module", ["engine", "service", "policy", "metrics", "store", "read"].every((f) => !/meta\/inbox/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));
   check("H52 no listening module", !existsSync("src/lib/meta/listening"));
   check("H53 no messaging module", !existsSync("src/lib/meta/messaging"));
-  check("H54 no intelligence module", !existsSync("src/lib/meta/intelligence"));
+  // H54 — Phase 4 adds intelligence which may READ a narrow insights hint; the
+  // invariant that survives is that insights never depends on the intelligence module.
+  check("H54 insights does not depend on the intelligence module", ["engine", "service", "store", "read"].every((f) => !/meta\/intelligence/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));
   const insText = ["engine", "service", "policy", "metrics"].map((f) => readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8")).join("\n");
   check("H55 insights is read-only (no moderate/publish/write action)", !/\.moderate\(|publishToProvider|createCommentsGateway|sendMessage/.test(insText));
   check("H56 no AI intelligence in insights", !/sentimentScore|nextBestAction|reasoningGateway/.test(insText));

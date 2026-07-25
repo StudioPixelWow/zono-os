@@ -277,7 +277,9 @@ async function main() {
   check("G80 comment engine does not depend on the inbox module", !/meta\/inbox/.test(readFileSync("src/lib/meta/engagement/engine.ts", "utf8")) && !/meta\/inbox/.test(readFileSync("src/lib/meta/engagement/service.ts", "utf8")));
   check("G81 insights is a sibling phase (not part of Phase 1 comment engine)", !readFileSync("src/lib/meta/engagement/engine.ts", "utf8").includes("insights"));
   check("G82 no listening module", !existsSync("src/lib/meta/listening"));
-  check("G83 no intelligence module", !existsSync("src/lib/meta/intelligence"));
+  // G83 — Phase 4 adds intelligence as a consumer OVER this Phase-1 comment data;
+  // the invariant that survives is that the comment engine never depends on it.
+  check("G83 comment engine does not depend on the intelligence module", !/meta\/intelligence/.test(readFileSync("src/lib/meta/engagement/engine.ts", "utf8")) && !/meta\/intelligence/.test(readFileSync("src/lib/meta/engagement/service.ts", "utf8")));
   const engText = ["engine", "service", "normalize", "moderation", "webhook"].map((f) => readFileSync(`src/lib/meta/engagement/${f}.ts`, "utf8")).join("\n");
   check("G84 no messaging/DM function names in engagement", !/sendMessage|normalizeInboundMessage|instagram_manage_messages/.test(engText));
   check("G85 no insights/analytics ingestion in engagement", !/post_insights|fetchInsights|reach_impressions|campaignInsights/.test(engText));

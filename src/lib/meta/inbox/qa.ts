@@ -252,7 +252,9 @@ async function main() {
   // ═══ Absence proofs — Phase 3 ONLY (K79–K84) ══════════════════════════════
   check("K79 no listening module (Phase 5)", !existsSync("src/lib/meta/listening"));
   check("K80 no messaging/DM module (Phase 6)", !existsSync("src/lib/meta/messaging"));
-  check("K81 no intelligence module (Phase 4)", !existsSync("src/lib/meta/intelligence"));
+  // K81 — Phase 4 adds intelligence as a consumer OVER this inbox projection; the
+  // invariant that survives is that the inbox never depends on the intelligence module.
+  check("K81 inbox does not depend on the intelligence module", ["engine", "service", "store", "aggregate", "state", "search"].every((f) => !/meta\/intelligence/.test(readFileSync(`src/lib/meta/inbox/${f}.ts`, "utf8"))));
   check("K82 inbox has NO provider gateway (local projection)", !existsSync("src/lib/meta/inbox/gateway.ts"));
   const inboxText = ["engine", "service", "aggregate", "state", "search", "store"].map((f) => readFileSync(`src/lib/meta/inbox/${f}.ts`, "utf8")).join("\n");
   check("K83 no messaging/DM or intelligence surface in the inbox", !/sendMessage|normalizeInboundMessage|sentimentScore|nextBestAction|reasoningGateway/.test(inboxText));

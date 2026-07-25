@@ -8,7 +8,9 @@
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { getInboxConversation, listInboxLabels, canViewInbox, canManageInbox, canAssignInbox } from "@/lib/meta/inbox/service";
+import { canViewIntelligence, canRescore } from "@/lib/meta/intelligence/service";
 import { InboxActions } from "./_actions";
+import { InboxIntelligence } from "./_intelligence";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +59,8 @@ export default async function InboxConversationPage({ params }: { params: Promis
         canManage={canManageInbox(role)}
         canAssign={canAssignInbox(role)}
       />
+
+      {canViewIntelligence(role) && <InboxIntelligence conversationId={conversation.id} canManage={canRescore(role)} />}
     </main>
   );
 }

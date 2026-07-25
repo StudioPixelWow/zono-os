@@ -223,7 +223,7 @@ check("A19 Facebook Groups always denied (excluded)",
 
 // ── A24 · Notification contracts contain no secrets ──────────────────────────
 {
-  const has14 = META_EVENT_NAMES.length === 33; // +6.9 P3 (inbox.new_conversation, inbox.assigned)
+  const has14 = META_EVENT_NAMES.length === 36; // +6.9 P4 (intelligence.high_urgency_detected, .suggestion_ready, .scoring_failed)
   const evt = buildMetaNotificationEvent({ event: "meta.post.failed", orgId: "org1", occurredAt: "2026-07-24T00:00:00.000Z", assetRef: "page:1", data: { reason: "invalid_media" } });
   const json = JSON.stringify(evt);
   const clean = !json.includes(LIT_ACCESS_TOKEN) && evt.schemaVersion === 1 && evt.severity === "critical";
@@ -251,7 +251,7 @@ check("A19 Facebook Groups always denied (excluded)",
   let ok = true;
   try {
     const out = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" });
-    const allow = (p: string) => p.startsWith("src/lib/meta/") || p.startsWith("src/app/api/meta/") || p.startsWith("src/app/api/internal/meta/") || p.startsWith("src/app/(app)/meta-workspace/") || p === "scripts/check-meta-boundaries.mjs" || p === "package.json" || /^supabase\/migrations\/(2026120[15]120000_meta_workspace_phase[12]|2026121[05]120000_meta_workspace_phase3[ab]|20261220120000_meta_workspace_phase3c|20261225120000_meta_workspace_6_9_phase1_comments|20261230120000_meta_workspace_6_9_phase2_insights|20261231120000_meta_workspace_6_9_phase3_inbox)\.sql$/.test(p);
+    const allow = (p: string) => p.startsWith("src/lib/meta/") || p.startsWith("src/app/api/meta/") || p.startsWith("src/app/api/internal/meta/") || p.startsWith("src/app/(app)/meta-workspace/") || p === "scripts/check-meta-boundaries.mjs" || p === "package.json" || /^supabase\/migrations\/(2026120[15]120000_meta_workspace_phase[12]|2026121[05]120000_meta_workspace_phase3[ab]|20261220120000_meta_workspace_phase3c|20261225120000_meta_workspace_6_9_phase1_comments|20261230120000_meta_workspace_6_9_phase2_insights|20261231120000_meta_workspace_6_9_phase3_inbox|20270101120000_meta_workspace_6_9_phase4_intelligence)\.sql$/.test(p);
     const offenders = out.split("\n").map((l) => l.trim()).filter(Boolean)
       .map((l) => l.replace(/^\S+\s+/, "").replace(/^.*->\s*/, ""))
       .filter((p) => !allow(p));
@@ -277,9 +277,14 @@ check("A19 Facebook Groups always denied (excluded)",
 
 // ── A30 · No direct AI/model calls under the Meta module ─────────────────────
 {
-  const aiRe = /api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis|runReasoningGateway|@\/lib\/ai-reasoning/;
-  const offenders = metaFiles.filter((f) => !/qa\.ts$/.test(f) && aiRe.test(strip(readFileSync(f, "utf8"))));
-  check("A30 no direct AI/model endpoint under src/lib/meta", offenders.length === 0);
+  // Direct model endpoints are forbidden EVERYWHERE. Reaching the shipped AI
+  // Reasoning boundary (@/lib/ai-reasoning) is allowed ONLY from the single Phase-4
+  // adapter intelligence/reasoning.ts (the sanctioned reuse — no second gateway).
+  const endpointRe = /api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis/;
+  const boundaryRe = /runReasoningGateway|@\/lib\/ai-reasoning/;
+  const isSanctionedAiAdapter = (f: string) => /\/lib\/meta\/intelligence\/reasoning\.ts$/.test(f.replace(/\\/g, "/"));
+  const offenders = metaFiles.filter((f) => !/qa\.ts$/.test(f) && (endpointRe.test(strip(readFileSync(f, "utf8"))) || (!isSanctionedAiAdapter(f) && boundaryRe.test(strip(readFileSync(f, "utf8"))))));
+  check("A30 no direct AI/model endpoint under src/lib/meta (AI boundary only via the sanctioned adapter)", offenders.length === 0);
 }
 
 // ── Bonus · run the real guard over the tree (must be clean) ──────────────────

@@ -39,6 +39,9 @@ export type MetaNotificationEventName =
   | "meta.insights.refresh_failed"
   | "meta.inbox.new_conversation"
   | "meta.inbox.assigned"
+  | "meta.intelligence.high_urgency_detected"
+  | "meta.intelligence.suggestion_ready"
+  | "meta.intelligence.scoring_failed"
   | "meta.message.received"
   | "meta.webhook.unhealthy"
   | "meta.rate_limit.warning";

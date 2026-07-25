@@ -109,6 +109,22 @@ const inReconOrWebhook = (p) => { const n = p.replace(/\\/g, "/"); return n.incl
 //    (it is Meta-workspace-scoped; it references, never duplicates). ──────────────
 const inInboxDir = (p) => p.replace(/\\/g, "/").includes("/lib/meta/inbox/");
 const COMM_OS_CONVERSATION_TABLES = /communication_(threads|messages|conversations|intelligence_profiles|commitments|followups)\b/;
+
+// ── Phase 4 (6.9) — Engagement Intelligence. AI outputs are SUGGESTIONS ONLY.
+//    The intelligence module reuses the ONE AI Reasoning boundary + the existing
+//    Communication Copilot — never a second gateway / reply engine, never a direct
+//    model call, never a provider write, never raw prompt/response persistence. ──
+const inIntelDir = (p) => p.replace(/\\/g, "/").includes("/lib/meta/intelligence/");
+// The AI/Copilot integration is allowed ONLY in these two adapter files.
+const isIntelAiAdapter = (p) => { const n = p.replace(/\\/g, "/"); return /\/lib\/meta\/intelligence\/(reasoning|copilot)\.ts$/.test(n); };
+// A second AI gateway / direct model client (forbidden anywhere under intelligence).
+const INTEL_SECOND_GATEWAY = /\bnew OpenAI\b|from ["']openai["']|from ["']@anthropic|createChatCompletion|function\s+openAIProvider|responseFormat|v1\/chat\/completions/;
+// A second reply-generation engine (the Copilot/Draft-Studio composer must be REUSED, not redefined).
+const INTEL_SECOND_REPLY_ENGINE = /function\s+composeBody|export\s+function\s+generateReplySuggestions|function\s+buildReplyBody/;
+// Raw prompt/response persistence (forbidden — only safe derived signals are stored).
+const INTEL_RAW_PERSIST = /raw_prompt|raw_response|prompt_text\b|response_text\b|model_response|rawPrompt|rawResponse|promptBody|responseBody/;
+// AI output auto-executing an action / a provider write (forbidden — accept routes into existing approval-gated flows).
+const INTEL_AUTO_EXECUTE = /replyToComment|hideComment|deleteComment|\bsendMessage\b|executeModeration|autoReply|autoPublish|publishToProvider|executePublish|\.moderate\(/;
 const PHASE3C_FORBIDDEN = /fetchComments|replyToComment|hideComment|deleteComment|fetchPostMetrics|sendMessage|normalizeInboundMessage|post_insights|fetchInsights|engagement_inbox|engagementInbox|recreatePost|republishObject|deleteProviderObject|editProviderObject|adAccount|campaignInsights/;
 // Raw webhook payload / signature / app secret must never reach a safe surface.
 const PHASE3C_LEAK = /rawBody\b|raw_payload|webhook_signature|signatureValue|x-hub-signature|app_secret|META_APP_SECRET/i;
@@ -186,6 +202,36 @@ export function scanContent(path, rawCode) {
   }
   if (COMM_OS_CONVERSATION_TABLES.test(code)) {
     out.push(`${path}: references the Communication OS conversation model — the Meta inbox is Meta-scoped and must not duplicate/reference it (rule 14)`);
+  }
+  // Rule 15 (6.9 Phase 4) — Engagement Intelligence boundaries.
+  if (inIntelDir(norm)) {
+    if (/from ["'][^"']*provider\/graph/.test(code) || /import\(["'][^"']*provider\/graph/.test(code)) {
+      out.push(`${path}: the intelligence module must not import provider/graph — it never calls Meta (rule 15)`);
+    }
+    if (INTEL_SECOND_GATEWAY.test(code)) {
+      out.push(`${path}: a second AI gateway / direct model client is forbidden — reuse the shipped AI Reasoning boundary (@/lib/ai-reasoning) (rule 15)`);
+    }
+    if (INTEL_SECOND_REPLY_ENGINE.test(code)) {
+      out.push(`${path}: a second reply-generation engine is forbidden — reuse the existing Communication Copilot (rule 15)`);
+    }
+    if (INTEL_RAW_PERSIST.test(code)) {
+      out.push(`${path}: raw prompt/response persistence is forbidden — store only safe derived signals (rule 15)`);
+    }
+    if (INTEL_AUTO_EXECUTE.test(code)) {
+      out.push(`${path}: an AI suggestion must never auto-execute an action / provider write — accept routes into existing approval-gated flows (rule 15)`);
+    }
+    // AI reach is allowed ONLY via the two adapter files, and ONLY through the shipped boundaries.
+    if (!isIntelAiAdapter(norm)) {
+      if (/from ["']@\/lib\/ai-reasoning/.test(code)) out.push(`${path}: only intelligence/reasoning.ts may reach the AI Reasoning boundary (rule 15)`);
+      if (/from ["']@\/lib\/comm-copilot/.test(code) || /from ["']@\/lib\/draft-studio/.test(code)) out.push(`${path}: only intelligence/copilot.ts may reach the Communication Copilot (rule 15)`);
+    }
+  }
+  // Rule 15 (browser → model): a route/UI must not reach a model provider or the
+  // AI/Copilot adapters directly — it goes through the intelligence SERVICE.
+  if (norm.startsWith("src/app/")) {
+    if (/from ["']@\/lib\/ai-reasoning/.test(code) || /intelligence\/(reasoning|copilot)["']/.test(code) || /\b(selectProvider|openAIProvider|runReasoningGateway)\b/.test(code)) {
+      out.push(`${path}: a route/UI must not reach a model provider or AI adapter directly — use the intelligence service (rule 15)`);
+    }
   }
   return out;
 }
@@ -294,6 +340,33 @@ export function runGuard() {
       }
       const svc = join(inboxDir, "service.ts");
       if (existsSync(svc) && !/inboxReadAllowed/.test(readFileSync(svc, "utf8"))) failures.push(`${svc}: inbox read must remain capability-gated (inboxReadAllowed) (rule 14)`);
+    }
+  }
+
+  // 6.9 Phase 4 structural — Engagement Intelligence invariants.
+  {
+    const intelDir = join(META_DIR, "intelligence");
+    if (existsSync(intelDir)) {
+      // AI outputs are suggestions: signals are APPEND-ONLY — the store must never
+      // UPDATE a classification column in place (only is_current / processing_state).
+      const storeP = join(intelDir, "store.ts");
+      if (existsSync(storeP)) {
+        const c = strip(readFileSync(storeP, "utf8"));
+        if (/meta_engagement_signal[\s\S]{0,240}\.update\([\s\S]{0,240}(sentiment|intent|urgency|confidence)\s*:/.test(c)) {
+          failures.push(`${storeP}: engagement signals are append-only — a classification column must not be updated in place (rule 15)`);
+        }
+      }
+      // The two AI seams must actually delegate to the shipped boundaries.
+      const rP = join(intelDir, "reasoning.ts");
+      if (existsSync(rP) && !/from ["']@\/lib\/ai-reasoning/.test(readFileSync(rP, "utf8"))) failures.push(`${rP}: the reasoning adapter must delegate to the shipped AI Reasoning boundary (rule 15)`);
+      const cpP = join(intelDir, "copilot.ts");
+      if (existsSync(cpP) && !/from ["']@\/lib\/comm-copilot/.test(readFileSync(cpP, "utf8"))) failures.push(`${cpP}: the copilot adapter must reuse the existing Communication Copilot (rule 15)`);
+      // No second inbox model: intelligence must not define its own conversation table.
+      for (const f of walk(intelDir)) {
+        if (isQa(f)) continue;
+        const c = readFileSync(f, "utf8");
+        if (/create table[\s\S]{0,40}meta_inbox_conversation|from\(["']meta_inbox_conversation["']\)[\s\S]{0,60}\.insert/.test(c)) failures.push(`${f}: intelligence must not duplicate the Phase-3 inbox conversation model (rule 15)`);
+      }
     }
   }
 
