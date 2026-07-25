@@ -168,7 +168,9 @@ async function main() {
   check("H50 insights engine drives via the gateway port (no direct provider/graph import)", !/from ["'][^"']*provider\/graph/.test(readFileSync("src/lib/meta/insights/engine.ts", "utf8")));
 
   // ═══ Absence proofs — Phase 2 ONLY (H51–H57) ══════════════════════════════
-  check("H51 no inbox module", !existsSync("src/lib/meta/inbox"));
+  // H51 — Phase 3 later adds the inbox module; the invariant that survives is that
+  // the READ-ONLY insights module never references it (they stay decoupled).
+  check("H51 insights does not reference the inbox module", ["engine", "service", "policy", "metrics", "store", "read"].every((f) => !/meta\/inbox/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));
   check("H52 no listening module", !existsSync("src/lib/meta/listening"));
   check("H53 no messaging module", !existsSync("src/lib/meta/messaging"));
   check("H54 no intelligence module", !existsSync("src/lib/meta/intelligence"));

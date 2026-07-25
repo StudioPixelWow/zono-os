@@ -103,6 +103,12 @@ const isQa = (p) => /qa\.ts$/.test(p);
 //    never ingest comments/messaging/analytics. These function identifiers must
 //    not appear anywhere under the reconciliation / webhook surface. ────────────
 const inReconOrWebhook = (p) => { const n = p.replace(/\\/g, "/"); return n.includes("/lib/meta/reconcile/") || n.includes("/lib/meta/webhooks/"); };
+// ── Phase 3 (6.9) — the Unified Inbox is a LOCAL projection over already-ingested
+//    canonical comment data. It must NEVER import the sealed Graph layer (no Graph
+//    call at all) and must NEVER reference the Communication OS conversation model
+//    (it is Meta-workspace-scoped; it references, never duplicates). ──────────────
+const inInboxDir = (p) => p.replace(/\\/g, "/").includes("/lib/meta/inbox/");
+const COMM_OS_CONVERSATION_TABLES = /communication_(threads|messages|conversations|intelligence_profiles|commitments|followups)\b/;
 const PHASE3C_FORBIDDEN = /fetchComments|replyToComment|hideComment|deleteComment|fetchPostMetrics|sendMessage|normalizeInboundMessage|post_insights|fetchInsights|engagement_inbox|engagementInbox|recreatePost|republishObject|deleteProviderObject|editProviderObject|adAccount|campaignInsights/;
 // Raw webhook payload / signature / app secret must never reach a safe surface.
 const PHASE3C_LEAK = /rawBody\b|raw_payload|webhook_signature|signatureValue|x-hub-signature|app_secret|META_APP_SECRET/i;
@@ -171,6 +177,15 @@ export function scanContent(path, rawCode) {
   // through the server action → approval → durable queue, never a direct call.
   if (norm.startsWith("src/app/") && /createCommentsGateway|\.fetchComments\(|\.moderate\(/.test(code)) {
     out.push(`${path}: a route/UI must not construct or call the comments gateway — moderate via the server + approval + queue (rule 13)`);
+  }
+  // Rule 14 (6.9 Phase 3) — the Unified Inbox is a local projection: it must not
+  // import the sealed Graph layer (no Graph call), and no Meta module may reference
+  // the Communication OS conversation model (the inbox references, never duplicates).
+  if (inInboxDir(norm) && (/from ["'][^"']*provider\/graph/.test(code) || /import\(["'][^"']*provider\/graph/.test(code))) {
+    out.push(`${path}: the unified inbox must not import provider/graph — it is a local projection over canonical comment data, with NO Graph call (rule 14)`);
+  }
+  if (COMM_OS_CONVERSATION_TABLES.test(code)) {
+    out.push(`${path}: references the Communication OS conversation model — the Meta inbox is Meta-scoped and must not duplicate/reference it (rule 14)`);
   }
   return out;
 }
@@ -265,6 +280,20 @@ export function runGuard() {
     const c = strip(readFileSync(f, "utf8"));
     if (/from ["'][^"']*provider\/graph/.test(c) || /import\(["'][^"']*provider\/graph/.test(c)) {
       failures.push(`${f}: the schedule module must not import provider/graph — drive publishing via the Phase-3A publish seam (rule 9)`);
+    }
+  }
+
+  // 6.9 Phase 3 structural — the Unified Inbox is a local projection: there must be
+  // NO provider gateway under the inbox module, and inbox read must stay capability-
+  // gated (never bypassed) even though it makes no Graph call.
+  {
+    const inboxDir = join(META_DIR, "inbox");
+    if (existsSync(inboxDir)) {
+      for (const f of walk(inboxDir)) {
+        if (/gateway\.(ts|tsx)$/i.test(f)) failures.push(`${f}: the unified inbox is a local projection — it must not define a provider gateway (rule 14)`);
+      }
+      const svc = join(inboxDir, "service.ts");
+      if (existsSync(svc) && !/inboxReadAllowed/.test(readFileSync(svc, "utf8"))) failures.push(`${svc}: inbox read must remain capability-gated (inboxReadAllowed) (rule 14)`);
     }
   }
 

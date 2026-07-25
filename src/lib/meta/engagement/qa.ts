@@ -271,7 +271,10 @@ async function main() {
 
   // ═══ Absence proofs — Phase 1 ONLY (G79–G86) ══════════════════════════════
   check("G79 no messaging module", !existsSync("src/lib/meta/messaging"));
-  check("G80 no inbox module", !existsSync("src/lib/meta/inbox"));
+  // G80 — Phase 3 later adds the inbox as a LOCAL projection over this Phase-1 comment
+  // data; the invariant that survives is that the Phase-1 comment engine never depends
+  // on the inbox (the dependency points inbox → engagement, never the reverse).
+  check("G80 comment engine does not depend on the inbox module", !/meta\/inbox/.test(readFileSync("src/lib/meta/engagement/engine.ts", "utf8")) && !/meta\/inbox/.test(readFileSync("src/lib/meta/engagement/service.ts", "utf8")));
   check("G81 insights is a sibling phase (not part of Phase 1 comment engine)", !readFileSync("src/lib/meta/engagement/engine.ts", "utf8").includes("insights"));
   check("G82 no listening module", !existsSync("src/lib/meta/listening"));
   check("G83 no intelligence module", !existsSync("src/lib/meta/intelligence"));
