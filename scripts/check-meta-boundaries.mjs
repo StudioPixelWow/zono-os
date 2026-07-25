@@ -139,6 +139,17 @@ const LISTENING_UNBOUNDED = /while\s*\(\s*true\s*\)|\bsetInterval\b|for\s*\(\s*;
 const LISTENING_AUTO_EXECUTE = /replyToComment|hideComment|deleteComment|\bsendMessage\b|\.moderate\(|publishToProvider|executePublish|followUser|likeMedia/;
 // A raw HTTP client in the listening MODULE (all provider I/O goes through the sealed gateway).
 const LISTENING_RAW_HTTP = /\bfetch\s*\(|XMLHttpRequest|\baxios\b|node-fetch|got\(/;
+
+// ── Phase 6 (6.9) — Messenger + IG-DM Messaging. Provider-boundary-only, bodies
+//    encrypted at rest, outbound APPROVAL-gated + window/tag-bound, no auto-send,
+//    no other provider (WhatsApp/SMS/email), no second engine/Comm-OS model. ──────
+const inMessagingDir = (p) => p.replace(/\\/g, "/").includes("/lib/meta/messaging/");
+const isMessagingCopilot = (p) => /\/lib\/meta\/messaging\/copilot\.ts$/.test(p.replace(/\\/g, "/"));
+const MSG_OTHER_PROVIDER = /\bwhatsapp\b|evolution-api|evoapicloud|\btwilio\b|nodemailer|\bsmtp\b|sendgrid|mailgun|\bsms\b/i;
+const MSG_AUTO_SEND = /autoReply|autoSend|autoEscalate|autoModerate|auto_send|sendWithoutApproval/i;
+const MSG_PLAINTEXT_BODY = /message_text|body_text|body_plain|plaintext_body|plainBody/;
+const MSG_RAW_HTTP = /\bfetch\s*\(|XMLHttpRequest|\baxios\b|node-fetch|got\(/;
+const MSG_SECOND_REPLY_ENGINE = /function\s+composeBody|export\s+function\s+generateReplySuggestions/;
 const PHASE3C_FORBIDDEN = /fetchComments|replyToComment|hideComment|deleteComment|fetchPostMetrics|sendMessage|normalizeInboundMessage|post_insights|fetchInsights|engagement_inbox|engagementInbox|recreatePost|republishObject|deleteProviderObject|editProviderObject|adAccount|campaignInsights/;
 // Raw webhook payload / signature / app secret must never reach a safe surface.
 const PHASE3C_LEAK = /rawBody\b|raw_payload|webhook_signature|signatureValue|x-hub-signature|app_secret|META_APP_SECRET/i;
@@ -262,6 +273,21 @@ export function scanContent(path, rawCode) {
   // listening gateway or a graph transport directly.
   if (norm.startsWith("src/app/") && /createListeningGateway|provider\/graph\/listening|graphJson\(/.test(code)) {
     out.push(`${path}: a route/UI must not reach the listening gateway / Meta directly — use the listening service (rule 16)`);
+  }
+  // Rule 17 (6.9 Phase 6) — Messaging boundaries.
+  if (inMessagingDir(norm)) {
+    if (MSG_OTHER_PROVIDER.test(code)) out.push(`${path}: only Meta messaging is allowed — no WhatsApp / SMS / email / other provider (rule 17)`);
+    if (MSG_AUTO_SEND.test(code)) out.push(`${path}: outbound is APPROVAL-gated — no auto-send / auto-reply / auto-escalate / auto-moderate (rule 17)`);
+    if (MSG_PLAINTEXT_BODY.test(code)) out.push(`${path}: message bodies must be ENCRYPTED at rest — no plaintext body column (rule 17)`);
+    if (MSG_RAW_HTTP.test(code)) out.push(`${path}: the messaging module must not make a raw HTTP call — all provider I/O goes through the sealed gateway (rule 17)`);
+    if (MSG_SECOND_REPLY_ENGINE.test(code)) out.push(`${path}: no second reply engine — reuse the existing Communication Copilot (rule 17)`);
+    if (/from ["'][^"']*provider\/graph\//.test(code)) out.push(`${path}: import the sealed messaging gateway from provider/graph (index), never a deep graph module (rule 17)`);
+    if (/from ["']@\/lib\/ai-reasoning/.test(code)) out.push(`${path}: messaging must reuse Phase-4 intelligence — no direct AI gateway import (rule 17)`);
+    if (!isMessagingCopilot(norm) && (/from ["']@\/lib\/comm-copilot/.test(code) || /from ["']@\/lib\/draft-studio/.test(code))) out.push(`${path}: only messaging/copilot.ts may reach the Communication Copilot (rule 17)`);
+  }
+  // Rule 17 (browser → Meta): a route/UI must not reach the messaging gateway directly.
+  if (norm.startsWith("src/app/") && /createMessagingGateway|provider\/graph\/messaging/.test(code)) {
+    out.push(`${path}: a route/UI must not reach the messaging gateway / Meta directly — use the messaging service (rule 17)`);
   }
   return out;
 }
@@ -425,6 +451,29 @@ export function runGuard() {
         if (isQa(f)) continue; const c = readFileSync(f, "utf8");
         if (/create table[\s\S]{0,40}meta_inbox_conversation|create table[\s\S]{0,40}meta_engagement_signal/.test(c)) failures.push(`${f}: listening must not duplicate the inbox / intelligence model (rule 16)`);
       }
+    }
+  }
+
+  // 6.9 Phase 6 structural — Messaging invariants.
+  {
+    const mDir = join(META_DIR, "messaging");
+    if (existsSync(mDir)) {
+      // Bodies are ENCRYPTED at rest: the store must write ciphertext columns only.
+      const storeP = join(mDir, "store.ts");
+      if (existsSync(storeP)) { const c = readFileSync(storeP, "utf8"); if (!/body_ciphertext|draft_body_ciphertext/.test(c)) failures.push(`${storeP}: message bodies must be encrypted at rest (ciphertext columns) (rule 17)`); if (MSG_PLAINTEXT_BODY.test(strip(c))) failures.push(`${storeP}: a plaintext body column is forbidden (rule 17)`); }
+      // Safe read models must not surface a token / ciphertext / encryption key / cursor.
+      const readP = join(mDir, "read.ts");
+      if (existsSync(readP)) { const c = strip(readFileSync(readP, "utf8")); if (/access_token|tokenPlain|ciphertext|encryption_key|cursor_ref|lease_token/.test(c)) failures.push(`${readP}: a token / ciphertext / key / cursor must not appear in a safe read model (rule 17)`); }
+      // Reuse the same capability evaluator + AES-256-GCM at-rest primitive.
+      const svcP = join(mDir, "service.ts");
+      if (existsSync(svcP) && !/resolveRuntime/.test(readFileSync(svcP, "utf8"))) failures.push(`${svcP}: messaging must reuse the existing capability evaluator (resolveRuntime) (rule 17)`);
+      const encP = join(mDir, "encryption.ts");
+      if (existsSync(encP) && !/@\/lib\/security\/crypto/.test(readFileSync(encP, "utf8"))) failures.push(`${encP}: messaging must reuse the shipped AES-256-GCM primitive (no second crypto) (rule 17)`);
+      // Outbound send must be approval-gated (engine references the approval + window guards).
+      const engP = join(mDir, "engine.ts");
+      if (existsSync(engP)) { const c = readFileSync(engP, "utf8"); if (!/isSendExecutable/.test(c) || !/evaluateSendEligibility/.test(c)) failures.push(`${engP}: outbound send must be approval-gated + window/tag-checked (rule 17)`); }
+      // No second inbox / intelligence / messaging model duplication.
+      for (const f of walk(mDir)) { if (isQa(f)) continue; const c = readFileSync(f, "utf8"); if (/create table[\s\S]{0,40}meta_inbox_conversation|create table[\s\S]{0,40}communication_/.test(c)) failures.push(`${f}: messaging must not duplicate the inbox / Communication OS model (rule 17)`); }
     }
   }
 

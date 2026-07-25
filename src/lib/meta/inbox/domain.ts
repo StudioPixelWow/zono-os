@@ -10,9 +10,10 @@
 // ============================================================================
 import type { MetaPlatform } from "../types";
 
-// Phase 3 = comment_thread. Phase 5 additively projects listening mentions into
-// the SAME inbox as source_kind = "mention" (no second inbox model).
-export type InboxSourceKind = "comment_thread" | "mention";
+// Phase 3 = comment_thread. Phase 5 additively projects listening mentions
+// (source_kind "mention"); Phase 6 additively projects DM threads (source_kind
+// "dm_thread") into the SAME inbox — no second inbox model.
+export type InboxSourceKind = "comment_thread" | "mention" | "dm_thread";
 export type InboxStatus = "open" | "snoozed" | "archived" | "resolved";
 
 export interface ConversationRecord {

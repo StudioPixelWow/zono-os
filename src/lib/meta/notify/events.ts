@@ -47,6 +47,8 @@ export const META_EVENT_SEVERITY: Record<MetaNotificationEventName, MetaNotifica
   "meta.listening.source_degraded": "warning",
   "meta.listening.ingestion_failed": "warning",
   "meta.message.received": "info",
+  "meta.message.sent": "info",
+  "meta.message.send_review": "warning",
   "meta.webhook.unhealthy": "critical",
   "meta.rate_limit.warning": "warning",
 };

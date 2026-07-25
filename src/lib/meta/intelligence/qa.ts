@@ -7,7 +7,7 @@
 // the seam — no model call). No network, no DB, no ambient clock/RNG. Also asserts
 // the boundary guard on synthetic fixtures + static frozen/absence proofs from disk.
 // ============================================================================
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { validateClassification, SAFE_FALLBACK, type RawClassification } from "./classify";
 import { deriveSuggestions } from "./suggest";
 import { canAccept, canDismiss, ROUTE_BY_ACTION, acceptIsNonExecuting } from "./state";
@@ -281,7 +281,9 @@ async function main() {
   // M81 — Phase 5 adds listening as a CONSUMER of the Phase-4 path; the invariant
   // that survives is that intelligence never depends on the listening module.
   check("M81 intelligence does not depend on the listening module", ["engine", "service", "store", "reasoning", "copilot"].every((f) => !/meta\/listening/.test(readFileSync(`src/lib/meta/intelligence/${f}.ts`, "utf8"))));
-  check("M82 no messaging/DM module (Phase 6)", !existsSync("src/lib/meta/messaging"));
+  // M82 — Phase 6 messaging REUSES this intelligence path; the invariant that survives
+  // is that intelligence never depends on the messaging module.
+  check("M82 intelligence does not depend on the messaging module", ["engine", "service", "store", "reasoning", "copilot"].every((f) => !/meta\/messaging/.test(readFileSync(`src/lib/meta/intelligence/${f}.ts`, "utf8"))));
   check("M83 intelligence reaches AI ONLY via the two adapters", (() => { const files = ["engine", "service", "domain", "classify", "suggest", "state", "read", "store", "roles", "observability", "fingerprint", "prompts", "ports"]; return files.every((f) => { const c = readFileSync(`src/lib/meta/intelligence/${f}.ts`, "utf8"); return !/@\/lib\/ai-reasoning|@\/lib\/comm-copilot|@\/lib\/draft-studio/.test(c); }); })());
   check("M84 no direct Meta/Graph call in intelligence", (() => { const files = ["engine", "service", "store", "reasoning", "copilot"]; return files.every((f) => !/graph\.facebook|fetchComments|replyToComment|hideComment|\.moderate\(/.test(readFileSync(`src/lib/meta/intelligence/${f}.ts`, "utf8"))); })());
   check("M85 store is append-only (no in-place classification update)", !/meta_engagement_signal[\s\S]{0,240}\.update\([\s\S]{0,240}(sentiment|intent|urgency)\s*:/.test(readFileSync("src/lib/meta/intelligence/store.ts", "utf8")));

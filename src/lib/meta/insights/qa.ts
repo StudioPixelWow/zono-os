@@ -174,7 +174,9 @@ async function main() {
   // H52 — Phase 5 adds listening (which may read a narrow insights hint via Phase-4);
   // the invariant that survives is that insights never depends on the listening module.
   check("H52 insights does not depend on the listening module", ["engine", "service", "store", "read"].every((f) => !/meta\/listening/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));
-  check("H53 no messaging module", !existsSync("src/lib/meta/messaging"));
+  // H53 — Phase 6 adds messaging as a sibling; the invariant that survives is that
+  // insights never depends on the messaging module.
+  check("H53 insights does not depend on the messaging module", ["engine", "service", "store", "read"].every((f) => !/meta\/messaging/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));
   // H54 — Phase 4 adds intelligence which may READ a narrow insights hint; the
   // invariant that survives is that insights never depends on the intelligence module.
   check("H54 insights does not depend on the intelligence module", ["engine", "service", "store", "read"].every((f) => !/meta\/intelligence/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));

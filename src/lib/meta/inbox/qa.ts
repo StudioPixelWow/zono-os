@@ -253,7 +253,9 @@ async function main() {
   // K79 — Phase 5 adds listening which PROJECTS into this inbox; the invariant that
   // survives is that the inbox never depends on the listening module.
   check("K79 inbox does not depend on the listening module", ["engine", "service", "store", "aggregate", "state", "search"].every((f) => !/meta\/listening/.test(readFileSync(`src/lib/meta/inbox/${f}.ts`, "utf8"))));
-  check("K80 no messaging/DM module (Phase 6)", !existsSync("src/lib/meta/messaging"));
+  // K80 — Phase 6 messaging PROJECTS into this inbox; the invariant that survives is
+  // that the inbox never depends on the messaging module.
+  check("K80 inbox does not depend on the messaging module", ["engine", "service", "store", "aggregate", "state", "search"].every((f) => !/meta\/messaging/.test(readFileSync(`src/lib/meta/inbox/${f}.ts`, "utf8"))));
   // K81 — Phase 4 adds intelligence as a consumer OVER this inbox projection; the
   // invariant that survives is that the inbox never depends on the intelligence module.
   check("K81 inbox does not depend on the intelligence module", ["engine", "service", "store", "aggregate", "state", "search"].every((f) => !/meta\/intelligence/.test(readFileSync(`src/lib/meta/inbox/${f}.ts`, "utf8"))));

@@ -125,3 +125,6 @@ export { createInsightsGateway, type InsightsDeps } from "./insights";
 
 // Phase 5 — the sealed READ-ONLY listening gateway (mentions + tagged content).
 export { createListeningGateway, type ListeningDeps } from "./listening";
+
+// Phase 6 — the sealed messaging gateway (Messenger + IG-DM reads + approval-gated send).
+export { createMessagingGateway, type MessagingDeps } from "./messaging";

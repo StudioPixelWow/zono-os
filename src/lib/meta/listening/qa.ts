@@ -7,7 +7,7 @@
 // no ambient clock/RNG, no real Graph call, no real AI call. Also asserts the
 // boundary guard on synthetic fixtures + static frozen/absence proofs from disk.
 // ============================================================================
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { normalizeMention, contentFingerprint, mentionDedupKey, type CanonicalMention } from "./normalize";
 import { decideMatch, isActionable, type MatchCandidates } from "./match";
 import { canChangeStatus, isUserResolvable } from "./state";
@@ -275,7 +275,9 @@ async function main() {
   check("N71 no authenticated write policy", !/for insert to authenticated|for update to authenticated|for delete to authenticated/.test(mig));
   check("N72 additive + dedup + one-active-job + SKIP LOCKED", !/drop table/i.test(mig) && /meta_mention_dedup_uq/.test(mig) && /meta_listening_job_active_uq/.test(mig) && /for update skip locked/i.test(mig));
   check("N73 no raw payload/token/signature column", !/access_token|raw_payload|webhook_signature|request_body|response_body/.test(mig));
-  check("N74 no messaging/DM module (Phase 6)", !existsSync("src/lib/meta/messaging"));
+  // N74 — Phase 6 adds messaging as a sibling; the invariant that survives is that
+  // listening never depends on it.
+  check("N74 listening does not depend on the messaging module", ["engine", "service", "store", "webhook"].every((f) => !/meta\/messaging/.test(readFileSync(`src/lib/meta/listening/${f}.ts`, "utf8"))));
   check("N75 listening never sends a message / DM (read-only)", ["engine", "service", "store", "webhook"].every((f) => !/sendMessage|sendDirectMessage|instagram_manage_messages|pages_messaging/.test(readFileSync(`src/lib/meta/listening/${f}.ts`, "utf8"))));
 
   // ═══ Scenarios ════════════════════════════════════════════════════════════

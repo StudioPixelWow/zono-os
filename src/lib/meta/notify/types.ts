@@ -47,6 +47,8 @@ export type MetaNotificationEventName =
   | "meta.listening.source_degraded"
   | "meta.listening.ingestion_failed"
   | "meta.message.received"
+  | "meta.message.sent"
+  | "meta.message.send_review"
   | "meta.webhook.unhealthy"
   | "meta.rate_limit.warning";
 

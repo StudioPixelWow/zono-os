@@ -270,7 +270,9 @@ async function main() {
   check("G78 moderation writes never appear in a route (approval+queue only)", !readFileSync("src/app/api/meta/engagement/comments/[id]/moderate/route.ts", "utf8").includes(".moderate("));
 
   // ═══ Absence proofs — Phase 1 ONLY (G79–G86) ══════════════════════════════
-  check("G79 no messaging module", !existsSync("src/lib/meta/messaging"));
+  // G79 — Phase 6 adds messaging as a sibling; the invariant that survives is that the
+  // comment engine never depends on it.
+  check("G79 comment engine does not depend on the messaging module", !/meta\/messaging/.test(readFileSync("src/lib/meta/engagement/engine.ts", "utf8")) && !/meta\/messaging/.test(readFileSync("src/lib/meta/engagement/service.ts", "utf8")));
   // G80 — Phase 3 later adds the inbox as a LOCAL projection over this Phase-1 comment
   // data; the invariant that survives is that the Phase-1 comment engine never depends
   // on the inbox (the dependency points inbox → engagement, never the reverse).
