@@ -122,3 +122,6 @@ export { createCommentsGateway, type CommentsDeps } from "./comments";
 
 // ── Batch 6.9 Phase 2 · read-only insight metrics, sealed here ───────────────
 export { createInsightsGateway, type InsightsDeps } from "./insights";
+
+// Phase 5 — the sealed READ-ONLY listening gateway (mentions + tagged content).
+export { createListeningGateway, type ListeningDeps } from "./listening";

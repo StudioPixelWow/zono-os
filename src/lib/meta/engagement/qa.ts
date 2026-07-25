@@ -276,7 +276,9 @@ async function main() {
   // on the inbox (the dependency points inbox → engagement, never the reverse).
   check("G80 comment engine does not depend on the inbox module", !/meta\/inbox/.test(readFileSync("src/lib/meta/engagement/engine.ts", "utf8")) && !/meta\/inbox/.test(readFileSync("src/lib/meta/engagement/service.ts", "utf8")));
   check("G81 insights is a sibling phase (not part of Phase 1 comment engine)", !readFileSync("src/lib/meta/engagement/engine.ts", "utf8").includes("insights"));
-  check("G82 no listening module", !existsSync("src/lib/meta/listening"));
+  // G82 — Phase 5 adds listening OVER this comment data; the invariant that survives
+  // is that the comment engine never depends on the listening module.
+  check("G82 comment engine does not depend on the listening module", !/meta\/listening/.test(readFileSync("src/lib/meta/engagement/engine.ts", "utf8")) && !/meta\/listening/.test(readFileSync("src/lib/meta/engagement/service.ts", "utf8")));
   // G83 — Phase 4 adds intelligence as a consumer OVER this Phase-1 comment data;
   // the invariant that survives is that the comment engine never depends on it.
   check("G83 comment engine does not depend on the intelligence module", !/meta\/intelligence/.test(readFileSync("src/lib/meta/engagement/engine.ts", "utf8")) && !/meta\/intelligence/.test(readFileSync("src/lib/meta/engagement/service.ts", "utf8")));

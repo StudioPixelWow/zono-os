@@ -250,7 +250,9 @@ async function main() {
   check("K78 inbox engine makes no direct provider/graph import", !/from ["'][^"']*provider\/graph/.test(readFileSync("src/lib/meta/inbox/engine.ts", "utf8")));
 
   // ═══ Absence proofs — Phase 3 ONLY (K79–K84) ══════════════════════════════
-  check("K79 no listening module (Phase 5)", !existsSync("src/lib/meta/listening"));
+  // K79 — Phase 5 adds listening which PROJECTS into this inbox; the invariant that
+  // survives is that the inbox never depends on the listening module.
+  check("K79 inbox does not depend on the listening module", ["engine", "service", "store", "aggregate", "state", "search"].every((f) => !/meta\/listening/.test(readFileSync(`src/lib/meta/inbox/${f}.ts`, "utf8"))));
   check("K80 no messaging/DM module (Phase 6)", !existsSync("src/lib/meta/messaging"));
   // K81 — Phase 4 adds intelligence as a consumer OVER this inbox projection; the
   // invariant that survives is that the inbox never depends on the intelligence module.

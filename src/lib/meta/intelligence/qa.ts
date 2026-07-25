@@ -278,7 +278,9 @@ async function main() {
   check("M80 guard clean on a legitimate intelligence domain file", scanContent("src/lib/meta/intelligence/suggest.ts", "export const x = 1;").length === 0);
 
   // ═══ Absence proofs — Phase 4 ONLY (M81–M85) ══════════════════════════════
-  check("M81 no listening module (Phase 5)", !existsSync("src/lib/meta/listening"));
+  // M81 — Phase 5 adds listening as a CONSUMER of the Phase-4 path; the invariant
+  // that survives is that intelligence never depends on the listening module.
+  check("M81 intelligence does not depend on the listening module", ["engine", "service", "store", "reasoning", "copilot"].every((f) => !/meta\/listening/.test(readFileSync(`src/lib/meta/intelligence/${f}.ts`, "utf8"))));
   check("M82 no messaging/DM module (Phase 6)", !existsSync("src/lib/meta/messaging"));
   check("M83 intelligence reaches AI ONLY via the two adapters", (() => { const files = ["engine", "service", "domain", "classify", "suggest", "state", "read", "store", "roles", "observability", "fingerprint", "prompts", "ports"]; return files.every((f) => { const c = readFileSync(`src/lib/meta/intelligence/${f}.ts`, "utf8"); return !/@\/lib\/ai-reasoning|@\/lib\/comm-copilot|@\/lib\/draft-studio/.test(c); }); })());
   check("M84 no direct Meta/Graph call in intelligence", (() => { const files = ["engine", "service", "store", "reasoning", "copilot"]; return files.every((f) => !/graph\.facebook|fetchComments|replyToComment|hideComment|\.moderate\(/.test(readFileSync(`src/lib/meta/intelligence/${f}.ts`, "utf8"))); })());

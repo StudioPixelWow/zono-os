@@ -66,6 +66,9 @@ const CAPABILITY_TO_SCOPES: Record<string, readonly string[]> = {
   "analytics.advanced.read": ["read_insights"],
   "instagram.mentions.read": ["instagram_manage_comments"],
   "instagram.first_comment.publish": ["instagram_content_publish"],
+  // 6.9 Phase 5 — listening (mentions / tagged content) on connected assets only.
+  "facebook.mentions.read": ["pages_read_engagement"],
+  "instagram.tags.read": ["instagram_manage_comments"],
 };
 
 /** The raw scopes a canonical capability requires (Graph-internal use). */

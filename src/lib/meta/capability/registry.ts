@@ -79,6 +79,11 @@ export const META_CAPABILITIES: readonly MetaCapability[] = [
   cap("instagram.messaging.reply", "instagram", "messaging", "extended", "messaging", { requiresAppReview: true, dependsOn: [K("instagram.messaging.read")] }, { defaultEnabled: false }),
   cap("analytics.advanced.read", "cross", "analytics", "extended", "analytics", { requiresAppReview: true, dependsOn: [K("analytics.basic.read")] }, { defaultEnabled: false }),
   cap("instagram.mentions.read", "instagram", "engagement", "extended", "comments", { requiresAppReview: true, requiresWebhook: true, dependsOn: [K("instagram.content.read")] }, { defaultEnabled: false }),
+  // 6.9 Phase 5 — Social Listening (mentions + tagged content) on CONNECTED assets
+  // only. Extended + disabled by default; require App Review (and Advanced Access at
+  // Meta) — never fabricate support. NO open-web/arbitrary-target listening exists.
+  cap("facebook.mentions.read", "facebook", "engagement", "extended", "comments", { requiresAppReview: true, requiresWebhook: true, dependsOn: [K("facebook.content.read")] }, { defaultEnabled: false, limitations: ["Facebook Page mention reading requires App Review; provider-permitted surface only."] }),
+  cap("instagram.tags.read", "instagram", "engagement", "extended", "comments", { requiresAppReview: true, requiresWebhook: true, dependsOn: [K("instagram.content.read")] }, { defaultEnabled: false, limitations: ["IG tagged-media reading requires App Review + Advanced Access; provider-permitted surface only."] }),
   cap("instagram.first_comment.publish", "instagram", "content", "extended", "publishing", { requiresAppReview: true, dependsOn: [K("instagram.content.publish")] }, { defaultEnabled: false }),
 
   // ── Excluded (permanently denied) ────────────────────────────────────

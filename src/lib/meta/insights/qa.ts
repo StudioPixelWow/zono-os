@@ -171,7 +171,9 @@ async function main() {
   // H51 — Phase 3 later adds the inbox module; the invariant that survives is that
   // the READ-ONLY insights module never references it (they stay decoupled).
   check("H51 insights does not reference the inbox module", ["engine", "service", "policy", "metrics", "store", "read"].every((f) => !/meta\/inbox/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));
-  check("H52 no listening module", !existsSync("src/lib/meta/listening"));
+  // H52 — Phase 5 adds listening (which may read a narrow insights hint via Phase-4);
+  // the invariant that survives is that insights never depends on the listening module.
+  check("H52 insights does not depend on the listening module", ["engine", "service", "store", "read"].every((f) => !/meta\/listening/.test(readFileSync(`src/lib/meta/insights/${f}.ts`, "utf8"))));
   check("H53 no messaging module", !existsSync("src/lib/meta/messaging"));
   // H54 — Phase 4 adds intelligence which may READ a narrow insights hint; the
   // invariant that survives is that insights never depends on the intelligence module.

@@ -125,6 +125,20 @@ const INTEL_SECOND_REPLY_ENGINE = /function\s+composeBody|export\s+function\s+ge
 const INTEL_RAW_PERSIST = /raw_prompt|raw_response|prompt_text\b|response_text\b|model_response|rawPrompt|rawResponse|promptBody|responseBody/;
 // AI output auto-executing an action / a provider write (forbidden — accept routes into existing approval-gated flows).
 const INTEL_AUTO_EXECUTE = /replyToComment|hideComment|deleteComment|\bsendMessage\b|executeModeration|autoReply|autoPublish|publishToProvider|executePublish|\.moderate\(/;
+
+// ── Phase 5 (6.9) — Social Listening. Provider-isolated, READ-ONLY, no open-web
+//    scraping, no arbitrary target, no browser→Meta, no second queue/inbox/model. ──
+const inListeningDir = (p) => p.replace(/\\/g, "/").includes("/lib/meta/listening/");
+const LISTENING_OPEN_WEB = /puppeteer|playwright|cheerio|jsdom|\bscrape\b|\bscraping\b|\bcrawl\b|web_?crawl|htmlparser/i;
+const LISTENING_ARBITRARY_TARGET = /profileUrl|profile_url|targetAccount|target_account|externalProfile|monitorUrl|monitor_url|arbitraryTarget|watchUsername|keywordCrawl/;
+// NB: `rawBody` (the webhook verify INPUT, passed to verifySignatureDualSecret like
+// the engagement handler) is legitimate — the concern is STORING a raw payload.
+const LISTENING_RAW = /raw_payload|raw_body\b|response_body|request_body|webhook_signature|providerResponseBody|rawCursor|raw_cursor/;
+const LISTENING_AI_DIRECT = /@\/lib\/ai-reasoning|@\/lib\/comm-copilot|@\/lib\/draft-studio/;
+const LISTENING_UNBOUNDED = /while\s*\(\s*true\s*\)|\bsetInterval\b|for\s*\(\s*;\s*;\s*\)/;
+const LISTENING_AUTO_EXECUTE = /replyToComment|hideComment|deleteComment|\bsendMessage\b|\.moderate\(|publishToProvider|executePublish|followUser|likeMedia/;
+// A raw HTTP client in the listening MODULE (all provider I/O goes through the sealed gateway).
+const LISTENING_RAW_HTTP = /\bfetch\s*\(|XMLHttpRequest|\baxios\b|node-fetch|got\(/;
 const PHASE3C_FORBIDDEN = /fetchComments|replyToComment|hideComment|deleteComment|fetchPostMetrics|sendMessage|normalizeInboundMessage|post_insights|fetchInsights|engagement_inbox|engagementInbox|recreatePost|republishObject|deleteProviderObject|editProviderObject|adAccount|campaignInsights/;
 // Raw webhook payload / signature / app secret must never reach a safe surface.
 const PHASE3C_LEAK = /rawBody\b|raw_payload|webhook_signature|signatureValue|x-hub-signature|app_secret|META_APP_SECRET/i;
@@ -232,6 +246,22 @@ export function scanContent(path, rawCode) {
     if (/from ["']@\/lib\/ai-reasoning/.test(code) || /intelligence\/(reasoning|copilot)["']/.test(code) || /\b(selectProvider|openAIProvider|runReasoningGateway)\b/.test(code)) {
       out.push(`${path}: a route/UI must not reach a model provider or AI adapter directly — use the intelligence service (rule 15)`);
     }
+  }
+  // Rule 16 (6.9 Phase 5) — Social Listening boundaries.
+  if (inListeningDir(norm)) {
+    if (LISTENING_OPEN_WEB.test(code)) out.push(`${path}: open-web scraping/crawling is forbidden — listening reads only the provider-permitted surface (rule 16)`);
+    if (LISTENING_ARBITRARY_TARGET.test(code)) out.push(`${path}: an arbitrary profile/account/keyword target is forbidden — sources derive from connected assets only (rule 16)`);
+    if (LISTENING_RAW.test(code)) out.push(`${path}: raw payload / webhook signature / raw cursor persistence is forbidden (rule 16)`);
+    if (LISTENING_AI_DIRECT.test(code)) out.push(`${path}: listening must reuse Phase-4 intelligence — no direct AI gateway / copilot import (rule 16)`);
+    if (LISTENING_UNBOUNDED.test(code)) out.push(`${path}: unbounded polling (infinite loop / setInterval) is forbidden — polling is bounded (rule 16)`);
+    if (LISTENING_AUTO_EXECUTE.test(code)) out.push(`${path}: listening is READ-ONLY — no provider write / auto-execute (rule 16)`);
+    if (LISTENING_RAW_HTTP.test(code)) out.push(`${path}: the listening module must not make a raw HTTP call — all provider I/O goes through the sealed gateway (rule 16)`);
+    if (/from ["'][^"']*provider\/graph\//.test(code)) out.push(`${path}: import the sealed listening gateway from provider/graph (index), never a deep graph module (rule 16)`);
+  }
+  // Rule 16 (browser → Meta): a route/UI must not construct/import the sealed
+  // listening gateway or a graph transport directly.
+  if (norm.startsWith("src/app/") && /createListeningGateway|provider\/graph\/listening|graphJson\(/.test(code)) {
+    out.push(`${path}: a route/UI must not reach the listening gateway / Meta directly — use the listening service (rule 16)`);
   }
   return out;
 }
@@ -366,6 +396,34 @@ export function runGuard() {
         if (isQa(f)) continue;
         const c = readFileSync(f, "utf8");
         if (/create table[\s\S]{0,40}meta_inbox_conversation|from\(["']meta_inbox_conversation["']\)[\s\S]{0,60}\.insert/.test(c)) failures.push(`${f}: intelligence must not duplicate the Phase-3 inbox conversation model (rule 15)`);
+      }
+    }
+  }
+
+  // 6.9 Phase 5 structural — Social Listening invariants.
+  {
+    // The sealed listening gateway is READ-ONLY: no write/reply/hide/delete/follow/
+    // like/send/publish method + no write HTTP verb.
+    const gwP = "src/lib/meta/provider/graph/listening.ts";
+    if (existsSync(gwP)) {
+      const c = strip(readFileSync(gwP, "utf8"));
+      if (/\b(reply|hide|deleteComment|follow|likeMedia|sendMessage|publish)\s*\(/.test(c) || /method:\s*["'](POST|PUT|PATCH|DELETE)["']/.test(c)) {
+        failures.push(`${gwP}: the listening gateway is READ-ONLY — no write/reply/hide/delete/follow/like/send/publish method (rule 16)`);
+      }
+    }
+    const lDir = join(META_DIR, "listening");
+    if (existsSync(lDir)) {
+      // Safe read models must not surface a token / raw cursor / idempotency key.
+      const readP = join(lDir, "read.ts");
+      if (existsSync(readP)) { const c = readFileSync(readP, "utf8"); if (/access_token|tokenPlain|cursor_ref|cursorRef|idempotencyKey|lease_token|leaseToken/.test(c)) failures.push(`${readP}: a token / raw cursor / lease / idempotency key must not appear in a safe read model (rule 16)`); }
+      // The listening service must reuse the SAME capability evaluator (no parallel system).
+      const svcP = join(lDir, "service.ts");
+      if (existsSync(svcP) && !/resolveRuntime/.test(readFileSync(svcP, "utf8"))) failures.push(`${svcP}: listening must reuse the existing capability evaluator (resolveRuntime) (rule 16)`);
+      // No second inbox / intelligence model: listening must reuse Phase-3 inbox +
+      // Phase-4 intelligence (it may import their stores/engines, not redefine them).
+      for (const f of walk(lDir)) {
+        if (isQa(f)) continue; const c = readFileSync(f, "utf8");
+        if (/create table[\s\S]{0,40}meta_inbox_conversation|create table[\s\S]{0,40}meta_engagement_signal/.test(c)) failures.push(`${f}: listening must not duplicate the inbox / intelligence model (rule 16)`);
       }
     }
   }

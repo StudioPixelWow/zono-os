@@ -42,6 +42,10 @@ export type MetaNotificationEventName =
   | "meta.intelligence.high_urgency_detected"
   | "meta.intelligence.suggestion_ready"
   | "meta.intelligence.scoring_failed"
+  | "meta.listening.new_mention"
+  | "meta.listening.high_urgency_mention"
+  | "meta.listening.source_degraded"
+  | "meta.listening.ingestion_failed"
   | "meta.message.received"
   | "meta.webhook.unhealthy"
   | "meta.rate_limit.warning";
