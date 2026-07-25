@@ -9,7 +9,11 @@
 import { readFileSync, existsSync } from "node:fs";
 import { DISPATCH_GROUP_NAMES, ALL_DISPATCH_SUBSYSTEMS, dispatchGroupMembers, validateDispatchPartition } from "./groups";
 import { META_WORKER_CRONS } from "./cadence";
+import { canViewOps } from "./roles";
+import { isAutoReplayable } from "./../schedule/dead-letter";
 import { scanContent } from "./../../../../scripts/check-meta-boundaries.mjs";
+
+const strip = (s: string) => s.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 
 let passed = 0, failed = 0;
 const check = (n: string, c: boolean) => { if (c) { passed++; console.log("  ✓ " + n); } else { failed++; console.error("  ✗ " + n); } };
@@ -50,6 +54,22 @@ function main() {
   check("O14 guard flags a provider/graph import in a Meta cron route (rule 18)", scanContent("src/app/api/cron/meta-dispatch-fast/route.ts", 'import { g } from "@/lib/meta/provider/graph";').some((v) => /rule 18/.test(v)));
   check("O15 guard flags a direct queue claim in an ops file (rule 18)", scanContent("src/lib/meta/ops/x.ts", "await createSupabaseInboxStore().claimDueJobs(a);").some((v) => /rule 18/.test(v)));
   check("O16 guard is clean on the real orchestrator (fan-out only)", scanContent("src/lib/meta/ops/orchestrator.ts", orch).length === 0);
+
+  // ═══ Ops Console + Dead-letter visibility (read-only, admin-gated) ══════════
+  check("O17 ops role gate admits owner/admin/org_admin only", canViewOps("owner") && canViewOps("admin") && canViewOps("org_admin") && !canViewOps("agent") && !canViewOps("support") && !canViewOps("content_creator"));
+
+  const summary = strip(readFileSync("src/lib/meta/ops/summary.ts", "utf8"));
+  const view = strip(readFileSync("src/app/(app)/meta-workspace/ops/OpsConsoleView.tsx", "utf8"));
+  const actions = strip(readFileSync("src/lib/meta/ops/actions.ts", "utf8"));
+  const page = strip(readFileSync("src/app/(app)/meta-workspace/ops/page.tsx", "utf8"));
+
+  check("O18 ops summary is server-only and reuses shipped health/dead-letter/webhook services (no store/provider)", /import "server-only"/.test(readFileSync("src/lib/meta/ops/summary.ts", "utf8")) && /@\/lib\/meta\/schedule\/service|getMessagingQueueHealth|getWebhookHealth|listDeadLetters/.test(summary) && !/createSupabase\w*Store|claimDueJobs|provider\/graph|graph\.facebook/.test(summary));
+  check("O19 ops guard-clean (Rule 18): summary + actions introduce no queue/provider/AI logic", scanContent("src/lib/meta/ops/summary.ts", summary).length === 0 && scanContent("src/lib/meta/ops/actions.ts", actions).length === 0);
+  const SENSITIVE = /\btoken\b|ciphertext|access_token|lease_token|app_secret|raw_payload|body_ciphertext|draft_body|\bsecret\b|webhook_signature|signatureValue/i;
+  check("O20 NO sensitive field surfaced (token/ciphertext/secret/payload/lease) in summary or view", !SENSITIVE.test(summary) && !SENSITIVE.test(view));
+  check("O21 Ops Console view is READ-ONLY (no fetch/form/mutation)", !/fetch\s*\(|<form|onSubmit|method:\s*["']POST|useMutation|\.mutate\(|action=\{/.test(view));
+  check("O22 dead-letter is MANUAL only — no auto-replay anywhere in the ops surface", isAutoReplayable() === false && !/replayDeadLetter|autoReplay|autoRedrive|\.replay\(|redrive\(/.test(summary + view + actions + page));
+  check("O23 page + action are admin-gated (canViewOps) with a permission fallback", /getMetaOpsSummaryAction/.test(page) && /res\.ok/.test(page) && /canViewOps/.test(actions) && /getSessionContext/.test(actions) && /ok: false/.test(actions));
 
   console.log(`\nBatch 7 ops self-test: ${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);
