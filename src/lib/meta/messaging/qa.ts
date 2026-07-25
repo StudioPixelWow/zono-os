@@ -277,6 +277,9 @@ async function main() {
   const mig = readFileSync("supabase/migrations/20270103120000_meta_workspace_6_9_phase6_messaging.sql", "utf8");
   check("P67 RLS org-select via current_org_id + no auth write", /current_org_id\(\)/.test(mig) && /enable row level security/.test(mig) && !/for insert to authenticated|for update to authenticated/.test(mig));
   check("P68 bodies encrypted at rest (ciphertext columns, no plaintext body)", /body_ciphertext/.test(mig) && /draft_body_ciphertext/.test(mig) && !/\bmessage_text\b|\bbody_text\b|\bbody_plain\b/.test(mig));
+  // RC1 regression: the active-job unique index must EXCLUDE dm_send_execute, else a
+  // second approved send on the same conversation collides and silently never sends.
+  check("P68b send-execute jobs excluded from the active-job unique index (RC1 fix)", (() => { const m = mig.slice(mig.indexOf("meta_messaging_job_active_uq")); return /job_kind <> 'dm_send_execute'/.test(m.slice(0, m.indexOf(";"))); })());
   check("P69 additive + SKIP LOCKED claim + dedup indexes", !/drop table/i.test(mig) && /for update skip locked/i.test(mig) && /meta_dm_message_dedup_uq/.test(mig) && /meta_dm_conversation_uq/.test(mig));
   check("P70 no token / raw payload / encryption key column", !/access_token|raw_payload|webhook_signature|encryption_key/.test(mig));
   check("P71 messaging module makes no direct Meta call (sealed gateway only)", ["engine", "service", "store", "policy", "normalize", "state", "feed", "webhook"].every((f) => { const c = readFileSync(`src/lib/meta/messaging/${f}.ts`, "utf8"); return !/graph\.facebook|graphJson\(|\/me\/accounts/.test(c); }));

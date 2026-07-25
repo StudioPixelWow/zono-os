@@ -117,10 +117,15 @@ create table if not exists public.meta_messaging_job (
 create index if not exists meta_messaging_job_due_idx on public.meta_messaging_job (status, available_at);
 create index if not exists meta_messaging_job_org_idx on public.meta_messaging_job (org_id, status);
 create unique index if not exists meta_messaging_job_idem_uq on public.meta_messaging_job (org_id, idempotency_key) where idempotency_key <> '';
--- One active SYNC job per conversation+kind (send jobs are keyed by the send id via idempotency).
+-- One active SYNC job per conversation+kind. Send-execute jobs are EXCLUDED here
+-- (they are per-send, not per-conversation) and are deduped by idempotency_key
+-- (meta_messaging_job_idem_uq) — otherwise a second approved send on the same
+-- conversation would collide on this index and its execute job would silently fail
+-- to enqueue, leaving the send stuck in 'ready' and never delivered.
 create unique index if not exists meta_messaging_job_active_uq
   on public.meta_messaging_job (org_id, conversation_id, job_kind)
-  where status in ('scheduled','available','claimed','executing','retry_wait') and conversation_id is not null;
+  where status in ('scheduled','available','claimed','executing','retry_wait')
+    and conversation_id is not null and job_kind <> 'dm_send_execute';
 
 -- ── SKIP-LOCKED claim RPC (SECURITY DEFINER; per-org fair, bounded) ─────────
 create or replace function public.meta_messaging_claim_due(
