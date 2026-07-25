@@ -24,3 +24,13 @@ export function validateMetricContract(c: MetricContract): { ok: boolean; violat
   for (const d of c.dimensions) { if (FORBIDDEN_DIMENSIONS.has(d)) violations.push(`forbidden identifier dimension: ${d}`); else if (!ALLOWED_DIMENSIONS.has(d)) violations.push(`non-allowlisted dimension: ${d}`); }
   return { ok: violations.length === 0, violations };
 }
+
+// ── Queue-health evaluation (Batch 7 · Production GA) ────────────────────────
+// Coarse, secret-free grade over canonical status counts only (no ids, no
+// payloads). Mirrors the sibling subsystems' evaluators; reused by the internal
+// queue-health route to bring the inbox sync queue to parity with the others.
+export function evaluateInboxHealth(input: { byStatus: Readonly<Record<string, number>>; deadLetter: number; oldestDueMs: number | null }): { healthy: boolean; backlog: number; degraded: boolean } {
+  const backlog = (input.byStatus.scheduled ?? 0) + (input.byStatus.available ?? 0) + (input.byStatus.retry_wait ?? 0);
+  const degraded = input.deadLetter > 0 || (input.oldestDueMs ?? 0) > 15 * 60_000 || backlog > 500;
+  return { healthy: !degraded, backlog, degraded };
+}

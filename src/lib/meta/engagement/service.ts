@@ -150,3 +150,8 @@ export async function listActionsForComment(orgId: string, commentId: string): P
   const r = await createServiceRoleClient().from("meta_engagement_action" as never).select("*").eq("org_id", orgId).eq("target_comment_id", commentId).order("created_at", { ascending: false } as never);
   return ((r.data as Row[]) ?? []).map((d) => toModerationActionDTO({ id: String(d.id), orgId, actionKind: d.action_kind as never, platform: d.platform as never, targetCommentId: String(d.target_comment_id), providerObjectId: (d.provider_object_id as string) ?? null, replyText: (d.reply_text as string) ?? null, approvalState: d.approval_state as never, status: d.status as never, requestedBy: null, approvedBy: null, providerResultId: null, safeErrorKind: (d.safe_error_kind as string) ?? null, safeErrorMessage: null, retryable: false, retryClass: null, attemptCount: 0, correlationId: "", idempotencyKey: "", executedAtIso: (d.executed_at as string) ?? null } as ModerationActionRow));
 }
+
+// ── Queue health (Batch 7 · Production GA) — secret-free status-count snapshot ─
+export async function getEngagementQueueHealth(orgId: string | null): Promise<{ byStatus: Readonly<Record<string, number>>; deadLetter: number; oldestDueMs: number | null }> {
+  return createSupabaseEngagementStore().queueHealth(orgId, Date.now());
+}

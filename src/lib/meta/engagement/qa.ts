@@ -15,7 +15,7 @@ import { normalizeComment, commentFingerprint, commentChanged } from "./normaliz
 import { rollupThreads } from "./threading";
 import { canTransitionModeration, approvalRequired, isExecutable, moderationEligibility, classifyModerationOutcome, MODERATION_TERMINAL } from "./moderation";
 import { canViewComments, canRequestModeration, canApproveModeration } from "./roles";
-import { validateMetricContract } from "./observability";
+import { validateMetricContract, evaluateEngagementHealth } from "./observability";
 import * as engine from "./engine";
 import type { EngagementStore, EngagementPorts, CommentJobRow, ModerationActionRow, CommentJobKind } from "./ports";
 import type { CommentsGateway, CommentFetchResult, ModerationResult, ProviderComment } from "./provider-types";
@@ -288,6 +288,12 @@ async function main() {
   check("G84 no messaging/DM function names in engagement", !/sendMessage|normalizeInboundMessage|instagram_manage_messages/.test(engText));
   check("G85 no insights/analytics ingestion in engagement", !/post_insights|fetchInsights|reach_impressions|campaignInsights/.test(engText));
   check("G86 no AI intelligence in engagement (Phase 1)", !/sentimentScore|nextBestAction|reasoningGateway/.test(engText));
+
+  // ═══ Batch 7 · Production GA — queue-health parity ══════════════════════════
+  check("G87 queue-health evaluator is secret-free + coarse (backlog from status counts)", (() => { const h = evaluateEngagementHealth({ byStatus: { scheduled: 2, available: 1 }, deadLetter: 0, oldestDueMs: 1000 }); return h.healthy && h.backlog === 3 && !h.degraded; })());
+  check("G88 queue-health evaluator degrades on dead-letter accumulation", evaluateEngagementHealth({ byStatus: {}, deadLetter: 1, oldestDueMs: null }).degraded === true);
+  check("G89 engagement queue-health route exists, is Bearer CRON_SECRET-gated, reuses the service reader + evaluator", (() => { const r = readFileSync("src/app/api/internal/meta/engagement/queue-health/route.ts", "utf8"); return /getEngagementQueueHealth/.test(r) && /Bearer \$\{secret\}/.test(r) && /evaluateEngagementHealth/.test(r); })());
+  check("G90 engagement queue-health route is read-only (no provider/graph, no write verb)", (() => { const r = readFileSync("src/app/api/internal/meta/engagement/queue-health/route.ts", "utf8"); return !/provider\/graph|sendMessage|\.moderate\(|method:\s*["']POST/.test(r); })());
 
   // ═══ Scenarios ════════════════════════════════════════════════════════════
   check("S1 comment edit re-sync updates in place (dedup by external id)", (() => { const a = normalizeComment(pc({ externalId: "e", message: "old" }), "facebook"); const b = normalizeComment(pc({ externalId: "e", message: "new" }), "facebook"); return a.externalId === b.externalId && commentChanged(a.contentFingerprint, b); })());

@@ -86,3 +86,8 @@ export async function getObjectInsights(orgId: string, providerObjectId: string)
 export async function getAccountInsights(orgId: string, assetId: string): Promise<InsightSummaryDTO> {
   return toInsightSummary(await createSupabaseInsightsStore().listAccountSeries(orgId, assetId));
 }
+
+// ── Queue health (Batch 7 · Production GA) — secret-free status-count snapshot ─
+export async function getInsightsQueueHealth(orgId: string | null): Promise<{ byStatus: Readonly<Record<string, number>>; deadLetter: number; oldestDueMs: number | null }> {
+  return createSupabaseInsightsStore().queueHealth(orgId, Date.now());
+}

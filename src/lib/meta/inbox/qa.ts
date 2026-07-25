@@ -12,7 +12,7 @@ import { aggregateThread, conversationChanged, type ThreadInput } from "./aggreg
 import { canTransitionStatus, isUnread, isSnoozeElapsed, canApplyAction } from "./state";
 import { matchesFilter, queryInbox, type InboxRow } from "./search";
 import { toConversationListItem, toConversationDetail, toLabelDTO } from "./read";
-import { validateMetricContract, INBOX_METRICS } from "./observability";
+import { validateMetricContract, INBOX_METRICS, evaluateInboxHealth } from "./observability";
 import { canViewInbox, canManageInbox, canAssignInbox } from "./roles";
 import * as engine from "./engine";
 import type { InboxStore, InboxPorts, InboxSyncJobRow, SyncStateRow, ConversationFull } from "./ports";
@@ -263,6 +263,12 @@ async function main() {
   const inboxText = ["engine", "service", "aggregate", "state", "search", "store"].map((f) => readFileSync(`src/lib/meta/inbox/${f}.ts`, "utf8")).join("\n");
   check("K83 no messaging/DM or intelligence surface in the inbox", !/sendMessage|normalizeInboundMessage|sentimentScore|nextBestAction|reasoningGateway/.test(inboxText));
   check("K84 no direct Meta/Graph call in the inbox (pure local projection)", !/graph\.facebook|fetchComments|replyToComment|createCommentsGateway/.test(inboxText));
+
+  // ═══ Batch 7 · Production GA — queue-health parity ══════════════════════════
+  check("K85 queue-health evaluator is secret-free + coarse (backlog from status counts)", (() => { const h = evaluateInboxHealth({ byStatus: { scheduled: 2, available: 1 }, deadLetter: 0, oldestDueMs: 1000 }); return h.healthy && h.backlog === 3 && !h.degraded; })());
+  check("K86 queue-health evaluator degrades on dead-letter accumulation", evaluateInboxHealth({ byStatus: {}, deadLetter: 1, oldestDueMs: null }).degraded === true);
+  check("K87 inbox queue-health route exists, is Bearer CRON_SECRET-gated, reuses the service reader + evaluator", (() => { const r = readFileSync("src/app/api/internal/meta/inbox/queue-health/route.ts", "utf8"); return /getInboxQueueHealth/.test(r) && /Bearer \$\{secret\}/.test(r) && /evaluateInboxHealth/.test(r); })());
+  check("K88 inbox queue-health route stays a pure local read (no provider/graph, no write verb)", (() => { const r = readFileSync("src/app/api/internal/meta/inbox/queue-health/route.ts", "utf8"); return !/provider\/graph|graph\.facebook|method:\s*["']POST|sendMessage/.test(r); })());
 
   // ═══ Scenarios ════════════════════════════════════════════════════════════
   check("S1 FB + IG threads land in ONE unified inbox list", (() => { const q = queryInbox([row({ id: "f", platform: "facebook" }), row({ id: "i", platform: "instagram" })], {}, "recent", { limit: 10, offset: 0 }); return q.total === 2; })());

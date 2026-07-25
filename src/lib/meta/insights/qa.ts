@@ -11,7 +11,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { isKnownMetric, sanitizeSnapshots, latestByMetric, metricDelta } from "./metrics";
 import { nextRefresh, DEFAULT_REFRESH_POLICY } from "./policy";
 import { toInsightSummary } from "./read";
-import { validateMetricContract } from "./observability";
+import { validateMetricContract, evaluateInsightsHealth } from "./observability";
 import { canViewInsights } from "./roles";
 import * as engine from "./engine";
 import type { InsightsStore, InsightsPorts, InsightJobRow, RefreshStateRow, InsightJobKind } from "./ports";
@@ -184,6 +184,12 @@ async function main() {
   check("H55 insights is read-only (no moderate/publish/write action)", !/\.moderate\(|publishToProvider|createCommentsGateway|sendMessage/.test(insText));
   check("H56 no AI intelligence in insights", !/sentimentScore|nextBestAction|reasoningGateway/.test(insText));
   check("H57 no full-table scan (bounded due-job claim only)", /claimDueJobs/.test(readFileSync("src/lib/meta/insights/engine.ts", "utf8")));
+
+  // ═══ Batch 7 · Production GA — queue-health parity ══════════════════════════
+  check("H58 queue-health evaluator is secret-free + coarse (backlog from status counts)", (() => { const h = evaluateInsightsHealth({ byStatus: { scheduled: 2, available: 1 }, deadLetter: 0, oldestDueMs: 1000 }); return h.healthy && h.backlog === 3 && !h.degraded; })());
+  check("H59 queue-health evaluator degrades on dead-letter accumulation", evaluateInsightsHealth({ byStatus: {}, deadLetter: 1, oldestDueMs: null }).degraded === true);
+  check("H60 insights queue-health route exists, is Bearer CRON_SECRET-gated, reuses the service reader + evaluator", (() => { const r = readFileSync("src/app/api/internal/meta/insights/queue-health/route.ts", "utf8"); return /getInsightsQueueHealth/.test(r) && /Bearer \$\{secret\}/.test(r) && /evaluateInsightsHealth/.test(r); })());
+  check("H61 insights queue-health route stays read-only (no write verb, no provider/graph)", (() => { const r = readFileSync("src/app/api/internal/meta/insights/queue-health/route.ts", "utf8"); return !/provider\/graph|method:\s*["']POST|sendMessage/.test(r); })());
 
   // ═══ Scenarios ════════════════════════════════════════════════════════════
   check("S1 re-observing the same metric+instant is a no-op (append-only dedup)", (() => { const s = toInsightSummary([snap("reach", 5, "t"), snap("reach", 5, "t")]); return s.series[0].points.length === 2; })());

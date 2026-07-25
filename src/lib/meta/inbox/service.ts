@@ -127,3 +127,8 @@ export async function getInboxConversation(orgId: string, id: string): Promise<C
 export async function getInboxUnreadCount(orgId: string): Promise<number> {
   return createSupabaseInboxStore().countUnread(orgId);
 }
+
+// ── Queue health (Batch 7 · Production GA) — secret-free status-count snapshot ─
+export async function getInboxQueueHealth(orgId: string | null): Promise<{ byStatus: Readonly<Record<string, number>>; deadLetter: number; oldestDueMs: number | null }> {
+  return createSupabaseInboxStore().queueHealth(orgId, Date.now());
+}
