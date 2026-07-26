@@ -120,7 +120,7 @@ Interpretation: `dbReachable:false` → DB/connection problem; `featureEnabled:f
 
 ## 7. Operational playbook (day-to-day)
 
-- **Daily glance:** hit the health endpoint; confirm `dbReachable:true`, `failedOrgs`≈0 in recent cron logs, `newInteractions` near 0.
+- **Daily glance:** hit the health endpoint (confirm `dbReachable:true`, `newInteractions` near 0); **separately** check the latest recompute cron log for `failedOrgs`=0 and `failed`=0 — these are cron-run fields, not part of the health-endpoint response.
 - **A broker reports "my captured lead didn't appear":** confirm flag on; confirm the extension is paired and the capture returned `{ok:true}` (not 404/401); confirm the recompute cron ran since capture (≤15 min); check the review board `/social-leads`. If the capture was `attribution: unresolved`, the lead still appears (campaign NULL) — that's expected.
 - **Raising/lowering cadence:** edit the `*/15 * * * *` entry in `vercel.json` and redeploy. Do not go below what review-first needs (hourly is also fine).
 - **Turning it off fast:** unset `SOCIAL_INTERACTION_INGEST_ENABLED` (Vercel env) and redeploy — endpoint 404, cron no-op, instantly.
@@ -144,7 +144,8 @@ Interpretation: `dbReachable:false` → DB/connection problem; `featureEnabled:f
 - [ ] **Stage 1:** set `SOCIAL_INTERACTION_INGEST_ENABLED=1`; pair the extension for the pilot broker only.
 - [ ] Pilot broker captures one real interaction → returns `{ok:true, id, attribution}`.
 - [ ] Within one cron cycle, the interaction appears on `/social-leads` (status `new`); no CRM lead created automatically.
-- [ ] Health endpoint shows `interactions`≥1, `socialLeads`≥1, `failedOrgs`=0.
+- [ ] Health endpoint shows `interactions`≥1, `socialLeads`≥1 (health reports DB/backlog/aggregate only — `dbReachable`, `interactions`, `socialLeads`, `newInteractions`, `unattributedInteractions`).
+- [ ] Latest recompute **cron log** shows `failedOrgs`=0 and `failed`=0 (these are cron-run fields, not health-endpoint fields).
 
 ---
 
