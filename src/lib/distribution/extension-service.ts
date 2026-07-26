@@ -273,6 +273,7 @@ export async function recordPublishResult(inst: AuthedInstance, report: PublishR
       try {
         await recordGroupPost(
           { groupId: pr.group_id, propertyId: pr.property_id, campaignId: pr.campaign_id,
+            sourcePostId: report.postId,
             postUrl: report.externalPostUrl ?? null, content: pr.post_text },
           { db, orgId: inst.orgId, userId: inst.userId },
         );
