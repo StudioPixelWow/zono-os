@@ -12,6 +12,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getPropertyMarketingLog } from "@/lib/property-marketing-log";
 import { manualPublishService } from "@/lib/distribution/manual-publish-service";
 import { buildActionCenter, type ActionCenter } from "./actions";
+import { GROUPS_CAMPAIGN_FROM_PROPERTY_ENABLED } from "@/lib/distribution/feature-flags";
 
 type Row = Record<string, unknown>;
 const num = (v: unknown): number => { const n = typeof v === "number" ? v : Number(v); return Number.isFinite(n) ? n : 0; };
@@ -46,6 +47,7 @@ export async function getPropertyMarketingActionCenter(propertyId: string): Prom
     published: s?.published ?? 0, failed: s?.failed ?? 0,
     comments: s?.comments ?? 0, leads: s?.leads ?? 0, pendingLeads,
     creatives: s?.creatives ?? 0, connected,
+    propertyId, campaignFromPropertyEnabled: GROUPS_CAMPAIGN_FROM_PROPERTY_ENABLED,
   });
 }
 

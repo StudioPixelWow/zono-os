@@ -9,7 +9,10 @@ import { CampaignWizard } from "@/components/facebook-groups/CampaignWizard";
 
 export const dynamic = "force-dynamic";
 
-export default async function CampaignWizardPage() {
+export default async function CampaignWizardPage({ searchParams }: { searchParams: Promise<{ propertyId?: string }> }) {
+  // Phase 3 (P0 #1): property-aware entry — when deep-linked with ?propertyId=,
+  // the wizard pre-selects that property instead of forcing a re-pick.
+  const { propertyId } = await searchParams;
   const boot = await getWizardBootstrap().catch(() => ({ properties: [], folders: [], connection: { provider: "facebook", label: "Facebook", status: "not_connected", connected: false, message: "פייסבוק לא מחובר", requiresMembership: true }, notes: ["טעינת הנתונים נכשלה כעת."] }));
-  return <CampaignWizard properties={boot.properties} folders={boot.folders} connection={boot.connection} notes={boot.notes} />;
+  return <CampaignWizard properties={boot.properties} folders={boot.folders} connection={boot.connection} notes={boot.notes} initialPropertyId={propertyId ?? null} />;
 }

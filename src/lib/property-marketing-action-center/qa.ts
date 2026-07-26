@@ -30,6 +30,14 @@ export function runSelfCheck(): ACSelfCheck {
   const noCampaign = buildActionCenter(input({ campaigns: 0 }));
   add("no campaign → recommend launch", noCampaign.recommended.some((i) => i.kind === "launch_campaign" && i.cta.href === "/distribution/campaign-wizard"));
 
+  // Phase 3 (P0 #1): launch CTA is property-aware ONLY when the flag is on; dark by default.
+  const flagOff = buildActionCenter(input({ campaigns: 0, propertyId: "p1" }));
+  add("launch CTA bare when flag off (dark by default)", flagOff.recommended.some((i) => i.kind === "launch_campaign" && i.cta.href === "/distribution/campaign-wizard"));
+  const flagOn = buildActionCenter(input({ campaigns: 0, propertyId: "p1", campaignFromPropertyEnabled: true }));
+  add("launch CTA deep-links property when flag on", flagOn.recommended.some((i) => i.kind === "launch_campaign" && i.cta.href === "/distribution/campaign-wizard?propertyId=p1"));
+  const flagOnNoProp = buildActionCenter(input({ campaigns: 0, campaignFromPropertyEnabled: true }));
+  add("launch CTA bare when flag on but no propertyId", flagOnNoProp.recommended.some((i) => i.kind === "launch_campaign" && i.cta.href === "/distribution/campaign-wizard"));
+
   const notConn = buildActionCenter(input({ connected: false }));
   add("not connected → recommend connect facebook", notConn.recommended.some((i) => i.kind === "connect_facebook" && i.cta.href === "/settings/distribution-connections"));
 

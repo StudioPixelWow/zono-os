@@ -23,6 +23,11 @@ export interface ActionCenterInput {
   campaigns: number; scheduled: number; dueNow: number; published: number;
   failed: number; comments: number; leads: number; pendingLeads: number; creatives: number;
   connected: boolean;
+  // Phase 3 (P0 #1): when the property→groups entry is enabled, the launch-campaign
+  // CTA deep-links the wizard to this property. Both optional → fully backward
+  // compatible (absent = today's bare wizard link).
+  propertyId?: string | null;
+  campaignFromPropertyEnabled?: boolean;
 }
 
 export interface ActionCenter {
@@ -67,7 +72,12 @@ export function buildActionCenter(input: ActionCenterInput): ActionCenter {
   if (input.campaigns === 0) items.push(item({
     id: "launch-campaign", kind: "launch_campaign", status: "recommended", priority: 68,
     title: "השקת קמפיין לקבוצות", why: "עוד לא שווק הנכס בקבוצות פייסבוק — בנו קמפיין ממוקד עם אשף הקמפיין.",
-    count: null, cta: { href: "/distribution/campaign-wizard", label: "בניית קמפיין" },
+    count: null, cta: {
+      href: input.campaignFromPropertyEnabled && input.propertyId
+        ? `/distribution/campaign-wizard?propertyId=${input.propertyId}`
+        : "/distribution/campaign-wizard",
+      label: "בניית קמפיין",
+    },
   }));
 
   if (input.creatives === 0) items.push(item({

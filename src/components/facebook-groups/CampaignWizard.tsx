@@ -18,15 +18,18 @@ import { generatePostVariations, autoReplyTemplates, type PropertyFacts } from "
 
 interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
-interface Props { properties: WProperty[]; folders: GroupFolder[]; connection: Connection; notes: string[] }
+interface Props { properties: WProperty[]; folders: GroupFolder[]; connection: Connection; notes: string[]; initialPropertyId?: string | null }
 
 const STEPS = ["נכס", "תוכן פוסט", "חיבור פייסבוק", "קבוצות", "תדירות", "גאנט ואישור", "תגובות"];
 const fmt = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
 const FREQS: Frequency[] = ["one_time", "three_weekly", "daily", "full_month"];
 
-export function CampaignWizard({ properties, folders, connection, notes }: Props) {
+export function CampaignWizard({ properties, folders, connection, notes, initialPropertyId = null }: Props) {
   const [step, setStep] = useState(0);
-  const [propId, setPropId] = useState<string | null>(null);
+  // Phase 3 (P0 #1): pre-select the deep-linked property when it exists in the list.
+  const [propId, setPropId] = useState<string | null>(
+    initialPropertyId && properties.some((p) => p.id === initialPropertyId) ? initialPropertyId : null,
+  );
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [frequency, setFrequency] = useState<Frequency>("three_weekly");
   const [startDate] = useState(() => new Date(Date.now() + 3 * 86400_000).toISOString().slice(0, 10));
