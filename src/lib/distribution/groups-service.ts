@@ -118,7 +118,7 @@ export async function recommendGroups(propertyId: string): Promise<PropertyGroup
   return { recommendations, propertyTitle: (p?.title as string) ?? (p?.name as string) ?? null };
 }
 
-export interface RecordPostInput { groupId: string; propertyId?: string | null; campaignId?: string | null; postUrl?: string | null; content?: string | null; reach?: number; reactions?: number; comments?: number }
+export interface RecordPostInput { groupId: string; propertyId?: string | null; campaignId?: string | null; sourcePostId?: string | null; postUrl?: string | null; content?: string | null; reach?: number; reactions?: number; comments?: number }
 export async function recordGroupPost(
   input: RecordPostInput,
   // Phase 1 (P0 #2): optional injected context so trusted service-role callers
@@ -148,6 +148,7 @@ export async function recordGroupPost(
 
   const { data, error } = await db.from("distribution_group_posts" as never).insert({
     org_id: orgId, group_id: input.groupId, property_id: input.propertyId ?? null, campaign_id: input.campaignId ?? null,
+    source_post_id: input.sourcePostId ?? null,
     post_url: input.postUrl ?? null, status: "posted", posted_by: userId, reach: input.reach ?? null,
     reactions: input.reactions ?? null, comments: input.comments ?? null, content_hash: hash,
   } as never).select("id").single();
