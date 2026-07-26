@@ -71,12 +71,17 @@ export const distributionSchedulerService = {
     if (!fresh.length) return { ok: false, created: 0, skippedDuplicates: skipped, planned: planned.length, errors: ["כל הפוסטים כבר קיימים בתור"] };
 
     // Persist as scheduled posts. Carry the variation copy onto each post.
+    // Phase 1 (P0 #2): forward the campaign's property_id onto every queued row
+    // so the identifier spine (property→campaign→post) is unbroken.
+    const campaign = await distributionRepo.getCampaign(config.campaignId);
+    const propertyId = campaign?.property_id ?? null;
     const variations = await distributionRepo.listVariations(config.campaignId);
     const byId = new Map(variations.map((v) => [v.id, v]));
     const created = await distributionPostsRepository.createMany(fresh.map((p) => {
       const v = byId.get(p.variationId);
       return {
         campaignId: config.campaignId, groupId: p.groupId, variationId: p.variationId, scheduledAt: p.scheduledAt,
+        propertyId,
         status: "scheduled" as const, postTitle: v?.headline ?? null,
         postText: v ? [v.hook, v.body].filter(Boolean).join("\n\n") : null,
         cta: v?.cta ?? null, hashtags: v?.hashtags ?? [],
