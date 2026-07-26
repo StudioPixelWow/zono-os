@@ -6,7 +6,7 @@
  * auto-send, NO auto-contact-creation. Org-scoped.
  */
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 import type { Database, LeadSource } from "@/lib/supabase/types";
@@ -26,19 +26,34 @@ const platformToSource = (p: string | null): LeadSource =>
   p === "facebook" ? "facebook" : p === "instagram" ? "instagram" : "other";
 
 // ── Recompute: score interactions → build social leads ───────────────────────
-export interface SocialRecomputeSummary { interactions: number; leads: number }
+// interactions/leads kept for existing callers; scanned/created/deduped/skipped/
+// failed are the P4.5 processing counters.
+export interface SocialRecomputeSummary {
+  interactions: number; leads: number;
+  scanned: number; created: number; deduped: number; skipped: number; failed: number;
+}
 
 export async function recomputeSocialLeads(): Promise<SocialRecomputeSummary> {
-  const { orgId } = await ctx();
+  // Org resolution works in BOTH a user session AND the cron service-role context
+  // (runWithServiceRoleOrg): getSessionContext synthesizes a profile with org_id
+  // there but no user, so we resolve org from profile (not ctx(), which requires
+  // a user). Under service-role RLS is bypassed, so EVERY read/write below is
+  // EXPLICITLY scoped by organization_id — never relying on RLS for tenancy.
+  const { profile } = await getSessionContext();
+  if (!profile?.org_id) throw new Error("not authenticated");
+  const orgId = profile.org_id;
   const supabase = await createClient();
+  const empty: SocialRecomputeSummary = { interactions: 0, leads: 0, scanned: 0, created: 0, deduped: 0, skipped: 0, failed: 0 };
 
-  const { data: interactions } = await supabase.from("social_interactions").select("*").limit(3000);
-  if (!interactions?.length) return { interactions: 0, leads: 0 };
+  const { data: interactions } = await supabase.from("social_interactions").select("*")
+    .eq("organization_id", orgId).limit(3000);
+  if (!interactions?.length) return empty;
 
-  const { data: existingLeads } = await supabase.from("social_leads").select("id,social_interaction_id");
+  const { data: existingLeads } = await supabase.from("social_leads").select("id,social_interaction_id")
+    .eq("organization_id", orgId);
   const leadByInteraction = new Map((existingLeads ?? []).map((l) => [l.social_interaction_id, l.id]));
 
-  let created = 0;
+  let created = 0, deduped = 0, skipped = 0, failed = 0;
   for (const it of interactions) {
     const r = detectIntent(it.message_text, it.interaction_type);
     await supabase.from("social_interactions").update({
@@ -46,18 +61,21 @@ export async function recomputeSocialLeads(): Promise<SocialRecomputeSummary> {
       lead_quality: r.leadQuality, urgency_score: r.urgencyScore, lead_probability: r.leadProbability,
       interaction_score: clamp(r.leadQuality * 0.6 + r.intentScore * 0.4), engagement_level: r.engagementLevel,
       lead_score: r.leadQuality, status: r.intent === "spam" ? "spam" : it.status === "new" ? "reviewed" : it.status,
-    } as never).eq("id", it.id);
+    } as never).eq("id", it.id).eq("organization_id", orgId);
 
     // Build a social lead for qualifying interactions (never spam/negative).
     const qualifies = r.intent !== "spam" && r.intent !== "negative" && r.leadProbability >= 45;
-    if (!qualifies) continue;
+    if (!qualifies) { skipped++; continue; }
     if (leadByInteraction.has(it.id)) {
+      // Already has a lead — refresh scoring only. Status / reviewed / converted
+      // fields are NOT touched, so human-review decisions are preserved.
       await supabase.from("social_leads").update({
         intent: r.intent, lead_score: r.leadQuality, lead_quality_score: r.leadQuality, intent_confidence: r.intentConfidence,
         urgency_score: r.urgencyScore, priority_score: clamp(r.leadQuality * 0.6 + r.urgencyScore * 0.4),
         recommended_next_action: recommendedAction(r.intent),
         ai_summary: `${INTENT_LABEL[r.intent]} · איכות ${r.leadQuality} · ביטחון ${r.intentConfidence}%`, ai_next_action: recommendedAction(r.intent),
-      } as never).eq("id", leadByInteraction.get(it.id)!);
+      } as never).eq("id", leadByInteraction.get(it.id)!).eq("organization_id", orgId);
+      deduped++;
       continue;
     }
     // P4.4: carry the campaign attribution the interaction already resolved (via
@@ -70,7 +88,13 @@ export async function recomputeSocialLeads(): Promise<SocialRecomputeSummary> {
       const attr = await resolvePostAttribution(it.distribution_queue_id, orgId, supabase);
       campaignId = attr?.campaignId ?? null;
     }
-    await supabase.from("social_leads").insert({
+    // P4.5: the app-level Map pre-check above is an efficiency hint; the partial
+    // unique index social_leads_org_interaction_uq is the authority. INSERT and
+    // catch unique_violation (23505) for OUR index — a concurrent run created it
+    // first: treat as deduped, never a second row, never overwrite the existing
+    // (possibly reviewed/converted) lead. Any OTHER error is counted as failed and
+    // NOT swallowed as a dedup.
+    const { error: insErr } = await supabase.from("social_leads").insert({
       organization_id: orgId, social_interaction_id: it.id, community_id: it.community_id, property_id: it.property_id,
       campaign_id: campaignId,
       platform: it.platform, source_url: it.external_post_url ?? it.source_post_url, profile_url: it.profile_url ?? it.source_profile_url,
@@ -79,10 +103,18 @@ export async function recomputeSocialLeads(): Promise<SocialRecomputeSummary> {
       intent_confidence: r.intentConfidence, urgency_score: r.urgencyScore, recommended_next_action: recommendedAction(r.intent),
       ai_summary: `${INTENT_LABEL[r.intent]} · איכות ${r.leadQuality} · ביטחון ${r.intentConfidence}%`, ai_next_action: recommendedAction(r.intent),
     } as never);
-    created++;
+    if (!insErr) { created++; }
+    else if (insErr.code === "23505" && (insErr.message ?? "").includes("social_leads_org_interaction_uq")) { deduped++; }
+    else { failed++; console.error("[social] recompute lead insert failed:", insErr.code, (insErr.message ?? "").slice(0, 160)); }
   }
-  // Refresh community last_lead_at proxy via activity log (lightweight).
-  return { interactions: interactions.length, leads: created };
+  return { interactions: interactions.length, leads: created, scanned: interactions.length, created, deduped, skipped, failed };
+}
+
+/** Distinct organizations that have at least one social interaction (cron scope). */
+export async function organizationsWithSocialInteractions(): Promise<string[]> {
+  const db = createServiceRoleClient();
+  const { data } = await db.from("social_interactions").select("organization_id").limit(5000);
+  return [...new Set(((data ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id))];
 }
 
 // ── Review (status changes, assignment) ──────────────────────────────────────
