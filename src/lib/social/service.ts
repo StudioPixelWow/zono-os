@@ -11,6 +11,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 import type { Database, LeadSource } from "@/lib/supabase/types";
 import { detectIntent, INTENT_LABEL, recommendedAction, toLeadIntent, type SocialIntent } from "./engine";
+import { resolvePostAttribution } from "@/lib/distribution/attribution";
 
 type DB = Database["public"]["Tables"];
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -59,8 +60,19 @@ export async function recomputeSocialLeads(): Promise<SocialRecomputeSummary> {
       } as never).eq("id", leadByInteraction.get(it.id)!);
       continue;
     }
+    // P4.4: carry the campaign attribution the interaction already resolved (via
+    // its source distribution post) into the new social lead, so the downstream
+    // human conversion (convertSocialLeadToLead → community_lead_attribution +
+    // lead.created payload) has it. property_id already flows from the interaction.
+    // Resolved server-side (org-validated) — never trusted from client input.
+    let campaignId: string | null = null;
+    if (it.distribution_queue_id) {
+      const attr = await resolvePostAttribution(it.distribution_queue_id, orgId, supabase);
+      campaignId = attr?.campaignId ?? null;
+    }
     await supabase.from("social_leads").insert({
       organization_id: orgId, social_interaction_id: it.id, community_id: it.community_id, property_id: it.property_id,
+      campaign_id: campaignId,
       platform: it.platform, source_url: it.external_post_url ?? it.source_post_url, profile_url: it.profile_url ?? it.source_profile_url,
       person_name: it.person_name ?? it.source_user_name, intent: r.intent, lead_score: r.leadQuality,
       status: "new", lead_quality_score: r.leadQuality, priority_score: clamp(r.leadQuality * 0.6 + r.urgencyScore * 0.4),
