@@ -4,7 +4,7 @@
 // transmits Facebook cookies, passwords, or session tokens. Only a boolean
 // "facebook session detected" flag (computed by the content script) is sent.
 // ============================================================================
-const ZONO_BASE = "https://app.zono.example"; // set to your ZONO deployment origin
+const ZONO_BASE = "https://zono-os-ro2s.vercel.app"; // ZONO production deployment origin
 const VERSION = "0.1.0";
 
 // Shared pure capture helpers (P4.3) — classify/backoff. Bundled, not remote code.
