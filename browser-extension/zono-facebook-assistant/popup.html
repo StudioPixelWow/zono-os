@@ -14,6 +14,9 @@
     button.secondary { background: #efeef5; color: #1b1b1f; }
     pre { white-space: pre-wrap; font-size: 12px; background: #f6f5fb; padding: 8px; border-radius: 8px; }
     .row { display: flex; gap: 8px; margin-top: 8px; }
+    select { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d0d0d8; border-radius: 8px; }
+    #captureCard input, #captureCard select { margin-top: 8px; }
+    button:disabled { opacity: .55; cursor: default; }
   </style>
 </head>
 <body>
@@ -43,8 +46,30 @@
     <p class="muted" id="postMsg"></p>
   </div>
 
+  <div class="card" id="captureCard" style="display:none">
+    <p class="muted">שמירת אינטראקציה מהפוסט הנוכחי (הזנה ידנית — ללא סריקה אוטומטית):</p>
+    <p class="muted" id="captureContext"></p>
+    <div id="captureForm">
+      <select id="capType">
+        <option value="comment">תגובה</option>
+        <option value="message">הודעה</option>
+        <option value="reaction">תגובה רגשית</option>
+      </select>
+      <input id="capText" placeholder="תוכן ההודעה/תגובה" />
+      <input id="capAuthor" placeholder="שם המגיב (לא חובה)" />
+      <input id="capProfile" placeholder="קישור לפרופיל (לא חובה)" />
+      <input id="capCommentId" placeholder="מזהה תגובה חיצוני (לא חובה)" />
+      <input id="capPostId" placeholder="מזהה פוסט חיצוני (לא חובה)" />
+      <input id="capPostUrl" placeholder="קישור לפוסט (לא חובה)" />
+      <div class="row"><button id="captureBtn">שמור אינטראקציה ב-ZONO</button></div>
+      <p class="muted">האינטראקציה תישמר ב-ZONO לצורך בדיקה וסיווג ליד.</p>
+    </div>
+    <p class="muted" id="captureMsg"></p>
+  </div>
+
   <div class="row"><button id="refreshBtn" class="secondary">רענן פוסט הבא</button></div>
 
+  <script src="capture.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
