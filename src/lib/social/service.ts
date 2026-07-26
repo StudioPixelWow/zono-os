@@ -134,8 +134,11 @@ export async function convertSocialLeadToLead(socialLeadId: string): Promise<Con
   await logActivityEvent({ eventType: "social_lead.converted", entityType: twinType, entityId: twinId, title: "המרה מליד חברתי", description: sl.ai_summary, relatedEntityType: "lead", relatedEntityId: lead.id, metadata: { socialLeadId, community: sl.community_id, platform: sl.platform } });
 
   // 5) Attribution chain (Community → Social Lead → Lead → Buyer).
+  // Phase 2 (P0 #4, T2.2): populate the existing campaign_id column so a converted
+  // lead carries its campaign attribution (from the social lead's campaign_id).
   if (sl.community_id) await supabase.from("community_lead_attribution").insert({
     organization_id: orgId, community_id: sl.community_id, lead_id: lead.id, property_id: sl.property_id,
+    campaign_id: sl.campaign_id,
     distribution_item_id: sl.distribution_item_id, source_interaction_id: sl.social_interaction_id,
     attribution_confidence: sl.intent_confidence, attribution_reason: `המרה מליד חברתי · ${INTENT_LABEL[intent]}`,
   } as never);
@@ -162,6 +165,25 @@ export async function convertSocialLeadToLead(socialLeadId: string): Promise<Con
     if (!r.ok) console.error("[social] canonical journey ensure failed:", r.error);
   } catch (e) {
     console.error("[social] journey ensure on conversion failed:", e);
+  }
+
+  // 9) Phase 2 (P0 #4, T2.1): emit the canonical lead.created kernel event so this
+  // converted lead flows onto the timeline, notifications, journey, automation,
+  // recommendation and search subscribers — reusing the existing event bus exactly
+  // as leads/actions.ts does. Idempotency-keyed on the lead id so a re-emit for the
+  // same lead is deduped by the (org, key) unique pair. Best-effort: an emit failure
+  // must not fail the conversion.
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({
+      type: DOMAIN_EVENTS.leadCreated,
+      entityType: "lead",
+      entityId: lead.id,
+      idempotencyKey: `lead.created:${lead.id}`,
+      payload: { source: platformToSource(sl.platform), intent: leadIntent, propertyId: sl.property_id, campaignId: sl.campaign_id },
+    });
+  } catch (e) {
+    console.error("[social] lead.created emit failed:", e);
   }
 
   return { leadId: lead.id, buyerId: buyerId ?? undefined, sellerId: sellerId ?? undefined };
