@@ -119,8 +119,16 @@ export async function recommendGroups(propertyId: string): Promise<PropertyGroup
 }
 
 export interface RecordPostInput { groupId: string; propertyId?: string | null; campaignId?: string | null; postUrl?: string | null; content?: string | null; reach?: number; reactions?: number; comments?: number }
-export async function recordGroupPost(input: RecordPostInput): Promise<{ id: string; duplicate: boolean; warnings: string[] }> {
-  const { db, orgId, userId } = await ctx();
+export async function recordGroupPost(
+  input: RecordPostInput,
+  // Phase 1 (P0 #2): optional injected context so trusted service-role callers
+  // (the extension publish path, which has no user session) can reuse this history
+  // writer without going through session-based ctx(). Backward compatible; the
+  // content_hash dedup below is unchanged and remains the manual-path safeguard —
+  // publish-path idempotency is enforced upstream in recordPublishResult.
+  override?: { db: Awaited<ReturnType<typeof createClient>>; orgId: string; userId: string | null },
+): Promise<{ id: string; duplicate: boolean; warnings: string[] }> {
+  const { db, orgId, userId } = override ?? await ctx();
   const hash = input.content ? contentHash(input.content) : null;
   // Duplicate prevention: same content already posted to this group.
   let duplicate = false;

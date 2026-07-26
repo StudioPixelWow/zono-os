@@ -18,6 +18,7 @@ import crypto from "node:crypto";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
+import { recordGroupPost } from "./groups-service";
 import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
 
@@ -153,6 +154,12 @@ export async function revokeAllInstances(orgId: string, userId: string | null): 
 // ── Prepared-post delivery (Part D) ───────────────────────────────────────────
 export interface NextPostPayload {
   postId: string;
+  // Phase 1 (P0 #2): identifier spine carried to the extension. Nullable because
+  // legacy destination-shortcut posts do not have these set.
+  campaignId: string | null;
+  variationId: string | null;
+  propertyId: string | null;
+  groupId: string | null;
   destinationName: string | null;
   destinationUrl: string | null;
   text: string;
@@ -172,7 +179,7 @@ const GROUP_COMPLIANCE = [
 export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload | null> {
   const db = createServiceRoleClient();
   const { data } = await db.from(DIST.posts as never)
-    .select("id,post_text,hashtags,image_url,external_destination_url,group_id,status,metadata,scheduled_at")
+    .select("id,post_text,hashtags,image_url,external_destination_url,group_id,campaign_id,variation_id,property_id,status,metadata,scheduled_at")
     .eq("org_id", inst.orgId)
     .in("status", ["scheduled", "queued", "draft"] as never)
     .order("scheduled_at", { ascending: true })
@@ -180,6 +187,7 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
   const rows = (data ?? []) as unknown as Array<{
     id: string; post_text: string | null; hashtags: string[] | null; image_url: string | null;
     external_destination_url: string | null; group_id: string | null; metadata: Record<string, unknown> | null;
+    campaign_id: string | null; variation_id: string | null; property_id: string | null;
   }>;
   // Prefer browser-assisted destinations (groups/marketplace).
   const pick = rows.find((r) => {
@@ -201,6 +209,10 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
   }
   return {
     postId: pick.id,
+    campaignId: pick.campaign_id ?? null,
+    variationId: pick.variation_id ?? null,
+    propertyId: pick.property_id ?? null,
+    groupId: pick.group_id ?? null,
     destinationName,
     destinationUrl,
     text: pick.post_text ?? "",
@@ -224,13 +236,57 @@ export interface PublishReport {
 export async function recordPublishResult(inst: AuthedInstance, report: PublishReport): Promise<boolean> {
   const db = createServiceRoleClient();
   const now = new Date().toISOString();
+
+  // Phase 1 (P0 #2), architect-approved correction (B1/B2):
+  // recordPublishResult is the SINGLE idempotency boundary for publishing. The
+  // not-published → published transition is a one-way, atomic, single-winner
+  // state change on distribution_posts, so distribution_posts.status IS the
+  // idempotency key and the serialization point — not content_hash.
+  //   - Idempotency (B1): the conditional UPDATE (status <> 'published') affects
+  //     the row exactly once; retries — including NULL-post_text posts — observe
+  //     0 rows and skip the history write. No content-dependent dedup involved.
+  //   - Race safety (B2): concurrent confirms contend on the single row lock;
+  //     exactly one wins the transition (1 row), the rest see 0 rows. No
+  //     SELECT→INSERT check-then-act window.
+  // The single conditional UPDATE also returns the ids in one round-trip, so no
+  // separate re-read is needed.
+  if (report.result === "user_confirmed_published") {
+    const patch = { status: "published", published_at: now, published_manually_at: now, published_by: inst.userId,
+      external_post_url: report.externalPostUrl ?? null, failure_reason: null };
+    const { data: transitioned, error } = await db.from(DIST.posts as never)
+      .update(patch as never)
+      .eq("id", report.postId).eq("org_id", inst.orgId).neq("status", "published")
+      .select("group_id,property_id,campaign_id,post_text");
+    if (error) { console.error(`${LOG} recordPublishResult failed: ${error.message}`); return false; }
+    const rows = (transitioned ?? []) as Array<{ group_id: string | null; property_id: string | null; campaign_id: string | null; post_text: string | null }>;
+    if (rows.length === 0) {
+      // Already published (idempotent retry or concurrent loser) — never double-record.
+      console.log(`${LOG} org_id=${inst.orgId} post=${report.postId} result=already_published (idempotent skip)`);
+      return true;
+    }
+    const pr = rows[0]!;
+    // Record group-post history for campaign-pipeline posts (real group_id) so real
+    // publishes feed dedupe + analytics. Only reached once per post (state guard
+    // above), so legacy content_hash dedup in recordGroupPost is no longer relied on
+    // for idempotency here. Best-effort: a history failure must not fail the result.
+    if (pr.group_id) {
+      try {
+        await recordGroupPost(
+          { groupId: pr.group_id, propertyId: pr.property_id, campaignId: pr.campaign_id,
+            postUrl: report.externalPostUrl ?? null, content: pr.post_text },
+          { db, orgId: inst.orgId, userId: inst.userId },
+        );
+      } catch (e) {
+        console.error(`${LOG} recordPublishResult history write failed: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    console.log(`${LOG} org_id=${inst.orgId} post=${report.postId} result=${report.result}`);
+    return true;
+  }
+
+  // Non-publish results: status transitions with no history side effect.
   let patch: Record<string, unknown>;
   switch (report.result) {
-    case "user_confirmed_published":
-      // published ONLY on human confirmation — stamps who + when.
-      patch = { status: "published", published_at: now, published_manually_at: now, published_by: inst.userId,
-        external_post_url: report.externalPostUrl ?? null, failure_reason: null };
-      break;
     case "user_cancelled":
       patch = { status: "cancelled", skipped_reason: "user_cancelled" };
       break;
