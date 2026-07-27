@@ -110,6 +110,19 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
     return { ok: true, message: r.data?.status === "not_installed" ? "התוסף עדיין לא מותקן/מחובר." : "סטטוס התוסף עודכן." };
   }, { id: "check-extension", pendingMessage: "בודק תוסף…", success: (r) => r.message ?? null });
 
+  // Chrome extension INSTALL flow. The extension is a first-party browser add-on,
+  // NOT a fake action and NOT a status re-check: if a distribution URL is configured
+  // (Chrome Web Store listing or a hosted package) the CTA opens it in a new tab;
+  // otherwise it reveals the exact "Load unpacked" steps. Clicking "Install" always
+  // performs a visible action. A web page cannot programmatically install an unpacked
+  // extension or open chrome://extensions, so guiding the user is the correct action.
+  const EXTENSION_URL = process.env.NEXT_PUBLIC_ZONO_EXTENSION_URL ?? "";
+  const [showInstall, setShowInstall] = useState(false);
+  const onInstallExtension = () => {
+    if (EXTENSION_URL) { window.open(EXTENSION_URL, "_blank", "noopener,noreferrer"); return; }
+    setShowInstall(true);
+  };
+
   // Chrome extension pairing (Facebook Groups assistant).
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const onStartPairing = () => runner.run(async () => {
@@ -206,8 +219,7 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
             path={paths.extension}
             icon="Download"
             cta="התקן תוסף Chrome"
-            ctaBusyId="check-extension"
-            onCta={onCheckExtension}
+            onCta={onInstallExtension}
             note="התוסף פועל בדפדפן שלך. ZONO לעולם לא מקבל סיסמה או עוגיות פייסבוק — רק שולח לתוסף פוסטים מוכנים, והפרסום מתבצע באישורך."
             runner={runner}
           />
@@ -224,8 +236,14 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
               <p className="text-ink font-black">תוסף Chrome — פרסום לקבוצות</p>
             </div>
             <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={onInstallExtension}>
+                <Icon name="Download" size={14} className="ms-1" /> התקן תוסף
+              </Button>
               <Button size="sm" onClick={onStartPairing} loading={runner.busyId === "pair-start"}>
                 <Icon name="Download" size={14} className="ms-1" /> התחל חיבור תוסף
+              </Button>
+              <Button size="sm" variant="ghost" onClick={onCheckExtension} loading={runner.busyId === "check-extension"}>
+                בדוק אם מותקן
               </Button>
               {paths.extension.status !== "not_installed" && (
                 <Button size="sm" variant="ghost" onClick={onRevokeExtension} loading={runner.busyId === "pair-revoke"}>
@@ -244,6 +262,30 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
             {extVersion && <p className="text-muted">גרסת תוסף: <span className="text-ink font-bold" dir="ltr">{extVersion}</span></p>}
             {extProfile && <p className="text-muted">פרופיל Facebook: <span className="text-ink font-bold">{extProfile}</span></p>}
           </div>
+
+          {/* Install instructions — revealed by the Install CTA when no Web Store /
+              hosted-package URL is configured. This is the intended "install" action. */}
+          {showInstall && (
+            <div className="border-brand/30 bg-surface mt-4 rounded-xl border p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-ink text-sm font-bold">התקנת תוסף ZONO ל-Chrome</p>
+                <button type="button" onClick={() => setShowInstall(false)} className="text-muted text-xs underline">סגור</button>
+              </div>
+              {EXTENSION_URL ? (
+                <a href={EXTENSION_URL} target="_blank" rel="noopener noreferrer" className="text-brand mt-2 inline-block text-sm font-bold underline">הורד את חבילת התוסף</a>
+              ) : (
+                <p className="text-muted mt-2 text-xs">התוסף עדיין אינו בחנות Chrome — מתקינים אותו כתוסף מקומי (Load unpacked):</p>
+              )}
+              <ol className="text-muted mt-2 grid list-decimal gap-1 pe-5 text-xs">
+                <li>אתר את תיקיית התוסף בפרויקט: <span dir="ltr" className="text-ink font-mono">browser-extension/zono-facebook-assistant</span></li>
+                <li>פתח בכרום את הכתובת <span dir="ltr" className="text-ink font-mono">chrome://extensions</span> (העתק-הדבק — לא ניתן ללחוץ על קישור זה מדף אינטרנט).</li>
+                <li>הפעל את «מצב מפתח» (Developer mode) בפינה הימנית-עליונה.</li>
+                <li>לחץ «טען תוסף לא ארוז» (Load unpacked) ובחר את התיקייה.</li>
+                <li>ודא שהתוסף מופיע ומופעל, ואשר את בקשת הרשאת הגישה לדומיין של ZONO.</li>
+                <li>חזור לכאן ולחץ «התחל חיבור תוסף» כדי לקבל קוד חיבור.</li>
+              </ol>
+            </div>
+          )}
 
           {/* Pairing instructions + code */}
           {pairingCode && (
