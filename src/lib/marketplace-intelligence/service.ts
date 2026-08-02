@@ -14,6 +14,7 @@ import type { Json } from "@/lib/supabase/types";
 import { matchBuyersToListing, type BuyerForMatch, type ListingForDeal } from "@/lib/external-listings/deal";
 import { detectDuplicate, priceAnomaly, classifyOpportunity, marketHealthByArea } from "./classify";
 import { SOURCE_REGISTRY, sourceInfo } from "./registry";
+import { buyerMatchCount, acquisitionCount } from "./counts";
 import { MARKETPLACE_INTEL_VERSION, COMPLIANCE_NOTE } from "./types";
 import type { MarketListing, MarketplaceReport, MarketOpportunity, SourceInfo } from "./types";
 
@@ -102,8 +103,11 @@ export async function getMarketplaceIntel(): Promise<MarketplaceReport> {
     opportunities: opportunities.slice(0, 60), areaHealth,
     totals: {
       listings: listings.length,
-      acquisitions: opportunities.filter((o) => o.kind === "acquisition").length,
-      buyerMatches: opportunities.filter((o) => o.kind === "buyer_match").length,
+      acquisitions: acquisitionCount(opportunities),
+      // P1-2: count listings that actually have buyer matches (what the cards show),
+      // not just those LABELLED buyer_match — an acquisition-kind listing can also
+      // carry buyer matches.
+      buyerMatches: buyerMatchCount(opportunities),
       duplicates, anomalies,
     },
     hasData: true, notes: [COMPLIANCE_NOTE],

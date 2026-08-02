@@ -150,7 +150,7 @@ export function assembleDailyOS(
     territory: w.territory,
     marketing: { scheduledToday: w.facebook.scheduledToday, commentsWaiting: w.facebook.commentsWaiting, leadApprovals: w.facebook.leadApprovals, groupsToPublish: w.facebook.groupsToPublish, tasks: w.facebook.tasks },
     deals: { hotBuyers: d.hotBuyers.slice(0, 8), sellersAtRisk: d.sellersAtRisk.slice(0, 8), criticalListings: d.criticalListings.slice(0, 8), leadFollowUps: d.leadFollowUps.slice(0, 8) },
-    performance: { daily: dailyScore, weekly: dailyScore, conversionOpportunities: p.conversionOpportunities, followUpRatePct: p.followUpRatePct, weakSpots: p.weakSpots },
+    performance: { daily: dailyScore, weekly: dailyScore, conversionOpportunities: p.conversionOpportunities, followUpRatePct: p.followUpRatePct, weakSpots: p.weakSpots, peopleTracked: p.activeBuyers + p.activeSellers + p.leadsHandled },
     approvals: [
       ...d.pendingApprovals.map((a) => ({ id: a.id, title: a.recommendation, why: a.reason ?? "", source: a.agentName ?? "AI", href: entityHref(a.entityType, a.entityId) })),
       ...w.inbox.filter((i) => i.requiresApproval && i.status === "pending").map((i) => ({ id: i.id, title: i.recommendation, why: i.reason ?? "", source: i.agentName ?? "AI", href: entityHref(i.entityType, i.entityId) })),

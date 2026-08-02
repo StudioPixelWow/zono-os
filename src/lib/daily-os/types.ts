@@ -122,6 +122,8 @@ export interface DailyDeals { hotBuyers: ScoredEntity[]; sellersAtRisk: ScoredEn
 export interface DailyPerformance {
   daily: number; weekly: number; conversionOpportunities: number; followUpRatePct: number;
   weakSpots: { title: string; detail: string; impact: Impact }[];
+  /** People (buyers+sellers+leads) the follow-up rate is based on. 0 ⇒ rate is "no data", not 0%. (QA P1-3) */
+  peopleTracked?: number;
 }
 
 export interface ApprovalItem { id: string; title: string; why: string; source: string; href: string }

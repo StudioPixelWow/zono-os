@@ -10,6 +10,7 @@ import {
   type Prediction, type PredictionKind, type PredictionSignals, type DataSufficiency,
   type RiskLevel, type Trend, type SignalEntity, type PredictionSubject, type PredictionAction,
 } from "./types";
+import { hasNoFollowUpPopulation, overloadFollowUpPenalty } from "./followup";
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 const CAP: Record<DataSufficiency, number> = { high: 88, medium: 68, low: 45, none: 15 };
@@ -144,7 +145,9 @@ export function forecast(sig: PredictionSignals, now: number = Date.now()): Pred
     const perf = sig.performance; const conv = sig.conversation;
     if (!perf && !conv) out.push(insufficient("broker_overload", "אין נתוני עומס זמינים.", ["נדרשים נתוני ביצועים ותקשורת"], 3));
     else {
-      const load = clamp((conv ? conv.whatsappWaiting * 6 : 0) + (perf ? perf.weakSpots.length * 10 : 0) + (perf ? (100 - perf.followUpRatePct) * 0.3 : 0));
+      // P1-3: the follow-up penalty only counts with a real population — an empty
+      // population's 0% rate must not add (100-0)*0.3 to the load.
+      const load = clamp((conv ? conv.whatsappWaiting * 6 : 0) + (perf ? perf.weakSpots.length * 10 : 0) + overloadFollowUpPenalty(perf));
       out.push(mk({
         kind: "broker_overload", probability: load, outcome: load >= 60 ? "עומס גבוה — אזן משימות ומעקבים." : "עומס מנוהל.",
         suff: perf ? "medium" : "low", trend: load >= 55 ? "up" : "flat",
@@ -158,13 +161,16 @@ export function forecast(sig: PredictionSignals, now: number = Date.now()): Pred
   // 7. Missed follow-up risk.
   {
     const perf = sig.performance; const leads = sig.leadFollowUps;
-    if (!perf && !leads.length) out.push(insufficient("missed_followup", "אין אותות מעקב זמינים.", ["נדרשים לידים/לקוחות פתוחים עם שיעור מעקב"], 3));
+    // P1-3: guard on POPULATION, not object presence. With zero people tracked,
+    // a 0% follow-up rate means "no data" — never 100% missed.
+    if (hasNoFollowUpPopulation(perf, leads)) out.push(insufficient("missed_followup", "אין לידים או לקוחות פתוחים למעקב.", ["נדרשים לידים/לקוחות פתוחים עם שיעור מעקב"], 3));
     else {
-      const prob = perf ? clamp(100 - perf.followUpRatePct) : clamp(40 + leads.length * 10);
+      const hasPopulation = perf && (perf.peopleTracked ?? 0) > 0;
+      const prob = hasPopulation ? clamp(100 - perf.followUpRatePct) : clamp(40 + leads.length * 10);
       out.push(mk({
         kind: "missed_followup", probability: prob, outcome: prob >= 50 ? "סיכון גבוה לפספוס מעקבים — סגור פערים היום." : "מעקב תחת שליטה.",
-        suff: perf ? "high" : leads.length ? "low" : "none", trend: prob >= 55 ? "up" : "flat",
-        evidence: [perf ? `שיעור מעקב ${perf.followUpRatePct}%` : "", `${leads.length} לידים פתוחים`].filter(Boolean),
+        suff: hasPopulation ? "high" : leads.length ? "low" : "none", trend: prob >= 55 ? "up" : "flat",
+        evidence: [hasPopulation ? `שיעור מעקב ${perf.followUpRatePct}%` : "", `${leads.length} לידים פתוחים`].filter(Boolean),
         missing: perf ? [] : ["נדרש שיעור מעקב מדויק"], riskLevel: riskFrom(prob), riskNote: "פספוס מעקב = אובדן לידים ועסקאות.",
         action: { label: "סגור מעקבים פתוחים", href: "/today", requiresApproval: true }, subjects: subjectsOf(leads), horizonDays: 3,
       }));

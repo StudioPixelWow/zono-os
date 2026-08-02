@@ -41,7 +41,7 @@ async function buildSignals(): Promise<PredictionSignals> {
     staleListings: mapEntities(daily?.deals?.criticalListings, "property"),
     leadFollowUps: mapEntities(daily?.deals?.leadFollowUps, "lead"),
     performance: daily?.performance
-      ? { daily: daily.performance.daily, weekly: daily.performance.weekly, followUpRatePct: daily.performance.followUpRatePct, conversionOpportunities: daily.performance.conversionOpportunities, weakSpots: daily.performance.weakSpots ?? [] }
+      ? { daily: daily.performance.daily, weekly: daily.performance.weekly, followUpRatePct: daily.performance.followUpRatePct, conversionOpportunities: daily.performance.conversionOpportunities, weakSpots: daily.performance.weakSpots ?? [], peopleTracked: daily.performance.peopleTracked ?? 0 }
       : null,
     conversation: daily?.conversation
       ? { whatsappUnread: daily.conversation.whatsappUnread, whatsappWaiting: daily.conversation.whatsappWaiting, facebookComments: daily.conversation.facebookComments, facebookLeads: daily.conversation.facebookLeads }

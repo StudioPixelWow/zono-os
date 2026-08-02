@@ -86,6 +86,9 @@ export function DailyBrief({ data }: { data: MissionControlDTO }) {
   const today = bucketRecommendations(data.actionCenter.recommendations).today;
   const opportunities = ex.opportunitySignals;
   const newListings = [...ex.listings].filter((l) => l.firstSeenAt).sort((a, b) => new Date(b.firstSeenAt!).getTime() - new Date(a.firstSeenAt!).getTime());
+  // P1-2: the "הזדמנויות היום" card now counts and lists the SAME array, so the
+  // header can never read 0 while cards are shown (previously counted opportunitySignals).
+  const opportunitiesToday = newListings.filter((l) => l.opportunityScore >= 70);
   const priceDrops = data.actionCenter.dashboard.marketStats.priceDrops;
   const pendingReview = drafts.filter((d) => d.status === "ready_for_review" || d.status === "draft");
   const approvedAwaiting = drafts.filter((d) => d.status === "approved");
@@ -131,10 +134,10 @@ export function DailyBrief({ data }: { data: MissionControlDTO }) {
       </Card>
     );
     if (id === "opportunities") return (
-      <Card key={id} id={id} title="הזדמנויות היום" count={opportunities.length} state={s} toggle={toggle}>
-        {newListings.filter((l) => l.opportunityScore >= 70).length ? (
+      <Card key={id} id={id} title="הזדמנויות היום" count={opportunitiesToday.length} state={s} toggle={toggle}>
+        {opportunitiesToday.length ? (
           <div className="flex flex-col">
-            {newListings.filter((l) => l.opportunityScore >= 70).slice(0, 5).map((l) => (
+            {opportunitiesToday.slice(0, 5).map((l) => (
               <Link key={l.id} href={`/external-listings/${encodeURIComponent(l.id)}`} prefetch={false} className="border-line/60 hover:bg-surface flex items-center justify-between gap-2 border-b py-1.5 text-xs transition last:border-0">
                 <span className="text-ink min-w-0 truncate font-bold">{l.title ?? "מודעה"}<span className="text-muted font-normal"> · {ils(l.price)}</span></span>
                 <Pill tone="rising">{Math.round(l.opportunityScore)}</Pill>

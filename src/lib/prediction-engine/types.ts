@@ -49,7 +49,7 @@ export interface SignalEntity {
   kind: string; id: string; name: string; score: number | null;
   reason: string | null; riskLabel: string | null; href: string; lastActivityAt: string | null;
 }
-export interface PerfSignal { daily: number; weekly: number; followUpRatePct: number; conversionOpportunities: number; weakSpots: { title: string; detail: string; impact: string }[] }
+export interface PerfSignal { daily: number; weekly: number; followUpRatePct: number; conversionOpportunities: number; weakSpots: { title: string; detail: string; impact: string }[]; peopleTracked?: number }
 export interface ConvSignal { whatsappUnread: number; whatsappWaiting: number; facebookComments: number; facebookLeads: number }
 export interface MktSignal { scheduledToday: number; commentsWaiting: number; leadApprovals: number; groupsToPublish: number }
 export interface TerrSignal { score: number | null; growth: number | null; band: string | null }
