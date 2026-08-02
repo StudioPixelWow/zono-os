@@ -19,6 +19,9 @@ export type { AutomationIntent } from "./automation-subscriber";
 // Stage 3 — Recommendation subscriber (event → affected areas + Daily/Executive cache refresh).
 export { projectEventToRecommendationRefresh } from "./recommendation-subscriber";
 export type { RecommendationRefresh, RecommendationArea } from "./recommendation-subscriber";
+// Batch 7 — Autopilot subscriber (event → prioritized, approval-gated rescue proposal; never executes).
+export { projectEventToAutopilotRescue } from "./autopilot-subscriber";
+export type { AutopilotRescue, RescueSeverity, RescuePlaybook } from "./autopilot-subscriber";
 // Stage 3 — Per-subscriber delivery ledger (observability + idempotency).
 export { recordDelivery } from "./subscriber-deliveries";
 export type { SubscriberName, DeliveryStatus, DeliveryInput } from "./subscriber-deliveries";

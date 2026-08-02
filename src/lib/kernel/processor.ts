@@ -25,6 +25,7 @@ import { projectEventToGraphEdges } from "./graph-subscriber";
 import { projectEventToMemory } from "./memory-subscriber";
 import { projectEventToAutomation } from "./automation-subscriber";
 import { projectEventToRecommendationRefresh } from "./recommendation-subscriber";
+import { projectEventToAutopilotRescue } from "./autopilot-subscriber";
 import { recordDelivery } from "./subscriber-deliveries";
 import { classifyEventForSearch } from "@/lib/search-projection/subscriber";
 import { indexEntity, softDeleteEntity } from "@/lib/search-projection/indexer";
@@ -46,6 +47,7 @@ export interface DrainResult {
   automationCandidates: number; // events classified into a downstream automation
   recommendationRefreshes: number; // events that invalidated a live-read cache
   cachesInvalidated: number;    // daily_os / executive_os invalidations issued
+  autopilotProposals: number;   // Batch 7 — rescue proposals classified (flag-gated)
   searchIndexed: number;        // search_documents upserts/soft-deletes applied
   memoriesIngested: number;     // canonical ai_memory create/reinforce/supersede
   journeysCreated: number;      // canonical journeys opened from real events
@@ -66,6 +68,7 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
     scanned: 0, projected: 0, timelineRows: 0, duplicateSkips: 0,
     skipped: 0, notified: 0, graphEdges: 0, memoryRows: 0,
     automationCandidates: 0, recommendationRefreshes: 0, cachesInvalidated: 0, searchIndexed: 0, memoriesIngested: 0,
+    autopilotProposals: 0,
     journeysCreated: 0, journeysAdvanced: 0, failed: 0,
   };
 
@@ -376,6 +379,35 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       });
     }
   } catch { /* recommendation refresh is non-critical */ }
+
+  // ── Autopilot — Batch 7 · CLASSIFY ONLY (never execute). Detects deals/leads at
+  //    risk of loss (or time-sensitive opportunities) and records a prioritized,
+  //    approval-gated rescue proposal. Flag-gated: zero-cost (no ledger write)
+  //    until ZONO_AUTOPILOT_ENABLED is on, so it ships dark and lights up by env
+  //    flip alone — no code change at launch. Surfacing the queue in the Action
+  //    Center is the next slice; here we only classify + record. ───────────────
+  if (process.env.ZONO_AUTOPILOT_ENABLED === "true") {
+    try {
+      const rescue = projectEventToAutopilotRescue(row);
+      if (!rescue) {
+        await recordDelivery(db, {
+          orgId: row.organization_id, eventId: row.id, subscriber: "autopilot",
+          status: "skipped", latencyMs: Date.now() - t0,
+          metadata: { reason: "no_rescue_signal" },
+        });
+      } else {
+        out.autopilotProposals++;
+        await recordDelivery(db, {
+          orgId: row.organization_id, eventId: row.id, subscriber: "autopilot", status: "done",
+          latencyMs: Date.now() - t0,
+          metadata: {
+            signal: rescue.signal, severity: rescue.severity, playbook: rescue.playbook,
+            slaHours: rescue.slaHours, requiresApproval: rescue.requiresApproval,
+          },
+        });
+      }
+    } catch { /* autopilot classification is non-critical */ }
+  }
 }
 
 /** Postgres unique-violation (idempotent no-op), not a real failure. */
