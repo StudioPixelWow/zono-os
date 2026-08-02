@@ -14,6 +14,7 @@ import {
   generateValuationReport, generateValuationPresentation, sendValuationReportAsPdf, getLatestReport,
   type GeneratedReport, type SendReportInput, type SendReportResult,
 } from "./report-service";
+import { validateInput } from "./valuation-engine";
 import { getBrokerSoldProperties } from "./providers";
 import { diagnoseValuationEvidence, type ValuationEvidenceDiagnosis } from "./diagnostics";
 import { buildValuationScanProof, type ValuationScanProof } from "./external-scan-proof";
@@ -54,6 +55,10 @@ export async function runValuationAction(id: string): Promise<Result<RunOutput>>
 /** Create a draft from input and immediately run it (wizard "compute" step). */
 export async function createAndRunValuationAction(input: ValuationInput, propertyId?: string | null): Promise<Result<{ id: string }>> {
   try {
+    // P1-4: independent server-side validation — the client wizard guard is not
+    // trusted as the only gate. Reject invalid input before creating a draft.
+    const v = validateInput(input);
+    if (!v.ok) return { ok: false, error: v.errors.join(" ") };
     const id = await createValuationDraft(input, propertyId);
     await runValuationById(id);
     return { ok: true, data: { id } };

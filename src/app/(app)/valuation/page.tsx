@@ -2,10 +2,15 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { listValuations, type ValuationListItem } from "@/lib/valuation/service";
 import { CONFIDENCE_LABEL } from "@/lib/valuation/types";
+import { valuationValueLabel, valuationStatusPill } from "@/lib/valuation/list-display";
 
 export const dynamic = "force-dynamic";
 
-const ils = (n: number | null) => (n == null ? "—" : `₪${Math.round(n).toLocaleString("he-IL")}`);
+const PILL_TONE = {
+  success: "bg-emerald-50 text-emerald-700",
+  warning: "bg-amber-50 text-amber-700",
+  neutral: "bg-line/60 text-ink",
+} as const;
 
 const SCAN_STEPS = [
   { icon: "Building2", label: "עסקאות שֶׁבוצעו" },
@@ -73,11 +78,11 @@ export default async function ValuationLandingPage() {
                   <p className="text-ink truncate font-bold">{[v.street, v.neighborhood, v.city].filter(Boolean).join(", ") || "נכס"}</p>
                   <Icon name="ChevronLeft" size={16} className="text-muted group-hover:text-brand" />
                 </div>
-                <p className="text-brand-strong mt-2 text-2xl font-black">{ils(v.estimatedValue)}</p>
+                <p className="text-brand-strong mt-2 text-2xl font-black">{valuationValueLabel(v)}</p>
                 <div className="text-muted mt-2 flex items-center gap-2 text-xs">
-                  <span className={`rounded-full px-2 py-0.5 font-bold ${v.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-line/60 text-ink"}`}>
-                    {v.status === "completed" ? "הושלם" : v.status === "draft" ? "טיוטה" : "בעיבוד"}
-                  </span>
+                  {(() => { const pill = valuationStatusPill(v); return (
+                    <span className={`rounded-full px-2 py-0.5 font-bold ${PILL_TONE[pill.tone]}`}>{pill.label}</span>
+                  ); })()}
                   {v.confidenceLevel && <span>ביטחון: {CONFIDENCE_LABEL[v.confidenceLevel as keyof typeof CONFIDENCE_LABEL] ?? v.confidenceLevel}</span>}
                   <span>· {new Date(v.createdAt).toLocaleDateString("he-IL")}</span>
                 </div>

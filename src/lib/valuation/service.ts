@@ -279,7 +279,9 @@ async function persistResult(
 
   void input;
   await db.from(TABLE as never).update({
-    status: "completed",
+    // P0-3: a valuation with no trustworthy result is NOT "completed" — it is
+    // insufficient_data, so no surface can present a failure as a success.
+    status: result.valuationAvailable === false ? "insufficient_data" : "completed",
     estimated_value: result.estimatedValue, low_value: result.lowValue, high_value: result.highValue,
     recommended_listing_price: result.recommendedListingPrice, target_closing_price: result.targetClosingPrice,
     minimum_acceptable_price: result.minimumAcceptablePrice, estimated_price_per_sqm: result.estimatedPricePerSqm,
@@ -428,18 +430,24 @@ export async function getValuationHistory(valuationId: string, limit = 20): Prom
 export interface ValuationListItem {
   id: string; city: string | null; neighborhood: string | null; street: string | null;
   estimatedValue: number | null; confidenceLevel: string | null; status: string; createdAt: string;
+  /** P0-3: carry the availability flag so the list never shows ₪0 for a failed valuation. */
+  valuationAvailable: boolean | null;
 }
 export async function listValuations(limit = 50): Promise<ValuationListItem[]> {
   const { db, orgId } = await ctx();
   const { data } = await db.from(TABLE as never)
-    .select("id,city,neighborhood,street,estimated_value,confidence_level,status,created_at")
+    .select("id,city,neighborhood,street,estimated_value,confidence_level,status,created_at,metadata")
     .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(limit);
-  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-    id: r.id as string, city: (r.city as string) ?? null, neighborhood: (r.neighborhood as string) ?? null,
-    street: (r.street as string) ?? null, estimatedValue: r.estimated_value == null ? null : Number(r.estimated_value),
-    confidenceLevel: (r.confidence_level as string) ?? null, status: (r.status as string) ?? "draft",
-    createdAt: r.created_at as string,
-  }));
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => {
+    const meta = (r.metadata ?? null) as Record<string, unknown> | null;
+    const available = meta && typeof meta.valuationAvailable === "boolean" ? (meta.valuationAvailable as boolean) : null;
+    return {
+      id: r.id as string, city: (r.city as string) ?? null, neighborhood: (r.neighborhood as string) ?? null,
+      street: (r.street as string) ?? null, estimatedValue: r.estimated_value == null ? null : Number(r.estimated_value),
+      confidenceLevel: (r.confidence_level as string) ?? null, status: (r.status as string) ?? "draft",
+      createdAt: r.created_at as string, valuationAvailable: available,
+    };
+  });
 }
 
 // ── save to property / seller follow-up ───────────────────────────────────────

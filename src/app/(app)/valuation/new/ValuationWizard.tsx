@@ -62,8 +62,22 @@ export function ValuationWizard({ initialInput, propertyId }: { initialInput?: V
 
   const canCompute = !!input.city && !!input.builtSqm && Number(input.builtSqm) > 0;
 
-  const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
-  const prev = () => setStep((s) => Math.max(0, s - 1));
+  // P1-4: enforce required fields before advancing. Step 0 (מיקום) needs a city;
+  // step 1 (פרטי נכס) needs a positive built area. Server-side validation in
+  // createAndRunValuationAction is the independent second guard.
+  const stepError = (s: number): string | null => {
+    if (s === 0 && !input.city) return "יש להזין עיר כדי להמשיך.";
+    if (s === 1 && !(input.builtSqm && Number(input.builtSqm) > 0)) return "יש להזין שטח בנוי במ\"ר כדי להמשיך.";
+    return null;
+  };
+
+  const next = () => {
+    const err = stepError(step);
+    if (err) { setError(err); return; }
+    setError(null);
+    setStep((s) => Math.min(STEPS.length - 1, s + 1));
+  };
+  const prev = () => { setError(null); setStep((s) => Math.max(0, s - 1)); };
 
   const runScan = () => {
     setError(null);
