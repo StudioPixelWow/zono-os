@@ -1,0 +1,81 @@
+{
+  "generatedAt": "2026-08-03",
+  "sources": {
+    "A_production": 473,
+    "B_replay": 541,
+    "C_repository": "= B (migrations produce replay)",
+    "D_generated_types": 310
+  },
+  "table_level": {
+    "migration_only": {
+      "count": 71,
+      "note": "in repo, NOT deployed to production; mostly meta_workspace batch + copilot/creative/agency/zi",
+      "classification": "missing_migration_deploy / product_decision"
+    },
+    "production_only": {
+      "count": 3,
+      "tables": [
+        "approval_decisions",
+        "journey_notes",
+        "user_ui_preferences"
+      ],
+      "classification": "production-only, NO migration provenance (dangerous)",
+      "note": "journey_notes is REFERENCED BY CODE and exists in prod but no migration creates it -> fresh rebuild breaks"
+    },
+    "types_missing_prod_tables": {
+      "count": 163,
+      "classification": "type_gap",
+      "note": "163 production tables absent from generated types (accessed via .from(x as never)); not schema drift, a type-safety gap"
+    },
+    "types_stale_only": {
+      "count": 12,
+      "note": "types still list 12 tables not in prod (agency_ai_feedback, creative_generation*, israel_neighborhoods, zi_* ...) — generated at an earlier migration state"
+    }
+  },
+  "column_level_shared_table_drift": [
+    {
+      "table": "properties",
+      "classification": "missing_column_in_prod",
+      "detail": "replay has `formatted_address text` that production lacks (undeployed migration column)"
+    },
+    {
+      "table": "agencies",
+      "classification": "missing_columns_in_prod",
+      "detail": "replay has 7 columns prod lacks: brand_name, created_from, creation_confidence, display_name, franchise_name, identity_metadata, identity_status"
+    },
+    {
+      "table": "deals",
+      "classification": "type_mismatch",
+      "detail": "commission_amount & value are BIGINT in production but INTEGER in migrations -> production altered AHEAD of the repo (out-of-band change or removed migration)"
+    }
+  ],
+  "aggregate_posture": {
+    "rls": {
+      "production": "473/473 enabled, 11 policy-less (system)",
+      "replay": "541/541 enabled, 13 policy-less (system)",
+      "correction": "prior '109 tables without RLS' REJECTED"
+    },
+    "policies": {
+      "production": 1690,
+      "replay": 1812
+    },
+    "functions_replay": 70,
+    "enums_replay": 44
+  },
+  "object_usage": {
+    "tables_referenced_by_code_literal": 420,
+    "schema_tables_never_literally_referenced": 122,
+    "caveat": "code also uses .from(x as never) + dynamic names, so 'never referenced' overstates dead set",
+    "code_ref_missing_from_schema": [
+      "journey_notes"
+    ]
+  },
+  "verdict": "Schema Reconciliation Incomplete",
+  "unresolved": [
+    "71 undeployed migrations (deploy vs remove)",
+    "3 prod-only orphan tables need provenance migrations",
+    "deals bigint vs integer type mismatch",
+    "163 untyped prod tables",
+    "full 470-table column diff to be run via delivered join script for exhaustive enumeration"
+  ]
+}
