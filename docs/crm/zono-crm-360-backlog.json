@@ -1,0 +1,239 @@
+{
+  "meta": {
+    "generatedFrom": "evidence-based audit of repo 7096473 + live DB (tlrefajhyrqnjtmimaos)",
+    "date": "2026-08-03",
+    "priorities": { "P0": "integrity/security", "P1": "A-Z workflow completion", "P2": "operational completeness", "P3": "intelligence/advantage" },
+    "complexity": ["S", "M", "L", "XL"]
+  },
+  "items": [
+    {
+      "id": "CRM-P0-001", "domain": "Security", "capability": "Private document storage",
+      "currentStatus": "broken", "priority": "P0", "dependencies": [],
+      "affectedRoutes": ["/documents", "/deals", "/properties/[id]"],
+      "affectedTables": ["documents", "storage.buckets(documents,property-media,zono-marketing-assets)"],
+      "missingBehavior": "documents/property-media buckets are public=true with 'select to public'; legal/ID/contract files are world-readable by URL, bypassing RLS.",
+      "acceptanceCriteria": "Buckets private; downloads via short-lived signed URLs; no unauthenticated access to any document; RLS-scoped read enforced.",
+      "testsRequired": ["signed-url expiry test", "cross-org document access denied", "public URL returns 403"],
+      "productDecision": "none", "complexity": "M", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P0-002", "domain": "Security", "capability": "Tenant isolation on writes",
+      "currentStatus": "partial", "priority": "P0", "dependencies": [],
+      "affectedRoutes": ["*"], "affectedTables": ["109 tables with no RLS", "all service-role write paths"],
+      "missingBehavior": "All writes use service-role client (BYPASSRLS) relying on hand-written org_id filters; 109 tables have no RLS backstop. A single missing predicate = cross-tenant leak.",
+      "acceptanceCriteria": "RLS enabled on all tenant tables; a two-org isolation test passes for every CRM entity; service-role writes wrapped by an org-scoping helper that cannot omit org_id.",
+      "testsRequired": ["two-org isolation integration test per entity", "RLS coverage lint (fail build if tenant table lacks policy)"],
+      "productDecision": "none", "complexity": "L", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P0-003", "domain": "Users", "capability": "Deactivation & departure enforcement",
+      "currentStatus": "broken", "priority": "P0", "dependencies": [],
+      "affectedRoutes": ["/(app) layout", "/admin/agents"],
+      "affectedTables": ["users"],
+      "missingBehavior": "users.status='disabled' is written but never checked at the app guard; a disabled/departed agent keeps full session access; no record transfer on departure.",
+      "acceptanceCriteria": "Disabled user is denied at layout/middleware; departure workflow reassigns owned records to a chosen agent; audit entry written.",
+      "testsRequired": ["disabled user blocked", "departure reassigns all owned records", "audit entry created"],
+      "productDecision": "who inherits records on departure (manager choice vs round-robin)", "complexity": "M", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P0-004", "domain": "Identity", "capability": "Duplicate person on social conversion",
+      "currentStatus": "broken", "priority": "P0", "dependencies": [],
+      "affectedRoutes": ["/leads", "/buyers", "/sellers"],
+      "affectedTables": ["leads", "buyers", "sellers"],
+      "missingBehavior": "social/service.ts inserts a lead AND a buyer/seller twin without findExistingContact, creating duplicate person rows (contradicts convertLead dedup).",
+      "acceptanceCriteria": "All person-creating paths run through one dedup gate (phone/email normalized); duplicates are merged or linked, never silently duplicated.",
+      "testsRequired": ["social capture of existing contact does not duplicate", "dedup on normalized phone/email"],
+      "productDecision": "none", "complexity": "M", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-010", "domain": "Identity", "capability": "Unified person entity (multi-role)",
+      "currentStatus": "missing", "priority": "P1", "dependencies": ["CRM-P0-004"],
+      "affectedRoutes": ["/contacts", "/buyers", "/sellers", "/leads"],
+      "affectedTables": ["NEW: persons/contacts", "leads", "buyers", "sellers", "notes", "documents", "activity_events"],
+      "missingBehavior": "No single person entity; a buyer-then-seller is two identities; notes/documents/timeline are multi-FK and fragment per role.",
+      "acceptanceCriteria": "One person entity holds multiple roles without duplication; timeline/notes/documents attach to the person and appear across roles; merge/restore supported.",
+      "testsRequired": ["person holds buyer+seller roles, one identity", "note on buyer role visible on person timeline", "merge two persons preserves history"],
+      "productDecision": "migrate existing leads/buyers/sellers into person model vs additive link table", "complexity": "XL", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-011", "domain": "Import", "capability": "CRM import pipeline",
+      "currentStatus": "missing", "priority": "P1", "dependencies": ["CRM-P1-010"],
+      "affectedRoutes": ["NEW: /import"],
+      "affectedTables": ["NEW: import_batches/import_rows", "persons", "buyers", "sellers", "properties", "deals", "tasks"],
+      "missingBehavior": "No CSV/Excel import for CRM entities; no mapping/preview/validation/dedup/partial-failure/rollback/history. Migrating off a spreadsheet is impossible in-product.",
+      "acceptanceCriteria": "Upload CSV/Excel → column mapping → preview → validation → duplicate detection → commit with partial-failure report + import history + rollback.",
+      "testsRequired": ["valid import persists", "invalid rows reported without aborting batch", "duplicate rows detected", "rollback restores pre-import state"],
+      "productDecision": "supported entity set for v1 import", "complexity": "L", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-012", "domain": "Offers", "capability": "Persisted offer entity",
+      "currentStatus": "missing", "priority": "P1", "dependencies": [],
+      "affectedRoutes": ["/deals", "/properties/[id]"],
+      "affectedTables": ["NEW: offers", "NEW: offer_status_history", "deals", "properties"],
+      "missingBehavior": "No offers table; offers are ephemeral inputs to the negotiation assistant and never saved. Offer→counteroffer→accepted is a manual stage click, not data.",
+      "acceptanceCriteria": "Create/track multiple offers per property/deal with amount, conditions, financing, expiry, status history, counteroffers, and conversion to accepted transaction.",
+      "testsRequired": ["multiple offers per property", "counteroffer chain persists", "accepted offer advances deal + records win"],
+      "productDecision": "offer confidentiality rules (visible to which roles)", "complexity": "L", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-013", "domain": "Commissions", "capability": "Commission calculation engine",
+      "currentStatus": "partial", "priority": "P1", "dependencies": ["CRM-P1-012"],
+      "affectedRoutes": ["/deals", "NEW: /commissions", "/reports"],
+      "affectedTables": ["NEW: commissions", "NEW: commission_splits", "deals"],
+      "missingBehavior": "Only a flat 2% estimate + one manual final number. No buyer/seller side, office/agent/manager/cooperating split, VAT, referral, adjustment, payment/invoice/collection status, approval, or audit.",
+      "acceptanceCriteria": "Deal close computes commission by configurable split rules (side, office/agent/manager/co-broker %, VAT, referral); payment/collection status tracked; approval + audit; reconciles in reporting by agent/office/period.",
+      "testsRequired": ["split math reconciles to total", "VAT applied", "collection status transitions", "commission report reconciles with deals"],
+      "productDecision": "default split-rule model + VAT handling (org-configurable)", "complexity": "L", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-014", "domain": "Properties", "capability": "Viewings / showings + feedback",
+      "currentStatus": "missing", "priority": "P1", "dependencies": [],
+      "affectedRoutes": ["/properties/[id]", "/calendar", "/deals"],
+      "affectedTables": ["NEW: viewings", "NEW: viewing_feedback", "meetings", "properties", "buyers"],
+      "missingBehavior": "No showings/viewings/feedback tables; the listing→viewing→feedback→offer path cannot be captured.",
+      "acceptanceCriteria": "Schedule a viewing (links property+buyer+agent), record outcome + structured feedback, auto-create follow-up, surface interested-buyer status on the property, feed matching.",
+      "testsRequired": ["viewing scheduled links all parties", "feedback recorded + follow-up task created", "viewing outcome visible on property + buyer timelines"],
+      "productDecision": "none", "complexity": "M", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-015", "domain": "Matching", "capability": "Match action loop (send/feedback/learn/expire)",
+      "currentStatus": "partial", "priority": "P1", "dependencies": ["CRM-P1-014", "CRM-P1-020"],
+      "affectedRoutes": ["/matches", "/buyers/[id]"],
+      "affectedTables": ["match_intelligence_profiles", "match_objections", "communication_messages"],
+      "missingBehavior": "feedbackPositive is a hard-coded false; no send-to-buyer, no feedback capture, no learning, no stale expiration. Match is a read-only scorecard.",
+      "acceptanceCriteria": "Send a match to a buyer (via comm hub), capture buyer/agent response, feed rejection reason back to scoring, expire stale matches.",
+      "testsRequired": ["send-to-buyer logs a message", "feedback updates match state", "rejected reason influences next recompute", "stale match expires"],
+      "productDecision": "learning model scope (rule-based vs weighted)", "complexity": "L", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-016", "domain": "Market Intelligence", "capability": "Opportunity → person conversion",
+      "currentStatus": "partial", "priority": "P1", "dependencies": ["CRM-P1-010"],
+      "affectedRoutes": ["/marketplace", "/mission-control", "/action-center"],
+      "affectedTables": ["opportunity_signals", "radar_seller_profiles", "leads", "sellers", "persons"],
+      "missingBehavior": "Opportunities convert only into a property, never a person (lead/seller). Marketplace cards are dead-ends.",
+      "acceptanceCriteria": "An opportunity can create/attach an owned lead or seller record with source attribution + dedup; outcome tracked back to the opportunity.",
+      "testsRequired": ["opportunity→seller creates owned seller (deduped)", "conversion records source + outcome", "no dead-end cards on launch surfaces"],
+      "productDecision": "none", "complexity": "M", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-017", "domain": "Communication", "capability": "Primary inbox real send",
+      "currentStatus": "partial", "priority": "P1", "dependencies": [],
+      "affectedRoutes": ["/whatsapp", "/communication"],
+      "affectedTables": ["whatsapp_messages", "communication_messages", "whatsapp_drafts"],
+      "missingBehavior": "Flagship inbox uses markDraftSent (manual) though a real WA Cloud API + Gmail send exist; consent/opt-out/quiet-hours absent.",
+      "acceptanceCriteria": "The inbox agents use actually sends via the real provider (gated on connection), logs outbound with delivery/read state, and enforces consent/opt-out.",
+      "testsRequired": ["send via connected provider persists + status updates", "opt-out blocks send", "no duplicate send"],
+      "productDecision": "which provider is default for pilot (Cloud API vs personal bridge)", "complexity": "M", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-018", "domain": "Lead Management", "capability": "Routing auto-assign + SLA + response time",
+      "currentStatus": "partial", "priority": "P1", "dependencies": [],
+      "affectedRoutes": ["/leads", "/team"],
+      "affectedTables": ["leads", "lead_routing_profiles", "lead_routing_candidates"],
+      "missingBehavior": "Routing is recommendation-only (no auto-assign/round-robin/rules); first-contact SLA + response-time never computed (avg_response_minutes hardcoded null); no accept/reject; no reopen.",
+      "acceptanceCriteria": "Rules/round-robin auto-assign on capture; first-contact SLA tracked + escalated; response-time computed from real events; accept/reject + reopen transitions.",
+      "testsRequired": ["new lead auto-assigns by rule", "SLA breach escalates", "response time computed from first outbound", "reopen transition"],
+      "productDecision": "routing policy (round-robin vs fit-score vs territory)", "complexity": "L", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-019", "domain": "Deals", "capability": "Full stage lifecycle + detail page",
+      "currentStatus": "partial", "priority": "P1", "dependencies": ["CRM-P1-012"],
+      "affectedRoutes": ["/deals", "NEW: /deals/[id]"],
+      "affectedTables": ["deals", "deal_profiles", "deal_journeys"],
+      "missingBehavior": "Canonical enum has 8 stages vs 12 in UI (lossy bridge); no exclusivity/financing/due-diligence/handover/cancelled/reopened/counteroffer stages; stage-duration never computed (exited_at never set); board-only, no per-deal page; no win reason; no required-fields-by-stage.",
+      "acceptanceCriteria": "Single canonical stage model covering the full lifecycle; stage duration recorded; per-deal detail page; required-fields-by-stage; win + loss reasons; cooperating-broker.",
+      "testsRequired": ["stage advance sets exited_at/duration", "required field blocks advance", "reopen works", "detail page renders deal graph"],
+      "productDecision": "canonical stage set + required fields per stage", "complexity": "L", "launchBlocking": true
+    },
+    {
+      "id": "CRM-P1-020", "domain": "Communication", "capability": "Action-from-message → task/lead",
+      "currentStatus": "partial", "priority": "P1", "dependencies": ["CRM-P1-017"],
+      "affectedRoutes": ["/whatsapp", "/communication"],
+      "affectedTables": ["whatsapp_ai_actions", "tasks", "leads"],
+      "missingBehavior": "AI action extraction produces suggestions only; converting a message into a durable task/lead is not fully wired.",
+      "acceptanceCriteria": "From a message, create a task/lead/follow-up that persists and links back to the conversation and person.",
+      "testsRequired": ["message→task persists + links", "message→lead deduped"],
+      "productDecision": "none", "complexity": "S", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P2-030", "domain": "Automation", "capability": "Wire autopilot execution loop",
+      "currentStatus": "implemented-not-connected", "priority": "P2", "dependencies": ["CRM-P1-017"],
+      "affectedRoutes": ["/automation"],
+      "affectedTables": ["automation_workflows", "automation_runs", "journey_delayed_actions", "domain_events"],
+      "missingBehavior": "Automation subscriber is classify-only; dispatchTrigger has zero callers; delay queue has no cron; action handlers are no-ops; no stale-lead/expiration scanners; no rate limits.",
+      "acceptanceCriteria": "Approved automations execute via the kernel with idempotency+retries; delayed actions resume via cron; rate limits enforced; irreversible/customer-facing actions remain approval-gated.",
+      "testsRequired": ["approved workflow executes once (idempotent)", "delayed action resumes", "rate limit blocks burst", "no auto-send without approval"],
+      "productDecision": "which automations may run unattended vs approval-only", "complexity": "L", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P2-031", "domain": "Calendar", "capability": "Bridge Google Calendar ↔ CRM meetings",
+      "currentStatus": "implemented-not-connected", "priority": "P2", "dependencies": [],
+      "affectedRoutes": ["/calendar"],
+      "affectedTables": ["meetings", "google_synced_events"],
+      "missingBehavior": "Google client is real but writes to google_synced_events; internal meetings are not pushed to Google; the two stores are unbridged.",
+      "acceptanceCriteria": "CRM meetings sync bi-directionally with Google; one source of truth surfaced on /calendar; conflict handling.",
+      "testsRequired": ["CRM meeting appears in Google", "Google event appears on /calendar", "reschedule syncs both ways"],
+      "productDecision": "none", "complexity": "M", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P2-032", "domain": "Documents", "capability": "Real e-signature integration",
+      "currentStatus": "backend-only", "priority": "P2", "dependencies": ["CRM-P0-001"],
+      "affectedRoutes": ["/documents", "/deals"],
+      "affectedTables": ["document_requests", "document_signatures", "legal_documents"],
+      "missingBehavior": "channel enum lists providers but no real API; signing is manual record-keeping.",
+      "acceptanceCriteria": "Send for signature via a real provider; status webhook updates signature state; signed file stored privately + audited.",
+      "testsRequired": ["send-for-signature creates provider envelope", "webhook updates status", "signed doc stored + audited"],
+      "productDecision": "which e-sign provider", "complexity": "M", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P2-033", "domain": "Reporting", "capability": "Agent/source filters + real export",
+      "currentStatus": "partial", "priority": "P2", "dependencies": [],
+      "affectedRoutes": ["/reports", "/executive"],
+      "affectedTables": ["bi_reports"],
+      "missingBehavior": "No per-agent/per-source filter UI; no saved views; export is CSV/JSON/MD only (no PDF/Excel).",
+      "acceptanceCriteria": "Filter by agent/source/status/date; save views; export PDF/Excel; numbers reconcile with records.",
+      "testsRequired": ["filtered report matches underlying rows", "saved view persists", "export opens in Excel"],
+      "productDecision": "none", "complexity": "M", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P2-034", "domain": "Search", "capability": "Bulk actions + saved filters",
+      "currentStatus": "missing", "priority": "P2", "dependencies": [],
+      "affectedRoutes": ["/buyers", "/sellers", "/properties", "/leads"],
+      "affectedTables": ["persons", "buyers", "sellers", "properties"],
+      "missingBehavior": "No multi-select bulk actions on CRM lists; no saved filters.",
+      "acceptanceCriteria": "Multi-select + bulk assign/tag/status/export; save+recall list filters.",
+      "testsRequired": ["bulk assign updates all + audits", "saved filter recalls"],
+      "productDecision": "none", "complexity": "M", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P2-035", "domain": "People", "capability": "Contact essentials (tags/consent/ID/custom fields/archive)",
+      "currentStatus": "missing", "priority": "P2", "dependencies": ["CRM-P1-010"],
+      "affectedRoutes": ["/contacts", "/buyers", "/sellers"],
+      "affectedTables": ["persons", "NEW: entity_tags", "NEW: custom_fields"],
+      "missingBehavior": "No tags, consent/opt-in, Israeli ID (ת\"ז), campaign attribution, user-defined custom fields, archive/restore.",
+      "acceptanceCriteria": "Tags, consent flags, ID field, campaign source, custom fields, archive/restore all persist and appear in list/detail/search.",
+      "testsRequired": ["tag filter works", "consent blocks messaging", "archive hides from lists but restorable"],
+      "productDecision": "consent model for Israeli market", "complexity": "M", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P3-040", "domain": "AI", "capability": "Expose branded AI suite (BMI/Area Leaders/Winning DNA/Zone Dominance/Coach)",
+      "currentStatus": "backend-only", "priority": "P3", "dependencies": [],
+      "affectedRoutes": ["/territory", "/executive", "NEW readers"],
+      "affectedTables": ["broker_market_intelligence", "market_area_leaders", "broker_winning_dna", "broker_ai_coaching"],
+      "missingBehavior": "Engines compute + persist on sync but have zero UI/API reader; flagship features are invisible or fed by different engines.",
+      "acceptanceCriteria": "Each branded feature has a reader surfacing real persisted output with evidence/scale/confidence/insufficient-data states — or is hidden until ready (see feature-readiness).",
+      "testsRequired": ["reader renders persisted output", "insufficient-data state shows when empty"],
+      "productDecision": "which branded features ship vs hide for v1", "complexity": "M", "launchBlocking": false
+    },
+    {
+      "id": "CRM-P3-041", "domain": "Feature exposure", "capability": "Feature-readiness gating",
+      "currentStatus": "partial", "priority": "P3", "dependencies": [],
+      "affectedRoutes": ["nav", "/graph", "/territory", "/valuation"],
+      "affectedTables": ["feature_flags"],
+      "missingBehavior": "Backend-only/empty modules (graph render, territory 0%, branded AI) appear as available; no per-module readiness state; dead nav possible.",
+      "acceptanceCriteria": "Each module carries production/beta/internal/disabled/unavailable-no-data; broken≠available; no dead nav links; lack-of-data ≠ error.",
+      "testsRequired": ["disabled module hidden from nav", "no-data module shows empty-state not error"],
+      "productDecision": "per-module launch exposure decisions", "complexity": "M", "launchBlocking": false
+    }
+  ]
+}
