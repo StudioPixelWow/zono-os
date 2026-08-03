@@ -1,0 +1,115 @@
+{
+  "meta": {
+    "generatedFrom": "static scan of createServiceRoleClient write sites @7096473",
+    "serviceRoleFiles": 171,
+    "totalWriteOps": 337,
+    "note": "AST-precise per-line enumeration is a follow-up; repository-layer writes via const TABLE are under-counted here."
+  },
+  "summary": {
+    "tier1_tenant_critical": 14,
+    "tier1_tables": [
+      "leads",
+      "org_invitations",
+      "organizations",
+      "properties",
+      "tasks",
+      "users"
+    ],
+    "byTier": {
+      "1": 14,
+      "2": 17,
+      "3": 306
+    }
+  },
+  "tier1_sites": [
+    {
+      "file": "agent-website/service.ts",
+      "table": "leads",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "office-website/service.ts",
+      "table": "leads",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "team-admin/actions.ts",
+      "table": "org_invitations",
+      "op": "update",
+      "tier": 1
+    },
+    {
+      "file": "repositories/organizationRepository.ts",
+      "table": "organizations",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "external-listings/service.ts",
+      "table": "properties",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "properties/repository.ts",
+      "table": "properties",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "properties/repository.ts",
+      "table": "properties",
+      "op": "update",
+      "tier": 1
+    },
+    {
+      "file": "properties/repository.ts",
+      "table": "properties",
+      "op": "delete",
+      "tier": 1
+    },
+    {
+      "file": "exclusive-acquisition/repository.ts",
+      "table": "tasks",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "external-listings/service.ts",
+      "table": "tasks",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "journey-automation/orchestrator.ts",
+      "table": "tasks",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "transactions/service.ts",
+      "table": "tasks",
+      "op": "insert",
+      "tier": 1
+    },
+    {
+      "file": "operating-areas/service.ts",
+      "table": "users",
+      "op": "update",
+      "tier": 1
+    },
+    {
+      "file": "repositories/userRepository.ts",
+      "table": "users",
+      "op": "upsert",
+      "tier": 1
+    }
+  ],
+  "wrapperContract": {
+    "recommended": "scopedWrite(actor, table, op, payload) → assertWrite(actor,{targetOrganizationId:actor.organizationId,...}) then service-role op; injects organization_id on create; refuses foreign org_id",
+    "completeWhen": "a cross-tenant-denial test passes for the site",
+    "migrationStatus": "not_started"
+  }
+}
