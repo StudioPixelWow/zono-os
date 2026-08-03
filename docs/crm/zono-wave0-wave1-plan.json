@@ -1,0 +1,197 @@
+{
+  "meta": {
+    "phase": "Wave 0 + Wave 1",
+    "generatedFrom": "repo 7096473 + live DB",
+    "date": "2026-08-03",
+    "rule": "additive-only; preview-before-apply; no production data changes; no completion without runtime evidence"
+  },
+  "items": [
+    {
+      "id": "W0-DOC-STORAGE",
+      "domain": "Security",
+      "risk": "P0",
+      "affectedTables": [
+        "storage.buckets",
+        "documents",
+        "property_media"
+      ],
+      "affectedRoutes": [
+        "/documents",
+        "/properties/[id]",
+        "/deals"
+      ],
+      "currentState": "public buckets; files world-readable by URL",
+      "requiredState": "private buckets + signed URLs after server permission check",
+      "dependencies": [],
+      "migration": "20261001122000_private_document_buckets.sql (preview)",
+      "tests": [
+        "own-doc read ok",
+        "cross-org denied",
+        "unauth denied",
+        "expired url denied",
+        "path manipulation denied"
+      ],
+      "acceptanceCriteria": "no unauthenticated access to any document; RLS+signed URL enforced",
+      "rollback": "set buckets public + restore public read policy",
+      "completionEvidence": "migration file + audit + preview doc",
+      "status": "designed-not-applied"
+    },
+    {
+      "id": "W0-ORG-SCOPE",
+      "domain": "Security",
+      "risk": "P0",
+      "affectedTables": [
+        "ALL tenant tables"
+      ],
+      "affectedRoutes": [
+        "*"
+      ],
+      "currentState": "service-role writes bypass RLS; 109 tables no policy; hand-written org filters",
+      "requiredState": "centralized org-scoped write boundary + RLS on all tenant tables",
+      "dependencies": [],
+      "migration": "RLS packs (per registry) — additive",
+      "tests": [
+        "authorizeWrite: cross-tenant denied",
+        "inactive denied",
+        "ownership + manager gates (13 tests PASS)",
+        "two-org DB isolation (pending staging)"
+      ],
+      "acceptanceCriteria": "no cross-tenant read/write; unsafe service-role writes wrapped",
+      "rollback": "n/a (additive policies)",
+      "completionEvidence": "src/lib/security/org-scope.ts + 13 passing tests",
+      "status": "core-implemented; wiring+RLS pending"
+    },
+    {
+      "id": "W0-DEACTIVATION",
+      "domain": "Security",
+      "risk": "P0",
+      "affectedTables": [
+        "users"
+      ],
+      "affectedRoutes": [
+        "(app) layout",
+        "/admin/agents"
+      ],
+      "currentState": "status=disabled written but not enforced; no record transfer",
+      "requiredState": "inactive blocked server-side; departure transfers records preserving history",
+      "dependencies": [
+        "W0-ORG-SCOPE"
+      ],
+      "migration": "records_transfer audit (additive)",
+      "tests": [
+        "disabled member denied (in org-scope: PASS)",
+        "departure reassigns records",
+        "history preserved"
+      ],
+      "acceptanceCriteria": "inactive users cannot access/mutate; no orphaned records",
+      "rollback": "reversible transfer window",
+      "completionEvidence": "org-scope inactive_member deny (tested)",
+      "status": "partial"
+    },
+    {
+      "id": "W1-IDENTITY-SCHEMA",
+      "domain": "Identity",
+      "risk": "P1",
+      "affectedTables": [
+        "persons",
+        "person_identifiers",
+        "person_roles",
+        "person_merge_log",
+        "leads",
+        "buyers",
+        "sellers"
+      ],
+      "affectedRoutes": [
+        "/contacts",
+        "/buyers",
+        "/sellers",
+        "/leads"
+      ],
+      "currentState": "fragmented identity across leads/buyers/sellers",
+      "requiredState": "one canonical person, multi-role, additive links",
+      "dependencies": [],
+      "migration": "20261001120000_persons_identity_additive.sql (preview)",
+      "tests": [
+        "resolver 16 tests PASS",
+        "backfill dry-run (pending staging)"
+      ],
+      "acceptanceCriteria": "one identity per org; roles attach without duplication; ambiguous not auto-merged",
+      "rollback": "drop persons/person_* + person_id columns",
+      "completionEvidence": "migration file + resolver + 16 tests",
+      "status": "designed + core-implemented"
+    },
+    {
+      "id": "W1-IDENTITY-RESOLVER",
+      "domain": "Identity",
+      "risk": "P1",
+      "affectedTables": [
+        "persons",
+        "person_identifiers"
+      ],
+      "affectedRoutes": [
+        "all person-creation paths"
+      ],
+      "currentState": "ad-hoc per-path normalizers; social path duplicates people",
+      "requiredState": "single dedup gate on every creation path",
+      "dependencies": [
+        "W1-IDENTITY-SCHEMA"
+      ],
+      "migration": "none",
+      "tests": [
+        "16 tests PASS: link/create/review, conflicting, name-only, idempotent"
+      ],
+      "acceptanceCriteria": "exact_high auto-links; conflicting/ambiguous review; never name-only merge",
+      "rollback": "n/a (pure)",
+      "completionEvidence": "src/lib/identity/resolution.ts + 16 tests",
+      "status": "implemented; wiring pending"
+    },
+    {
+      "id": "W1-IMPORT-PIPELINE",
+      "domain": "Import",
+      "risk": "P1",
+      "affectedTables": [
+        "import_batches",
+        "import_rows",
+        "import_mappings"
+      ],
+      "affectedRoutes": [
+        "/import (new)"
+      ],
+      "currentState": "no CRM import exists",
+      "requiredState": "CSV/XLSX map→preview→validate→dedup→commit→error-report→history→rollback",
+      "dependencies": [
+        "W1-IDENTITY-RESOLVER"
+      ],
+      "migration": "20261001121000_import_pipeline_additive.sql (preview)",
+      "tests": [
+        "validation 19 tests PASS: normalize + partial-failure + formula-reject",
+        "end-to-end (pending staging)"
+      ],
+      "acceptanceCriteria": "valid rows commit; invalid reported; duplicates handled; org-isolated; rollback works",
+      "rollback": "per CRM_IMPORT_ROLLBACK_PLAN (rollback_state)",
+      "completionEvidence": "validation.ts + 19 tests + migration",
+      "status": "core-implemented; UI+async pending"
+    },
+    {
+      "id": "W0-OBSERVABILITY",
+      "domain": "Security",
+      "risk": "P1",
+      "affectedTables": [],
+      "affectedRoutes": [
+        "*"
+      ],
+      "currentState": "no error tracking; console.error only",
+      "requiredState": "error capture + job/import monitoring + security event logging",
+      "dependencies": [],
+      "migration": "none",
+      "tests": [
+        "error captured",
+        "permission-failure logged"
+      ],
+      "acceptanceCriteria": "critical errors + failed jobs observable; no sensitive data logged",
+      "rollback": "n/a",
+      "completionEvidence": "runbook",
+      "status": "designed"
+    }
+  ]
+}
