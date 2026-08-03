@@ -1,0 +1,3 @@
+# Migration replay CI
+
+`ci-migration-replay.sh` provisions a clean Postgres 16 DB, lays down the Supabase-compatible bootstrap (roles anon/authenticated/service_role, schemas auth/storage/extensions, extensions in `extensions` schema, **`search_path` including `extensions`**, auth.uid()/role()/jwt(), storage.buckets/objects/foldername), then runs all `supabase/migrations/*.sql` in order with `ON_ERROR_STOP=1`. Exits non-zero on the first failure. Proven: **209/209 pass** on a clean DB with this bootstrap (2026-08-03). Without `extensions` on the search_path, migration #11 (`israel_localities`) fails at `gin_trgm_ops`.
