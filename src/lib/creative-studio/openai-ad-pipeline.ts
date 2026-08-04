@@ -9,9 +9,10 @@
 // ============================================================================
 import "server-only";
 import { resolveImageProvider } from "./visual-providers";
+import { resolveImageModel } from "./model-config";
 import type { SourceManifest, QaVisionFindings, CreativeScores, CreativeHardFails } from "./creative-qa";
 
-const IMAGE_MODEL = () => process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
+const IMAGE_MODEL = () => resolveImageModel();
 const VISION_MODEL = () => process.env.OPENAI_VISION_MODEL || "gpt-4o";
 
 export type AdKind = "property" | "sold" | "testimonial";

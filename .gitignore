@@ -40,3 +40,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .tsc-out.txt
+
+# playwright (creative-lab e2e) — generated run artifacts, never committed
+/test-results/
+/playwright-report/
+/e2e/**/.report.json

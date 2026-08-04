@@ -1,0 +1,76 @@
+name: creative-lab-ci
+
+# Certification harness for the Creative test runtime. Runs on a real Ubuntu
+# runner (where Next.js is NOT force-killed, unlike the authoring sandbox), so it
+# executes the full local verification AND the 40-scenario browser E2E that could
+# not run during authoring. No Supabase, no OpenAI, no Docker — the guarded test
+# runtime (ZONO_CREATIVE_TEST_RUNTIME=true) backs the app with in-memory stores +
+# mock providers. Nothing here touches production.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify-and-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: use-server export guard
+        run: node scripts/check-use-server-exports.mjs
+
+      - name: Creative-Studio test suites (338 assertions)
+        run: |
+          set -e
+          for f in \
+            src/lib/creative-studio/visual-gen-extensions.qa.ts \
+            src/lib/content-orchestration/runtime.qa.ts \
+            src/lib/creative-studio/kinds/kinds.qa.ts \
+            src/lib/content-orchestration/db-store.qa.ts \
+            src/lib/creative-studio/storage/storage-contract.qa.ts \
+            src/lib/creative-studio/reflow.qa.ts \
+            src/lib/creative-runtime/runtime-factory.qa.ts \
+            src/lib/creative-runtime/lab-flows.qa.ts \
+            src/lib/creative-runtime/test-runtime-security.qa.ts ; do
+            echo "── $f"
+            node --import tsx "$f"
+          done
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser E2E — 40 scenarios (creative test runtime)
+        env:
+          ZONO_CREATIVE_TEST_RUNTIME: "true"
+        run: bash scripts/creative-lab-e2e.sh
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            test-results/
+            e2e/creative-lab/.report.json
+          retention-days: 7

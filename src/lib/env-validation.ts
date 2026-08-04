@@ -34,6 +34,14 @@ const CORE_VARS = [
  * Call once at boot (instrumentation). Safe to call repeatedly.
  */
 export function assertCoreEnv(): void {
+  // Guarded escape hatch for the deterministic Creative test runtime: when the
+  // explicit test-runtime flag is set AND we are NOT in production, the app boots
+  // with NO Supabase (in-memory store + mock providers + local storage) so the
+  // real Next.js app and browser E2E can run without Docker or credentials.
+  // Production is unaffected: NODE_ENV==="production" never takes this path, and
+  // the bypass requires the explicit ZONO_CREATIVE_TEST_RUNTIME flag regardless.
+  if (process.env.ZONO_CREATIVE_TEST_RUNTIME === "true" && process.env.NODE_ENV !== "production") return;
+
   const missing = CORE_VARS.filter((name) => !isReal(process.env[name]));
   if (missing.length === 0) return;
   throw new Error(
