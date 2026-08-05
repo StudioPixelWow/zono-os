@@ -11,6 +11,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { activityEventRepository } from "@/lib/activity/repository";
+import { normPhone, normEmail } from "./identity";
 
 export type PersonRole = "buyer" | "seller" | "lead";
 const TABLES: Record<PersonRole, string> = { buyer: "buyers", seller: "sellers", lead: "leads" };
@@ -24,19 +25,6 @@ export interface PersonProfile {
   roles: PersonRoleRef[]; timeline: PersonTimelineItem[]; primary: { type: PersonRole; id: string };
 }
 export interface PersonListItem { key: string; name: string; phone: string | null; email: string | null; roles: PersonRole[]; primary: { type: PersonRole; id: string } }
-
-/** Normalize an Israeli phone to a comparable key (digits; drop 972/leading 0). */
-function normPhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  let d = phone.replace(/\D/g, "");
-  if (d.startsWith("972")) d = d.slice(3);
-  if (d.startsWith("0")) d = d.slice(1);
-  return d.length >= 6 ? d : null;
-}
-function normEmail(email: string | null | undefined): string | null {
-  const e = (email ?? "").trim().toLowerCase();
-  return e.includes("@") ? e : null;
-}
 
 interface ContactRow { id: string; full_name: string | null; phone: string | null; email: string | null; owner_id: string | null; created_at: string | null; stage?: string | null }
 type DB = Awaited<ReturnType<typeof createClient>>;

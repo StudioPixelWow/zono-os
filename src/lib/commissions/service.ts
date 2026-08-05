@@ -12,6 +12,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { round, num, computeVatNet, derivePaymentStatus } from "./rules";
 
 export type CommissionStatus = "draft" | "pending_approval" | "approved" | "cancelled";
 export type PaymentStatus = "pending" | "partial" | "paid" | "overdue";
@@ -47,22 +48,6 @@ async function ctx() {
   return { userId: user.id, orgId: profile.org_id, isManager, db };
 }
 type DB = any;
-const round = (n: number) => Math.round(n);
-const num = (n: number | undefined | null) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? round(n) : 0);
-
-function computeVatNet(gross: number, vatPct: number, adjustments: number) {
-  const g = num(gross);
-  const vat_amount = round((g * vatPct) / 100);
-  const net_amount = Math.max(0, g + adjustments);
-  return { gross_amount: g, vat_amount, net_amount };
-}
-
-function derivePaymentStatus(due: number, collected: number, current: PaymentStatus): PaymentStatus {
-  if (due > 0 && collected >= due) return "paid";
-  if (collected > 0) return "partial";
-  if (current === "overdue") return "overdue";
-  return "pending";
-}
 
 // ── reads ────────────────────────────────────────────────────────────────────
 function mapCollection(c: Record<string, unknown>): CollectionSummary {

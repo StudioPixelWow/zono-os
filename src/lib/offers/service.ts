@@ -12,6 +12,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { OFFER_OPEN_STATUSES, offerNextAction, offerActionAllowed } from "./rules";
 
 export type OfferStatus = "draft" | "submitted" | "countered" | "accepted" | "rejected" | "withdrawn" | "expired";
 export type OfferSide = "buyer" | "seller" | "agent";
@@ -35,8 +36,6 @@ export interface CreateOfferInput {
   requestedEntryDate?: string | null; expiresAt?: string | null; note?: string | null;
 }
 
-const OPEN_STATUSES: OfferStatus[] = ["draft", "submitted", "countered"];
-
 async function ctx() {
   const { user, profile } = await getSessionContext();
   if (!user || !profile?.org_id) throw new Error("לא מחובר/ת");
@@ -45,19 +44,6 @@ async function ctx() {
   return { userId: user.id, orgId: profile.org_id, db };
 }
 type DB = any;
-
-function nextAction(status: OfferStatus, responder: string | null): string {
-  switch (status) {
-    case "draft": return "הגש הצעה";
-    case "submitted": return responder === "seller" ? "ממתין לתשובת מוכר" : "ממתין לתשובה";
-    case "countered": return responder === "buyer" ? "נדרשת תשובת קונה" : "נדרשת תשובת מוכר";
-    case "accepted": return "המר לעסקה";
-    case "rejected": return "נדחתה";
-    case "withdrawn": return "בוטלה";
-    case "expired": return "פג תוקף";
-    default: return "";
-  }
-}
 
 function mapSummary(d: Record<string, unknown>): OfferSummary {
   const status = ((d.status as string) ?? "draft") as OfferStatus;
@@ -68,7 +54,7 @@ function mapSummary(d: Record<string, unknown>): OfferSummary {
     current_responder: (d.current_responder as string) ?? null, financing: (d.financing as string) ?? null,
     requested_entry_date: (d.requested_entry_date as string) ?? null, expires_at: (d.expires_at as string) ?? null,
     submitted_at: (d.submitted_at as string) ?? null, created_at: d.created_at as string, updated_at: d.updated_at as string,
-    nextAction: nextAction(status, (d.current_responder as string) ?? null),
+    nextAction: offerNextAction(status, (d.current_responder as string) ?? null),
   };
 }
 
@@ -92,7 +78,7 @@ export async function listOffers(filter?: { status?: OfferStatus | "open" | "all
   if (filter?.propertyId) q = q.eq("property_id", filter.propertyId);
   if (filter?.buyerId) q = q.eq("buyer_id", filter.buyerId);
   if (filter?.status && filter.status !== "all") {
-    if (filter.status === "open") q = q.in("status", OPEN_STATUSES);
+    if (filter.status === "open") q = q.in("status", OFFER_OPEN_STATUSES as string[]);
     else q = q.eq("status", filter.status);
   }
   const { data } = await q.order("updated_at", { ascending: false }).limit(300);
@@ -129,7 +115,7 @@ export async function createDraftOffer(input: CreateOfferInput): Promise<{ id: s
 }
 
 function assertStatus(cur: string, allowed: OfferStatus[]): void {
-  if (!allowed.includes(cur as OfferStatus)) throw new Error(`פעולה לא חוקית במצב "${cur}"`);
+  if (!offerActionAllowed(cur, allowed)) throw new Error(`פעולה לא חוקית במצב "${cur}"`);
 }
 
 export async function submitOffer(offerId: string): Promise<void> {
@@ -225,7 +211,7 @@ export async function getOffersCommandCenter(): Promise<OffersCommandCenter> {
   const offers = await listOffers({ status: "all" });
   return {
     offers,
-    open: offers.filter((o) => OPEN_STATUSES.includes(o.status)).length,
+    open: offers.filter((o) => OFFER_OPEN_STATUSES.includes(o.status)).length,
     accepted: offers.filter((o) => o.status === "accepted").length,
     awaitingSeller: offers.filter((o) => o.status === "submitted" && o.current_responder === "seller").length,
     awaitingBuyer: offers.filter((o) => o.status === "countered" && o.current_responder === "buyer").length,
