@@ -1,6 +1,10 @@
 /**
- * Client-side document file upload to the `documents` Supabase Storage bucket.
- * Used by the documents screen's "upload" flow. Returns the public URL + path.
+ * Client-side document file upload to the PRIVATE `documents` Supabase Storage
+ * bucket. Used by the documents screen's "upload" flow. Returns ONLY the storage
+ * path — sensitive documents are never public. Access happens later through a
+ * short-lived signed URL minted server-side (documents/service.ts →
+ * getDocumentSignedUrl). The org-scoped INSERT policy (documents_org_insert)
+ * authorizes the upload; the first path segment is the org id.
  */
 import { createClient } from "@/lib/supabase/client";
 
@@ -22,7 +26,7 @@ export function isAllowedDocFile(file: File): boolean {
 export async function uploadDocumentFile(
   file: File,
   orgId: string,
-): Promise<{ url: string; path: string; mimeType: string; size: number }> {
+): Promise<{ path: string; mimeType: string; size: number }> {
   if (file.size > MAX_BYTES) throw new Error("הקובץ גדול מ-25MB");
   const supabase = createClient();
   const ext = (file.name.split(".").pop() || "bin").toLowerCase();
@@ -32,6 +36,7 @@ export async function uploadDocumentFile(
     contentType: file.type || "application/octet-stream",
   });
   if (error) throw new Error(error.message);
-  const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return { url: pub.publicUrl, path, mimeType: file.type, size: file.size };
+  // NO public URL — the bucket is private. Only the org-scoped path is stored;
+  // reads go through a server-minted short-lived signed URL.
+  return { path, mimeType: file.type, size: file.size };
 }

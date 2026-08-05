@@ -7,7 +7,7 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import {
   createDocumentFromTemplateAction, createDocumentManualAction, createSignatureRequestAction, recordSignatureAction,
-  cancelDocumentAction, getDocumentDetailAction,
+  cancelDocumentAction, getDocumentDetailAction, getDocumentSignedUrlAction,
 } from "@/lib/documents/actions";
 import {
   signatureStatusLabel, STATUS_TONE, AUDIT_EVENT_LABELS, docCategoryLabel, DOC_CATEGORY_LABELS,
@@ -112,17 +112,15 @@ function NewDocumentForm({ r }: { r: Runner }) {
   const submit = () =>
     r.run(async () => {
       setUploadErr(null);
-      let fileUrl: string | undefined;
       let storagePath: string | undefined;
       if (file) {
         if (!org) throw new Error("לא ניתן לזהות ארגון להעלאה");
         const up = await uploadDocumentFile(file, org.id);
-        fileUrl = up.url;
         storagePath = up.path;
       }
       const res = await createDocumentManualAction({
         title, docCategory, expiresAt: expiresAt || null, notes: notes || null,
-        fileUrl, storagePath, isChecklistItem: isChecklist,
+        storagePath, isChecklistItem: isChecklist,
       });
       if (res.error) throw new Error(res.error);
       setTitle(""); setNotes(""); setExpiresAt(""); setFile(null); setIsChecklist(false);
@@ -201,11 +199,22 @@ function DocCard({ d, r }: { d: DocumentSummary; r: Runner }) {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {d.file_url && (
+        {d.has_stored_file ? (
+          <Button size="sm" variant="secondary" loading={r.busyId === `open-${d.id}`}
+            onClick={() => r.run(async () => {
+              const res = await getDocumentSignedUrlAction(d.id);
+              if (res.error || !res.url) throw new Error(res.error ?? "פתיחת המסמך נכשלה");
+              window.open(res.url, "_blank", "noopener,noreferrer");
+              return res;
+            }, { id: `open-${d.id}`, pendingMessage: "פותח מסמך מאובטח...", success: () => "נפתח קישור מאובטח (5 דק׳)" })}>
+            <Icon name="Download" size={14} />צפה / הורד
+          </Button>
+        ) : d.file_url ? (
+          // Legacy historical asset stored as a public URL before private storage.
           <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="bg-surface text-ink hover:border-brand-light border-line inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-bold">
             <Icon name="Download" size={14} />צפה / הורד
           </a>
-        )}
+        ) : null}
         {(d.signature_status === "draft") && (
           <Button size="sm" loading={r.busyId === `req-${d.id}`}
             onClick={() => wrap(() => createSignatureRequestAction(d.id, "manual"), `req-${d.id}`, "מכין בקשה...")}>

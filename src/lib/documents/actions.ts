@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import {
   createDocumentFromTemplate, createDocumentManual, addDocumentVersion, addParticipant, createSignatureRequest,
-  recordSignature, rejectDocument, cancelDocument, computeDealChecklist, getDocumentDetail,
+  recordSignature, rejectDocument, cancelDocument, computeDealChecklist, getDocumentDetail, getDocumentSignedUrl,
   type EntityRefs, type DocumentDetail, type ManualDocInput,
 } from "./service";
 
@@ -50,4 +50,12 @@ export async function recomputeChecklistAction(dealId: string): Promise<DocActio
 }
 export async function getDocumentDetailAction(documentId: string): Promise<DocumentDetail | null> {
   return getDocumentDetail(documentId);
+}
+/** Mint a short-lived signed URL for a private document file (5-minute TTL). */
+export async function getDocumentSignedUrlAction(documentId: string): Promise<DocActionState & { url?: string }> {
+  try {
+    const r = await getDocumentSignedUrl(documentId);
+    if (!r) return { error: "לא נמצא קובץ מאובטח למסמך זה" };
+    return { ok: true, url: r.url };
+  } catch (e) { return { error: e instanceof Error ? e.message : "פתיחת המסמך נכשלה" }; }
 }
