@@ -10,10 +10,11 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import {
-  providerIsOpenAI, buildSourceManifest, buildAdPrompt, generateAdImageRaw, runCreativeQA, runCreativeDirectorQA, refUrlsFor,
+  providerIsOpenAI, buildSourceManifest, generateAdImageRaw, runCreativeQA, runCreativeDirectorQA, refUrlsFor,
   type AdSpec, type AdGenAssets, type AdKind, type CreativeFindings,
 } from "./openai-ad-pipeline";
 import { renderHybridAd, hybridAvailable } from "./hybrid-ad";
+import { buildDynamicAdPrompt } from "./dynamic-ad-prompt";
 import {
   deriveCritical, decideApproval, buildCorrectionPrompt, decideCreative, buildCreativeCorrection,
   type QaScores, type QaCritical, type QaVisionFindings, type SourceManifest, type CreativeScores,
@@ -35,10 +36,11 @@ const TOTAL_BUDGET_MS = Math.max(60_000, Number(process.env.ZONO_CREATIVE_TOTAL_
 // Rough cost of one full attempt (image gen + 2 vision QA calls). If less than
 // this remains in the budget, we don't start another attempt.
 const ATTEMPT_COST_MS = Math.max(40_000, Number(process.env.ZONO_CREATIVE_ATTEMPT_COST_MS) || 95_000);
-// HYBRID PATH (default ON): generate a text-free gpt-image-2 SCENE, then composite
-// the ZONO brand overlay deterministically (exact colors, real logo + agent photo,
-// perfect RTL Hebrew). Set ZONO_HYBRID_OVERLAY=0 to force the legacy AI-bake path.
-const HYBRID_ENABLED = !["0", "false", "off", "no"].includes((process.env.ZONO_HYBRID_OVERLAY ?? "").toLowerCase());
+// DESIGN MODE (user mandate): AI designs the WHOLE ad (incl. Hebrew) with
+// gpt-image-2, driven by a FRESH AI-written art-direction prompt each time.
+// The deterministic scene+overlay HYBRID stays available behind a flag
+// (ZONO_HYBRID_OVERLAY=1) as the "perfect Hebrew, templated" alternative.
+const HYBRID_ENABLED = ["1", "true", "on", "yes"].includes((process.env.ZONO_HYBRID_OVERLAY ?? "").toLowerCase());
 
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
@@ -127,7 +129,9 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
       break;
     }
     attempts = n;
-    const prompt = buildAdPrompt(p.spec, p.assets, correction) + dnaSuffix;
+    // FRESH AI-written art direction each attempt (falls back to the static
+    // buildAdPrompt inside buildDynamicAdPrompt when no LLM/key is available).
+    const prompt = (await buildDynamicAdPrompt(p.spec, p.assets, correction)) + dnaSuffix;
     // On a correction pass, ATTACH the previous generated image as the base to
     // edit (first ref) so OpenAI fixes ONLY the flagged text and preserves the
     // layout/composition/branding — it never redesigns or starts a new concept.
