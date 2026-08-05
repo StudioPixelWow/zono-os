@@ -1,0 +1,107 @@
+{
+  "generated": "2026-08-05",
+  "target": "zono-dev (tlrefajhyrqnjtmimaos) staging",
+  "verdict": "Staging Ready, Design Partner Not Ready",
+  "production_touched": false,
+  "blockers": [
+    {
+      "id": "DP-1",
+      "domain": "deployment",
+      "severity": "high",
+      "reproduction": "No deployed staging application URL bound to the reconciled Supabase project exists in this session.",
+      "affected_workflow": "All application-level E2E, feature smoke, and tenant-isolation phases (6, 7, 8, 10).",
+      "owner": "Tal / devops",
+      "recommended_fix": "Deploy creative-lab-cert to a non-production URL with staging secrets server-side and outbound integrations disabled, per STAGING_DEPLOYMENT_EVIDENCE.md.",
+      "launch_blocking": true,
+      "evidence": "docs/runtime/STAGING_DEPLOYMENT_EVIDENCE.md"
+    },
+    {
+      "id": "DP-2",
+      "domain": "security/auth",
+      "severity": "medium",
+      "reproduction": "Security advisor reports auth_leaked_password_protection = disabled.",
+      "affected_workflow": "Password set/reset; compromised-password rejection.",
+      "owner": "Tal (project owner)",
+      "recommended_fix": "Enable Leaked Password Protection for the zono-dev Auth project in the dashboard; not automatable via MCP. Re-run advisor to confirm.",
+      "launch_blocking": true,
+      "evidence": "docs/security/STAGING_AUTH_HARDENING.md"
+    },
+    {
+      "id": "DP-3",
+      "domain": "runtime/e2e",
+      "severity": "high",
+      "reproduction": "0 of 10 CRM browser journeys executed (no deployed app).",
+      "affected_workflow": "Lead→Buyer, Seller/Property, Matching, Viewing, Offer, Deal, Commission/Collection, Today, Bulk Leads, Private Documents.",
+      "owner": "QA / Tal",
+      "recommended_fix": "Run the 10-journey matrix in a real browser against the deployed staging app; record pass/fail with screenshots.",
+      "launch_blocking": true,
+      "evidence": "docs/runtime/FULL_JOURNEY_RESULTS.md"
+    },
+    {
+      "id": "DP-4",
+      "domain": "security/tenant-isolation",
+      "severity": "high",
+      "reproduction": "Cross-tenant (Alpha vs Beta) probes not run through app surfaces; and no audit yet that tenant-facing reads never use the service-role client to bypass RLS.",
+      "affected_workflow": "All multi-tenant surfaces (search, lists, counts, signed doc URLs, every workspace).",
+      "owner": "Tal",
+      "recommended_fix": "After deploy, run two-org cross-tenant probes capturing HTTP status + UI; audit server code for service-role bypass on tenant reads. DB-layer RLS (553/553) already verified.",
+      "launch_blocking": true,
+      "evidence": "docs/security/APP_TENANT_ISOLATION_RESULTS.md"
+    },
+    {
+      "id": "DP-5",
+      "domain": "runtime/feature-smoke",
+      "severity": "medium",
+      "reproduction": "App-level smoke for 8 feature families not run (DB-runtime smoke passed 8/8).",
+      "affected_workflow": "Meta Workspace, Meta Social Intelligence, Copilot, ZI Learning, Broker Intelligence, Agency Resolver, Creative QA, Israel Neighborhoods.",
+      "owner": "Tal",
+      "recommended_fix": "Run app-level smoke per family (provider-disabled/mock where live creds absent) after deploy.",
+      "launch_blocking": true,
+      "evidence": "docs/runtime/FEATURE_FAMILY_SMOKE_RESULTS.md"
+    },
+    {
+      "id": "DP-6",
+      "domain": "operations/monitoring",
+      "severity": "medium",
+      "reproduction": "External alerting not wired; only ad-hoc SQL checks exist.",
+      "affected_workflow": "Detection of stuck queues, dead-letter growth, publish failures, RLS-denial spikes, slow queries.",
+      "owner": "Tal / devops",
+      "recommended_fix": "Wire the SQL checks in STAGING_MONITORING_READINESS.md into scheduled checks/alerts against the deployed app + Postgres logs.",
+      "launch_blocking": true,
+      "evidence": "docs/operations/STAGING_MONITORING_READINESS.md"
+    },
+    {
+      "id": "DP-7",
+      "domain": "schema/reconciliation",
+      "severity": "low",
+      "reproduction": "approval_decisions and user_ui_preferences exist on staging but are defined by no repo migration (0 rows, 0 code refs).",
+      "affected_workflow": "None active; schema drift bookkeeping.",
+      "owner": "Tal (product owner)",
+      "recommended_fix": "By 2026-09-05, apply the prepared reviewed drop (after re-confirming 0 rows / 0 refs / no dependency) or adopt if a use path emerges.",
+      "launch_blocking": false,
+      "evidence": "docs/database/ORPHAN_TABLE_RESOLUTION.md; docs/database/reviewed-drops/"
+    },
+    {
+      "id": "DP-8",
+      "domain": "security/performance-backlog",
+      "severity": "low",
+      "reproduction": "Residual advisor items: 6 non-Meta functions with mutable search_path; citext/pg_trgm in public schema; ~46 deferred low-value unindexed FKs; other pre-existing anon-executable SECURITY DEFINER helpers.",
+      "affected_workflow": "None critical; hardening backlog.",
+      "owner": "Tal / backend",
+      "recommended_fix": "Follow-up migrations: pin search_path on the 6 functions; move extensions to a dedicated schema; index remaining FKs if query patterns warrant; review anon-executable helpers.",
+      "launch_blocking": false,
+      "evidence": "docs/security/SECURITY_DEFINER_RPC_HARDENING.md; docs/performance/FK_INDEX_HARDENING.md"
+    },
+    {
+      "id": "DP-9",
+      "domain": "security/auth",
+      "severity": "medium",
+      "reproduction": "Not yet confirmed that no RLS policy on public.users permits a member to update their own role_id/org_id.",
+      "affected_workflow": "Role escalation / tenant hopping.",
+      "owner": "Tal / backend",
+      "recommended_fix": "Audit users-table RLS policies; ensure self-update of role_id/org_id is disallowed.",
+      "launch_blocking": false,
+      "evidence": "docs/security/STAGING_AUTH_HARDENING.md"
+    }
+  ]
+}
