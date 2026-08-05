@@ -301,23 +301,36 @@ export function hybridAvailable(): boolean {
 }
 
 /**
- * Produce a finished ad the ZONO way: fresh AI scene prompt → gpt-image-2 scene
- * (text-free) → deterministic premium overlay with exact brand colors, the real
- * logo and the real agent photo, and perfect RTL Hebrew. Throws on hard failure
- * so the caller can fall back to the legacy bake path (never blocks the button).
+ * Produce a finished ad the ZONO way: the REAL property photo is the hero (so the
+ * property is ALWAYS represented correctly — never an AI-invented building), and a
+ * deterministic premium overlay stamps exact brand colors, the real logo, the real
+ * agent photo and pixel-perfect RTL Hebrew on top. Fast (no slow /images/edits
+ * bake → no 75s timeout) and always correct. When no property photo exists (e.g. a
+ * brand/market post), gpt-image-2 generates a text-free premium SCENE as the base.
+ * Throws on hard failure so the caller can fall back to the legacy path.
  */
 export async function renderHybridAd(spec: AdSpec, assets: AdGenAssets): Promise<HybridImage> {
-  const prompt = await buildScenePrompt(spec);
   const size = process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536";
-  const scene = await generateFinalImage(prompt, null, { size }); // text-free scene
-  const sceneBuf = Buffer.from(scene.b64, "base64");
-
-  const [logoBytes, agentBytes] = await Promise.all([
+  const [logoBytes, agentBytes, propertyBytes] = await Promise.all([
     assets.logoUrl ? fetchLogoBytes(assets.logoUrl).catch(() => null) : Promise.resolve(null),
     assets.agentPhoto ? fetchLogoBytes(assets.agentPhoto).catch(() => null) : Promise.resolve(null),
+    assets.propertyImages[0] ? fetchLogoBytes(assets.propertyImages[0]).catch(() => null) : Promise.resolve(null),
   ]);
 
+  let baseBuf: Buffer;
+  let provider: string;
+  if (propertyBytes) {
+    // Real property photo = hero. Always-correct representation, fast, no AI image call.
+    baseBuf = propertyBytes;
+    provider = "photo+overlay";
+  } else {
+    // No property photo → premium text-free gpt-image-2 scene as the base.
+    const scene = await generateFinalImage(await buildScenePrompt(spec), null, { size });
+    baseBuf = Buffer.from(scene.b64, "base64");
+    provider = `${scene.provider}+overlay`;
+  }
+
   const brand: BrandPaint = { bg: spec.palette.bg, bg2: spec.palette.bg2, accent: spec.palette.accent, ink: spec.palette.bg };
-  const out = await composeAd(sceneBuf, spec, brand, { logoBytes, agentBytes });
-  return { b64: out.toString("base64"), mime: "image/png", provider: `${scene.provider}+overlay` };
+  const out = await composeAd(baseBuf, spec, brand, { logoBytes, agentBytes });
+  return { b64: out.toString("base64"), mime: "image/png", provider };
 }

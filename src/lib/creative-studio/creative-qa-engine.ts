@@ -36,11 +36,12 @@ const TOTAL_BUDGET_MS = Math.max(60_000, Number(process.env.ZONO_CREATIVE_TOTAL_
 // Rough cost of one full attempt (image gen + 2 vision QA calls). If less than
 // this remains in the budget, we don't start another attempt.
 const ATTEMPT_COST_MS = Math.max(40_000, Number(process.env.ZONO_CREATIVE_ATTEMPT_COST_MS) || 95_000);
-// DESIGN MODE (user mandate): AI designs the WHOLE ad (incl. Hebrew) with
-// gpt-image-2, driven by a FRESH AI-written art-direction prompt each time.
-// The deterministic scene+overlay HYBRID stays available behind a flag
-// (ZONO_HYBRID_OVERLAY=1) as the "perfect Hebrew, templated" alternative.
-const HYBRID_ENABLED = ["1", "true", "on", "yes"].includes((process.env.ZONO_HYBRID_OVERLAY ?? "").toLowerCase());
+// DEFAULT: HYBRID — real property photo as hero + deterministic premium overlay
+// (exact brand colors, real logo + agent photo, perfect RTL Hebrew). This is the
+// only path that is ALWAYS correct AND fast: the legacy AI-bake path both garbles
+// Hebrew and TIMES OUT with gpt-image-2 (/images/edits >75s). Set
+// ZONO_HYBRID_OVERLAY=0 to force the legacy AI-bake path.
+const HYBRID_ENABLED = !["0", "false", "off", "no"].includes((process.env.ZONO_HYBRID_OVERLAY ?? "").toLowerCase());
 
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
