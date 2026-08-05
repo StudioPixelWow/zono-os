@@ -76,6 +76,10 @@ function assembleScores(findings: QaVisionFindings | null, c: QaCritical): QaSco
 interface OrchestratorParams {
   orgId: string; propertyId: string | null; requestId: string | null; createdBy: string | null;
   kind: AdKind; template?: string | null; spec: AdSpec; assets: AdGenAssets; bucket: string;
+  // Optional agent-chosen design direction (the "3 options" flow). When present it
+  // is realized faithfully by buildDynamicAdPrompt on every attempt instead of a
+  // freshly invented concept — so each of the 3 briefs drives its own distinct ad.
+  conceptBrief?: string | null;
   // Creative DNA selection — applies a ready org DNA profile or a code preset to
   // the art direction (resolved+logged once). When omitted, the org DEFAULT
   // ready profile (if any) is applied automatically.
@@ -132,7 +136,7 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
     attempts = n;
     // FRESH AI-written art direction each attempt (falls back to the static
     // buildAdPrompt inside buildDynamicAdPrompt when no LLM/key is available).
-    const prompt = (await buildDynamicAdPrompt(p.spec, p.assets, correction)) + dnaSuffix;
+    const prompt = (await buildDynamicAdPrompt(p.spec, p.assets, correction, p.conceptBrief)) + dnaSuffix;
     // On a correction pass, ATTACH the previous generated image as the base to
     // edit (first ref) so OpenAI fixes ONLY the flagged text and preserves the
     // layout/composition/branding — it never redesigns or starts a new concept.

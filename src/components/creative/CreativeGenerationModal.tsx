@@ -19,7 +19,7 @@ import { FinalAdsSkeleton, type FinalAdPreview } from "./FinalAdsSkeleton";
  * the 2 skeleton cards keep pulsing until `complete` (the real image-generation
  * response) is true. We never fake final completion.
  */
-export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { complete: boolean; onView: () => void; finalAds?: FinalAdPreview[] }) {
+export function CreativeGenerationModal({ complete, onView, finalAds = [], count = 2 }: { complete: boolean; onView: () => void; finalAds?: FinalAdPreview[]; count?: number }) {
   const [t, setT] = useState(0); // simulated concept progress 0..1 (held ≤0.92 until complete)
   const [tick, setTick] = useState(0); // rotating ticker index
   const startedComplete = useRef(false);
@@ -53,7 +53,7 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { c
   const selectPhase = final || tt >= 0.78;
   const rejected = selectPhase ? 10 : 0;
   const selectedCount = selectPhase ? 2 : 0;
-  const finalAdsCount = final ? 2 : 0;
+  const finalAdsCount = final ? count : 0;
   // Honest completion: count real successes; flag a full failure (no images).
   const successCount = finalAds.filter((a) => a.imageUrl || !a.failed).length;
   const allFailed = final && finalAds.length > 0 && finalAds.every((a) => a.failed && !a.imageUrl);
@@ -111,7 +111,7 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { c
                       <motion.p initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-ink text-lg font-black">
                         הגרסאות המנצחות מוכנות
                       </motion.p>
-                      <p className="text-brand-strong text-2xl font-black">🏆 {successCount || 2} מודעות נבחרו</p>
+                      <p className="text-brand-strong text-2xl font-black">🏆 {successCount || count} מודעות נבחרו</p>
                     </>
                   )}
                 </div>
@@ -144,7 +144,7 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [] }: { c
           {/* final ads area — 2 large skeletons, gated on the REAL backend response */}
           {selectPhase && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="border-line/50 mt-4 rounded-2xl border border-dashed p-3.5">
-              <FinalAdsSkeleton complete={final} ads={finalAds} />
+              <FinalAdsSkeleton complete={final} ads={finalAds} count={count} />
             </motion.div>
           )}
 

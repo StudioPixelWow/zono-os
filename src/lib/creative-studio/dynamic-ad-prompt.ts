@@ -63,7 +63,7 @@ Overall feel: bright, clean, high-end, warm and trustworthy — but ELEVATED to 
  * deterministic locks. gpt-image-2 designs the whole ad from this. Falls back to
  * the static buildAdPrompt when no LLM/key is available or the call fails.
  */
-export async function buildDynamicAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: string): Promise<string> {
+export async function buildDynamicAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: string, conceptBrief?: string | null): Promise<string> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return buildAdPrompt(spec, assets, correction);
   const textModel = process.env.OPENAI_TEXT_MODEL || "gpt-4o";
@@ -74,23 +74,30 @@ export async function buildDynamicAdPrompt(spec: AdSpec, assets: AdGenAssets, co
     emotionalFeel: spec.emotionalFeel, visualStory: spec.visualStory,
     hasLogo: Boolean(assets.logoUrl), hasAgentPhoto: Boolean(assets.agentPhoto), propertyPhotos: Math.min(assets.propertyImages.length, 4),
   };
+  // When the agent picked/edited a specific design direction ("3 options" flow),
+  // REALIZE exactly that direction — expand its intent into a full English brief,
+  // keep the chosen concept, never swap it for a generic layout.
+  const brief = (conceptBrief ?? "").trim();
+  const userMsg = brief
+    ? `The agent has CHOSEN this exact design direction for the ad (it may be written in Hebrew). Realize THIS direction faithfully — translate its intent into a complete art-direction brief, keep its concept, mood and layout idea, do NOT replace it with a generic layout:\n"""${brief}"""\n\nProperty context (JSON):\n${JSON.stringify(ctx)}`
+    : `Property context (JSON). Invent a fresh concept — do NOT reuse a standard layout:\n${JSON.stringify(ctx)}`;
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: textModel, temperature: 0.95, max_tokens: 620,
+        model: textModel, temperature: brief ? 0.7 : 0.95, max_tokens: 620,
         messages: [
           { role: "system", content: SYS },
-          { role: "user", content: `Property context (JSON). Invent a fresh concept — do NOT reuse a standard layout:\n${JSON.stringify(ctx)}` },
+          { role: "user", content: userMsg },
         ],
       }),
     });
     if (!res.ok) return buildAdPrompt(spec, assets, correction);
     const json = await res.json();
-    const brief = (json?.choices?.[0]?.message?.content ?? "").trim();
-    if (!brief || brief.length < 80) return buildAdPrompt(spec, assets, correction);
-    return `ZONO PREMIUM REAL ESTATE CREATIVE ENGINE — fresh art direction for this property:\n${brief}\n\n${buildLocks(spec, assets, correction)}`;
+    const written = (json?.choices?.[0]?.message?.content ?? "").trim();
+    if (!written || written.length < 80) return buildAdPrompt(spec, assets, correction);
+    return `ZONO PREMIUM REAL ESTATE CREATIVE ENGINE — fresh art direction for this property:\n${written}\n\n${buildLocks(spec, assets, correction)}`;
   } catch {
     return buildAdPrompt(spec, assets, correction);
   }

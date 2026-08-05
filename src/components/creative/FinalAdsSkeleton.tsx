@@ -29,9 +29,10 @@ function fmtElapsed(sec: number): string {
 /** The "Final ads" area: 2 large preview cards. While generating they show live
  *  per-ad working state + elapsed time; on completion they show the REAL
  *  generated ads (images) when available. */
-export function FinalAdsSkeleton({ complete, ads = [] }: { complete: boolean; ads?: FinalAdPreview[] }) {
+export function FinalAdsSkeleton({ complete, ads = [], count = 2 }: { complete: boolean; ads?: FinalAdPreview[]; count?: number }) {
   const [elapsed, setElapsed] = useState(0);
   const [step, setStep] = useState(0);
+  const n = Math.max(2, complete ? Math.max(ads.length, count) : count);
 
   useEffect(() => {
     if (complete) return;
@@ -48,14 +49,14 @@ export function FinalAdsSkeleton({ complete, ads = [] }: { complete: boolean; ad
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
         <span className="text-ink text-[13px] font-black">
-          {complete ? "🏆 2 מודעות סופיות מוכנות" : "2 מודעות סופיות נוצרות"}
+          {complete ? `🏆 ${n} מודעות סופיות מוכנות` : `${n} מודעות סופיות נוצרות`}
         </span>
         <span className="text-muted text-[11px] font-bold tabular-nums">
           {complete ? "הושלם" : `${fmtElapsed(elapsed)} · נמשך בדרך כלל 1–3 דק׳`}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        {[0, 1].map((i) => {
+      <div className={`grid gap-3 ${n >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+        {Array.from({ length: n }, (_, i) => {
           const ad = ads[i];
           return (
             <div
