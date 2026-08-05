@@ -12,15 +12,17 @@
 /** Verified default image model (override via env). */
 export const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 /** Models this integration is known to support. Extend as OpenAI ships more. */
-export const SUPPORTED_IMAGE_MODELS = ["gpt-image-2", "gpt-image-1"] as const;
+export const SUPPORTED_IMAGE_MODELS = ["gpt-image-2"] as const;
+/** RETIRED models — never used again. Any request/env pin for one is coerced to
+ *  the current default (user mandate: "תגרוס את הישן" — scrap the old model). */
+export const RETIRED_IMAGE_MODELS = ["gpt-image-1", "dall-e-2", "dall-e-3"] as const;
 
-/** Resolve the configured OpenAI image model (precedence: env → legacy alias → default). */
+/** Resolve the OpenAI image model. A retired pin (e.g. a stale gpt-image-1 env
+ *  var) is coerced to the verified default so the old model can never come back. */
 export function resolveImageModel(): string {
-  return (
-    process.env.OPENAI_IMAGE_MODEL ||
-    process.env.ZONO_OPENAI_IMAGE_MODEL ||
-    DEFAULT_IMAGE_MODEL
-  );
+  const requested = (process.env.OPENAI_IMAGE_MODEL || process.env.ZONO_OPENAI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim();
+  if ((RETIRED_IMAGE_MODELS as readonly string[]).includes(requested)) return DEFAULT_IMAGE_MODEL;
+  return requested || DEFAULT_IMAGE_MODEL;
 }
 
 export type ImageProviderName = "openai" | "mock";
