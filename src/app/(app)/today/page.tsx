@@ -8,6 +8,7 @@ import { getDailyOS } from "@/lib/daily-os/service";
 import { DailyOS } from "@/components/daily-os/DailyOS";
 import { BrokerIntelligenceQueuePanel } from "@/components/broker-intelligence/BrokerIntelligenceQueuePanel";
 import { BrokerTodayAgenda } from "@/components/broker-intelligence/BrokerTodayAgenda";
+import { AgentWorkQueue } from "@/components/today/AgentWorkQueue";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,9 @@ export default async function TodayPage() {
   const data = await getDailyOS();
   return (
     <div dir="rtl" className="flex flex-col gap-6">
+      {/* Epic 3 hardening — the explicit prioritized work-queue: overdue tasks,
+          meetings, offers/documents/commissions/collections awaiting action. */}
+      <AgentWorkQueue />
       {/* Broker OS · Phase 2 — the chronological workday, built live from the
           shared queue. Leads the morning: "what to do, in what order, when". */}
       <BrokerTodayAgenda />
