@@ -70,7 +70,7 @@ export function buildSourceManifest(spec: AdSpec): SourceManifest {
 
 export function refUrlsFor(assets: AdGenAssets): string[] {
   // Up to 4 property photos so the model can build a real COLLAGE, plus logo + agent.
-  return [...assets.propertyImages.slice(0, 4), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
+  return [...assets.propertyImages.slice(0, 1), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
 }
 
 /** Full art-direction brief — the ZONO PREMIUM REAL ESTATE CREATIVE ENGINE
@@ -202,7 +202,7 @@ export async function generateAdImageRaw(prompt: string, refUrls: string[]): Pro
   const form = new FormData();
   form.append("model", IMAGE_MODEL()); form.append("prompt", prompt);
   // Vertical 4:5 social poster (closest gpt-image-1 portrait size to 1080×1350).
-  form.append("size", process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536"); form.append("quality", "high"); form.append("n", "1");
+  form.append("size", process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536"); form.append("quality", process.env.ZONO_CREATIVE_IMAGE_QUALITY || "medium"); form.append("n", "1");
   let attached = 0;
   for (const url of refUrls) { const f = await fetchBlob(url); if (f) { form.append("image[]", f.blob, f.name); attached++; } }
   if (!attached) throw new Error("no reference images could be fetched");

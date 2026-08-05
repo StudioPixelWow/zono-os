@@ -423,8 +423,10 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     if (vars.length) {
       const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
       const rows: Record<string, unknown>[] = [];
-      for (let i = 0; i < vars.length; i++) {
-        const v = vars[i];
+      // Generate the concepts IN PARALLEL (like the property-ad path) — a
+      // sequential loop over the slow reference-image calls blew past the 300s
+      // serverless limit, so sold/testimonial produced no output. Cap to 2.
+      await Promise.all(vars.slice(0, 2).map(async (v) => {
         const base: Record<string, unknown> = {
           org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
           output_type: g.requestType, variant_name: v.variantName, format: g.format, title: `${v.variantName} · ${v.headline}`,
@@ -443,7 +445,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             critic_summary: `עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${v.variantName}).`,
             creative_selection_metadata: { mode: "ai_full_ad", kind, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
           });
-          continue;
+          return;
         }
         // AI image exists but didn't fully pass QA → SHOW the best AI creative
         // with a review warning (AI-only; never fall back to a deterministic render).
@@ -456,7 +458,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             critic_summary: `${outcome.warning ?? "ממתין לאישור QA סופי"} · הגרסה הטובה ביותר לאחר ${outcome.attempts} ניסיונות תיקון AI (${v.variantName}).`,
             creative_selection_metadata: { mode: "ai_self_correct", kind, qa: outcome.scores, attempts: outcome.attempts, warning: outcome.warning, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
           });
-          continue;
+          return;
         }
         // No AI image at all (no provider / generation threw) → deterministic render fallback.
         rows.push({ ...base,
@@ -466,7 +468,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           critic_summary: `${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — לא הופקה תמונת AI"}.`,
           creative_selection_metadata: { mode: "fallback", kind, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
         });
-      }
+      }));
       const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
       if (insErr) { console.error("[quick-creative][full-ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
       const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
