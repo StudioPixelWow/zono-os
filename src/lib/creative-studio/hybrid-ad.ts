@@ -22,8 +22,7 @@ import { generateFinalImage, resolveImageProvider } from "./visual-providers";
 import { fetchLogoBytes } from "./logo-composite";
 import { normalizeIlsPrice, resolveSaleLabel, type AdSpec, type AdGenAssets } from "./openai-ad-pipeline";
 import { measureText, fitText } from "./reflow";
-import { buildDesign, pickLayout, type DesignContent, type DesignBrand } from "./design-engine/build-design";
-import { renderDesignToPng } from "./design-engine/svg-renderer";
+import { buildDynamicAdPrompt } from "./dynamic-ad-prompt";
 
 // ── Bundled Hebrew font registration ────────────────────────────────────────
 // librsvg (used by sharp for SVG text) needs a Hebrew-capable font on the
@@ -311,67 +310,26 @@ export function hybridAvailable(): boolean {
  * brand/market post), gpt-image-2 generates a text-free premium SCENE as the base.
  * Throws on hard failure so the caller can fall back to the legacy path.
  */
-function darken(hex: string, amt = 0.35): string {
-  const h = hex.replace("#", "");
-  if (h.length < 6) return hex;
-  const f = (i: number) => Math.max(0, Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - amt)));
-  const to2 = (n: number) => n.toString(16).padStart(2, "0");
-  return `#${to2(f(0))}${to2(f(2))}${to2(f(4))}`;
-}
-function priceDigits(price: string | null | undefined): string {
-  const d = (price ?? "").replace(/[^\d]/g, "");
-  return d ? Number(d).toLocaleString("en-US") : "";
-}
-function buildContent(spec: AdSpec, assets: AdGenAssets): DesignContent {
-  const highlights: Array<{ label: string; value: string }> = [];
-  if (spec.rooms) highlights.push({ value: String(spec.rooms), label: "חדרים" });
-  if (spec.sqm) highlights.push({ value: String(spec.sqm), label: 'מ״ר' });
-  if (spec.floor) highlights.push({ value: String(spec.floor), label: "קומה" });
-  const address = [spec.street, spec.city].filter(Boolean).join(", ");
-  return {
-    headline: spec.headline,
-    subtitle: spec.subheadline || address || (spec.propertyType ?? undefined) || undefined,
-    heroImage: assets.propertyImages[0] || undefined,
-    logoUrl: assets.logoUrl || undefined,
-    badgeText: resolveSaleLabel(spec),
-    price: priceDigits(spec.price) || undefined,
-    ctaText: spec.cta || undefined,
-    phone: spec.agentPhone || undefined,
-    features: spec.features && spec.features.length ? spec.features.slice(0, 4) : undefined,
-    propertyHighlights: highlights.length ? highlights : undefined,
-    agentName: spec.agentName || undefined,
-    agentTitle: spec.logoText || undefined,
-    agentPhoto: assets.agentPhoto || undefined,
-  };
-}
-
 export async function renderHybridAd(spec: AdSpec, assets: AdGenAssets): Promise<HybridImage> {
-  ensureHebrewFont();
-  const [logoBytes, agentBytes, propertyBytes] = await Promise.all([
-    assets.logoUrl ? fetchLogoBytes(assets.logoUrl).catch(() => null) : Promise.resolve(null),
-    assets.agentPhoto ? fetchLogoBytes(assets.agentPhoto).catch(() => null) : Promise.resolve(null),
-    assets.propertyImages[0] ? fetchLogoBytes(assets.propertyImages[0]).catch(() => null) : Promise.resolve(null),
-  ]);
-
-  // ── ZONO DESIGN ENGINE: assemble a premium DesignJSON (varied layout per
-  // concept, brand-DNA enforced) and render it to PNG via SVG + sharp. Perfect
-  // Hebrew, exact brand colors, real property photo/logo/agent, no timeout. ──
+  // AI DESIGNS THE WHOLE AD: an LLM writes a fresh, innovative premium brief in the
+  // brand's language (all required content), then gpt-image-2 renders the complete
+  // design via /images/generations — a single fast call, so NO 75s /images/edits
+  // timeout. No template. On any failure, fall back to the real-photo overlay so
+  // the button never breaks.
+  const size = process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536";
   try {
-    const brand: DesignBrand = { primary: spec.palette.bg, accent: spec.palette.accent, deep: darken(spec.palette.bg, 0.4) };
-    const content = buildContent(spec, assets);
-    const layout = pickLayout(spec.conceptLabel || spec.headline);
-    const design = buildDesign(layout, content, brand);
-    const out = await renderDesignToPng(design, { hero: propertyBytes, logo: logoBytes, agent: agentBytes });
-    return { b64: out.toString("base64"), mime: "image/png", provider: `design-engine:${layout}` };
+    const prompt = await buildDynamicAdPrompt(spec, { propertyImages: [], logoUrl: null, agentPhoto: null }, "");
+    const img = await generateFinalImage(prompt, null, { size });
+    return { b64: img.b64, mime: img.mime, provider: img.provider };
   } catch {
-    // Safety net: the simpler deterministic overlay so the button never breaks.
-    const size = process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536";
-    let baseBuf: Buffer;
-    let provider: string;
-    if (propertyBytes) { baseBuf = propertyBytes; provider = "photo+overlay"; }
-    else { const scene = await generateFinalImage(await buildScenePrompt(spec), null, { size }); baseBuf = Buffer.from(scene.b64, "base64"); provider = `${scene.provider}+overlay`; }
+    const [logoBytes, agentBytes, propertyBytes] = await Promise.all([
+      assets.logoUrl ? fetchLogoBytes(assets.logoUrl).catch(() => null) : Promise.resolve(null),
+      assets.agentPhoto ? fetchLogoBytes(assets.agentPhoto).catch(() => null) : Promise.resolve(null),
+      assets.propertyImages[0] ? fetchLogoBytes(assets.propertyImages[0]).catch(() => null) : Promise.resolve(null),
+    ]);
+    const baseBuf = propertyBytes ?? Buffer.from((await generateFinalImage(await buildScenePrompt(spec), null, { size })).b64, "base64");
     const brand: BrandPaint = { bg: spec.palette.bg, bg2: spec.palette.bg2, accent: spec.palette.accent, ink: spec.palette.bg };
     const out = await composeAd(baseBuf, spec, brand, { logoBytes, agentBytes });
-    return { b64: out.toString("base64"), mime: "image/png", provider };
+    return { b64: out.toString("base64"), mime: "image/png", provider: "photo+overlay" };
   }
 }

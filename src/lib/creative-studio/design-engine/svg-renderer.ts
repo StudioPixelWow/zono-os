@@ -54,20 +54,21 @@ export async function renderDesignToPng(design: DesignJSON, assets: DesignAssets
   const defs: string[] = [];
   const rasters: Array<{ el: DesignElement; role: "hero" | "logo" | "agent" }> = [];
   let gradId = 0;
-
-  // ── canvas background ──
-  svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`);
   const c = design.canvas;
+
+  // ── canvas background as its OWN layer, composited BELOW the hero photo so the
+  //    real property image is never painted over. ──
+  let bgInner: string;
   if (c.backgroundGradient) {
-    const id = `bg${gradId++}`;
-    // approximate any linear gradient as brand deep→primary diagonal
     const m = c.backgroundGradient.match(/#[0-9a-fA-F]{6}/g) || [c.backgroundColor || "#0f2436"];
-    const c1 = m[0], c2 = m[m.length - 1];
-    defs.push(`<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>`);
-    svg.push(`<rect width="${W}" height="${H}" fill="url(#${id})"/>`);
+    bgInner = `<defs><linearGradient id="cbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${m[0]}"/><stop offset="1" stop-color="${m[m.length - 1]}"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#cbg)"/>`;
   } else {
-    svg.push(`<rect width="${W}" height="${H}" fill="${c.backgroundColor || "#ffffff"}"/>`);
+    bgInner = `<rect width="${W}" height="${H}" fill="${c.backgroundColor || "#ffffff"}"/>`;
   }
+  const bgSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${bgInner}</svg>`);
+
+  // ── foreground SVG (overlay scrim + all vector/text), NO canvas background ──
+  svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`);
 
   const els = [...design.elements].filter((e) => e.visible !== false).sort((a, b) => a.zIndex - b.zIndex);
 
