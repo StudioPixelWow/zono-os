@@ -190,7 +190,10 @@ async function fetchBlob(url: string): Promise<{ blob: Blob; name: string } | nu
 /** Per-image generation timeout (ms). Prevents a hung OpenAI call from stalling
  *  the whole flow — on timeout the request aborts and throws, so the attempt
  *  loop retries or falls back to the deterministic renderer. */
-const IMAGE_TIMEOUT_MS = Math.max(20_000, Number(process.env.ZONO_CREATIVE_IMAGE_TIMEOUT_MS) || 75_000);
+// gpt-image-2 /images/edits with the real logo + agent photo + property refs needs
+// well over 75s; give it room (route maxDuration is 300s). The QA budget caps this
+// to a single attempt so total wall-clock stays under the serverless limit.
+const IMAGE_TIMEOUT_MS = Math.max(20_000, Number(process.env.ZONO_CREATIVE_IMAGE_TIMEOUT_MS) || 200_000);
 
 /** Raw gpt-image-1 multi-image edit → finished ad. Throws on no-key / API error / timeout. */
 export async function generateAdImageRaw(prompt: string, refUrls: string[]): Promise<RawImage> {

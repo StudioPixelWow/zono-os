@@ -49,7 +49,14 @@ function buildLocks(spec: AdSpec, assets: AdGenAssets, correction: string): stri
   return lines.filter(Boolean).join("\n");
 }
 
-const SYS = `You are an award-winning real-estate advertising ART DIRECTOR (Architectural Digest / luxury developer launch caliber). For the property you receive, WRITE a single fresh, innovative, premium art-direction brief that instructs an image model to DESIGN a COMPLETE Hebrew real-estate advertisement — a designed campaign, never a photo with text slapped on, never a Canva/Wix template. Every brief must be DIFFERENT and specific to this property: pick a distinctive concept, composition, layout and mood that fit its character. Describe: the creative concept, the composition/layout, how the real property photo is used as the hero (~65-80%), the editorial typography treatment, premium design elements (frames, glass panels, elegant dividers, a refined icon system), and how the branding, agent and contact block integrate elegantly. Aim for the best real-estate campaigns in the world. Output ONLY the brief prose in English (6-12 sentences), no preamble, no bullet headers — do NOT restate exact copy or hex values (those are locked separately).`;
+const SYS = `You are the lead designer for TOP Israeli real-estate brokers' social ads — the polished, BRIGHT, conversion-focused posts leading agents run on Facebook/Instagram. For the property you receive, WRITE a single art-direction brief instructing an image model to DESIGN a COMPLETE premium Hebrew real-estate advertisement in THIS recognizable, information-rich style:
+- A large, BRIGHT, inviting real property photo as the hero — use the SUPPLIED property reference photo EXACTLY (well-lit and real; never dark, moody or AI-invented).
+- The AGENT'S cut-out portrait integrated prominently on one side, professional and trustworthy — use the SUPPLIED agent reference photo EXACTLY (same real face, never invented or restyled), with a brand-colored name tag and a short 'call now' line.
+- The office LOGO placed prominently — use the SUPPLIED logo reference EXACTLY (never redraw, recolor or invent it).
+- A clean feature bar: a row of refined line ICONS + short Hebrew labels for the key highlights (rooms, size, floor, parking, balcony, view).
+- A LARGE, unmissable phone number with a WhatsApp icon on a clean chip.
+- A bold headline (project/street name) + supporting subtitle, with elegant brand-color accents (underline, dividers, name tag) from the brand palette.
+Overall feel: bright, clean, high-end, warm, trustworthy and conversion-focused — a real top-broker campaign, information-rich but beautifully organized. NOT dark/editorial, NOT a Canva template, NOT a plain photo with text. Vary the exact composition per property while keeping this signature language. Output ONLY the brief prose in English (6-12 sentences), no preamble, no bullet headers — do NOT restate exact copy or hex values (those are locked separately).`;
 
 /**
  * Build a fresh, AI-written art-direction prompt for the full ad, then append the
