@@ -88,7 +88,7 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [], count
               <span className="bg-brand-strong text-card grid h-7 w-7 place-items-center rounded-lg text-[13px] font-black">Z</span>
               <h3 className="text-ink text-xl font-black">ZONO Creative Engine</h3>
             </div>
-            <p className="text-muted mt-1 text-sm font-bold">בוחן 12 רעיונות ומפיק את 2 המודעות החזקות ביותר עבור הנכס שלך</p>
+            <p className="text-muted mt-1 text-sm font-bold">בוחן 12 רעיונות ומפיק את {count} המודעות החזקות ביותר עבור הנכס שלך</p>
           </div>
 
           {/* desktop: pipeline + status side by side; mobile: stacked */}
@@ -150,7 +150,7 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [], count
 
           {/* footer */}
           <p className="text-muted mt-4 text-center text-[11px] font-bold">
-            המערכת בוחנת 12 רעיונות, מדרגת ומסננת — ומפיקה רק את 2 המודעות הסופיות הטובות ביותר.
+            המערכת בוחנת 12 רעיונות, מדרגת ומסננת — ומפיקה רק את {count} המודעות הסופיות הטובות ביותר.
           </p>
 
           <AnimatePresence>

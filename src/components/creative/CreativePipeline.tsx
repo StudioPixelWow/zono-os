@@ -7,8 +7,8 @@ export const PIPELINE_STEPS = [
   "יצירת 12 רעיונות",
   "דירוג Wow Score",
   "QA עברית",
-  "בחירת 2 מנצחות",
-  "יצירת 2 מודעות סופיות",
+  "בחירת המנצחות",
+  "יצירת המודעות הסופיות",
 ] as const;
 
 /** activeStep is 0-based; steps below it are complete, the one at it is active,

@@ -187,7 +187,9 @@ function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: Brand
 /** Map a quick variation (sold / testimonial) → AdSpec. */
 function variationToSpec(v: QuickVar, input: QuickInput, brand: BrandSnapshot, kind: AdKind): AdSpec {
   const priceNum = Number(input.price);
-  const price = kind !== "testimonial" && input.price && Number.isFinite(priceNum) ? `₪${priceNum.toLocaleString("he-IL")}` : null;
+  // Price appears ONLY on for-sale ("למכירה") ads. Sold ("נמכר") and testimonial
+  // posts NEVER show a price (user rule).
+  const price = kind !== "testimonial" && kind !== "sold" && input.price && Number.isFinite(priceNum) ? `₪${priceNum.toLocaleString("he-IL")}` : null;
   return {
     kind, conceptLabel: v.variantName,
     headline: v.headline, subheadline: v.subheadline ?? null,
