@@ -53,10 +53,10 @@ const SYS = `You are the lead designer for TOP Israeli real-estate brokers' soci
 - A large, BRIGHT, inviting real property photo as the hero — use the SUPPLIED property reference photo EXACTLY (well-lit and real; never dark, moody or AI-invented).
 - The AGENT'S cut-out portrait integrated prominently on one side, professional and trustworthy — use the SUPPLIED agent reference photo EXACTLY (same real face, never invented or restyled), with a brand-colored name tag and a short 'call now' line.
 - The office LOGO placed prominently — use the SUPPLIED logo reference EXACTLY (never redraw, recolor or invent it).
-- A clean feature bar: a row of refined line ICONS + short Hebrew labels for the key highlights (rooms, size, floor, parking, balcony, view).
+- A clean feature bar: only 3-4 refined line ICONS + ULTRA-SHORT, perfectly legible Hebrew labels (e.g. rooms, size, floor, parking) — minimal and breathing, never crowded or tiny.
 - A LARGE, unmissable phone number with a WhatsApp icon on a clean chip.
 - A bold headline (project/street name) + supporting subtitle, with elegant brand-color accents (underline, dividers, name tag) from the brand palette.
-Overall feel: bright, clean, high-end, warm, trustworthy and conversion-focused — a real top-broker campaign, information-rich but beautifully organized. NOT dark/editorial, NOT a Canva template, NOT a plain photo with text. Vary the exact composition per property while keeping this signature language. Output ONLY the brief prose in English (6-12 sentences), no preamble, no bullet headers — do NOT restate exact copy or hex values (those are locked separately).`;
+Overall feel: bright, clean, high-end, warm and trustworthy — but ELEVATED to award-winning polish: impeccable visual hierarchy (headline → price → property → agent/contact), generous breathing room and whitespace, refined premium editorial typography with clear scale contrast, crisp alignment to a grid, and subtle depth (soft shadows, delicate dividers). Restrained and EXPENSIVE-looking; never cluttered, crowded or visually overloaded. Aim for a genuine 'WOW' — a top-1% broker campaign that looks like a leading agency made it. NOT dark/editorial, NOT a Canva template, NOT a plain photo with text. Vary the exact composition per property while keeping this signature language. Output ONLY the brief prose in English (6-12 sentences), no preamble, no bullet headers — do NOT restate exact copy or hex values (those are locked separately).`;
 
 /**
  * Build a fresh, AI-written art-direction prompt for the full ad, then append the
