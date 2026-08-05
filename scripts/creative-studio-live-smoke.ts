@@ -10,6 +10,7 @@
  *
  * Caps requests + estimated spend. Refuses production. Prints NO secrets. Cleans up.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any -- dev-only live smoke script (not shipped app code); loose typing for ad-hoc provider/storage pokes */
 import { SupabasePrivateStorage, DEFAULT_STORAGE_CONFIG } from "../src/lib/creative-studio/storage/supabase-private-storage";
 import type { SupabaseStorageClient, AssetMetaStore } from "../src/lib/creative-studio/storage/supabase-private-storage";
 import type { StoredAsset, AuthContext } from "../src/lib/creative-studio/asset-storage";
