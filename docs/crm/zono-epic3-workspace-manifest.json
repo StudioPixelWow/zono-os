@@ -1,0 +1,138 @@
+{
+  "epic": "Epic 3 — Operational Workspace & Daily Agent Experience",
+  "branch": "creative-lab-cert",
+  "generated_status": "in_progress",
+  "principles": {
+    "no_client_db_writes": true,
+    "no_duplicate_transition_rules": true,
+    "no_second_identity_model": true,
+    "no_second_task_model": true,
+    "no_second_timeline_model": true,
+    "append_only_history": ["offer_events", "collection_events", "note_edits", "deal_journeys", "timeline/activity_events"]
+  },
+  "workspaces": [
+    {
+      "id": "people",
+      "route": "/people, /people/[type]/[id]",
+      "entities": ["buyers", "sellers", "leads", "activity_events", "notes"],
+      "services": ["src/lib/people/service.ts (resolvePersonByEntity, listPeople)", "src/lib/notes/service.ts", "src/lib/tasks/actions.ts"],
+      "actions": ["call", "whatsapp", "email", "create task", "add note", "open role workspace"],
+      "permissions": "org-scoped read; note/task via server actions",
+      "loading_state": true, "empty_state": true, "error_state": true, "responsive": true,
+      "tests": [],
+      "completion": "Implemented (read-time unified identity; no second model). Gaps: normalized-phone/email exact-match only; no reassign/archive at person level."
+    },
+    {
+      "id": "offers",
+      "route": "/offers",
+      "entities": ["offers", "offer_events", "deals", "buyers", "sellers", "properties"],
+      "services": ["src/lib/offers/service.ts", "src/lib/offers/actions.ts"],
+      "actions": ["create draft", "submit", "seller counter/accept/reject", "buyer counter", "accept", "reject", "withdraw", "expire", "convert to deal"],
+      "permissions": "org RLS; write=agent; append-only offer_events",
+      "loading_state": true, "empty_state": true, "error_state": true, "responsive": true,
+      "tests": [],
+      "completion": "Implemented. Gaps: entity linking (buyer/property) from the standalone create form is deferred to launch-from-workspace; attachments not modeled."
+    },
+    {
+      "id": "commissions",
+      "route": "/commissions",
+      "entities": ["commissions", "collections", "collection_events", "deals"],
+      "services": ["src/lib/commissions/service.ts", "src/lib/commissions/actions.ts"],
+      "actions": ["create/recalc", "submit", "approve (manager)", "cancel", "create collection", "record/partial", "reverse (non-destructive)", "mark paid/overdue"],
+      "permissions": "org RLS; write=agent; approve/cancel=manager; append-only collection_events",
+      "loading_state": true, "empty_state": true, "error_state": true, "responsive": true,
+      "tests": [],
+      "completion": "Implemented. Gaps: shares are entered (not auto-split by rule); no invoice/receipt document generation."
+    },
+    {
+      "id": "documents",
+      "route": "/documents",
+      "entities": ["documents", "document_versions", "document_participants", "document_signatures", "document_audit_logs", "storage:documents (private)"],
+      "services": ["src/lib/documents/service.ts (getDocumentSignedUrl)", "src/lib/documents/upload.ts", "src/lib/documents/actions.ts"],
+      "actions": ["upload (private)", "signed view/download", "version", "participants", "signature request", "record signature", "reject", "cancel", "checklist"],
+      "permissions": "org RLS; private bucket + org-scoped signed URLs (5-min TTL)",
+      "loading_state": true, "empty_state": true, "error_state": true, "responsive": true,
+      "tests": [],
+      "completion": "Implemented + BLOCKER RESOLVED (private signed access). Legacy public rows keep opening for historical compatibility."
+    },
+    {
+      "id": "notes",
+      "route": "/notes (+ NotesPanel embedded in entity workspaces)",
+      "entities": ["notes", "note_edits"],
+      "services": ["src/lib/notes/service.ts", "src/lib/notes/actions.ts"],
+      "actions": ["create", "edit (append-only history)", "pin", "archive", "tags", "history"],
+      "permissions": "org RLS; edit/archive=author or manager",
+      "loading_state": true, "empty_state": true, "error_state": true, "responsive": true,
+      "tests": [],
+      "completion": "Implemented over existing notes table (no second model). Gaps: attachments; @mention resolution UI is store-only."
+    },
+    {
+      "id": "leads",
+      "route": "/leads, /leads/[id]",
+      "entities": ["leads"],
+      "services": ["src/lib/leads/service.ts (listLeads + lifecycle)", "journey-canonical/transitions"],
+      "actions": ["assign", "mark contacted", "convert", "lost", "stage", "score"],
+      "permissions": "org RLS; mutations via server actions",
+      "loading_state": true, "empty_state": true, "error_state": true, "responsive": true,
+      "tests": [],
+      "completion": "Partial. Added the missing list route. Gaps: stage-transition validation not enforced at setLeadStage; disqualify/reopen/qualify/archive UI actions incomplete; fields (SLA/attempts/follow-up) not modeled."
+    },
+    {
+      "id": "buyers", "route": "/buyers, /buyers/[id]", "entities": ["buyers", "matching-intelligence"],
+      "services": ["src/lib/buyers/*", "src/lib/matching-intelligence/service.ts"],
+      "actions": ["edit requirements", "mark contacted", "review matches", "notes", "tasks"],
+      "permissions": "org RLS; server actions", "loading_state": true, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Partial (pre-existing). Gaps: thin requirements model, no saved searches/favorites, requirement edits do not trigger matching recompute, missing accept/reject-match / submit-offer / pause-archive."
+    },
+    {
+      "id": "sellers", "route": "/sellers, /sellers/[id]", "entities": ["sellers", "propertySellers"],
+      "services": ["src/lib/sellers/*"], "actions": ["connect property", "co-owner", "360 edit"],
+      "permissions": "org RLS; server actions", "loading_state": true, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Partial (pre-existing). Gaps: valuation history, exclusivity dates, competing agencies, listing-appointment actions."
+    },
+    {
+      "id": "properties", "route": "/properties, /properties/[id]", "entities": ["properties", "property media/docs", "matches"],
+      "services": ["src/lib/properties/*", "journey-cockpit"], "actions": ["edit", "price/status", "add owner", "mark sold/rented", "archive"],
+      "permissions": "org RLS; server actions; publish gated by seller readiness", "loading_state": true, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Partial (pre-existing). Gaps: distinct Price History / Feedback / Offers / Negotiation tabs; schedule viewing / record feedback / create offer from property."
+    },
+    {
+      "id": "matches", "route": "/matches, /matches/[id]", "entities": ["matching-intelligence"],
+      "services": ["src/lib/matching-intelligence/*"], "actions": ["advance stage", "recalc"],
+      "permissions": "org RLS; single engine (no duplicate)", "loading_state": true, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Partial (pre-existing). Gaps: status-segmented board views; reject-with-reason / send-via-channel / mark viewed-interested / expire / reopen verbs."
+    },
+    {
+      "id": "viewings", "route": "/calendar (generic meetings — no dedicated /viewings)", "entities": ["meetings", "calendar-os"],
+      "services": ["src/lib/calendar-os/*"], "actions": ["schedule", "complete", "no-show", "cancel"],
+      "permissions": "org RLS; server actions", "loading_state": true, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Partial (pre-existing). Gaps: dedicated viewings route + status buckets; confirm/reminders/attendance/feedback/related-offer."
+    },
+    {
+      "id": "deals", "route": "/deals (board; no /deals/[id] detail)", "entities": ["deals", "deal_journeys"],
+      "services": ["src/lib/deals/service.ts (DealService)"], "actions": ["advance stage", "create (quick)", "log negotiation", "objections"],
+      "permissions": "org RLS; DealService only; append-only deal_journeys", "loading_state": true, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Partial (pre-existing). Gaps: deal detail route; participants/lawyer/financing/deadlines; create commission/collection from deal; reopen/cancel."
+    },
+    {
+      "id": "today", "route": "/today", "entities": ["daily-os", "broker-intelligence"],
+      "services": ["src/lib/daily-os/*", "src/lib/broker-intelligence/*"], "actions": ["dismiss", "snooze", "complete"],
+      "permissions": "org RLS", "loading_state": false, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Partial (pre-existing). Recommendation/agenda engine rather than the itemized SLA/viewing/offer/collection work-queue."
+    },
+    {
+      "id": "search", "route": "⌘K CommandPalette + /search", "entities": ["search_documents projection"],
+      "services": ["src/lib/search/service.ts"], "actions": ["global search"],
+      "permissions": "org + owner scoped", "loading_state": true, "empty_state": true, "error_state": true, "responsive": true, "tests": [],
+      "completion": "Implemented (pre-existing). Hebrew/phone/address aware; grouped; keyboard nav."
+    }
+  ],
+  "deliverable_docs": [
+    "EPIC3_WORKSPACE_ARCHITECTURE.md", "EPIC3_NAVIGATION_MAP.md", "EPIC3_TODAY_WORKSPACE.md",
+    "EPIC3_PERSON_WORKSPACE.md", "EPIC3_PROPERTY_WORKSPACE.md", "EPIC3_MATCHING_WORKSPACE.md",
+    "EPIC3_VIEWING_WORKSPACE.md", "EPIC3_OFFER_AND_NEGOTIATION_WORKSPACE.md", "EPIC3_DEAL_WORKSPACE.md",
+    "EPIC3_COMMISSION_COLLECTION_WORKSPACE.md", "EPIC3_SEARCH_AND_LISTS.md", "EPIC3_PERMISSIONS_MATRIX.md",
+    "EPIC3_RTL_RESPONSIVE_QA.md", "EPIC3_TEST_MATRIX.md", "EPIC3_FINAL_REPORT.md", "zono-epic3-workspace-manifest.json"
+  ],
+  "verdict": "Epic 3 Incomplete (major new domains delivered — Offers, Commissions/Collections, Notes, Person, Documents blocker fixed; remaining: automated tests, deal detail + several partial-workspace actions, viewings route, matches board, bulk list actions)."
+}
