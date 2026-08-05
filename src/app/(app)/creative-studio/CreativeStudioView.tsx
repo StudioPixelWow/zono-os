@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
@@ -1986,10 +1987,11 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
   // ZONO Creative Engine waiting experience instead of the form. Generation logic
   // is untouched — `busy` = running, `done` = real backend response received.
   if (busy || done) {
-    return <CreativeGenerationModal complete={done} finalAds={finalAds} onView={() => { onClose(); router.refresh(); }} />;
+    return <ModalPortal><CreativeGenerationModal complete={done} finalAds={finalAds} onView={() => { onClose(); router.refresh(); }} /></ModalPortal>;
   }
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
@@ -2075,7 +2077,15 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
         )}
       </div>
     </div>
+    </ModalPortal>
   );
+}
+
+/** Renders modal overlays into document.body so a transformed ancestor can't break
+ *  position:fixed (which made the popup appear mid-page and require scrolling). */
+function ModalPortal({ children }: { children: React.ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
 }
 
 function UploadModal({ onClose, onDone, orgId, userId, et, eid }: { onClose: () => void; onDone: () => void; orgId: string; userId: string; et: string; eid: string }) {
