@@ -41,12 +41,17 @@ const GROUPS: NavGroup[] = [
     { label: "Mission Control", href: "/mission-control", icon: "Target" },
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
   ]},
-  { key: "office", title: "המשרד שלי", desc: "נכסים • אנשים • עסקאות • יומן", icon: "Building2", accent: "blue", items: [
+  { key: "office", title: "המשרד שלי", desc: "אנשים • נכסים • הצעות • עסקאות", icon: "Building2", accent: "blue", items: [
+    { label: "אנשים", href: "/people", icon: "Users" },
     { label: "נכסים", href: "/properties", icon: "Building" },
     { label: "קונים", href: "/buyers", icon: "Users" },
     { label: "מוכרים", href: "/sellers", icon: "UserCheck" },
-    { label: "לידים", href: "/social-leads", icon: "UserPlus" },
+    { label: "לידים", href: "/leads", icon: "UserPlus" },
+    { label: "הצעות", href: "/offers", icon: "Send" },
     { label: "עסקאות", href: "/deals", icon: "Handshake" },
+    { label: "עמלות וגבייה", href: "/commissions", icon: "TrendingDown" },
+    { label: "מסמכים", href: "/documents", icon: "FileText" },
+    { label: "הערות", href: "/notes", icon: "FilePlus2" },
     { label: "פגישות", href: "/calendar", icon: "Calendar" },
   ]},
   { key: "marketing", title: "תקשורת ושיווק", desc: "WhatsApp • Facebook • קמפיינים", icon: "Megaphone", accent: "green", items: [
