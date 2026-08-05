@@ -172,7 +172,14 @@ function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: Brand
     city: input.city ?? null, street: input.address ?? null,
     rooms: input.rooms ?? null, sqm: input.sizeSqm ?? null, floor: input.floor ?? null,
     logoText: brand.officeName ?? null,
-    palette: { bg: ad.palette.bg, bg2: ad.palette.bg2, accent: ad.palette.accent },
+    // Use the REAL resolved brand palette (from brand_identity_profiles) — the
+    // per-concept ad.palette can default to generic green/gold and drop the brand.
+    // bg = primary (band), accent = secondary (badge/price pop), so RE/MAX blue+red.
+    palette: {
+      bg: brand.colors[0] || ad.palette.bg,
+      bg2: brand.colors[2] || brand.colors[1] || ad.palette.bg2,
+      accent: brand.colors[1] || brand.colors[2] || ad.palette.accent,
+    },
     brandPersonality: brandPersonalityOf(brand), propertyType: input.propertyType ?? null,
     emotionalFeel: ad.artDirection?.emotionalFeel ?? null, visualStory: ad.artDirection?.visualStory ?? null,
   };
