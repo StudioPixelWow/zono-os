@@ -6,7 +6,7 @@
 //
 // Default model: gpt-image-2 — verified available in the OpenAI API
 // (OpenAI "Introducing gpt-image-2 — available today in the API", 2026).
-// gpt-image-1 remains a supported fallback; set the env var to pin either.
+// gpt-image-1 is retired (see RETIRED_IMAGE_MODELS): a stale pin to it is coerced to the default.
 // ============================================================================
 
 /** Verified default image model (override via env). */
