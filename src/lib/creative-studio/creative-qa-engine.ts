@@ -10,9 +10,11 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import {
-  providerIsOpenAI, buildSourceManifest, buildAdPrompt, generateAdImageRaw, runCreativeQA, runCreativeDirectorQA, refUrlsFor,
+  providerIsOpenAI, buildSourceManifest, generateAdImageRaw, runCreativeQA, runCreativeDirectorQA, refUrlsFor,
   type AdSpec, type AdGenAssets, type AdKind, type CreativeFindings,
 } from "./openai-ad-pipeline";
+import { renderHybridAd, hybridAvailable } from "./hybrid-ad";
+import { buildDynamicAdPrompt } from "./dynamic-ad-prompt";
 import {
   deriveCritical, decideApproval, buildCorrectionPrompt, decideCreative, buildCreativeCorrection,
   type QaScores, type QaCritical, type QaVisionFindings, type SourceManifest, type CreativeScores,
@@ -34,6 +36,12 @@ const TOTAL_BUDGET_MS = Math.max(60_000, Number(process.env.ZONO_CREATIVE_TOTAL_
 // Rough cost of one full attempt (image gen + 2 vision QA calls). If less than
 // this remains in the budget, we don't start another attempt.
 const ATTEMPT_COST_MS = Math.max(40_000, Number(process.env.ZONO_CREATIVE_ATTEMPT_COST_MS) || 95_000);
+// DEFAULT: AI EDITS path — gpt-image-2 designs the full ad FROM the real reference
+// images (property photo + office logo + agent photo), which are passed on EVERY
+// generation (user mandate). generateAdImageRaw uses /images/edits with those refs
+// + buildDynamicAdPrompt. Timeout raised to 200s so it can finish. Set
+// ZONO_HYBRID_OVERLAY=1 to use the no-reference generations/overlay path instead.
+const HYBRID_ENABLED = ["1", "true", "on", "yes"].includes((process.env.ZONO_HYBRID_OVERLAY ?? "").toLowerCase());
 
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
@@ -68,6 +76,10 @@ function assembleScores(findings: QaVisionFindings | null, c: QaCritical): QaSco
 interface OrchestratorParams {
   orgId: string; propertyId: string | null; requestId: string | null; createdBy: string | null;
   kind: AdKind; template?: string | null; spec: AdSpec; assets: AdGenAssets; bucket: string;
+  // Optional agent-chosen design direction (the "3 options" flow). When present it
+  // is realized faithfully by buildDynamicAdPrompt on every attempt instead of a
+  // freshly invented concept — so each of the 3 briefs drives its own distinct ad.
+  conceptBrief?: string | null;
   // Creative DNA selection — applies a ready org DNA profile or a code preset to
   // the art direction (resolved+logged once). When omitted, the org DEFAULT
   // ready profile (if any) is applied automatically.
@@ -122,14 +134,30 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
       break;
     }
     attempts = n;
-    const prompt = buildAdPrompt(p.spec, p.assets, correction) + dnaSuffix;
+    // FRESH AI-written art direction each attempt (falls back to the static
+    // buildAdPrompt inside buildDynamicAdPrompt when no LLM/key is available).
+    const prompt = (await buildDynamicAdPrompt(p.spec, p.assets, correction, p.conceptBrief)) + dnaSuffix;
     // On a correction pass, ATTACH the previous generated image as the base to
     // edit (first ref) so OpenAI fixes ONLY the flagged text and preserves the
     // layout/composition/branding — it never redesigns or starts a new concept.
     const callRefs = correction && prevImageUrl ? [prevImageUrl, ...refUrls].slice(0, 6) : refUrls;
+    // HYBRID FIRST: text-free gpt-image-2 scene + deterministic ZONO overlay
+    // (exact brand colors, real logo + agent photo, perfect Hebrew). On ANY hybrid
+    // failure, fall back to the legacy AI-bake path so the button never breaks.
+    const useHybrid = HYBRID_ENABLED && hybridAvailable();
     let img: { b64: string; mime: string } | null = null;
-    try { img = await generateAdImageRaw(prompt, callRefs); }
-    catch (e) { allFail.push(String(e).slice(0, 200)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail(), creative: null }); continue; }
+    try {
+      img = useHybrid ? await renderHybridAd(p.spec, p.assets) : await generateAdImageRaw(prompt, callRefs);
+    } catch (e) {
+      if (useHybrid) {
+        allFail.push(`hybrid: ${String(e).slice(0, 160)}`);
+        try { img = await generateAdImageRaw(prompt, callRefs); }
+        catch (e2) { allFail.push(String(e2).slice(0, 160)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail(), creative: null }); continue; }
+      } else {
+        allFail.push(String(e).slice(0, 200)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail(), creative: null }); continue;
+      }
+    }
+    if (!img) continue;
 
     const path = `${p.orgId}/qa/${generationId ?? "x"}/${n}-${Date.now()}.png`;
     const { error: upErr } = await db.storage.from(p.bucket).upload(path, Buffer.from(img.b64, "base64"), { contentType: img.mime, upsert: true });

@@ -172,7 +172,14 @@ function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: Brand
     city: input.city ?? null, street: input.address ?? null,
     rooms: input.rooms ?? null, sqm: input.sizeSqm ?? null, floor: input.floor ?? null,
     logoText: brand.officeName ?? null,
-    palette: { bg: ad.palette.bg, bg2: ad.palette.bg2, accent: ad.palette.accent },
+    // Use the REAL resolved brand palette (from brand_identity_profiles) — the
+    // per-concept ad.palette can default to generic green/gold and drop the brand.
+    // bg = primary (band), accent = secondary (badge/price pop), so RE/MAX blue+red.
+    palette: {
+      bg: brand.colors[0] || ad.palette.bg,
+      bg2: brand.colors[2] || brand.colors[1] || ad.palette.bg2,
+      accent: brand.colors[1] || brand.colors[2] || ad.palette.accent,
+    },
     brandPersonality: brandPersonalityOf(brand), propertyType: input.propertyType ?? null,
     emotionalFeel: ad.artDirection?.emotionalFeel ?? null, visualStory: ad.artDirection?.visualStory ?? null,
   };
@@ -180,7 +187,9 @@ function adToSpec(ad: FinalAdData, kind: AdKind, input: QuickInput, brand: Brand
 /** Map a quick variation (sold / testimonial) → AdSpec. */
 function variationToSpec(v: QuickVar, input: QuickInput, brand: BrandSnapshot, kind: AdKind): AdSpec {
   const priceNum = Number(input.price);
-  const price = kind !== "testimonial" && input.price && Number.isFinite(priceNum) ? `₪${priceNum.toLocaleString("he-IL")}` : null;
+  // Price appears ONLY on for-sale ("למכירה") ads. Sold ("נמכר") and testimonial
+  // posts NEVER show a price (user rule).
+  const price = kind !== "testimonial" && kind !== "sold" && input.price && Number.isFinite(priceNum) ? `₪${priceNum.toLocaleString("he-IL")}` : null;
   return {
     kind, conceptLabel: v.variantName,
     headline: v.headline, subheadline: v.subheadline ?? null,
@@ -281,6 +290,101 @@ export async function resolveBrandSnapshot(opts: { entityType?: string; entityId
 export interface GenerateQuickInput {
   requestType: QuickType; input: QuickInput; format: string;
   entityType?: string; entityId?: string; propertyId?: string | null; dealId?: string | null;
+  // "3 options" flow: up to 3 agent-edited design-direction briefs. When present,
+  // generation realizes each brief as ONE distinct gpt-image-2 ad (same locked
+  // copy + real assets), bypassing the automatic concept matrix.
+  conceptBriefs?: string[];
+}
+
+/** Fast, deterministic property→AdSpec (no extra LLM). Real property facts only;
+ *  the visual VARIETY comes from the 3 design briefs, not from re-inventing copy. */
+function propertyInputToSpec(input: QuickInput, brand: BrandSnapshot): AdSpec {
+  const priceNum = Number(input.price);
+  const price = input.price && Number.isFinite(priceNum) ? `₪${priceNum.toLocaleString("he-IL")}` : null;
+  const where = input.neighborhood || input.city || null;
+  const headline = [input.propertyType || "נכס", where ? `ב${where}` : "למכירה"].filter(Boolean).join(" ");
+  return {
+    kind: "property", conceptLabel: "קונספט",
+    headline, subheadline: input.address ?? null,
+    priceLabel: "מחיר", price,
+    features: providedFeatures(input),
+    cta: input.customCta || "לפרטים נוספים",
+    agentName: brand.agentName ?? null, agentPhone: brand.agentWhatsapp ?? null,
+    city: input.city ?? null, street: input.address ?? null,
+    rooms: input.rooms ?? null, sqm: input.sizeSqm ?? null, floor: input.floor ?? null,
+    logoText: brand.officeName ?? null,
+    palette: {
+      bg: brand.colors[0] || "#024C96",
+      bg2: brand.colors[2] || brand.colors[1] || "#012F5C",
+      accent: brand.colors[1] || brand.colors[2] || "#DA1D2D",
+    },
+    brandPersonality: brandPersonalityOf(brand), propertyType: input.propertyType ?? null,
+    emotionalFeel: null, visualStory: null,
+  };
+}
+
+/** Resolve the SHARED locked copy (AdSpec) for the 3-options flow, per request
+ *  type. Property uses fast deterministic facts; sold/testimonial reuse the first
+ *  strategic variation's copy. All three briefs then share this exact copy. */
+function baseSpecForBriefs(g: GenerateQuickInput, brand: BrandSnapshot): { spec: AdSpec; kind: AdKind } {
+  if (g.requestType === "sold_post" || g.requestType === "testimonial_post") {
+    const kind: AdKind = g.requestType === "sold_post" ? "sold" : "testimonial";
+    const vars = buildQuickVariations(g.requestType, g.input, brand, g.format);
+    const v = vars[0];
+    return { spec: variationToSpec(v, g.input, brand, kind), kind };
+  }
+  return { spec: propertyInputToSpec(g.input, brand), kind: "property" };
+}
+
+/** AI writes 3 DISTINCT premium Hebrew design-direction briefs for this property/
+ *  brand — the editable seed of the "3 options" flow. Each brief is a short, human
+ *  art-direction paragraph the agent can tweak before generating. Never throws:
+ *  falls back to 3 solid hand-written directions when no LLM/key is available. */
+export async function buildConceptBriefs(g: GenerateQuickInput): Promise<{ briefs: string[]; source: "ai" | "fallback" }> {
+  const brand = await resolveBrandSnapshot({ entityType: g.entityType, entityId: g.entityId });
+  const { spec } = baseSpecForBriefs(g, brand.snapshot);
+  const key = process.env.OPENAI_API_KEY;
+  const where = g.input.neighborhood || g.input.city || "";
+  const fallback = [
+    `יוקרה נקייה ומוארת: תמונת הנכס גדולה וזוהרת כגיבור, הרבה אוויר לבן, טיפוגרפיה עריכתית מעודנת. תמונת הסוכן חתוכה בצד עם תג שם בצבע המותג, לוגו בולט למעלה, ומחיר ${spec.price ?? "מודגש"} כאלמנט הכי חזק אחרי הכותרת.`,
+    `כהה ואלגנטי ופרימיום: רקע כהה עמוק בגווני המותג, הנכס ממוסגר בקו דק ומואר, כותרת ${where ? `"${spec.headline}"` : "הכותרת"} גדולה ונקייה. שורת מאפיינים מינימלית של 3-4 אייקוני קו, מספר טלפון ענק עם אייקון וואטסאפ על צ'יפ נקי.`,
+    `חם ומזמין וקרוב: קומפוזיציה בהירה וידידותית, הנכס בפריים גדול, הסוכן מוצג בגובה העיניים כדמות אמינה. אקצנטים בצבע המותג (קו תחתון, מפרידים, תג שם), קריאה לפעולה ברורה "${spec.cta}" ומספר טלפון בולט מאוד.`,
+  ];
+  if (!key) return { briefs: fallback, source: "fallback" };
+  const textModel = process.env.OPENAI_TEXT_MODEL || "gpt-4o";
+  const sys = `You are the lead art director for top Israeli real-estate brokers' premium social ads. Given a property + brand, propose EXACTLY 3 DISTINCT, high-end design directions for a single vertical Hebrew ad. Each direction is one short human paragraph WRITTEN IN HEBREW (2-3 sentences), describing mood, color emphasis (within the brand palette), hero/property treatment, agent cut-out + logo placement, and the contact/CTA emphasis — an editable brief a broker can tweak. The 3 must feel genuinely different from each other (e.g. bright-luxury / dark-elegant / warm-inviting), all premium and "wow". Do NOT restate exact prices, phones or hex values. Return ONLY a JSON array of exactly 3 strings, nothing else.`;
+  const ctx = {
+    propertyType: g.input.propertyType, city: g.input.city, neighborhood: g.input.neighborhood, address: g.input.address,
+    rooms: g.input.rooms, sizeSqm: g.input.sizeSqm, floor: g.input.floor, importantText: g.input.importantText,
+    requestType: g.requestType, headline: spec.headline, brandPersonality: spec.brandPersonality,
+    hasLogo: Boolean(brand.snapshot.officeLogo), hasAgentPhoto: Boolean(brand.snapshot.agentPhoto),
+  };
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: textModel, temperature: 0.95, max_tokens: 700,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: `${sys}\nReturn as {"briefs": ["...","...","..."]}.` },
+          { role: "user", content: `Property + brand context (JSON):\n${JSON.stringify(ctx)}` },
+        ],
+      }),
+    });
+    if (!res.ok) return { briefs: fallback, source: "fallback" };
+    const json = await res.json();
+    const raw = json?.choices?.[0]?.message?.content ?? "";
+    let arr: unknown;
+    try { const parsed = JSON.parse(raw); arr = Array.isArray(parsed) ? parsed : parsed?.briefs; } catch { arr = null; }
+    const briefs = (Array.isArray(arr) ? arr : []).filter((s): s is string => typeof s === "string" && s.trim().length > 20).map((s) => s.trim()).slice(0, 3);
+    if (briefs.length === 3) return { briefs, source: "ai" };
+    // pad with fallback if the model returned fewer than 3 usable briefs
+    const merged = [...briefs, ...fallback].slice(0, 3);
+    return { briefs: merged, source: briefs.length ? "ai" : "fallback" };
+  } catch {
+    return { briefs: fallback, source: "fallback" };
+  }
 }
 export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ requestId: string; created: number }> {
   const { orgId, userId, supabase } = await ctx();
@@ -315,6 +419,69 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     balcony: Boolean(g.input.balcony), parking: Boolean(g.input.parking), storage: Boolean(g.input.storage), elevator: Boolean(g.input.elevator),
     hasPropertyImage: Boolean(g.input.propertyImage), importantText: g.input.importantText ?? null,
   });
+
+  // ── 3 OPTIONS (agent-chosen design briefs) ──────────────────────────────
+  // The agent asked ZONO to write 3 design directions, optionally edited them,
+  // and hit "צור 3 אפשרויות". Realize each brief as ONE distinct gpt-image-2 ad
+  // — SAME locked copy + real assets (logo + agent photo passed every time) —
+  // so the agent picks between 3 genuinely different premium designs.
+  if (g.conceptBriefs && g.conceptBriefs.length) {
+    const briefs = g.conceptBriefs.map((s) => (s ?? "").trim()).filter(Boolean).slice(0, 3);
+    if (briefs.length) {
+      const { spec: baseSpec, kind } = baseSpecForBriefs(g, brand.snapshot);
+      const fmt = g.format || "feed_4_5";
+      const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
+      const finalRows: Record<string, unknown>[] = await Promise.all(briefs.map(async (brief, i) => {
+        const label = `אפשרות ${i + 1}`;
+        const base: Record<string, unknown> = {
+          org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
+          output_type: g.requestType, variant_name: label, format: fmt, title: `${label} · ${baseSpec.headline}`,
+          headline: baseSpec.headline, subheadline: baseSpec.subheadline, body_text: baseSpec.features.join(" · "), cta_text: baseSpec.cta,
+          brand_match_score: 0, readability_score: 0, conversion_score: 0, seller_lead_score: 0, buyer_lead_score: 0, overall_score: 0, status: "generated",
+          overall_quality_score: 0, wow_score: 0, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
+          used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
+        };
+        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind, template: null, spec: baseSpec, assets, conceptBrief: brief, bucket: VISUAL_BUCKET });
+        if (outcome.imageUrl) {
+          const passed = outcome.status === "approved";
+          return { ...base, status: passed ? "generated" : "needs_review",
+            render_data: { format: fmt, width: 1080, height: 1350, fullAd: true, concept: { label, brief }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
+            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
+            image_error: passed ? null : ([outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null),
+            quality_status: passed ? "passed" : "review",
+            critic_summary: passed
+              ? `${label} · עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות.`
+              : `${label} · ${outcome.warning ?? "ממתין לאישור QA סופי"} · הגרסה הטובה ביותר לאחר ${outcome.attempts} ניסיונות תיקון AI.`,
+            creative_selection_metadata: { mode: passed ? "ai_full_ad" : "ai_self_correct", option: i + 1, brief, attempts: outcome.attempts, qa: outcome.scores, warning: outcome.warning, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+          };
+        }
+        return { ...base, status: "failed",
+          render_data: { failed: true, fullAd: true, concept: { label, brief } } as unknown as Json,
+          image_url: null, image_provider: outcome.provider, image_status: "failed",
+          image_error: (outcome.status === "no_provider" ? "ספק AI לא מוגדר (OPENAI_API_KEY / ZONO_IMAGE_PROVIDER=openai)" : (outcome.failReasons.join(" · ") || "יצירת התמונה נכשלה")).slice(0, 500),
+          quality_status: "failed",
+          critic_summary: `${label} · יצירת התמונה נכשלה — ${outcome.status === "no_provider" ? "ספק ה-AI אינו מוגדר" : "לא הופקה תמונה"}.`,
+          is_hidden_due_to_quality: true,
+          creative_selection_metadata: { mode: "failed", option: i + 1, brief, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
+        };
+      }));
+      const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(finalRows as never).select("id");
+      if (insErr) { console.error("[quick-creative][3-options] insert failed:", insErr.message); throw new Error(`שמירת האפשרויות נכשלה: ${insErr.message}`); }
+      const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);
+      if (!adIds.length) throw new Error("שמירת האפשרויות נכשלה — לא נוצרו פריטים.");
+      const withImage = finalRows.filter((r) => (r as { image_url?: string | null }).image_url).length;
+      if (withImage === 0) {
+        const reasons = Array.from(new Set(finalRows.flatMap((r) => (r as { creative_selection_metadata?: { failReasons?: string[] } }).creative_selection_metadata?.failReasons ?? []))).slice(0, 4);
+        const hint = reasons.some((x) => x.includes("ספק")) || reasons.length === 0
+          ? "ספק התמונות של OpenAI לא מוגדר (הגדר OPENAI_API_KEY ו-ZONO_IMAGE_PROVIDER=openai)"
+          : reasons.some((x) => x.includes("נכסים לרפרנס"))
+            ? "אין תמונות רפרנס — הוסף תמונות לנכס או לוגו/תמונת סוכן למותג"
+            : reasons.join(" · ");
+        throw new Error(`לא נוצרו תמונות AI אמיתיות — ${hint}`);
+      }
+      return { requestId, created: adIds.length };
+    }
+  }
 
   // ── PROPERTY AD: exactly 4 distinct, layout-validated concept creatives. ──
   // This path BYPASSES the variation×family candidate matrix (which could select
@@ -416,8 +583,10 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     if (vars.length) {
       const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
       const rows: Record<string, unknown>[] = [];
-      for (let i = 0; i < vars.length; i++) {
-        const v = vars[i];
+      // Generate the concepts IN PARALLEL (like the property-ad path) — a
+      // sequential loop over the slow reference-image calls blew past the 300s
+      // serverless limit, so sold/testimonial produced no output. Cap to 2.
+      await Promise.all(vars.slice(0, 2).map(async (v) => {
         const base: Record<string, unknown> = {
           org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
           output_type: g.requestType, variant_name: v.variantName, format: g.format, title: `${v.variantName} · ${v.headline}`,
@@ -436,7 +605,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             critic_summary: `עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${v.variantName}).`,
             creative_selection_metadata: { mode: "ai_full_ad", kind, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
           });
-          continue;
+          return;
         }
         // AI image exists but didn't fully pass QA → SHOW the best AI creative
         // with a review warning (AI-only; never fall back to a deterministic render).
@@ -449,7 +618,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             critic_summary: `${outcome.warning ?? "ממתין לאישור QA סופי"} · הגרסה הטובה ביותר לאחר ${outcome.attempts} ניסיונות תיקון AI (${v.variantName}).`,
             creative_selection_metadata: { mode: "ai_self_correct", kind, qa: outcome.scores, attempts: outcome.attempts, warning: outcome.warning, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
           });
-          continue;
+          return;
         }
         // No AI image at all (no provider / generation threw) → deterministic render fallback.
         rows.push({ ...base,
@@ -459,7 +628,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           critic_summary: `${outcome.status === "no_provider" ? "רנדרר (ספק AI לא מוגדר)" : "רנדרר — לא הופקה תמונת AI"}.`,
           creative_selection_metadata: { mode: "fallback", kind, genStatus: outcome.status, generationId: outcome.generationId, failReasons: outcome.failReasons } as unknown as Json,
         });
-      }
+      }));
       const { data: insP, error: insErr } = await supabase.from("zono_quick_creative_outputs").insert(rows as never).select("id");
       if (insErr) { console.error("[quick-creative][full-ad] insert failed:", insErr.message); throw new Error(`שמירת המודעות נכשלה: ${insErr.message}`); }
       const adIds = ((insP ?? []) as { id: string }[]).map((r) => r.id);

@@ -1,0 +1,32 @@
+-- ============================================================================
+-- REVIEWED DROP — public.user_ui_preferences   ⚠ NOT APPLIED. STAGED FOR REVIEW.
+-- ----------------------------------------------------------------------------
+-- Intentionally OUTSIDE supabase/migrations/ — never auto-applied.
+--
+-- Rationale (as of 2026-08-05, staging zono-dev):
+--   • Orphan: defined by NO repository migration (reverse drift).
+--   • 0 rows on staging.
+--   • 0 code references (src/**/*.ts|tsx). No `uiPreferences` / `user_preferences`
+--     accessor exists in the codebase, and no other UI-preferences table is in
+--     use — so there is no demonstrated product owner or read/write path.
+--   • Per the reconciliation directive, adopt ONLY with a real owner + use path;
+--     neither is present, so this is NOT adopted.
+--
+-- Decision: DEPRECATE → reviewed drop. Do NOT auto-drop.
+-- Before running: confirm still 0 rows, still 0 refs, no view/RPC/cron/dynamic
+-- dependency, and product-owner sign-off. If a settings feature is planned that
+-- would USE this shape, re-classify as ADOPT instead and write an additive
+-- create-if-not-exists migration matching the live shape below.
+--
+-- Live shape (for the record):
+--   id uuid pk default gen_random_uuid()
+--   org_id uuid not null → organizations(id) on delete cascade
+--   user_id uuid not null → users(id) on delete cascade
+--   key text not null
+--   value jsonb not null default '{}'::jsonb
+--   updated_at timestamptz not null default now()
+--   unique (user_id, key); indexes: pkey(id), user_idx(user_id)
+--   RLS: all (org_id = current_org_id() and user_id = auth.uid())
+-- ============================================================================
+
+-- drop table if exists public.user_ui_preferences;

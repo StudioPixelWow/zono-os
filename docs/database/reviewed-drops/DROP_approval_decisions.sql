@@ -1,0 +1,38 @@
+-- ============================================================================
+-- REVIEWED DROP — public.approval_decisions   ⚠ NOT APPLIED. STAGED FOR REVIEW.
+-- ----------------------------------------------------------------------------
+-- This file is intentionally OUTSIDE supabase/migrations/ so it is NEVER
+-- auto-applied by a migration replay / `supabase db push`. It is a prepared,
+-- reviewed drop for a product owner to approve.
+--
+-- Rationale (as of 2026-08-05, staging zono-dev):
+--   • Orphan: defined by NO repository migration (reverse drift).
+--   • 0 rows on staging.
+--   • 0 code references (src/**/*.ts|tsx).
+--   • Generic approve/reject log keyed by bundle_id + (entity_type, entity_id).
+--     Overlaps domain-specific approval models already in active use:
+--       - meta_approval_request (Meta Workspace content approval)
+--       - offers.status='accepted' + offer_events (offer acceptance)
+--       - commissions.status='approved' (commission approval gate)
+--   • No evidence of an owning product surface. Building a new approval system
+--     around this table would DUPLICATE the above — explicitly disallowed.
+--
+-- Decision: DEPRECATE → reviewed drop. Do NOT auto-drop.
+-- Before running this: confirm (a) still 0 rows, (b) still 0 code refs,
+-- (c) no view/RPC/cron/dynamic-SQL dependency, (d) product-owner sign-off.
+--
+-- Live shape being dropped (for the record / to recreate if needed):
+--   id uuid pk default gen_random_uuid()
+--   org_id uuid not null → organizations(id) on delete cascade
+--   bundle_id text not null
+--   entity_type text, entity_id text
+--   decision text not null check (decision in ('approved','rejected'))
+--   reason text
+--   decided_by uuid → users(id) on delete set null
+--   decided_at timestamptz not null default now()
+--   indexes: pkey(id), org_idx(org_id), bundle_idx(org_id,bundle_id)
+--   RLS: select(org), insert(org + agent + decided_by=auth.uid())
+-- ============================================================================
+
+-- Guarded, reversible-by-recreate. Run ONLY after sign-off.
+-- drop table if exists public.approval_decisions;

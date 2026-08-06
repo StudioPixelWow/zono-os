@@ -33,7 +33,10 @@ export interface DocumentSummary {
   id: string; title: string; doc_category: string | null; categoryLabel: string; signature_status: string;
   deal_id: string | null; buyer_id: string | null; seller_id: string | null; lead_id: string | null;
   property_id: string | null; expires_at: string | null; current_version: number; is_required: boolean; updated_at: string;
+  /** Legacy public URL (only on historical rows; new uploads are private). */
   file_url: string | null;
+  /** True when the doc has a private stored file reachable via a signed URL. */
+  has_stored_file: boolean;
 }
 export interface DocCommandCenter {
   pendingSignatures: number; blockedDeals: number; missingDocuments: number; expiringSoon: number;
@@ -51,7 +54,29 @@ function mapDoc(d: Record<string, unknown>): DocumentSummary {
     expires_at: (d.expires_at as string) ?? null, current_version: (d.current_version as number) ?? 1,
     is_required: Boolean(d.is_required), updated_at: d.updated_at as string,
     file_url: (d.file_url as string) ?? null,
+    has_stored_file: Boolean((d.storage_path as string) ?? null),
   };
+}
+
+const DOCS_BUCKET = "documents";
+const SIGNED_TTL_SEC = 300; // 5-minute short-lived signed reads
+
+/**
+ * Mint a short-lived signed URL for a document's PRIVATE stored file. Org-scoped
+ * (RLS + explicit org filter): a user can only sign their own org's document,
+ * and the storage `documents_org_select` policy blocks cross-org object reads.
+ * Returns null when the doc has no private stored file (legacy public-URL rows
+ * are opened directly by the client and never reach here).
+ */
+export async function getDocumentSignedUrl(documentId: string): Promise<{ url: string } | null> {
+  const { orgId, userId, supabase } = await ctx();
+  const { data } = await supabase.from("documents").select("storage_path").eq("org_id", orgId).eq("id", documentId).maybeSingle();
+  const path = (data as { storage_path?: string | null } | null)?.storage_path ?? null;
+  if (!path) return null;
+  const { data: signed, error } = await supabase.storage.from(DOCS_BUCKET).createSignedUrl(path, SIGNED_TTL_SEC);
+  if (error || !signed?.signedUrl) throw new Error(error?.message ?? "יצירת קישור מאובטח נכשלה");
+  await audit(supabase, orgId, documentId, userId, "viewed", "נוצר קישור צפייה מאובטח (5 דק׳)");
+  return { url: signed.signedUrl };
 }
 
 // ── command center ─────────────────────────────────────────────────────────

@@ -9,9 +9,10 @@
 // ============================================================================
 import "server-only";
 import { resolveImageProvider } from "./visual-providers";
+import { resolveImageModel } from "./model-config";
 import type { SourceManifest, QaVisionFindings, CreativeScores, CreativeHardFails } from "./creative-qa";
 
-const IMAGE_MODEL = () => process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
+const IMAGE_MODEL = () => resolveImageModel();
 const VISION_MODEL = () => process.env.OPENAI_VISION_MODEL || "gpt-4o";
 
 export type AdKind = "property" | "sold" | "testimonial";
@@ -69,7 +70,7 @@ export function buildSourceManifest(spec: AdSpec): SourceManifest {
 
 export function refUrlsFor(assets: AdGenAssets): string[] {
   // Up to 4 property photos so the model can build a real COLLAGE, plus logo + agent.
-  return [...assets.propertyImages.slice(0, 4), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
+  return [...assets.propertyImages.slice(0, 1), assets.logoUrl, assets.agentPhoto].filter(Boolean) as string[];
 }
 
 /** Full art-direction brief — the ZONO PREMIUM REAL ESTATE CREATIVE ENGINE
@@ -189,7 +190,10 @@ async function fetchBlob(url: string): Promise<{ blob: Blob; name: string } | nu
 /** Per-image generation timeout (ms). Prevents a hung OpenAI call from stalling
  *  the whole flow — on timeout the request aborts and throws, so the attempt
  *  loop retries or falls back to the deterministic renderer. */
-const IMAGE_TIMEOUT_MS = Math.max(20_000, Number(process.env.ZONO_CREATIVE_IMAGE_TIMEOUT_MS) || 75_000);
+// gpt-image-2 /images/edits with the real logo + agent photo + property refs needs
+// well over 75s; give it room (route maxDuration is 300s). The QA budget caps this
+// to a single attempt so total wall-clock stays under the serverless limit.
+const IMAGE_TIMEOUT_MS = Math.max(20_000, Number(process.env.ZONO_CREATIVE_IMAGE_TIMEOUT_MS) || 200_000);
 
 /** Raw gpt-image-1 multi-image edit → finished ad. Throws on no-key / API error / timeout. */
 export async function generateAdImageRaw(prompt: string, refUrls: string[]): Promise<RawImage> {
@@ -198,7 +202,7 @@ export async function generateAdImageRaw(prompt: string, refUrls: string[]): Pro
   const form = new FormData();
   form.append("model", IMAGE_MODEL()); form.append("prompt", prompt);
   // Vertical 4:5 social poster (closest gpt-image-1 portrait size to 1080×1350).
-  form.append("size", process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536"); form.append("quality", "high"); form.append("n", "1");
+  form.append("size", process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536"); form.append("quality", process.env.ZONO_CREATIVE_IMAGE_QUALITY || "medium"); form.append("n", "1");
   let attached = 0;
   for (const url of refUrls) { const f = await fetchBlob(url); if (f) { form.append("image[]", f.blob, f.name); attached++; } }
   if (!attached) throw new Error("no reference images could be fetched");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
@@ -47,7 +48,7 @@ import {
 } from "@/lib/creative-studio/visual-actions";
 import { VISUAL_TYPE_LABELS, VARIATION_MODES } from "@/lib/creative-studio/visual-dna";
 import {
-  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction, listCreativeCandidatesAction, listQuickOutputsAction,
+  generateQuickCreativeAction, brandPreviewAction, favoriteQuickAction, approveQuickAction, rejectQuickAction, duplicateQuickAction, regenerateQuickAction, listCreativeCandidatesAction, listQuickOutputsAction, buildConceptBriefsAction,
 } from "@/lib/creative-studio/quick-creative-actions";
 import type { FinalAdPreview } from "@/components/creative/FinalAdsSkeleton";
 import { QUICK_TYPE_LABELS } from "@/lib/creative-studio/quick-creative-engine";
@@ -1925,6 +1926,9 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
   const [done, setDone] = useState(false);
   const [finalAds, setFinalAds] = useState<FinalAdPreview[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  // "3 options" flow: AI-written, agent-editable design-direction briefs.
+  const [briefs, setBriefs] = useState<string[] | null>(null);
+  const [briefsBusy, setBriefsBusy] = useState(false);
   const set = (k: string, v: string | boolean | number) => setF((p) => ({ ...p, [k]: v }));
   const str = (k: string) => (typeof f[k] === "string" ? (f[k] as string) : "");
 
@@ -1935,18 +1939,32 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
     : type === "sold_post" ? !!str("address")
     : (str("address") && str("importantText"));
 
-  const submit = async () => {
+  const buildInput = (): Record<string, unknown> => ({
+    propertyImage: str("propertyImage") || null, neighborhood: str("neighborhood") || null, city: str("city") || null, address: str("address") || null, customCta: str("customCta") || null,
+    testimonialText: str("testimonialText") || null, recommenderName: str("recommenderName") || null, stars: f.stars ? Number(f.stars) : null, dealDate: str("dealDate") || null,
+    propertyType: str("propertyType") || null, salePrice: str("salePrice") || null, exclusive: !!f.exclusive, saleTime: str("saleTime") || null, sellerName: str("sellerName") || null,
+    importantText: str("importantText") || null, price: str("price") || null, rooms: str("rooms") || null, sizeSqm: str("sizeSqm") || null, floor: str("floor") || null, parking: str("parking") || null, storage: !!f.storage, balcony: !!f.balcony, elevator: !!f.elevator, evacuationDate: str("evacuationDate") || null,
+    improveText: improve,
+  });
+
+  // Ask ZONO to write 3 editable design-direction briefs. Best-effort; on failure
+  // the agent can still use the direct "create" button.
+  const genBriefs = async () => {
+    if (type === "property_ad_post" && !str("propertyImage")) { setErr("יש להעלות תמונת נכס לפני יצירת מודעה."); setStep(3); return; }
+    setBriefsBusy(true); setErr(null);
+    const res = await buildConceptBriefsAction({ requestType: type as never, input: buildInput() as never, format, entityType: et, entityId: eid });
+    setBriefsBusy(false);
+    if (res.error || !res.briefs?.length) { setErr(res.error ?? "בניית ההוראות נכשלה"); return; }
+    setBriefs(res.briefs.slice(0, 3));
+  };
+
+  const submit = async (conceptBriefs?: string[]) => {
     // RULE 1/5: real property image required for a property ad — never invent one.
     if (type === "property_ad_post" && !str("propertyImage")) { setErr("יש להעלות תמונת נכס לפני יצירת מודעה."); setStep(3); return; }
     setBusy(true); setErr(null);
-    const input: Record<string, unknown> = {
-      propertyImage: str("propertyImage") || null, neighborhood: str("neighborhood") || null, city: str("city") || null, address: str("address") || null, customCta: str("customCta") || null,
-      testimonialText: str("testimonialText") || null, recommenderName: str("recommenderName") || null, stars: f.stars ? Number(f.stars) : null, dealDate: str("dealDate") || null,
-      propertyType: str("propertyType") || null, salePrice: str("salePrice") || null, exclusive: !!f.exclusive, saleTime: str("saleTime") || null, sellerName: str("sellerName") || null,
-      importantText: str("importantText") || null, price: str("price") || null, rooms: str("rooms") || null, sizeSqm: str("sizeSqm") || null, floor: str("floor") || null, parking: str("parking") || null, storage: !!f.storage, balcony: !!f.balcony, elevator: !!f.elevator, evacuationDate: str("evacuationDate") || null,
-      improveText: improve,
-    };
-    const res = await generateQuickCreativeAction({ requestType: type as never, input: input as never, format, entityType: et, entityId: eid });
+    const input = buildInput();
+    const briefsArg = (conceptBriefs ?? []).map((s) => (s ?? "").trim()).filter(Boolean);
+    const res = await generateQuickCreativeAction({ requestType: type as never, input: input as never, format, entityType: et, entityId: eid, ...(briefsArg.length ? { conceptBriefs: briefsArg } : {}) });
     if (res.error) { setErr(res.error); setBusy(false); return; }
     // Pull the just-generated outputs so the modal's final cards show the REAL
     // produced ads (image when available; labeled "ready" tile otherwise) instead
@@ -1955,7 +1973,7 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
       const { outputs } = await listQuickOutputsAction({ entityType: et, entityId: eid });
       const mine = outputs
         .filter((o) => (o as { output_type?: string }).output_type === type)
-        .slice(0, 2)
+        .slice(0, 3)
         .map((o) => ({
           imageUrl: ((o as { image_url?: string | null }).image_url) ?? null,
           label: ((o as { variant_name?: string }).variant_name) ?? "מודעה סופית",
@@ -1986,10 +2004,11 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
   // ZONO Creative Engine waiting experience instead of the form. Generation logic
   // is untouched — `busy` = running, `done` = real backend response received.
   if (busy || done) {
-    return <CreativeGenerationModal complete={done} finalAds={finalAds} onView={() => { onClose(); router.refresh(); }} />;
+    return <ModalPortal><CreativeGenerationModal complete={done} finalAds={finalAds} count={briefs ? 3 : 2} onView={() => { onClose(); router.refresh(); }} /></ModalPortal>;
   }
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div dir="rtl" className="bg-card max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
@@ -2058,24 +2077,51 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
 
         {step === 4 && (
           <div className="flex flex-col gap-3">
-            <p className="text-ink text-sm">ZONO ייצר מנוע איכות מלא ויציג רק את 4 הגרסאות החזקות ביותר.</p>
-            {busy ? (
-              <div className="bg-surface flex flex-col gap-1.5 rounded-xl p-3">
-                {["מנתח את הנכס…", "מושך השראות מהמערכת…", "מייצר מועמדים…", "בודק איכות…", "משפר תוצאות…", "מציג את 4 הגרסאות הטובות ביותר"].map((s, i) => (
-                  <div key={s} className="flex items-center gap-2 text-[12px] font-bold text-ink">
-                    <span className="bg-brand-soft text-brand-strong grid h-5 w-5 place-items-center rounded-full text-[10px] font-black">{i + 1}</span>{s}
+            {!briefs ? (<>
+              <p className="text-ink text-sm font-black">ZONO יכתוב 3 כיווני עיצוב שונים לפי הנכס והמותג — תוכלו לערוך כל אחד ואז ליצור 3 אפשרויות.</p>
+              <p className="text-muted text-[12px]">בכל אפשרות מועברים תמיד הלוגו, תמונת הסוכן, הטלפון וצבעי המותג — ומנוע gpt-image-2 מעצב את המודעה כולה.</p>
+              {err && <p className="text-danger text-[12px]">{err}</p>}
+              <Button size="sm" loading={briefsBusy} onClick={genBriefs}><Icon name="Sparkles" size={14} />🤖 AI בנה 3 הוראות עיצוב</Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={() => submit()}>או צור אוטומטית (ללא הוראות)</Button>
+                <Button size="sm" variant="ghost" onClick={() => setStep(3)}>חזרה</Button>
+              </div>
+            </>) : (<>
+              <p className="text-ink text-sm font-black">3 כיווני עיצוב — ערכו לפי הצורך ולחצו על ״צור 3 אפשרויות״:</p>
+              <div className="flex flex-col gap-2.5">
+                {briefs.map((b, i) => (
+                  <div key={i} className="border-line bg-surface flex flex-col gap-1 rounded-xl border p-2.5">
+                    <span className="text-brand-strong text-[11px] font-black">אפשרות {i + 1}</span>
+                    <textarea
+                      value={b}
+                      onChange={(e) => setBriefs((prev) => { const n = [...(prev ?? [])]; n[i] = e.target.value; return n; })}
+                      rows={3}
+                      className="border-line bg-card text-ink rounded-lg border px-3 py-2 text-[13px] leading-relaxed"
+                    />
                   </div>
                 ))}
               </div>
-            ) : null}
-            {err && <p className="text-danger text-[12px]">{err}</p>}
-            <div className="flex gap-2"><Button size="sm" loading={busy} onClick={submit}><Icon name="Sparkles" size={14} />צור עם בקרת איכות</Button><Button size="sm" variant="ghost" onClick={() => setStep(3)}>חזרה</Button></div>
-            <p className="text-muted text-[11px]">המערכת מייצרת 16 מועמדים פנימיים, מדרגת אותם בקפדנות ומציגה רק את הטובים ביותר.</p>
+              {err && <p className="text-danger text-[12px]">{err}</p>}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" loading={busy} onClick={() => submit(briefs)}><Icon name="Sparkles" size={14} />צור 3 אפשרויות</Button>
+                <Button size="sm" variant="ghost" loading={briefsBusy} onClick={genBriefs}>בנה הוראות מחדש</Button>
+                <Button size="sm" variant="ghost" onClick={() => setStep(3)}>חזרה</Button>
+              </div>
+              <p className="text-muted text-[11px]">כל אפשרות עוברת בקרת איכות (טקסט עברי, לוגו, פרצוף הסוכן, טלפון ומחיר) לפני שהיא מוצגת.</p>
+            </>)}
           </div>
         )}
       </div>
     </div>
+    </ModalPortal>
   );
+}
+
+/** Renders modal overlays into document.body so a transformed ancestor can't break
+ *  position:fixed (which made the popup appear mid-page and require scrolling). */
+function ModalPortal({ children }: { children: React.ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
 }
 
 function UploadModal({ onClose, onDone, orgId, userId, et, eid }: { onClose: () => void; onDone: () => void; orgId: string; userId: string; et: string; eid: string }) {

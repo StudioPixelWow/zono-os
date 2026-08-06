@@ -6,6 +6,7 @@
 // base64 bytes (real → uploaded to storage by the service). Keys server-side.
 // ============================================================================
 import "server-only";
+import { resolveImageModel } from "../model-config";
 import type { VisualDNA } from "../visual-dna";
 
 export interface VisualGenInput {
@@ -50,7 +51,7 @@ async function openaiVisual(key: string, i: VisualGenInput): Promise<VisualGenRe
   const size = i.aspect === "portrait" ? "1024x1536" : i.aspect === "landscape" ? "1536x1024" : "1024x1024";
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: process.env.ZONO_OPENAI_IMAGE_MODEL || "gpt-image-1", prompt: i.prompt, size, n: 1 }),
+    body: JSON.stringify({ model: resolveImageModel(), prompt: i.prompt, size, n: 1 }),
   });
   if (!res.ok) throw new Error(`OpenAI image failed (${res.status})`);
   const json = await res.json();
@@ -181,7 +182,7 @@ export function resolveImageProvider(): ImageProviderInfo {
 /** Resolve the OpenAI image model: OPENAI_IMAGE_MODEL (canonical), then the
  *  legacy ZONO_OPENAI_IMAGE_MODEL alias, then gpt-image-1. */
 function openaiImageModel(): string {
-  return process.env.OPENAI_IMAGE_MODEL || process.env.ZONO_OPENAI_IMAGE_MODEL || "gpt-image-1";
+  return resolveImageModel();
 }
 
 /** OpenAI text-to-image (gpt-image-1), returning raw base64 bytes. Generates the

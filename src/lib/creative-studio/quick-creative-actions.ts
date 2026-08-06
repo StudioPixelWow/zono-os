@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import {
   generateQuickCreative, listQuickOutputs, listCreativeCandidates, resolveBrandSnapshot, setQuickFavorite, approveQuickOutput, rejectQuickOutput,
-  duplicateQuickOutput, editQuickText, replaceQuickImage, regenerateQuickRequest, generateQuickCreativeImage, type GenerateQuickInput,
+  duplicateQuickOutput, editQuickText, replaceQuickImage, regenerateQuickRequest, generateQuickCreativeImage, buildConceptBriefs, type GenerateQuickInput,
 } from "./quick-creative-service";
 
 export interface QcActionState { ok?: boolean; error?: string; message?: string; warnings?: string[] }
@@ -33,6 +33,11 @@ export async function brandPreviewAction(input: { entityType?: string; entityId?
 export async function generateQuickCreativeAction(g: GenerateQuickInput): Promise<QcActionState> {
   try { const r = await generateQuickCreative(g); revalidate(g.entityType, g.entityId); return { ok: true, message: `נוצרו ${r.created} וריאציות` }; }
   catch (e) { return { error: e instanceof Error ? e.message : "היצירה נכשלה" }; }
+}
+/** "3 options" flow: AI writes 3 editable Hebrew design-direction briefs. */
+export async function buildConceptBriefsAction(g: GenerateQuickInput): Promise<QcActionState & { briefs?: string[]; source?: string }> {
+  try { const r = await buildConceptBriefs(g); return { ok: true, briefs: r.briefs, source: r.source }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "בניית ההוראות נכשלה" }; }
 }
 export async function listQuickOutputsAction(input: { entityType?: string; entityId?: string }): Promise<{ outputs: Record<string, unknown>[] }> {
   try { return { outputs: await listQuickOutputs(input) }; } catch { return { outputs: [] }; }

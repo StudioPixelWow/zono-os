@@ -60,7 +60,7 @@ export default function CommunicationStudio({ initialTarget }: { initialTarget?:
 
       {wfId && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-300 bg-sky-50/50 px-3 py-2 text-[12px]">
-          <span className="text-sky-800 font-semibold">🔁 נפתח מתוך Workflow — צעד הטיוטה מסומן "הוכן / ממתין לאישור". ZONO אינו שולח אוטומטית.</span>
+          <span className="text-sky-800 font-semibold">🔁 נפתח מתוך Workflow — צעד הטיוטה מסומן &quot;הוכן / ממתין לאישור&quot;. ZONO אינו שולח אוטומטית.</span>
           <Link href="/workflow-builder" className="rounded-lg border border-sky-400 px-3 py-1 font-bold text-sky-800">חזור לתהליך</Link>
         </div>
       )}

@@ -1,0 +1,123 @@
+{
+  "phase": "Creative-Studio Extension",
+  "architecture_decision": "Extend existing src/lib/creative-studio/ (single engine); no standalone module; no second OpenAI client.",
+  "model": { "default": "gpt-image-2", "verified": "OpenAI API (gpt-image-2 available, 2026)", "fallback": "gpt-image-1", "hardcoded_in_business_logic": false },
+  "capabilities": [
+    {
+      "capability": "Provider & model configuration", "classification": "Extend",
+      "reused": "visual-providers, openai-ad-pipeline (delegated, not duplicated)",
+      "new_files": ["src/lib/creative-studio/model-config.ts (changed)", "src/lib/creative-studio/image-provider.ts"],
+      "files_changed": ["src/lib/creative-studio/openai-ad-pipeline.ts", "src/lib/creative-studio/visual-providers/index.ts"],
+      "db_impact": "none", "provider_impact": "unified model resolution; ImageProvider interface + Mock/OpenAI adapters", "storage_impact": "none", "ui_impact": "none",
+      "tests": "unit: default model, precedence, validateImageConfig(key/no-key/unknown-model)", "status": "IMPLEMENTED", "evidence": "52-assertion unit suite green; tsc clean"
+    },
+    {
+      "capability": "Brand-asset resolution", "classification": "Disconnected",
+      "reused": "brand_identity_profiles, organizations, users",
+      "new_files": ["src/lib/creative-studio/brand-asset-resolver.ts"], "files_changed": [],
+      "db_impact": "read-only", "provider_impact": "none", "storage_impact": "none", "ui_impact": "none",
+      "tests": "unit: precedence, approval gating, unapproved skip, rejected ignore, legacy fallback", "status": "IMPLEMENTED", "evidence": "unit green"
+    },
+    {
+      "capability": "Creative kinds (agent_brand, office_brand, market_stat)", "classification": "Missing-in-studio",
+      "reused": "existing kind system", "new_files": ["src/lib/creative-studio/creative-kinds.ts"], "files_changed": [],
+      "db_impact": "none (uses zono_quick_creative output_type)", "provider_impact": "none", "storage_impact": "none", "ui_impact": "selection later",
+      "tests": "unit: kind membership, requiredAssetsFor, market-stat sourcing guard", "status": "IMPLEMENTED (types+guards); spec builders + engine wiring PARTIAL", "evidence": "unit green"
+    },
+    {
+      "capability": "Deterministic logo composition", "classification": "Extend",
+      "reused": "brand-identity logos", "new_files": ["src/lib/creative-studio/logo-composite.ts (changed)", "src/lib/creative-studio/visual-gen-math.ts (changed)"], "files_changed": [],
+      "db_impact": "none", "provider_impact": "none (post-generation)", "storage_impact": "none", "ui_impact": "none", "provider_dependency": "sharp",
+      "tests": "unit: placement, max caps, contrast variant, safe-zone avoidance", "status": "IMPLEMENTED (pure+wrapper); runtime pixel-match DEFERRED", "evidence": "unit green; sharp render not run here"
+    },
+    {
+      "capability": "Platform size variants", "classification": "Missing-in-studio",
+      "reused": "-", "new_files": ["src/lib/creative-studio/size-variants.ts (changed)"], "files_changed": [],
+      "db_impact": "variant URLs on output metadata", "provider_impact": "none", "storage_impact": "variant uploads", "ui_impact": "download grid later", "provider_dependency": "sharp",
+      "tests": "unit: size table, aspect, cover-resize wrapper", "status": "IMPLEMENTED (cover crop); per-aspect deterministic reflow PARTIAL", "evidence": "unit green"
+    },
+    {
+      "capability": "Provider transport retry", "classification": "Extend",
+      "reused": "-", "new_files": ["src/lib/creative-studio/provider-retry.ts"], "files_changed": [],
+      "db_impact": "none", "provider_impact": "transient-only retry, backoff+jitter+budget", "storage_impact": "none", "ui_impact": "none",
+      "tests": "unit: classification, backoff, runner success/permanent", "status": "IMPLEMENTED", "evidence": "unit green"
+    },
+    {
+      "capability": "Usage & cost logging", "classification": "Missing",
+      "reused": "usage_events", "new_files": ["src/lib/creative-studio/usage-logging.ts"], "files_changed": [],
+      "db_impact": "writes usage_events", "provider_impact": "none", "storage_impact": "none", "ui_impact": "none",
+      "tests": "unit: event build, redaction, honest cost basis", "status": "IMPLEMENTED (builder+writer); wiring into generate paths PARTIAL", "evidence": "unit green"
+    },
+    {
+      "capability": "Output lineage & version history", "classification": "Extend",
+      "reused": "zono_quick_creative_outputs (generation_round, metadata)", "new_files": ["src/lib/creative-studio/output-lineage.ts"], "files_changed": [],
+      "db_impact": "uses existing columns", "provider_impact": "none", "storage_impact": "none", "ui_impact": "compare/restore later",
+      "tests": "unit: round/root, immutability guard, restore, order", "status": "IMPLEMENTED (lib); persist wiring PARTIAL", "evidence": "unit green"
+    },
+    {
+      "capability": "Secure storage (private + signed)", "classification": "Missing",
+      "reused": "generated-zono-visuals bucket", "new_files": [], "files_changed": [],
+      "db_impact": "asset state model", "provider_impact": "none", "storage_impact": "private buckets + signed URLs + migration", "ui_impact": "review access",
+      "tests": "cross-org access (deferred)", "status": "DESIGNED — NOT IMPLEMENTED", "evidence": "SECURE_STORAGE.md"
+    },
+    {
+      "capability": "Content orchestration (calendar→generate→publish→learn)", "classification": "Outside creative-studio",
+      "reused": "campaigns, distribution, meta, approvals, tasks, timeline", "new_files": ["src/lib/content-orchestration/creative-content-service.ts (planned)"], "files_changed": [],
+      "db_impact": "links only", "provider_impact": "none", "storage_impact": "none", "ui_impact": "-",
+      "tests": "integration (deferred)", "status": "DESIGNED — NOT IMPLEMENTED", "evidence": "CONTENT_ORCHESTRATION.md"
+    },
+    {
+      "capability": "Performance → learning loop", "classification": "Outside creative-studio",
+      "reused": "distribution_analytics, creative feedback", "new_files": [], "files_changed": [],
+      "db_impact": "-", "provider_impact": "-", "storage_impact": "-", "ui_impact": "-",
+      "tests": "deferred", "status": "DESIGNED — NOT IMPLEMENTED", "evidence": "PERFORMANCE_LEARNING_LOOP.md"
+    },
+    {
+      "capability": "Minimal operational UI (workspace + bulk)", "classification": "Outside creative-studio",
+      "reused": "creative-studio actions", "new_files": [], "files_changed": [],
+      "db_impact": "-", "provider_impact": "-", "storage_impact": "-", "ui_impact": "2 screens (planned)",
+      "tests": "component + E2E (deferred)", "status": "NOT IMPLEMENTED", "evidence": "-"
+    }
+  ],
+  "tests": {
+    "note": "Superseded by local-runtime-completion-manifest.json and the certification phase below.",
+    "new_unit_assertions": 52,
+    "typescript_new_modules": "clean"
+  },
+  "certification_phase": {
+    "phase": "Browser Certification and External Staging Validation",
+    "patch": { "apply_check": "OK on origin/main", "files": 84, "added": 76, "modified": 8, "deleted": 0, "secrets_or_binaries_or_traces": "none", "scope": "creative-studio/creative-runtime/content-orchestration/creative-lab/e2e/docs/scripts/migration + 3 guarded config files" },
+    "executed_here": {
+      "assertions_total": 338, "assertions_failed": 0,
+      "suites": {
+        "visual-gen-extensions.qa.ts": "52/0", "runtime.qa.ts": "34/0", "kinds.qa.ts": "21/0",
+        "db-store.qa.ts": "13/0", "storage-contract.qa.ts": "24/0 (Local+Supabase)", "reflow.qa.ts": "113/0",
+        "runtime-factory.qa.ts": "14/0", "lab-flows.qa.ts": "36/0", "test-runtime-security.qa.ts": "31/0"
+      },
+      "tsc": "0 errors", "eslint": "0 errors", "use_server_guard": "148 modules clean",
+      "migration_replay": "210/210 (prior phase; migration unchanged)"
+    },
+    "executed_on_normal_runner": {
+      "browser_e2e_40": "40 passed, 0 failed (macOS, Node 24, Chromium via Playwright, test runtime, no Supabase/OpenAI/Docker)",
+      "defects_found_and_fixed": [
+        "code+config: 127.0.0.1-vs-localhost origin broke session cookie + server actions — pinned E2E to localhost + set session cookie directly on the browser context",
+        "test: 4 racy generation tests read newest output before list refresh — wait for new output by content + verify idempotency by stable count"
+      ]
+    },
+    "external_runtime_executed": {
+      "supabase_db_rls": "PASSED — real zono-dev project: additive migration applied, 8/8 constraint/persistence checks, real RLS org-isolation (A sees / B does not), cleaned up",
+      "openai_live_smoke": "PASSED 12/12 — real capped gpt-image-2 calls, one per kind, model stamped, usage requested→succeeded, real image bytes",
+      "supabase_storage": "PASSED 11/11 — real bucket via SupabasePrivateStorage: owner signed read; anonymous/inactive/cross-org/arbitrary-path/qa_failed denied; approved promotion + private master retained; cleaned up"
+    },
+    "blocked_here": {
+      "next_build": "environment defect (authoring sandbox only) — Next toolchain force-killed; runs on a normal runner / CI",
+      "deployed_publishing_and_browser_smoke": "deployment — needs a staging deploy target (none available); mock publishing path verified (runtime.qa 34/0, lab-flows 36/0)"
+    },
+    "verdicts": {
+      "local_implementation": "Local Implementation Complete",
+      "browser_certification": "PASSED — 40/40 executed end-to-end through the real browser on a normal runner (macOS)",
+      "external_runtime": "External Runtime Partially Passed (strong) — Supabase DB+RLS, live OpenAI (gpt-image-2), and Supabase Storage all executed GREEN on the real project; only deployed publishing/browser smoke remains (no deploy target)"
+    }
+  },
+  "verdict": "Creative-Studio Extension — local code complete; Browser Certification PASSED (40/40); Local Runtime finally approved; External Runtime Partially Passed (strong) — DB+RLS+OpenAI+Storage live-green; only deploy-dependent gate remains"
+}

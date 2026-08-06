@@ -26,6 +26,20 @@ async function ctx() {
 }
 const nowIso = () => new Date().toISOString();
 
+export interface LeadListRow {
+  id: string; full_name: string; phone: string | null; email: string | null;
+  stage: string; score: number | null; source: string | null; created_at: string; owner_id: string | null;
+}
+/** Org-scoped lead list for the Leads workspace (server-authoritative, RLS). */
+export async function listLeads(opts?: { stage?: string }): Promise<LeadListRow[]> {
+  const { orgId } = await ctx();
+  const supabase = await createClient();
+  let q = supabase.from("leads").select("id,full_name,phone,email,stage,score,source,created_at,owner_id").eq("org_id", orgId);
+  if (opts?.stage && (LEAD_STAGES as readonly string[]).includes(opts.stage)) q = q.eq("stage", opts.stage as never);
+  const { data } = await q.order("created_at", { ascending: false }).limit(400);
+  return ((data ?? []) as unknown as LeadListRow[]);
+}
+
 /** Normalized contact keys for duplicate detection (no destructive merge). */
 export function normalizePhone(v?: string | null): string | null {
   if (!v) return null; const d = String(v).replace(/[^\d]/g, ""); return d.length >= 6 ? d : null;
