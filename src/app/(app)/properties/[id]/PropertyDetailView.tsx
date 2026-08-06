@@ -290,6 +290,9 @@ export function PropertyDetailView({
               <Link href={`/creative/new?type=property_sale_post&propertyId=${p.id}`}>
                 <Button leadingIcon={<Icon name="Sparkles" size={16} />}>צור פוסט פרסום</Button>
               </Link>
+              <Link href={`/offers?propertyId=${p.id}`}>
+                <Button variant="secondary" leadingIcon={<Icon name="Send" size={16} />}>צור הצעה</Button>
+              </Link>
               <Link href={`/properties/${p.id}/edit`}>
                 <Button variant="secondary" leadingIcon={<Icon name="Settings" size={16} />}>עריכה</Button>
               </Link>

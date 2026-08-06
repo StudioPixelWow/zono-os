@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
@@ -13,6 +13,7 @@ import {
   signatureStatusLabel, STATUS_TONE, AUDIT_EVENT_LABELS, docCategoryLabel, DOC_CATEGORY_LABELS,
 } from "@/lib/documents/engine";
 import { uploadDocumentFile } from "@/lib/documents/upload";
+import { offerFormOptionsAction, type OfferFormOptions } from "@/lib/offers/actions";
 import { useCurrentOrganization } from "@/components/dashboard/DashboardDataProvider";
 import type { DocCommandCenter, DocumentSummary, DocumentDetail } from "@/lib/documents/service";
 
@@ -108,6 +109,11 @@ function NewDocumentForm({ r }: { r: Runner }) {
   const [file, setFile] = useState<File | null>(null);
   const [isChecklist, setIsChecklist] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [opts, setOpts] = useState<OfferFormOptions | null>(null);
+  const [buyerId, setBuyerId] = useState("");
+  const [propertyId, setPropertyId] = useState("");
+
+  useEffect(() => { let live = true; offerFormOptionsAction().then((o) => { if (live) setOpts(o); }).catch(() => { if (live) setOpts({ buyers: [], properties: [] }); }); return () => { live = false; }; }, []);
 
   const submit = () =>
     r.run(async () => {
@@ -121,9 +127,10 @@ function NewDocumentForm({ r }: { r: Runner }) {
       const res = await createDocumentManualAction({
         title, docCategory, expiresAt: expiresAt || null, notes: notes || null,
         storagePath, isChecklistItem: isChecklist,
+        buyer_id: buyerId || undefined, property_id: propertyId || undefined,
       });
       if (res.error) throw new Error(res.error);
-      setTitle(""); setNotes(""); setExpiresAt(""); setFile(null); setIsChecklist(false);
+      setTitle(""); setNotes(""); setExpiresAt(""); setFile(null); setIsChecklist(false); setBuyerId(""); setPropertyId("");
       return res;
     }, { id: "new-doc", pendingMessage: file ? "מעלה ויוצר..." : "יוצר מסמך...", success: () => "המסמך נוצר ✓" });
 
@@ -148,6 +155,20 @@ function NewDocumentForm({ r }: { r: Runner }) {
         <label className="flex flex-col gap-1">
           <span className={lbl}>קובץ (PDF / תמונה / Word)</span>
           <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" className="text-muted text-xs" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={lbl}>קונה מקושר (אופציונלי)</span>
+          <select className={field} value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
+            <option value="">{opts ? "ללא" : "טוען..."}</option>
+            {opts?.buyers.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={lbl}>נכס מקושר (אופציונלי)</span>
+          <select className={field} value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+            <option value="">{opts ? "ללא" : "טוען..."}</option>
+            {opts?.properties.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
         </label>
       </div>
       <label className="flex flex-col gap-1">

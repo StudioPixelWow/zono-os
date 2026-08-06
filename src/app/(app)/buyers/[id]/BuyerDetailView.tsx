@@ -204,6 +204,7 @@ export function BuyerDetailView({
               onClick={() => window.dispatchEvent(new CustomEvent("zono:new-deal", { detail: { prefill: { kind: "buyer", id: b.id, label: b.full_name } } }))}>
               צור עסקה
             </Button>
+            <Link href={`/offers?buyerId=${b.id}`}><Button variant="secondary" leadingIcon={<Icon name="Send" size={16} />}>צור הצעה</Button></Link>
             <Link href={`/buyers/${b.id}/edit`}><Button variant="ghost" leadingIcon={<Icon name="Settings" size={16} />}>עריכה</Button></Link>
           </div>
         </div>

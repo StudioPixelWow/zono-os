@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import {
   createOfferAction, submitOfferAction, sellerResponseAction, counterOfferAction, acceptOfferAction,
   rejectOfferAction, withdrawOfferAction, expireOfferAction, convertOfferToDealAction, getOfferDetailAction,
+  offerFormOptionsAction, type OfferFormOptions,
 } from "@/lib/offers/actions";
 import type { OffersCommandCenter, OfferSummary, OfferDetail, OfferStatus } from "@/lib/offers/service";
 
@@ -29,8 +30,12 @@ type Filter = "all" | "open" | "accepted";
 export function OffersView({ cc }: { cc: OffersCommandCenter }) {
   const r = useActionRunner();
   const router = useRouter();
+  const params = useSearchParams();
+  // Prefill+lock a buyer/property when arriving from a buyer/property workspace.
+  const lockBuyerId = params.get("buyerId");
+  const lockPropertyId = params.get("propertyId");
   const [filter, setFilter] = useState<Filter>("all");
-  const [showNew, setShowNew] = useState(false);
+  const [showNew, setShowNew] = useState(Boolean(lockBuyerId || lockPropertyId));
 
   const offers = cc.offers.filter((o) =>
     filter === "all" ? true : filter === "accepted" ? o.status === "accepted" : ["draft", "submitted", "countered"].includes(o.status));
@@ -56,7 +61,7 @@ export function OffersView({ cc }: { cc: OffersCommandCenter }) {
       </div>
 
       <ActionFeedback runner={r} />
-      {showNew && <NewOfferForm r={r} onDone={() => { setShowNew(false); router.refresh(); }} />}
+      {showNew && <NewOfferForm r={r} lockBuyerId={lockBuyerId} lockPropertyId={lockPropertyId} onDone={() => { setShowNew(false); router.refresh(); }} />}
 
       <nav className="border-line flex gap-1 border-b">
         {([["all", "הכל"], ["open", "פתוחות"], ["accepted", "אושרו"]] as [Filter, string][]).map(([id, label]) => (
@@ -84,16 +89,23 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
 
 type Runner = ReturnType<typeof useActionRunner>;
 
-function NewOfferForm({ r, onDone }: { r: Runner; onDone: () => void }) {
+function NewOfferForm({ r, onDone, lockBuyerId, lockPropertyId }: { r: Runner; onDone: () => void; lockBuyerId?: string | null; lockPropertyId?: string | null }) {
+  const [opts, setOpts] = useState<OfferFormOptions | null>(null);
+  const [buyerId, setBuyerId] = useState(lockBuyerId ?? "");
+  const [propertyId, setPropertyId] = useState(lockPropertyId ?? "");
   const [amount, setAmount] = useState("");
   const [financing, setFinancing] = useState("");
   const [entry, setEntry] = useState("");
   const [expires, setExpires] = useState("");
   const [note, setNote] = useState("");
 
+  useEffect(() => { let live = true; offerFormOptionsAction().then((o) => { if (live) setOpts(o); }).catch(() => { if (live) setOpts({ buyers: [], properties: [] }); }); return () => { live = false; }; }, []);
+
+  const canSubmit = Boolean(buyerId && propertyId);
   const submit = () =>
     r.run(async () => {
       const res = await createOfferAction({
+        buyerId, propertyId,
         amount: amount ? Number(amount) : null, financing: financing || null,
         requestedEntryDate: entry || null, expiresAt: expires || null, note: note || null,
       });
@@ -106,14 +118,28 @@ function NewOfferForm({ r, onDone }: { r: Runner; onDone: () => void }) {
     <div className="bg-card border-line flex flex-col gap-3 rounded-2xl border p-4 shadow-sm">
       <h2 className="text-ink text-base font-extrabold">הצעה חדשה (טיוטה)</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-muted text-[11px] font-bold">קונה *</span>
+          <select className={field} value={buyerId} disabled={Boolean(lockBuyerId)} onChange={(e) => setBuyerId(e.target.value)}>
+            <option value="">{opts ? "בחר קונה" : "טוען..."}</option>
+            {opts?.buyers.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-muted text-[11px] font-bold">נכס *</span>
+          <select className={field} value={propertyId} disabled={Boolean(lockPropertyId)} onChange={(e) => setPropertyId(e.target.value)}>
+            <option value="">{opts ? "בחר נכס" : "טוען..."}</option>
+            {opts?.properties.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </label>
         <label className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">סכום ההצעה (₪)</span><input className={field} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))} placeholder="1620000" /></label>
         <label className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">מימון / תנאי</span><input className={field} value={financing} onChange={(e) => setFinancing(e.target.value)} placeholder="משכנתא / מזומן" /></label>
         <label className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">תאריך כניסה מבוקש</span><input type="date" className={field} value={entry} onChange={(e) => setEntry(e.target.value)} /></label>
         <label className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">תוקף ההצעה עד</span><input type="date" className={field} value={expires} onChange={(e) => setExpires(e.target.value)} /></label>
       </div>
       <label className="flex flex-col gap-1"><span className="text-muted text-[11px] font-bold">הערה</span><input className={field} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-      <Button className="w-fit" loading={r.busyId === "offer-new"} onClick={submit}><Icon name="Plus" size={14} />צור טיוטה</Button>
-      <p className="text-muted text-[11px]">קישור לנכס/קונה נעשה מתוך מרחב הנכס או הקונה. כאן נוצרת טיוטה שניתן להגיש ולנהל.</p>
+      <Button className="w-fit" disabled={!canSubmit} loading={r.busyId === "offer-new"} onClick={submit}><Icon name="Plus" size={14} />צור טיוטה</Button>
+      <p className="text-muted text-[11px]">המוכר נגזר אוטומטית מבעל הנכס. חובה לבחור קונה ונכס כדי לקשר את ההצעה.</p>
     </div>
   );
 }
