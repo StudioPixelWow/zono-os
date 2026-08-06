@@ -9,6 +9,7 @@ import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { NotesPanel } from "@/components/notes/NotesPanel";
 import { advanceDealStageAction } from "@/lib/deals/actions";
 import { createCommissionAction } from "@/lib/commissions/actions";
+import { createDocumentManualAction } from "@/lib/documents/actions";
 import { DEAL_STAGE_OPTIONS } from "@/lib/deals/options";
 import type { DealDetail } from "@/lib/deals/detail";
 import type { NoteDTO } from "@/lib/notes/service";
@@ -25,6 +26,8 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
   const [stage, setStage] = useState(deal.stage);
   const [gross, setGross] = useState("");
   const [showComm, setShowComm] = useState(false);
+  const [docTitle, setDocTitle] = useState("");
+  const [showDoc, setShowDoc] = useState(false);
 
   const advance = () =>
     r.run(async () => {
@@ -40,6 +43,14 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
       setGross(""); setShowComm(false); router.refresh();
       return res;
     }, { id: "comm", pendingMessage: "יוצר עמלה...", success: () => "עמלה נוצרה ✓" });
+
+  const addDoc = () =>
+    r.run(async () => {
+      const res = await createDocumentManualAction({ title: docTitle, docCategory: "custom", deal_id: deal.id });
+      if (res.error) throw new Error(res.error);
+      setDocTitle(""); setShowDoc(false); router.refresh();
+      return res;
+    }, { id: "doc", pendingMessage: "יוצר מסמך...", success: () => "מסמך נוצר ✓" });
 
   return (
     <main dir="rtl" className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
@@ -87,7 +98,18 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
       </Section>
 
       {/* documents */}
-      <Section title="מסמכים" extra={<Link href="/documents" className="text-brand-strong text-[12px] font-bold">כל המסמכים ↗</Link>}>
+      <Section title="מסמכים" extra={
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowDoc((s) => !s)} className="text-brand-strong text-[12px] font-bold">+ מסמך לעסקה</button>
+          <Link href="/documents" className="text-brand-strong text-[12px] font-bold">כל המסמכים ↗</Link>
+        </div>
+      }>
+        {showDoc && (
+          <div className="mb-2 flex items-center gap-2">
+            <input value={docTitle} onChange={(e) => setDocTitle(e.target.value)} placeholder="כותרת מסמך" className="bg-surface border-line text-ink h-9 max-w-[220px] rounded-xl border px-3 text-sm outline-none" />
+            <Button size="sm" loading={r.busyId === "doc"} onClick={addDoc}>צור</Button>
+          </div>
+        )}
         {deal.documents.length === 0 ? <Empty text="אין מסמכים מקושרים" /> : deal.documents.map((d) => (
           <Row key={d.id} main={d.title} sub={d.signature_status} />
         ))}

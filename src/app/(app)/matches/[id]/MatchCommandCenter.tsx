@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
@@ -16,6 +17,7 @@ import {
   resolveMatchRiskAction,
   setMatchStageAction,
 } from "@/lib/matching-intelligence/actions";
+import { createOfferFromMatchAction } from "@/lib/offers/actions";
 import type { MatchCommandCenter as MatchCC } from "@/lib/matching-intelligence/service";
 
 const TONE_TEXT: Record<Tone, string> = { good: "text-success", medium: "text-brand-strong", risk: "text-danger" };
@@ -54,6 +56,7 @@ function Snapshot({ title, href, name, a, b }: { title: string; href: string; na
 }
 
 export function MatchCommandCenter({ data }: { data: MatchCC }) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [objType, setObjType] = useState("price");
@@ -92,6 +95,12 @@ export function MatchCommandCenter({ data }: { data: MatchCC }) {
             <div className="text-center"><p className={cn("text-4xl font-black", TONE_TEXT[scoreTone(p.closing_probability)])}>{p.closing_probability}%</p><p className="text-muted text-[11px] font-semibold">הסתברות סגירה</p></div>
             <Badge tone="brand">{STAGE_LABELS[p.match_stage as MatchStage] ?? p.match_stage}</Badge>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" disabled={pending} leadingIcon={<Icon name="Send" size={15} />}
+            onClick={() => run(async () => { const res = await createOfferFromMatchAction(p.id); if (!res.error) router.push("/offers"); return res; })}>
+            צור הצעה
+          </Button>
         </div>
       </div>
 
