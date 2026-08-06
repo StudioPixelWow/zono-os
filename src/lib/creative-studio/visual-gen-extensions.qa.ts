@@ -31,7 +31,8 @@ function testModelConfig() {
   const a = process.env.OPENAI_IMAGE_MODEL, b = process.env.ZONO_OPENAI_IMAGE_MODEL, k = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_IMAGE_MODEL; delete process.env.ZONO_OPENAI_IMAGE_MODEL; delete process.env.OPENAI_API_KEY;
   ok("default model gpt-image-2", resolveImageModel() === "gpt-image-2" && DEFAULT_IMAGE_MODEL === "gpt-image-2");
-  ok("gpt-image-2 supported; gpt-image-1 retired", (SUPPORTED_IMAGE_MODELS as readonly string[]).includes("gpt-image-2") && !(SUPPORTED_IMAGE_MODELS as readonly string[]).includes("gpt-image-1"));  const noKey = validateImageConfig();
+  ok("gpt-image-2 supported; gpt-image-1 retired", (SUPPORTED_IMAGE_MODELS as readonly string[]).includes("gpt-image-2") && !(SUPPORTED_IMAGE_MODELS as readonly string[]).includes("gpt-image-1"));
+  const noKey = validateImageConfig();
   ok("no key → mock + not liveReady", noKey.provider === "mock" && noKey.liveReady === false && noKey.notes.length > 0);
   process.env.OPENAI_API_KEY = "sk-test";
   const withKey = validateImageConfig();
