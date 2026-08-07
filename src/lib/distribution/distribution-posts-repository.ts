@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { DIST, type DistPostRow } from "./db-types";
 import type { PostingStatus } from "./scheduler-planner";
+import { buildContentHash, buildIdempotencyKey } from "./publishing-state-machine";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
 
@@ -33,18 +34,35 @@ export interface QueueCounts {
 }
 
 export const distributionPostsRepository = {
-  /** Bulk-insert queue posts. Returns the created rows. */
+  /**
+   * Insert queue posts as canonical per-group execution rows. Each row gets a
+   * deterministic content_hash + idempotency_key + agent owner + publish_state, so
+   * the same content to the same group cannot be enqueued twice (DB-enforced dedup;
+   * duplicates are skipped, never a second post). Returns the created rows.
+   */
   async createMany(rows: QueuePostInput[]): Promise<DistPostRow[]> {
     const s = await scope(); if (!s || !rows.length) return [];
-    const payload = rows.map((r) => ({
-      org_id: s.orgId, campaign_id: r.campaignId, group_id: r.groupId, variation_id: r.variationId,
-      property_id: r.propertyId ?? null, platform: "facebook", status: r.status ?? "scheduled",
-      post_title: r.postTitle ?? null, post_text: r.postText ?? null, hashtags: r.hashtags ?? [],
-      cta: r.cta ?? null, image_url: r.imageUrl ?? null, scheduled_at: r.scheduledAt, created_by: s.userId,
-    }));
-    const { data, error } = await s.db.from(DIST.posts as never).insert(payload as never).select("*");
-    if (error) { console.error("[distribution.posts] createMany:", error.message); return []; }
-    return list<DistPostRow>(data);
+    const created: DistPostRow[] = [];
+    for (const r of rows) {
+      const contentHash = buildContentHash({ text: r.postText ?? "", imageUrl: r.imageUrl ?? null, destinationId: r.groupId });
+      const idempotencyKey = buildIdempotencyKey({
+        orgId: s.orgId, campaignId: r.campaignId, groupId: r.groupId, propertyId: r.propertyId ?? null,
+        contentHash, scheduleKey: (r.scheduledAt ?? "").slice(0, 13),
+      });
+      const { data, error } = await s.db.from(DIST.posts as never).insert({
+        org_id: s.orgId, campaign_id: r.campaignId, group_id: r.groupId, variation_id: r.variationId,
+        property_id: r.propertyId ?? null, platform: "facebook", status: r.status ?? "scheduled", publish_state: "queued",
+        post_title: r.postTitle ?? null, post_text: r.postText ?? null, hashtags: r.hashtags ?? [],
+        cta: r.cta ?? null, image_url: r.imageUrl ?? null, scheduled_at: r.scheduledAt, created_by: s.userId,
+        assigned_user_id: s.userId, content_hash: contentHash, idempotency_key: idempotencyKey,
+      } as never).select("*").maybeSingle();
+      if (error) {
+        if (!/duplicate key|23505/i.test(error.message)) console.error("[distribution.posts] createMany:", error.message);
+        continue; // duplicate content → skip (never a second post)
+      }
+      if (data) created.push(data as unknown as DistPostRow);
+    }
+    return created;
   },
 
   async getById(id: string): Promise<DistPostRow | null> {
