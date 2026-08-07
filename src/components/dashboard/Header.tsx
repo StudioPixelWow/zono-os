@@ -5,9 +5,14 @@ import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 import { useCurrentUser } from "./DashboardDataProvider";
 import { ProfileEditPopup } from "./ProfileEditPopup";
+import { ZonoLogo } from "@/components/brand/ZonoLogo";
 import { getUnreadCountAction } from "@/lib/notifications/actions";
 
-/** Top bar: search, notifications, profile. */
+/** Opens the ⌘K command palette — the mobile menu surface (same event the
+ *  bottom-nav "עוד" button fires). */
+const openMobileMenu = () => { try { window.dispatchEvent(new CustomEvent("zono:open-search")); } catch { /* ignore */ } };
+
+/** Top bar: mobile brand + menu, search, notifications, profile. */
 export function Header() {
   const user = useCurrentUser();
   const [editOpen, setEditOpen] = useState(false);
@@ -27,6 +32,23 @@ export function Header() {
   return (
     <header className="bg-surface/80 sticky top-0 z-30 backdrop-blur-xl">
       <div className="border-line flex items-center gap-3 border-b px-4 py-3 sm:gap-4 sm:px-6 lg:px-8">
+        {/* Mobile brand + menu (start/right in RTL). Persistent ZONO logo for brand
+            awareness + hamburger that opens the command palette / menu. Hidden on
+            lg where the sidebar already shows the logo + full navigation. */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <button
+            type="button"
+            onClick={openMobileMenu}
+            aria-label="תפריט"
+            className="bg-card border-line text-muted hover:text-brand hover:border-brand-light grid h-11 w-11 shrink-0 place-items-center rounded-2xl border transition"
+          >
+            <Icon name="Menu" size={22} />
+          </button>
+          <Link href="/" aria-label="ZONO" className="shrink-0" title="ZONO">
+            <ZonoLogo width={92} height={30} className="h-[30px] w-auto object-contain" priority />
+          </Link>
+        </div>
+
         {/* Search */}
         <div className="relative me-auto hidden w-full max-w-xl md:block">
           <span className="text-muted pointer-events-none absolute inset-y-0 end-3 flex items-center">
@@ -40,7 +62,7 @@ export function Header() {
         </div>
 
         {/* Right cluster */}
-        <div className="ms-auto flex items-center gap-2 sm:gap-3 md:ms-0">
+        <div className="ms-auto flex items-center gap-2 sm:gap-3">
           <Link
             href="/notifications"
             className="bg-card border-line text-muted hover:text-brand hover:border-brand-light relative grid h-11 w-11 place-items-center rounded-2xl border transition"
