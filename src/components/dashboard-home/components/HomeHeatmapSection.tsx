@@ -25,7 +25,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
-export function HomeHeatmapSection() {
+export function HomeHeatmapSection({ heightClass = "h-[380px] lg:h-[460px]" }: { heightClass?: string } = {}) {
   const [filters, setFilters] = useState<HomeMapFilters>(DEFAULT_HOME_MAP_FILTERS);
   const [data, setData] = useState<HomeMapData | null>(null);
   const [view, setView] = useState<"heat" | "markers">("heat");
@@ -103,15 +103,15 @@ export function HomeHeatmapSection() {
       {/* Map / empty states */}
       <div className="relative mt-4 overflow-hidden rounded-2xl border border-white/10">
         {noKey ? (
-          <div className="flex h-[380px] flex-col items-center justify-center gap-2 bg-black/20 text-center"><Icon name="Map" size={28} className="text-white/40" /><p className="text-sm font-bold text-white/70">מפה לא זמינה</p></div>
+          <div className={`flex ${heightClass} flex-col items-center justify-center gap-2 bg-black/20 text-center`}><Icon name="Map" size={28} className="text-white/40" /><p className="text-sm font-bold text-white/70">מפה לא זמינה</p></div>
         ) : needArea ? (
-          <div className="flex h-[380px] flex-col items-center justify-center gap-3 bg-black/20 text-center">
+          <div className={`flex ${heightClass} flex-col items-center justify-center gap-3 bg-black/20 text-center`}>
             <Icon name="MapPin" size={28} className="text-white/40" />
             <p className="text-sm font-bold text-white/80">יש להגדיר אזור התמחות כדי להציג מפת חום</p>
             <Link href="/settings/operating-areas" className="bg-brand-strong rounded-xl px-3 py-2 text-sm font-bold text-white">הגדרת אזור התמחות</Link>
           </div>
         ) : (
-          <ZonoMap points={points} heightClass="h-[380px] lg:h-[460px]" clusterThreshold={60} heatmap={view === "heat"} emptyMessage="אין עדיין נכסים עם מיקום מדויק להצגה על המפה" />
+          <ZonoMap points={points} heightClass={heightClass} clusterThreshold={60} heatmap={view === "heat"} emptyMessage="אין עדיין נכסים עם מיקום מדויק להצגה על המפה" />
         )}
         {pending && <div className="absolute end-3 top-3 rounded-full bg-black/40 px-3 py-1 text-xs font-bold text-white/80">טוען…</div>}
       </div>
