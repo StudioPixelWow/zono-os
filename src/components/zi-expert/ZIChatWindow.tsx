@@ -78,17 +78,21 @@ export function ZIChatWindow(p: ZIChatWindowProps) {
             onRegenerate={p.onRegenerate}
           />
 
-          {/* Sources + helpful + follow-ups for the latest answer. */}
+          {/* Sources + helpful + follow-ups for the latest answer. Height-capped
+              and internally scrollable so this meta block can never dominate the
+              window and hide the answer above it (mobile is short). */}
           {p.answerMeta && (p.answerMeta.sources.length > 0 || p.answerMeta.followups.length > 0) && (
-            <div className="border-t border-white/10 bg-white/[0.02] px-3.5 py-2.5">
+            <div className="max-h-[38%] shrink-0 overflow-y-auto border-t border-white/10 bg-white/[0.02] px-3.5 py-2.5">
               {p.answerMeta.sources.length > 0 && (
                 <div className="mb-2">
                   <p className="mb-1 flex items-center gap-1 text-[11px] font-bold text-white/40"><BookOpen size={11} /> מקורות תשובה</p>
-                  <div className="flex flex-wrap gap-1.5">
+                  {/* Single horizontally-scrollable row — sources stay compact and
+                      never wrap into several rows that push the answer off-screen. */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
                     {p.answerMeta.sources.map((s) => (
                       s.route
-                        ? <Link key={s.id} href={s.route} onClick={p.onClose} className="rounded-lg border border-violet-400/25 bg-white/[0.04] px-2 py-1 text-[11px] font-bold text-violet-100 transition hover:bg-violet-500/15">{s.title}</Link>
-                        : <span key={s.id} className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold text-white/70">{s.title}</span>
+                        ? <Link key={s.id} href={s.route} onClick={p.onClose} className="shrink-0 whitespace-nowrap rounded-lg border border-violet-400/25 bg-white/[0.04] px-2 py-1 text-[11px] font-bold text-violet-100 transition hover:bg-violet-500/15">{s.title}</Link>
+                        : <span key={s.id} className="shrink-0 whitespace-nowrap rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold text-white/70">{s.title}</span>
                     ))}
                   </div>
                 </div>

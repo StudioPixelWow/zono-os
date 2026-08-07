@@ -98,3 +98,50 @@ export async function resolvePropertyContactForView(property: PropertyRow): Prom
     propertyLabel: propertyLabelOf(property),
   });
 }
+
+/** The external-listing fields needed to build the same owner/broker CTA. */
+export interface ExternalListingContactInput {
+  title: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_type: string | null;
+  has_agent: boolean | null;
+}
+
+/**
+ * Resolve the SAME representation-aware contact CTA (owner vs broker, Hebrew
+ * outreach text, honest disabled state) for a discovered EXTERNAL listing. The
+ * listing already carries a single public contact (name + phone) plus has_agent /
+ * contact_type; the detail was loaded org-scoped, so no extra read is needed. The
+ * one contact is fed as both owner and broker input so the correct number is
+ * present whichever branch the classifier picks.
+ */
+export async function resolveExternalListingContactForView(
+  listing: ExternalListingContactInput,
+): Promise<ResolvedPropertyContact> {
+  const { profile } = await getSessionContext();
+  const agentName = (profile as { full_name?: string | null } | null)?.full_name ?? "";
+  const label =
+    listing.title?.trim() ||
+    [listing.neighborhood, listing.city].filter(Boolean).join(", ").trim() ||
+    "הנכס";
+
+  return resolvePropertyContact({
+    ownershipScope: null,
+    sourceType: null,
+    exclusivityScope: null,
+    isExclusive: false,
+    isAgentExclusive: false,
+    isOfficeExclusive: false,
+    externalHasAgent: listing.has_agent,
+    externalContactType: listing.contact_type,
+    ownerPhone: listing.contact_phone,
+    ownerName: listing.contact_name,
+    brokerPhone: listing.contact_phone,
+    brokerName: listing.contact_name,
+    agentName,
+    propertyLabel: label,
+  });
+}

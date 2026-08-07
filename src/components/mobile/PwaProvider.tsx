@@ -21,14 +21,31 @@ export function PwaProvider() {
     const refresh = () => { try { setPending(getQueueStats().pending); } catch { /* ignore */ } };
     const goOnline = () => { setOnline(true); void flushOfflineQueue(true).then(refresh); };
     const goOffline = () => setOnline(false);
+    // Reconcile against navigator.onLine — the source of truth. The online/offline
+    // EVENTS are unreliable on mobile (a spurious "offline" can fire, or the paired
+    // "online" can be missed while the tab is backgrounded/loading), which otherwise
+    // leaves the "no connection" banner stuck on while the device is actually online.
+    // Re-sync on mount, on focus/visibility, and on a slow interval so it self-heals.
+    const reconcile = () => {
+      const on = typeof navigator !== "undefined" ? navigator.onLine : true;
+      setOnline(on);
+      if (on) { try { if (getQueueStats().pending > 0) void flushOfflineQueue(true).then(refresh); } catch { /* ignore */ } }
+    };
 
+    reconcile();
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
     window.addEventListener("zono:offline-queue-changed", refresh);
+    document.addEventListener("visibilitychange", reconcile);
+    window.addEventListener("focus", reconcile);
+    const reconcileTimer = window.setInterval(reconcile, 15000);
     return () => {
       window.removeEventListener("online", goOnline);
       window.removeEventListener("offline", goOffline);
       window.removeEventListener("zono:offline-queue-changed", refresh);
+      document.removeEventListener("visibilitychange", reconcile);
+      window.removeEventListener("focus", reconcile);
+      window.clearInterval(reconcileTimer);
     };
   }, []);
 

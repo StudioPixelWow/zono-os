@@ -272,7 +272,7 @@ export function ZIWidget() {
             aria-label="פתח את ZI — המומחה שלך ל-ZONO"
             className="zi-launcher fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-5 z-[150] lg:bottom-5"
           >
-            <ZIAvatar size={155} state="idle" bare />
+            <ZIAvatar size={108} state="idle" bare />
           </motion.button>
         )}
       </AnimatePresence>

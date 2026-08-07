@@ -10,6 +10,55 @@ import { ListingHoverPreview } from "@/components/listings/ListingHoverPreview";
 import { createAcquisitionTaskAction, promoteExternalListingAction } from "@/lib/external-listings/actions";
 import { createAcquisitionAlertDraftAction, createBuyerMatchAlertDraftAction } from "@/lib/external-listings/alert-actions";
 import type { ExternalListingDetail } from "@/lib/external-listings/service";
+import type { ResolvedPropertyContact } from "@/lib/properties/contact/property-contact-core";
+
+const CONTACT_BADGE_TONE: Record<ResolvedPropertyContact["representation"], string> = {
+  private_owner: "bg-success-soft text-success",
+  broker: "bg-brand-soft text-brand-strong",
+  broker_exclusive: "bg-warning-soft text-warning",
+};
+
+/** Owner/broker-aware contact CTA — WhatsApp primary, call secondary, honest
+ *  disabled state. Same resolution the CRM property page uses. Native intents
+ *  only (wa.me / tel:) — nothing is sent on the agent's behalf. */
+function ListingContactCTA({ contact }: { contact: ResolvedPropertyContact }) {
+  return (
+    <div className="bg-card border-line flex flex-col gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="MessageCircle" size={16} /></span>
+          <h3 className="text-ink text-sm font-extrabold">יצירת קשר עם הנכס</h3>
+        </div>
+        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", CONTACT_BADGE_TONE[contact.representation])}>{contact.badgeLabel}</span>
+      </div>
+      {contact.contactName && !contact.disabled && (
+        <span className="text-muted -mt-1 text-[12px] font-semibold">{contact.contactName}</span>
+      )}
+      {contact.disabled ? (
+        <div className="border-line text-muted flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed text-sm font-semibold">
+          <Icon name="Phone" size={16} /> {contact.emptyLabel}
+        </div>
+      ) : (
+        <div className="flex items-stretch gap-2">
+          <a
+            href={contact.whatsappUrl ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-[#25D366] text-[15px] font-black text-white shadow-sm transition hover:brightness-95 active:scale-[0.99] h-12"
+          >
+            <Icon name="MessageCircle" size={20} /> {contact.whatsappLabel}
+          </a>
+          <a
+            href={contact.telUrl ?? undefined}
+            className="bg-surface text-ink border-line flex flex-1 items-center justify-center gap-2 rounded-2xl border text-sm font-bold transition hover:bg-brand-soft active:scale-[0.99] h-12"
+          >
+            <Icon name="Phone" size={16} /> {contact.callLabel}
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
@@ -39,7 +88,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function ExternalListingDetailView({ detail }: { detail: ExternalListingDetail }) {
+export function ExternalListingDetailView({ detail, contact }: { detail: ExternalListingDetail; contact?: ResolvedPropertyContact | null }) {
   const router = useRouter();
   const l = detail.listing;
   const { market, buyerMatches, dealPotential, ai } = detail;
@@ -86,6 +135,9 @@ export function ExternalListingDetailView({ detail }: { detail: ExternalListingD
           <Field label="שכונה" value={l.neighborhood ?? "—"} />
         </div>
       </div>
+
+      {/* Owner / broker contact CTA — same resolution as the CRM property page. */}
+      {contact && <ListingContactCTA contact={contact} />}
 
       {/* Source protection notice */}
       <div className="bg-warning-soft border-warning/30 flex items-start gap-2 rounded-[18px] border p-4">

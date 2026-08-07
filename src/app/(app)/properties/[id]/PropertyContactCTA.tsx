@@ -108,11 +108,11 @@ export function PropertyContactCTA({
       dir="rtl"
       className={cn(
         "fixed inset-x-0 z-30 lg:hidden",
-        "bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))]",
+        "bottom-[calc(12.5rem+env(safe-area-inset-bottom,0px))]",
         "border-line bg-card/95 border-t px-3 pb-2 pt-2 backdrop-blur-xl",
       )}
     >
-      <div className="mb-1 flex items-center gap-2 pe-20">
+      <div className="mb-1 flex items-center gap-2">
         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", BADGE_TONE[contact.representation])}>
           {contact.badgeLabel}
         </span>
@@ -120,8 +120,7 @@ export function PropertyContactCTA({
           <span className="text-muted truncate text-[11px] font-semibold">{contact.contactName}</span>
         )}
       </div>
-      {/* Reserve inline-end room (pe-20) for the ZI launcher so it can't cover the CTA. */}
-      <div className="flex items-stretch gap-2 pe-20">
+      <div className="flex items-stretch gap-2">
         <ContactButtons contact={contact} onTrack={track} size="bar" />
       </div>
     </div>
@@ -146,9 +145,10 @@ export function PropertyContactCTA({
       </div>
 
       {/* ── Mobile: sticky bottom action bar (portaled to <body>) ─────────────────
-          Sits ABOVE the app bottom nav (fixed bottom-0, z-40) using the shared
-          4.75rem clearance, is safe-area aware, and reserves inline-end space so
-          the floating ZI launcher never covers the buttons. RTL via inset-x. */}
+          Full-width, safe-area aware, RTL via inset-x. Sits ABOVE the floating ZI
+          launcher (fixed, physical bottom-right at 4.75rem, ~7rem tall) — not just
+          above the bottom nav — so the launcher can never cover the WhatsApp / Call
+          buttons. The launcher rests in the corner below this bar. */}
       {mounted && createPortal(mobileBar, document.body)}
     </>
   );
