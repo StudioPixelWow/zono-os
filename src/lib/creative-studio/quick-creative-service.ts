@@ -6,7 +6,7 @@
 // Approve/favorite/reject feed the learning loop. RLS-scoped. No invented content.
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { isUuid } from "@/lib/utils";
 import type { Json } from "@/lib/supabase/types";
@@ -765,7 +765,9 @@ export async function listQuickOutputs(opts: { entityType?: string; entityId?: s
   if (opts.entityType === "property" && isUuid(opts.entityId)) q = q.eq("property_id", opts.entityId);
   else if (opts.entityType === "agent" && isUuid(opts.entityId)) q = q.eq("agent_id", opts.entityId);
   const { data } = await q.order("is_favorite", { ascending: false }).order("created_at", { ascending: false }).limit(60);
-  return (data ?? []) as QuickOutputRow[];
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const resolved = await Promise.all(rows.map((r) => resolveCreativePreview(supabase, r)));
+  return resolved as QuickOutputRow[];
 }
 
 /** Admin/debug: every candidate (selected + rejected) with scores + critic. */
@@ -862,6 +864,30 @@ async function generateQuickCreativeFromRequest(supabase: DB, orgId: string, rq:
 }
 
 const VISUAL_BUCKET = "generated-zono-visuals";
+const CREATIVE_PRIVATE_BUCKET = "creative-private"; // private master; served via short-lived signed URLs
+const CREATIVE_SIGNED_TTL_SEC = 300;
+
+/** Mint a short-lived org-scoped signed URL for a private-master object. */
+async function signCreativePrivate(sb: DB, path: string): Promise<string | null> {
+  const { data } = await sb.storage.from(CREATIVE_PRIVATE_BUCKET).createSignedUrl(path, CREATIVE_SIGNED_TTL_SEC);
+  return data?.signedUrl ?? null;
+}
+
+/** Resolve a private master into a FRESH signed preview URL (never persisted),
+ *  re-injecting it into the render_data image placeholder. Legacy rows that
+ *  already carry a public image_url are returned unchanged. */
+async function resolveCreativePreview(sb: DB, row: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const path = (row.private_master_path as string | null) ?? null;
+  if (!path || row.image_url) return row;
+  const signed = await signCreativePrivate(sb, path);
+  if (!signed) return row;
+  const out: Record<string, unknown> = { ...row, image_url: signed };
+  try {
+    const rd = row.render_data as { blocks?: Record<string, unknown>[] } | null;
+    if (rd?.blocks) out.render_data = { ...rd, blocks: rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl: signed } : b)) };
+  } catch { /* keep original */ }
+  return out;
+}
 /**
  * Generate the FINAL ad image for a quick-creative output via Gemini Nano Banana
  * — using the variation's master prompt + the property photo as reference.
@@ -913,12 +939,12 @@ async function genImageForOutput(supabase: DB, orgId: string, outputId: string):
     const bytes = Buffer.from(img.b64, "base64");
     const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
     const path = `${orgId}/quick/${outputId}-${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, bytes, { contentType: img.mime, upsert: true });
+    const admin = createServiceRoleClient() as unknown as DB;
+    const { error: upErr } = await admin.storage.from(CREATIVE_PRIVATE_BUCKET).upload(path, bytes, { contentType: img.mime, upsert: true });
     if (upErr) { log("uploaded to storage", false); throw new Error(`העלאת התמונה נכשלה: ${upErr.message}`); }
     log("uploaded to storage", true);
-    const { data: pub } = supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path);
-    const imageUrl = pub.publicUrl;
-    log("storage path", path);
+    const imageUrl = (await signCreativePrivate(supabase, path)) ?? "";
+    log("private master path", path);
 
     // Persist image_url + inject into the render image placeholder.
     let nextRd = out.render_data as unknown;
@@ -926,7 +952,7 @@ async function genImageForOutput(supabase: DB, orgId: string, outputId: string):
       const rd = out.render_data as { blocks?: Record<string, unknown>[] } | null;
       if (rd?.blocks) nextRd = { ...rd, blocks: rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl } : b)) };
     } catch { /* keep original */ }
-    await supabase.from("zono_quick_creative_outputs").update({ image_url: imageUrl, image_provider: img.provider, image_status: "generated", image_error: null, render_data: nextRd as never }).eq("org_id", orgId).eq("id", outputId);
+    await supabase.from("zono_quick_creative_outputs").update({ private_master_path: path, storage_visibility: "private", image_url: null, image_provider: img.provider, image_status: "generated", image_error: null, render_data: nextRd } as never).eq("org_id", orgId).eq("id", outputId);
     log("generated_image_url saved", true);
     log("generated_image_url", imageUrl);
     return { imageUrl, provider: img.provider };
