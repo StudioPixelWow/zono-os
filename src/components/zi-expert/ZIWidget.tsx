@@ -286,7 +286,9 @@ export function ZIWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-5 z-[150] flex h-[min(620px,calc(100dvh-7.5rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl lg:bottom-5 lg:h-[min(620px,calc(100vh-2.5rem))]"
+            // Mobile: edge-to-edge bottom sheet that clears the app bottom nav +
+            // safe area (RTL-safe via inset-x). Desktop (lg): the corner panel.
+            className="fixed inset-x-2 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] z-[150] flex h-[min(620px,calc(100dvh-7.5rem))] w-auto flex-col overflow-hidden rounded-3xl lg:inset-x-auto lg:right-5 lg:bottom-5 lg:h-[min(620px,calc(100vh-2.5rem))] lg:w-[min(390px,calc(100vw-2rem))]"
           >
             <ZIChatWindow
               messages={messages}
