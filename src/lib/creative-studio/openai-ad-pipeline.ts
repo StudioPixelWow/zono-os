@@ -273,10 +273,18 @@ export interface CreativeFindings { scores: CreativeScores; hardFails: CreativeH
 /** LAYER 2 — Creative Director evaluation (DESIRABILITY). Judges the image as a
  *  top Israeli real-estate marketer / Meta ads strategist / premium branding
  *  expert against the bar of leading brokers & developers. Never throws. */
-export async function runCreativeDirectorQA(b64: string): Promise<CreativeFindings | null> {
+export async function runCreativeDirectorQA(b64: string, kind: AdKind = "property"): Promise<CreativeFindings | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
-  const ask = `You are simultaneously a TOP Israeli real-estate marketing designer, a top Meta ads creative strategist, and a premium branding expert. Judge this real-estate ad image for DESIRABILITY (not correctness) against the bar of premium ads from leading Israeli brokers and developers. Reject generic / boring / weak / cluttered / AI-looking / Canva-looking / amateur / outdated / low-converting work. Answer ONLY with JSON:
+  // Kind-aware subject brief: judge the ad by the criteria appropriate to what it
+  // is. The property-centric hard-fails only make sense when the property photo is
+  // the intended subject; for 'sold'/'testimonial' the hero is different by design.
+  const subjectBrief = kind === "sold"
+    ? `SUBJECT: this is a SOLD ("נמכר") announcement — the Hebrew word "נמכר" is the intended HERO and may fill most of the frame, and there is NO price. Do NOT flag textDominatesProperty, priceNotDominant or propertyImageTooSmall for this kind; judge it as a bold typographic celebration.`
+    : kind === "testimonial"
+    ? `SUBJECT: this is a RECOMMENDATION / testimonial — the recommendation TEXT plus the agent portrait are the intended HERO; there is NO property photo or price to dominate. Do NOT flag textDominatesProperty, priceNotDominant or propertyImageTooSmall for this kind; judge it as a premium testimonial / trust creative.`
+    : `SUBJECT: this is a PROPERTY sale ad — the property photo must be the dominant hero and the price prominent.`;
+  const ask = `You are simultaneously a TOP Israeli real-estate marketing designer, a top Meta ads creative strategist, and a premium branding expert. ${subjectBrief} Judge this real-estate ad image for DESIRABILITY (not correctness) against the bar of premium ads from leading Israeli brokers and developers. Reject generic / boring / weak / cluttered / AI-looking / Canva-looking / amateur / outdated / low-converting work. Answer ONLY with JSON:
 {"scores": {"visualImpact":0-100,"realEstateCredibility":0-100,"premiumFeeling":0-100,"brandConsistency":0-100,"conversionPotential":0-100,"typographyQuality":0-100,"layoutQuality":0-100,"imageComposition":0-100,"overallWow":0-100},
  "hardFails": {"propertyImageTooSmall":bool,"textDominatesProperty":bool,"priceNotDominant":bool,"weakHierarchy":bool,"uglyCollage":bool,"excessiveEmptySpace":bool,"excessiveClutter":bool,"looksAiGenerated":bool,"notProfessionalAd":bool},
  "proudToPublish": bool, "notes":"one-line: what holds it back"}
