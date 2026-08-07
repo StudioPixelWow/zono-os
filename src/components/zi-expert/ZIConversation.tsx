@@ -21,7 +21,7 @@ export function ZIConversation({ messages, streaming, thinking, moduleLabel, onR
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto px-3.5 py-3">
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3.5 py-3">
       {messages.length === 0 && !thinking && !streaming && <ZIEmptyState moduleLabel={moduleLabel} />}
 
       {messages.map((m) => (
