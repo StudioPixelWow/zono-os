@@ -51,5 +51,18 @@ check("no generation path uploads to a public bucket", !/VISUAL_BUCKET\)\.upload
 const metaDelivery = read("src/lib/meta/publish/media-delivery.ts");
 check("meta publishing still private signed (no getPublicUrl)", /createSignedUrl/.test(metaDelivery) && !/getPublicUrl/.test(metaDelivery));
 
+// 7. Distribution hand-offs resolve the APPROVED DERIVATIVE for linked outputs and
+//    never leak a private master. Extension (Groups) + manual-publish (Groups/WhatsApp).
+const ext = read("src/lib/distribution/extension-service.ts");
+const manual = read("src/lib/distribution/manual-publish-service.ts");
+check("extension getNextPost resolves derivative for linked posts",
+  /resolveJobDerivative/.test(ext) && /creative_output_id/.test(ext) && !/getPublicUrl/.test(ext));
+check("manual-publish resolves derivative for linked posts (Groups/WhatsApp)",
+  /resolveJobDerivative/.test(manual) && /p\.creative_output_id/.test(manual) && !/getPublicUrl/.test(manual));
+check("manual-publish honest no-leak fallback (null, never private master)",
+  /signedUrl \? handoff\.signedUrl : null/.test(manual));
+check("manual-publish maps only Groups\\/WhatsApp to promotion channels (Meta excluded)",
+  /promotionChannelFor/.test(manual) && /return "facebook_groups"/.test(manual) && /return "whatsapp"/.test(manual) && /return null; \/\/ facebook_page \/ instagram/.test(manual));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
