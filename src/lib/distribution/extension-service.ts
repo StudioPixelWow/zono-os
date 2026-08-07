@@ -20,6 +20,7 @@ import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
 import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
+import { promoteForChannel, resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
 
 type UserDb = Awaited<ReturnType<typeof createClient>>;
 
@@ -172,7 +173,7 @@ const GROUP_COMPLIANCE = [
 export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload | null> {
   const db = createServiceRoleClient();
   const { data } = await db.from(DIST.posts as never)
-    .select("id,post_text,hashtags,image_url,external_destination_url,group_id,status,metadata,scheduled_at")
+    .select("id,post_text,hashtags,image_url,external_destination_url,group_id,status,metadata,scheduled_at,creative_output_id,creative_version")
     .eq("org_id", inst.orgId)
     .in("status", ["scheduled", "queued", "draft"] as never)
     .order("scheduled_at", { ascending: true })
@@ -180,6 +181,7 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
   const rows = (data ?? []) as unknown as Array<{
     id: string; post_text: string | null; hashtags: string[] | null; image_url: string | null;
     external_destination_url: string | null; group_id: string | null; metadata: Record<string, unknown> | null;
+    creative_output_id: string | null; creative_version: number | null;
   }>;
   // Prefer browser-assisted destinations (groups/marketplace).
   const pick = rows.find((r) => {
@@ -199,16 +201,44 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
     destinationName = grp?.name ?? null;
     destinationUrl = destinationUrl ?? grp?.group_url ?? null;
   }
+  // Image hand-off. When the task is linked to a creative output, the extension
+  // receives ONLY the approved facebook_groups DISTRIBUTION DERIVATIVE via a
+  // channel/job-scoped signed URL — never the private master, a draft, or a
+  // service-role URL. A missing/revoked derivative or an active emergency stop is
+  // an honest block: we do not hand out an image and do not mark the post ready.
+  let imageUrls: string[] = [];
+  if (pick.creative_output_id) {
+    const emergencyActive = await isGroupsEmergencyActive(db, inst.orgId, pick.group_id);
+    const handoff = await resolveJobDerivative({
+      orgId: inst.orgId, outputId: pick.creative_output_id, targetChannel: "facebook_groups",
+      creativeVersion: pick.creative_version ?? 1, emergencyActive, db: db as never,
+    });
+    if (!handoff.ok || !handoff.signedUrl) {
+      console.warn(`${LOG} getNextPost blocked for post ${pick.id}: ${handoff.reason ?? "no_derivative"}`);
+      return null; // honest preflight block — no image, post stays queued, not "ready"
+    }
+    imageUrls = [handoff.signedUrl];
+  } else if (pick.image_url) {
+    imageUrls = [pick.image_url]; // legacy task (pre-derivative) — historical public URL
+  }
   return {
     postId: pick.id,
     destinationName,
     destinationUrl,
     text: pick.post_text ?? "",
-    imageUrls: pick.image_url ? [pick.image_url] : [],
+    imageUrls,
     hashtags: Array.isArray(pick.hashtags) ? pick.hashtags : [],
     complianceWarnings: GROUP_COMPLIANCE,
     requiresHumanConfirm: true,
   };
+}
+
+/** Active emergency stop for the org or the target group (lost-ack controls). */
+async function isGroupsEmergencyActive(db: ReturnType<typeof createServiceRoleClient>, orgId: string, groupId: string | null): Promise<boolean> {
+  const { data } = await db.from("distribution_publish_controls" as never)
+    .select("scope,scope_id").eq("org_id", orgId).eq("state", "active");
+  const rows = (data ?? []) as unknown as Array<{ scope: string; scope_id: string | null }>;
+  return rows.some((c) => c.scope === "organization" || (c.scope === "group" && c.scope_id === groupId));
 }
 
 // ── Publish result reporting (Part E) ─────────────────────────────────────────
@@ -308,18 +338,39 @@ export async function listGroupDestinations(): Promise<GroupDestination[]> {
 }
 
 // ── Create prepared publish TASKS for selected groups (Part B) ────────────────
-export interface GroupTaskInput { destinationIds: string[]; text: string; imageUrl?: string | null; hashtags?: string[] }
+export interface GroupTaskInput { destinationIds: string[]; text: string; imageUrl?: string | null; hashtags?: string[];
+  /** When set, the extension is handed the APPROVED facebook_groups derivative of
+   *  this creative output (not image_url). Promotion happens here (approved-only,
+   *  idempotent). Legacy callers may still pass a raw imageUrl. */
+  outputId?: string | null; creativeVersion?: number | null;
+}
 
 /** Create one prepared distribution_post per selected group. No server publish. */
-export async function createGroupPublishTasks(input: GroupTaskInput): Promise<{ created: number }> {
+export async function createGroupPublishTasks(input: GroupTaskInput): Promise<{ created: number; blocked?: string }> {
   const s = await userScope(); if (!s) return { created: 0 };
   const dests = await listGroupDestinations();
   const chosen = dests.filter((d) => input.destinationIds.includes(d.id));
   if (chosen.length === 0) return { created: 0 };
+
+  // Approved-derivative hand-off: promote the creative for facebook_groups ONCE
+  // (idempotent, approved-only). If promotion is refused, do NOT create imageless
+  // group tasks — surface an honest block.
+  const creativeVersion: number | null = input.creativeVersion ?? null;
+  if (input.outputId) {
+    const promo = await promoteForChannel({
+      orgId: s.orgId, outputId: input.outputId, targetChannel: "facebook_groups",
+      purpose: "group_publish", actorId: s.userId, isManager: true,
+    });
+    if (!promo.ok) { console.warn(`${LOG} createGroupPublishTasks promotion blocked: ${promo.error}`); return { created: 0, blocked: promo.error }; }
+  }
+
   const now = new Date().toISOString();
   const rows = chosen.map((d) => ({
     org_id: s.orgId, status: "scheduled", post_text: input.text, hashtags: input.hashtags ?? [],
-    image_url: input.imageUrl ?? null, external_destination_url: d.url,
+    // Linked tasks resolve the derivative at hand-off; image_url stays null (never a master URL).
+    image_url: input.outputId ? null : (input.imageUrl ?? null),
+    creative_output_id: input.outputId ?? null, creative_version: input.outputId ? (creativeVersion ?? 1) : null,
+    external_destination_url: d.url,
     provider: "facebook", provider_status: "manual", manual_publish_required: true,
     metadata: { channel_kind: d.destinationType, destination_id: d.id, destination_name: d.name },
     created_by: s.userId, scheduled_at: now,
