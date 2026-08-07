@@ -25,8 +25,13 @@ import type { AttentionItemRow, OpportunityRow } from "@/lib/decision-intelligen
 import { getBrokerIntelligenceQueue } from "@/lib/broker-intelligence/aggregate-service";
 import { activityEventRepository, type ActivityEventRow } from "@/lib/activity/repository";
 import { getHomeKpiExtras, listTodayTasks, type HomeTaskItem } from "@/lib/home/home-service";
+import { listBuyerBoard } from "@/lib/buyers/repository";
+import { getAcquisitionCommandCenter } from "@/lib/acquisition/service";
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
-import type { HomeActivityItem, HomeRec } from "@/components/home-control/types";
+import type {
+  HomeActivityItem, HomeRec, HomeHero, HomeNowItem, HomePipeline,
+  HomeFollowUpItem, HomeAcquisition, HomeNextDeal,
+} from "@/components/home-control/types";
 
 export const dynamic = "force-dynamic";
 
@@ -123,18 +128,46 @@ export default async function Home() {
   try { todayTasks = await listTodayTasks(6); } catch (e) { console.error("[home] tasks failed:", e); }
 
   let recommendations: HomeRec[] = [];
+  let buyerMatches: HomeRec[] = [];
   let recTotal = 0;
   try {
     const queue = await getBrokerIntelligenceQueue({ limit: 12 });
     recTotal = queue.total;
-    recommendations = queue.items.slice(0, 3).map((r) => ({
+    const toRec = (r: (typeof queue.items)[number]): HomeRec => ({
       id: r.id, title: r.title, why: r.why, urgency: r.urgency,
       href: r.href, action: r.suggestedAction, area: r.area,
-    }));
+    });
+    recommendations = queue.items.slice(0, 3).map(toRec);
+    // Client × property = the buyer-matching recommendations (real, evidence-based).
+    buyerMatches = queue.items.filter((r) => r.area === "buyer").slice(0, 6).map(toRec);
   } catch (e) { console.error("[home] recommendations failed:", e); }
 
   let activity: HomeActivityItem[] = [];
   try { activity = mapActivity(await activityEventRepository.listRecentForOrg(8)); } catch (e) { console.error("[home] activity failed:", e); }
+
+  // Follow-up radar — real hot/warm buyers not contacted in ≥7 days.
+  let followUps: HomeFollowUpItem[] = [];
+  try {
+    const board = await listBuyerBoard();
+    const DAY = 86_400_000;
+    followUps = board.followUp.slice(0, 5).map((b) => {
+      const hot = b.temperature === "hot";
+      const days = b.last_contacted_at ? Math.floor((Date.now() - new Date(b.last_contacted_at).getTime()) / DAY) : null;
+      return {
+        id: b.id,
+        name: b.full_name || "לקוח",
+        tag: hot ? "לקוח חם" : "לקוח חמים",
+        tagTone: hot ? "danger" as const : "warning" as const,
+        sub: days === null ? "טרם נוצר קשר" : `אין קשר ${days} ימים`,
+        action: "פתח לקוח",
+        href: `/buyers/${b.id}`,
+      };
+    });
+  } catch (e) { console.error("[home] follow-up radar failed:", e); }
+
+  // Property-acquisition radar — real inventory-acquisition command-center counts.
+  let acquisition: HomeAcquisition = { total: 0, highPriority: 0, privateSellers: 0, buyerDemand: 0, doubleSide: 0, contacted: 0 };
+  try { acquisition = await getAcquisitionCommandCenter(); } catch (e) { console.error("[home] acquisition failed:", e); }
 
   // Reuse the dashboard pipeline for the featured + hot property cards.
   const dict = getDashboardDict("he");
@@ -160,12 +193,62 @@ export default async function Home() {
     newLeads: newLeadsCount,
   };
 
+  // ── Command-center view-models (all real, org-scoped). ──────────────────────
+  const dealsNeedingAction = attentionRows.filter((a) => a.entity_type === "deal").length;
+
+  const hero: HomeHero = {
+    opportunities: recTotal,
+    chips: [
+      { id: "leads", label: "לידים חדשים", value: newLeadsCount, tone: "success" as const, href: "/leads" },
+      { id: "tours", label: "סיורים השבוע", value: kpiExtras.toursThisWeek, tone: "warning" as const, href: "/viewings" },
+      { id: "deals", label: "עסקאות לטיפול", value: dealsNeedingAction, tone: "brand" as const, href: "/deals" },
+      { id: "followups", label: "מעקבים פתוחים", value: followUps.length, tone: "danger" as const, href: "/buyers" },
+    ].filter((c) => c.value > 0),
+  };
+
+  const now: HomeNowItem[] = [
+    newLeadsCount > 0 && { id: "leads", icon: "Flame", tone: "danger" as const, label: `${newLeadsCount} לידים חדשים מחכים למענה`, action: "טפל בלידים", href: "/leads" },
+    dealsNeedingAction > 0 && { id: "deals", icon: "Handshake", tone: "brand" as const, label: `${dealsNeedingAction} עסקאות דורשות פעולה`, action: "בדוק עסקאות", href: "/deals" },
+    followUps.length > 0 && { id: "followups", icon: "Phone", tone: "warning" as const, label: `${followUps.length} לקוחות חמים ממתינים למעקב`, action: "טפל במעקבים", href: "/buyers" },
+    acquisition.highPriority > 0 && { id: "acq", icon: "Target", tone: "success" as const, label: `${acquisition.highPriority} הזדמנויות גיוס בעדיפות גבוהה`, action: "פתח רדאר גיוס", href: "/acquisition" },
+  ].filter(Boolean) as HomeNowItem[];
+
+  const pipeline: HomePipeline = {
+    weightedRevenue: dealsBoard?.revenue.weightedRevenue ?? 0,
+    expectedCommission: dealsBoard?.revenue.expectedCommission ?? 0,
+    pipelineValue: dealsBoard?.revenue.pipelineValue ?? 0,
+    stages: (dealsBoard?.pipeline ?? []).map((s) => ({ stage: s.stage, label: s.label, count: s.count, value: s.value })),
+  };
+
+  // Next deal = the highest-value real active deal (deals are sorted by value desc).
+  let nextDeal: HomeNextDeal | null = null;
+  const topDeal = dealsBoard?.deals[0];
+  if (topDeal) {
+    const stageLabel = (dealsBoard?.pipeline ?? []).find((s) => s.stage === topDeal.deal_stage)?.label ?? topDeal.deal_stage;
+    nextDeal = {
+      id: topDeal.id,
+      buyerName: topDeal.buyerName || "קונה",
+      propertyTitle: topDeal.propertyTitle || "נכס",
+      probability: Math.round(topDeal.deal_probability ?? 0),
+      commission: Math.round(topDeal.commission_value ?? 0),
+      stageLabel,
+      href: "/deals",
+    };
+  }
+
   return (
     <HomeControlCenter
       dict={dict}
       agentName={agentName}
+      hero={hero}
       kpis={kpis}
       recommendations={recommendations}
+      buyerMatches={buyerMatches}
+      now={now}
+      pipeline={pipeline}
+      followUps={followUps}
+      acquisition={acquisition}
+      nextDeal={nextDeal}
       activity={activity}
       tasks={todayTasks}
       featuredProperty={data.featuredProperty}

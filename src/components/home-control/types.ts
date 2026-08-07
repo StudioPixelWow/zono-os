@@ -43,3 +43,61 @@ export interface HomePerf {
   activeDeals: number;
   newLeads: number;
 }
+
+// ── Command-center view-models (all fed from real services in page.tsx) ───────
+
+/** Hero: one actionable headline + micro-summary chips. */
+export interface HomeHero {
+  opportunities: number; // # of actionable AI recommendations right now
+  chips: { id: string; label: string; value: number; tone: "brand" | "success" | "warning" | "danger"; href: string }[];
+}
+
+/** NOW — operational urgency rows (distinct from the AI Coach). */
+export interface HomeNowItem {
+  id: string;
+  icon: string;
+  tone: "brand" | "success" | "warning" | "danger";
+  label: string;
+  action: string;
+  href: string;
+}
+
+/** Deal pipeline summary (money-first). */
+export interface HomePipeline {
+  weightedRevenue: number;
+  expectedCommission: number;
+  pipelineValue: number;
+  stages: { stage: string; label: string; count: number; value: number }[];
+}
+
+/** Follow-up radar row — a real person who shouldn't go cold. */
+export interface HomeFollowUpItem {
+  id: string;
+  name: string;
+  tag: string;              // e.g. "ליד חם" / "לקוח חמים"
+  tagTone: "danger" | "warning" | "brand";
+  sub: string;              // e.g. "אין קשר 8 ימים"
+  action: string;           // CTA label
+  href: string;
+}
+
+/** Property-acquisition radar counts. */
+export interface HomeAcquisition {
+  total: number;
+  highPriority: number;
+  privateSellers: number;
+  buyerDemand: number;
+  doubleSide: number;
+  contacted: number;
+}
+
+/** The next-deal killer card (top real active deal). */
+export interface HomeNextDeal {
+  id: string;
+  buyerName: string;
+  propertyTitle: string;
+  probability: number;      // 0..100
+  commission: number;       // ₪ estimated commission
+  stageLabel: string;
+  href: string;
+}
