@@ -38,6 +38,8 @@ import type {
   RelationshipRow,
 } from "@/lib/activity/types";
 import { PropertySellersPanel } from "./PropertySellersPanel";
+import { PropertyContactCTA } from "./PropertyContactCTA";
+import type { ResolvedPropertyContact } from "@/lib/properties/contact/property-contact-core";
 import { TransactionResearchPanel } from "@/components/transactions/TransactionResearchPanel";
 import type { PropertySellerView } from "@/lib/sellers/service360";
 import type { SellerReadiness } from "@/lib/sellers/propertySellers";
@@ -109,6 +111,7 @@ export function PropertyDetailView({
   recommendedBuyers,
   propertySellers,
   sellerReadiness,
+  contactCta,
   marketingSlot,
   calendarSlot,
   documentsSlot,
@@ -130,6 +133,7 @@ export function PropertyDetailView({
   recommendedBuyers: import("@/components/activity/RecommendedMatches").RecoItemView[];
   propertySellers: PropertySellerView[];
   sellerReadiness: SellerReadiness;
+  contactCta: ResolvedPropertyContact;
   marketingSlot?: ReactNode;
   calendarSlot?: ReactNode;
   documentsSlot?: ReactNode;
@@ -275,6 +279,10 @@ export function PropertyDetailView({
               </span>
               <Icon name="ChevronLeft" size={16} />
             </button>
+
+            {/* Property contact CTA — WhatsApp / call the owner or representing broker.
+                Renders the desktop panel here; the mobile sticky bar is fixed-positioned. */}
+            <PropertyContactCTA propertyId={p.id} contact={contactCta} />
 
             {/* Action toolbar */}
             <div className="mt-auto flex flex-wrap items-center gap-2">
@@ -488,6 +496,9 @@ export function PropertyDetailView({
           </div>
         )}
       </div>
+
+      {/* Reserve space on mobile so the sticky contact bar never hides content. */}
+      <div className="h-28 lg:hidden" aria-hidden />
     </div>
   );
 }

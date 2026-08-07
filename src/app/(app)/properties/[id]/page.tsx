@@ -17,6 +17,7 @@ import { getPropertyCommandCenter } from "@/lib/intelligence/service";
 import { recommendedBuyersForProperty } from "@/lib/matching-intelligence/service";
 import { getPropertySellers } from "@/lib/sellers/service360";
 import { validatePropertySellerReadiness } from "@/lib/sellers/propertySellers";
+import { resolvePropertyContactForView } from "@/lib/properties/contact/property-contact-service";
 import {
   getActivitySummaryForEntity,
   getEntityRelationships,
@@ -63,6 +64,7 @@ export default async function PropertyDetailsPage({
     recommendedBuyers,
     propertySellers,
     sellerReadiness,
+    contactCta,
   ] = await Promise.all([
     getPropertyActivities(id),
     getPropertyNotes(id),
@@ -78,6 +80,7 @@ export default async function PropertyDetailsPage({
     recommendedBuyersForProperty(id),
     getPropertySellers(id),
     validatePropertySellerReadiness(id),
+    resolvePropertyContactForView(property),
   ]);
 
   // The canonical journey + the asset checklist context. No legacy stage anywhere.
@@ -129,6 +132,7 @@ export default async function PropertyDetailsPage({
       recommendedBuyers={recommendedBuyers}
       propertySellers={propertySellers}
       sellerReadiness={sellerReadiness}
+      contactCta={contactCta}
       marketingSlot={marketingSlot}
       calendarSlot={calendarSlot}
       documentsSlot={documentsSlot}
