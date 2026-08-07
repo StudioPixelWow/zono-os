@@ -446,7 +446,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           const passed = outcome.status === "approved";
           return { ...base, status: passed ? "generated" : "needs_review",
             render_data: { format: fmt, width: 1080, height: 1350, fullAd: true, concept: { label, brief }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
-            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
+            private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad",
             image_error: passed ? null : ([outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null),
             quality_status: passed ? "passed" : "review",
             critic_summary: passed
@@ -524,7 +524,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             const passed = outcome.status === "approved";
             return { ...base, status: passed ? "generated" : "needs_review",
               render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
-              image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
+              private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad",
               image_error: passed ? null : ([outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null),
               quality_status: passed ? "passed" : "review",
               critic_summary: passed
@@ -600,7 +600,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
         if (outcome.status === "approved" && outcome.imageUrl) {
           rows.push({ ...base,
             render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
-            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
+            private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
             quality_status: "passed",
             critic_summary: `עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${v.variantName}).`,
             creative_selection_metadata: { mode: "ai_full_ad", kind, qa: outcome.scores, attempts: outcome.attempts, generationId: outcome.generationId } as unknown as Json,
@@ -612,7 +612,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
         if (outcome.imageUrl) {
           rows.push({ ...base, status: "needs_review",
             render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
-            image_url: outcome.imageUrl, image_provider: outcome.provider, image_status: "ai_full_ad",
+            private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad",
             image_error: [outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null,
             quality_status: "review",
             critic_summary: `${outcome.warning ?? "ממתין לאישור QA סופי"} · הגרסה הטובה ביותר לאחר ${outcome.attempts} ניסיונות תיקון AI (${v.variantName}).`,
@@ -724,15 +724,17 @@ async function generateAdScenesForOutputs(supabase: DB, orgId: string, outputIds
       }
       const ext = scene.mime?.includes("png") ? "png" : scene.mime?.includes("webp") ? "webp" : "jpg";
       const path = `${orgId}/scene/${id}-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from(VISUAL_BUCKET).upload(path, Buffer.from(scene.b64, "base64"), { contentType: scene.mime ?? "image/png", upsert: true });
+      // PRIVATE master via service role; the scene URL is a short-lived signed
+      // preview (re-minted on read), never a permanent public URL.
+      const admin = createServiceRoleClient() as unknown as DB;
+      const { error: upErr } = await admin.storage.from(CREATIVE_PRIVATE_BUCKET).upload(path, Buffer.from(scene.b64, "base64"), { contentType: scene.mime ?? "image/png", upsert: true });
       if (upErr) { await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed", image_error: `upload: ${upErr.message}`.slice(0, 500) }).eq("org_id", orgId).eq("id", id); return; }
-      const { data: pub } = supabase.storage.from(VISUAL_BUCKET).getPublicUrl(path);
-      const sceneUrl = pub.publicUrl;
+      const sceneUrl = (await signCreativePrivate(supabase, path)) ?? "";
       const nextAd = { ...ad, sceneUrl, sceneStatus: scene.status, sceneMode: scene.mode };
       await supabase.from("zono_quick_creative_outputs").update({
-        image_url: sceneUrl, image_provider: scene.provider, image_status: scene.status, image_error: null,
-        render_data: { ...rd, ad: nextAd } as never,
-      }).eq("org_id", orgId).eq("id", id);
+        private_master_path: path, storage_visibility: "private", image_url: null, image_provider: scene.provider, image_status: scene.status, image_error: null,
+        render_data: { ...rd, ad: nextAd },
+      } as never).eq("org_id", orgId).eq("id", id);
     } catch (e) {
       console.error(`[cpe][scene] failed for ${id}:`, e instanceof Error ? e.message : e);
       try { await supabase.from("zono_quick_creative_outputs").update({ image_status: "failed", image_error: String(e).slice(0, 500) }).eq("org_id", orgId).eq("id", id); } catch { /* ignore */ }
@@ -883,8 +885,14 @@ async function resolveCreativePreview(sb: DB, row: Record<string, unknown>): Pro
   if (!signed) return row;
   const out: Record<string, unknown> = { ...row, image_url: signed };
   try {
-    const rd = row.render_data as { blocks?: Record<string, unknown>[] } | null;
-    if (rd?.blocks) out.render_data = { ...rd, blocks: rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl: signed } : b)) };
+    const rd = row.render_data as { blocks?: Record<string, unknown>[]; ad?: Record<string, unknown> } | null;
+    if (rd) {
+      const nextRd: Record<string, unknown> = { ...rd };
+      if (rd.blocks) nextRd.blocks = rd.blocks.map((b) => (b.component === "image_placeholder" ? { ...b, imageUrl: signed } : b));
+      // The AI "scene" path stores its URL under render_data.ad.sceneUrl.
+      if (rd.ad && typeof rd.ad === "object") nextRd.ad = { ...(rd.ad as Record<string, unknown>), sceneUrl: signed };
+      out.render_data = nextRd;
+    }
   } catch { /* keep original */ }
   return out;
 }

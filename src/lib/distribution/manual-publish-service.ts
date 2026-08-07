@@ -12,6 +12,17 @@ import { distributionRepo } from "./repository";
 import { getProviderForKind } from "./distribution-provider-registry";
 import type { DestinationKind, ProviderConnectionStatus } from "./distribution-provider";
 import type { DistPostRow, DistGroupRow } from "./db-types";
+import { resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
+import type { Channel } from "@/lib/creative-studio/promotion/creative-promotion-core";
+
+// Map a manual-publish destination onto an APPROVED-DERIVATIVE promotion channel.
+// Meta surfaces (page/instagram) keep their own private meta-media path and are
+// intentionally NOT promotion channels — they are excluded here (returns null).
+function promotionChannelFor(kind: DestinationKind): Channel | null {
+  if (kind === "facebook_group" || kind === "facebook_marketplace") return "facebook_groups";
+  if (kind === "whatsapp") return "whatsapp";
+  return null; // facebook_page / instagram -> Meta private media path, unchanged
+}
 
 export interface AssistantPost {
   postId: string; status: string; campaignId: string | null; groupId: string | null;
@@ -47,14 +58,33 @@ export const manualPublishService = {
     const groups = await distributionRepo.listGroups({ limit: 500 });
     const byGroup = new Map<string, DistGroupRow>(groups.map((g) => [g.id, g]));
 
-    return posts.map((p) => {
+    return await Promise.all(posts.map(async (p) => {
       const group = p.group_id ? byGroup.get(p.group_id) ?? null : null;
       const kind = kindOf(p);
       const provider = getProviderForKind(kind);
+      // Image hand-off. When the post is linked to a creative output, the assistant
+      // surfaces ONLY the approved distribution derivative for this exact channel/
+      // version via a job-scoped signed URL — never the private master, a draft, or
+      // a public URL. A missing/revoked derivative or an active emergency stop is an
+      // honest empty image (null): we never fall back to a private/legacy leak.
+      // Meta surfaces (page/instagram) keep their own media path (channel === null).
+      let sourceImageUrl: string | null = p.image_url;
+      const channel = promotionChannelFor(kind);
+      if (p.creative_output_id && channel) {
+        const handoff = await resolveJobDerivative({
+          orgId: p.org_id, outputId: p.creative_output_id, targetChannel: channel,
+          creativeVersion: p.creative_version ?? 1, emergencyActive: false,
+        });
+        sourceImageUrl = handoff.ok && handoff.signedUrl ? handoff.signedUrl : null;
+      } else if (p.creative_output_id && !channel) {
+        // Linked but Meta-routed: no promotion derivative applies; do not leak a
+        // private master. Meta's own media path supplies the asset downstream.
+        sourceImageUrl = p.image_url;
+      }
       const prepared = provider.preparePost({
         text: [p.post_text, (p.hashtags ?? []).join(" ")].filter(Boolean).join("\n\n"),
         hashtags: p.hashtags ?? [],
-        imageUrl: p.image_url,
+        imageUrl: sourceImageUrl,
         destinationUrl: group?.group_url ?? p.external_destination_url ?? null,
         destinationName: group?.name ?? null,
         scheduledAt: p.scheduled_at,
@@ -68,7 +98,7 @@ export const manualPublishService = {
         provider: provider.key, providerLabel: provider.label, providerStatus: p.provider_status ?? "not_connected",
         checklist: prepared.checklist,
       };
-    });
+    }));
   },
 
   /** Prepare ONE post for manual publishing (also snapshots provider fields). */

@@ -8,7 +8,7 @@
 // stored for admin debug; a failing image is NEVER returned as approved.
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import {
   providerIsOpenAI, buildSourceManifest, generateAdImageRaw, runCreativeQA, runCreativeDirectorQA, refUrlsFor,
   type AdSpec, type AdGenAssets, type AdKind, type CreativeFindings,
@@ -46,9 +46,20 @@ const HYBRID_ENABLED = ["1", "true", "on", "yes"].includes((process.env.ZONO_HYB
 export interface AdGenOutcome {
   status: "approved" | "manual_review" | "no_provider";
   generationId: string | null; imageUrl: string | null; provider: string;
+  /** Durable PRIVATE-master object path of the returned image (creative-private
+   *  bucket). The caller persists this, not the ephemeral signed imageUrl. */
+  masterPath: string | null;
   scores: QaScores | null; creativeWow: number | null; attempts: number; failReasons: string[];
   /** Shown to the user when the best creative is returned without a clean QA pass. */
   warning: string | null;
+}
+
+const CREATIVE_PRIVATE_BUCKET = "creative-private";
+const CREATIVE_SIGNED_TTL_SEC = 300;
+/** Short-lived signed URL for a private QA master (correction-ref + review). */
+async function signQaMaster(db: DB, path: string): Promise<string | null> {
+  const { data } = await db.storage.from(CREATIVE_PRIVATE_BUCKET).createSignedUrl(path, CREATIVE_SIGNED_TTL_SEC);
+  return data?.signedUrl ?? null;
 }
 
 /** Warning surfaced when the retry budget is exhausted (spec §5). */
@@ -88,9 +99,9 @@ interface OrchestratorParams {
 
 export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Promise<AdGenOutcome> {
   // Full-ad generation + QA is an OpenAI capability; otherwise the caller falls back.
-  if (!providerIsOpenAI()) return { status: "no_provider", generationId: null, imageUrl: null, provider: "mock", scores: null, creativeWow: null, attempts: 0, failReasons: ["ספק AI לא מוגדר"], warning: null };
+  if (!providerIsOpenAI()) return { status: "no_provider", generationId: null, imageUrl: null, masterPath: null, provider: "mock", scores: null, creativeWow: null, attempts: 0, failReasons: ["ספק AI לא מוגדר"], warning: null };
   const refUrls = refUrlsFor(p.assets);
-  if (!refUrls.length) return { status: "no_provider", generationId: null, imageUrl: null, provider: "openai", scores: null, creativeWow: null, attempts: 0, failReasons: ["אין נכסים לרפרנס"], warning: null };
+  if (!refUrls.length) return { status: "no_provider", generationId: null, imageUrl: null, masterPath: null, provider: "openai", scores: null, creativeWow: null, attempts: 0, failReasons: ["אין נכסים לרפרנס"], warning: null };
 
   const manifest: SourceManifest = buildSourceManifest(p.spec);
   const { data: genRow } = await db.from("creative_generations").insert({
@@ -117,7 +128,7 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   // we keep the BEST generated image (highest overall, creativeWow as tiebreak)
   // so after MAX_ATTEMPTS we return the strongest candidate with a review warning
   // — never blocking the user.
-  type BestCandidate = { scores: QaScores; creativeWow: number | null; imageUrl: string };
+  type BestCandidate = { scores: QaScores; creativeWow: number | null; imageUrl: string; masterPath: string };
   let best: BestCandidate | null = null;
   // Creative-first ranking: the Creative Director's WOW dominates; correctness
   // overall is a light tiebreaker.
@@ -160,8 +171,12 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
     if (!img) continue;
 
     const path = `${p.orgId}/qa/${generationId ?? "x"}/${n}-${Date.now()}.png`;
-    const { error: upErr } = await db.storage.from(p.bucket).upload(path, Buffer.from(img.b64, "base64"), { contentType: img.mime, upsert: true });
-    const imageUrl = upErr ? null : db.storage.from(p.bucket).getPublicUrl(path).data.publicUrl;
+    // PRIVATE master via service role (p.bucket is legacy/ignored). imageUrl is a
+    // short-lived signed URL used as the correction-pass reference (OpenAI fetches
+    // it synchronously) and for review display; the durable reference is `path`.
+    const admin = createServiceRoleClient() as unknown as DB;
+    const { error: upErr } = await admin.storage.from(CREATIVE_PRIVATE_BUCKET).upload(path, Buffer.from(img.b64, "base64"), { contentType: img.mime, upsert: true });
+    const imageUrl = upErr ? null : (await signQaMaster(db, path));
     if (imageUrl) prevImageUrl = imageUrl;
 
     // CREATIVE-FIRST MODE — the Creative Director outranks the QA checklist.
@@ -191,12 +206,12 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
 
     if (approved && imageUrl) {
       if (generationId) await db.from("creative_generations").update({ status: "approved", final_image_url: imageUrl, approved_attempt_id: attemptId, attempts_count: n, overall_score: creative?.scores.overallWow ?? scores.overall } as never).eq("id", generationId);
-      return { status: "approved", generationId, imageUrl, provider: "openai", scores, creativeWow: creative?.scores.overallWow ?? null, attempts: n, failReasons: [], warning: null };
+      return { status: "approved", generationId, imageUrl, masterPath: path, provider: "openai", scores, creativeWow: creative?.scores.overallWow ?? null, attempts: n, failReasons: [], warning: null };
     }
     // Keep the BEST generated image (ranked by creative WOW first) so the retry
     // budget returns the strongest candidate, never blocking the user.
     if (imageUrl) {
-      const cand: BestCandidate = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl };
+      const cand: BestCandidate = { scores, creativeWow: creative?.scores.overallWow ?? null, imageUrl, masterPath: path };
       if (!best || bestRank(cand) > bestRank(best)) best = cand;
     }
     // Next correction — CREATIVE FIRST: redesign for desirability unless a hard
@@ -209,7 +224,7 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   // Retry budget (initial + 2 corrections) exhausted — RETURN THE BEST generation
   // with a review warning (spec §5). Never block the user; never edit outside AI.
   if (generationId) await db.from("creative_generations").update({ status: "manual_review", attempts_count: attempts, final_image_url: best?.imageUrl ?? null, overall_score: best?.scores.overall ?? 0 } as never).eq("id", generationId);
-  return { status: "manual_review", generationId, imageUrl: best?.imageUrl ?? null, provider: "openai", scores: best?.scores ?? null, creativeWow: best?.creativeWow ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12), warning: best?.imageUrl ? REVIEW_WARNING : null };
+  return { status: "manual_review", generationId, imageUrl: best?.imageUrl ?? null, masterPath: best?.masterPath ?? null, provider: "openai", scores: best?.scores ?? null, creativeWow: best?.creativeWow ?? null, attempts, failReasons: Array.from(new Set(allFail)).slice(0, 12), warning: best?.imageUrl ? REVIEW_WARNING : null };
 }
 
 interface AttemptRecord {

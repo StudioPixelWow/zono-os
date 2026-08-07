@@ -1,0 +1,49 @@
+{
+  "ledger": "generated-zono-visuals legacy migration",
+  "generated_from": "zono-dev (tlrefajhyrqnjtmimaos) storage.objects + DB references",
+  "bucket": "generated-zono-visuals",
+  "bucket_public_at_audit": true,
+  "do_not_delete": true,
+  "do_not_flip_until": "all active-public-reference objects have a proven approved-derivative replacement",
+  "totals": {
+    "total_objects": 120,
+    "distinct_orgs": 1,
+    "public_url_references_in_db": 61,
+    "active_public_post_references": 0
+  },
+  "classification": {
+    "active_public_reference": {
+      "count": 0,
+      "definition": "object referenced by a scheduled/queued/published distribution_posts.image_url (a live public/social dependency)",
+      "disposition": "none exist -> no live public-social workflow depends on the legacy bucket",
+      "safe_to_privatize": true
+    },
+    "internal_only": {
+      "count": 61,
+      "definition": "object referenced only by an authenticated-UI creative row (zono_quick_creative_outputs / zono_visual_assets image_url)",
+      "disposition": "renders only in the authenticated Creative Studio UI; re-migrate to creative-private + re-point rows before flipping, OR accept legacy-only display breakage (all on the single dev org)",
+      "safe_to_privatize": false,
+      "replacement_derivative": "none yet (legacy rows predate private storage; new outputs already write private)"
+    },
+    "unreferenced": {
+      "count": 59,
+      "definition": "object in the bucket with no DB reference",
+      "disposition": "orphaned; safe to leave; candidate for a later quarantine sweep (not deleted)",
+      "safe_to_privatize": true
+    },
+    "unknown": {
+      "count": 0,
+      "disposition": "quarantine for manual review if any appear; never auto-delete"
+    }
+  },
+  "flip_decision": {
+    "flip_generated_zono_visuals_private_now": false,
+    "reason": "0 active public references means no public-social breakage, but 61 internal-only legacy rows would lose authenticated-UI display until re-migrated. Per spec, do not flip until those have safe replacements. All affected data is on the single dev org (ZZ-TEST), so risk is dev-only.",
+    "prerequisite_to_flip": "re-upload the 61 internal-only masters into creative-private and re-point their rows (a one-time backfill), then flip"
+  },
+  "rollback": {
+    "new_writes": "already private (creative-private); reverting code restores getPublicUrl on generated-zono-visuals for new writes",
+    "bucket_flip": "NOT performed; no rollback needed. If later flipped, rollback = `update storage.buckets set public=true where id='generated-zono-visuals'` + restore the public SELECT policy",
+    "derivatives": "creative-published + creative_distribution_derivatives are additive; dropping them does not affect legacy objects"
+  }
+}

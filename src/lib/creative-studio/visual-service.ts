@@ -3,18 +3,20 @@
 // ----------------------------------------------------------------------------
 // Generates visuals for a creative output from Marketing/Visual/Campaign DNA +
 // property + location. Prompts are internal only. Real bytes upload to the
-// generated-zono-visuals bucket; mock returns an SVG data URL. Approved visuals
-// auto-inject into the creative output's render_data. RLS-scoped.
+// PRIVATE creative-private bucket (service role) and are served via short-lived
+// signed URLs; mock returns an SVG data URL. Approved visuals auto-inject into
+// the creative output's render_data. RLS-scoped.
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Json } from "@/lib/supabase/types";
 import { buildVisualDNA, scoreVisual, visualTypeForOutput, type MarketingDnaScores } from "./visual-dna";
 import { buildVisualPrompt, generationReason } from "./visual-providers/prompt";
 import { generateVisual } from "./visual-providers";
 
-const BUCKET = "generated-zono-visuals";
+const CREATIVE_PRIVATE_BUCKET = "creative-private"; // private master; short-lived signed previews
+const CREATIVE_SIGNED_TTL_SEC = 300;
 
 async function ctx() {
   const { user, profile } = await getSessionContext();
@@ -24,6 +26,22 @@ async function ctx() {
 }
 type DB = Awaited<ReturnType<typeof createClient>>;
 export type VisualRow = Record<string, unknown>;
+
+/** Short-lived org-scoped signed URL for a private visual master. */
+async function signVisual(sb: DB, path: string | null | undefined): Promise<string | null> {
+  if (!path) return null;
+  const { data } = await sb.storage.from(CREATIVE_PRIVATE_BUCKET).createSignedUrl(path, CREATIVE_SIGNED_TTL_SEC);
+  return data?.signedUrl ?? null;
+}
+/** Resolve a visual row's private master into a fresh signed image_url/thumbnail
+ *  (never persisted). Rows with a legacy public image_url pass through. */
+async function resolveVisual(sb: DB, row: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const path = (row.storage_path as string | null) ?? null;
+  const legacyPublic = typeof row.image_url === "string" && (row.image_url as string).includes("/object/public/");
+  if (!path || legacyPublic) return row;
+  const signed = await signVisual(sb, path);
+  return signed ? { ...row, image_url: signed, thumbnail_url: signed } : row;
+}
 
 function cdnaScores(meta: unknown): MarketingDnaScores {
   const d = (meta && typeof meta === "object" ? (meta as { campaign_dna?: Record<string, number> }).campaign_dna : null) ?? {};
@@ -40,7 +58,8 @@ async function propertyData(supabase: DB, orgId: string, entityType: string, ent
 export async function listEntityVisuals(entityType: string, entityId: string): Promise<VisualRow[]> {
   const { orgId, supabase } = await ctx();
   const { data } = await supabase.from("zono_visual_assets").select("*").eq("org_id", orgId).eq("entity_type", entityType).eq("entity_id", entityId).neq("status", "deleted").order("is_favorite", { ascending: false }).order("overall_score", { ascending: false }).limit(120);
-  return (data ?? []) as VisualRow[];
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return (await Promise.all(rows.map((r) => resolveVisual(supabase, r)))) as VisualRow[];
 }
 
 export async function generateVisualForOutput(creativeOutputId: string, variationMode?: string): Promise<{ created: number; provider: string }> {
@@ -88,10 +107,11 @@ export async function generateVisualForOutput(creativeOutputId: string, variatio
     try {
       const bytes = Buffer.from(result.b64, "base64");
       const path = `${orgId}/${o.entity_type}/${o.entity_id}/${visualType}/${Date.now()}-${crypto.randomUUID()}.png`;
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes, { contentType: result.mime, upsert: false });
+      // PRIVATE master via service role; served through short-lived signed URLs.
+      const admin = createServiceRoleClient() as unknown as DB;
+      const { error: upErr } = await admin.storage.from(CREATIVE_PRIVATE_BUCKET).upload(path, bytes, { contentType: result.mime, upsert: false });
       if (upErr) throw new Error(upErr.message);
-      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      imageUrl = pub.publicUrl; storagePath = path;
+      imageUrl = await signVisual(supabase, path); storagePath = path;
     } catch {
       // storage failed → keep row without image (still scored), do not crash
       imageUrl = null;
@@ -118,8 +138,12 @@ export async function setVisualFavorite(visualId: string, value: boolean): Promi
 /** Approve + AUTO-INJECT the image into the linked creative output's render_data. */
 export async function approveVisual(visualId: string): Promise<void> {
   const { orgId, userId, supabase } = await ctx();
-  const { data: v } = await supabase.from("zono_visual_assets").update({ is_approved: true, is_rejected: false, status: "approved" }).eq("org_id", orgId).eq("id", visualId).select("creative_output_id,image_url,visual_type,entity_type,entity_id").single();
-  const vis = v as { creative_output_id: string | null; image_url: string | null; visual_type: string; entity_type: string; entity_id: string } | null;
+  const { data: v } = await supabase.from("zono_visual_assets").update({ is_approved: true, is_rejected: false, status: "approved" }).eq("org_id", orgId).eq("id", visualId).select("creative_output_id,image_url,storage_path,visual_type,entity_type,entity_id").single();
+  const vraw = v as { creative_output_id: string | null; image_url: string | null; storage_path: string | null; visual_type: string; entity_type: string; entity_id: string } | null;
+  // Prefer a FRESH signed URL from the private master; fall back to a legacy
+  // public image_url for historical rows (no storage_path).
+  const signedNow = vraw ? await signVisual(supabase, vraw.storage_path) : null;
+  const vis = vraw ? { ...vraw, image_url: signedNow ?? vraw.image_url } : null;
   if (vis?.creative_output_id && vis.image_url) {
     const { data: out } = await supabase.from("zono_creative_outputs").select("render_data").eq("org_id", orgId).eq("id", vis.creative_output_id).maybeSingle();
     const rd = (out as { render_data?: Record<string, unknown> } | null)?.render_data;

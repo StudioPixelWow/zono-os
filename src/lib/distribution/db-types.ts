@@ -60,6 +60,8 @@ export interface DistPostRow {
   // Phase 6 — provider + manual-publish fields.
   provider: string | null; provider_status: string; manual_publish_required: boolean;
   external_destination_url: string | null; published_by: string | null; published_manually_at: string | null;
+  // Step 3-4 — link to the approved creative distribution derivative (private storage).
+  creative_output_id: string | null; creative_version: number | null;
   created_at: string; updated_at: string;
 }
 
