@@ -168,15 +168,46 @@ export const NO_CREATIVE_HARD_FAILS: CreativeHardFails = {
 
 export interface CreativeDecision { passed: boolean; reasons: string[]; hardFailures: string[] }
 
-/** The creative-director approval gate. */
-export function decideCreative(s: CreativeScores, hf: CreativeHardFails, proudToPublish: boolean): CreativeDecision {
+// ── Creative-kind awareness (Part B) ─────────────────────────────────────────
+// Only kinds where the PROPERTY PHOTO is the intended visual subject get the
+// property-centric hard-fails. For 'sold' the hero is the word "נמכר" (no price
+// at all) and for 'testimonial' the hero is the recommendation text + agent
+// portrait — so "text dominates the property" / "price not dominant" / "property
+// too small" are NOT failures there. Every OTHER gate (all other hard-fails, all
+// score thresholds, and proudToPublish) is unchanged for every kind.
+// Fail-safe: an omitted OR unknown kind is treated as property-subject (the
+// STRICTEST path), so an accidental omission can never wrongly approve.
+const KNOWN_QA_KINDS = new Set<string>(["property", "sold", "testimonial"]);
+const PROPERTY_SUBJECT_KINDS = new Set<string>(["property"]);
+const PROPERTY_CENTRIC_HARD_FAILS: readonly (keyof CreativeHardFails)[] = [
+  "propertyImageTooSmall", "textDominatesProperty", "priceNotDominant",
+] as const;
+
+/** True when the property photo is the intended visual subject for this kind.
+ *  Omitted/unknown kinds fail safe to TRUE (strictest). */
+export function isPropertySubjectKind(kind: string | null | undefined): boolean {
+  if (kind == null || kind === "") return true;      // omitted → strict
+  if (!KNOWN_QA_KINDS.has(kind)) return true;         // unknown → strict (fail safe)
+  return PROPERTY_SUBJECT_KINDS.has(kind);            // known: only 'property' is subject
+}
+
+/** The creative-director approval gate. `kind` is REQUIRED so it can never be
+ *  omitted accidentally by a caller; passing null/undefined still behaves
+ *  deterministically (strict). */
+export function decideCreative(s: CreativeScores, hf: CreativeHardFails, proudToPublish: boolean, kind: string | null | undefined): CreativeDecision {
+  const propertySubject = isPropertySubjectKind(kind);
   const hardFailures: string[] = []; const reasons: string[] = [];
   const hfLabels: [keyof CreativeHardFails, string][] = [
     ["propertyImageTooSmall", "תמונת הנכס קטנה מדי"], ["textDominatesProperty", "הטקסט משתלט על הנכס"], ["priceNotDominant", "המחיר לא דומיננטי ויזואלית"],
     ["weakHierarchy", "היררכיה חלשה"], ["uglyCollage", "קולאז' מכוער"], ["excessiveEmptySpace", "יותר מדי שטח ריק"],
     ["excessiveClutter", "עומס ויזואלי"], ["looksAiGenerated", "נראה כמו AI"], ["notProfessionalAd", "לא נראה כמו מודעת נדל\"ן מקצועית"],
   ];
-  for (const [k, label] of hfLabels) if (hf[k]) hardFailures.push(label);
+  for (const [k, label] of hfLabels) {
+    if (!hf[k]) continue;
+    // Property-centric hard-fails apply ONLY when the property is the visual subject.
+    if (!propertySubject && PROPERTY_CENTRIC_HARD_FAILS.includes(k)) continue;
+    hardFailures.push(label);
+  }
   const t = CREATIVE_THRESHOLDS;
   const checks: [number, number, string][] = [
     [s.overallWow, t.overallWow, "WOW כולל"], [s.conversionPotential, t.conversionPotential, "פוטנציאל המרה"],

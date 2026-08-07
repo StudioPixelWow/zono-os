@@ -193,9 +193,9 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
 
     // LAYER 2 — Creative QA runs EVERY attempt (the primary gate), not gated on
     // the correctness checklist.
-    const creative: CreativeFindings | null = await runCreativeDirectorQA(img.b64);
+    const creative: CreativeFindings | null = await runCreativeDirectorQA(img.b64, p.kind);
     const creativeDecision = creative
-      ? decideCreative(creative.scores, creative.hardFails, creative.proudToPublish)
+      ? decideCreative(creative.scores, creative.hardFails, creative.proudToPublish, p.kind)
       : { passed: false, reasons: ["Creative QA לא זמין"], hardFailures: [] as string[] };
 
     // Approve when the Creative Director is proud AND no critical DATA error remains.
