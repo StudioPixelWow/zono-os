@@ -37,11 +37,17 @@ export interface AdGenAssets { propertyImages: string[]; logoUrl: string | null;
 
 export function providerIsOpenAI(): boolean { return resolveImageProvider().provider === "openai"; }
 
-/** The default large premium badge — "למכירה" for live listings, "נמכר" for sold. */
+/** The default large premium badge, per campaign kind:
+ *   property    → "למכירה" (for sale)
+ *   sold        → "נמכר" (just sold)
+ *   testimonial → a social-proof badge, NEVER "למכירה" — a recommendation post is
+ *                 about happy clients, not a listing for sale. */
 export function resolveSaleLabel(spec: AdSpec): string {
   const explicit = (spec.saleLabel ?? "").trim();
   if (explicit) return explicit;
-  return spec.kind === "sold" ? "נמכר" : "למכירה";
+  if (spec.kind === "sold") return "נמכר";
+  if (spec.kind === "testimonial") return "לקוחות ממליצים";
+  return "למכירה";
 }
 
 /** Israeli real-estate price format: ₪1,620,000 — no space after ₪, comma
@@ -130,7 +136,9 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     // ── TEXT-LOCK (spec §3) — EXACT strings, never altered ─────────────────────
     "════ TEXT-LOCK — render ONLY these EXACT Hebrew strings, crisp and perfectly legible right-to-left (RTL). Reproduce each string letter-for-letter. NEVER rewrite, NEVER abbreviate, NEVER invent, NEVER autocorrect, NEVER replace letters, NEVER add similar words, NEVER translate, NEVER duplicate letters. No text may appear on the image that is not in this list: ════",
     "HEBREW VALIDATION (mandatory before finalizing): every Hebrew string must be 100% correctly spelled (e.g. 'למכירה' never 'למכירת'). If you cannot render a string with 100% correct spelling, reproduce the EXACT provided characters verbatim — never substitute a similar-looking or similar-sounding word, never approximate, never paraphrase. PRESERVE EXACTLY and never alter: the property address, the property type, the agent name, the office name and the phone number. Never invent an address, a Hebrew word, or a number.",
-    `• {{sale_label}} = "${saleLabel}"  ← LARGE, premium, highly visible — a luxury campaign HEADLINE BADGE (not a cheap sticker). This is the most prominent text element.`,
+    spec.kind === "testimonial"
+      ? `• {{sale_label}} = "${saleLabel}"  ← a tasteful, premium SOCIAL-PROOF badge — elegant and visible, but the client's recommendation/quote remains the hero. This is NOT a "for sale" sign and must never read as one.`
+      : `• {{sale_label}} = "${saleLabel}"  ← LARGE, premium, highly visible — a luxury campaign HEADLINE BADGE (not a cheap sticker). This is the most prominent text element.`,
     `• {{headline}} = "${spec.headline}"`,
     spec.subheadline ? `• {{subheadline}} = "${spec.subheadline}"` : "",
     address ? `• {{property_address}} = "${address}"  ← HIGHLY VISIBLE and prominent. NOT tiny footer text, NOT legal copy. This is mandatory, large and easy to read.` : "",
