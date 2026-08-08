@@ -12,6 +12,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { PUBLISH_STATES, type PublishState } from "./publishing-state-machine";
+import { distributionPostsRepository, type GroupPublishStat } from "./distribution-posts-repository";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -72,6 +73,7 @@ export interface PublishingControlData {
   queued: ControlPost[];          // queued / scheduled / draft (waiting to be served)
   events: ControlEvent[];         // most recent transition audit
   controls: ControlStop[];        // active emergency stops
+  groupStats: GroupPublishStat[]; // canonical per-group publishing success rate + history
 }
 
 const EMPTY_STATE_COUNTS = (): Record<PublishState, number> =>
@@ -83,7 +85,7 @@ export function emptyControlData(ready = false): PublishingControlData {
     stateCounts: EMPTY_STATE_COUNTS(),
     totals: { active: 0, publishedAllTime: 0, failedActive: 0, inFlight: 0, needsHuman: 0 },
     inFlight: [], reconciliation: [], failed: [], deadLetter: [], paused: [], queued: [],
-    events: [], controls: [],
+    events: [], controls: [], groupStats: [],
   };
 }
 
@@ -266,6 +268,8 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
   });
 
   const needsHuman = reconciliation.length + failed.length + deadLetter.length;
+  // Canonical per-group publishing report (success rate + attempts + last published).
+  const groupStats = await distributionPostsRepository.groupPublishStats().catch(() => []);
   return {
     ready: true,
     stateCounts,
@@ -279,5 +283,6 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
     inFlight, reconciliation, failed, deadLetter, paused, queued,
     events: controlEvents,
     controls,
+    groupStats,
   };
 }
