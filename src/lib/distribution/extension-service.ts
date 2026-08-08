@@ -7,9 +7,11 @@
 // HARD SECURITY RULES:
 //   - ZONO NEVER receives/stores Facebook passwords, cookies, or session tokens.
 //   - Pairing codes + extension secrets are stored HASHED (sha256) — never raw.
-//   - The extension only ever sends: status, version, fb-session-detected bool,
-//     optional fb display name/id, heartbeat. Nothing else is persisted.
-//   - No server-side browser automation, no scraping. Human approves every post.
+//   - The extension sends: status, version, fb-session-detected bool, optional fb
+//     display name/id, heartbeat, and — ONLY on the user's explicit import request
+//     — the list of groups that user is a member of (metadata only: id/name/url/
+//     member count/privacy). See group-import-service.ts. No credentials, ever.
+//   - No server-side browser automation. Human approves every post.
 // All writes use the service-role client AFTER the relevant auth check (ZONO
 // session for pairing-start; instance secret for the rest).
 // ============================================================================

@@ -4,7 +4,10 @@ import type { FacebookPathView } from "@/lib/distribution/facebook-connection-pa
 import type { MetaIntegrationView } from "@/lib/distribution/meta-pages";
 import type { GroupDestination, GroupTaskStatus } from "@/lib/distribution/extension-service";
 import { getMetaOAuthConfig } from "@/lib/distribution/meta-oauth";
+import { getGroupConnectionOverviewAction, listGroupSyncEventsAction } from "@/lib/distribution/group-connection-actions";
+import type { GroupConnectionOverview, SyncEventView } from "@/lib/distribution/group-import-service";
 import { DistributionConnectionsView } from "./DistributionConnectionsView";
+import { FacebookGroupsImportPanel } from "./FacebookGroupsImportPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -40,17 +43,26 @@ export default async function DistributionConnectionsPage({
   let metaIntegration: MetaIntegrationView | null = null;
   let groups: GroupDestination[] = [];
   let groupTasks: GroupTaskStatus[] = [];
+  let groupOverview: GroupConnectionOverview | null = null;
+  let groupSyncEvents: SyncEventView[] = [];
   try {
-    [connections, paths, metaIntegration, groups, groupTasks] = await Promise.all([
+    [connections, paths, metaIntegration, groups, groupTasks, groupOverview, groupSyncEvents] = await Promise.all([
       getDistributionConnectionsAction(),
       getFacebookConnectionPathsAction(),
       getMetaIntegrationAction(),
       listFacebookGroupsAction(),
       listGroupTaskStatusesAction(),
+      getGroupConnectionOverviewAction(),
+      listGroupSyncEventsAction(),
     ]);
   } catch (e) {
     console.error("[distribution-connections] load failed:", e);
   }
   const metaConfigured = getMetaOAuthConfig().configured;
-  return <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} metaConfigured={metaConfigured} metaIntegration={metaIntegration} groups={groups} groupTasks={groupTasks} notice={notice} />;
+  return (
+    <>
+      <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} metaConfigured={metaConfigured} metaIntegration={metaIntegration} groups={groups} groupTasks={groupTasks} notice={notice} />
+      {groupOverview && <FacebookGroupsImportPanel overview={groupOverview} events={groupSyncEvents} />}
+    </>
+  );
 }
