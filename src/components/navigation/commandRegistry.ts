@@ -91,6 +91,7 @@ export const SYSTEM_MAP: SystemGroup[] = [
     key: "marketing", title: "שיווק והפצה", icon: "Megaphone", items: [
       { id: "whatsapp", label: "WhatsApp", href: "/whatsapp", icon: "MessageCircle", category: "עמודים", group: "marketing", type: "page" },
       { id: "fb-groups", label: "Facebook Groups", href: "/distribution/groups", icon: "Users", category: "עמודים", group: "marketing", type: "page", keywords: ["קבוצות"] },
+      { id: "fb-groups-intelligence", label: "מודיעין קבוצות", href: "/distribution/groups/intelligence", icon: "BarChart3", category: "עמודים", group: "marketing", type: "page", keywords: ["קבוצות", "מודיעין", "ספאם", "איכות", "intelligence"] },
       { id: "campaigns", label: "קמפיינים", href: "/marketing", icon: "Megaphone", category: "עמודים", group: "marketing", type: "page" },
       { id: "office-site", label: "דפי נחיתה", href: "/office-website", icon: "Globe", category: "עמודים", group: "marketing", type: "page", keywords: ["landing"] },
       { id: "agent-site", label: "אתרי נכס", href: "/agent-website", icon: "Globe", category: "עמודים", group: "marketing", type: "page" },

@@ -71,6 +71,7 @@ export const MODULES: ModuleEntry[] = [
   { id: "distribution", label: "הפצה", route: "/distribution", icon: "Send", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true },
   { id: "distribution-daily", label: "הפצה יומית", route: "/distribution/daily", icon: "Send", category: "צמיחה", roleMin: "agent", sidebar: false, searchable: true },
   { id: "distribution-groups", label: "קבוצות פייסבוק", route: "/distribution/groups", icon: "Users", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true, description: "מנוע הפצה לקבוצות — רישום, ביצועים וייחוס לידים" },
+  { id: "distribution-groups-intelligence", label: "מודיעין קבוצות", route: "/distribution/groups/intelligence", icon: "BarChart3", category: "צמיחה", roleMin: "agent", sidebar: false, searchable: true, description: "ציוני איכות, סיכון ספאם ותובנות לכל קבוצה — מבוסס נתונים אמיתיים" },
   { id: "social-leads", label: "לידים מרשתות", route: "/social-leads", icon: "MessageCircle", category: "צמיחה", roleMin: "agent", sidebar: true, searchable: true },
 
   // ── ניהול ──

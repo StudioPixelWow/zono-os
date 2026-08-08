@@ -85,6 +85,46 @@ export function scoreGroupLeads(s: GroupStats): number {
   return clamp(Math.min(80, leadRate * 100) + (s.totalLeads >= 5 ? 20 : s.totalLeads * 4));
 }
 
+// ── Spam-risk scoring (from REAL posting behaviour) ───────────────────────────
+export interface SpamStats {
+  totalPosts: number;
+  postsLast3d: number;      // real posts in the last 3 days (burst window)
+  postsLast7d: number;      // real posts in the last 7 days
+  duplicatePosts: number;   // posts that repeat an earlier post's content_hash in this group
+  avgResponseRate: number | null; // 0..1 — engaged posts / posts
+  totalLeads: number;
+}
+
+/**
+ * Group spam-risk 0..100 — how likely OUR posting pattern in this group looks
+ * spammy / risks the group flagging us. Derived only from real posting behaviour:
+ *   • burst posting (too many posts inside the MIN_DAYS_BETWEEN_POSTS window),
+ *   • duplicate-content re-posting rate,
+ *   • high post volume the group ignores (near-zero engagement),
+ *   • sustained posting that never converts to a single lead.
+ * Honest zero when there is no activity to judge.
+ */
+export function scoreGroupSpamRisk(s: SpamStats): number {
+  if (s.totalPosts === 0) return 0; // no activity → no spam signal (honest)
+  let risk = 0;
+
+  // 1) Burst posting inside the safe window — the single strongest spam signal.
+  if (s.postsLast3d >= 2) risk += Math.min(35, (s.postsLast3d - 1) * 18);
+  if (s.postsLast7d >= 4) risk += Math.min(25, (s.postsLast7d - 3) * 8);
+
+  // 2) Duplicate-content re-posting rate (same ad pushed again).
+  const dupRate = Math.min(1, s.duplicatePosts / s.totalPosts);
+  risk += Math.min(30, dupRate * 60);
+
+  // 3) High volume the group ignores → we are shouting into a void (spam footprint).
+  if (s.totalPosts >= 5 && (s.avgResponseRate ?? 0) < 0.05) risk += 20;
+
+  // 4) Sustained posting with zero leads → churn without value.
+  if (s.totalPosts >= 8 && s.totalLeads === 0) risk += 15;
+
+  return clamp(risk);
+}
+
 // ── Property → group recommendation ──────────────────────────────────────────
 export interface RecoGroupInput {
   id: string; name: string; city: string | null; region: string | null;
