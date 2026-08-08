@@ -74,6 +74,36 @@ export const externalListingRepository = {
     const candidates = withImage.length ? withImage : pool;
     return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
   },
+  /** Newest PRIVATE-OWNER listings (no broker, no exclusivity) with a photo AND a
+   *  contact phone — the home "נכסים חדשים באזור" strip where the agent can open a
+   *  WhatsApp chat with the owner. Prefers the agent's city, then fills from the
+   *  wider area so the strip is never empty when private inventory exists. */
+  async listPrivateOwnerListings(limit = 5, city?: string | null): Promise<ExternalListingRow[]> {
+    const supabase = await createClient();
+    const base = () => supabase
+      .from("external_listings")
+      .select("*")
+      .neq("status", "removed")
+      .eq("has_agent", false)
+      .not("contact_phone", "is", null)
+      .order("first_seen_at", { ascending: false })
+      .order("imported_at", { ascending: false })
+      .limit(limit * 4);
+    const withImage = (rows: ExternalListingRow[]) =>
+      rows.filter((l) => Array.isArray(l.images) && (l.images as unknown[]).length > 0 && (l.contact_phone ?? "").trim().length > 0);
+    let pool: ExternalListingRow[] = [];
+    if (city && city.trim()) {
+      const { data } = await base().eq("city", city.trim());
+      pool = withImage((data ?? []) as ExternalListingRow[]);
+    }
+    if (pool.length < limit) {
+      const { data } = await base();
+      const wider = withImage((data ?? []) as ExternalListingRow[]);
+      const seen = new Set(pool.map((p) => p.id));
+      for (const r of wider) { if (!seen.has(r.id)) { pool.push(r); seen.add(r.id); } if (pool.length >= limit) break; }
+    }
+    return pool.slice(0, limit);
+  },
   async getById(id: string): Promise<ExternalListingRow | null> {
     const supabase = await createClient();
     const { data } = await supabase.from("external_listings").select("*").eq("id", id).maybeSingle();
