@@ -28,6 +28,10 @@ export interface ScheduleConfig {
   groupIds: string[];
   variationIds: string[];
   endDate?: string | null;  // campaign range cap (no slot after this)
+  // Optional real attributes → enable INTELLIGENCE-DRIVEN per-group assignment
+  // (best-fit variation per group). When absent, plain rotation is used.
+  groupAttrs?: GroupAttr[];
+  variationAttrs?: VariationAttr[];
 }
 
 export interface PlannedPost {
@@ -43,6 +47,66 @@ const ymd = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 export function rotateAssignments(groupIds: string[], variationIds: string[]): { groupId: string; variationId: string }[] {
   if (!variationIds.length) return [];
   return groupIds.map((g, i) => ({ groupId: g, variationId: variationIds[i % variationIds.length] }));
+}
+
+// ── Intelligence-driven per-group variation assignment ───────────────────────
+export type AngleKey =
+  | "family" | "investment" | "urgency" | "emotional" | "local" | "luxury" | "value" | "exclusivity";
+
+export interface GroupAttr { id: string; city?: string | null; region?: string | null; category?: string | null; propertyTypes?: string[] }
+export interface VariationAttr { id: string; angle?: string | null }
+
+/** A group's preferred angle order, derived from its REAL classification. */
+export function groupAnglePreference(g: GroupAttr): AngleKey[] {
+  const types = g.propertyTypes ?? [];
+  const cat = g.category ?? "";
+  if (cat === "investors" || types.includes("commercial") || types.includes("land"))
+    return ["investment", "value", "exclusivity", "urgency", "local", "luxury", "emotional", "family"];
+  if (types.includes("penthouse") || types.includes("private_house") || types.includes("duplex"))
+    return ["luxury", "exclusivity", "emotional", "local", "value", "family", "investment", "urgency"];
+  if (cat === "community" || cat === "city")
+    return ["local", "family", "emotional", "value", "urgency", "exclusivity", "investment", "luxury"];
+  return ["family", "emotional", "local", "value", "urgency", "exclusivity", "investment", "luxury"]; // residential default
+}
+
+/** Fit (higher = better) of ONE variation's angle for ONE group, from real attrs. */
+export function scoreVariationForGroup(g: GroupAttr, v: VariationAttr): number {
+  const pref = groupAnglePreference(g);
+  const angle = (v.angle ?? "") as AngleKey;
+  const rank = pref.indexOf(angle);
+  let score = rank === -1 ? 5 : (pref.length - rank) * 10; // 10..80 by preference
+  if (angle === "local" && (g.city || g.region)) score += 8; // a "local" angle suits a geo-anchored group
+  return score;
+}
+
+/**
+ * Assign the BEST-FIT variation to every group using its real classification,
+ * spreading usage so one variation is not overused across the campaign.
+ * Deterministic. Falls back to plain rotation when no attributes are supplied.
+ */
+export function bestFitAssignments(
+  groupIds: string[], variationIds: string[],
+  groupAttrs: GroupAttr[] = [], variationAttrs: VariationAttr[] = [],
+): { groupId: string; variationId: string }[] {
+  if (!variationIds.length) return [];
+  if (!variationAttrs.length || !groupAttrs.length) return rotateAssignments(groupIds, variationIds);
+  const vById = new Map(variationAttrs.map((v) => [v.id, v]));
+  const gById = new Map(groupAttrs.map((g) => [g.id, g]));
+  const usage = new Map<string, number>();
+  return groupIds.map((gid) => {
+    const g = gById.get(gid) ?? { id: gid };
+    let best = variationIds[0];
+    let bestScore = -Infinity;
+    for (const vid of variationIds) {
+      const v = vById.get(vid);
+      const fit = v ? scoreVariationForGroup(g, v) : 0;
+      const spread = (usage.get(vid) ?? 0) * 6; // discourage overuse → variety across groups
+      const s = fit - spread;
+      if (s > bestScore) { bestScore = s; best = vid; }
+    }
+    usage.set(best, (usage.get(best) ?? 0) + 1);
+    return { groupId: gid, variationId: best };
+  });
 }
 
 /** Reorder assignments so the same variation is never in two adjacent positions
@@ -107,7 +171,11 @@ export function generateSlots(
 /** Build the full plan: assignments (rotated, de-duplicated) zipped with slots. */
 export function planSchedule(config: ScheduleConfig, now: Date = new Date()): PlannedPost[] {
   if (!config.groupIds.length || !config.variationIds.length) return [];
-  const assignments = avoidAdjacentDuplicates(rotateAssignments(config.groupIds, config.variationIds));
+  // Intelligence-driven when real attributes are supplied; plain rotation otherwise.
+  const base = (config.variationAttrs?.length && config.groupAttrs?.length)
+    ? bestFitAssignments(config.groupIds, config.variationIds, config.groupAttrs, config.variationAttrs)
+    : rotateAssignments(config.groupIds, config.variationIds);
+  const assignments = avoidAdjacentDuplicates(base);
   const slots = generateSlots(
     assignments.length, config.startDate, config.windowStartHour, config.windowEndHour,
     config.delayMinutes, config.maxPostsPerDay, config.endDate ?? null, now,
