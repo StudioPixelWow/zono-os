@@ -75,8 +75,20 @@ export const personalTransportProvider: WhatsAppProvider = {
   async connectionState(ctx) {
     // Read-only: allowed even when disabled so the UI can show real state.
     if (!compat.personalConfigured()) return readSessionSnapshot(ctx, KIND);
+    const prev = await readSessionSnapshot(ctx, KIND);
     const r = await compat.getState(ctx);
-    if (r.ok) await writeSession(ctx, KIND, { state: r.data.state, displayName: r.data.displayName, phone: r.data.phone, error: null });
+    if (r.ok) {
+      let state = r.data.state;
+      // During pairing Evolution reports "connecting"/"disconnected" while the
+      // phone hasn't scanned yet. If we still hold a QR from the webhook, keep
+      // showing it (fresh → waiting_qr, timed out → qr_expired) rather than
+      // hiding it behind a generic connecting spinner.
+      if ((state === "connecting" || state === "disconnected") && prev.qr) {
+        const fresh = Date.parse(prev.qr.expiresAt) > Date.now();
+        state = fresh ? "waiting_qr" : "qr_expired";
+      }
+      await writeSession(ctx, KIND, { state, displayName: r.data.displayName, phone: r.data.phone, error: null });
+    }
     const snap = await readSessionSnapshot(ctx, KIND);
     recordSessionUp(snap.state === "connected", oc(ctx));
     return snap;

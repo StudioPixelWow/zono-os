@@ -6,15 +6,29 @@
 // name, and returns a canonical result. The route never reads an Evolution
 // field. Foreign instances, outbound echoes, and unknown events → "ignore".
 // ============================================================================
-import type { WaConnState, WaInboundMessage, WaSessionCtx } from "../../types";
-import type { RawWebhookEnvelope, RawInboundMessage, RawConnectionState } from "./raw";
+import type { WaConnState, WaInboundMessage, WaQr, WaSessionCtx } from "../../types";
+import type { RawWebhookEnvelope, RawInboundMessage, RawConnectionState, RawQrUpdate } from "./raw";
 import { ctxFromInstance } from "./instance";
 import { normalizeWebhookState } from "./status";
 
 export type NormalizedWebhook =
   | { kind: "message"; ctx: WaSessionCtx; message: WaInboundMessage }
   | { kind: "status"; ctx: WaSessionCtx; state: WaConnState }
+  | { kind: "qr"; ctx: WaSessionCtx; qr: WaQr }
   | { kind: "ignore"; reason: string };
+
+const QR_TTL_MS = 60_000; // QR validity window we advertise to the client
+
+/** Pull the scannable QR out of a QRCODE_UPDATED payload. Evolution nests it
+ *  under `qrcode` or places it flat on `data`; accept both. Returns null when no
+ *  image/code is present (caller then falls back to a plain waiting_qr status). */
+function extractQr(data: unknown, nowIso: string): WaQr | null {
+  const d = (data ?? {}) as RawQrUpdate;
+  const base64 = d.qrcode?.base64 ?? d.base64 ?? null;
+  const code = d.qrcode?.code ?? d.code ?? null;
+  if (!base64 && !code) return null;
+  return { image: base64 ?? null, raw: code ?? null, expiresAt: new Date(Date.parse(nowIso) + QR_TTL_MS).toISOString() };
+}
 
 function extractText(m: RawInboundMessage["message"]): { text: string; kind: WaInboundMessage["kind"] } {
   if (!m) return { text: "", kind: "text" };
@@ -80,7 +94,10 @@ export function normalizeWebhook(input: unknown, nowIso: string): NormalizedWebh
   }
 
   if (event === "qrcode.updated" || event === "qrcode_updated") {
-    return { kind: "status", ctx, state: "waiting_qr" };
+    const qr = extractQr(env.data, nowIso);
+    // Carry the scannable image up when present; otherwise still signal that a
+    // QR is expected so the UI shows the waiting state.
+    return qr ? { kind: "qr", ctx, qr } : { kind: "status", ctx, state: "waiting_qr" };
   }
 
   return { kind: "ignore", reason: "unhandled_event" };
