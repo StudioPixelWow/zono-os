@@ -162,6 +162,7 @@ export async function getBuyerMeetings(id: string): Promise<MeetingRow[]> {
 export interface BuyerBoard {
   newBuyers: BuyerRow[];
   followUp: BuyerRow[];
+  dormant: BuyerRow[];
   missingPreferences: BuyerRow[];
   recentlyUpdated: BuyerRow[];
   total: number;
@@ -199,9 +200,24 @@ export async function listBuyerBoard(): Promise<BuyerBoard> {
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 6);
 
+  // Dormant / lead-rescue: gone cold ≥30 days since last contact, or never
+  // contacted and created ≥14 days ago. Oldest first (most in need of revival).
+  const dormant = buyers
+    .filter((b) =>
+      b.last_contacted_at
+        ? now - new Date(b.last_contacted_at).getTime() >= 30 * DAY
+        : now - new Date(b.created_at).getTime() >= 14 * DAY,
+    )
+    .sort((a, b) => {
+      const ax = a.last_contacted_at ? new Date(a.last_contacted_at).getTime() : new Date(a.created_at).getTime();
+      const bx = b.last_contacted_at ? new Date(b.last_contacted_at).getTime() : new Date(b.created_at).getTime();
+      return ax - bx;
+    });
+
   return {
     newBuyers: newBuyers.slice(0, 6),
     followUp: followUp.slice(0, 6),
+    dormant: dormant.slice(0, 6),
     missingPreferences: missingPreferences.slice(0, 6),
     recentlyUpdated,
     total: buyers.length,

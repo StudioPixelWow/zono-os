@@ -47,7 +47,7 @@ function Card({ p }: { p: HomePrivateListing }) {
             <span className="bg-surface text-muted inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-[12px] font-bold">אין טלפון זמין</span>
           )}
           <Link href={p.href} className="border-line text-ink hover:bg-surface inline-flex items-center justify-center rounded-xl border px-3 py-2 text-[13px] font-bold transition">
-            לפרטים
+            צפה בנכס
           </Link>
         </div>
       </div>
