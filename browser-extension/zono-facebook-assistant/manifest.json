@@ -1,10 +1,13 @@
 {
   "manifest_version": 3,
   "name": "ZONO Facebook Assistant",
-  "version": "0.1.0",
-  "description": "Browser-assisted publishing helper for ZONO. Shows prepared posts for Facebook Groups/Marketplace; the user publishes manually and confirms. No auto-posting, no credential access.",
-  "permissions": ["storage", "alarms"],
-  "host_permissions": ["https://*.facebook.com/*"],
+  "version": "0.2.0",
+  "description": "Browser-assisted publishing helper for ZONO. Imports the groups you are a member of, shows prepared posts for Facebook Groups, captures comments on your ZONO posts. You publish manually and confirm. No auto-posting, no credential access.",
+  "permissions": ["storage", "alarms", "tabs"],
+  "host_permissions": [
+    "https://*.facebook.com/*",
+    "https://zono-os-ro2s.vercel.app/*"
+  ],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "ZONO Facebook Assistant" },
   "content_scripts": [
