@@ -32,6 +32,11 @@ export interface QueueCounts {
   total: number; draft: number; scheduled: number; queued: number; publishing: number;
   published: number; failed: number; cancelled: number; successRate: number;
 }
+export interface GroupPublishStat {
+  groupId: string; groupName: string | null;
+  total: number; published: number; failed: number; deadLetter: number; inFlight: number;
+  successRate: number; avgAttempts: number; lastPublishedAt: string | null; topFailureCode: string | null;
+}
 
 export const distributionPostsRepository = {
   /**
@@ -127,6 +132,63 @@ export const distributionPostsRepository = {
     const attempted = c.published + c.failed;
     c.successRate = attempted ? Math.round((c.published / attempted) * 10000) / 100 : 0;
     return c;
+  },
+
+  /**
+   * CANONICAL per-group publishing report — aggregates distribution_posts by
+   * group over the publish_state lifecycle (not the legacy status column):
+   * published / failed / dead-letter / in-flight counts, success rate, average
+   * attempts, last published time and the dominant failure code per group.
+   */
+  async groupPublishStats(limit = 2000): Promise<GroupPublishStat[]> {
+    const s = await scope(); if (!s) return [];
+    const { data } = await s.db.from(DIST.posts as never)
+      .select("group_id,publish_state,status,attempt_count,published_at,failure_code")
+      .eq("org_id", s.orgId).not("group_id", "is", null).limit(limit);
+    const rows = list<{ group_id: string | null; publish_state: string | null; status: string | null; attempt_count: number | null; published_at: string | null; failure_code: string | null }>(data);
+
+    // Resolve group names for the groups that actually appear.
+    const ids = [...new Set(rows.map((r) => r.group_id).filter((g): g is string => !!g))];
+    const names = new Map<string, string>();
+    if (ids.length) {
+      const { data: gs } = await s.db.from(DIST.groups as never).select("id,name").eq("org_id", s.orgId).in("id", ids as never);
+      for (const g of list<{ id: string; name: string | null }>(gs)) names.set(g.id, g.name ?? "");
+    }
+
+    const TERMINAL_FAIL = new Set(["dead_letter"]);
+    const IN_FLIGHT = new Set(["dispatching", "awaiting_confirmation", "awaiting_reconciliation"]);
+    const eff = (r: { publish_state: string | null; status: string | null }): string =>
+      r.publish_state ?? (r.status === "publishing" ? "dispatching" : (r.status ?? "queued"));
+
+    type Acc = { total: number; published: number; failed: number; deadLetter: number; inFlight: number; attemptsSum: number; lastPublishedAt: string | null; failCodes: Record<string, number> };
+    const by = new Map<string, Acc>();
+    for (const r of rows) {
+      const gid = r.group_id as string;
+      const a = by.get(gid) ?? { total: 0, published: 0, failed: 0, deadLetter: 0, inFlight: 0, attemptsSum: 0, lastPublishedAt: null, failCodes: {} };
+      const st = eff(r);
+      a.total++;
+      a.attemptsSum += r.attempt_count ?? 0;
+      if (st === "published") { a.published++; if (r.published_at && (!a.lastPublishedAt || r.published_at > a.lastPublishedAt)) a.lastPublishedAt = r.published_at; }
+      else if (st === "failed") { a.failed++; if (r.failure_code) a.failCodes[r.failure_code] = (a.failCodes[r.failure_code] ?? 0) + 1; }
+      else if (TERMINAL_FAIL.has(st)) { a.deadLetter++; if (r.failure_code) a.failCodes[r.failure_code] = (a.failCodes[r.failure_code] ?? 0) + 1; }
+      else if (IN_FLIGHT.has(st)) a.inFlight++;
+      by.set(gid, a);
+    }
+
+    const out: GroupPublishStat[] = [];
+    for (const [gid, a] of by) {
+      const attempted = a.published + a.failed + a.deadLetter;
+      const topFailureCode = Object.entries(a.failCodes).sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+      out.push({
+        groupId: gid, groupName: names.get(gid) ?? null,
+        total: a.total, published: a.published, failed: a.failed, deadLetter: a.deadLetter, inFlight: a.inFlight,
+        successRate: attempted ? Math.round((a.published / attempted) * 10000) / 100 : 0,
+        avgAttempts: a.total ? Math.round((a.attemptsSum / a.total) * 10) / 10 : 0,
+        lastPublishedAt: a.lastPublishedAt, topFailureCode,
+      });
+    }
+    // Most active / most at-risk first: by attempted desc, then success asc.
+    return out.sort((x, y) => (y.published + y.failed + y.deadLetter) - (x.published + x.failed + x.deadLetter) || x.successRate - y.successRate);
   },
 
   // ── Phase 6: manual publishing ──────────────────────────────────────────────

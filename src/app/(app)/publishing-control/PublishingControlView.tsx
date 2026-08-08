@@ -366,6 +366,53 @@ export function PublishingControlView({ data }: { data: PublishingControlData })
         </section>
       )}
 
+      {/* Per-group publishing performance (canonical: publish_state) */}
+      {data.groupStats.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <SectionHeading icon="BarChart3" title="ביצועי פרסום לפי קבוצה" subtitle="אחוז הצלחה, פרסומים/כשלים, ניסיונות ופרסום אחרון — מתוך מנוע הפרסום הקנוני" />
+          <Glass className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-sm">
+                <thead>
+                  <tr className="text-muted border-line/60 border-b text-[11px]">
+                    <th className="px-3 py-2 font-bold">קבוצה</th>
+                    <th className="px-3 py-2 font-bold">הצלחה</th>
+                    <th className="px-3 py-2 font-bold">פורסמו</th>
+                    <th className="px-3 py-2 font-bold">נכשלו</th>
+                    <th className="px-3 py-2 font-bold">בטיפול</th>
+                    <th className="px-3 py-2 font-bold">ניסיונות</th>
+                    <th className="px-3 py-2 font-bold">פורסם לאחרונה</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.groupStats.slice(0, 50).map((g) => {
+                    const tone = g.published + g.failed + g.deadLetter === 0 ? "text-muted"
+                      : g.successRate >= 80 ? "text-success" : g.successRate >= 50 ? "text-brand-strong" : "text-danger";
+                    return (
+                      <tr key={g.groupId} className="border-line/40 border-b last:border-0">
+                        <td className="text-ink px-3 py-2 font-bold">
+                          {g.groupName || "—"}
+                          {g.topFailureCode && <span className="text-danger mr-2 text-[10px] font-medium">· {g.topFailureCode}</span>}
+                        </td>
+                        <td className={cn("px-3 py-2 font-black tabular-nums", tone)}>
+                          {g.published + g.failed + g.deadLetter === 0 ? "—" : `${g.successRate}%`}
+                        </td>
+                        <td className="text-success px-3 py-2 tabular-nums">{nfmt(g.published)}</td>
+                        <td className="text-danger px-3 py-2 tabular-nums">{nfmt(g.failed + g.deadLetter)}</td>
+                        <td className="text-muted px-3 py-2 tabular-nums">{nfmt(g.inFlight)}</td>
+                        <td className="text-muted px-3 py-2 tabular-nums">{g.avgAttempts || "—"}</td>
+                        <td className="text-muted px-3 py-2 text-[11px]">{g.lastPublishedAt ? timeAgo(g.lastPublishedAt) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Glass>
+          {data.groupStats.length > 50 && <p className="text-muted text-center text-xs">מוצגות 50 קבוצות מובילות מתוך {nfmt(data.groupStats.length)}.</p>}
+        </section>
+      )}
+
       {/* Live event feed */}
       <section className="flex flex-col gap-3">
         <SectionHeading icon="Activity" title="יומן פעילות" subtitle="היסטוריית מעברי מצב — לוג בלתי-ניתן-לשינוי (append-only)" />
