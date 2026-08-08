@@ -20,6 +20,16 @@ export interface RawConnectionState {
   state?: string;                // some builds return a flat state
 }
 
+/** QRCODE_UPDATED webhook payload (subset). Evolution v2 sends the QR either
+ *  nested under `qrcode` or flat on `data`. Both carry the scannable PNG as a
+ *  data-URL in `base64` and the raw string in `code`. No credentials here. */
+export interface RawQrUpdate {
+  qrcode?: { code?: string | null; base64?: string | null; pairingCode?: string | null } | null;
+  base64?: string | null;
+  code?: string | null;
+  pairingCode?: string | null;
+}
+
 /** POST /instance/create response (subset we use). */
 export interface RawCreate {
   instance?: { instanceName?: string; status?: string };
