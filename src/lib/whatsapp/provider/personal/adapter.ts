@@ -85,18 +85,20 @@ export const personalTransportProvider: WhatsAppProvider = {
     if (!compat.personalConfigured()) return readSessionSnapshot(ctx, KIND);
     const prev = await readSessionSnapshot(ctx, KIND);
     const r = await compat.getState(ctx);
-    if (r.ok) {
-      let state = r.data.state;
-      // During pairing Evolution reports "connecting"/"disconnected" while the
-      // phone hasn't scanned yet. If we still hold a QR from the webhook, keep
-      // showing it (fresh → waiting_qr, timed out → qr_expired) rather than
-      // hiding it behind a generic connecting spinner.
-      if ((state === "connecting" || state === "disconnected") && prev.qr) {
-        const fresh = Date.parse(prev.qr.expiresAt) > Date.now();
-        state = fresh ? "waiting_qr" : "qr_expired";
-      }
-      await writeSession(ctx, KIND, { state, displayName: r.data.displayName, phone: r.data.phone, error: null });
+    // Base state from the live read; fall back to the stored state if the read
+    // failed (timeout/network) so a transient blip never hides a valid QR.
+    let state = r.ok ? r.data.state : prev.state;
+    const displayName = r.ok ? r.data.displayName : prev.displayName;
+    const phone = r.ok ? r.data.phone : prev.phone;
+    // A fresh QR ALWAYS means we're waiting for a scan — surface it as waiting_qr
+    // regardless of whatever transient state Evolution reports (Baileys emits
+    // connecting/close updates between QR refreshes) or whether the live read
+    // even succeeded. Only a real "connected" clears it. Timed-out QR → qr_expired
+    // so the UI auto-refreshes. This is what keeps the code on screen mid-pairing.
+    if (state !== "connected" && prev.qr) {
+      state = Date.parse(prev.qr.expiresAt) > Date.now() ? "waiting_qr" : "qr_expired";
     }
+    await writeSession(ctx, KIND, { state, displayName, phone, error: null });
     const snap = await readSessionSnapshot(ctx, KIND);
     recordSessionUp(snap.state === "connected", oc(ctx));
     return snap;

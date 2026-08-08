@@ -107,19 +107,25 @@ export async function ingestBridgeStatus(ctx: WaSessionCtx, state: WaConnState, 
   const r = row.data as { id: string; metadata: Record<string, unknown> | null; last_connected_at: string | null } | null;
   if (!r) return { ok: false };
   const prev = ((r.metadata as { wa_session?: Record<string, unknown> } | null)?.wa_session ?? {});
+  const prevQr = (prev as { qr?: { expiresAt?: string } | null }).qr ?? null;
+  const qrFresh = !!prevQr?.expiresAt && Date.parse(prevQr.expiresAt) > Date.now();
+  // While a fresh QR is still held, transient "disconnected" updates (Baileys
+  // emits close/disconnected BETWEEN QR refreshes before the phone scans) must
+  // NOT flip the stored state to disconnected — the UI only shows the code when
+  // the state is waiting_qr, so that would hide a perfectly valid QR. Keep
+  // waiting_qr until we're truly connected (or the QR expires on its own TTL).
+  const effectiveState: WaConnState = state === "disconnected" && qrFresh ? "waiting_qr" : state;
   const wa_session = {
-    ...prev, state,
+    ...prev, state: effectiveState,
     displayName: extra.displayName ?? (prev as { displayName?: string }).displayName ?? null,
     phone: extra.phone ?? (prev as { phone?: string }).phone ?? null,
     error: extra.error ?? null,
-    // Clear the QR only once truly connected. Baileys emits transient
-    // "close"/disconnected connection updates BETWEEN QR refreshes while the
-    // phone hasn't scanned yet — nulling on those would erase a still-valid QR
-    // mid-pairing. A genuinely stale QR expires on its own (TTL → qr_expired).
+    // Clear the QR only once truly connected. A genuinely stale QR expires on
+    // its own (TTL → qr_expired); transient disconnects keep it.
     qr: state === "connected" ? null : (prev as { qr?: unknown }).qr ?? null,
   };
   await db.from("whatsapp_accounts" as never).update({
-    connection_status: state === "connected" ? "connected" : state === "error" ? "error" : "sandbox",
+    connection_status: effectiveState === "connected" ? "connected" : effectiveState === "error" ? "error" : "sandbox",
     last_connected_at: state === "connected" ? new Date().toISOString() : r.last_connected_at,
     metadata: { ...(r.metadata ?? {}), wa_session },
   } as never).eq("id", r.id);
