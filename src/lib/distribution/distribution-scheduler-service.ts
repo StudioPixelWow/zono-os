@@ -9,8 +9,32 @@
 import "server-only";
 import { distributionRepo } from "./repository";
 import { distributionPostsRepository } from "./distribution-posts-repository";
-import { planSchedule, type ScheduleConfig, type PlannedPost } from "./scheduler-planner";
-import type { DistVariationRow } from "./db-types";
+import { planSchedule, type ScheduleConfig, type PlannedPost, type GroupAttr, type VariationAttr } from "./scheduler-planner";
+import { classifyGroup } from "./groups-engine";
+import type { DistVariationRow, DistGroupRow } from "./db-types";
+
+/**
+ * Attach REAL group + variation attributes to the config so the planner can pick
+ * the best-fit variation per group (instead of blind rotation). Group angle-fit is
+ * derived from the same classification the intelligence layer uses (region /
+ * property types / category). No-op if attributes are already present.
+ */
+async function enrichConfigWithAttrs(config: ScheduleConfig): Promise<ScheduleConfig> {
+  if (config.groupAttrs && config.variationAttrs) return config;
+  const [groups, variations] = await Promise.all([
+    distributionRepo.listGroups({ limit: 500 }),
+    distributionRepo.listVariations(config.campaignId),
+  ]);
+  const wanted = new Set(config.groupIds);
+  const groupAttrs: GroupAttr[] = (groups as DistGroupRow[])
+    .filter((g) => wanted.has(g.id))
+    .map((g) => {
+      const cls = classifyGroup(g.name ?? "", (g as { rules_notes?: string | null }).rules_notes ?? null, g.city);
+      return { id: g.id, city: g.city ?? null, region: cls.region, category: g.category ?? cls.category, propertyTypes: cls.propertyTypes };
+    });
+  const variationAttrs: VariationAttr[] = (variations as DistVariationRow[]).map((v) => ({ id: v.id, angle: v.angle ?? null }));
+  return { ...config, groupAttrs, variationAttrs };
+}
 
 export interface BuildQueueResult {
   ok: boolean;
@@ -49,7 +73,7 @@ export const distributionSchedulerService = {
 
   /** Plan the schedule (pure preview — no writes). Caller can show it before saving. */
   async preview(config: ScheduleConfig): Promise<PlannedPost[]> {
-    return planSchedule(config);
+    return planSchedule(await enrichConfigWithAttrs(config));
   },
 
   /** Validate → plan → de-dupe → insert scheduled posts. */
@@ -57,7 +81,7 @@ export const distributionSchedulerService = {
     const errors = await this.validate(config);
     if (errors.length) return { ok: false, created: 0, skippedDuplicates: 0, planned: 0, errors };
 
-    const planned = planSchedule(config);
+    const planned = planSchedule(await enrichConfigWithAttrs(config));
     if (!planned.length) return { ok: false, created: 0, skippedDuplicates: 0, planned: 0, errors: ["לא נוצרו שיבוצים — בדוק את חלון הפרסום וטווח התאריכים"] };
 
     // De-dupe: skip identical (campaign, group, variation, time) posts already queued.
