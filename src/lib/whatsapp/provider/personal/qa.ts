@@ -61,6 +61,7 @@ check("A10 connect response with QR → waiting_qr + carries image/raw", (() => 
 })());
 check("A11 connectionState 'open' → connected (no QR)", fromConnectionState({ instance: { state: "open" } }).state === "connected");
 check("A12 error classify: 401→auth, 404→not_found, 429→rate_limited", classifyHttp(401, "").category === "auth" && classifyHttp(404, "").category === "not_found" && classifyHttp(429, "").category === "rate_limited");
+check("A12a error classify: 403 'already in use' → invalid (fetch QR, not auth-fail); plain 403 → auth", classifyHttp(403, 'This name "zono__o__u" is already in use.').category === "invalid" && classifyHttp(403, "Unauthorized").category === "auth");
 check("A13 instance name roundtrips (org,user) and rejects foreign", (() => {
   const n = instanceName({ orgId: "o1", userId: "u1" });
   const back = ctxFromInstance(n);

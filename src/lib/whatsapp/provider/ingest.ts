@@ -71,20 +71,30 @@ export async function ingestBridgeMessage(ctx: WaSessionCtx, msg: WaInboundMessa
 
 /** Persist a fresh QR (pushed by the bridge's QRCODE_UPDATED event) onto the
  *  broker's own session snapshot so the connect screen can render it. Scoped
- *  strictly to the (org,user) that owns the session; never global/shared. */
+ *  strictly to the (org,user) resolved from the (authenticated, validated)
+ *  instance name; never global/shared. Upserts the row when missing: Evolution
+ *  emits the QR asynchronously right after instance creation — often before the
+ *  connect call has finished writing the session row — so requiring a pre-existing
+ *  row would drop the very first (and sometimes only) QR. */
 export async function ingestBridgeQr(ctx: WaSessionCtx, qr: WaQr): Promise<{ ok: boolean }> {
   if (!isServiceRoleConfigured()) return { ok: false };
   const db = createServiceRoleClient();
   const row = await db.from("whatsapp_accounts" as never).select("id,metadata")
     .eq("organization_id", ctx.orgId).eq("provider", "whatsapp_web").eq("user_id", ctx.userId).maybeSingle();
   const r = row.data as { id: string; metadata: Record<string, unknown> | null } | null;
-  if (!r) return { ok: false };
-  const prev = ((r.metadata as { wa_session?: Record<string, unknown> } | null)?.wa_session ?? {});
+  const prev = ((r?.metadata as { wa_session?: Record<string, unknown> } | null)?.wa_session ?? {});
   const wa_session = { ...prev, state: "waiting_qr" as WaConnState, qr, error: null };
-  await db.from("whatsapp_accounts" as never).update({
-    connection_status: "sandbox",
-    metadata: { ...(r.metadata ?? {}), wa_session },
-  } as never).eq("id", r.id);
+  if (r) {
+    await db.from("whatsapp_accounts" as never).update({
+      connection_status: "sandbox",
+      metadata: { ...(r.metadata ?? {}), wa_session },
+    } as never).eq("id", r.id);
+  } else {
+    await db.from("whatsapp_accounts" as never).insert({
+      organization_id: ctx.orgId, user_id: ctx.userId, provider: "whatsapp_web", provider_kind: "bridge",
+      connection_status: "sandbox", approval_required: true, metadata: { wa_session },
+    } as never);
+  }
   return { ok: true };
 }
 
