@@ -19,6 +19,18 @@
 <body>
   <h1>ZONO — עוזר פרסום לקבוצות</h1>
 
+  <div class="card" id="baseCard">
+    <p class="muted">כתובת ZONO (ברירת מחדל: הסביבה הרשמית). שנה רק אם אתה על דומיין אחר.</p>
+    <input id="base" placeholder="https://zono-os-ro2s.vercel.app" />
+    <div class="row"><button id="baseBtn" class="secondary">שמור כתובת</button></div>
+  </div>
+
+  <div class="card" id="groupsCard">
+    <p class="muted">ייבוא הקבוצות שאתה חבר בהן ל-ZONO (נפתחת רשימת הקבוצות שלך ונסרקת).</p>
+    <div class="row"><button id="scanBtn">ייבא את הקבוצות שלי</button></div>
+    <p class="muted" id="scanMsg"></p>
+  </div>
+
   <div class="card" id="pairCard">
     <p class="muted">הדבק את קוד החיבור מ-ZONO (הגדרות → חיבורי הפצה).</p>
     <input id="code" placeholder="ZONO-XXXX-XXXX" />

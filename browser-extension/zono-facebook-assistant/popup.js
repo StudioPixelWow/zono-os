@@ -21,6 +21,21 @@ async function showNextPost() {
   $("text").textContent = [post.text, (post.hashtags || []).join(" ")].filter(Boolean).join("\n\n");
 }
 
+// Load + save the ZONO base URL.
+chrome.storage.local.get(["zonoBase", "lastImport"], (s) => {
+  if (s.zonoBase) $("base").value = s.zonoBase;
+  if (s.lastImport) $("scanMsg").textContent = `יובאו ${s.lastImport.imported ?? 0} · עודכנו ${s.lastImport.updated ?? 0}`;
+});
+$("baseBtn").addEventListener("click", async () => {
+  const base = $("base").value.trim();
+  await send("SET_BASE", { base });
+  $("scanMsg").textContent = "הכתובת נשמרה";
+});
+$("scanBtn").addEventListener("click", async () => {
+  await send("SCAN_NOW", {});
+  $("scanMsg").textContent = "פותח את רשימת הקבוצות שלך וסורק… הקבוצות יופיעו ב-ZONO בסיום.";
+});
+
 $("pairBtn").addEventListener("click", async () => {
   const code = $("code").value.trim();
   if (!code) return;

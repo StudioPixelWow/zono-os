@@ -1,17 +1,29 @@
 // ============================================================================
-// ZONO Facebook Assistant — background service worker (skeleton).
-// Sends heartbeats to ZONO and fetches the next prepared post. NEVER reads or
-// transmits Facebook cookies, passwords, or session tokens. Only a boolean
-// "facebook session detected" flag (computed by the content script) is sent.
+// ZONO Facebook Assistant — background service worker (v0.2).
+// Talks ONLY to ZONO's canonical extension APIs. NEVER reads or transmits
+// Facebook cookies, passwords, or session tokens — only the group/comment
+// metadata the user themselves can see, on their explicit import, plus a boolean
+// "facebook session detected" flag computed by the content script.
+//
+// Responsibilities:
+//   • pairing  → /api/extension/facebook/pairing/complete
+//   • heartbeat → /api/extension/facebook/heartbeat   (reads back scanRequested)
+//   • groups   → /api/extension/facebook/groups       (P4 import)
+//   • comments → /api/extension/facebook/comments      (P5 social-lead ingest)
+//   • next-post / publish-result / event               (P0 human-confirmed publish)
+// No new queue, no publishing model here — the server owns the canonical state.
 // ============================================================================
-const ZONO_BASE = "https://app.zono.example"; // set to your ZONO deployment origin
-const VERSION = "0.1.0";
+const DEFAULT_BASE = "https://zono-os-ro2s.vercel.app";
+const VERSION = "0.2.0";
 
+async function getBase() {
+  const { zonoBase } = await chrome.storage.local.get(["zonoBase"]);
+  return (zonoBase || DEFAULT_BASE).replace(/\/+$/, "");
+}
 async function getCreds() {
   const { instanceId, secret } = await chrome.storage.local.get(["instanceId", "secret"]);
   return instanceId && secret ? { instanceId, secret } : null;
 }
-
 function authHeaders(creds) {
   return {
     "content-type": "application/json",
@@ -20,70 +32,138 @@ function authHeaders(creds) {
   };
 }
 
-// Pairing: exchange a user-entered code for an instanceId + secret (stored locally).
+// ── Pairing ──────────────────────────────────────────────────────────────────
 async function completePairing(code) {
-  const res = await fetch(`${ZONO_BASE}/api/extension/facebook/pairing/complete`, {
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/pairing/complete`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ code, version: VERSION }),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({ ok: false, error: "bad response" }));
   if (!json.ok) return { ok: false, error: json.error };
   await chrome.storage.local.set({ instanceId: json.instanceId, secret: json.secret });
   return { ok: true };
 }
 
-// Heartbeat: report version + fb-session-detected flag (no credentials).
+// ── Heartbeat (returns scanRequested so we know when to import groups) ────────
 async function heartbeat(facebookSessionDetected, facebookProfileName) {
   const creds = await getCreds();
-  if (!creds) return;
-  await fetch(`${ZONO_BASE}/api/extension/facebook/heartbeat`, {
+  if (!creds) return { ok: false };
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/heartbeat`, {
     method: "POST", headers: authHeaders(creds),
     body: JSON.stringify({ version: VERSION, facebookSessionDetected, facebookProfileName: facebookProfileName ?? null }),
-  }).catch(() => {});
+  }).catch(() => null);
+  const json = res ? await res.json().catch(() => ({})) : {};
+  // Pull directive: the ZONO UI asked for a group import → open the joined-groups
+  // page and let the content script scan it.
+  if (json && json.scanRequested) await triggerGroupScan();
+  return json || { ok: false };
 }
 
+// ── Group import (P4) ────────────────────────────────────────────────────────
+async function triggerGroupScan() {
+  await chrome.storage.local.set({ scanPending: true, scanPendingAt: Date.now() });
+  // Open (or focus) the joined-groups page; the content script picks up scanPending.
+  const url = "https://www.facebook.com/groups/joins/";
+  const tabs = await chrome.tabs.query({ url: "https://*.facebook.com/*" });
+  if (tabs && tabs.length) {
+    await chrome.tabs.update(tabs[0].id, { url, active: true });
+  } else {
+    await chrome.tabs.create({ url, active: true });
+  }
+}
+
+async function submitGroups(groups) {
+  const creds = await getCreds();
+  if (!creds || !Array.isArray(groups) || !groups.length) return { ok: false, error: "no groups" };
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/groups`, {
+    method: "POST", headers: authHeaders(creds), body: JSON.stringify({ groups }),
+  }).catch(() => null);
+  const json = res ? await res.json().catch(() => ({ ok: false })) : { ok: false };
+  if (json && json.ok) await chrome.storage.local.set({ scanPending: false, lastImport: { ...json, at: Date.now() } });
+  return json;
+}
+
+// ── Comment ingest (P5) ──────────────────────────────────────────────────────
+async function submitComments(comments) {
+  const creds = await getCreds();
+  if (!creds || !Array.isArray(comments) || !comments.length) return { ok: false, error: "no comments" };
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/comments`, {
+    method: "POST", headers: authHeaders(creds), body: JSON.stringify({ comments }),
+  }).catch(() => null);
+  return res ? await res.json().catch(() => ({ ok: false })) : { ok: false };
+}
+
+// Watched posts: map an external FB post URL → our canonical postId, so the
+// content script can attribute comments it reads to the right ZONO post.
+async function watchPost(url, postId) {
+  if (!url || !postId) return;
+  const { watchedPosts } = await chrome.storage.local.get(["watchedPosts"]);
+  const map = watchedPosts || {};
+  map[url] = postId;
+  await chrome.storage.local.set({ watchedPosts: map });
+}
+async function getWatchedPosts() {
+  const { watchedPosts } = await chrome.storage.local.get(["watchedPosts"]);
+  return watchedPosts || {};
+}
+
+// ── Prepared-post delivery + human-confirmed result (P0) ─────────────────────
 async function fetchNextPost() {
   const creds = await getCreds();
   if (!creds) return null;
-  const res = await fetch(`${ZONO_BASE}/api/extension/facebook/next-post`, { headers: authHeaders(creds) });
-  const json = await res.json();
-  return json.ok ? json.post : null;
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/next-post`, { headers: authHeaders(creds) }).catch(() => null);
+  const json = res ? await res.json().catch(() => ({})) : {};
+  return json && json.ok ? json.post : null;
 }
-
 async function reportResult(payload) {
   const creds = await getCreds();
   if (!creds) return false;
-  const res = await fetch(`${ZONO_BASE}/api/extension/facebook/publish-result`, {
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/publish-result`, {
     method: "POST", headers: authHeaders(creds), body: JSON.stringify(payload),
-  });
-  const json = await res.json();
-  return !!json.ok;
+  }).catch(() => null);
+  const json = res ? await res.json().catch(() => ({})) : {};
+  // If a real post URL was confirmed, watch it so we can later capture its comments.
+  if (json && json.ok && payload.result === "user_confirmed_published" && payload.externalPostUrl) {
+    await watchPost(payload.externalPostUrl, payload.postId);
+  }
+  return !!(json && json.ok);
 }
-
-// Lightweight interaction event (opened | copied) — NOT a publish.
 async function reportEvent(postId, event) {
   const creds = await getCreds();
   if (!creds) return false;
-  const res = await fetch(`${ZONO_BASE}/api/extension/facebook/event`, {
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/event`, {
     method: "POST", headers: authHeaders(creds), body: JSON.stringify({ postId, event }),
-  });
-  const json = await res.json();
-  return !!json.ok;
+  }).catch(() => null);
+  const json = res ? await res.json().catch(() => ({})) : {};
+  return !!(json && json.ok);
 }
 
-// Periodic heartbeat (the content script supplies the session flag via message).
+// Periodic heartbeat fallback (content script supplies the real session flag).
 chrome.alarms.create("heartbeat", { periodInMinutes: 5 });
-chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === "heartbeat") heartbeat(false, null);
-});
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === "heartbeat") heartbeat(false, null); });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
-    if (msg.type === "PAIR") sendResponse(await completePairing(msg.code));
-    else if (msg.type === "HEARTBEAT") { await heartbeat(msg.facebookSessionDetected, msg.facebookProfileName); sendResponse({ ok: true }); }
-    else if (msg.type === "NEXT_POST") sendResponse({ post: await fetchNextPost() });
-    else if (msg.type === "EVENT") sendResponse({ ok: await reportEvent(msg.postId, msg.event) });
-    else if (msg.type === "REPORT") sendResponse({ ok: await reportResult(msg.payload) });
+    switch (msg.type) {
+      case "PAIR": sendResponse(await completePairing(msg.code)); break;
+      case "SET_BASE": await chrome.storage.local.set({ zonoBase: (msg.base || "").replace(/\/+$/, "") }); sendResponse({ ok: true }); break;
+      case "HEARTBEAT": sendResponse(await heartbeat(msg.facebookSessionDetected, msg.facebookProfileName)); break;
+      case "SCAN_NOW": await triggerGroupScan(); sendResponse({ ok: true }); break;
+      case "GROUPS_SCANNED": sendResponse(await submitGroups(msg.groups)); break;
+      case "COMMENTS_SCANNED": sendResponse(await submitComments(msg.comments)); break;
+      case "GET_WATCHED": sendResponse({ watched: await getWatchedPosts() }); break;
+      case "NEXT_POST": sendResponse({ post: await fetchNextPost() }); break;
+      case "EVENT": sendResponse({ ok: await reportEvent(msg.postId, msg.event) }); break;
+      case "REPORT": sendResponse({ ok: await reportResult(msg.payload) }); break;
+      default: sendResponse({ ok: false, error: "unknown" });
+    }
   })();
-  return true; // async response
+  return true; // async
 });
