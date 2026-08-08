@@ -26,8 +26,10 @@ async function ctx(): Promise<Ctx | null> {
   const { profile } = await getSessionContext();
   if (!profile?.org_id || !profile?.id) return null;
   const db: any = createServiceRoleClient();
-  const { data } = await db.from("users").select("role").eq("id", profile.id).maybeSingle();
-  const role = ((data as { role?: string } | null)?.role) ?? "agent";
+  // Role lives on roles.key (joined via users.role_id) — NOT a users.role column.
+  const { data } = await db.from("users").select("role_id, roles:role_id(key)").eq("id", profile.id).maybeSingle();
+  const joined = (data as { roles?: { key?: string } | { key?: string }[] } | null)?.roles;
+  const role = (Array.isArray(joined) ? joined[0]?.key : joined?.key) ?? "agent";
   return { orgId: profile.org_id, userId: profile.id, rank: RANK[role] ?? 40 };
 }
 
