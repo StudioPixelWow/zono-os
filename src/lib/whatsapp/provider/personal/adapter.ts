@@ -100,7 +100,6 @@ export const personalTransportProvider: WhatsAppProvider = {
     }
     await writeSession(ctx, KIND, { state, displayName, phone, error: null });
     const snap = await readSessionSnapshot(ctx, KIND);
-    console.log(`[wa-diag] connState prevState=${prev.state} prevQr=${!!prev.qr} getOk=${r.ok} getVal=${r.ok ? r.data.state : "n/a"} final=${snap.state} snapQr=${!!snap.qr}`);
     recordSessionUp(snap.state === "connected", oc(ctx));
     return snap;
   },
