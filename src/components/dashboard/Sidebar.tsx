@@ -59,6 +59,7 @@ const GROUPS: NavGroup[] = [
     { label: "WhatsApp", href: "/whatsapp", icon: "MessageCircle" },
     { label: "Facebook", href: "/facebook", icon: "Send" },
     { label: "פרסום בקבוצות", href: "/distribution", icon: "Megaphone" },
+    { label: "מודיעין קבוצות", href: "/distribution/groups/intelligence", icon: "BarChart3" },
     { label: "מרכז בקרת פרסום", href: "/publishing-control", icon: "Shield" },
     { label: "קמפיינים", href: "/distribution/campaign-wizard", icon: "Target" },
     { label: "Marketing OS", href: "/marketing", icon: "BarChart3" },

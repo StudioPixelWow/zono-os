@@ -8,7 +8,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import {
-  classifyGroup, regionForCity, scoreGroupPerformance, scoreGroupLeads,
+  classifyGroup, regionForCity, scoreGroupPerformance, scoreGroupLeads, scoreGroupSpamRisk,
   recommendGroupsForProperty, contentHash, checkCompliance,
   type GroupRecommendation, type RecoGroupInput,
 } from "./groups-engine";
@@ -73,12 +73,13 @@ export async function addGroup(input: AddGroupInput): Promise<{ id: string }> {
 export async function recomputeGroupScores(): Promise<{ groups: number }> {
   const { db, orgId } = await ctx();
   const groups = await getGroupRegistry();
+  const now = Date.now();
   for (const g of groups) {
     const [{ data: posts }, { data: leads }] = await Promise.all([
-      db.from("distribution_group_posts" as never).select("reach,reactions,comments,posted_at").eq("org_id", orgId).eq("group_id", g.id).limit(500),
+      db.from("distribution_group_posts" as never).select("reach,reactions,comments,posted_at,content_hash,created_at").eq("org_id", orgId).eq("group_id", g.id).limit(500),
       db.from("distribution_group_leads" as never).select("created_at").eq("org_id", orgId).eq("group_id", g.id).limit(500),
     ]);
-    const postRows = (posts ?? []) as { reach?: number; reactions?: number; comments?: number; posted_at?: string }[];
+    const postRows = (posts ?? []) as { reach?: number; reactions?: number; comments?: number; posted_at?: string; content_hash?: string | null; created_at?: string }[];
     const leadRows = (leads ?? []) as { created_at?: string }[];
     const totalPosts = postRows.length;
     const totalLeads = leadRows.length;
@@ -86,12 +87,29 @@ export async function recomputeGroupScores(): Promise<{ groups: number }> {
     const avgResponseRate = totalPosts ? engaged / totalPosts : null;
     const lastPostAt = postRows.map((p) => p.posted_at).filter(Boolean).sort().slice(-1)[0] ?? g.lastPostAt;
     const lastLeadAt = leadRows.map((l) => l.created_at).filter(Boolean).sort().slice(-1)[0] ?? g.lastLeadAt;
+
+    // Real spam-risk signals from posting behaviour.
+    const postMs = (p: { posted_at?: string; created_at?: string }) => {
+      const t = new Date(p.posted_at ?? p.created_at ?? "").getTime();
+      return Number.isNaN(t) ? null : t;
+    };
+    const postsLast3d = postRows.filter((p) => { const t = postMs(p); return t != null && now - t <= 3 * 86_400_000; }).length;
+    const postsLast7d = postRows.filter((p) => { const t = postMs(p); return t != null && now - t <= 7 * 86_400_000; }).length;
+    const seen = new Set<string>();
+    let duplicatePosts = 0;
+    for (const p of postRows) {
+      const h = p.content_hash ?? null;
+      if (!h) continue;
+      if (seen.has(h)) duplicatePosts++; else seen.add(h);
+    }
+    const spamRiskScore = scoreGroupSpamRisk({ totalPosts, postsLast3d, postsLast7d, duplicatePosts, avgResponseRate, totalLeads });
+
     const stats = {
-      totalPosts, totalLeads, avgResponseRate, membersCount: g.membersCount, spamRiskScore: g.spamRiskScore,
+      totalPosts, totalLeads, avgResponseRate, membersCount: g.membersCount, spamRiskScore, // fresh spam feeds performance penalty
       daysSinceLastLead: daysSince(lastLeadAt), daysSinceLastPost: daysSince(lastPostAt),
     };
     await db.from("distribution_groups" as never).update({
-      performance_score: scoreGroupPerformance(stats), lead_score: scoreGroupLeads(stats),
+      performance_score: scoreGroupPerformance(stats), lead_score: scoreGroupLeads(stats), spam_risk_score: spamRiskScore,
       total_posts: totalPosts, total_leads: totalLeads, avg_response_rate: avgResponseRate,
       last_post_at: lastPostAt ?? null, last_lead_at: lastLeadAt ?? null,
     } as never).eq("id", g.id).eq("org_id", orgId);
