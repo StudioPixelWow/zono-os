@@ -30,8 +30,29 @@ import { getAcquisitionCommandCenter } from "@/lib/acquisition/service";
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
 import type {
   HomeActivityItem, HomeRec, HomeHero, HomeNowItem, HomePipeline,
-  HomeFollowUpItem, HomeAcquisition, HomeNextDeal,
+  HomeFollowUpItem, HomeAcquisition, HomeNextDeal, HomePrivateListing,
 } from "@/components/home-control/types";
+
+// Owner phone → wa.me international (IL): 05X… → 9725X…; already-972 kept.
+function ownerWhatsappUrl(phone: string | null, title: string, city: string | null): string | null {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length < 9) return null;
+  let intl = digits;
+  if (intl.startsWith("972")) { /* keep */ }
+  else if (intl.startsWith("0")) intl = "972" + intl.slice(1);
+  else if (intl.length === 9) intl = "972" + intl;
+  else return null;
+  const where = city ? ` ב${city}` : "";
+  const msg = `שלום, ראיתי את המודעה על ${title}${where} ואשמח לפרטים נוספים 🙂`;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+}
+function firstImageUrl(images: unknown): string | null {
+  if (!Array.isArray(images) || images.length === 0) return null;
+  const f = images[0];
+  if (typeof f === "string") return f;
+  if (f && typeof f === "object") { const o = f as Record<string, unknown>; return (o.url as string) ?? (o.src as string) ?? (o.image as string) ?? null; }
+  return null;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +115,26 @@ export default async function Home() {
 
   let featuredExternal: ExternalListingRow | null = null;
   try { featuredExternal = await externalListingRepository.randomPrivateOpportunity(); } catch (e) { console.error("[home] featured failed:", e); }
+
+  // "נכסים חדשים באזור" — private-owner (no-broker) listings + WhatsApp to owner.
+  let privateListings: HomePrivateListing[] = [];
+  try {
+    const rows = await externalListingRepository.listPrivateOwnerListings(5, cityName);
+    privateListings = rows.map((l) => ({
+      id: l.id,
+      title: (l.title ?? "").trim() || "נכס ללא כותרת",
+      city: l.city ?? null,
+      neighborhood: l.neighborhood ?? null,
+      price: l.price ?? null,
+      rooms: l.rooms ?? null,
+      sqm: l.sqm ?? l.area_sqm ?? null,
+      floor: l.floor ?? null,
+      imageUrl: firstImageUrl(l.images),
+      ownerName: l.contact_name ?? null,
+      whatsappUrl: ownerWhatsappUrl(l.contact_phone ?? null, (l.title ?? "").trim() || "הנכס", l.city ?? null),
+      href: `/external-listings/${l.id}`,
+    }));
+  } catch (e) { console.error("[home] private listings failed:", e); }
 
   let competitorRows: CompetitorProfileRow[] = [];
   try { competitorRows = [...(await getCompetitorBoard()).competitors]; } catch (e) { console.error("[home] competitors failed:", e); }
@@ -253,6 +294,7 @@ export default async function Home() {
       tasks={todayTasks}
       featuredProperty={data.featuredProperty}
       hotProperties={data.hotProperties}
+      privateListings={privateListings}
       territory={{ areaLabel: cityName ?? null, properties: properties.length, buyers: buyersCount, deals: activeDealsCount }}
       perf={perf}
       summary={{ recTotal, toursThisWeek: kpiExtras.toursThisWeek, newLeads: newLeadsCount }}

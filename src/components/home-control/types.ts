@@ -101,3 +101,19 @@ export interface HomeNextDeal {
   stageLabel: string;
   href: string;
 }
+
+/** A private-owner (no-broker) listing card with a direct WhatsApp-to-owner CTA. */
+export interface HomePrivateListing {
+  id: string;
+  title: string;
+  city: string | null;
+  neighborhood: string | null;
+  price: number | null;
+  rooms: number | null;
+  sqm: number | null;
+  floor: number | null;
+  imageUrl: string | null;
+  ownerName: string | null;
+  whatsappUrl: string | null;  // wa.me link to the owner (null if no valid phone)
+  href: string;                // /external-listings/[id]
+}

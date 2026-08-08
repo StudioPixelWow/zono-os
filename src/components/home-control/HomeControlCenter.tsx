@@ -17,12 +17,13 @@ import { tr, type DashboardDict } from "@/lib/dashboard-home/i18n";
 import type { PropertyCard } from "@/lib/dashboard-home/types";
 import { RecommendedPropertyCard } from "@/components/dashboard-home/components/DashboardHero";
 import { HotPropertiesSection } from "@/components/dashboard-home/components/HotPropertiesSection";
+import { PrivateOwnerListings } from "./PrivateOwnerListings";
 import { HomeHeatmapSection } from "@/components/dashboard-home/components/HomeHeatmapSection";
 import { TodayTasksCard } from "./TodayTasksCard";
 import type { HomeTaskItem } from "@/lib/home/home-service";
 import type {
   HomeKpi, HomeRec, HomeActivityItem, HomeTerritory, HomePerf,
-  HomeHero, HomeNowItem, HomePipeline, HomeFollowUpItem, HomeAcquisition, HomeNextDeal,
+  HomeHero, HomeNowItem, HomePipeline, HomeFollowUpItem, HomeAcquisition, HomeNextDeal, HomePrivateListing,
 } from "./types";
 
 const ils = (n: number) => `₪${Math.round(n).toLocaleString("he-IL")}`;
@@ -569,6 +570,7 @@ export interface HomeControlCenterProps {
   tasks: HomeTaskItem[];
   featuredProperty: PropertyCard | null;
   hotProperties: PropertyCard[];
+  privateListings: HomePrivateListing[];
   territory: HomeTerritory;
   perf: HomePerf;
   summary: { recTotal: number; toursThisWeek: number; newLeads: number };
@@ -628,9 +630,14 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
         <Territory territory={p.territory} />
       </div>
 
-      {/* 11. New properties in area */}
+      {/* 11. New properties in area — PRIVATE-OWNER (no broker) with WhatsApp-to-owner */}
       <div>
-        <Head title="נכסים חדשים באזור" action={<Link href="/properties" className="text-brand-strong hover:text-brand text-xs font-bold">לכל הנכסים</Link>} />
+        <Head title="נכסים חדשים באזור" subtitle="נכסים ללא מתווך — פנייה ישירה לבעלים בוואטסאפ" action={<Link href="/external-listings" className="text-brand-strong hover:text-brand text-xs font-bold">לכל הנכסים</Link>} />
+        <PrivateOwnerListings items={p.privateListings} />
+      </div>
+
+      {/* 11b. Hot exclusive properties (preserved — renders its own heading) */}
+      <div>
         <HotPropertiesSection t={t} properties={p.hotProperties} />
       </div>
 
