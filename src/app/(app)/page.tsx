@@ -266,10 +266,6 @@ export default async function Home() {
     const conversations = wa.waitingConversations.slice(0, 4).map((c) => ({
       id: c.id, name: c.contactName, reason: c.reason, href: c.href, urgency: c.urgency,
     }));
-    // A live per-agent WhatsApp session counts as connected even before any
-    // conversation has arrived — otherwise a freshly-paired account looks
-    // disconnected on the home screen. Fall back to conversation activity for
-    // the Cloud-API path where no per-user session row exists.
     let sessionConnected = false;
     try {
       const ctx = await resolveSessionCtx();
