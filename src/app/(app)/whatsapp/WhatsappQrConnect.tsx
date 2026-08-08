@@ -56,7 +56,15 @@ export function WhatsappQrConnect({ initial }: { initial: WaConnectionSnapshot }
     pollRef.current = setInterval(poll, 3500);
   }, [poll]);
 
-  useEffect(() => () => stopPoll(), []);
+  // Poll from the moment the screen mounts whenever we're mid-pairing — the QR
+  // can arrive server-side (SSR) from a session already in progress, and after
+  // the user scans we must detect "connected" even if they never clicked the
+  // button. Only fully connected / unavailable states sit still.
+  useEffect(() => {
+    if (initial.state !== "connected" && initial.state !== "unavailable") startPolling();
+    return () => stopPoll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const beginConnect = async () => {
     setBusy(true);
