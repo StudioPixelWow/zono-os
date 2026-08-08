@@ -7,6 +7,7 @@
 // ============================================================================
 import { NextResponse, type NextRequest } from "next/server";
 import { authInstance, recordHeartbeat } from "@/lib/distribution/extension-service";
+import { getPendingScan } from "@/lib/distribution/group-import-service";
 
 export async function POST(req: NextRequest) {
   const inst = await authInstance(req.headers.get("x-zono-instance-id"), req.headers.get("x-zono-extension-secret"));
@@ -21,5 +22,8 @@ export async function POST(req: NextRequest) {
     facebookProfileName: body.facebookProfileName ?? null,
     facebookProfileId: body.facebookProfileId ?? null,
   });
-  return NextResponse.json({ ok: true, status });
+  // Pull-model directive: when the ZONO UI has asked for an import, tell the
+  // extension to scan the user's groups and POST them to /api/extension/facebook/groups.
+  const scanRequested = await getPendingScan(inst);
+  return NextResponse.json({ ok: true, status, scanRequested });
 }
