@@ -21,6 +21,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
 import { promoteForChannel, resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
+import { claimNextPost, transitionPost, buildContentHash, buildIdempotencyKey, type PublishState } from "./publishing-state-machine";
 
 type UserDb = Awaited<ReturnType<typeof createClient>>;
 
@@ -169,25 +170,15 @@ const GROUP_COMPLIANCE = [
   "הפרסום מתבצע ידנית על ידך בדפדפן שלך — ZONO לא מפרסם עבורך.",
 ];
 
-/** The next prepared GROUP/MARKETPLACE post for this org (no tokens, no PII). */
+/**
+ * The next prepared GROUP/MARKETPLACE post for this instance (no tokens, no PII).
+ * Uses the DB-level ATOMIC CLAIM (claim_next_distribution_post): org-scoped, agent
+ * (user) isolated, emergency-stop aware, FOR UPDATE SKIP LOCKED — so two instances /
+ * a double GET / concurrent workers can NEVER receive the same post.
+ */
 export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload | null> {
   const db = createServiceRoleClient();
-  const { data } = await db.from(DIST.posts as never)
-    .select("id,post_text,hashtags,image_url,external_destination_url,group_id,status,metadata,scheduled_at,creative_output_id,creative_version")
-    .eq("org_id", inst.orgId)
-    .in("status", ["scheduled", "queued", "draft"] as never)
-    .order("scheduled_at", { ascending: true })
-    .limit(20);
-  const rows = (data ?? []) as unknown as Array<{
-    id: string; post_text: string | null; hashtags: string[] | null; image_url: string | null;
-    external_destination_url: string | null; group_id: string | null; metadata: Record<string, unknown> | null;
-    creative_output_id: string | null; creative_version: number | null;
-  }>;
-  // Prefer browser-assisted destinations (groups/marketplace).
-  const pick = rows.find((r) => {
-    const kind = (r.metadata?.channel_kind as string) ?? (r.group_id ? "facebook_group" : "");
-    return kind === "facebook_group" || kind === "facebook_marketplace";
-  }) ?? rows.find((r) => !!r.group_id);
+  const pick = await claimNextPost(db as never, { orgId: inst.orgId, userId: inst.userId, instanceId: inst.id });
   if (!pick) return null;
 
   // Destination name/url: prefer metadata (Phase 21 manual group destinations),
@@ -214,8 +205,16 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
       creativeVersion: pick.creative_version ?? 1, emergencyActive, db: db as never,
     });
     if (!handoff.ok || !handoff.signedUrl) {
+      // Honest preflight block. The post was atomically claimed (dispatching); release
+      // it back to queued so it isn't stuck under lease and can retry once the
+      // derivative is available. Not counted as a publish failure.
       console.warn(`${LOG} getNextPost blocked for post ${pick.id}: ${handoff.reason ?? "no_derivative"}`);
-      return null; // honest preflight block — no image, post stays queued, not "ready"
+      await transitionPost(db as never, {
+        postId: pick.id, orgId: inst.orgId, from: "dispatching", to: "queued",
+        kind: "handoff_block", actorId: inst.userId, reason: handoff.reason ?? "no_derivative",
+        patch: { status: "scheduled", lease_expires_at: null, locked_by: null },
+      });
+      return null;
     }
     imageUrls = [handoff.signedUrl];
   } else if (pick.image_url) {
@@ -250,36 +249,62 @@ export interface PublishReport {
   errorMessage?: string | null;
 }
 
-/** Apply the extension's human-confirmed result to the distribution post. No fake success. */
+/**
+ * Apply the extension's human-confirmed result via the canonical state machine.
+ * No fake success (published ONLY on explicit human confirmation). An ambiguous
+ * result (needs_manual_action) moves to awaiting_reconciliation and is NEVER
+ * resubmitted — the lost-ack guarantee. Failures re-queue with a retry window, or
+ * dead-letter once max_attempts is reached.
+ */
 export async function recordPublishResult(inst: AuthedInstance, report: PublishReport): Promise<boolean> {
   const db = createServiceRoleClient();
   const now = new Date().toISOString();
+  const { data: cur } = await db.from(DIST.posts as never)
+    .select("publish_state,attempt_count,max_attempts,dispatched_at")
+    .eq("id", report.postId).eq("org_id", inst.orgId).maybeSingle();
+  const c = cur as { publish_state: string | null; attempt_count: number | null; max_attempts: number | null; dispatched_at: string | null } | null;
+  if (!c) { console.error(`${LOG} recordPublishResult: post not found ${report.postId}`); return false; }
+  const from = (c.publish_state ?? "dispatching") as PublishState;
+  const dur = c.dispatched_at ? Date.now() - new Date(c.dispatched_at).getTime() : null;
+
+  let to: PublishState;
   let patch: Record<string, unknown>;
   switch (report.result) {
     case "user_confirmed_published":
-      // published ONLY on human confirmation — stamps who + when.
+      to = "published";
       patch = { status: "published", published_at: now, published_manually_at: now, published_by: inst.userId,
-        external_post_url: report.externalPostUrl ?? null, failure_reason: null };
+        external_post_url: report.externalPostUrl ?? null, confirmation_source: "user", failure_reason: null, duration_ms: dur };
       break;
     case "user_cancelled":
-      patch = { status: "cancelled", skipped_reason: "user_cancelled" };
-      break;
     case "user_skipped":
-      patch = { status: "cancelled", skipped_reason: "user_skipped" };
+      to = "cancelled";
+      patch = { status: "cancelled", skipped_reason: report.result };
       break;
-    case "failed":
-      patch = { status: "failed", failure_reason: (report.errorMessage ?? "extension reported failure").slice(0, 500) };
+    case "failed": {
+      const attempts = c.attempt_count ?? 0;
+      const max = c.max_attempts ?? 5;
+      const deadLetter = attempts >= max;
+      to = deadLetter ? "dead_letter" : "failed";
+      patch = { status: "failed", failure_reason: (report.errorMessage ?? "extension reported failure").slice(0, 500),
+        failure_code: "extension_failed",
+        next_retry_at: deadLetter ? null : new Date(Date.now() + 15 * 60 * 1000).toISOString() };
       break;
+    }
     case "needs_manual_action":
-      patch = { status: "queued", failure_reason: "needs_manual_action" };
+      // Ambiguous — Facebook may already hold the post. NEVER resubmit blindly.
+      to = "awaiting_reconciliation";
+      patch = { status: "failed", failure_reason: "needs_manual_action — awaiting reconciliation" };
       break;
     default:
       return false;
   }
-  const { error } = await db.from(DIST.posts as never)
-    .update(patch as never).eq("id", report.postId).eq("org_id", inst.orgId);
-  if (error) { console.error(`${LOG} recordPublishResult failed: ${error.message}`); return false; }
-  console.log(`${LOG} org_id=${inst.orgId} post=${report.postId} result=${report.result}`);
+
+  const res = await transitionPost(db as never, {
+    postId: report.postId, orgId: inst.orgId, from, to,
+    kind: "publish_result", actorId: inst.userId, reason: report.result, patch,
+  });
+  if (!res.ok) { console.error(`${LOG} recordPublishResult transition failed: ${res.error}`); return false; }
+  console.log(`${LOG} org_id=${inst.orgId} post=${report.postId} ${from}->${to}`);
   return true;
 }
 
@@ -346,7 +371,7 @@ export interface GroupTaskInput { destinationIds: string[]; text: string; imageU
 }
 
 /** Create one prepared distribution_post per selected group. No server publish. */
-export async function createGroupPublishTasks(input: GroupTaskInput): Promise<{ created: number; blocked?: string }> {
+export async function createGroupPublishTasks(input: GroupTaskInput): Promise<{ created: number; blocked?: string; deduped?: number }> {
   const s = await userScope(); if (!s) return { created: 0 };
   const dests = await listGroupDestinations();
   const chosen = dests.filter((d) => input.destinationIds.includes(d.id));
@@ -365,22 +390,38 @@ export async function createGroupPublishTasks(input: GroupTaskInput): Promise<{ 
   }
 
   const now = new Date().toISOString();
-  const rows = chosen.map((d) => ({
-    org_id: s.orgId, status: "scheduled", post_text: input.text, hashtags: input.hashtags ?? [],
-    // Linked tasks resolve the derivative at hand-off; image_url stays null (never a master URL).
-    image_url: input.outputId ? null : (input.imageUrl ?? null),
-    creative_output_id: input.outputId ?? null, creative_version: input.outputId ? (creativeVersion ?? 1) : null,
-    external_destination_url: d.url,
-    provider: "facebook", provider_status: "manual", manual_publish_required: true,
-    metadata: { channel_kind: d.destinationType, destination_id: d.id, destination_name: d.name },
-    created_by: s.userId, scheduled_at: now,
-  }));
-  const { error } = await s.db.from(DIST.posts as never).insert(rows as never);
-  if (error) { console.error(`${LOG} createGroupPublishTasks failed: ${error.message}`); return { created: 0 }; }
-  // Stamp last_used_at on the chosen destinations (best-effort).
-  await s.db.from(DEST as never).update({ last_used_at: now } as never)
-    .eq("org_id", s.orgId).in("id", chosen.map((d) => d.id) as never);
-  return { created: rows.length };
+  const scheduleKey = now.slice(0, 13); // hour bucket
+  const imageForHash = input.outputId ? String(input.outputId) : (input.imageUrl ?? null);
+  let created = 0, deduped = 0;
+  for (const d of chosen) {
+    // Deterministic identity: same content to the same destination within the hour
+    // collides on uq_dposts_org_idem → DB-enforced no double post.
+    const contentHash = buildContentHash({ text: input.text, imageUrl: imageForHash, destinationId: d.id });
+    const idempotencyKey = buildIdempotencyKey({ orgId: s.orgId, destinationId: d.id, contentHash, creativeVersion: input.outputId ? (creativeVersion ?? 1) : null, scheduleKey });
+    const { error } = await s.db.from(DIST.posts as never).insert({
+      org_id: s.orgId, status: "scheduled", publish_state: "queued",
+      post_text: input.text, hashtags: input.hashtags ?? [],
+      // Linked tasks resolve the derivative at hand-off; image_url stays null (never a master URL).
+      image_url: input.outputId ? null : (input.imageUrl ?? null),
+      creative_output_id: input.outputId ?? null, creative_version: input.outputId ? (creativeVersion ?? 1) : null,
+      external_destination_url: d.url,
+      provider: "facebook", provider_status: "manual", manual_publish_required: true,
+      metadata: { channel_kind: d.destinationType, destination_id: d.id, destination_name: d.name },
+      created_by: s.userId, assigned_user_id: s.userId, scheduled_at: now,
+      content_hash: contentHash, idempotency_key: idempotencyKey,
+    } as never);
+    if (error) {
+      if (/duplicate key|23505/i.test(error.message)) { deduped++; continue; } // already dispatched — no double post
+      console.error(`${LOG} createGroupPublishTasks insert failed: ${error.message}`);
+      continue;
+    }
+    created++;
+  }
+  if (created > 0) {
+    await s.db.from(DEST as never).update({ last_used_at: now } as never)
+      .eq("org_id", s.orgId).in("id", chosen.map((d) => d.id) as never);
+  }
+  return { created, deduped };
 }
 
 // ── Per-group task status for the ZONO UI (Part E) ────────────────────────────
