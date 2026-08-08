@@ -13,7 +13,7 @@
 // effects — it records only a minimal operational event (no content).
 // ============================================================================
 import { NextResponse, type NextRequest } from "next/server";
-import { ingestBridgeMessage, ingestBridgeStatus } from "@/lib/whatsapp/provider/ingest";
+import { ingestBridgeMessage, ingestBridgeStatus, ingestBridgeQr } from "@/lib/whatsapp/provider/ingest";
 import { normalizePersonalWebhook } from "@/lib/whatsapp/provider/personal";
 import { personalWebhookToken } from "@/lib/whatsapp/provider/personal/webhook-url";
 import { isPersonalWhatsappEnabled } from "@/lib/whatsapp/provider/personal-flag";
@@ -47,6 +47,11 @@ export async function POST(req: NextRequest) {
       const r = await ingestBridgeMessage(norm.ctx, norm.message);
       recordInbound(r.ok ? "message" : `rejected_${r.reason ?? "unknown"}`, { org: norm.ctx.orgId, agent: norm.ctx.userId });
       return NextResponse.json({ ok: r.ok, reason: r.reason }, { status: 200 });
+    }
+    if (norm.kind === "qr") {
+      const r = await ingestBridgeQr(norm.ctx, norm.qr);
+      recordInbound(r.ok ? "qr" : "qr_no_session", { org: norm.ctx.orgId, agent: norm.ctx.userId });
+      return NextResponse.json({ ok: r.ok }, { status: 200 });
     }
     if (norm.kind === "status") {
       await ingestBridgeStatus(norm.ctx, norm.state, { displayName: null, phone: null, error: null });

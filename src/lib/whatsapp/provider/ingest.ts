@@ -13,7 +13,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isServiceRoleConfigured } from "@/lib/supabase/env";
-import type { WaConnState, WaInboundMessage, WaSessionCtx } from "./types";
+import type { WaConnState, WaInboundMessage, WaQr, WaSessionCtx } from "./types";
 
 const phoneHash = (phone: string): string =>
   crypto.createHash("sha256").update(phone.replace(/[^\d]/g, "")).digest("hex").slice(0, 40);
@@ -67,6 +67,25 @@ export async function ingestBridgeMessage(ctx: WaSessionCtx, msg: WaInboundMessa
     created_at: msg.timestamp || now,
   } as never);
   return { ok: true, conversationId: convId };
+}
+
+/** Persist a fresh QR (pushed by the bridge's QRCODE_UPDATED event) onto the
+ *  broker's own session snapshot so the connect screen can render it. Scoped
+ *  strictly to the (org,user) that owns the session; never global/shared. */
+export async function ingestBridgeQr(ctx: WaSessionCtx, qr: WaQr): Promise<{ ok: boolean }> {
+  if (!isServiceRoleConfigured()) return { ok: false };
+  const db = createServiceRoleClient();
+  const row = await db.from("whatsapp_accounts" as never).select("id,metadata")
+    .eq("organization_id", ctx.orgId).eq("provider", "whatsapp_web").eq("user_id", ctx.userId).maybeSingle();
+  const r = row.data as { id: string; metadata: Record<string, unknown> | null } | null;
+  if (!r) return { ok: false };
+  const prev = ((r.metadata as { wa_session?: Record<string, unknown> } | null)?.wa_session ?? {});
+  const wa_session = { ...prev, state: "waiting_qr" as WaConnState, qr, error: null };
+  await db.from("whatsapp_accounts" as never).update({
+    connection_status: "sandbox",
+    metadata: { ...(r.metadata ?? {}), wa_session },
+  } as never).eq("id", r.id);
+  return { ok: true };
 }
 
 /** Update the stored per-user session snapshot from a bridge connection event. */
