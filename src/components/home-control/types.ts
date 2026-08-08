@@ -102,6 +102,52 @@ export interface HomeNextDeal {
   href: string;
 }
 
+/** WhatsApp — a conversation that needs the agent's attention. */
+export interface HomeWaConversation {
+  id: string;
+  name: string;
+  reason: string;           // recommended next action (from the inbox engine)
+  href: string;             // /whatsapp/inbox?c=…
+  urgency: number;          // 0..100
+}
+/** WhatsApp summary + the conversations worth acting on now. */
+export interface HomeWhatsapp {
+  connected: boolean;       // any real conversation data exists
+  waiting: number;
+  urgent: number;
+  today: number;
+  conversations: HomeWaConversation[];
+}
+
+/** Marketing — one thing worth promoting/acting on now. */
+export interface HomeMarketingItem {
+  id: string;
+  title: string;
+  detail: string;           // why / what to do
+  action: string;           // CTA label
+  href: string;
+  score: number;            // impact / marketing score 0..100
+}
+export interface HomeMarketing {
+  hasData: boolean;
+  items: HomeMarketingItem[];
+}
+
+/** A dormant lead worth bringing back into play. */
+export interface HomeDormantLead {
+  id: string;
+  name: string;
+  sub: string;              // e.g. "אין קשר 41 ימים"
+  href: string;
+}
+
+/** "ZONO worked for you" — what the system did recently (real activity counts). */
+export interface HomeZonoWork {
+  windowLabel: string;      // e.g. "ב-24 השעות האחרונות"
+  items: { id: string; icon: string; label: string; tone: "brand" | "success" | "warning" }[];
+  total: number;
+}
+
 /** A private-owner (no-broker) listing card with a direct WhatsApp-to-owner CTA. */
 export interface HomePrivateListing {
   id: string;

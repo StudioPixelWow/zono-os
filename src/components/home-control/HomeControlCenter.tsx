@@ -24,6 +24,7 @@ import type { HomeTaskItem } from "@/lib/home/home-service";
 import type {
   HomeKpi, HomeRec, HomeActivityItem, HomeTerritory, HomePerf,
   HomeHero, HomeNowItem, HomePipeline, HomeFollowUpItem, HomeAcquisition, HomeNextDeal, HomePrivateListing,
+  HomeWhatsapp, HomeMarketing, HomeDormantLead, HomeZonoWork,
 } from "./types";
 
 const ils = (n: number) => `₪${Math.round(n).toLocaleString("he-IL")}`;
@@ -333,7 +334,7 @@ function FollowUpRadar({ items }: { items: HomeFollowUpItem[] }) {
   return (
     <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]" dir="rtl">
       <Head
-        title="רדאר Follow-up"
+        title="מעקבים שלא כדאי לצנן"
         subtitle="אנשים שלא כדאי לתת להם להתקרר"
         action={items.length > 0 ? <Link href="/buyers" className="text-brand-strong hover:text-brand text-xs font-bold">טפל בכל המעקבים</Link> : undefined}
       />
@@ -410,7 +411,7 @@ function AcquisitionRadar({ acq }: { acq: HomeAcquisition }) {
 function ActivityFeed({ items }: { items: HomeActivityItem[] }) {
   return (
     <div className="bg-card border-line flex h-full flex-col gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
-      <Head title="מה חדש" subtitle="פעילות אחרונה במערכת" action={<Link href="/action-center" className="text-brand-strong hover:text-brand text-xs font-bold">לכל הפעילות</Link>} />
+      <Head title="מה חדש" subtitle="מה קרה בעסק שלך לאחרונה" action={<Link href="/action-center" className="text-brand-strong hover:text-brand text-xs font-bold">לכל הפעילות</Link>} />
       {items.length === 0 ? (
         <div className="text-muted flex flex-1 flex-col items-center justify-center gap-1 py-6 text-center">
           <Icon name="Bell" size={24} className="text-muted/70" />
@@ -469,7 +470,7 @@ function Updates({ recTotal, toursThisWeek, newLeads }: { recTotal: number; tour
   ];
   return (
     <div className="bg-card border-line flex h-full flex-col gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]" dir="rtl">
-      <Head title="הודעות ועדכונים" subtitle="מה דורש את תשומת ליבך" />
+      <Head title="דברים שכדאי לדעת" subtitle="עדכונים שדורשים את תשומת ליבך" />
       <ul className="flex flex-col gap-2">
         {rows.map((r) => (
           <li key={r.label}>
@@ -554,6 +555,134 @@ function QuickActions() {
   );
 }
 
+// ── WhatsApp — the conversations waiting for you ─────────────────────────────
+function WhatsappWaiting({ wa }: { wa: HomeWhatsapp }) {
+  return (
+    <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
+      <Head
+        title="השיחות שמחכות לך"
+        subtitle="ZONO זיהה את השיחות שכדאי לקדם עכשיו"
+        action={wa.connected ? <Link href="/whatsapp" className="text-brand-strong hover:text-brand text-xs font-bold">לכל השיחות</Link> : undefined}
+      />
+      {wa.conversations.length > 0 && (
+        <div className="mt-3 mb-2 flex flex-wrap gap-2">
+          {wa.waiting > 0 && <span className="bg-warning-soft text-warning rounded-full px-3 py-1 text-[11px] font-bold">{wa.waiting} ממתינות לתגובה</span>}
+          {wa.urgent > 0 && <span className="bg-danger-soft text-danger rounded-full px-3 py-1 text-[11px] font-bold">{wa.urgent} דחופות</span>}
+          {wa.today > 0 && <span className="bg-brand-soft text-brand-strong rounded-full px-3 py-1 text-[11px] font-bold">{wa.today} היום</span>}
+        </div>
+      )}
+      {wa.conversations.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-8 text-center">
+          <span className="bg-[#25D366]/10 text-[#128C7E] grid h-12 w-12 place-items-center rounded-2xl"><Icon name="MessageCircle" size={22} /></span>
+          <p className="text-ink text-sm font-bold">{wa.connected ? "אין שיחות שממתינות לתגובה — הכול מטופל" : "חברו את WhatsApp כדי לזהות שיחות שדורשות טיפול"}</p>
+          <Link href="/whatsapp" className="btn-zono-primary mt-1 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-bold">
+            <Icon name="MessageCircle" size={14} /> {wa.connected ? "פתח את WhatsApp" : "חיבור WhatsApp"}
+          </Link>
+        </div>
+      ) : (
+        <ul className="mt-1 flex flex-col gap-2">
+          {wa.conversations.map((c) => (
+            <li key={c.id}>
+              <Link href={c.href} className="border-line hover:bg-surface/60 flex items-center gap-3 rounded-xl border px-3 py-2.5 transition">
+                <span className="bg-[#25D366]/12 text-[#128C7E] grid h-9 w-9 shrink-0 place-items-center rounded-xl"><Icon name="MessageCircle" size={16} /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-ink truncate text-sm font-bold">{c.name}</p>
+                  {c.reason && <p className="text-muted truncate text-[12px]">{c.reason}</p>}
+                </div>
+                <span className="text-brand-strong shrink-0 inline-flex items-center gap-1 text-[13px] font-black">פתח שיחה <Icon name="ArrowLeft" size={13} /></span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ── ZONO worked for you — what happened behind the scenes ────────────────────
+function ZonoWork({ work }: { work: HomeZonoWork }) {
+  if (work.items.length === 0) return null; // honest: nothing to show yet → hide the band
+  return (
+    <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
+      <Head title="ZONO עובד בשבילך" subtitle={`מה קרה מאחורי הקלעים ${work.windowLabel}`} />
+      <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+        {work.items.map((it) => (
+          <div key={it.id} className="bg-surface flex items-center gap-2.5 rounded-2xl p-3">
+            <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", TONE_SOFT[it.tone])}><Icon name={it.icon} size={16} /></span>
+            <span className="text-ink text-[12px] font-bold leading-tight">{it.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Lead rescue — dormant clients worth bringing back ────────────────────────
+function LeadRescue({ items }: { items: HomeDormantLead[] }) {
+  if (items.length === 0) return null; // nothing dormant → don't add noise
+  return (
+    <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
+      <Head
+        title="לידים שכדאי להחזיר לתמונה"
+        subtitle="לקוחות מהעבר שעכשיו יש סיבה טובה לחזור אליהם"
+        action={<Link href="/buyers" className="text-brand-strong hover:text-brand text-xs font-bold">לכל הלקוחות</Link>}
+      />
+      <ul className="mt-2 flex flex-col gap-2">
+        {items.map((it) => (
+          <li key={it.id}>
+            <Link href={it.href} className="border-line hover:bg-surface/60 flex items-center gap-3 rounded-xl border px-3 py-2.5 transition">
+              <span className="bg-warning-soft text-warning grid h-9 w-9 shrink-0 place-items-center rounded-xl"><Icon name="Snowflake" size={16} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-ink truncate text-sm font-bold">{it.name}</p>
+                <p className="text-muted truncate text-[12px]">{it.sub}</p>
+              </div>
+              <span className="text-brand-strong shrink-0 inline-flex items-center gap-1 text-[13px] font-black">חזור ללקוח <Icon name="ArrowLeft" size={13} /></span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ── Marketing focus — what's worth promoting now ─────────────────────────────
+function MarketingFocus({ mk }: { mk: HomeMarketing }) {
+  return (
+    <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
+      <Head
+        title="השיווק שלך"
+        subtitle="ZONO מזהה מה עובד, מה נחלש ומה כדאי לקדם עכשיו"
+        action={mk.hasData ? <Link href="/marketing" className="text-brand-strong hover:text-brand text-xs font-bold">למרכז השיווק</Link> : undefined}
+      />
+      {!mk.hasData ? (
+        <div className="flex flex-col items-center gap-2 py-8 text-center">
+          <span className="bg-brand-soft text-brand grid h-12 w-12 place-items-center rounded-2xl"><Icon name="Megaphone" size={22} /></span>
+          <p className="text-ink text-sm font-bold">עדיין אין נתוני שיווק</p>
+          <p className="text-muted max-w-sm text-xs">הפעילו ניתוח שיווק או חברו את Meta כדי ש-ZONO ימליץ אילו נכסים כדאי לקדם עכשיו ואיפה</p>
+          <Link href="/marketing" className="btn-zono-primary mt-1 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-bold">
+            <Icon name="Megaphone" size={14} /> פתח את מרכז השיווק
+          </Link>
+        </div>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-2">
+          {mk.items.map((it) => (
+            <li key={it.id}>
+              <Link href={it.href} className="border-line hover:bg-surface/60 flex items-start gap-3 rounded-xl border px-3 py-2.5 transition">
+                <span className="bg-brand-soft text-brand-strong grid h-9 w-9 shrink-0 place-items-center rounded-xl"><Icon name="Megaphone" size={16} /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-ink truncate text-sm font-bold">{it.title}</p>
+                  {it.detail && <p className="text-muted line-clamp-2 text-[12px]">{it.detail}</p>}
+                </div>
+                <span className="text-brand-strong shrink-0 inline-flex items-center gap-1 text-[13px] font-black">{it.action} <Icon name="ArrowLeft" size={13} /></span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export interface HomeControlCenterProps {
   dict: DashboardDict;
   agentName: string;
@@ -571,6 +700,10 @@ export interface HomeControlCenterProps {
   featuredProperty: PropertyCard | null;
   hotProperties: PropertyCard[];
   privateListings: HomePrivateListing[];
+  whatsapp: HomeWhatsapp;
+  marketing: HomeMarketing;
+  dormantLeads: HomeDormantLead[];
+  zonoWork: HomeZonoWork;
   territory: HomeTerritory;
   perf: HomePerf;
   summary: { recTotal: number; toursThisWeek: number; newLeads: number };
@@ -589,17 +722,26 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
       {/* 3. AI Coach (dark) */}
       <AiCoach recs={p.recommendations} />
 
+      {/* 3b. What ZONO did for you behind the scenes (hidden when nothing recent) */}
+      <ZonoWork work={p.zonoWork} />
+
       {/* 4. NOW + Today's tasks */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <NowSection items={p.now} />
         <TodayTasksCard tasks={p.tasks} />
       </div>
 
+      {/* 4b. WhatsApp — the conversations waiting for you */}
+      <WhatsappWaiting wa={p.whatsapp} />
+
       {/* 5. Deal pipeline — money first */}
       <DealPipeline pipeline={p.pipeline} />
 
       {/* 6. Client × Property matches */}
       <ClientMatches recs={p.buyerMatches} />
+
+      {/* 6b. Lead rescue — dormant clients worth bringing back (hidden when none) */}
+      <LeadRescue items={p.dormantLeads} />
 
       {/* 7. The Next Deal — killer card (only when a real deal exists) */}
       {p.nextDeal && <NextDealCard deal={p.nextDeal} />}
@@ -609,6 +751,9 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
         <FollowUpRadar items={p.followUps} />
         <AcquisitionRadar acq={p.acquisition} />
       </div>
+
+      {/* 8b. Marketing — what's worth promoting now */}
+      <MarketingFocus mk={p.marketing} />
 
       {/* 9. Recommended property (50%) + Quick actions (50%) — same row */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -632,7 +777,7 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
 
       {/* 11. New properties in area — PRIVATE-OWNER (no broker) with WhatsApp-to-owner */}
       <div>
-        <Head title="נכסים חדשים באזור" subtitle="נכסים ללא מתווך — פנייה ישירה לבעלים בוואטסאפ" action={<Link href="/external-listings" className="text-brand-strong hover:text-brand text-xs font-bold">לכל הנכסים</Link>} />
+        <Head title="נכסים חדשים באזור שלך" subtitle="נכסים ללא מתווך — פנייה ישירה לבעלים בוואטסאפ" action={<Link href="/external-listings" className="text-brand-strong hover:text-brand text-xs font-bold">לכל הנכסים</Link>} />
         <PrivateOwnerListings items={p.privateListings} />
       </div>
 
@@ -647,7 +792,7 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
         <Updates recTotal={p.summary.recTotal} toursThisWeek={p.summary.toursThisWeek} newLeads={p.summary.newLeads} />
       </div>
       <div>
-        <Head title="ביצועים חודשיים" />
+        <Head title="הביצועים שלך" subtitle="התמונה החודשית שלך במבט מהיר" />
         <MonthlyPerformance perf={p.perf} />
       </div>
     </div>

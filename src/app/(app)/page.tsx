@@ -27,10 +27,13 @@ import { activityEventRepository, type ActivityEventRow } from "@/lib/activity/r
 import { getHomeKpiExtras, listTodayTasks, type HomeTaskItem } from "@/lib/home/home-service";
 import { listBuyerBoard } from "@/lib/buyers/repository";
 import { getAcquisitionCommandCenter } from "@/lib/acquisition/service";
+import { getBrokerWhatsapp } from "@/lib/whatsapp/inbox-service";
+import { getMarketingBoard } from "@/lib/marketing/service";
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
 import type {
   HomeActivityItem, HomeRec, HomeHero, HomeNowItem, HomePipeline,
   HomeFollowUpItem, HomeAcquisition, HomeNextDeal, HomePrivateListing,
+  HomeWhatsapp, HomeMarketing, HomeMarketingItem, HomeDormantLead, HomeZonoWork,
 } from "@/components/home-control/types";
 
 // Owner phone → wa.me international (IL): 05X… → 9725X…; already-972 kept.
@@ -80,6 +83,33 @@ function hrefForEntity(entityType: string | null, entityId: string | null): stri
     default: return null;
   }
 }
+// "ZONO worked for you" — real counts of what happened in the last 24h, grouped.
+function buildZonoWork(rows: ActivityEventRow[]): HomeZonoWork {
+  const DAY = 86_400_000;
+  const recent = rows.filter((r) => Date.now() - new Date(r.occurred_at).getTime() <= DAY);
+  const buckets: Record<string, { icon: string; label: string; tone: "brand" | "success" | "warning"; n: number }> = {
+    match: { icon: "Sparkles", label: "התאמות חדשות נמצאו", tone: "brand", n: 0 },
+    lead: { icon: "Users", label: "לידים ולקוחות עודכנו", tone: "success", n: 0 },
+    property: { icon: "Building", label: "נכסים חדשים זוהו באזור שלך", tone: "brand", n: 0 },
+    task: { icon: "ListChecks", label: "מעקבים ומשימות תוזמנו", tone: "warning", n: 0 },
+    deal: { icon: "Handshake", label: "עסקאות התקדמו", tone: "success", n: 0 },
+  };
+  const keyFor = (r: ActivityEventRow): string | null => {
+    const e = (r.entity_type ?? "").toLowerCase();
+    if (e === "match") return "match";
+    if (e === "buyer" || e === "seller" || e === "lead" || e === "contact") return "lead";
+    if (e === "property") return "property";
+    if (e === "task" || e === "meeting" || e === "viewing") return "task";
+    if (e === "deal" || e === "offer") return "deal";
+    return null;
+  };
+  for (const r of recent) { const k = keyFor(r); if (k) buckets[k].n++; }
+  const items = Object.entries(buckets)
+    .filter(([, v]) => v.n > 0)
+    .map(([id, v]) => ({ id, icon: v.icon, label: `${v.n} ${v.label}`, tone: v.tone }));
+  return { windowLabel: "ב-24 השעות האחרונות", items, total: recent.length };
+}
+
 function mapActivity(rows: ActivityEventRow[]): HomeActivityItem[] {
   return rows.map((r) => {
     const key = (r.entity_type ?? "").toLowerCase();
@@ -183,14 +213,32 @@ export default async function Home() {
     buyerMatches = queue.items.filter((r) => r.area === "buyer").slice(0, 6).map(toRec);
   } catch (e) { console.error("[home] recommendations failed:", e); }
 
+  // Recent activity — reused for the feed AND the "ZONO worked for you" summary.
   let activity: HomeActivityItem[] = [];
-  try { activity = mapActivity(await activityEventRepository.listRecentForOrg(8)); } catch (e) { console.error("[home] activity failed:", e); }
+  let zonoWork: HomeZonoWork = { windowLabel: "ב-24 השעות האחרונות", items: [], total: 0 };
+  try {
+    const rows = await activityEventRepository.listRecentForOrg(60);
+    activity = mapActivity(rows.slice(0, 8));
+    zonoWork = buildZonoWork(rows);
+  } catch (e) { console.error("[home] activity failed:", e); }
+
+  // Dormant / lead-rescue — buyers gone cold (≥30d) worth bringing back.
+  let dormantLeads: HomeDormantLead[] = [];
 
   // Follow-up radar — real hot/warm buyers not contacted in ≥7 days.
   let followUps: HomeFollowUpItem[] = [];
   try {
     const board = await listBuyerBoard();
     const DAY = 86_400_000;
+    dormantLeads = board.dormant.slice(0, 5).map((b) => {
+      const days = b.last_contacted_at ? Math.floor((Date.now() - new Date(b.last_contacted_at).getTime()) / DAY) : null;
+      return {
+        id: b.id,
+        name: b.full_name || "לקוח",
+        sub: days === null ? "טרם נוצר קשר" : `אין קשר ${days} ימים`,
+        href: `/buyers/${b.id}`,
+      };
+    });
     followUps = board.followUp.slice(0, 5).map((b) => {
       const hot = b.temperature === "hot";
       const days = b.last_contacted_at ? Math.floor((Date.now() - new Date(b.last_contacted_at).getTime()) / DAY) : null;
@@ -209,6 +257,46 @@ export default async function Home() {
   // Property-acquisition radar — real inventory-acquisition command-center counts.
   let acquisition: HomeAcquisition = { total: 0, highPriority: 0, privateSellers: 0, buyerDemand: 0, doubleSide: 0, contacted: 0 };
   try { acquisition = await getAcquisitionCommandCenter(); } catch (e) { console.error("[home] acquisition failed:", e); }
+
+  // WhatsApp — the conversations waiting for the agent (real inbox engine).
+  let whatsapp: HomeWhatsapp = { connected: false, waiting: 0, urgent: 0, today: 0, conversations: [] };
+  try {
+    const wa = await getBrokerWhatsapp(profile?.id ?? null);
+    const conversations = wa.waitingConversations.slice(0, 4).map((c) => ({
+      id: c.id, name: c.contactName, reason: c.reason, href: c.href, urgency: c.urgency,
+    }));
+    whatsapp = {
+      connected: wa.waiting + wa.urgent + wa.today + wa.unread > 0 || conversations.length > 0,
+      waiting: wa.waiting, urgent: wa.urgent, today: wa.today, conversations,
+    };
+  } catch (e) { console.error("[home] whatsapp failed:", e); }
+
+  // Marketing — what's worth promoting now (opportunity signals + property DNA).
+  let marketing: HomeMarketing = { hasData: false, items: [] };
+  try {
+    const mb = await getMarketingBoard();
+    const items: HomeMarketingItem[] = [];
+    for (const o of mb.opportunities.slice(0, 5)) {
+      const eid = (o.entity_id as string | null) ?? null;
+      const href = o.entity_type === "property" && eid ? `/properties/${eid}` : "/marketing";
+      items.push({
+        id: o.id, title: (o.title as string) ?? "הזדמנות שיווק",
+        detail: (o.description as string) ?? "", action: (o.recommended_action as string) ?? "פתח שיווק",
+        href, score: Math.round((o.impact_score as number) ?? 0),
+      });
+    }
+    // If no opportunity signals, fall back to the top promote-worthy properties.
+    if (items.length === 0) {
+      for (const d of mb.propertyDna.filter((p) => p.score >= 55).slice(0, 4)) {
+        items.push({
+          id: d.propertyId, title: d.title || "נכס לקידום",
+          detail: d.summary ?? "נכס עם ציון שיווק גבוה — כדאי לקדם", action: "קדם את הנכס",
+          href: `/properties/${d.propertyId}`, score: Math.round(d.score),
+        });
+      }
+    }
+    marketing = { hasData: items.length > 0, items: items.slice(0, 4) };
+  } catch (e) { console.error("[home] marketing failed:", e); }
 
   // Reuse the dashboard pipeline for the featured + hot property cards.
   const dict = getDashboardDict("he");
@@ -295,6 +383,10 @@ export default async function Home() {
       featuredProperty={data.featuredProperty}
       hotProperties={data.hotProperties}
       privateListings={privateListings}
+      whatsapp={whatsapp}
+      marketing={marketing}
+      dormantLeads={dormantLeads}
+      zonoWork={zonoWork}
       territory={{ areaLabel: cityName ?? null, properties: properties.length, buyers: buyersCount, deals: activeDealsCount }}
       perf={perf}
       summary={{ recTotal, toursThisWeek: kpiExtras.toursThisWeek, newLeads: newLeadsCount }}
