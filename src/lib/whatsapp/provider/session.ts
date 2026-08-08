@@ -8,11 +8,26 @@
 // bridge worker, never in ZONO's DB or client.
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
 import type { WaConnState, WaConnectionSnapshot, WaProviderKind, WaQr, WaSessionCtx } from "./types";
 
 const PROVIDER = "whatsapp_web";
+
+/**
+ * DB client for the per-user session store. The snapshot (state + QR) is
+ * per-user data the bridge webhook writes via the SERVICE ROLE; if reads here
+ * used the RLS cookie client they could disagree with the writer (RLS on this
+ * table proved unreliable in the Server-Component render path, hiding a valid
+ * QR). So every session read/write goes through the service role, scoped
+ * EXPLICITLY by (organization_id, user_id, provider) — the same isolation RLS
+ * would give, and identical to how the webhook ingest writes. Falls back to the
+ * RLS cookie client only when the service role isn't configured.
+ */
+async function sessionDb() {
+  return isServiceRoleConfigured() ? createServiceRoleClient() : await createClient();
+}
 
 /** Resolve the caller's (org, user) session scope from the authenticated session. */
 export async function resolveSessionCtx(): Promise<WaSessionCtx | null> {
@@ -54,7 +69,7 @@ function toSnapshot(kind: WaProviderKind, row: AccountRow | null): WaConnectionS
 
 /** Read the current broker's stored session row (their own, never another's). */
 export async function readSessionRow(ctx: WaSessionCtx): Promise<AccountRow | null> {
-  const db = await createClient();
+  const db = await sessionDb();
   const { data } = await db.from("whatsapp_accounts" as never)
     .select("id,connection_status,session_ref,last_connected_at,metadata")
     .eq("organization_id", ctx.orgId).eq("provider", PROVIDER).eq("user_id", ctx.userId).maybeSingle();
@@ -68,7 +83,7 @@ export async function readSessionSnapshot(ctx: WaSessionCtx, kind: WaProviderKin
 
 /** Persist a session snapshot on the broker's own row (create if missing). */
 export async function writeSession(ctx: WaSessionCtx, kind: WaProviderKind, patch: Partial<StoredSession>): Promise<void> {
-  const db = await createClient();
+  const db = await sessionDb();
   const row = await readSessionRow(ctx);
   const prev = ((row?.metadata as { wa_session?: StoredSession } | undefined)?.wa_session ?? {}) as Partial<StoredSession>;
   const merged: StoredSession = {
@@ -94,7 +109,7 @@ export async function writeSession(ctx: WaSessionCtx, kind: WaProviderKind, patc
 
 /** Clear the broker's session (disconnect / delete). */
 export async function clearSession(ctx: WaSessionCtx, hard: boolean): Promise<void> {
-  const db = await createClient();
+  const db = await sessionDb();
   const row = await readSessionRow(ctx);
   if (!row) return;
   if (hard) {
