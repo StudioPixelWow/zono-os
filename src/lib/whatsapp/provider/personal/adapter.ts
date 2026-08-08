@@ -36,9 +36,17 @@ function disabledSnapshot(): WaConnectionSnapshot {
   return { providerKind: KIND, state: "unavailable", qr: null, displayName: null, phone: null, lastConnectedAt: null, error: PERSONAL_DISABLED_NOTICE };
 }
 
-/** Persist a canonical connection reading, then return the stored client-safe snapshot. */
+/** Persist a canonical connection reading, then return the stored client-safe snapshot.
+ *  Never clobbers a stored QR with null: Evolution delivers the scannable QR
+ *  asynchronously via the QRCODE_UPDATED webhook, which can land *during* a
+ *  connect/create call. Since /instance/create itself returns no QR, writing its
+ *  null result back would erase the webhook-delivered QR. So we only write `qr`
+ *  when this reading actually carries one, and when it does we surface it as
+ *  waiting_qr so the screen shows it immediately. */
 async function persist(ctx: WaSessionCtx, c: CanonicalConnection): Promise<WaConnectionSnapshot> {
-  await writeSession(ctx, KIND, { state: c.state, qr: c.qr, displayName: c.displayName, phone: c.phone, error: null });
+  const patch: Parameters<typeof writeSession>[2] = { state: c.state, displayName: c.displayName, phone: c.phone, error: null };
+  if (c.qr) { patch.qr = c.qr; patch.state = "waiting_qr"; }
+  await writeSession(ctx, KIND, patch);
   return readSessionSnapshot(ctx, KIND);
 }
 

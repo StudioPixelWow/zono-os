@@ -112,7 +112,11 @@ export async function ingestBridgeStatus(ctx: WaSessionCtx, state: WaConnState, 
     displayName: extra.displayName ?? (prev as { displayName?: string }).displayName ?? null,
     phone: extra.phone ?? (prev as { phone?: string }).phone ?? null,
     error: extra.error ?? null,
-    qr: state === "connected" || state === "disconnected" ? null : (prev as { qr?: unknown }).qr ?? null,
+    // Clear the QR only once truly connected. Baileys emits transient
+    // "close"/disconnected connection updates BETWEEN QR refreshes while the
+    // phone hasn't scanned yet — nulling on those would erase a still-valid QR
+    // mid-pairing. A genuinely stale QR expires on its own (TTL → qr_expired).
+    qr: state === "connected" ? null : (prev as { qr?: unknown }).qr ?? null,
   };
   await db.from("whatsapp_accounts" as never).update({
     connection_status: state === "connected" ? "connected" : state === "error" ? "error" : "sandbox",
