@@ -39,10 +39,13 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Pro
   // bridge provider is configured; otherwise the Cloud-API gate below is used.
   if (isQrProviderActive() && !forceManual) {
     let snap: WaConnectionSnapshot = OFFLINE_SNAP;
+    let diagCtx = "none";
     try {
       const ctx = await resolveSessionCtx();
+      diagCtx = ctx ? `${ctx.orgId.slice(0, 8)}/${ctx.userId.slice(0, 8)}` : "null";
       if (ctx) snap = await getWhatsAppProvider().connectionState(ctx);
     } catch (e) { console.error("[whatsapp] provider state failed:", e); }
+    console.log(`[wa-diag] page ssr ctx=${diagCtx} state=${snap.state} hasQr=${!!snap.qr} render=${snap.state !== "connected" ? "QrConnect" : "View"}`);
     if (snap.state !== "connected") return <WhatsappQrConnect initial={snap} />;
     let cc: WhatsappCommandCenter = EMPTY;
     try { cc = await getWhatsappCommandCenter(); } catch (e) { console.error("[whatsapp] load failed:", e); }
