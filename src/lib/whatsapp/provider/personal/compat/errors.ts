@@ -22,6 +22,10 @@ export interface PersonalError { category: PersonalErrorCategory; message: strin
 /** Classify an HTTP status + body snippet into a stable category. */
 export function classifyHttp(status: number, bodySnippet: string): PersonalError {
   const b = bodySnippet.toLowerCase();
+  // "Instance already exists" comes back as 403 but is NOT an auth failure — it
+  // means we should fetch a fresh QR for the existing instance, not give up.
+  // Classify as "invalid" so createSession falls through to connectSession.
+  if (status === 403 && /already in use|already exists|is already/.test(b)) return { category: "invalid", message: "instance_exists" };
   if (status === 401 || status === 403) return { category: "auth", message: "unauthorized" };
   if (status === 404) return { category: "not_found", message: "instance_not_found" };
   if (status === 429) return { category: "rate_limited", message: "rate_limited" };
