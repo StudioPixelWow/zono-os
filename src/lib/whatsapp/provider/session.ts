@@ -70,12 +70,10 @@ function toSnapshot(kind: WaProviderKind, row: AccountRow | null): WaConnectionS
 /** Read the current broker's stored session row (their own, never another's). */
 export async function readSessionRow(ctx: WaSessionCtx): Promise<AccountRow | null> {
   const db = await sessionDb();
-  const { data, error } = await db.from("whatsapp_accounts" as never)
+  const { data } = await db.from("whatsapp_accounts" as never)
     .select("id,connection_status,session_ref,last_connected_at,metadata")
     .eq("organization_id", ctx.orgId).eq("provider", PROVIDER).eq("user_id", ctx.userId).maybeSingle();
-  const row = (data as AccountRow | null) ?? null;
-  console.log(`[wa-diag] readRow svc=${isServiceRoleConfigured()} err=${(error as { message?: string } | null)?.message ?? "none"} hasRow=${!!row} hasQr=${!!((row?.metadata as { wa_session?: { qr?: unknown } } | null)?.wa_session?.qr)}`);
-  return row;
+  return (data as AccountRow | null) ?? null;
 }
 
 /** Read a client-safe snapshot of the current broker's session. */
