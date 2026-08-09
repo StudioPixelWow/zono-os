@@ -155,7 +155,7 @@ export async function getAgentListing(slug: string, filters: PropertyFilters = {
   ]);
 
   const effective = resolveEffectiveBrand((agentBrandR.data ?? null) as Record<string, unknown> | null, (officeBrandR.data ?? null) as Record<string, unknown> | null);
-  const tokens = buildBrandTokens({ primary: effective.primary, secondary: effective.secondary, accent: effective.accent, logo: effective.logo, profileImage: (s.profile_image_url as string | null) ?? effective.profileImage });
+  const tokens = buildBrandTokens({ primary: effective.primary, secondary: effective.secondary, accent: effective.accent, logo: effective.logo, profileImage: effective.profileImage ?? (s.profile_image_url as string | null) });
   const themeRaw = (s.theme as { preset?: unknown } | null)?.preset;
 
   let properties = ((propsR.data ?? []) as RawProp[]).map((p) => toProperty(slug, p));
@@ -174,8 +174,8 @@ export async function getAgentListing(slug: string, filters: PropertyFilters = {
     slug,
     theme: isSiteTheme(themeRaw) ? themeRaw : "luxury-light",
     brandVars: tokens.vars,
-    agentName: (s.display_name as string) || effective.agentName || "סוכן/ת נדל\"ן",
-    officeName: (orgR.data as { name?: string } | null)?.name ?? effective.officeName ?? null,
+    agentName: effective.agentName || (s.display_name as string) || "סוכן/ת נדל\"ן",
+    officeName: effective.officeName ?? (orgR.data as { name?: string } | null)?.name ?? null,
     logo: tokens.logo,
     whatsapp: waLink((s.whatsapp as string | null) ?? effective.whatsapp, (s.phone as string | null) ?? effective.phone),
     tel: (s.phone as string | null) ? `tel:${((s.phone as string) ?? "").replace(/[^0-9+]/g, "")}` : null,
@@ -219,7 +219,7 @@ export async function getAgentSite(slug: string): Promise<AgentSitePayload | "di
     accent: effective.accent,
     logo: effective.logo,
     // Prefer the agent's site profile image, then the brand-profile image.
-    profileImage: (s.profile_image_url as string | null) ?? effective.profileImage,
+    profileImage: effective.profileImage ?? (s.profile_image_url as string | null),
   });
 
   const themeRaw = (s.theme as { preset?: unknown } | null)?.preset;
@@ -249,7 +249,7 @@ export async function getAgentSite(slug: string): Promise<AgentSitePayload | "di
   // ── Stats / proof points — ONLY real numbers (spec §13/§18) ────────────────
   const twin = (twinR.data ?? {}) as { total_closed_deals?: number; satisfaction_score?: number };
   const soldCount = soldR.count ?? 0;
-  const years = (s.years_experience as number | null) ?? null;
+  const years = (s.years_experience as number | null) ?? (typeof agentBrand?.years_experience === "number" ? (agentBrand.years_experience as number) : null);
   const testimonials = (((s.testimonials as { name: string; area?: string | null; text: string; rating?: number | null }[] | undefined) ?? [])
     .filter((t) => t && t.text)).slice(0, 6)
     .map((t) => ({ name: t.name, area: t.area ?? null, text: t.text, rating: t.rating ?? null }));
@@ -266,10 +266,14 @@ export async function getAgentSite(slug: string): Promise<AgentSitePayload | "di
   if (soldCount) proofPoints.push({ value: `${soldCount}+`, label: "נמכרו" });
   else if (all.length) proofPoints.push({ value: `${all.length}`, label: "נכסים פעילים" });
 
-  // ── Agent identity ────────────────────────────────────────────────────────
-  const name = (s.display_name as string) || effective.agentName || "סוכן/ת נדל\"ן";
-  const phone = (s.phone as string | null) ?? effective.phone;
-  const whatsappRaw = (s.whatsapp as string | null) ?? effective.whatsapp;
+  // ── Agent identity — brand-identity profile is the canonical source of truth
+  //    (real curated name/title/photo/office/contact); the agent_websites row is
+  //    the fallback (it can hold onboarding placeholders). ────────────────────
+  const bi = (k: string): string | null => { const v = agentBrand?.[k]; return typeof v === "string" && v.trim() ? v.trim() : null; };
+  const biNum = (k: string): number | null => { const v = agentBrand?.[k]; return typeof v === "number" ? v : null; };
+  const name = bi("display_name") ?? bi("full_name") ?? (s.display_name as string) ?? effective.agentName ?? "סוכן/ת נדל\"ן";
+  const phone = bi("phone") ?? (s.phone as string | null) ?? effective.phone;
+  const whatsappRaw = bi("whatsapp") ?? (s.whatsapp as string | null) ?? effective.whatsapp;
   const areasList = serviceAreas.length ? serviceAreas : areas.map((a) => a.name).slice(0, 6);
   const headline = (s.headline_hebrew as string | null) || null;
   // Value proposition: real headline if present, else composed from real facts only.
@@ -291,21 +295,21 @@ export async function getAgentSite(slug: string): Promise<AgentSitePayload | "di
     agent: {
       name,
       firstName: firstNameOf(name),
-      title: (s.title_hebrew as string | null) ?? null,
+      title: bi("title") ?? (s.title_hebrew as string | null) ?? null,
       headline,
       valueProp,
-      bio: (s.bio_hebrew as string | null) ?? null,
+      bio: (s.bio_hebrew as string | null) ?? bi("short_bio") ?? null,
       cover: (s.cover_image_url as string | null) ?? null,
       phone,
       whatsapp: waLink(whatsappRaw, phone),
       tel: phone ? `tel:${phone.replace(/[^0-9+]/g, "")}` : null,
-      email: (s.email as string | null) ?? null,
-      yearsExperience: years,
+      email: bi("email") ?? (s.email as string | null) ?? null,
+      yearsExperience: years ?? biNum("years_experience"),
       languages: ((s.languages as string[] | undefined) ?? []).filter(Boolean),
       specialties: ((s.specialties as string[] | undefined) ?? []).filter(Boolean),
       areas: areasList,
       social: ((s.social_links as Record<string, string> | undefined) ?? {}),
-      officeName: (orgR.data as { name?: string } | null)?.name ?? effective.officeName ?? null,
+      officeName: bi("office_name") ?? (orgR.data as { name?: string } | null)?.name ?? effective.officeName ?? null,
       officeAddress: (orgR.data as { city?: string | null } | null)?.city ?? null,
     },
     sections: (s.enabled_sections as Record<string, boolean>) ?? {},
