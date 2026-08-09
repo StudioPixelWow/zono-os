@@ -1,35 +1,55 @@
 "use client";
-// Client-side filter over the already-loaded, DAL-fetched safe org directory
-// (P5.1). This filters data the server already authorized + audited — it opens
-// NO new data path. The platform-wide DAL search lives in the ⌘K command
-// palette; this is the convenience filter on the directory screen.
+// Customer directory (P5.2). Search + plan filter + sort over the already-loaded,
+// DAL-fetched, audited safe org list. This filters data the server already
+// authorized — it opens NO new data path and does NOT loop per-org (no N+1).
+// Per-org usage/activity columns are intentionally deferred until an aggregated
+// group-by DAL exists (see delivery notes) rather than N+1 per row.
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
-import { PlanBadge, IdChip, formatPlatformDate } from "./ui";
+import { PlanBadge, IdChip, PLAN_LABEL, formatPlatformDate } from "./ui";
 import type { PlatformOrgSummary } from "@/lib/platform-admin/server/dal";
+
+type SortKey = "created_desc" | "created_asc" | "name";
 
 export function CustomersDirectory({ orgs }: { orgs: PlatformOrgSummary[] }) {
   const [q, setQ] = useState("");
+  const [plan, setPlan] = useState("");
+  const [sort, setSort] = useState<SortKey>("created_desc");
+
+  const plans = useMemo(() => [...new Set(orgs.map((o) => o.plan).filter(Boolean))] as string[], [orgs]);
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return orgs;
-    return orgs.filter((o) => o.name.toLowerCase().includes(s) || o.id.toLowerCase().startsWith(s));
-  }, [orgs, q]);
+    let list = orgs.filter((o) =>
+      (!s || o.name.toLowerCase().includes(s) || o.id.toLowerCase().startsWith(s)) &&
+      (!plan || o.plan === plan),
+    );
+    list = [...list].sort((a, b) => {
+      if (sort === "name") return a.name.localeCompare(b.name, "he");
+      const cmp = a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
+      return sort === "created_asc" ? cmp : -cmp;
+    });
+    return list;
+  }, [orgs, q, plan, sort]);
 
   return (
     <div className="border-line bg-card rounded-2xl border">
-      <div className="border-line flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="border-line flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-xl border bg-surface px-3">
+      <div className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-3">
+        <div className="border-line flex h-9 min-w-[200px] flex-1 items-center gap-2 rounded-xl border bg-surface px-3">
           <Icon name="Search" size={15} className="text-muted" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="סינון לפי שם ארגון…"
-            className="text-ink h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted"
-          />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="סינון לפי שם ארגון…" className="text-ink h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted" />
         </div>
-        <span className="text-muted text-[12px] font-semibold">{filtered.length} / {orgs.length} ארגונים</span>
+        <select value={plan} onChange={(e) => setPlan(e.target.value)} className="border-line text-ink h-9 rounded-xl border bg-surface px-2 text-[13px] font-semibold outline-none">
+          <option value="">כל התוכניות</option>
+          {plans.map((p) => <option key={p} value={p}>{PLAN_LABEL[p] ?? p}</option>)}
+        </select>
+        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="border-line text-ink h-9 rounded-xl border bg-surface px-2 text-[13px] font-semibold outline-none">
+          <option value="created_desc">חדש → ישן</option>
+          <option value="created_asc">ישן → חדש</option>
+          <option value="name">לפי שם</option>
+        </select>
+        <span className="text-muted text-[12px] font-semibold">{filtered.length} / {orgs.length}</span>
       </div>
 
       {filtered.length === 0 ? (
