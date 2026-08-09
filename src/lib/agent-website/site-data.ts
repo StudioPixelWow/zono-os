@@ -109,7 +109,7 @@ function toProperty(slug: string, p: RawProp): SiteProperty {
     type: p.type, status: p.status, image: p.primary_image_url, tag,
     lat: typeof p.latitude === "number" ? p.latitude : null,
     lng: typeof p.longitude === "number" ? p.longitude : null,
-    href: `/agent/${slug}/properties/${p.id}`,
+    href: `/p/${p.id}`,
   };
 }
 

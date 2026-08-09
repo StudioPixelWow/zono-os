@@ -191,7 +191,7 @@ export async function getOfficeSite(slug: string): Promise<OfficeSitePayload | "
     price: p.price, monthlyRent: p.monthly_rent, listingKind: p.listing_kind, city: p.city, neighborhood: p.neighborhood,
     rooms: p.rooms, sizeSqm: p.size_sqm, floor: p.floor, type: p.type, status: p.status, image: p.primary_image_url, tag: propTag(p),
     lat: typeof p.latitude === "number" ? p.latitude : null, lng: typeof p.longitude === "number" ? p.longitude : null,
-    href: `/site/${slug}/properties/${p.id}`, agent: agentRef(p.owner_id),
+    href: `/p/${p.id}`, agent: agentRef(p.owner_id),
   });
   const all = rawProps.map(toProp);
   const featuredIds = (s.featured_property_ids as string[] | undefined) ?? [];
@@ -299,7 +299,7 @@ export async function getOfficeListing(slug: string, filters: OfficePropertyFilt
     price: p.price, monthlyRent: p.monthly_rent, listingKind: p.listing_kind, city: p.city, neighborhood: p.neighborhood,
     rooms: p.rooms, sizeSqm: p.size_sqm, floor: p.floor, type: p.type, status: p.status, image: p.primary_image_url, tag: propTag(p),
     lat: typeof p.latitude === "number" ? p.latitude : null, lng: typeof p.longitude === "number" ? p.longitude : null,
-    href: `/site/${slug}/properties/${p.id}`, agent: p.owner_id ? agentById.get(p.owner_id) ?? null : null,
+    href: `/p/${p.id}`, agent: p.owner_id ? agentById.get(p.owner_id) ?? null : null,
   }));
 
   const q = filters.q?.trim().toLowerCase();
