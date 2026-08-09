@@ -65,3 +65,56 @@ export interface RawWebhookEnvelope {
   instance?: string | null;      // instance name
   data?: unknown;
 }
+
+// ── READ shapes (findContacts / findChats / findMessages) ────────────────────
+// Evolution v2 varies these between builds; every field is optional and the
+// mappers parse defensively. Groups (JIDs ending @g.us) are skipped upstream.
+
+/** A single contact row from POST /chat/findContacts. */
+export interface RawContact {
+  id?: string | null;            // JID, e.g. "972501234567@s.whatsapp.net"
+  remoteJid?: string | null;     // some builds use remoteJid instead of id
+  pushName?: string | null;
+  name?: string | null;
+}
+
+/** POST /chat/findContacts — an array, or `{ contacts: [...] }`. */
+export type RawFindContacts = RawContact[] | { contacts?: RawContact[] | null } | null;
+
+/** A stored message body (shared by chats' lastMessage and message records). */
+export interface RawMessageBody {
+  conversation?: string | null;
+  extendedTextMessage?: { text?: string | null } | null;
+  imageMessage?: { caption?: string | null } | null;
+  documentMessage?: { caption?: string | null; fileName?: string | null } | null;
+}
+
+/** A single chat row from POST /chat/findChats. */
+export interface RawChat {
+  id?: string | null;            // JID
+  remoteJid?: string | null;     // some builds use remoteJid instead of id
+  pushName?: string | null;
+  name?: string | null;
+  updatedAt?: number | string | null;
+  messageTimestamp?: number | string | null;
+  // lastMessage may be a plain string or an object carrying a message body.
+  lastMessage?: string | { message?: RawMessageBody | null } | null;
+}
+
+/** POST /chat/findChats — an array, or `{ chats: [...] }`. */
+export type RawFindChats = RawChat[] | { chats?: RawChat[] | null } | null;
+
+/** A single message record from POST /chat/findMessages. */
+export interface RawMessageRecord {
+  key?: { remoteJid?: string | null; fromMe?: boolean | null; id?: string | null } | null;
+  message?: RawMessageBody | null;
+  messageTimestamp?: number | string | null;
+  pushName?: string | null;
+}
+
+/** POST /chat/findMessages — an array, `{ messages: { records: [...] } }`, or
+ *  `{ messages: [...] }`. */
+export type RawFindMessages =
+  | RawMessageRecord[]
+  | { messages?: { records?: RawMessageRecord[] | null } | RawMessageRecord[] | null }
+  | null;

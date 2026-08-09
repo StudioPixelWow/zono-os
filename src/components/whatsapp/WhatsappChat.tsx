@@ -1,477 +1,357 @@
 "use client";
-
 // ============================================================================
-// 💬 ZONO WhatsApp — In-app Conversation Center (client).
-// A two-pane WhatsApp-style center: a searchable conversation list + a live
-// thread with a composer, a "new conversation" modal, and an "add as lead"
-// modal that reuses the full BuyerForm prefilled with the contact's name/phone.
-// In-memory state only. All sends are real (human-in-the-loop personalSend).
+// 📘 ZONO — WhatsApp CONVERSATION CENTER (client).
+// ----------------------------------------------------------------------------
+// A two-pane conversation center over the connected personal WhatsApp:
+//   • Left — the agent's ZONO conversations PLUS a clearly-labeled section of the
+//     account's EXISTING WhatsApp chats (read live from the transport).
+//   • Right — the selected thread + an approval-gated reply composer.
+//   • New chat — a searchable CONTACTS picker (read from the account) above a
+//     manual phone fallback; starting a chat sends the first approved message.
+// Fully defensive: if the remote reads return nothing, only the ZONO list shows
+// (today's behavior). In-memory state only — no localStorage.
 // ============================================================================
-import { useMemo, useState, useTransition } from "react";
-import {
-  waChatListAction,
-  waChatThreadAction,
-  waChatSendReplyAction,
-  waChatStartAction,
-  type WaChatConv,
-} from "@/lib/whatsapp/chat-actions";
-import { BuyerForm } from "@/app/(app)/buyers/BuyerForm";
-import { createBuyerAction } from "@/lib/buyers/actions";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/dashboard/Icon";
-import { Button, Spinner } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Button";
+import {
+  waChatListAction, waChatThreadAction, waChatSendReplyAction, waChatStartAction,
+  waContactsAction, waRemoteChatsAction, waRemoteThreadAction,
+  type WaChatConv, type WaContact, type WaRemoteChat,
+} from "@/lib/whatsapp/chat-actions";
 
-const WA_GREEN = "#25D366";
-const WA_TEAL = "#128C7E";
+type Msg = { id: string; direction: string; body: string; at: string | null };
+type Selection =
+  | { kind: "zono"; id: string; name: string | null }
+  | { kind: "remote"; phone: string; name: string | null };
 
-type ThreadMsg = { id: string; direction: string; body: string; at: string | null };
+const WA = "linear-gradient(135deg,#25D366,#128C7E)";
 
-function relativeTime(iso: string | null): string {
+function fmtTime(iso: string | null): string {
   if (!iso) return "";
   const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  const diff = Date.now() - t;
-  const min = Math.round(diff / 60000);
-  if (min < 1) return "עכשיו";
-  if (min < 60) return `לפני ${min} ד׳`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `לפני ${hr} ש׳`;
-  const day = Math.round(hr / 24);
-  if (day < 7) return `לפני ${day} ימים`;
-  return new Date(t).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" });
-}
-
-function timeLabel(iso: string | null): string {
-  if (!iso) return "";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  return new Date(t).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-}
-
-function Avatar() {
-  return (
-    <span
-      className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-white"
-      style={{ background: `linear-gradient(135deg, ${WA_GREEN}, ${WA_TEAL})` }}
-    >
-      <Icon name="MessageCircle" size={20} />
-    </span>
-  );
+  if (Number.isNaN(t)) return "";
+  try { return new Date(t).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+  catch { return ""; }
 }
 
 export function WhatsappChat({ initial }: { initial: WaChatConv[] }) {
-  const [convos, setConvos] = useState<WaChatConv[]>(initial);
-  const [query, setQuery] = useState("");
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [convs, setConvs] = useState<WaChatConv[]>(initial);
+  const [remote, setRemote] = useState<WaRemoteChat[]>([]);
+  const [sel, setSel] = useState<Selection | null>(null);
+  const [thread, setThread] = useState<Msg[]>([]);
+  const [threadBusy, setThreadBusy] = useState(false);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Prefill (name + phone) for the new-chat modal, set by a remote row's
+  // "add as lead" affordance so the modal opens ready to send.
+  const [prefillSeed, setPrefillSeed] = useState<{ phone: string; name: string | null } | null>(null);
 
-  // Thread state
-  const [messages, setMessages] = useState<ThreadMsg[]>([]);
-  const [threadPhone, setThreadPhone] = useState<string | null>(null);
-  const [threadName, setThreadName] = useState<string | null>(null);
-  const [threadLoading, setThreadLoading] = useState(false);
-  const [replyText, setReplyText] = useState("");
-  const [replyError, setReplyError] = useState<string | null>(null);
-  const [sending, startSending] = useTransition();
+  // Merge the ZONO list with the account's existing WhatsApp chats. ZONO convs
+  // have no phone, so remote chats live in their own labeled section (defensive:
+  // an empty/failed remote read simply leaves today's ZONO-only list).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try { const r = await waRemoteChatsAction(); if (alive) setRemote(r); } catch { /* keep ZONO-only */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
-  // New-conversation modal
-  const [showNew, setShowNew] = useState(false);
-  const [newPhone, setNewPhone] = useState("");
-  const [newText, setNewText] = useState("");
-  const [newError, setNewError] = useState<string | null>(null);
-  const [startingNew, startNew] = useTransition();
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [thread]);
 
-  // Lead modal
-  const [leadFor, setLeadFor] = useState<{ name: string; phone: string } | null>(null);
+  const refreshLists = useCallback(async () => {
+    try { setConvs(await waChatListAction()); } catch { /* keep */ }
+    try { setRemote(await waRemoteChatsAction()); } catch { /* keep */ }
+  }, []);
 
-  const [, startRefresh] = useTransition();
+  const openZono = useCallback(async (c: WaChatConv) => {
+    setSel({ kind: "zono", id: c.id, name: c.name });
+    setErr(null); setThread([]); setThreadBusy(true);
+    try { setThread(await waChatThreadAction(c.id)); } catch { setThread([]); }
+    finally { setThreadBusy(false); }
+  }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return convos;
-    return convos.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.lastMessage ?? "").toLowerCase().includes(q),
-    );
-  }, [convos, query]);
+  const openRemote = useCallback(async (c: WaRemoteChat) => {
+    setSel({ kind: "remote", phone: c.phone, name: c.name });
+    setErr(null); setThread([]); setThreadBusy(true);
+    try { setThread(await waRemoteThreadAction(c.phone)); } catch { setThread([]); }
+    finally { setThreadBusy(false); }
+  }, []);
 
-  const activeConv = convos.find((c) => c.id === activeId) ?? null;
+  const reloadThread = useCallback(async (s: Selection) => {
+    try { setThread(s.kind === "zono" ? await waChatThreadAction(s.id) : await waRemoteThreadAction(s.phone)); }
+    catch { /* keep */ }
+  }, []);
 
-  async function loadThread(id: string) {
-    setThreadLoading(true);
-    setReplyError(null);
-    const r = await waChatThreadAction(id);
-    setMessages(r.messages);
-    setThreadPhone(r.phone);
-    setThreadName(r.name);
-    setThreadLoading(false);
-    return r;
-  }
+  const send = useCallback(async () => {
+    if (!sel || !reply.trim() || sending) return;
+    const text = reply.trim();
+    setSending(true); setErr(null);
+    try {
+      const r = sel.kind === "zono"
+        ? await waChatSendReplyAction(sel.id, text)
+        : await waChatStartAction(sel.phone, text);
+      if (!r.ok) { setErr(r.error ?? "שליחה נכשלה."); return; }
+      setReply("");
+      await reloadThread(sel);
+      await refreshLists();
+    } catch { setErr("שליחה נכשלה."); }
+    finally { setSending(false); }
+  }, [sel, reply, sending, reloadThread, refreshLists]);
 
-  function openConversation(id: string) {
-    setActiveId(id);
-    setReplyText("");
-    setMessages([]);
-    setThreadPhone(null);
-    setThreadName(null);
-    void loadThread(id);
-  }
+  const onStarted = useCallback(async (phone: string, name: string | null) => {
+    setModalOpen(false);
+    await refreshLists();
+    setSel({ kind: "remote", phone, name });
+    setThreadBusy(true);
+    try { setThread(await waRemoteThreadAction(phone)); } catch { setThread([]); }
+    finally { setThreadBusy(false); }
+  }, [refreshLists]);
 
-  function refreshList() {
-    startRefresh(async () => {
-      const list = await waChatListAction();
-      setConvos(list);
-    });
-  }
-
-  function sendReply() {
-    if (!activeId) return;
-    const text = replyText.trim();
-    if (!text) return;
-    setReplyError(null);
-    startSending(async () => {
-      const r = await waChatSendReplyAction(activeId, text);
-      if (r.ok) {
-        setMessages((cur) => [
-          ...cur,
-          { id: `local-${Date.now()}`, direction: "outbound", body: text, at: new Date().toISOString() },
-        ]);
-        setReplyText("");
-        void loadThread(activeId);
-        refreshList();
-      } else {
-        setReplyError(r.error ?? "השליחה נכשלה");
-      }
-    });
-  }
-
-  function startConversation() {
-    setNewError(null);
-    startNew(async () => {
-      const r = await waChatStartAction(newPhone, newText);
-      if (!r.ok) {
-        setNewError(r.error ?? "השליחה נכשלה");
-        return;
-      }
-      const digits = newPhone.replace(/\D/g, "");
-      setShowNew(false);
-      setNewPhone("");
-      setNewText("");
-      const list = await waChatListAction();
-      setConvos(list);
-      // Try to open the conversation whose phone matches (best-effort).
-      let matchId: string | null = null;
-      for (const c of list) {
-        const t = await waChatThreadAction(c.id);
-        if (t.phone && t.phone.replace(/\D/g, "").endsWith(digits.slice(-9))) {
-          matchId = c.id;
-          break;
-        }
-      }
-      if (matchId) openConversation(matchId);
-    });
-  }
-
-  // Open the lead modal for a conversation, resolving its phone on demand.
-  function openLeadForConversation(conv: WaChatConv) {
-    if (activeId === conv.id && (threadPhone || threadName)) {
-      setLeadFor({ name: threadName ?? conv.name, phone: threadPhone ?? "" });
-      return;
-    }
-    startRefresh(async () => {
-      const t = await waChatThreadAction(conv.id);
-      setLeadFor({ name: t.name ?? conv.name, phone: t.phone ?? "" });
-    });
-  }
+  const selKey = sel ? (sel.kind === "zono" ? `z:${sel.id}` : `r:${sel.phone}`) : null;
 
   return (
-    <div dir="rtl" className="h-full">
-      <div className="bg-card border-line grid h-[calc(100vh-8rem)] grid-cols-1 overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)] md:grid-cols-[360px_1fr]">
-        {/* Conversation list (right side in RTL) */}
-        <aside
-          className={`border-line flex min-h-0 flex-col md:border-l ${activeId ? "hidden md:flex" : "flex"}`}
-        >
-          <div className="border-line flex items-center justify-between gap-2 border-b px-4 py-3">
-            <h2 className="text-ink text-lg font-bold">שיחות</h2>
-            <Button
-              size="sm"
-              leadingIcon={<Icon name="Plus" size={16} />}
-              onClick={() => {
-                setShowNew(true);
-                setNewError(null);
-              }}
-            >
-              שיחה חדשה
-            </Button>
-          </div>
-          <div className="border-line border-b px-3 py-2">
-            <div className="bg-surface border-line flex items-center gap-2 rounded-xl border px-3">
-              <Icon name="Search" size={16} className="text-muted" />
-              <input
-                className="text-ink h-9 w-full bg-transparent text-sm outline-none"
-                placeholder="חיפוש שיחה"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
+    <div dir="rtl" className="mx-auto w-full max-w-6xl px-4 py-6">
+      <div className="bg-card border-line grid min-h-[560px] grid-cols-1 overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)] md:grid-cols-[320px_1fr]">
+        {/* ── List pane ─────────────────────────────────────────────────── */}
+        <aside className="border-line flex flex-col md:border-l">
+          <header className="border-line flex items-center justify-between gap-2 border-b p-3">
+            <div className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-xl text-white" style={{ background: WA }}><Icon name="MessageCircle" size={16} /></span>
+              <span className="text-ink text-sm font-black">שיחות</span>
             </div>
-          </div>
+            <button onClick={() => { setPrefillSeed(null); setModalOpen(true); }} className="btn-zono-primary zono-focus-ring inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-black text-white">
+              <Icon name="Plus" size={14} /> שיחה חדשה
+            </button>
+          </header>
+
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="text-muted p-6 text-center text-sm">אין עדיין שיחות</p>
-            ) : (
-              filtered.map((c) => (
-                <div
-                  key={c.id}
-                  className={`group border-line hover:bg-surface flex cursor-pointer items-center gap-3 border-b px-3 py-3 transition ${
-                    activeId === c.id ? "bg-surface" : ""
-                  }`}
-                  onClick={() => openConversation(c.id)}
-                >
-                  <Avatar />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-ink truncate font-bold">{c.name}</span>
-                      <span className="text-muted shrink-0 text-xs">{relativeTime(c.lastAt)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted truncate text-sm">{c.lastMessage ?? "—"}</span>
-                      {c.unread && (
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ background: WA_GREEN }}
-                          aria-label="לא נקרא"
-                        />
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    title="הוסף כליד"
-                    aria-label="הוסף כליד"
-                    className="text-muted hover:text-brand-strong hover:bg-brand-soft grid h-8 w-8 shrink-0 place-items-center rounded-full opacity-0 transition group-hover:opacity-100"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openLeadForConversation(c);
-                    }}
-                  >
-                    <Icon name="UserPlus" size={16} />
-                  </button>
-                </div>
-              ))
+            {/* ZONO conversations */}
+            <ListLabel>שיחות ZONO</ListLabel>
+            {convs.length === 0 ? (
+              <Empty>אין עדיין שיחות</Empty>
+            ) : convs.map((c) => (
+              <ConvRow key={`z:${c.id}`} active={selKey === `z:${c.id}`} title={c.name || "לקוח"} sub={c.lastMessage} at={c.at} onClick={() => openZono(c)} />
+            ))}
+
+            {/* Existing WhatsApp chats (read from the connected account) */}
+            {remote.length > 0 && (
+              <>
+                <ListLabel>שיחות מ‑WhatsApp</ListLabel>
+                {remote.map((c) => (
+                  <ConvRow
+                    key={`r:${c.phone}`}
+                    active={selKey === `r:${c.phone}`}
+                    title={c.name || c.phone}
+                    sub={c.lastMessage}
+                    at={c.at}
+                    onClick={() => openRemote(c)}
+                    action={
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setPrefillSeed({ phone: c.phone, name: c.name }); setModalOpen(true); }}
+                        title="הוסף כליד"
+                        className="text-muted hover:text-brand shrink-0 rounded-lg p-1"
+                      >
+                        <Icon name="UserPlus" size={15} />
+                      </button>
+                    }
+                  />
+                ))}
+              </>
             )}
           </div>
         </aside>
 
-        {/* Thread pane (left/main in RTL) */}
-        <section className={`flex min-h-0 flex-col ${activeId ? "flex" : "hidden md:flex"}`}>
-          {!activeConv ? (
-            <div className="text-muted flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-              <Icon name="MessageCircle" size={40} className="text-muted" />
-              <p className="text-sm">בחר שיחה כדי להתחיל</p>
+        {/* ── Thread pane ───────────────────────────────────────────────── */}
+        <section className="flex min-h-0 flex-col">
+          {!sel ? (
+            <div className="text-muted flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+              <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="MessageCircle" size={26} /></span>
+              <p className="text-sm font-bold">בחר שיחה כדי לצפות בהודעות</p>
             </div>
           ) : (
             <>
-              {/* Thread header */}
-              <div className="border-line flex items-center justify-between gap-2 border-b px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    className="text-muted hover:text-ink md:hidden"
-                    aria-label="חזרה"
-                    onClick={() => setActiveId(null)}
-                  >
-                    <Icon name="ArrowRight" size={20} />
-                  </button>
-                  <Avatar />
-                  <div className="min-w-0">
-                    <div className="text-ink truncate font-bold">{threadName ?? activeConv.name}</div>
-                    {threadPhone && <div className="text-muted text-xs" dir="ltr">{threadPhone}</div>}
-                  </div>
+              <header className="border-line flex items-center justify-between gap-2 border-b p-3">
+                <div className="min-w-0">
+                  <p className="text-ink truncate text-sm font-black">{sel.name || (sel.kind === "remote" ? sel.phone : "לקוח")}</p>
+                  <p className="text-muted text-[11px] font-semibold">{sel.kind === "remote" ? "שיחת WhatsApp קיימת" : "שיחת ZONO"}</p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  leadingIcon={<Icon name="UserPlus" size={16} />}
-                  onClick={() => setLeadFor({ name: threadName ?? activeConv.name, phone: threadPhone ?? "" })}
-                >
-                  הוסף כליד
-                </Button>
+                {sel.kind === "remote" && <span className="text-muted inline-flex items-center gap-1 text-[11px] font-bold"><Icon name="Phone" size={12} /> {sel.phone}</span>}
+              </header>
+
+              <div ref={scrollRef} className="bg-line/20 min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+                {threadBusy ? (
+                  <div className="text-muted flex items-center justify-center gap-2 py-10 text-[12px] font-bold"><Spinner size={16} /> טוען הודעות…</div>
+                ) : thread.length === 0 ? (
+                  <div className="text-muted py-10 text-center text-[12px] font-bold">אין הודעות בשיחה זו</div>
+                ) : thread.map((m) => (
+                  <Bubble key={m.id} mine={m.direction === "outbound"} body={m.body} at={m.at} />
+                ))}
               </div>
 
-              {/* Messages */}
-              <div className="bg-surface/40 min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                {threadLoading ? (
-                  <div className="text-muted flex h-full items-center justify-center">
-                    <Spinner size={22} />
-                  </div>
-                ) : messages.length === 0 ? (
-                  <p className="text-muted py-8 text-center text-sm">אין עדיין הודעות בשיחה זו</p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {messages.map((m) => {
-                      const outbound = m.direction === "outbound";
-                      return (
-                        <div
-                          key={m.id}
-                          className={`flex ${outbound ? "justify-start" : "justify-end"}`}
-                        >
-                          <div
-                            className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
-                              outbound ? "text-white" : "bg-card text-ink border-line border"
-                            }`}
-                            style={outbound ? { background: WA_GREEN } : undefined}
-                          >
-                            <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                            <div
-                              className={`mt-0.5 text-left text-[10px] ${outbound ? "text-white/80" : "text-muted"}`}
-                              dir="ltr"
-                            >
-                              {timeLabel(m.at)}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Composer */}
-              <div className="border-line border-t px-4 py-3">
-                {threadPhone === null && !threadLoading ? (
-                  <p className="bg-surface text-muted rounded-xl px-3 py-2 text-center text-sm">
-                    לא נמצא מספר טלפון להשבה בשיחה זו
-                  </p>
-                ) : (
-                  <>
-                    {replyError && (
-                      <p className="bg-danger-soft text-danger mb-2 rounded-xl px-3 py-2 text-sm font-semibold">
-                        {replyError}
-                      </p>
-                    )}
-                    <div className="flex items-end gap-2">
-                      <textarea
-                        className="bg-surface border-line text-ink focus:border-brand-light h-11 max-h-32 min-h-11 w-full resize-none rounded-xl border px-3 py-2.5 text-sm outline-none"
-                        placeholder="הקלד הודעה…"
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            sendReply();
-                          }
-                        }}
-                        disabled={sending || threadLoading}
-                      />
-                      <button
-                        type="button"
-                        onClick={sendReply}
-                        disabled={sending || threadLoading || !replyText.trim()}
-                        aria-label="שלח"
-                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition disabled:opacity-50"
-                        style={{ background: WA_GREEN }}
-                      >
-                        {sending ? <Spinner size={18} /> : <Icon name="Send" size={18} />}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+              <footer className="border-line border-t p-3">
+                {err && <p className="text-danger mb-2 text-[12px] font-bold">{err}</p>}
+                <div className="flex items-end gap-2">
+                  <textarea
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+                    rows={1}
+                    placeholder="כתוב תשובה… (התגובה נשלחת רק לאחר אישור)"
+                    className="border-line bg-card text-ink max-h-32 min-h-[42px] flex-1 resize-none rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-brand-light"
+                  />
+                  <button onClick={() => void send()} disabled={sending || !reply.trim()} className="btn-zono-primary zono-focus-ring inline-flex h-[42px] items-center gap-1.5 rounded-xl px-4 text-[13px] font-black text-white disabled:opacity-50">
+                    {sending ? <Spinner size={15} /> : <Icon name="Send" size={15} />} שלח
+                  </button>
+                </div>
+              </footer>
             </>
           )}
         </section>
       </div>
 
-      {/* New-conversation modal */}
-      {showNew && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setShowNew(false)}
-        >
-          <div
-            dir="rtl"
-            className="bg-card border-line w-full max-w-md rounded-[22px] border p-5 shadow-[var(--shadow-card)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-ink text-lg font-bold">שיחה חדשה</h3>
-              <button
-                type="button"
-                className="text-muted hover:text-ink"
-                aria-label="סגירה"
-                onClick={() => setShowNew(false)}
-              >
-                <Icon name="X" size={20} />
-              </button>
-            </div>
-            <label className="mb-3 block">
-              <span className="text-ink text-sm font-bold">מספר טלפון</span>
-              <input
-                className="bg-surface border-line text-ink focus:border-brand-light mt-1 h-11 w-full rounded-xl border px-3 text-sm outline-none"
-                dir="ltr"
-                placeholder="05X-XXXXXXX"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-              />
-            </label>
-            <label className="mb-3 block">
-              <span className="text-ink text-sm font-bold">הודעה</span>
-              <textarea
-                className="bg-surface border-line text-ink focus:border-brand-light mt-1 h-24 w-full resize-none rounded-xl border px-3 py-2.5 text-sm outline-none"
-                placeholder="תוכן ההודעה…"
-                value={newText}
-                onChange={(e) => setNewText(e.target.value)}
-              />
-            </label>
-            {newError && (
-              <p className="bg-danger-soft text-danger mb-3 rounded-xl px-3 py-2 text-sm font-semibold">
-                {newError}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={startConversation}
-              disabled={startingNew || !newPhone.trim() || !newText.trim()}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl font-semibold text-white transition disabled:opacity-50"
-              style={{ background: WA_GREEN }}
-            >
-              {startingNew ? <Spinner size={18} /> : <Icon name="Send" size={18} />}
-              שלח והתחל שיחה
-            </button>
-          </div>
-        </div>
-      )}
+      {modalOpen && <NewChatModal onClose={() => setModalOpen(false)} onStarted={onStarted} seed={prefillSeed} />}
+    </div>
+  );
+}
 
-      {/* Add-as-lead modal */}
-      {leadFor && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
-          onClick={() => setLeadFor(null)}
-        >
-          <div
-            dir="rtl"
-            className="my-8 w-full max-w-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">הוסף כליד</h3>
-              <button
-                type="button"
-                className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-                aria-label="סגירה"
-                onClick={() => setLeadFor(null)}
-              >
-                <Icon name="X" size={20} />
-              </button>
-            </div>
-            <BuyerForm
-              initial={{ fullName: leadFor.name, phone: leadFor.phone || "" }}
-              submitLabel="צור ליד"
-              cancelHref="/whatsapp"
-              onSubmit={createBuyerAction}
-            />
-          </div>
+// ── List primitives ─────────────────────────────────────────────────────────
+
+function ListLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-muted bg-line/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide">{children}</p>;
+}
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="text-muted px-3 py-6 text-center text-[12px] font-bold">{children}</p>;
+}
+
+function ConvRow({ active, title, sub, at, onClick, action }: {
+  active: boolean; title: string; sub: string | null; at: string | null; onClick: () => void; action?: React.ReactNode;
+}) {
+  return (
+    <button onClick={onClick} className={`flex w-full items-center gap-2.5 border-b border-line/60 px-3 py-2.5 text-right transition ${active ? "bg-brand-soft/60" : "hover:bg-line/40"}`}>
+      <span className="bg-brand-soft text-brand grid h-9 w-9 shrink-0 place-items-center rounded-full text-[13px] font-black">{title.trim().charAt(0) || "?"}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="text-ink truncate text-[13px] font-black">{title}</span>
+          {at && <span className="text-muted shrink-0 text-[10px] font-semibold">{fmtTime(at)}</span>}
+        </span>
+        <span className="text-muted block truncate text-[12px]">{sub || "—"}</span>
+      </span>
+      {action}
+    </button>
+  );
+}
+
+function Bubble({ mine, body, at }: { mine: boolean; body: string; at: string | null }) {
+  return (
+    <div className={`flex ${mine ? "justify-start" : "justify-end"}`}>
+      <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed shadow-sm ${mine ? "bg-brand text-white" : "bg-card border-line text-ink border"}`}>
+        <p className="whitespace-pre-wrap break-words">{body || "—"}</p>
+        {at && <p className={`mt-0.5 text-[10px] ${mine ? "text-white/70" : "text-muted"}`}>{fmtTime(at)}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── New chat modal (contacts picker + manual fallback) ───────────────────────
+
+function NewChatModal({ onClose, onStarted, seed }: {
+  onClose: () => void;
+  onStarted: (phone: string, name: string | null) => void;
+  seed: { phone: string; name: string | null } | null;
+}) {
+  const [contacts, setContacts] = useState<WaContact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+  const [phone, setPhone] = useState(seed?.phone ?? "");
+  const [name, setName] = useState<string | null>(seed?.name ?? null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Lazily load the account's contacts when the modal opens (spinner while busy).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try { const c = await waContactsAction(); if (alive) setContacts(c); }
+      catch { if (alive) setContacts([]); }
+      finally { if (alive) setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return contacts.slice(0, 100);
+    return contacts.filter((c) => (c.name ?? "").toLowerCase().includes(needle) || c.phone.includes(needle)).slice(0, 100);
+  }, [contacts, q]);
+
+  const start = async () => {
+    if (!phone.trim() || !text.trim() || busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await waChatStartAction(phone.trim(), text.trim());
+      if (!r.ok) { setErr(r.error ?? "שליחה נכשלה."); return; }
+      onStarted(phone.trim(), name);
+    } catch { setErr("שליחה נכשלה."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div dir="rtl" className="bg-card border-line w-full max-w-md rounded-[22px] border p-4 shadow-[var(--shadow-lift)]" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-ink text-base font-black">שיחה חדשה</h3>
+          <button onClick={onClose} className="text-muted hover:text-ink rounded-lg p-1"><Icon name="X" size={18} /></button>
         </div>
-      )}
+
+        {/* Contacts picker (above the manual phone fallback) */}
+        <label className="text-muted mb-1 block text-[11px] font-black">בחר איש קשר</label>
+        <div className="border-line mb-1 flex items-center gap-2 rounded-xl border px-2.5">
+          <Icon name="Search" size={15} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חפש לפי שם או מספר…" className="text-ink h-9 flex-1 bg-transparent text-sm outline-none" />
+        </div>
+        <div className="border-line mb-3 max-h-44 overflow-y-auto rounded-xl border">
+          {loading ? (
+            <div className="text-muted flex items-center justify-center gap-2 py-6 text-[12px] font-bold"><Spinner size={15} /> טוען אנשי קשר…</div>
+          ) : filtered.length === 0 ? (
+            <p className="text-muted py-6 text-center text-[12px] font-bold">{contacts.length === 0 ? "אין אנשי קשר זמינים" : "לא נמצאו תוצאות"}</p>
+          ) : filtered.map((c) => {
+            const picked = phone.trim() === c.phone;
+            return (
+              <button key={c.phone} onClick={() => { setPhone(c.phone); setName(c.name); }} className={`flex w-full items-center gap-2.5 border-b border-line/60 px-3 py-2 text-right transition ${picked ? "bg-brand-soft/60" : "hover:bg-line/40"}`}>
+                <span className="bg-brand-soft text-brand grid h-8 w-8 shrink-0 place-items-center rounded-full text-[12px] font-black">{(c.name || c.phone).charAt(0)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="text-ink block truncate text-[13px] font-bold">{c.name || c.phone}</span>
+                  <span className="text-muted block truncate text-[11px]">{c.phone}</span>
+                </span>
+                {picked && <Icon name="Check" size={15} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Manual phone fallback */}
+        <label className="text-muted mb-1 block text-[11px] font-black">או הזן מספר ידנית</label>
+        <input value={phone} onChange={(e) => { setPhone(e.target.value); setName(null); }} inputMode="tel" placeholder="מספר טלפון (למשל 0501234567)" className="border-line bg-card text-ink mb-3 h-10 w-full rounded-xl border px-3 text-sm outline-none focus:border-brand-light" />
+
+        <label className="text-muted mb-1 block text-[11px] font-black">הודעה ראשונה</label>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="כתוב את ההודעה…" className="border-line bg-card text-ink mb-1 w-full resize-none rounded-xl border px-3 py-2 text-sm outline-none focus:border-brand-light" />
+
+        {err && <p className="text-danger mb-2 text-[12px] font-bold">{err}</p>}
+        <div className="mt-2 flex items-center justify-end gap-2">
+          <button onClick={onClose} className="text-muted text-[13px] font-bold">ביטול</button>
+          <button onClick={() => void start()} disabled={busy || !phone.trim() || !text.trim()} className="btn-zono-primary zono-focus-ring inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-black text-white disabled:opacity-50">
+            {busy ? <Spinner size={15} /> : <Icon name="Send" size={15} />} שלח והתחל
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
