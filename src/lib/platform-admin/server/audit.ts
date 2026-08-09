@@ -44,7 +44,8 @@ export async function writePlatformAudit(e: PlatformAuditEvent): Promise<void> {
       actor_id: e.operator.userId,
       actor_label: `platform:${e.operator.role}`,
       action: e.action,
-      resource_type: e.resourceType ?? null,
+      // resource_type is NOT NULL on platform_audit_log — never pass null.
+      resource_type: e.resourceType ?? "platform",
       resource_id: e.resourceId ?? null,
       source: "platform_admin",
       new_values: newValues,

@@ -44,7 +44,7 @@ export async function listOrganizationsForPlatform(): Promise<PlatformOrgSummary
     .select("id,name,plan,created_at")
     .order("created_at", { ascending: false }).limit(500);
   const rows = (data ?? []) as { id: string; name: string; plan: string | null; created_at: string }[];
-  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "customers.list", metadata: { count: rows.length } });
+  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "customers.list", resourceType: "organization", metadata: { count: rows.length } });
   return rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan ?? null, createdAt: r.created_at }));
 }
 
@@ -56,7 +56,7 @@ export async function getOrganizationForPlatform(orgId: string): Promise<Platfor
   const { data } = await db.from("organizations")
     .select("id,name,plan,city,onboarding_completed,created_at")
     .eq("id", orgId).maybeSingle();
-  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "customers.read", targetOrgId: orgId });
+  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "customers.read", resourceType: "organization", resourceId: orgId, targetOrgId: orgId });
   if (!data) return null;
   const r = data as { id: string; name: string; plan: string | null; city: string | null; onboarding_completed: boolean; created_at: string };
   return { id: r.id, name: r.name, plan: r.plan ?? null, city: r.city ?? null, onboardingCompleted: !!r.onboarding_completed, createdAt: r.created_at };
@@ -70,6 +70,6 @@ export async function listOrganizationUsersForPlatform(orgId: string): Promise<P
     .select("id,full_name,status,last_seen_at")
     .eq("org_id", orgId).limit(500);
   const rows = (data ?? []) as { id: string; full_name: string | null; status: string | null; last_seen_at: string | null }[];
-  await writePlatformAudit({ operator, capability: "platform.users.read", action: "users.list", targetOrgId: orgId, metadata: { count: rows.length } });
+  await writePlatformAudit({ operator, capability: "platform.users.read", action: "users.list", resourceType: "user", targetOrgId: orgId, metadata: { count: rows.length } });
   return rows.map((r) => ({ id: r.id, name: r.full_name ?? null, status: r.status ?? null, lastSeenAt: r.last_seen_at ?? null }));
 }
