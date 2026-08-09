@@ -12,13 +12,20 @@ import { evolutionConfig, isEvolutionConfigured } from "./config";
 import { evoFetch } from "./client";
 import { endpointsFor } from "./endpoints";
 import { instanceName } from "./instance";
-import { buildCreateInstance, buildPresence, buildSendText } from "./requests";
-import { fromConnect, fromConnectionState, fromCreate, type CanonicalConnection } from "./responses";
-import type { RawConnect, RawConnectionState, RawCreate, RawSendResult } from "./raw";
+import { buildCreateInstance, buildFindAll, buildFindMessages, buildPresence, buildSendText } from "./requests";
+import {
+  fromConnect, fromConnectionState, fromCreate,
+  fromFindChats, fromFindContacts, fromFindMessages,
+  type CanonicalChat, type CanonicalConnection, type CanonicalContact, type CanonicalMessage,
+} from "./responses";
+import type {
+  RawConnect, RawConnectionState, RawCreate, RawFindChats, RawFindContacts,
+  RawFindMessages, RawSendResult,
+} from "./raw";
 import { fromSend } from "./responses";
 import type { PersonalError } from "./errors";
 
-export type { CanonicalConnection } from "./responses";
+export type { CanonicalConnection, CanonicalChat, CanonicalContact, CanonicalMessage } from "./responses";
 export type { PersonalError, PersonalErrorCategory } from "./errors";
 export { errorLabel } from "./errors";
 export { normalizeWebhook, type NormalizedWebhook } from "./webhooks";
@@ -117,4 +124,37 @@ export async function sendPresence(ctx: WaSessionCtx, toPhone: string, on: boole
   if (!cfg) return;
   const ep = endpointsFor(cfg.targetVersion);
   await evoFetch<unknown>(cfg, "POST", ep.sendPresence(instanceName(ctx)), buildPresence(toPhone, on));
+}
+
+const MAX_CONTACTS = 500;
+const MAX_MESSAGES = 100;
+
+/** READ the connected account's contacts (personal chats only, deduped). */
+export async function fetchContacts(ctx: WaSessionCtx): Promise<CompatResult<CanonicalContact[]>> {
+  const cfg = evolutionConfig();
+  if (!cfg) return { ok: false, error: UNAVAILABLE };
+  const ep = endpointsFor(cfg.targetVersion);
+  const res = await evoFetch<RawFindContacts>(cfg, "POST", ep.findContacts(instanceName(ctx)), buildFindAll());
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, data: fromFindContacts(res.data).slice(0, MAX_CONTACTS) };
+}
+
+/** READ the account's EXISTING chats (personal only, newest first). */
+export async function fetchChats(ctx: WaSessionCtx): Promise<CompatResult<CanonicalChat[]>> {
+  const cfg = evolutionConfig();
+  if (!cfg) return { ok: false, error: UNAVAILABLE };
+  const ep = endpointsFor(cfg.targetVersion);
+  const res = await evoFetch<RawFindChats>(cfg, "POST", ep.findChats(instanceName(ctx)), buildFindAll());
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, data: fromFindChats(res.data) };
+}
+
+/** READ a single chat's messages by contact phone (oldest first, capped). */
+export async function fetchChatMessages(ctx: WaSessionCtx, phone: string): Promise<CompatResult<CanonicalMessage[]>> {
+  const cfg = evolutionConfig();
+  if (!cfg) return { ok: false, error: UNAVAILABLE };
+  const ep = endpointsFor(cfg.targetVersion);
+  const res = await evoFetch<RawFindMessages>(cfg, "POST", ep.findMessages(instanceName(ctx)), buildFindMessages(phone));
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, data: fromFindMessages(res.data).slice(-MAX_MESSAGES) };
 }
