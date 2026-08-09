@@ -1,31 +1,52 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { getPublicAgentProperties, logAgentSiteEvent, type PublicAgentProperty } from "@/lib/agent-website/service";
+import { getAgentListing, type PropertyFilters } from "@/lib/agent-website/site-data";
+import { logAgentSiteEvent } from "@/lib/agent-website/service";
+import { AgentPropertyCard } from "@/components/agent-website/ui";
 
 export const dynamic = "force-dynamic";
-const money = (n: number | null | undefined) => typeof n === "number" && n > 0 ? `₪${n.toLocaleString("he-IL")}` : "";
 
-export default async function AgentPropertiesPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function AgentPropertiesPage({ params, searchParams }: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
-  const props = await getPublicAgentProperties(slug).catch(() => []);
-  // Record the property-listing view so the agent-site "צפיות בנכסים" metric is real.
+  const sp = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? undefined;
+  const filters: PropertyFilters = { q: one(sp.q), area: one(sp.area), type: one(sp.type), min: one(sp.min), max: one(sp.max), rooms: one(sp.rooms) };
+
+  const view = await getAgentListing(slug, filters).catch(() => null);
   try { const h = await headers(); await logAgentSiteEvent(slug, "property_view", { path: "/properties", userAgent: h.get("user-agent") ?? undefined, ip: (h.get("x-forwarded-for") ?? "").split(",")[0] || undefined }); } catch { /* never block render */ }
+
+  if (!view || view === "disabled") {
+    return <main dir="rtl" className="grid min-h-screen place-items-center bg-white px-4"><div className="rounded-3xl border border-[#e8eaf0] p-10 text-center"><div className="mb-3 text-4xl">🏠</div><h1 className="text-xl font-black text-[#0f172a]">האתר אינו פעיל כרגע</h1></div></main>;
+  }
+
+  const active = Object.values(filters).some(Boolean);
   return (
-    <div dir="rtl" className="min-h-screen bg-white text-[#0f172a]">
-      <nav className="border-b border-[#eef0f4] bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3"><Link href={`/agent/${slug}`} className="font-black text-[#1e1b4b]">← חזרה לאתר</Link><h1 className="text-lg font-black">כל הנכסים</h1></div></nav>
-      <main className="mx-auto max-w-6xl px-4 py-8">
-        {props.length === 0 ? <p className="py-16 text-center text-[#64748b]">אין נכסים זמינים כרגע.</p> : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{props.map((p) => <Card key={p.id} p={p} />)}</div>
+    <div dir="rtl" style={{ ...(view.brandVars as Record<string, string>) }} className="min-h-screen bg-[var(--brand-background)] text-[var(--brand-text)]">
+      <nav className="sticky top-0 z-30 border-b border-[var(--brand-border)] bg-[var(--brand-background)]/90 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-3.5 sm:px-8">
+          <Link href={`/agent/${slug}`} className="text-[14px] font-bold text-[color:var(--brand-link)]">← חזרה לאתר</Link>
+          {view.logo ? <img src={view.logo} alt={view.officeName ?? ""} className="h-8 w-auto max-w-[130px] object-contain" /> : <span className="font-black text-[var(--brand-text)]">{view.officeName ?? view.agentName}</span>}
+        </div>
+      </nav>
+      <main className="mx-auto w-full max-w-7xl px-5 py-10 sm:px-8">
+        <div className="mb-6 flex items-baseline justify-between gap-4">
+          <h1 className="text-2xl font-black sm:text-3xl">כל הנכסים</h1>
+          <span className="text-[14px] font-semibold text-[var(--brand-muted)]">{view.properties.length} נכסים{active ? " · מסוננים" : ""}</span>
+        </div>
+        {view.properties.length === 0 ? (
+          <div className="py-20 text-center text-[var(--brand-muted)]">
+            <p className="text-[16px] font-semibold">לא נמצאו נכסים{active ? " התואמים לחיפוש" : ""}.</p>
+            {active && <Link href={`/agent/${slug}/properties`} className="mt-3 inline-block text-[14px] font-bold text-[color:var(--brand-link)]">ניקוי סינון</Link>}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {view.properties.map((p) => <AgentPropertyCard key={p.id} property={p} />)}
+          </div>
         )}
       </main>
-    </div>
-  );
-}
-function Card({ p }: { p: PublicAgentProperty }) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#eef0f4]">
-      <div className="relative h-44 bg-[#f1f5f9]">{p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-3xl">🏠</div>}{p.tag && <span className="absolute right-3 top-3 rounded-full bg-[#7C3AED] px-2 py-0.5 text-[11px] font-bold text-white">{p.tag}</span>}</div>
-      <div className="p-4"><p className="text-lg font-black">{money(p.price)}</p><p className="text-[13px] text-[#64748b]">{p.city ?? ""}{p.neighborhood ? " · " + p.neighborhood : ""}</p><p className="mt-1 text-[13px] text-[#334155]">{p.rooms ? `${p.rooms} חד׳` : ""}{p.area ? ` · ${p.area} מ״ר` : ""}</p></div>
     </div>
   );
 }
