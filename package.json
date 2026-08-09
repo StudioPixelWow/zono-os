@@ -20,6 +20,7 @@
     "dev-check:platform-admin": "tsx scripts/platform-admin-dev-check.ts",
     "qa:platform-admin-shell": "tsx scripts/platform-admin-shell-qa.ts",
     "qa:platform-customer360": "tsx scripts/platform-customer360-qa.ts",
+    "qa:platform-user-admin": "tsx scripts/platform-user-admin-qa.ts",
     "dev-check:launch": "tsx scripts/launch-dev-check.ts",
     "readiness": "tsx scripts/zono-production-readiness.ts",
     "validate:e2e": "tsx scripts/zono-e2e-validation.ts",

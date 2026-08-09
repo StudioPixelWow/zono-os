@@ -6,12 +6,13 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceRoleOrgContext } from "@/lib/supabase/server-context";
 import { getCurrentUserProfile, type UserProfile } from "@/lib/repositories/userRepository";
+import { isBlockedAccountStatus } from "@/lib/auth/account-status";
 import {
   getOrganizationById,
   type Organization,
 } from "@/lib/repositories/organizationRepository";
 
-export type OnboardingState = "unauthenticated" | "onboarding" | "ready";
+export type OnboardingState = "unauthenticated" | "onboarding" | "ready" | "suspended";
 
 export interface SessionContext {
   user: User | null;
@@ -52,6 +53,12 @@ export async function getSessionContext(): Promise<SessionContext> {
   }
 
   const profile = await getCurrentUserProfile();
+  // P5.3: a suspended/disabled account is blocked at the runtime session guard —
+  // suspension is enforced, not cosmetic. Checked BEFORE onboarding so a blocked
+  // user can neither use the app nor (re)onboard.
+  if (profile && isBlockedAccountStatus((profile as { status?: string | null }).status)) {
+    return { user, profile, organization: null, state: "suspended" };
+  }
   if (!profile || !profile.onboarding_completed) {
     return { user, profile: profile ?? null, organization: null, state: "onboarding" };
   }
