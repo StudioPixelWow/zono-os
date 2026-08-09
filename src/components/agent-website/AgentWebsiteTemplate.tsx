@@ -124,7 +124,7 @@ function Hero({ data }: { data: AgentSitePayload }) {
   const title = agent.valueProp || agent.headline || "הבית הבא שלכם מתחיל כאן";
 
   return (
-    <section className="relative overflow-hidden border-b border-[var(--brand-border)] bg-gradient-to-b from-[var(--brand-surface)] to-[var(--brand-background)]">
+    <section className="relative overflow-hidden border-b border-[var(--brand-border)] bg-gradient-to-b from-[var(--brand-soft)] via-[var(--brand-surface)] to-[var(--brand-background)]">
       <div className={`mx-auto grid w-full max-w-7xl items-center gap-10 px-5 pb-16 pt-10 sm:px-8 lg:pb-24 lg:pt-14 ${hasPhoto ? "lg:grid-cols-2" : ""}`}>
         {/* Text (start / right) */}
         <div className={hasPhoto ? "" : "mx-auto max-w-3xl text-center"}>

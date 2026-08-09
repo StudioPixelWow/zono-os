@@ -26,7 +26,7 @@ export function ExpertiseMap({ points, areas, primaryArea, propertiesHref }: {
   }));
   const heading = primaryArea ? `המומחה שלך לנדל״ן ב${primaryArea}` : "האזור שלי. המומחיות שלי.";
   const hasMap = mapPoints.length > 0;
-  const useHeat = mapPoints.length > 12; // heat only reads well with many points; else clean markers
+  const useHeat = mapPoints.length >= 4; // heat map with cluster counts once several properties are geocoded
 
   return (
     <section id="areas" className="bg-[var(--brand-surface)]">
@@ -34,7 +34,7 @@ export function ExpertiseMap({ points, areas, primaryArea, propertiesHref }: {
         <div className="order-2 lg:order-1">
           {hasMap ? (
             <div className="overflow-hidden rounded-2xl border border-[var(--brand-border)]">
-              <ZonoMap points={mapPoints} heightClass="h-[420px]" clusterThreshold={12} markersWithHeat={useHeat} heatmap={useHeat} emptyMessage="אין עדיין נכסים ממופים" />
+              <ZonoMap points={mapPoints} heightClass="h-[420px]" clusterThreshold={5} markersWithHeat heatmap={useHeat} markerRevealZoom={15} emptyMessage="אין עדיין נכסים ממופים" />
             </div>
           ) : (
             <AreaFallback areas={areas} />
