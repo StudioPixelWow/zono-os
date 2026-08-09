@@ -64,3 +64,31 @@ export async function assertPlatformCapability(capability: PlatformCapability): 
 export async function currentOperatorCan(capability: PlatformCapability): Promise<boolean> {
   return operatorCan(await getCurrentPlatformOperator(), capability);
 }
+
+/**
+ * Non-throwing page/layout guard: resolve the operator ONLY if they hold
+ * `capability`, else null. Route handlers use this to render a safe denial
+ * instead of throwing. Fail-closed like `operatorCan`.
+ */
+export async function authorizePlatform(capability: PlatformCapability): Promise<PlatformOperator | null> {
+  const operator = await getCurrentPlatformOperator();
+  return operatorCan(operator, capability) ? operator : null;
+}
+
+/**
+ * The operator's OWN display name (their own users row, by id). Service-role
+ * read of a single non-sensitive column (full_name) for the authenticated
+ * operator themself — never another user, never PII beyond their own name.
+ * Returns null if unavailable; the header degrades to role-only.
+ */
+export async function getPlatformOperatorDisplayName(userId: string): Promise<string | null> {
+  if (!isServiceRoleConfigured()) return null;
+  try {
+    const db = createServiceRoleClient();
+    const { data } = await db.from("users").select("full_name").eq("id", userId).maybeSingle();
+    const row = (data as { full_name: string | null } | null) ?? null;
+    return row?.full_name ?? null;
+  } catch {
+    return null;
+  }
+}
