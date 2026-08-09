@@ -16,7 +16,7 @@ const ROOMS = ["1", "2", "3", "4", "5", "6"];
 const PRICES = [500_000, 1_000_000, 1_500_000, 2_000_000, 3_000_000, 5_000_000];
 const fmtPrice = (n: number) => `₪${(n / 1_000_000).toLocaleString("he-IL", { maximumFractionDigits: 1 })}M`;
 
-export function PropertySearch({ slug, areas, types }: { slug: string; areas: string[]; types: string[] }) {
+export function PropertySearch({ slug, areas, types, basePath = "/agent" }: { slug: string; areas: string[]; types: string[]; basePath?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ q: "", area: "", type: "", min: "", max: "", rooms: "" });
@@ -25,7 +25,7 @@ export function PropertySearch({ slug, areas, types }: { slug: string; areas: st
     e.preventDefault();
     const p = new URLSearchParams();
     Object.entries(f).forEach(([k, v]) => { if (v) p.set(k, v); });
-    router.push(`/agent/${slug}/properties${p.toString() ? `?${p}` : ""}`);
+    router.push(`${basePath}/${slug}/properties${p.toString() ? `?${p}` : ""}`);
   };
 
   const sel = "w-full rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-3 py-3 text-[14px] text-[var(--brand-text)] outline-none transition focus:border-[color:var(--brand-primary)]";
