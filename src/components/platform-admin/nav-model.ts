@@ -31,7 +31,7 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
   {
     label: "לקוחות", icon: "Building2", children: [
       { label: "ארגונים", href: "/platform/customers", icon: "Building2", cap: "platform.customers.read", ready: true },
-      { label: "משתמשים", href: "/platform/users", icon: "Users", cap: "platform.users.read" },
+      { label: "משתמשים", href: "/platform/users", icon: "Users", cap: "platform.users.read", ready: true },
     ],
   },
   {
@@ -44,10 +44,10 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
   },
   {
     label: "מוצר", icon: "Layers", children: [
-      { label: "גישת יכולות", href: "/platform/product/feature-access", icon: "ShieldCheck", cap: "platform.flags.read" },
-      { label: "דגלי יכולות", href: "/platform/product/feature-flags", icon: "Flag", cap: "platform.flags.read" },
-      { label: "שימוש", href: "/platform/product/usage", icon: "Activity", cap: "platform.usage.read" },
-      { label: "עלויות AI", href: "/platform/product/ai-costs", icon: "Sparkles", cap: "platform.ai.read" },
+      { label: "גישת יכולות", href: "/platform/product/feature-access", icon: "ShieldCheck", cap: "platform.flags.read", ready: true },
+      { label: "דגלי יכולות", href: "/platform/product/feature-flags", icon: "Flag", cap: "platform.flags.read", ready: true },
+      { label: "שימוש", href: "/platform/product/usage", icon: "Activity", cap: "platform.usage.read", ready: true },
+      { label: "עלויות AI", href: "/platform/product/ai-costs", icon: "Sparkles", cap: "platform.ai.read", ready: true },
     ],
   },
   {
@@ -68,7 +68,7 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
       { label: "הפעלות וגישה", href: "/platform/security/sessions", icon: "Lock", cap: "platform.audit.read", ready: true },
     ],
   },
-  { label: "הגדרות", href: "/platform/settings", icon: "Settings", cap: "platform.customers.read" },
+  { label: "הגדרות", href: "/platform/settings", icon: "Settings", cap: "platform.customers.read", ready: true },
 ];
 
 /** Flattened leaf list (for the command palette + route/cap coverage checks). */
