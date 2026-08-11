@@ -61,10 +61,11 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
   { label: "תמיכה", href: "/platform/support", icon: "Handshake", cap: "platform.support.read", ready: true },
   {
     label: "אבטחה", icon: "Shield", children: [
+      { label: "מרכז אבטחה", href: "/platform/security", icon: "Shield", cap: "platform.admins.read", ready: true },
+      { label: "מנהלי פלטפורמה", href: "/platform/security/admin-users", icon: "Fingerprint", cap: "platform.admins.read", ready: true },
       { label: "יומן ביקורת", href: "/platform/security/audit-log", icon: "ScrollText", cap: "platform.audit.read", ready: true },
       { label: "היסטוריית מצב תמיכה", href: "/platform/security/impersonation", icon: "ShieldCheck", cap: "platform.support.read", ready: true },
-      { label: "מנהלי פלטפורמה", href: "/platform/security/admin-users", icon: "Fingerprint", cap: "platform.admins.read" },
-      { label: "הפעלות", href: "/platform/security/sessions", icon: "Lock", cap: "platform.audit.read" },
+      { label: "הפעלות וגישה", href: "/platform/security/sessions", icon: "Lock", cap: "platform.audit.read", ready: true },
     ],
   },
   { label: "הגדרות", href: "/platform/settings", icon: "Settings", cap: "platform.customers.read" },
