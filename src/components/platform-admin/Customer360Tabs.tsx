@@ -19,6 +19,7 @@ export const CUSTOMER360_TABS: C360Tab[] = [
   { key: "access", label: "גישה", sub: "/access", cap: "platform.customers.read", icon: "ShieldCheck" },
   { key: "operations", label: "תפעול", sub: "/operations", cap: "platform.ops.read", icon: "Route" },
   { key: "billing", label: "חיוב", sub: "/billing", cap: "platform.billing.read", icon: "Banknote" },
+  { key: "support", label: "תמיכה", sub: "/support", cap: "platform.support.read", icon: "Handshake" },
 ];
 
 export function Customer360Tabs({ orgId, caps }: { orgId: string; caps: string[] }) {

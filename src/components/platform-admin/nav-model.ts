@@ -58,7 +58,7 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
       { label: "בריאות מערכת", href: "/platform/operations/system-health", icon: "Activity", cap: "platform.ops.read", ready: true },
     ],
   },
-  { label: "תמיכה", href: "/platform/support", icon: "Handshake", cap: "platform.support.read" },
+  { label: "תמיכה", href: "/platform/support", icon: "Handshake", cap: "platform.support.read", ready: true },
   {
     label: "אבטחה", icon: "Shield", children: [
       { label: "יומן ביקורת", href: "/platform/security/audit-log", icon: "ScrollText", cap: "platform.audit.read", ready: true },
