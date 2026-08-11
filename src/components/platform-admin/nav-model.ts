@@ -52,9 +52,10 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
   },
   {
     label: "תפעול", icon: "Route", children: [
-      { label: "אינטגרציות", href: "/platform/operations/integrations", icon: "Globe", cap: "platform.integrations.read" },
-      { label: "עבודות ותורים", href: "/platform/operations/jobs", icon: "ListChecks", cap: "platform.ops.read" },
-      { label: "בריאות מערכת", href: "/platform/operations/system-health", icon: "Activity", cap: "platform.ops.read" },
+      { label: "סקירת תפעול", href: "/platform/operations", icon: "Activity", cap: "platform.ops.read", ready: true },
+      { label: "אינטגרציות", href: "/platform/operations/integrations", icon: "Globe", cap: "platform.integrations.read", ready: true },
+      { label: "עבודות ותורים", href: "/platform/operations/jobs", icon: "ListChecks", cap: "platform.ops.read", ready: true },
+      { label: "בריאות מערכת", href: "/platform/operations/system-health", icon: "Activity", cap: "platform.ops.read", ready: true },
     ],
   },
   { label: "תמיכה", href: "/platform/support", icon: "Handshake", cap: "platform.support.read" },
