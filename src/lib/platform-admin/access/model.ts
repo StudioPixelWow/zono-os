@@ -129,3 +129,35 @@ export function classifyDrift(e: EffectiveAccess, currentEnabled = true): DriftE
   else if (e.source === "org_override" || e.source === "feature_flag") severity = "info";
   return { feature: e.feature, label: e.label, current: currentEnabled, resolved: e.enabled, severity, source: e.source, reason: e.reason };
 }
+
+export interface DriftSummary { critical: number; warning: number; info: number; none: number; total: number }
+
+/** Aggregate a drift set by severity — used by the platform drift report. */
+export function summarizeDrift(entries: DriftEntry[]): DriftSummary {
+  const s: DriftSummary = { critical: 0, warning: 0, info: 0, none: 0, total: entries.length };
+  for (const e of entries) s[e.severity] += 1;
+  return s;
+}
+
+// ── Access matrix (PURE) ────────────────────────────────────────────────────
+// features × plans, PLAN-ALONE (no org overrides). This is the canonical
+// "what each plan entitles" table rendered by the plans / feature-access
+// screens. Base modules (entitlement:null) are true for every tier.
+export const PLAN_TIERS: PlanTier[] = ["starter", "professional", "office", "enterprise"];
+
+export interface AccessMatrixCell { tier: PlanTier; entitled: boolean }
+export interface AccessMatrixRow { feature: string; label: string; category: FeatureDef["category"]; entitlement: EntitlementKey | null; cells: AccessMatrixCell[] }
+
+/** Deterministic features×plans entitlement matrix (plan-alone, no overrides). */
+export function buildAccessMatrix(): AccessMatrixRow[] {
+  return FEATURE_CATALOG.map((f) => ({
+    feature: f.key,
+    label: f.label,
+    category: f.category,
+    entitlement: f.entitlement,
+    cells: PLAN_TIERS.map((tier) => ({
+      tier,
+      entitled: f.entitlement ? planAllows(tier, f.entitlement) : true,
+    })),
+  }));
+}

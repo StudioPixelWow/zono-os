@@ -6,6 +6,7 @@
  */
 import {
   FEATURE_CATALOG, featureByKey, normalizePlanTier, resolveFeatureAccess, classifyDrift,
+  buildAccessMatrix, summarizeDrift, PLAN_TIERS,
 } from "../src/lib/platform-admin/access/model";
 import type { PlanTier } from "../src/lib/launch/types";
 
@@ -68,6 +69,24 @@ function main(): void {
   // ── 8. Catalog integrity. ──
   assert(FEATURE_CATALOG.length >= 14, `catalog has ${FEATURE_CATALOG.length} features`);
   assert(new Set(FEATURE_CATALOG.map((f) => f.key)).size === FEATURE_CATALOG.length, "catalog keys unique");
+
+  // ── 9. Access matrix: one row per feature, one cell per tier, monotonic-ish. ──
+  const matrix = buildAccessMatrix();
+  assert(matrix.length === FEATURE_CATALOG.length, "matrix row per catalog feature");
+  assert(matrix.every((r) => r.cells.length === PLAN_TIERS.length), "matrix cell per plan tier");
+  // Base modules entitled on EVERY tier; enterprise entitled to EVERYTHING.
+  assert(matrix.filter((r) => r.entitlement === null).every((r) => r.cells.every((c) => c.entitled)), "matrix: base modules entitled on all tiers");
+  assert(matrix.every((r) => r.cells.find((c) => c.tier === "enterprise")!.entitled), "matrix: enterprise entitled to every feature");
+  // starter must NOT be entitled to a known plan-gated feature.
+  assert(matrix.find((r) => r.feature === "competitor_intelligence")!.cells.find((c) => c.tier === "starter")!.entitled === false, "matrix: starter lacks competitor_intelligence");
+
+  // ── 10. Drift summary aggregation matches per-entry classification. ──
+  const drift = FEATURE_CATALOG.map((f) => classifyDrift(resolveFeatureAccess("starter", f, null), true));
+  const sum = summarizeDrift(drift);
+  assert(sum.total === drift.length, "drift summary total == entries");
+  assert(sum.critical + sum.warning + sum.info + sum.none === drift.length, "drift summary buckets sum to total");
+  assert(sum.critical === drift.filter((d) => d.severity === "critical").length, "drift summary critical count matches");
+  assert(sum.critical > 0, "starter (grandfathered) has CRITICAL drift → enforcement must not silently remove access");
 
   console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
   process.exit(failures === 0 ? 0 : 1);

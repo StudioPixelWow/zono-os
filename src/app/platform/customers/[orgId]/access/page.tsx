@@ -4,9 +4,11 @@
 // Flags: flags.read (each gated independently). NO mutation of any kind.
 import { authorizePlatform } from "@/lib/platform-admin/server/auth";
 import { getOrgAccessForPlatform } from "@/lib/platform-admin/server/dal";
+import { getOrgEffectiveAccess } from "@/lib/platform-admin/server/access";
 import { RestrictedPanel } from "@/components/platform-admin/customer360-ui";
 import { PanelCard, PlanBadge, formatPlatformDate } from "@/components/platform-admin/ui";
 import { KV } from "@/components/platform-admin/customer360-ui";
+import { EffectiveAccessList, DriftSummaryStrip, DriftList } from "@/components/platform-admin/access-ui";
 import { Icon } from "@/components/dashboard/Icon";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +17,7 @@ export default async function Customer360AccessPage({ params }: { params: Promis
   const operator = await authorizePlatform("platform.customers.read");
   if (!operator) return <RestrictedPanel />;
   const { orgId } = await params;
-  const a = await getOrgAccessForPlatform(orgId);
+  const [a, eff] = await Promise.all([getOrgAccessForPlatform(orgId), getOrgEffectiveAccess(orgId)]);
   const limitEntries = a.entitlements.limits ? Object.entries(a.entitlements.limits).slice(0, 12) : [];
 
   return (
@@ -67,9 +69,35 @@ export default async function Customer360AccessPage({ params }: { params: Promis
         )}
       </PanelCard>
 
+      {/* EFFECTIVE ACCESS (P5.4 · resolver output) */}
+      <div className="col-span-full">
+        <PanelCard title="גישה אפקטיבית (מחושב · מצב צל)" icon="ShieldCheck">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
+            <span className="text-muted text-[12px] font-semibold">מוכרע ע״י ה-resolver הקנוני: תוכנית {eff.planTier}{eff.overridesApplied ? " · כולל overrides" : " · ללא overrides (חסרה הרשאת דגלים)"}</span>
+            <DriftSummaryStrip summary={eff.driftSummary} />
+          </div>
+          <EffectiveAccessList access={eff.access} />
+        </PanelCard>
+      </div>
+
+      {/* DRIFT (P5.4 · shadow) */}
+      {eff.driftSummary.critical + eff.driftSummary.warning + eff.driftSummary.info > 0 && (
+        <div className="col-span-full">
+          <PanelCard title="סטייה מהתנהגות נוכחית" icon="Activity">
+            {eff.driftSummary.critical > 0 && (
+              <div className="border-danger-soft bg-danger-soft/40 mb-3 flex items-start gap-2 rounded-xl border px-4 py-3">
+                <span className="text-danger mt-0.5"><Icon name="AlertTriangle" size={15} /></span>
+                <span className="text-ink text-[12px] font-semibold">אכיפה תסיר {eff.driftSummary.critical} יכולות שבשימוש כיום — יש לשדרג תוכנית או להוסיף override לפני מעבר לאכיפה.</span>
+              </div>
+            )}
+            <DriftList drift={eff.drift} />
+          </PanelCard>
+        </div>
+      )}
+
       <div className="border-line bg-surface col-span-full flex items-center gap-2 rounded-xl border px-4 py-3">
         <span className="text-muted"><Icon name="Lock" size={14} /></span>
-        <span className="text-muted text-[12px] font-semibold">תצוגה לקריאה בלבד — שינוי תוכנית/זכאויות/דגלים אינו זמין ב-P5.2.</span>
+        <span className="text-muted text-[12px] font-semibold">תצוגה לקריאה בלבד · מצב צל (SHADOW) — המערכת מחשבת ומדווחת גישה אך אינה אוכפת. שינוי תוכנית/זכאויות/דגלים אינו זמין.</span>
       </div>
     </div>
   );
