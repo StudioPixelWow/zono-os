@@ -4,6 +4,7 @@
 // actions only — no silent dropdown execution, no password ops, no delete. All
 // writes go through audited platform server actions.
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import { StatusBadge, formatPlatformDate } from "./ui";
@@ -18,7 +19,7 @@ type Pending =
   | { kind: "suspend" | "activate"; userId: string; name: string }
   | { kind: "role"; userId: string; name: string; roleKey: string; roleLabel: string };
 
-export function OrgUserAdmin({ orgId, users, roles, invitations }: { orgId: string; users: OrgUserRow[]; roles: OrgRoleOption[]; invitations: OrgInvitationRow[] }) {
+export function OrgUserAdmin({ orgId, users, roles, invitations, canImpersonate = false }: { orgId: string; users: OrgUserRow[]; roles: OrgRoleOption[]; invitations: OrgInvitationRow[]; canImpersonate?: boolean }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [reason, setReason] = useState("");
   const [busy, startTransition] = useTransition();
@@ -119,14 +120,19 @@ export function OrgUserAdmin({ orgId, users, roles, invitations }: { orgId: stri
                 </select>
                 <span><StatusBadge status={u.status} /></span>
                 <span className="text-muted text-[12px]">{u.lastSeenAt ? formatPlatformDate(u.lastSeenAt) : "—"}</span>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setPending({ kind: suspended ? "activate" : "suspend", userId: u.id, name: u.name || "—" })}
-                  className={cn("inline-flex h-8 items-center justify-center gap-1 rounded-lg px-2.5 text-[12px] font-bold", suspended ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}
-                >
-                  <Icon name={suspended ? "Check" : "Lock"} size={13} />{suspended ? "הפעלה" : "השעיה"}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setPending({ kind: suspended ? "activate" : "suspend", userId: u.id, name: u.name || "—" })}
+                    className={cn("inline-flex h-8 items-center justify-center gap-1 rounded-lg px-2.5 text-[12px] font-bold", suspended ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}
+                  >
+                    <Icon name={suspended ? "Check" : "Lock"} size={13} />{suspended ? "הפעלה" : "השעיה"}
+                  </button>
+                  {canImpersonate && !suspended ? (
+                    <Link href={`/platform/support-view/${orgId}/${u.id}`} title="צפייה במערכת כמשתמש" className="border-line text-brand inline-flex h-8 items-center justify-center rounded-lg border px-2 text-[12px] font-bold"><Icon name="ShieldCheck" size={13} /></Link>
+                  ) : null}
+                </div>
               </li>
             );
           })}

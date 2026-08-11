@@ -62,6 +62,7 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
   {
     label: "אבטחה", icon: "Shield", children: [
       { label: "יומן ביקורת", href: "/platform/security/audit-log", icon: "ScrollText", cap: "platform.audit.read", ready: true },
+      { label: "היסטוריית מצב תמיכה", href: "/platform/security/impersonation", icon: "ShieldCheck", cap: "platform.support.read", ready: true },
       { label: "מנהלי פלטפורמה", href: "/platform/security/admin-users", icon: "Fingerprint", cap: "platform.admins.read" },
       { label: "הפעלות", href: "/platform/security/sessions", icon: "Lock", cap: "platform.audit.read" },
     ],

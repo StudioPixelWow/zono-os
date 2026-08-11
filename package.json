@@ -38,7 +38,8 @@
     "qa:platform-access": "tsx scripts/platform-access-qa.ts",
     "qa:platform-billing": "tsx scripts/platform-billing-qa.ts",
     "qa:platform-ops": "tsx scripts/platform-ops-qa.ts",
-    "qa:platform-support": "tsx scripts/platform-support-qa.ts"
+    "qa:platform-support": "tsx scripts/platform-support-qa.ts",
+    "qa:platform-impersonation": "tsx scripts/platform-impersonation-qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

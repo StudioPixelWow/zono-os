@@ -10,6 +10,7 @@ import { RestrictedPanel, EmptyPanel } from "@/components/platform-admin/custome
 import { PanelCard, StatusBadge, formatPlatformDate } from "@/components/platform-admin/ui";
 import { OrgUserAdmin } from "@/components/platform-admin/OrgUserAdmin";
 import { Icon } from "@/components/dashboard/Icon";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function Customer360UsersPage({ params }: { params: Promise
   if (!operator) return <RestrictedPanel />;
   const { orgId } = await params;
   const canManage = operatorCan(operator, "platform.users.manage");
+  const canImpersonate = operatorCan(operator, "platform.support.impersonate");
 
   const [{ users, roleDistribution, activeCount }, seats, roles, invitations] = await Promise.all([
     getOrgUsersForPlatform(orgId),
@@ -48,7 +50,7 @@ export default async function Customer360UsersPage({ params }: { params: Promise
       {users.length === 0 ? (
         <EmptyPanel icon="Users" note="אין משתמשים בארגון זה" />
       ) : canManage ? (
-        <OrgUserAdmin orgId={orgId} users={users} roles={roles} invitations={invitations} />
+        <OrgUserAdmin orgId={orgId} users={users} roles={roles} invitations={invitations} canImpersonate={canImpersonate} />
       ) : (
         <PanelCard title={`משתמשים (${users.length})`} icon="Users">
           <ul className="divide-line divide-y">
@@ -59,7 +61,12 @@ export default async function Customer360UsersPage({ params }: { params: Promise
                 </span>
                 <span className="text-muted text-[12.5px] font-semibold">{u.roleName || u.roleKey || "—"}</span>
                 <span><StatusBadge status={u.status} /></span>
-                <span className="text-muted text-[12px]">{u.lastSeenAt ? formatPlatformDate(u.lastSeenAt) : "—"}</span>
+                <span className="text-muted flex items-center justify-between gap-2 text-[12px]">
+                  {u.lastSeenAt ? formatPlatformDate(u.lastSeenAt) : "—"}
+                  {canImpersonate && u.status !== "suspended" && u.status !== "disabled" ? (
+                    <Link href={`/platform/support-view/${orgId}/${u.id}`} title="צפייה במערכת כמשתמש" className="border-line text-brand inline-flex h-7 items-center justify-center rounded-lg border px-2 font-bold"><Icon name="ShieldCheck" size={13} /></Link>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>

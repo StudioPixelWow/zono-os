@@ -23,6 +23,7 @@ export default async function Page({ params }: { params: Promise<{ ticketId: str
   if (!detail) notFound();
   const { ticket: t, notes } = detail;
   const canManage = await currentOperatorCan("platform.support.manage");
+  const canImpersonate = await currentOperatorCan("platform.support.impersonate");
   const operators = canManage ? await listAssignableOperators() : [];
 
   return (
@@ -85,9 +86,19 @@ export default async function Page({ params }: { params: Promise<{ ticketId: str
             </div>
           </PanelCard>
 
-          <div className="border-line bg-surface rounded-xl border px-4 py-3">
-            <p className="text-muted text-[11px] font-semibold">כלי הזדהות (act-as-user) אינו זמין — מתוכנן לשלב P5.8. אין החלפת הפעלה.</p>
-          </div>
+          {canImpersonate && t.userId && (
+            <PanelCard title="צפייה במערכת כמשתמש" icon="ShieldCheck">
+              <div className="px-1">
+                <p className="text-muted mb-3 text-[12px]">מצב תמיכה לקריאה בלבד — שחזור מאובטח של חשבון הלקוח בתוך הפלטפורמה. אין כניסה לחשבון הלקוח ואין שינוי נתונים.</p>
+                <Link href={`/platform/support-view/${t.orgId}/${t.userId}?ticket=${t.id}`} className="bg-brand inline-block rounded-lg px-4 py-2 text-[13px] font-bold text-white">כניסה לצפייה כמשתמש ←</Link>
+              </div>
+            </PanelCard>
+          )}
+          {!t.userId && (
+            <div className="border-line bg-surface rounded-xl border px-4 py-3">
+              <p className="text-muted text-[11px] font-semibold">לפנייה זו לא משויך משתמש יעד — צפייה במערכת כמשתמש אינה זמינה.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
