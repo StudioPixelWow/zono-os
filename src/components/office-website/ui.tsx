@@ -65,29 +65,38 @@ export function OfficePropertyCard({ property }: { property: OfficeProperty }) {
   );
 }
 
-/** Team member card (spec §6/§23) — large portrait, links to /agent/[slug]. */
+/** Team member card (spec §6/§23) — large portrait, links to /agent/[slug].
+ *  Server-safe: no event handlers; the WhatsApp link is a SIBLING of the profile
+ *  link (never an <a> nested inside another <a>). */
 export function TeamCard({ member }: { member: OfficeTeamMember }) {
-  const body = (
+  const cls = "group flex flex-col overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] transition duration-200 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]";
+  const photo = (
+    <div className="relative aspect-[4/5] overflow-hidden bg-[var(--brand-soft)]">
+      {member.photo
+        ? <img src={member.photo} alt={member.name} loading="lazy" className="h-full w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]" />
+        : <div className="grid h-full w-full place-items-center text-5xl font-black text-[color:var(--brand-primary)]">{member.name.slice(0, 1)}</div>}
+    </div>
+  );
+  const heading = (
     <>
-      <div className="relative aspect-[4/5] overflow-hidden bg-[var(--brand-soft)]">
-        {member.photo
-          ? <img src={member.photo} alt={member.name} loading="lazy" className="h-full w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]" />
-          : <div className="grid h-full w-full place-items-center text-5xl font-black text-[color:var(--brand-primary)]">{member.name.slice(0, 1)}</div>}
-      </div>
+      <div className="text-[16px] font-black text-[var(--brand-text)]">{member.name}</div>
+      {member.title && <div className="text-[13px] font-semibold text-[color:var(--brand-link)]">{member.title}</div>}
+    </>
+  );
+  return (
+    <div className={cls}>
+      {member.href ? <Link href={member.href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]">{photo}</Link> : photo}
       <div className="flex flex-1 flex-col p-4">
-        <div className="text-[16px] font-black text-[var(--brand-text)]">{member.name}</div>
-        {member.title && <div className="text-[13px] font-semibold text-[color:var(--brand-link)]">{member.title}</div>}
+        {member.href ? <Link href={member.href} className="hover:opacity-90">{heading}</Link> : heading}
         {member.areas.length > 0 && <div className="mt-1 line-clamp-1 text-[12px] text-[var(--brand-muted)]">{member.areas.join(" · ")}</div>}
         {member.activeProperties > 0 && <div className="mt-2 text-[12px] font-bold text-[var(--brand-text)]">{member.activeProperties} נכסים פעילים</div>}
         <div className="mt-3 flex items-center gap-2 pt-1">
-          {member.whatsapp && <a href={member.whatsapp} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`WhatsApp ${member.name}`} className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--brand-primary)] text-[var(--brand-on-primary)]"><WaGlyph /></a>}
-          {member.href && <span className="text-[13px] font-bold text-[color:var(--brand-link)]">לפרופיל ←</span>}
+          {member.whatsapp && <a href={member.whatsapp} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp ${member.name}`} className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--brand-primary)] text-[var(--brand-on-primary)]"><WaGlyph /></a>}
+          {member.href && <Link href={member.href} className="text-[13px] font-bold text-[color:var(--brand-link)]">לפרופיל ←</Link>}
         </div>
       </div>
-    </>
+    </div>
   );
-  const cls = "group flex flex-col overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] transition duration-200 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]";
-  return member.href ? <Link href={member.href} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
 /** Testimonial card with agent attribution (integrity: linked agent only). */
