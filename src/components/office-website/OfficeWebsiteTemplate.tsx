@@ -11,7 +11,7 @@ import { AgentHeader, type HeaderNavItem } from "@/components/agent-website/Agen
 import { PropertySearch } from "@/components/agent-website/PropertySearch";
 import { ExpertiseMap } from "@/components/agent-website/ExpertiseMap";
 import { MobileStickyCta } from "@/components/agent-website/MobileStickyCta";
-import { SectionShell, TextLink, StatStrip, ProofPoints, AreaChips } from "@/components/agent-website/ui";
+import { SectionShell, TextLink, StatStrip, AreaChips } from "@/components/agent-website/ui";
 import { OfficePropertyCard, TeamCard, OfficeTestimonialCard } from "./ui";
 import { SiteLeadForm } from "@/app/site/[slug]/SiteLeadForm";
 
@@ -117,24 +117,50 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
 function Hero({ data }: { data: OfficeSitePayload }) {
   const { office, brand } = data;
   const title = office.tagline || `${office.name} — הבית שלכם להחלטה נכונה`;
+  const hasCover = !!office.cover;
   return (
-    <section className="relative overflow-hidden border-b border-[var(--brand-border)] bg-gradient-to-b from-[var(--brand-soft)] via-[var(--brand-surface)] to-[var(--brand-background)]">
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-5 pb-16 pt-10 sm:px-8 lg:grid-cols-2 lg:pb-24 lg:pt-14">
-        <div>
-          {brand.logo ? <img src={brand.logo} alt={office.name} className="mb-4 h-12 w-auto max-w-[190px] object-contain" /> : <div className="mb-2 text-[15px] font-black text-[color:var(--brand-link)]">{office.name}</div>}
-          <h1 className="text-4xl font-black leading-[1.1] text-[var(--brand-text)] sm:text-5xl">{title}</h1>
-          {office.description && <p className="mt-4 max-w-md text-[16px] leading-relaxed text-[var(--brand-muted)]">{office.description}</p>}
-          {data.proofPoints.length > 0 && <div className="mt-6"><ProofPoints points={data.proofPoints} /></div>}
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] px-6 py-3.5 text-[15px] font-bold text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)]">דברו איתנו</a>
-            {office.whatsapp && <a href={office.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-6 py-3.5 text-[15px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
-          </div>
-        </div>
-        {office.cover && (
-          <div className="relative">
-            <div className="aspect-[4/3] w-full overflow-hidden rounded-3xl bg-[var(--brand-soft)]"><img src={office.cover} alt={office.name} className="h-full w-full object-cover" /></div>
+    <section className="relative isolate overflow-hidden">
+      {/* Immersive background — cover photo when available, else a rich brand
+          gradient, so the hero always feels premium (never a flat white block). */}
+      <div className="absolute inset-0 -z-10">
+        {hasCover ? (
+          <>
+            <img src={office.cover!} alt={office.name} className="h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/55 to-black/30" />
+          </>
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-[var(--brand-primary)]" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/55" />
+          </>
+        )}
+        <div className="absolute inset-0 opacity-[0.16]" style={{ backgroundImage: "radial-gradient(58% 58% at 80% 6%, #fff, transparent 60%)" }} />
+        <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "radial-gradient(#fff 1px, transparent 1.6px)", backgroundSize: "24px 24px" }} />
+      </div>
+
+      <div className="mx-auto flex min-h-[82vh] w-full max-w-7xl flex-col justify-center gap-6 px-5 py-24 sm:px-8">
+        {brand.logo
+          ? <img src={brand.logo} alt={office.name} className="mb-1 h-16 w-auto max-w-[220px] self-start rounded-2xl bg-white/95 p-2.5 object-contain shadow-xl" />
+          : <div className="text-[15px] font-black text-white/90">{office.name}</div>}
+        <h1 className="max-w-4xl text-4xl font-black leading-[1.05] text-white drop-shadow-sm sm:text-6xl lg:text-7xl">{title}</h1>
+        {office.description && <p className="max-w-xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]">{office.description}</p>}
+
+        {data.proofPoints.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-3">
+            {data.proofPoints.slice(0, 4).map((pp) => (
+              <div key={pp.label} className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 backdrop-blur-md">
+                <div className="text-2xl font-black text-white sm:text-3xl">{pp.value}</div>
+                <div className="mt-0.5 text-[12.5px] font-semibold text-white/75">{pp.label}</div>
+              </div>
+            ))}
           </div>
         )}
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a href="#contact" className="rounded-xl bg-white px-8 py-4 text-[15px] font-black text-[color:var(--brand-primary)] shadow-2xl transition hover:-translate-y-0.5">דברו איתנו</a>
+          <a href="#properties" className="rounded-xl border border-white/40 bg-white/10 px-8 py-4 text-[15px] font-bold text-white backdrop-blur-md transition hover:bg-white/20">צפו בנכסים</a>
+          {office.whatsapp && <a href={office.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-white/40 bg-white/10 px-8 py-4 text-[15px] font-bold text-white backdrop-blur-md transition hover:bg-white/20">שלחו WhatsApp</a>}
+        </div>
       </div>
     </section>
   );
