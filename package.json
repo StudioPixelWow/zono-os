@@ -34,7 +34,8 @@
     "qa:meta-connection": "tsx src/lib/meta/connection/qa.ts",
     "qa:meta-content": "tsx src/lib/meta/content/qa.ts",
     "qa:meta-publish": "tsx src/lib/meta/publish/qa.ts",
-    "test:epic3": "node --experimental-strip-types --test scripts/epic3-tests/*.ts"
+    "test:epic3": "node --experimental-strip-types --test scripts/epic3-tests/*.ts",
+    "qa:platform-access": "tsx scripts/platform-access-qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
