@@ -35,7 +35,8 @@
     "qa:meta-content": "tsx src/lib/meta/content/qa.ts",
     "qa:meta-publish": "tsx src/lib/meta/publish/qa.ts",
     "test:epic3": "node --experimental-strip-types --test scripts/epic3-tests/*.ts",
-    "qa:platform-access": "tsx scripts/platform-access-qa.ts"
+    "qa:platform-access": "tsx scripts/platform-access-qa.ts",
+    "qa:platform-billing": "tsx scripts/platform-billing-qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

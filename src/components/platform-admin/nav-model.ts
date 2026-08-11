@@ -36,9 +36,10 @@ export const PLATFORM_NAV: PlatformNavItem[] = [
   },
   {
     label: "הכנסות", icon: "Banknote", children: [
-      { label: "מנויים", href: "/platform/revenue/subscriptions", icon: "BadgeCheck", cap: "platform.billing.read" },
-      { label: "תשלומים", href: "/platform/revenue/payments", icon: "Wallet", cap: "platform.billing.read" },
-      { label: "תוכניות", href: "/platform/revenue/plans", icon: "Tag", cap: "platform.billing.read" },
+      { label: "סקירת הכנסות", href: "/platform/revenue", icon: "Banknote", cap: "platform.billing.read", ready: true },
+      { label: "מנויים", href: "/platform/revenue/subscriptions", icon: "BadgeCheck", cap: "platform.billing.read", ready: true },
+      { label: "תשלומים", href: "/platform/revenue/payments", icon: "Wallet", cap: "platform.billing.read", ready: true },
+      { label: "תוכניות", href: "/platform/revenue/plans", icon: "Tag", cap: "platform.billing.read", ready: true },
     ],
   },
   {
