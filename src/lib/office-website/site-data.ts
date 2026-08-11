@@ -128,6 +128,12 @@ export async function getOfficeSite(slug: string): Promise<OfficeSitePayload | "
     admin.from("organizations").select("name,city").eq("id", orgId).maybeSingle(),
   ]);
 
+  // Per-agent brand-identity photos (real headshots). Preferred over the
+  // agent_websites profile image, which can be a stock placeholder — mirrors the
+  // agent site's resolution so a person shows the SAME photo everywhere.
+  const { data: agentBrandRows } = await admin.from("brand_identity_profiles").select("entity_id,profile_image_url").eq("org_id", orgId);
+  const agentPhotoByUser = new Map(((agentBrandRows ?? []) as { entity_id: string; profile_image_url: string | null }[]).map((r) => [r.entity_id, r.profile_image_url ?? null]));
+
   // ── Brand → tokens (office colors from brand_identity, office_websites fallback) ─
   const officeBrand = (officeBrandR.data ?? null) as Record<string, unknown> | null;
   const effective = resolveEffectiveBrand(null, officeBrand);
@@ -163,7 +169,7 @@ export async function getOfficeSite(slug: string): Promise<OfficeSitePayload | "
     const u = users.find((x) => x.id === uid); const site = siteByUser.get(uid);
     const name = site?.display_name || u?.full_name; if (!name) return null;
     const slug = publishedSlug(uid);
-    return { id: uid, name, photo: site?.profile_image_url ?? u?.avatar_url ?? null, href: slug ? `/agent/${slug}` : null };
+    return { id: uid, name, photo: agentPhotoByUser.get(uid) ?? site?.profile_image_url ?? u?.avatar_url ?? null, href: slug ? `/agent/${slug}` : null };
   };
 
   const team: OfficeTeamMember[] = users.map((u) => {
@@ -175,7 +181,7 @@ export async function getOfficeSite(slug: string): Promise<OfficeSitePayload | "
       id: u.id,
       name: site?.display_name || u.full_name || "סוכן/ת",
       title: site?.title_hebrew || u.title || 'יועץ נדל"ן',
-      photo: site?.profile_image_url ?? u.avatar_url ?? null,
+      photo: agentPhotoByUser.get(u.id) ?? site?.profile_image_url ?? u.avatar_url ?? null,
       phone: site?.phone ?? u.phone ?? null,
       whatsapp: waLink(site?.whatsapp ?? null, site?.phone ?? u.phone ?? null),
       areas: areas.slice(0, 3),

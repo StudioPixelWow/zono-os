@@ -133,13 +133,19 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
   // ── Listing agent ───────────────────────────────────────────────────────────
   const owner = (ownerR.data ?? null) as RawUser | null;
   const site = (siteR.data ?? null) as RawSite | null;
+  // Real headshot from the agent's brand-identity — preferred over the
+  // agent_websites profile image (can be a stock placeholder). Same source the
+  // agent site uses, so the agent shows the SAME photo everywhere.
+  const agentBrandPhoto: string | null = agentId
+    ? (((await admin.from("brand_identity_profiles").select("profile_image_url").eq("org_id", orgId).eq("entity_id", agentId).maybeSingle()).data as { profile_image_url: string | null } | null)?.profile_image_url ?? null)
+    : null;
   const agentSlug = site && site.status === "published" && site.slug ? site.slug : null;
   const agentPhone = site?.phone ?? owner?.phone ?? null;
   const agent: ListingAgent | null = (owner || site) ? {
     id: agentId as string,
     name: site?.display_name || owner?.full_name || "סוכן/ת",
     title: site?.title_hebrew || owner?.title || 'יועץ נדל"ן',
-    photo: site?.profile_image_url ?? owner?.avatar_url ?? null,
+    photo: agentBrandPhoto ?? site?.profile_image_url ?? owner?.avatar_url ?? null,
     phone: agentPhone,
     tel: agentPhone ? `tel:${agentPhone.replace(/[^0-9+]/g, "")}` : null,
     whatsapp: waLink(site?.whatsapp ?? null, agentPhone),
