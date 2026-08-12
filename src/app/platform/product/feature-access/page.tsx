@@ -4,7 +4,9 @@
 // always-on behavior. No enforcement, no mutation.
 import { authorizePlatform } from "@/lib/platform-admin/server/auth";
 import { getPlatformAccessDrift } from "@/lib/platform-admin/server/access";
+import { getPlatformLimitDrift } from "@/lib/limits/server/limits";
 import { buildAccessMatrix, PLAN_TIERS } from "@/lib/platform-admin/access/model";
+import { operatorCan } from "@/lib/platform-admin/capabilities";
 import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
 import { PageHeader, PanelCard, PlanBadge } from "@/components/platform-admin/ui";
 import { AccessMatrixTable, DriftSummaryStrip } from "@/components/platform-admin/access-ui";
@@ -13,12 +15,17 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+const STATUS_TONE: Record<string, string> = {
+  exceeded: "bg-danger-soft text-danger", near_limit: "bg-warning-soft text-warning", normal: "bg-success-soft text-success",
+};
+
 export default async function Page() {
   const operator = await authorizePlatform("platform.flags.read");
   if (!operator) return <PlatformDenied />;
 
   const matrix = buildAccessMatrix();
   const report = await getPlatformAccessDrift();
+  const limitDrift = operatorCan(operator, "platform.entitlements.read") ? await getPlatformLimitDrift() : null;
 
   return (
     <div className="space-y-5">
@@ -69,6 +76,41 @@ export default async function Page() {
           {report.orgs.length === 0 && <li className="text-muted px-1 py-4 text-[13px]">אין ארגונים לניתוח</li>}
         </ul>
       </PanelCard>
+
+      {limitDrift && (
+        <PanelCard title="דוח סטיית מגבלות (מצב צל)" icon="Activity">
+          {limitDrift.rows.some((r) => r.severity === "critical") && (
+            <div className="border-danger-soft bg-danger-soft/40 mb-4 flex items-start gap-2 rounded-xl border px-4 py-3">
+              <span className="text-danger mt-0.5"><Icon name="AlertTriangle" size={15} /></span>
+              <span className="text-ink text-[12px] font-semibold">קיימות חריגות מהתקרה המוצעת — במצב צל אינן חוסמות. יש לפתור (שדרוג / override) לפני אכיפה עתידית (P7).</span>
+            </div>
+          )}
+          <div className="border-line overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[620px] border-collapse text-[13px]">
+              <thead>
+                <tr className="border-line bg-surface border-b text-[12px]">
+                  {["ארגון", "מגבלה", "שימוש / תקרה", "נותר", "סטטוס", "מצב", "יחסום?"].map((h) => <th key={h} className="text-muted px-3 py-2.5 text-start font-bold">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {limitDrift.rows.map((r, i) => (
+                  <tr key={`${r.orgId}-${r.limitKey}-${i}`} className="border-line border-b last:border-0">
+                    <td className="px-3 py-2.5"><Link href={`/platform/customers/${r.orgId}/access`} className="text-ink hover:text-brand font-semibold">{r.orgName ?? r.orgId}</Link></td>
+                    <td className="text-ink px-3 py-2.5">{r.label}</td>
+                    <td className="text-ink px-3 py-2.5 tabular-nums">{r.usage ?? "—"} / {r.configuredLimit ?? "∞"}</td>
+                    <td className="text-muted px-3 py-2.5 tabular-nums">{r.remaining ?? "—"}</td>
+                    <td className="px-3 py-2.5"><span className={"rounded-md px-2 py-0.5 text-[11px] font-bold " + (STATUS_TONE[r.status] ?? "")}>{r.status}</span></td>
+                    <td className="text-muted px-3 py-2.5 text-[11px]" dir="ltr">{r.mode}</td>
+                    <td className="px-3 py-2.5 text-[11px] font-bold">{r.wouldBlock ? <span className="text-danger">כן (צל)</span> : <span className="text-muted">לא</span>}</td>
+                  </tr>
+                ))}
+                {limitDrift.rows.length === 0 && <tr><td colSpan={7} className="text-muted px-3 py-4 text-[13px]">אין מגבלות ברות-השוואה לניתוח</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-muted mt-3 px-1 text-[11px]">{limitDrift.note}</p>
+        </PanelCard>
+      )}
     </div>
   );
 }
