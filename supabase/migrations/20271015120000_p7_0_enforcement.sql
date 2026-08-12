@@ -54,7 +54,8 @@ begin
 end;
 $$;
 
-revoke all on function public.enforce_limit_lock(uuid, text) from anon, authenticated;
+revoke all on function public.enforce_limit_lock(uuid, text) from public;
+grant execute on function public.enforce_limit_lock(uuid, text) to service_role;
 
 -- ── ROLLBACK ────────────────────────────────────────────────────────────────
 -- drop function if exists public.enforce_limit_lock(uuid, text);
