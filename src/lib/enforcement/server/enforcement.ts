@@ -103,6 +103,36 @@ export async function getEnforcementReadiness(): Promise<EnforcementReadinessRep
   };
 }
 
+// ── Customer-context resolver (for wiring into CUSTOMER mutations) ──────────
+// Unlike getEnforcementReadiness/assert* (platform operator scoped), this is
+// callable from a customer server action (org manager). It does NOT assert a
+// platform capability. It resolves, via service-role: (a) whether enforcement is
+// ACTIVE for this org+limit (ENFORCED, or a PILOT row scoped to this org), and
+// (b) the effective configured limit (org override → plan default) — the trusted
+// server-derived value to pass to the guarded RPC (never from the browser).
+export async function resolveLimitEnforcementForMutation(
+  orgId: string, limitKey: LimitKey,
+): Promise<{ active: boolean; mode: EnforcementMode; configuredLimit: number | null }> {
+  const { mode } = await readConfig("limit", limitKey, orgId);
+  // PILOT rows are org-scoped; a PILOT/ENFORCED resolution for THIS org means active.
+  const active = mode === "ENFORCED" || mode === "PILOT";
+  let configuredLimit: number | null = null;
+  try {
+    const { defaultLimits } = await import("@/lib/launch/plans");
+    const { normalizePlanTier } = await import("@/lib/platform-admin/access/model");
+    const { LIMIT_DEFS, effectiveConfigured } = await import("@/lib/limits/model");
+    const db = createServiceRoleClient();
+    const { data: org } = await (db.from("organizations" as never).select("plan").eq("id", orgId).maybeSingle() as unknown as Promise<{ data: { plan: string | null } | null }>);
+    const { data: op } = await (db.from("org_plans" as never).select("plan,limits").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: { plan: string | null; limits: Record<string, unknown> | null } | null }>);
+    const tier = normalizePlanTier(op?.plan ?? org?.plan ?? null);
+    const planDefault = defaultLimits(tier) as never;
+    const override = (op?.limits && typeof op.limits === "object") ? op.limits : null;
+    const def = LIMIT_DEFS[limitKey];
+    configuredLimit = effectiveConfigured(def, planDefault, override as never).value;
+  } catch { configuredLimit = null; }
+  return { active, mode, configuredLimit };
+}
+
 // ── Mode-change writer (capability-gated + audited; NOT executed by P7.0) ────
 export async function setEnforcementMode(
   controlType: "feature" | "limit", controlKey: string, mode: EnforcementMode,

@@ -58,7 +58,13 @@ export async function acceptInvitationAction(token: string): Promise<TeamActionS
 export async function createInvitationAction(input: { email: string; fullName?: string; roleKey?: string }): Promise<TeamActionState> {
   if (!input.email?.trim()) return { error: "נא להזין כתובת אימייל" };
   try { const r = await createInvitation(input); revalidate(); return { ok: true, token: r.token, message: "ההזמנה נוצרה — העתק את הקישור ושלח לסוכן" }; }
-  catch (e) { return { error: e instanceof Error ? e.message : "יצירת ההזמנה נכשלה" }; }
+  catch (e) {
+    const raw = e instanceof Error ? e.message : "יצירת ההזמנה נכשלה";
+    // Block-UX contract: map the enforcement sentinel to a clean Hebrew message.
+    // Never surface raw Postgres/SQL/stack text to the user.
+    if (raw === "LIMIT_REACHED") return { error: "הגעתם למכסת המושבים בתוכנית — יש לשדרג או להסיר סוכן פעיל כדי להזמין נוסף" };
+    return { error: raw };
+  }
 }
 export async function cancelInvitationAction(id: string): Promise<TeamActionState> {
   try { await cancelInvitation(id); revalidate(); return { ok: true, message: "ההזמנה בוטלה" }; }

@@ -4,8 +4,10 @@
 // link), see invite status, list agents, change role, activate/deactivate.
 // Org-scoped via RLS. No auth user is created here — agents join via the link.
 // ============================================================================
-import { createClient } from "@/lib/supabase/server";
+import "server-only";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
 
 async function ctx() {
   const { user, profile } = await getSessionContext();
@@ -60,11 +62,41 @@ export async function getTeamAdmin(): Promise<TeamAdmin> {
 export async function createInvitation(input: { email: string; fullName?: string; roleKey?: string }): Promise<{ token: string }> {
   const { orgId, userId, isManager, supabase } = await ctx();
   if (!isManager) throw new Error("נדרשת הרשאת מנהל/בעלים");
+  // Server-side validation (stays in app code; RPC owns only the atomic DB section).
+  const email = input.email.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("כתובת אימייל לא תקינה");
+  const roleKey = input.roleKey || "agent";
   const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, "");
   const expires = new Date(Date.now() + 14 * 86_400_000).toISOString();
+
+  // Resolve enforcement mode for THIS org (service-role, server-derived limit).
+  const enf = await resolveLimitEnforcementForMutation(orgId, "seats");
+
+  if (enf.active) {
+    // PILOT(this org)/ENFORCED → atomic guarded RPC owns lock+count+dup-check+insert.
+    // No JS check-then-insert here: the RPC is the ONLY seat-consuming path in this mode.
+    const svc = createServiceRoleClient();
+    const payload = {
+      email, full_name: input.fullName?.trim() || null, role_key: roleKey,
+      token, invited_by: userId, expires_at: expires,
+    };
+    const { error } = await (svc.rpc("create_invitation_guarded" as never, {
+      p_org: orgId, p_payload: payload, p_limit: enf.configuredLimit ?? -1,
+    } as never) as unknown as Promise<{ error: { message?: string } | null }>);
+    if (error) {
+      const msg = error.message ?? "";
+      if (/LIMIT_REACHED/.test(msg)) throw new Error("LIMIT_REACHED");
+      if (/DUPLICATE_PENDING/.test(msg)) throw new Error("כבר קיימת הזמנה ממתינה לכתובת זו");
+      if (/INVALID_EMAIL/.test(msg)) throw new Error("כתובת אימייל לא תקינה");
+      throw new Error("יצירת ההזמנה נכשלה");
+    }
+    return { token };
+  }
+
+  // OFF/SHADOW → preserve today's exact path (RLS-scoped normal insert).
   const { error } = await supabase.from("org_invitations").insert({
-    org_id: orgId, email: input.email.trim().toLowerCase(), full_name: input.fullName?.trim() || null,
-    role_key: input.roleKey || "agent", token, status: "pending", invited_by: userId, expires_at: expires,
+    org_id: orgId, email, full_name: input.fullName?.trim() || null,
+    role_key: roleKey, token, status: "pending", invited_by: userId, expires_at: expires,
   });
   if (error) throw new Error(error.message);
   return { token };
