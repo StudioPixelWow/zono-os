@@ -13,9 +13,7 @@ import type { License } from "./types";
 /** Storage allowance per tier (MB). -1 = unlimited. Kept here (not in the frozen
  *  launch limits) so it can grow without touching the plan framework. */
 const STORAGE_MB: Record<PlanTier, number> = {
-  starter: 512,
-  professional: 5120,
-  office: 25600,
+  standard: 5120,
   enterprise: -1,
 };
 

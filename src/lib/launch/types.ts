@@ -4,8 +4,20 @@
 // ============================================================================
 
 // ── Plans & licensing ────────────────────────────────────────────────────────
-export type PlanTier = "starter" | "professional" | "office" | "enterprise";
-export type PlanStatus = "active" | "trialing" | "past_due" | "canceled";
+// FLAT MODEL (2026): ZONO has ONE product plan — "standard" (197 ₪ / active
+// agent / month, ALL features open, 14-day trial). "enterprise" (10+ agents) is
+// NOT a bigger feature bundle — it is the same full product with custom pricing,
+// onboarding and org terms. Legacy tiers (starter/professional/office/pro/team)
+// are decoded to "standard" by normalizePlanTier for backward compatibility.
+export type PlanTier = "standard" | "enterprise";
+export type PlanStatus = "trialing" | "active" | "past_due" | "canceled" | "expired" | "enterprise";
+
+/** Canonical per-agent monthly price for the standard plan (₪). Single source. */
+export const STANDARD_SEAT_PRICE_ILS = 197;
+/** Free trial length (days). */
+export const TRIAL_DAYS = 14;
+/** Above this agent count, self-serve standard is replaced by the enterprise contact flow. */
+export const ENTERPRISE_SEAT_THRESHOLD = 10;
 
 export interface PlanLimits {
   seats: number;            // -1 = unlimited

@@ -89,7 +89,7 @@ export async function getOrgPlan(): Promise<OrgPlan> {
   const plan = await createLaunchRepository(ctx.db).getPlan(ctx.orgId);
   if (plan) return plan;
   // Default: Starter (not persisted until an admin sets it).
-  return { plan: "starter", status: "active", trialEndsAt: null, limits: defaultLimits("starter"), stripeCustomerId: null, stripeSubscriptionId: null, currentPeriodEnd: null };
+  return { plan: "standard", status: "active", trialEndsAt: null, limits: defaultLimits("standard"), stripeCustomerId: null, stripeSubscriptionId: null, currentPeriodEnd: null };
 }
 export async function setOrgPlan(plan: PlanTier, status: PlanStatus = "active"): Promise<void> {
   const ctx = await assertLaunchAdminAccess();

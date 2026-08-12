@@ -41,7 +41,8 @@
     "qa:platform-support": "tsx scripts/platform-support-qa.ts",
     "qa:platform-impersonation": "tsx scripts/platform-impersonation-qa.ts",
     "qa:platform-security": "tsx scripts/platform-security-qa.ts",
-    "qa:platform-intel": "tsx scripts/platform-intel-qa.ts"
+    "qa:platform-intel": "tsx scripts/platform-intel-qa.ts",
+    "qa:commercial-pricing": "tsx scripts/commercial-pricing-qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

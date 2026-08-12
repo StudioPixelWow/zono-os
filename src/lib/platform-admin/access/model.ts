@@ -49,16 +49,12 @@ export function featureByKey(key: string): FeatureDef | null {
   return FEATURE_CATALOG.find((f) => f.key === key) ?? null;
 }
 
-/** Normalize any raw plan string (org_plan enum `pro`/`team`, or org_plans text)
- *  to a canonical PlanTier. Unknown/empty → "starter" (documented mapping;
- *  `pro→professional`, `team→office`). */
+/** Normalize any raw plan string to the FLAT model. "enterprise" → enterprise;
+ *  every legacy tier (starter/professional/office/pro/team) and unknown/empty →
+ *  "standard" (all features are open on every plan, so legacy customers simply
+ *  become standard). This is the backward-compat safety net. */
 export function normalizePlanTier(raw: string | null | undefined): PlanTier {
-  switch ((raw ?? "").toLowerCase()) {
-    case "professional": case "pro": return "professional";
-    case "office": case "team": return "office";
-    case "enterprise": return "enterprise";
-    case "starter": default: return "starter";
-  }
+  return (raw ?? "").toLowerCase() === "enterprise" ? "enterprise" : "standard";
 }
 
 export type AccessSource =
@@ -143,7 +139,7 @@ export function summarizeDrift(entries: DriftEntry[]): DriftSummary {
 // features × plans, PLAN-ALONE (no org overrides). This is the canonical
 // "what each plan entitles" table rendered by the plans / feature-access
 // screens. Base modules (entitlement:null) are true for every tier.
-export const PLAN_TIERS: PlanTier[] = ["starter", "professional", "office", "enterprise"];
+export const PLAN_TIERS: PlanTier[] = ["standard", "enterprise"];
 
 export interface AccessMatrixCell { tier: PlanTier; entitled: boolean }
 export interface AccessMatrixRow { feature: string; label: string; category: FeatureDef["category"]; entitlement: EntitlementKey | null; cells: AccessMatrixCell[] }

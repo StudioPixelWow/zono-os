@@ -5,6 +5,7 @@
 // still override per org/role/user. No billing here — Stripe is wired later.
 // ============================================================================
 import type { PlanDefinition, PlanLimits, PlanTier } from "./types";
+import { STANDARD_SEAT_PRICE_ILS } from "./types";
 
 const UNLIMITED = -1;
 
@@ -25,37 +26,27 @@ export const ENTITLEMENTS = {
 } as const;
 export type EntitlementKey = (typeof ENTITLEMENTS)[keyof typeof ENTITLEMENTS];
 
+// FLAT MODEL: ALL features open on BOTH plans (no feature gating by tier). The
+// ONLY difference is pricing/packaging: standard = 197 ₪/agent (self-serve),
+// enterprise = custom (contact). Limits are unlimited — the product is not
+// feature-limited; billing is per active agent (seat), handled outside PLANS.
+const ALL_FEATURES = Object.values(ENTITLEMENTS);
+const UNLIMITED_LIMITS: PlanLimits = { seats: UNLIMITED, operatingAreas: UNLIMITED, monitoredListings: UNLIMITED, aiCallsPerMonth: UNLIMITED, syncsPerDay: UNLIMITED };
+
 export const PLANS: Record<PlanTier, PlanDefinition> = {
-  starter: {
-    tier: "starter", label: "Starter", priceHintIls: 0,
-    limits: { seats: 1, operatingAreas: 1, monitoredListings: 200, aiCallsPerMonth: 100, syncsPerDay: 2 },
-    features: [ENTITLEMENTS.PROPERTY_RADAR, ENTITLEMENTS.BUYER_MATCHING],
-  },
-  professional: {
-    tier: "professional", label: "Professional", priceHintIls: 199, highlight: true,
-    limits: { seats: 3, operatingAreas: 4, monitoredListings: 2000, aiCallsPerMonth: 2000, syncsPerDay: 6 },
-    features: [
-      ENTITLEMENTS.PROPERTY_RADAR, ENTITLEMENTS.BUYER_MATCHING, ENTITLEMENTS.SELLER_INTELLIGENCE,
-      ENTITLEMENTS.AI_COPILOT, ENTITLEMENTS.JOURNEY_AUTOMATION,
-    ],
-  },
-  office: {
-    tier: "office", label: "Office", priceHintIls: 599,
-    limits: { seats: 15, operatingAreas: 12, monitoredListings: 12000, aiCallsPerMonth: 12000, syncsPerDay: 12 },
-    features: [
-      ENTITLEMENTS.PROPERTY_RADAR, ENTITLEMENTS.BUYER_MATCHING, ENTITLEMENTS.SELLER_INTELLIGENCE,
-      ENTITLEMENTS.AI_COPILOT, ENTITLEMENTS.JOURNEY_AUTOMATION, ENTITLEMENTS.OFFICE_INTELLIGENCE,
-      ENTITLEMENTS.EXECUTIVE_INTELLIGENCE, ENTITLEMENTS.COMPETITOR_INTELLIGENCE, ENTITLEMENTS.MULTI_AGENT,
-    ],
+  standard: {
+    tier: "standard", label: "ZONO לסוכני נדל״ן", priceHintIls: STANDARD_SEAT_PRICE_ILS, highlight: true,
+    limits: { ...UNLIMITED_LIMITS },
+    features: [...ALL_FEATURES],
   },
   enterprise: {
-    tier: "enterprise", label: "Enterprise", priceHintIls: null,
-    limits: { seats: UNLIMITED, operatingAreas: UNLIMITED, monitoredListings: UNLIMITED, aiCallsPerMonth: UNLIMITED, syncsPerDay: UNLIMITED },
-    features: Object.values(ENTITLEMENTS),
+    tier: "enterprise", label: "ZONO למשרדים", priceHintIls: null,
+    limits: { ...UNLIMITED_LIMITS },
+    features: [...ALL_FEATURES],
   },
 };
 
-export const PLAN_ORDER: PlanTier[] = ["starter", "professional", "office", "enterprise"];
+export const PLAN_ORDER: PlanTier[] = ["standard", "enterprise"];
 
 export function planDefinition(tier: PlanTier): PlanDefinition { return PLANS[tier]; }
 

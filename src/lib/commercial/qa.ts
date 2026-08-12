@@ -55,7 +55,7 @@ S("2. Webhook signature verification — fail closed (mirrors WhatsApp)");
 
 S("3. Registration validation");
 {
-  const base: RegistrationData = { officeName: "משרד", companyName: "חברה", taxId: "123", city: "חיפה", phone: "050", ownerFullName: "טל", ownerEmail: "a@b.com", ownerMobile: "052", agentCount: 3, workingAreas: ["חיפה"], planTier: "professional" };
+  const base: RegistrationData = { officeName: "משרד", companyName: "חברה", taxId: "123", city: "חיפה", phone: "050", ownerFullName: "טל", ownerEmail: "a@b.com", ownerMobile: "052", agentCount: 3, workingAreas: ["חיפה"], planTier: "standard" };
   check("3.1 a complete registration passes validateAll", validateAll(base).length === 0);
   check("3.2 missing company fields fail the company step", validateStep("company", { officeName: "" }).length > 0);
   check("3.3 password rules: <8 / no digit / no letter rejected; strong accepted",
@@ -65,7 +65,7 @@ S("3. Registration validation");
     validateStep("owner", base, { password: "Zono1234", passwordConfirm: "Zono1234" }).length === 0);
   check("3.5 email format validated", isEmail("a@b.com") && !isEmail("nope"));
   check("3.6 integrations step is never required (Skip allowed)", validateStep("integrations", {}).length === 0);
-  check("3.7 plan step requires a valid tier", validateStep("plan", {}).length > 0 && validateStep("plan", { planTier: "office" }).length === 0);
+  check("3.7 plan step requires a valid tier", validateStep("plan", {}).length > 0 && validateStep("plan", { planTier: "standard" }).length === 0);
 }
 
 S("4. Subscription lifecycle");
@@ -82,20 +82,20 @@ S("4. Subscription lifecycle");
 
 S("5. License model (projection over launch PLANS)");
 {
-  const starter = licenseForPlan("starter"), office = licenseForPlan("office"), ent = licenseForPlan("enterprise");
-  check("5.1 seats → maxUsers, features → modules, aiCalls → aiCredits, storage present",
-    starter.maxUsers === 1 && starter.enabledModules.includes("property_radar") && starter.aiCredits === 100 && starter.storageMb > 0);
+  const standard = licenseForPlan("standard"), ent = licenseForPlan("enterprise");
+  check("5.1 flat model: standard has ALL modules + unlimited seats/storage/AI",
+    standard.maxUsers === -1 && standard.enabledModules.includes("property_radar") && standard.enabledModules.length >= 8 && standard.storageMb > 0);
   check("5.2 enterprise is unlimited users + all modules + unlimited storage", ent.maxUsers === -1 && ent.storageMb === -1 && ent.enabledModules.length >= 8);
-  check("5.3 seat limit enforced (-1 = unlimited)", !licenseAllowsUser(starter, 1) && licenseAllowsUser(office, 5) && licenseAllowsUser(ent, 9999));
-  check("5.4 module gating reads the license", licenseHasModule(office, "office_intelligence") && !licenseHasModule(starter, "office_intelligence"));
-  check("5.5 billing ref slot exists for future Grow compatibility", "billingRef" in starter);
+  check("5.3 unlimited seats (-1) never blocks a user on either plan", licenseAllowsUser(standard, 9999) && licenseAllowsUser(ent, 9999));
+  check("5.4 all modules open on standard (no feature gating by plan)", licenseHasModule(standard, "office_intelligence") && licenseHasModule(standard, "property_radar"));
+  check("5.5 billing ref slot exists for future Grow compatibility", "billingRef" in standard);
 }
 
 S("6. Plans display");
 {
   const cards = planCards();
-  check("6.1 four tiers with monthly pricing", cards.length === 4 && cards.find((c) => c.tier === "professional")?.monthlyIls === 199);
-  check("6.2 enterprise has no fixed price (contact)", cards.find((c) => c.tier === "enterprise")?.monthlyIls === null && planPriceIls("starter") === 0);
+  check("6.1 flat model: standard card at 197 ₪/agent", cards.length === 2 && cards.find((c) => c.tier === "standard")?.monthlyIls === 197);
+  check("6.2 enterprise has no fixed price (contact)", cards.find((c) => c.tier === "enterprise")?.monthlyIls === null && planPriceIls("standard") === 197);
 }
 
 S("7. Source guards — gated provisioning, encrypted draft, isolation");

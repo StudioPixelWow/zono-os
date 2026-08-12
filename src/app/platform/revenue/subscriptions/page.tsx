@@ -19,7 +19,7 @@ const STATE_FILTERS: { key: BillingState | "all"; label: string }[] = [
   { key: "PAYMENT_FAILED", label: "כשל תשלום" }, { key: "GRACE", label: "תקופת חסד" },
   { key: "CANCEL_PENDING", label: "ביטול בהמתנה" }, { key: "CANCELLED", label: "מבוטלים" },
 ];
-const PLAN_FILTERS: (PlanTier | "all")[] = ["all", "starter", "professional", "office", "enterprise"];
+const PLAN_FILTERS: (PlanTier | "all")[] = ["all", "standard", "enterprise"];
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ status?: string; plan?: string }> }) {
   const operator = await authorizePlatform("platform.billing.read");

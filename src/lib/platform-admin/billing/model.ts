@@ -142,7 +142,7 @@ export function resolvePlanCompat(input: {
   if (nSub != null) { canonical = nSub; source = "subscription"; }
   else if (nOrgPlan != null) { canonical = nOrgPlan; source = "org_plan"; }
   else if (nOrg != null) { canonical = nOrg; source = "organization"; }
-  else { canonical = "starter"; source = "none"; }
+  else { canonical = "standard"; source = "none"; }
 
   const present = [nSub, nOrgPlan, nOrg].filter((x): x is PlanTier => x != null);
   const conflict = present.length >= 2 && new Set(present).size > 1;

@@ -9,11 +9,16 @@ import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import type { PlatformMetric } from "@/lib/platform-admin/server/dal";
 
+// Flat model: 'standard' + 'enterprise'. Legacy values are kept so historical
+// rows still render a readable label (all decode to standard in the app).
 export const PLAN_LABEL: Record<string, string> = {
-  starter: "Starter",
-  pro: "Pro",
-  team: "Team",
-  enterprise: "Enterprise",
+  standard: "ZONO Standard",
+  enterprise: "ZONO Enterprise",
+  starter: "Standard (legacy)",
+  professional: "Standard (legacy)",
+  office: "Standard (legacy)",
+  pro: "Standard (legacy)",
+  team: "Standard (legacy)",
 };
 
 export const USER_STATUS_LABEL: Record<string, string> = {

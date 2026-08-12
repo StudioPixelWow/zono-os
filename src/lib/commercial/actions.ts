@@ -74,7 +74,7 @@ export async function startPaymentAction(): Promise<{ url?: string; errors?: Fie
   if (!draft) return { errors: [{ field: "_", message: "לא נמצאה טיוטה." }] };
   const errors = validateAll(draft.data);
   if (errors.length) return { errors };
-  const tier: PlanTier = draft.data.planTier ?? "starter";
+  const tier: PlanTier = draft.data.planTier ?? "standard";
   const amount = planPriceIls(tier) ?? 0;
   const payment = await createPayment({ draftId: draft.id, planTier: tier, amountIls: amount });
   if (!payment) return { errors: [{ field: "_", message: "תקלה ביצירת תשלום." }] };

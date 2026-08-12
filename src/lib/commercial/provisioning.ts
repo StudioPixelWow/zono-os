@@ -36,7 +36,7 @@ export async function provisionFromVerifiedPayment(payment: Payment, draft: Regi
   if (draft.orgId) return { ok: true, orgId: draft.orgId };
 
   const d = draft.data;
-  const tier: PlanTier = draft.planTier ?? "starter";
+  const tier: PlanTier = draft.planTier ?? "standard";
   const ownerEmail = draft.email ?? d.ownerEmail ?? "";
   const admin = createServiceRoleClient();
 

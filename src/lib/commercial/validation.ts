@@ -10,7 +10,7 @@ import type { PlanTier, RegistrationData, WizardStepKey } from "./types";
 export interface FieldError { field: string; message: string }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PLAN_TIERS: PlanTier[] = ["starter", "professional", "office", "enterprise"];
+const PLAN_TIERS: PlanTier[] = ["standard", "enterprise"];
 
 export const isEmail = (v: string | undefined | null): boolean => !!v && EMAIL_RE.test(v.trim());
 

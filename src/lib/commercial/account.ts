@@ -27,7 +27,7 @@ export async function getAccountOverview(): Promise<AccountOverview> {
     listOrgPayments().catch(() => [] as Payment[]),
     getOnboardingChecklist().catch(() => ({ steps: [], completed: 0, total: 8, percentage: 0 } as OnboardingChecklist)),
   ]);
-  const tier: PlanTier = sub?.planTier ?? (launchPlan?.plan as PlanTier | undefined) ?? "starter";
+  const tier: PlanTier = sub?.planTier ?? (launchPlan?.plan as PlanTier | undefined) ?? "standard";
   return {
     subscription: sub,
     license: licenseForPlan(tier, sub?.growSubscriptionId ?? null),

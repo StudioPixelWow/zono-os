@@ -7,11 +7,9 @@
 // ============================================================================
 import { useEffect, useState, useTransition } from "react";
 import { ensureDraftAction, saveStepAction, saveOwnerAction, startPaymentAction } from "@/lib/commercial/actions";
-import { planCards } from "@/lib/commercial/plans";
 import { WIZARD_STEPS, type PlanTier, type RegistrationData } from "@/lib/commercial/types";
 import type { FieldError } from "@/lib/commercial/validation";
 
-const CARDS = planCards();
 
 export function RegisterWizard() {
   const [idx, setIdx] = useState(0);
@@ -114,26 +112,53 @@ export function RegisterWizard() {
         )}
 
         {step.key === "plan" && (
-          <div className="flex flex-col gap-3">
-            <h2 className="text-ink text-lg font-black">בחר תוכנית</h2>
-            {err("planTier") ? <p className="text-danger text-[11px]">{err("planTier")}</p> : null}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {CARDS.map((c) => {
-                const sel = data.planTier === c.tier;
+          <div className="flex flex-col gap-4">
+            <div className="text-center">
+              <h2 className="text-ink text-xl font-black">מחיר פשוט. מערכת מלאה.</h2>
+              <p className="text-muted mt-1 text-[13px]">כל הכלים שסוכן נדל״ן צריך במקום אחד — בלי לבחור חבילה ובלי לוותר על פיצ׳רים.</p>
+            </div>
+            {err("planTier") ? <p className="text-danger text-center text-[11px]">{err("planTier")}</p> : null}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {/* Card 1 — the dominant standard plan */}
+              {(() => {
+                const sel = data.planTier === "standard";
                 return (
-                  <button key={c.tier} type="button" onClick={() => set({ planTier: c.tier as PlanTier })}
-                    className={`flex flex-col gap-2 rounded-[16px] border p-4 text-right ${sel ? "border-brand bg-[var(--brand-soft,#f0eefe)]" : "border-line"}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-ink text-sm font-black">{c.label}{c.highlight ? " ⭐" : ""}</span>
-                      <span className="text-brand text-sm font-black">{c.monthlyIls == null ? "בהתאמה" : `₪${c.monthlyIls}/חודש`}</span>
+                  <button type="button" onClick={() => set({ planTier: "standard" as PlanTier })}
+                    className={`relative flex flex-col gap-3 rounded-[20px] border-2 p-6 text-right shadow-sm transition ${sel ? "border-brand bg-[var(--brand-soft,#f0eefe)]" : "border-brand/40 bg-white"}`}>
+                    <span className="bg-brand absolute -top-3 right-5 rounded-full px-3 py-0.5 text-[11px] font-black text-white">14 ימים חינם</span>
+                    <span className="text-ink text-lg font-black">ZONO לסוכני נדל״ן</span>
+                    <div className="flex items-end gap-1">
+                      <span className="text-brand text-4xl font-black">197 ₪</span>
+                      <span className="text-muted mb-1 text-[12px]">לסוכן / לחודש</span>
                     </div>
-                    <span className="text-muted text-[11px]">{c.seats < 0 ? "משתמשים ללא הגבלה" : `עד ${c.seats} משתמשים`}</span>
-                    <ul className="text-muted flex flex-col gap-0.5 text-[11px]">{c.features.slice(0, 4).map((f) => <li key={f.key}>· {f.label}</li>)}</ul>
+                    <span className="text-ink text-[14px] font-bold">כל ZONO. בלי הגבלות.</span>
+                    <p className="text-muted text-[12px]">כל הכלים והיכולות של ZONO פתוחים עבורכם מהיום הראשון.</p>
+                    <ul className="text-muted grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                      {["CRM מלא", "ניהול לידים", "ניהול לקוחות", "ניהול נכסים", "ניהול עסקאות", "התאמות חכמות", "AI לסוכן", "WhatsApp", "אוטומציות", "משימות ופולואפים", "יומן ופגישות", "פרסום ושיווק", "יצירת תוכן", "דפי נכס", "אתר אישי לסוכן", "דוחות וביצועים"].map((f) => <li key={f}>· {f}</li>)}
+                    </ul>
+                    <span className={`mt-1 rounded-[12px] px-4 py-2.5 text-center text-[14px] font-black ${sel ? "bg-brand text-white" : "border-brand text-brand border"}`}>התחילו 14 ימים בחינם</span>
+                    <span className="text-muted text-center text-[10px]">ללא התחייבות. לאחר הניסיון: 197 ₪ לחודש לכל סוכן פעיל.</span>
                   </button>
                 );
-              })}
+              })()}
+              {/* Card 2 — enterprise (custom, secondary premium) */}
+              {(() => {
+                const sel = data.planTier === "enterprise";
+                return (
+                  <button type="button" onClick={() => set({ planTier: "enterprise" as PlanTier })}
+                    className={`flex flex-col gap-3 rounded-[20px] border p-6 text-right ${sel ? "border-ink bg-surface" : "border-line bg-surface/60"}`}>
+                    <span className="text-ink text-lg font-black">ZONO למשרדים</span>
+                    <span className="text-muted text-[12px] font-bold">10+ סוכנים</span>
+                    <span className="text-ink text-2xl font-black">בהתאמה אישית</span>
+                    <p className="text-muted text-[12px]">למשרדי תיווך גדולים אנו מתאימים את סביבת העבודה, מבנה המשתמשים, ההרשאות והתהליכים לצורכי המשרד.</p>
+                    <ul className="text-muted grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                      {["ניהול מספר רב של סוכנים", "הרשאות משתמשים", "ניהול צוות", "חלוקת לידים", "ניהול לידים מרכזי", "דוחות משרדיים", "בקרה למנהלים", "אוטומציות משרדיות", "התאמות לתהליך", "הטמעה וליווי"].map((f) => <li key={f}>· {f}</li>)}
+                    </ul>
+                    <span className={`mt-1 rounded-[12px] px-4 py-2.5 text-center text-[14px] font-black ${sel ? "bg-ink text-white" : "border-ink text-ink border"}`}>לתיאום שיחת התאמה</span>
+                  </button>
+                );
+              })()}
             </div>
-            {data.planTier ? <p className="text-muted text-[11px]">נבחר: <b className="text-ink">{CARDS.find((c) => c.tier === data.planTier)?.label}</b></p> : null}
           </div>
         )}
 
