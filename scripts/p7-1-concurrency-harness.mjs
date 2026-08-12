@@ -4,76 +4,72 @@
 // serialize different org / different limit, and that create_property_guarded
 // admits EXACTLY ONE of two concurrent final-slot creates (never N+1).
 //
-// This must be run OUTSIDE the single-session SQL tool — it opens two real pg
-// connections. Cloud MCP cannot do this (no second connection / no superuser
-// password), which is why P7.1 delivers this harness for you to execute.
+// Runs OUTSIDE the single-session SQL tool with two real pg connections.
+// Serialization is proven with pg_try_advisory_xact_lock (non-blocking: returns
+// false while the other connection holds the key). The final-slot test creates
+// ONE clearly-marked property, proves the second attempt gets LIMIT_REACHED,
+// then DELETES the marked row (self-cleaning; exact id printed).
 //
 // Usage:
-//   DATABASE_URL="postgres://…"  ORG_A="<uuid>"  ORG_B="<uuid>"  node scripts/p7-1-concurrency-harness.mjs
-// Requires the P7.1 atomic RPC migration applied (create_property_guarded).
-// All writes happen inside transactions that are ROLLED BACK — no residue.
+//   DATABASE_URL="postgres://…" ORG_A="<uuid>" ORG_B="<uuid>" node scripts/p7-1-concurrency-harness.mjs
+// Requires the P7.1 atomic RPC migration applied.
 // ============================================================================
 import pg from "pg";
 const { Client } = pg;
 const URL = process.env.DATABASE_URL;
 const ORG_A = process.env.ORG_A, ORG_B = process.env.ORG_B;
 if (!URL || !ORG_A || !ORG_B) { console.error("Set DATABASE_URL, ORG_A, ORG_B"); process.exit(2); }
-
 const mk = () => new Client({ connectionString: URL });
 let failed = 0;
 const ok = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) failed++; };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function tryLock(client, org, key, timeoutMs) {
-  // returns true if acquired within timeout, false if it blocked out
-  await client.query("begin");
-  await client.query(`set local lock_timeout = '${timeoutMs}ms'`);
-  try { await client.query("select public.enforce_limit_lock($1,$2)", [org, key]); return true; }
-  catch (e) { if (/lock timeout|canceling statement/i.test(e.message)) return false; throw e; }
-}
+const keyOf = async (client, org, limit) => (await client.query("select hashtextextended($1||':'||$2,0) k", [org, limit])).rows[0].k;
 
 (async () => {
   const A = mk(), B = mk();
   await A.connect(); await B.connect();
   try {
-    console.log("P7.1 · same org + same limit → B BLOCKS while A holds");
+    // ── CASE A/B/C: lock contention via a second real connection ──
+    console.log("P7.1 · lock serialization (two connections)");
     await A.query("begin");
-    await A.query("select public.enforce_limit_lock($1,$2)", [ORG_A, "seats"]); // A holds (xact)
-    const bBlocked = !(await tryLock(B, ORG_A, "seats", 800));                    // B tries same key
-    ok(bBlocked, "B could NOT acquire same org+limit while A holds (serialized)");
+    await A.query("select public.enforce_limit_lock($1,$2)", [ORG_A, "seats"]); // A holds seats:ORG_A (xact)
+    const kSame = await keyOf(B, ORG_A, "seats");
+    const kOtherOrg = await keyOf(B, ORG_B, "seats");
+    const kOtherLimit = await keyOf(B, ORG_A, "monitoredListings");
+    const gotSame = (await B.query("select pg_try_advisory_xact_lock($1) g", [kSame])).rows[0].g;
+    ok(gotSame === false, "CASE A: B CANNOT acquire same org+limit while A holds (serialized)");
+    await B.query("rollback"); await B.query("begin");
+    const gotOtherOrg = (await B.query("select pg_try_advisory_xact_lock($1) g", [kOtherOrg])).rows[0].g;
+    ok(gotOtherOrg === true, "CASE B: different org + same limit → B acquires immediately (no false block)");
+    const gotOtherLimit = (await B.query("select pg_try_advisory_xact_lock($1) g", [kOtherLimit])).rows[0].g;
+    ok(gotOtherLimit === true, "CASE C: same org + different limit → B acquires immediately");
     await B.query("rollback");
+    await A.query("rollback"); // release A
 
-    console.log("\nP7.1 · different org → NO block");
-    const bDiffOrg = await tryLock(B, ORG_B, "seats", 800);
-    ok(bDiffOrg, "B acquired different-org lock immediately (no false serialization)");
-    await B.query("rollback");
-
-    console.log("\nP7.1 · same org + different limit → NO block");
-    const bDiffKey = await tryLock(B, ORG_A, "monitoredListings", 800);
-    ok(bDiffKey, "B acquired same-org DIFFERENT-limit lock immediately");
-    await B.query("rollback");
-
-    await A.query("rollback"); // release A's lock
-
-    console.log("\nP7.1 · boundary: two concurrent final-slot creates → exactly ONE wins");
-    // Simulate limit = current+1 so exactly one of two concurrent creates fits.
-    const { rows } = await A.query("select count(*)::int n from public.properties where org_id=$1", [ORG_A]);
-    const limit = rows[0].n + 1;
-    // Fire both guarded creates concurrently, each in its own transaction, rolled back after.
-    const attempt = async (c) => {
-      await c.query("begin");
-      try { await c.query("select public.create_property_guarded($1,$2,'{}'::jsonb,$3)", [ORG_A, ORG_A, limit]); return "ok"; }
+    // ── FINAL-SLOT: two concurrent creates for the last slot ──
+    console.log("\nP7.1 · final-slot race (limit = usage+1 → exactly one wins)");
+    const start = (await A.query("select count(*)::int n from public.properties where org_id=$1", [ORG_A])).rows[0].n;
+    const limit = start + 1;
+    // A takes the slot in a held transaction (lock held until commit)
+    await A.query("begin");
+    const aId = (await A.query("select public.create_property_guarded($1,$2,'{\"qa\":\"p7.1\"}'::jsonb,$3) id", [ORG_A, ORG_A, limit])).rows[0].id;
+    // B attempts concurrently — it will BLOCK on A's advisory lock; commit A to let B proceed
+    const bPromise = (async () => {
+      await B.query("begin");
+      try { await B.query("select public.create_property_guarded($1,$2,'{}'::jsonb,$3)", [ORG_A, ORG_A, limit]); return "ok"; }
       catch (e) { return /LIMIT_REACHED/.test(e.message) ? "limit" : "err:" + e.message; }
-    };
-    const [r1, r2] = await Promise.all([attempt(A), attempt(B)]);
-    await A.query("rollback"); await B.query("rollback");
-    const wins = [r1, r2].filter((r) => r === "ok").length;
-    const blocks = [r1, r2].filter((r) => r === "limit").length;
-    ok(wins === 1 && blocks === 1, `exactly one create succeeded, one got LIMIT_REACHED [${r1}, ${r2}]`);
-    ok(!/err:/.test(r1 + r2), "no unexpected error / no partial write (both txns rolled back)");
-  } finally {
-    await A.end(); await B.end();
-  }
+      finally { await B.query("rollback"); }
+    })();
+    await new Promise((r) => setTimeout(r, 300)); // ensure B is queued on the lock
+    await A.query("commit");                       // A's property persists → usage now = limit
+    const bResult = await bPromise;
+    ok(bResult === "limit", `B (2nd create) received LIMIT_REACHED [${bResult}]`);
+    const after = (await A.query("select count(*)::int n from public.properties where org_id=$1", [ORG_A])).rows[0].n;
+    ok(after === limit, `final usage = ${limit} (exactly one added), never N+1 [got ${after}]`);
+    // cleanup the one QA property A created
+    await A.query("delete from public.properties where id=$1", [aId]);
+    const cleaned = (await A.query("select count(*)::int n from public.properties where org_id=$1", [ORG_A])).rows[0].n;
+    ok(cleaned === start, `cleanup: QA property ${aId} deleted, usage back to ${start}`);
+  } finally { await A.end(); await B.end(); }
   console.log("");
   if (failed === 0) console.log("ALL CHECKS PASSED (real two-connection proof)");
   else { console.log(`${failed} CHECK(S) FAILED`); process.exit(1); }

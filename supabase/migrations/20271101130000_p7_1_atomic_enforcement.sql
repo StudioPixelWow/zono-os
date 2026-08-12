@@ -73,8 +73,9 @@ begin
 end;
 $$;
 
-revoke all on function public.create_property_guarded(uuid, uuid, jsonb, integer) from public;
-revoke all on function public.reserve_seat_guarded(uuid, integer) from public;
+-- Supabase auto-grants EXECUTE to anon/authenticated on new functions — revoke them EXPLICITLY.
+revoke all on function public.create_property_guarded(uuid, uuid, jsonb, integer) from public, anon, authenticated;
+revoke all on function public.reserve_seat_guarded(uuid, integer) from public, anon, authenticated;
 grant execute on function public.create_property_guarded(uuid, uuid, jsonb, integer) to service_role;
 grant execute on function public.reserve_seat_guarded(uuid, integer) to service_role;
 
