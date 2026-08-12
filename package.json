@@ -45,7 +45,8 @@
     "qa:platform-telemetry": "tsx scripts/platform-telemetry-qa.ts",
     "qa:platform-ai-usage": "tsx scripts/platform-ai-usage-qa.ts",
     "qa:platform-trends": "tsx scripts/platform-trends-qa.ts",
-    "qa:platform-limits": "tsx scripts/platform-limits-qa.ts"
+    "qa:platform-limits": "tsx scripts/platform-limits-qa.ts",
+    "qa:platform-enforcement": "tsx scripts/platform-enforcement-qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

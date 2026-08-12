@@ -5,6 +5,7 @@
 import { authorizePlatform } from "@/lib/platform-admin/server/auth";
 import { getPlatformAccessDrift } from "@/lib/platform-admin/server/access";
 import { getPlatformLimitDrift } from "@/lib/limits/server/limits";
+import { getEnforcementReadiness } from "@/lib/enforcement/server/enforcement";
 import { buildAccessMatrix, PLAN_TIERS } from "@/lib/platform-admin/access/model";
 import { operatorCan } from "@/lib/platform-admin/capabilities";
 import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
@@ -25,7 +26,13 @@ export default async function Page() {
 
   const matrix = buildAccessMatrix();
   const report = await getPlatformAccessDrift();
-  const limitDrift = operatorCan(operator, "platform.entitlements.read") ? await getPlatformLimitDrift() : null;
+  const canEntitle = operatorCan(operator, "platform.entitlements.read");
+  const limitDrift = canEntitle ? await getPlatformLimitDrift() : null;
+  const readiness = canEntitle ? await getEnforcementReadiness() : null;
+  const READINESS_TONE: Record<string, string> = {
+    SAFE_TO_ENFORCE: "bg-success-soft text-success", NEEDS_ATOMIC_GUARD: "bg-warning-soft text-warning",
+    NEEDS_DATA_FIX: "bg-warning-soft text-warning", NEEDS_PRODUCT_DECISION: "bg-info-soft text-info", UNAVAILABLE: "bg-surface text-muted",
+  };
 
   return (
     <div className="space-y-5">
@@ -109,6 +116,32 @@ export default async function Page() {
             </table>
           </div>
           <p className="text-muted mt-3 px-1 text-[11px]">{limitDrift.note}</p>
+        </PanelCard>
+      )}
+
+      {readiness && (
+        <PanelCard title="מוכנות לאכיפה (P7.0)" icon="ShieldCheck">
+          <div className="border-line overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[560px] border-collapse text-[13px]">
+              <thead>
+                <tr className="border-line bg-surface border-b text-[12px]">
+                  {["מגבלה", "מצב נוכחי", "מוכנות", "אטומי בטוח?", "הערה"].map((h) => <th key={h} className="text-muted px-3 py-2.5 text-start font-bold">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {readiness.limits.map((l) => (
+                  <tr key={l.limitKey} className="border-line border-b last:border-0">
+                    <td className="text-ink px-3 py-2.5 font-semibold" dir="ltr">{l.limitKey}</td>
+                    <td className="text-muted px-3 py-2.5 text-[11px] font-bold" dir="ltr">{l.globalMode}</td>
+                    <td className="px-3 py-2.5"><span className={"rounded-md px-2 py-0.5 text-[11px] font-bold " + (READINESS_TONE[l.readiness] ?? "")} dir="ltr">{l.readiness}</span></td>
+                    <td className="px-3 py-2.5 text-[11px] font-bold">{l.atomicSafe ? <span className="text-success">כן</span> : <span className="text-warning">לא</span>}</td>
+                    <td className="text-muted px-3 py-2.5 text-[12px]">{l.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-muted mt-3 px-1 text-[11px]">{readiness.note} · שומר אטומי ב-DB: {readiness.atomicGuardAvailable ? "זמין" : "לא הוחל (מיגרציה מוצעת)"}</p>
         </PanelCard>
       )}
     </div>
