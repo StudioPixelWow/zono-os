@@ -1,6 +1,8 @@
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import { QA_ITEMS, QA_SUMMARY, type QaStatus } from "@/lib/product-qa/status";
+import { assertLaunchAdminAccess } from "@/lib/launch/server/permissions";
+import { AdminDenied } from "@/components/admin/AdminDenied";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +12,8 @@ const STATUS_META: Record<QaStatus, { label: string; tone: string; icon: string 
   fail: { label: "ממתין", tone: "bg-danger-soft text-danger", icon: "Minus" },
 };
 
-export default function ProductQaPage() {
+export default async function ProductQaPage() {
+  try { await assertLaunchAdminAccess(); } catch { return <AdminDenied />; }
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">

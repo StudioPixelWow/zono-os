@@ -39,6 +39,22 @@ export function buildPresence(toPhone: string, on: boolean): { number: string; p
   return { number: normalizeNumber(toPhone), presence: on ? "composing" : "paused", delay: on ? 1200 : 0 };
 }
 
+/** A WhatsApp personal JID for a phone (digits → `<digits>@s.whatsapp.net`). */
+export function toJid(phone: string): string {
+  return `${normalizeNumber(phone)}@s.whatsapp.net`;
+}
+
+/** Body for POST /chat/findContacts and /chat/findChats — an empty filter that
+ *  asks Evolution for the full set (builds accept `{}` or `{ where: {} }`). */
+export function buildFindAll(): { where: Record<string, unknown> } {
+  return { where: {} };
+}
+
+/** Body for POST /chat/findMessages — filter by a contact's JID. */
+export function buildFindMessages(phone: string): { where: { key: { remoteJid: string } } } {
+  return { where: { key: { remoteJid: toJid(phone) } } };
+}
+
 /** Body for POST /instance/create — pairs a fresh QR session for an instance.
  *  qrcode:true asks Evolution to emit a QR; the webhook config points Evolution
  *  back at ZONO's personal inbound route with a Bearer header so ZONO can

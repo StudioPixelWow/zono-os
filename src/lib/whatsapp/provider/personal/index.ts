@@ -6,9 +6,34 @@
 // here learn NOTHING about Evolution — that name lives only inside compat/.
 // ============================================================================
 import "server-only";
-import { personalConfigured, workerPing } from "./compat";
+import {
+  personalConfigured, workerPing,
+  fetchContacts, fetchChats, fetchChatMessages,
+  type CompatResult, type CanonicalChat, type CanonicalContact, type CanonicalMessage,
+} from "./compat";
+import type { WaSessionCtx } from "../types";
 
 export { personalTransportProvider } from "./adapter";
+
+// Neutral read surface. These forward to the compat layer so callers above the
+// provider boundary never import Evolution internals (C2/C9). The canonical
+// contact/chat/message DTOs carry only neutral fields (phone/name/body/at).
+export type { CanonicalChat, CanonicalContact, CanonicalMessage } from "./compat";
+
+/** READ the connected account's contacts (personal chats only). */
+export async function personalFetchContacts(ctx: WaSessionCtx): Promise<CompatResult<CanonicalContact[]>> {
+  return fetchContacts(ctx);
+}
+
+/** READ the connected account's EXISTING chats (personal only). */
+export async function personalFetchChats(ctx: WaSessionCtx): Promise<CompatResult<CanonicalChat[]>> {
+  return fetchChats(ctx);
+}
+
+/** READ a single chat's messages by contact phone. */
+export async function personalFetchChatMessages(ctx: WaSessionCtx, phone: string): Promise<CompatResult<CanonicalMessage[]>> {
+  return fetchChatMessages(ctx, phone);
+}
 
 /** READ-ONLY infra liveness of the transport backend (root ping — no session).
  *  Neutral surface for SRE synthetic monitoring; callers learn nothing about

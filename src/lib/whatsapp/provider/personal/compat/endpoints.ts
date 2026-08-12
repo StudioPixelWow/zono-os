@@ -19,6 +19,9 @@ type EndpointSet = {
   sendMedia: (instance: string) => string;
   sendPresence: (instance: string) => string; // typing/presence
   setWebhook: (instance: string) => string;
+  findContacts: (instance: string) => string; // read the account's contacts
+  findChats: (instance: string) => string;     // read existing chats
+  findMessages: (instance: string) => string;  // read a chat's messages
 };
 
 const V2: EndpointSet = {
@@ -31,6 +34,9 @@ const V2: EndpointSet = {
   sendMedia: (i) => `/message/sendMedia/${encodeURIComponent(i)}`,
   sendPresence: (i) => `/chat/sendPresence/${encodeURIComponent(i)}`,
   setWebhook: (i) => `/webhook/set/${encodeURIComponent(i)}`,
+  findContacts: (i) => `/chat/findContacts/${encodeURIComponent(i)}`,
+  findChats: (i) => `/chat/findChats/${encodeURIComponent(i)}`,
+  findMessages: (i) => `/chat/findMessages/${encodeURIComponent(i)}`,
 };
 
 /** Resolve the endpoint set for a target version (fallback: latest known). */

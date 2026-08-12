@@ -1,0 +1,1995 @@
+From c8cce313475cd2d4dee99f72b3111df5bb8e4cd6 Mon Sep 17 00:00:00 2001
+From: Tal Zatelman <tal.pixeld@gmail.com>
+Date: Sun, 9 Aug 2026 12:41:04 +0000
+Subject: [PATCH] feat(platform-admin): P5.1 platform admin control-plane shell
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Dedicated /platform control plane for ZONO staff, disjoint from the customer
+org UI. Protected by the P5.0 platform boundary (authorizePlatform); all
+cross-org reads go through the audited platform DAL — no service-role client in
+any page/component. Adds the shell (RTL sidebar + operator topbar + ⌘K command
+palette), an honest overview of safe count-only cross-org metrics, an
+organization directory + minimal org summary, a platform audit-log view, and
+capability-guarded 'בקרוב' placeholders for every remaining nav destination.
+
+- DAL: searchOrganizationsForPlatform, getPlatformOverviewMetrics (capability-
+  gated, count-only, no PII), listRecentPlatformAudit (safe columns only).
+- auth: authorizePlatform() page guard + own-name display helper.
+- No new production flags; no destructive actions; no Customer 360 / billing /
+  impersonation (deferred to later phases).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Cm5NAh92cekdimerQbEsCW
+---
+ package.json                                  |   2 +
+ scripts/platform-admin-shell-qa.ts            | 106 +++++++++
+ src/app/platform/customers/[orgId]/page.tsx   |  96 +++++++++
+ src/app/platform/customers/page.tsx           |  23 ++
+ src/app/platform/layout.tsx                   |  39 ++++
+ .../platform/operations/integrations/page.tsx |  20 ++
+ src/app/platform/operations/jobs/page.tsx     |  20 ++
+ .../operations/system-health/page.tsx         |  20 ++
+ src/app/platform/page.tsx                     | 144 +++++++++++++
+ src/app/platform/product/ai-costs/page.tsx    |  20 ++
+ .../platform/product/feature-access/page.tsx  |  20 ++
+ .../platform/product/feature-flags/page.tsx   |  20 ++
+ src/app/platform/product/usage/page.tsx       |  20 ++
+ src/app/platform/revenue/payments/page.tsx    |  20 ++
+ src/app/platform/revenue/plans/page.tsx       |  20 ++
+ .../platform/revenue/subscriptions/page.tsx   |  20 ++
+ .../platform/security/admin-users/page.tsx    |  20 ++
+ src/app/platform/security/audit-log/page.tsx  |  47 ++++
+ src/app/platform/security/sessions/page.tsx   |  20 ++
+ src/app/platform/settings/page.tsx            |  20 ++
+ src/app/platform/support/page.tsx             |  20 ++
+ src/app/platform/users/page.tsx               |  20 ++
+ .../platform-admin/CustomersDirectory.tsx     |  55 +++++
+ .../platform-admin/PlatformCommandPalette.tsx | 150 +++++++++++++
+ .../platform-admin/PlatformDenied.tsx         |  22 ++
+ .../platform-admin/PlatformPlaceholder.tsx    |  36 ++++
+ .../platform-admin/PlatformShell.tsx          | 201 ++++++++++++++++++
+ src/components/platform-admin/nav-model.ts    |  82 +++++++
+ src/components/platform-admin/ui.tsx          | 167 +++++++++++++++
+ src/lib/platform-admin/server/actions.ts      |  26 +++
+ src/lib/platform-admin/server/auth.ts         |  28 +++
+ src/lib/platform-admin/server/dal.ts          | 172 +++++++++++++++
+ 32 files changed, 1696 insertions(+)
+ create mode 100644 scripts/platform-admin-shell-qa.ts
+ create mode 100644 src/app/platform/customers/[orgId]/page.tsx
+ create mode 100644 src/app/platform/customers/page.tsx
+ create mode 100644 src/app/platform/layout.tsx
+ create mode 100644 src/app/platform/operations/integrations/page.tsx
+ create mode 100644 src/app/platform/operations/jobs/page.tsx
+ create mode 100644 src/app/platform/operations/system-health/page.tsx
+ create mode 100644 src/app/platform/page.tsx
+ create mode 100644 src/app/platform/product/ai-costs/page.tsx
+ create mode 100644 src/app/platform/product/feature-access/page.tsx
+ create mode 100644 src/app/platform/product/feature-flags/page.tsx
+ create mode 100644 src/app/platform/product/usage/page.tsx
+ create mode 100644 src/app/platform/revenue/payments/page.tsx
+ create mode 100644 src/app/platform/revenue/plans/page.tsx
+ create mode 100644 src/app/platform/revenue/subscriptions/page.tsx
+ create mode 100644 src/app/platform/security/admin-users/page.tsx
+ create mode 100644 src/app/platform/security/audit-log/page.tsx
+ create mode 100644 src/app/platform/security/sessions/page.tsx
+ create mode 100644 src/app/platform/settings/page.tsx
+ create mode 100644 src/app/platform/support/page.tsx
+ create mode 100644 src/app/platform/users/page.tsx
+ create mode 100644 src/components/platform-admin/CustomersDirectory.tsx
+ create mode 100644 src/components/platform-admin/PlatformCommandPalette.tsx
+ create mode 100644 src/components/platform-admin/PlatformDenied.tsx
+ create mode 100644 src/components/platform-admin/PlatformPlaceholder.tsx
+ create mode 100644 src/components/platform-admin/PlatformShell.tsx
+ create mode 100644 src/components/platform-admin/nav-model.ts
+ create mode 100644 src/components/platform-admin/ui.tsx
+ create mode 100644 src/lib/platform-admin/server/actions.ts
+
+diff --git a/package.json b/package.json
+index 91fce6a..a6e8523 100644
+--- a/package.json
++++ b/package.json
+@@ -17,6 +17,8 @@
+     "qa:comm-copilot": "tsx src/lib/comm-copilot/qa.ts",
+     "bench:comm-copilot": "tsx scripts/bench-comm-copilot.ts",
+     "dev-check:platform": "tsx scripts/platform-dev-check.ts",
++    "dev-check:platform-admin": "tsx scripts/platform-admin-dev-check.ts",
++    "qa:platform-admin-shell": "tsx scripts/platform-admin-shell-qa.ts",
+     "dev-check:launch": "tsx scripts/launch-dev-check.ts",
+     "readiness": "tsx scripts/zono-production-readiness.ts",
+     "validate:e2e": "tsx scripts/zono-e2e-validation.ts",
+diff --git a/scripts/platform-admin-shell-qa.ts b/scripts/platform-admin-shell-qa.ts
+new file mode 100644
+index 0000000..7c8182a
+--- /dev/null
++++ b/scripts/platform-admin-shell-qa.ts
+@@ -0,0 +1,106 @@
++/*
++ * P5.1 — Platform Admin Shell QA (LOCAL, no DB, no network).
++ * Proves the shell's structural + authorization invariants:
++ *   1. Every nav leaf routes to a real page file (no broken routes).
++ *   2. Every /platform page is server-guarded by authorizePlatform(cap), and the
++ *      asserted capability MATCHES the nav model's declared capability.
++ *   3. No /platform page or platform-admin component uses a service-role client
++ *      directly (all cross-org reads must go through the audited DAL).
++ *   4. DTO safety: the platform DAL never selects email/phone/secret columns.
++ *   5. Authorization matrix for the shell + overview gating (via pure operatorCan).
++ * Run: npx tsx scripts/platform-admin-shell-qa.ts
++ */
++import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
++import { join } from "node:path";
++import { PLATFORM_NAV_LEAVES } from "../src/components/platform-admin/nav-model";
++import { operatorCan, PLATFORM_ROLES, type PlatformOperator, type PlatformRole } from "../src/lib/platform-admin";
++
++let failures = 0;
++function assert(c: boolean, label: string): void { if (c) console.log(`  ✓ ${label}`); else { failures++; console.error(`  ✗ ${label}`); } }
++const op = (role: PlatformRole, status: "active" | "suspended" = "active"): PlatformOperator => ({ userId: "u", role, status });
++
++const APP = "src/app";
++const PLATFORM_DIR = join(APP, "platform");
++
++function hrefToPageFile(href: string): string {
++  return join(APP, href.replace(/^\//, ""), "page.tsx");
++}
++
++function walkPages(dir: string): string[] {
++  const out: string[] = [];
++  for (const name of readdirSync(dir)) {
++    const p = join(dir, name);
++    if (statSync(p).isDirectory()) out.push(...walkPages(p));
++    else if (name === "page.tsx") out.push(p);
++  }
++  return out;
++}
++
++function main(): void {
++  console.log("P5.1 platform-admin shell QA\n");
++
++  // ── 1 + 2. Nav leaves → real, capability-guarded pages (cap matches nav). ──
++  const capOf = (src: string): string | null => src.match(/authorizePlatform\(\s*["']([^"']+)["']\s*\)/)?.[1] ?? null;
++  for (const leaf of PLATFORM_NAV_LEAVES) {
++    const file = hrefToPageFile(leaf.href);
++    const exists = existsSync(file);
++    assert(exists, `nav "${leaf.label}" → page exists (${leaf.href})`);
++    if (!exists) continue;
++    const src = readFileSync(file, "utf8");
++    assert(capOf(src) === leaf.cap, `nav "${leaf.label}" page guards with ${leaf.cap}`);
++  }
++
++  // ── 2b. EVERY page under /platform is server-guarded (incl. drill-downs). ──
++  const pages = walkPages(PLATFORM_DIR);
++  assert(pages.length >= PLATFORM_NAV_LEAVES.length, `found ${pages.length} platform page files`);
++  for (const file of pages) {
++    const src = readFileSync(file, "utf8");
++    const guarded = /authorizePlatform\(/.test(src);
++    assert(guarded, `guarded: ${file.replace(APP + "/", "")}`);
++  }
++
++  // ── 3. No direct service-role client in pages or components. ──
++  const scanDirs = [PLATFORM_DIR, "src/components/platform-admin"];
++  for (const dir of scanDirs) {
++    const files: string[] = [];
++    const walk = (d: string) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(n)) files.push(p); } };
++    walk(dir);
++    for (const f of files) {
++      const src = readFileSync(f, "utf8");
++      assert(!/createServiceRoleClient/.test(src), `no service-role client: ${f.replace("src/", "")}`);
++    }
++  }
++
++  // ── 4. DTO safety — the DAL never selects sensitive columns. ──
++  const dal = readFileSync("src/lib/platform-admin/server/dal.ts", "utf8");
++  const selects = [...dal.matchAll(/\.select\(\s*["'`]([^"'`]*)["'`]/g)].map((m) => m[1]);
++  assert(selects.length > 0, `DAL has ${selects.length} select() column lists to audit`);
++  const FORBIDDEN = ["email", "phone", "password", "token", "secret", "ip", "user_agent"];
++  for (const sel of selects) {
++    const cols = sel.split(",").map((c) => c.trim().toLowerCase());
++    const bad = cols.filter((c) => FORBIDDEN.some((f) => c === f || c.includes(f)));
++    assert(bad.length === 0, `select is PII/secret-free: "${sel}"`);
++  }
++
++  // ── 5. Authorization matrix — shell base gate + overview usage/ops gating. ──
++  const SHELL = "platform.customers.read" as const;
++  // Non-operators (org owner/admin/agent → resolve to null) never reach the shell.
++  assert(!operatorCan(null, SHELL), "non-operator (org owner/admin/agent) denied shell");
++  // Suspended operator denied even with a privileged role.
++  assert(!operatorCan(op("super_admin", "suspended"), SHELL), "suspended operator denied shell");
++  // Every ACTIVE platform role can enter the shell (holds base read).
++  for (const r of PLATFORM_ROLES) assert(operatorCan(op(r), SHELL), `active ${r} may enter shell`);
++  // Overview usage metrics require usage.read; ops health requires ops.read.
++  assert(operatorCan(op("operations"), "platform.usage.read"), "operations sees usage metrics");
++  assert(operatorCan(op("operations"), "platform.ops.read"), "operations sees ops health");
++  assert(!operatorCan(op("billing_admin"), "platform.usage.read"), "billing_admin: usage RESTRICTED");
++  assert(!operatorCan(op("billing_admin"), "platform.ops.read"), "billing_admin: ops RESTRICTED");
++  assert(operatorCan(op("support"), "platform.usage.read"), "support sees usage metrics");
++  assert(!operatorCan(op("support"), "platform.ops.read"), "support: ops RESTRICTED");
++  assert(operatorCan(op("developer"), "platform.usage.read"), "developer sees usage metrics");
++
++  console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
++  process.exit(failures === 0 ? 0 : 1);
++}
++
++main();
+diff --git a/src/app/platform/customers/[orgId]/page.tsx b/src/app/platform/customers/[orgId]/page.tsx
+new file mode 100644
+index 0000000..2a5e6b9
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/page.tsx
+@@ -0,0 +1,96 @@
++// ZONO — Platform Admin · Organization summary (P5.1). A minimal, public-safe
++// org view via the audited DAL: identity + plan + a minimal user roster (name /
++// status / last-seen only — NO email, phone, CRM notes, leads, or commissions).
++// The full Customer 360 is P5.2.
++import Link from "next/link";
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrganizationForPlatform, listOrganizationUsersForPlatform } from "@/lib/platform-admin/server/dal";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { Icon } from "@/components/dashboard/Icon";
++import { PageHeader, PanelCard, PlanBadge, StatusBadge, IdChip, formatPlatformDate } from "@/components/platform-admin/ui";
++
++export const dynamic = "force-dynamic";
++
++export default async function PlatformOrgSummaryPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.customers.read");
++  if (!operator) return <PlatformDenied />;
++
++  const { orgId } = await params;
++  const org = await getOrganizationForPlatform(orgId);
++  if (!org) {
++    return (
++      <div>
++        <PageHeader eyebrow="לקוחות · ארגון" title="הארגון לא נמצא" icon="Building2" />
++        <div className="border-line bg-card rounded-2xl border p-8 text-center">
++          <p className="text-muted text-sm">לא נמצא ארגון עם המזהה המבוקש.</p>
++          <Link href="/platform/customers" className="text-brand-strong mt-3 inline-flex items-center gap-1 text-sm font-bold"><Icon name="ArrowLeft" size={15} />חזרה לארגונים</Link>
++        </div>
++      </div>
++    );
++  }
++
++  // Every platform role holds users.read; guard defensively anyway.
++  const users = await listOrganizationUsersForPlatform(orgId).catch(() => []);
++
++  return (
++    <div>
++      <div className="mb-4">
++        <Link href="/platform/customers" className="text-muted hover:text-ink inline-flex items-center gap-1 text-[12px] font-bold"><Icon name="ArrowLeft" size={14} />ארגונים</Link>
++      </div>
++      <PageHeader eyebrow="לקוחות · ארגון" title={org.name} icon="Building2" />
++
++      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
++        <PanelCard title="פרטי ארגון" icon="Building2">
++          <dl className="flex flex-col gap-3 px-1 py-1 text-[13px]">
++            <div className="flex items-center justify-between gap-3">
++              <dt className="text-muted font-semibold">תוכנית</dt>
++              <dd><PlanBadge plan={org.plan} /></dd>
++            </div>
++            <div className="flex items-center justify-between gap-3">
++              <dt className="text-muted font-semibold">עיר</dt>
++              <dd className="text-ink font-bold">{org.city || "—"}</dd>
++            </div>
++            <div className="flex items-center justify-between gap-3">
++              <dt className="text-muted font-semibold">אונבורדינג</dt>
++              <dd>
++                <span className={"inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold " + (org.onboardingCompleted ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
++                  {org.onboardingCompleted ? "הושלם" : "בתהליך"}
++                </span>
++              </dd>
++            </div>
++            <div className="flex items-center justify-between gap-3">
++              <dt className="text-muted font-semibold">נוצר</dt>
++              <dd className="text-ink font-bold">{formatPlatformDate(org.createdAt)}</dd>
++            </div>
++            <div className="flex items-center justify-between gap-3">
++              <dt className="text-muted font-semibold">מזהה</dt>
++              <dd><IdChip id={org.id} /></dd>
++            </div>
++          </dl>
++        </PanelCard>
++
++        <PanelCard title={`משתמשים (${users.length})`} icon="Users" className="lg:col-span-2">
++          {users.length === 0 ? (
++            <p className="text-muted px-2 py-6 text-center text-sm">אין משתמשים להצגה</p>
++          ) : (
++            <ul className="divide-line divide-y">
++              {users.map((u) => (
++                <li key={u.id} className="flex items-center gap-3 px-2 py-2.5">
++                  <span className="text-muted bg-surface grid h-8 w-8 shrink-0 place-items-center rounded-full"><Icon name="UserCircle" size={16} /></span>
++                  <span className="text-ink min-w-0 flex-1 truncate text-[13.5px] font-bold">{u.name || "—"}</span>
++                  <span className="text-muted hidden text-[11px] sm:inline">{u.lastSeenAt ? `נראה ${formatPlatformDate(u.lastSeenAt)}` : "—"}</span>
++                  <StatusBadge status={u.status} />
++                </li>
++              ))}
++            </ul>
++          )}
++        </PanelCard>
++      </div>
++
++      <div className="border-line bg-surface mt-5 flex items-center gap-2 rounded-xl border px-4 py-3">
++        <span className="text-brand"><Icon name="Sparkles" size={16} /></span>
++        <p className="text-muted text-[13px] font-semibold">תצוגת Customer 360 המלאה — מנויים, שימוש, אינטגרציות ותמיכה — תגיע ב-P5.2.</p>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/platform/customers/page.tsx b/src/app/platform/customers/page.tsx
+new file mode 100644
+index 0000000..9050a33
+--- /dev/null
++++ b/src/app/platform/customers/page.tsx
+@@ -0,0 +1,23 @@
++// ZONO — Platform Admin · Organizations directory (P5.1). Minimal, public-safe
++// cross-org list via the audited DAL. Full Customer 360 arrives in P5.2.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { listOrganizationsForPlatform } from "@/lib/platform-admin/server/dal";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PageHeader } from "@/components/platform-admin/ui";
++import { CustomersDirectory } from "@/components/platform-admin/CustomersDirectory";
++
++export const dynamic = "force-dynamic";
++
++export default async function PlatformCustomersPage() {
++  const operator = await authorizePlatform("platform.customers.read");
++  if (!operator) return <PlatformDenied />;
++
++  const orgs = await listOrganizationsForPlatform();
++
++  return (
++    <div>
++      <PageHeader eyebrow="לקוחות" title="ארגונים" icon="Building2" description="ספריית כל ארגוני הלקוחות בפלטפורמה. בחר ארגון לתצוגת סיכום. חיפוש גלובלי זמין ב-⌘K." />
++      <CustomersDirectory orgs={orgs} />
++    </div>
++  );
++}
+diff --git a/src/app/platform/layout.tsx b/src/app/platform/layout.tsx
+new file mode 100644
+index 0000000..c23d890
+--- /dev/null
++++ b/src/app/platform/layout.tsx
+@@ -0,0 +1,39 @@
++// ============================================================================
++// ZONO — Platform Admin control-plane layout (P5.1). A SEPARATE top-level route
++// segment (NOT the org-scoped /(app)/platform-admin tooling). Protected by the
++// P5.0 platform boundary: only an active platform operator with the base
++// platform.customers.read capability may enter. Everyone else — ordinary org
++// owner/admin/agent, suspended operator, anonymous — gets a safe denial. This
++// layout is the ONLY chrome for /platform/*; it never renders the customer app
++// shell.
++// ============================================================================
++import type { ReactNode } from "react";
++import { redirect } from "next/navigation";
++import { getSessionContext } from "@/lib/auth/session";
++import { getCurrentPlatformOperator, getPlatformOperatorDisplayName } from "@/lib/platform-admin/server/auth";
++import { operatorCan, capabilitiesForRole } from "@/lib/platform-admin/capabilities";
++import { PlatformShell } from "@/components/platform-admin/PlatformShell";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++
++export const dynamic = "force-dynamic";
++
++export default async function PlatformLayout({ children }: { children: ReactNode }) {
++  const { state } = await getSessionContext();
++  if (state === "unauthenticated") redirect("/login");
++
++  const operator = await getCurrentPlatformOperator();
++  // Base gate: must be an active operator holding the universal read capability.
++  if (!operatorCan(operator, "platform.customers.read") || !operator) {
++    return <PlatformDenied />;
++  }
++
++  const name = await getPlatformOperatorDisplayName(operator.userId);
++  const caps = capabilitiesForRole(operator.role);
++  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
++
++  return (
++    <PlatformShell operator={{ name, role: operator.role, caps }} env={env}>
++      {children}
++    </PlatformShell>
++  );
++}
+diff --git a/src/app/platform/operations/integrations/page.tsx b/src/app/platform/operations/integrations/page.tsx
+new file mode 100644
+index 0000000..898bed9
+--- /dev/null
++++ b/src/app/platform/operations/integrations/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.integrations.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="תפעול"
++      title="אינטגרציות"
++      icon="Globe"
++      description="מצב בריאות האינטגרציות החיצוניות של הלקוחות (ללא סודות או אסימונים)."
++      willContain={["סטטוס חיבורים", "כשלי אינטגרציה", "ספקים מחוברים", "בריאות Webhooks", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/operations/jobs/page.tsx b/src/app/platform/operations/jobs/page.tsx
+new file mode 100644
+index 0000000..cf6758e
+--- /dev/null
++++ b/src/app/platform/operations/jobs/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.ops.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="תפעול"
++      title="עבודות ותורים"
++      icon="ListChecks"
++      description="תורי עבודה, עומסים ותורי Dead-letter חוצי-ארגונים."
++      willContain={["עומק תורים", "עבודות שנכשלו", "Dead-letter", "השהיות עיבוד", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/operations/system-health/page.tsx b/src/app/platform/operations/system-health/page.tsx
+new file mode 100644
+index 0000000..072d4ab
+--- /dev/null
++++ b/src/app/platform/operations/system-health/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.ops.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="תפעול"
++      title="בריאות מערכת"
++      icon="Activity"
++      description="תמונת בריאות תשתיתית ותפעולית של הפלטפורמה."
++      willContain={["זמינות שירותים", "זמני תגובה", "שיעורי שגיאה", "התראות פעילות", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/page.tsx b/src/app/platform/page.tsx
+new file mode 100644
+index 0000000..75fb613
+--- /dev/null
++++ b/src/app/platform/page.tsx
+@@ -0,0 +1,144 @@
++// ZONO — Platform Admin Overview (P5.1). The owner's 10-second answer: how many
++// customers, how much product usage, are there operational problems, where to
++// look next. Every figure comes from the audited cross-org DAL (count-only
++// aggregates); metrics the operator can't see render as "מוגבל", never as a
++// fabricated 0. No MRR/ARR/churn/ARPU/AI-cost here — those are not yet
++// trustworthy in the schema, so they are intentionally omitted.
++import Link from "next/link";
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getPlatformOverviewMetrics, listRecentPlatformAudit } from "@/lib/platform-admin/server/dal";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import {
++  PageHeader, StatCard, UsageTile, PanelCard, PlanBadge, IdChip, QuickLink,
++  MetricValue, formatPlatformDate, formatPlatformDateTime,
++} from "@/components/platform-admin/ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++export default async function PlatformOverviewPage() {
++  const operator = await authorizePlatform("platform.customers.read");
++  if (!operator) return <PlatformDenied />;
++
++  const [metrics, audit] = await Promise.all([
++    getPlatformOverviewMetrics(),
++    listRecentPlatformAudit(8).catch(() => []),
++  ]);
++
++  const usersTotalLabel = metrics.usersTotal.state === "ok" && metrics.usersTotal.value !== null
++    ? `מתוך ${new Intl.NumberFormat("en-US").format(metrics.usersTotal.value)}`
++    : undefined;
++
++  // Operational status — only meaningful when the operator can read ops health.
++  const opsVisible = metrics.deadLetter.state === "ok" || metrics.failedPublishJobs.state === "ok";
++  const opsIssues = (metrics.deadLetter.value ?? 0) + (metrics.failedPublishJobs.value ?? 0);
++  const statusTone = !opsVisible ? "neutral" : opsIssues > 0 ? "warning" : "ok";
++  const statusText = !opsVisible ? "סטטוס תפעולי מוגבל להרשאה" : opsIssues > 0 ? "יש התראות תפעוליות לבדיקה" : "המערכת תקינה";
++
++  return (
++    <div>
++      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
++        <PageHeader eyebrow="ZONO · CONTROL PLANE" title="סקירת פלטפורמה" icon="LayoutGrid" description="תמונת מצב חוצת-ארגונים של ZONO — לקוחות, שימוש בליבת המוצר ובריאות תפעולית." />
++        <div className="flex items-center gap-2 pb-1">
++          <span className={
++            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold " +
++            (statusTone === "warning" ? "bg-warning-soft text-warning" : statusTone === "ok" ? "bg-success-soft text-success" : "bg-surface text-muted")
++          }>
++            <span className={"h-2 w-2 rounded-full " + (statusTone === "warning" ? "bg-warning" : statusTone === "ok" ? "bg-success" : "bg-muted")} />
++            {statusText}
++          </span>
++          <span className="text-muted text-[11px]">עודכן {formatPlatformDateTime(metrics.generatedAt)}</span>
++        </div>
++      </div>
++
++      {/* KPI row */}
++      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
++        <StatCard icon="Building2" label="ארגונים" metric={metrics.organizations} tone="brand" />
++        <StatCard icon="UserCheck" label="משתמשים פעילים" metric={metrics.usersActive} sub={usersTotalLabel} tone="success" />
++        <StatCard icon="Home" label="נכסים" metric={metrics.properties} tone="neutral" />
++        <StatCard icon="Target" label="לידים" metric={metrics.leads} tone="neutral" />
++      </div>
++
++      {/* Usage strip */}
++      <div className="mt-5">
++        <PanelCard title="שימוש בליבת המוצר" icon="Activity">
++          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
++            <UsageTile icon="Megaphone" label="קמפייני הפצה" metric={metrics.campaigns} />
++            <UsageTile icon="Globe" label="פרסומי פייסבוק" metric={metrics.facebookPublishes} />
++            <UsageTile icon="MessageCircle" label="הודעות וואטסאפ" metric={metrics.whatsappMessages} />
++          </div>
++        </PanelCard>
++      </div>
++
++      {/* Middle: recent orgs + operational health + audit */}
++      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
++        <PanelCard
++          title="פעילות ארגונים אחרונה"
++          icon="Building2"
++          className="lg:col-span-2"
++          action={<Link href="/platform/customers" className="text-brand-strong text-[12px] font-bold">כל הארגונים</Link>}
++        >
++          {metrics.recentOrganizations.length === 0 ? (
++            <p className="text-muted px-2 py-6 text-center text-sm">אין ארגונים להצגה</p>
++          ) : (
++            <ul className="divide-line divide-y">
++              {metrics.recentOrganizations.map((o) => (
++                <li key={o.id}>
++                  <Link href={`/platform/customers/${o.id}`} className="hover:bg-surface flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors">
++                    <span className="text-muted bg-surface grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name="Building2" size={15} /></span>
++                    <span className="text-ink min-w-0 flex-1 truncate text-sm font-bold">{o.name}</span>
++                    <PlanBadge plan={o.plan} />
++                    <span className="text-muted hidden text-[12px] sm:inline">{formatPlatformDate(o.createdAt)}</span>
++                    <IdChip id={o.id} />
++                  </Link>
++                </li>
++              ))}
++            </ul>
++          )}
++        </PanelCard>
++
++        <div className="flex flex-col gap-5">
++          <PanelCard title="בריאות תפעולית" icon="Activity">
++            <div className="grid grid-cols-2 gap-3">
++              <div className="border-line bg-surface rounded-xl border p-3 text-center">
++                <p className="text-ink text-2xl font-black tabular-nums"><MetricValue metric={metrics.deadLetter} /></p>
++                <p className="text-muted mt-1 text-[12px] font-semibold">Dead-letter</p>
++              </div>
++              <div className="border-line bg-surface rounded-xl border p-3 text-center">
++                <p className="text-ink text-2xl font-black tabular-nums"><MetricValue metric={metrics.failedPublishJobs} /></p>
++                <p className="text-muted mt-1 text-[12px] font-semibold">עבודות שנכשלו</p>
++              </div>
++            </div>
++          </PanelCard>
++
++          <PanelCard title="יומן ביקורת אחרון" icon="ScrollText" action={<Link href="/platform/security/audit-log" className="text-brand-strong text-[12px] font-bold">הכול</Link>}>
++            {audit.length === 0 ? (
++              <p className="text-muted px-2 py-4 text-center text-[13px]">אין רשומות</p>
++            ) : (
++              <ul className="flex flex-col gap-1">
++                {audit.map((e) => (
++                  <li key={e.id} className="flex items-center gap-2 px-1 py-1.5">
++                    <span className="text-brand-light"><Icon name="Fingerprint" size={13} /></span>
++                    <span className="text-ink truncate text-[12.5px] font-semibold">{e.action}</span>
++                    <span className="text-muted ms-auto shrink-0 text-[11px]">{formatPlatformDate(e.createdAt)}</span>
++                  </li>
++                ))}
++              </ul>
++            )}
++          </PanelCard>
++        </div>
++      </div>
++
++      {/* Quick links */}
++      <div className="mt-5">
++        <p className="text-muted mb-2 text-[11px] font-bold uppercase tracking-wide">קפיצה מהירה</p>
++        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
++          <QuickLink href="/platform/customers" icon="Building2" label="ארגונים" />
++          <QuickLink href="/platform/security/audit-log" icon="ScrollText" label="יומן ביקורת" />
++          <QuickLink href="/platform/operations/system-health" icon="Activity" label="בריאות מערכת" />
++          <QuickLink href="/platform/settings" icon="Settings" label="הגדרות" />
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/platform/product/ai-costs/page.tsx b/src/app/platform/product/ai-costs/page.tsx
+new file mode 100644
+index 0000000..658d321
+--- /dev/null
++++ b/src/app/platform/product/ai-costs/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.ai.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="מוצר"
++      title="עלויות AI"
++      icon="Sparkles"
++      description="מעקב עלויות ותצרוכת בינה מלאכותית ברמת הפלטפורמה."
++      willContain={["עלות לפי ארגון", "צריכת טוקנים", "מגמות עלות", "בקרת תקציב", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/product/feature-access/page.tsx b/src/app/platform/product/feature-access/page.tsx
+new file mode 100644
+index 0000000..ec6335d
+--- /dev/null
++++ b/src/app/platform/product/feature-access/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.flags.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="מוצר"
++      title="גישת יכולות"
++      icon="ShieldCheck"
++      description="בקרת גישה ליכולות מוצר לכל ארגון — מי מקבל מה."
++      willContain={["מטריצת גישה", "הפעלה לפי ארגון", "חבילות יכולות", "היסטוריית שינויים", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/product/feature-flags/page.tsx b/src/app/platform/product/feature-flags/page.tsx
+new file mode 100644
+index 0000000..9e22faa
+--- /dev/null
++++ b/src/app/platform/product/feature-flags/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.flags.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="מוצר"
++      title="דגלי יכולות"
++      icon="Flag"
++      description="ניהול דגלי פיצ'רים והשקה מבוקרת חוצת-ארגונים."
++      willContain={["דגלים פעילים", "השקה הדרגתית", "טירגוט לפי ארגון", "מצב הערכה", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/product/usage/page.tsx b/src/app/platform/product/usage/page.tsx
+new file mode 100644
+index 0000000..e1d69a4
+--- /dev/null
++++ b/src/app/platform/product/usage/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.usage.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="מוצר"
++      title="שימוש"
++      icon="Activity"
++      description="מדדי שימוש חוצי-ארגונים בליבת המוצר לאורך זמן."
++      willContain={["שימוש לפי מודול", "מגמות אימוץ", "ארגונים פעילים", "שיא עומסים", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/revenue/payments/page.tsx b/src/app/platform/revenue/payments/page.tsx
+new file mode 100644
+index 0000000..360c8bf
+--- /dev/null
++++ b/src/app/platform/revenue/payments/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.billing.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="הכנסות"
++      title="תשלומים"
++      icon="Wallet"
++      description="תנועות תשלום, חשבוניות וכשלי גבייה ברמת הפלטפורמה."
++      willContain={["תנועות אחרונות", "חשבוניות", "כשלי גבייה", "החזרים", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/revenue/plans/page.tsx b/src/app/platform/revenue/plans/page.tsx
+new file mode 100644
+index 0000000..04f4f87
+--- /dev/null
++++ b/src/app/platform/revenue/plans/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.billing.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="הכנסות"
++      title="תוכניות"
++      icon="Tag"
++      description="הגדרות תוכניות המחיר, מכסות והרשאות מסחריות."
++      willContain={["קטלוג תוכניות", "מכסות", "תמחור", "זכאויות", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/revenue/subscriptions/page.tsx b/src/app/platform/revenue/subscriptions/page.tsx
+new file mode 100644
+index 0000000..00afe63
+--- /dev/null
++++ b/src/app/platform/revenue/subscriptions/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.billing.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="הכנסות"
++      title="מנויים"
++      icon="BadgeCheck"
++      description="מצב המנויים הפעילים של כלל הלקוחות, תקופות חיוב ומחזור חידושים."
++      willContain={["מנויים פעילים", "מחזורי חידוש", "שדרוגים והורדות", "מנויים בסיכון", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/security/admin-users/page.tsx b/src/app/platform/security/admin-users/page.tsx
+new file mode 100644
+index 0000000..df8822e
+--- /dev/null
++++ b/src/app/platform/security/admin-users/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.admins.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="אבטחה"
++      title="מנהלי פלטפורמה"
++      icon="Fingerprint"
++      description="רשימת מנהלי הפלטפורמה, תפקידים וסטטוס. ניהול הרשאות זמין ל-Super Admin בלבד."
++      willContain={["מנהלים פעילים", "תפקידי פלטפורמה", "סטטוס וחסימות", "היסטוריית שינויים", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/security/audit-log/page.tsx b/src/app/platform/security/audit-log/page.tsx
+new file mode 100644
+index 0000000..644ed93
+--- /dev/null
++++ b/src/app/platform/security/audit-log/page.tsx
+@@ -0,0 +1,47 @@
++// ZONO — Platform Admin · Audit Log (P5.1). Most-recent platform audit events
++// from the P5.0 platform_audit_log, safe columns only (actor label, action,
++// resource type, org, time — NO ip / user-agent / value diffs). Cap:
++// platform.audit.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { listRecentPlatformAudit } from "@/lib/platform-admin/server/dal";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { Icon } from "@/components/dashboard/Icon";
++import { PageHeader, IdChip, formatPlatformDateTime } from "@/components/platform-admin/ui";
++
++export const dynamic = "force-dynamic";
++
++export default async function PlatformAuditLogPage() {
++  const operator = await authorizePlatform("platform.audit.read");
++  if (!operator) return <PlatformDenied />;
++
++  const entries = await listRecentPlatformAudit(50);
++
++  return (
++    <div>
++      <PageHeader eyebrow="אבטחה" title="יומן ביקורת" icon="ScrollText" description="פעולות מנהלי הפלטפורמה האחרונות. רשומות קריאה-בלבד, ללא נתונים רגישים." />
++      <div className="border-line bg-card overflow-hidden rounded-2xl border">
++        <div className="border-line text-muted hidden grid-cols-[1.4fr_1fr_1fr_1.2fr] gap-3 border-b px-4 py-2.5 text-[11px] font-bold sm:grid">
++          <span>פעולה</span><span>מבצע</span><span>סוג משאב</span><span>זמן</span>
++        </div>
++        {entries.length === 0 ? (
++          <p className="text-muted px-4 py-10 text-center text-sm">אין רשומות ביומן</p>
++        ) : (
++          <ul className="divide-line divide-y">
++            {entries.map((e) => (
++              <li key={e.id} className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-[1.4fr_1fr_1fr_1.2fr] sm:items-center sm:gap-3">
++                <span className="text-ink inline-flex items-center gap-2 text-[13px] font-bold">
++                  <span className="text-brand-light"><Icon name="Fingerprint" size={14} /></span>{e.action}
++                </span>
++                <span className="text-muted text-[12.5px] font-semibold">{e.actorLabel || "—"}</span>
++                <span className="text-muted text-[12.5px]">
++                  {e.resourceType || "—"}{e.orgId ? <> · <IdChip id={e.orgId} /></> : null}
++                </span>
++                <span className="text-muted text-[12px]">{formatPlatformDateTime(e.createdAt)}</span>
++              </li>
++            ))}
++          </ul>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/platform/security/sessions/page.tsx b/src/app/platform/security/sessions/page.tsx
+new file mode 100644
+index 0000000..075ab5d
+--- /dev/null
++++ b/src/app/platform/security/sessions/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.audit.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="אבטחה"
++      title="הפעלות"
++      icon="Lock"
++      description="הפעלות מנהלי פלטפורמה פעילות ומעקב גישה."
++      willContain={["הפעלות פעילות", "מכשירים", "כניסות אחרונות", "ניתוק הפעלות", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/settings/page.tsx b/src/app/platform/settings/page.tsx
+new file mode 100644
+index 0000000..b766755
+--- /dev/null
++++ b/src/app/platform/settings/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.customers.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="מערכת"
++      title="הגדרות"
++      icon="Settings"
++      description="הגדרות מרחב הניהול של הפלטפורמה והעדפות כלליות."
++      willContain={["העדפות תצוגה", "הגדרות התראות", "אזורי זמן", "מיתוג פלטפורמה", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/support/page.tsx b/src/app/platform/support/page.tsx
+new file mode 100644
+index 0000000..8f97171
+--- /dev/null
++++ b/src/app/platform/support/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.support.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="תמיכה"
++      title="תמיכה"
++      icon="Handshake"
++      description="מרכז כלי התמיכה בלקוחות. כלי הזדהות ופעולות תמיכה יתווספו בשלב מאוחר יותר."
++      willContain={["פניות פתוחות", "הקשר לקוח", "כלי אבחון", "היסטוריית תמיכה", ]}
++    />
++  );
++}
+diff --git a/src/app/platform/users/page.tsx b/src/app/platform/users/page.tsx
+new file mode 100644
+index 0000000..a2f3741
+--- /dev/null
++++ b/src/app/platform/users/page.tsx
+@@ -0,0 +1,20 @@
++// ZONO — Platform Admin placeholder (P5.1). Server-guarded; "בקרוב". No fake data.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { PlatformPlaceholder } from "@/components/platform-admin/PlatformPlaceholder";
++
++export const dynamic = "force-dynamic";
++
++export default async function Page() {
++  const operator = await authorizePlatform("platform.users.read");
++  if (!operator) return <PlatformDenied />;
++  return (
++    <PlatformPlaceholder
++      eyebrow="לקוחות"
++      title="משתמשים"
++      icon="Users"
++      description="ניהול חוצה-ארגונים של משתמשי הפלטפורמה: חיפוש, סטטוס וחיבור אחרון — ללא חשיפת אימייל או טלפון."
++      willContain={["חיפוש משתמשים גלובלי", "סטטוס וחיבור אחרון", "שיוך לארגון", "תצוגת תפקידים", ]}
++    />
++  );
++}
+diff --git a/src/components/platform-admin/CustomersDirectory.tsx b/src/components/platform-admin/CustomersDirectory.tsx
+new file mode 100644
+index 0000000..57aa6fc
+--- /dev/null
++++ b/src/components/platform-admin/CustomersDirectory.tsx
+@@ -0,0 +1,55 @@
++"use client";
++// Client-side filter over the already-loaded, DAL-fetched safe org directory
++// (P5.1). This filters data the server already authorized + audited — it opens
++// NO new data path. The platform-wide DAL search lives in the ⌘K command
++// palette; this is the convenience filter on the directory screen.
++import { useMemo, useState } from "react";
++import Link from "next/link";
++import { Icon } from "@/components/dashboard/Icon";
++import { PlanBadge, IdChip, formatPlatformDate } from "./ui";
++import type { PlatformOrgSummary } from "@/lib/platform-admin/server/dal";
++
++export function CustomersDirectory({ orgs }: { orgs: PlatformOrgSummary[] }) {
++  const [q, setQ] = useState("");
++  const filtered = useMemo(() => {
++    const s = q.trim().toLowerCase();
++    if (!s) return orgs;
++    return orgs.filter((o) => o.name.toLowerCase().includes(s) || o.id.toLowerCase().startsWith(s));
++  }, [orgs, q]);
++
++  return (
++    <div className="border-line bg-card rounded-2xl border">
++      <div className="border-line flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
++        <div className="border-line flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-xl border bg-surface px-3">
++          <Icon name="Search" size={15} className="text-muted" />
++          <input
++            value={q}
++            onChange={(e) => setQ(e.target.value)}
++            placeholder="סינון לפי שם ארגון…"
++            className="text-ink h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted"
++          />
++        </div>
++        <span className="text-muted text-[12px] font-semibold">{filtered.length} / {orgs.length} ארגונים</span>
++      </div>
++
++      {filtered.length === 0 ? (
++        <p className="text-muted px-4 py-10 text-center text-sm">לא נמצאו ארגונים תואמים</p>
++      ) : (
++        <ul className="divide-line divide-y">
++          {filtered.map((o) => (
++            <li key={o.id}>
++              <Link href={`/platform/customers/${o.id}`} className="hover:bg-surface flex items-center gap-3 px-4 py-3 transition-colors">
++                <span className="text-muted bg-surface grid h-9 w-9 shrink-0 place-items-center rounded-lg"><Icon name="Building2" size={16} /></span>
++                <span className="text-ink min-w-0 flex-1 truncate text-sm font-bold">{o.name}</span>
++                <PlanBadge plan={o.plan} />
++                <span className="text-muted hidden w-20 text-[12px] sm:inline">{formatPlatformDate(o.createdAt)}</span>
++                <IdChip id={o.id} />
++                <Icon name="ChevronLeft" size={16} className="text-muted" />
++              </Link>
++            </li>
++          ))}
++        </ul>
++      )}
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/PlatformCommandPalette.tsx b/src/components/platform-admin/PlatformCommandPalette.tsx
+new file mode 100644
+index 0000000..5ced44f
+--- /dev/null
++++ b/src/components/platform-admin/PlatformCommandPalette.tsx
+@@ -0,0 +1,150 @@
++"use client";
++// ============================================================================
++// ZONO — Platform command palette (⌘K / Ctrl+K). P5.1. Fast quick-navigation
++// across the platform nav plus a platform-wide organization search backed ONLY
++// by the audited DAL (searchOrganizationsAction). NO destructive actions here in
++// P5.1 — navigation + read-only org open only. Nav targets are gated by the
++// operator's granted capabilities (defense-in-depth on top of per-route guards).
++//
++// This component is MOUNTED only while open (fresh mount = reset state), so it
++// needs no reset effect; setState never runs synchronously inside an effect.
++// ============================================================================
++import { useEffect, useMemo, useRef, useState } from "react";
++import { useRouter } from "next/navigation";
++import { Icon } from "@/components/dashboard/Icon";
++import { cn } from "@/lib/utils";
++import { PLATFORM_NAV_LEAVES } from "./nav-model";
++import { PLAN_LABEL } from "./ui";
++import { searchOrganizationsAction } from "@/lib/platform-admin/server/actions";
++import type { PlatformOrgSummary } from "@/lib/platform-admin/server/dal";
++
++export function PlatformCommandPalette({ onClose, caps }: { onClose: () => void; caps: string[] }) {
++  const router = useRouter();
++  const [query, setQuery] = useState("");
++  const [orgs, setOrgs] = useState<PlatformOrgSummary[]>([]);
++  const [resultQuery, setResultQuery] = useState("");
++  const [active, setActive] = useState(0);
++  const reqId = useRef(0);
++
++  const q = query.trim();
++  const canCustomers = caps.includes("platform.customers.read");
++  const showOrgSection = canCustomers && q.length >= 2;
++
++  const navItems = useMemo(() => PLATFORM_NAV_LEAVES.filter((l) => caps.includes(l.cap)), [caps]);
++  const filteredNav = useMemo(() => {
++    const s = q.toLowerCase();
++    if (!s) return navItems;
++    return navItems.filter((l) => l.label.toLowerCase().includes(s) || l.href.toLowerCase().includes(s));
++  }, [navItems, q]);
++
++  // Only surface org results that correspond to the CURRENT query text.
++  const visibleOrgs = useMemo(
++    () => (showOrgSection && resultQuery === q ? orgs : []),
++    [showOrgSection, resultQuery, q, orgs],
++  );
++  const loading = showOrgSection && resultQuery !== q;
++
++  const targets = useMemo(() => {
++    const nav = filteredNav.map((l) => l.href);
++    const org = visibleOrgs.map((o) => `/platform/customers/${o.id}`);
++    return [...nav, ...org];
++  }, [filteredNav, visibleOrgs]);
++
++  // Debounced org search. setState happens ONLY inside the async timeout — never
++  // synchronously in the effect body (satisfies react-hooks/set-state-in-effect).
++  useEffect(() => {
++    if (!canCustomers || q.length < 2) return;
++    let cancelled = false;
++    const id = ++reqId.current;
++    const t = setTimeout(async () => {
++      const res = await searchOrganizationsAction(q);
++      if (cancelled || id !== reqId.current) return;
++      setOrgs(res.ok ? res.orgs : []);
++      setResultQuery(q);
++    }, 220);
++    return () => { cancelled = true; clearTimeout(t); };
++  }, [q, canCustomers]);
++
++  function go(href: string) {
++    onClose();
++    router.push(href);
++  }
++
++  function onKeyDown(e: React.KeyboardEvent) {
++    if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
++    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, Math.max(targets.length - 1, 0))); return; }
++    if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); return; }
++    if (e.key === "Enter") { e.preventDefault(); const href = targets[active]; if (href) go(href); }
++  }
++
++  return (
++    <div dir="rtl" className="fixed inset-0 z-[120] flex items-start justify-center px-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="חיפוש ופעולות">
++      <button type="button" aria-label="סגור" className="absolute inset-0 bg-ink/30 backdrop-blur-sm" onClick={onClose} />
++      <div className="border-line bg-card relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border shadow-2xl">
++        <div className="border-line flex items-center gap-2 border-b px-4">
++          <span className="text-muted"><Icon name="Search" size={18} /></span>
++          <input
++            autoFocus
++            value={query}
++            onChange={(e) => { setQuery(e.target.value); setActive(0); }}
++            onKeyDown={onKeyDown}
++            placeholder="חפש ארגון או קפוץ למסך…"
++            className="text-ink h-14 w-full bg-transparent text-[15px] outline-none placeholder:text-muted"
++          />
++          <kbd className="border-line text-muted hidden rounded-md border px-1.5 py-0.5 text-[10px] font-bold sm:inline">ESC</kbd>
++        </div>
++
++        <div className="max-h-[52vh] overflow-y-auto p-2">
++          {filteredNav.length > 0 && (
++            <div className="mb-1">
++              <p className="text-muted px-2 py-1.5 text-[11px] font-bold">ניווט מהיר</p>
++              {filteredNav.map((l, i) => (
++                <button
++                  key={l.href}
++                  type="button"
++                  onMouseEnter={() => setActive(i)}
++                  onClick={() => go(l.href)}
++                  className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right", active === i ? "bg-brand-soft" : "hover:bg-surface")}
++                >
++                  <span className="text-brand"><Icon name={l.icon} size={16} /></span>
++                  <span className="text-ink text-sm font-semibold">{l.label}</span>
++                  {!l.ready ? <span className="bg-warning-soft text-warning ms-auto rounded px-1.5 py-0.5 text-[10px] font-bold">בקרוב</span> : null}
++                </button>
++              ))}
++            </div>
++          )}
++
++          {showOrgSection && (
++            <div>
++              <p className="text-muted flex items-center gap-2 px-2 py-1.5 text-[11px] font-bold">
++                ארגונים
++                {loading ? <Icon name="Loader" size={12} className="animate-spin" /> : null}
++              </p>
++              {visibleOrgs.map((o, i) => {
++                const gi = filteredNav.length + i;
++                return (
++                  <button
++                    key={o.id}
++                    type="button"
++                    onMouseEnter={() => setActive(gi)}
++                    onClick={() => go(`/platform/customers/${o.id}`)}
++                    className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right", active === gi ? "bg-brand-soft" : "hover:bg-surface")}
++                  >
++                    <span className="text-muted bg-surface grid h-7 w-7 place-items-center rounded-lg"><Icon name="Building2" size={14} /></span>
++                    <span className="text-ink truncate text-sm font-semibold">{o.name}</span>
++                    <span className="text-muted ms-auto text-[11px] font-bold">{o.plan ? (PLAN_LABEL[o.plan] ?? o.plan) : ""}</span>
++                  </button>
++                );
++              })}
++              {!loading && visibleOrgs.length === 0 ? <p className="text-muted px-3 py-3 text-center text-[13px]">לא נמצאו ארגונים</p> : null}
++            </div>
++          )}
++
++          {filteredNav.length === 0 && !showOrgSection ? (
++            <p className="text-muted px-3 py-6 text-center text-[13px]">הקלד לפחות 2 תווים לחיפוש ארגונים</p>
++          ) : null}
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/PlatformDenied.tsx b/src/components/platform-admin/PlatformDenied.tsx
+new file mode 100644
+index 0000000..7ed91ea
+--- /dev/null
++++ b/src/components/platform-admin/PlatformDenied.tsx
+@@ -0,0 +1,22 @@
++// Safe, non-revealing denial for the platform control plane (P5.1). Shown to any
++// caller who is not an active platform operator (or lacks the required
++// capability). Deliberately generic: it never confirms what lies behind the
++// route, never echoes the attempted capability, and offers only a route back to
++// the customer app.
++import Link from "next/link";
++import { Icon } from "@/components/dashboard/Icon";
++
++export function PlatformDenied({ title = "אין גישה", note = "המרחב הזה זמין לצוות ZONO בלבד." }: { title?: string; note?: string }) {
++  return (
++    <div dir="rtl" className="grid min-h-[60vh] place-items-center p-6">
++      <div className="border-line bg-card w-full max-w-sm rounded-3xl border p-8 text-center">
++        <span className="text-muted bg-surface mx-auto grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Lock" size={26} /></span>
++        <p className="text-ink mt-4 text-xl font-black">{title}</p>
++        <p className="text-muted mt-1.5 text-sm">{note}</p>
++        <Link href="/" className="text-brand-strong mt-5 inline-flex items-center gap-1 text-sm font-bold">
++          <Icon name="ArrowLeft" size={15} />חזרה לאזור האישי
++        </Link>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/PlatformPlaceholder.tsx b/src/components/platform-admin/PlatformPlaceholder.tsx
+new file mode 100644
+index 0000000..6cc6aa5
+--- /dev/null
++++ b/src/components/platform-admin/PlatformPlaceholder.tsx
+@@ -0,0 +1,36 @@
++// Polished "בקרוב" placeholder for platform nav destinations not yet built
++// (P5.1). No fake data, no fake charts, no dead links — just an honest,
++// on-brand statement of what the section will contain. Every placeholder route
++// is still server-guarded by its capability before this renders.
++import { Icon } from "@/components/dashboard/Icon";
++import { PageHeader } from "./ui";
++
++export function PlatformPlaceholder({ eyebrow, title, icon, description, willContain }: {
++  eyebrow: string; title: string; icon: string; description: string; willContain: string[];
++}) {
++  return (
++    <div>
++      <PageHeader eyebrow={eyebrow} title={title} icon={icon} />
++      <div className="border-line bg-card rounded-2xl border p-8">
++        <div className="flex items-center gap-3">
++          <span className="text-brand bg-brand-soft grid h-11 w-11 place-items-center rounded-xl"><Icon name={icon} size={22} /></span>
++          <div>
++            <span className="bg-warning-soft text-warning inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-black">בקרוב</span>
++            <p className="text-ink mt-1 text-lg font-black">{title}</p>
++          </div>
++        </div>
++        <p className="text-muted mt-4 max-w-2xl text-sm leading-relaxed">{description}</p>
++        {willContain.length ? (
++          <ul className="mt-5 grid max-w-2xl gap-2 sm:grid-cols-2">
++            {willContain.map((item) => (
++              <li key={item} className="border-line bg-surface flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-semibold text-ink">
++                <span className="text-brand-light"><Icon name="Check" size={14} /></span>
++                {item}
++              </li>
++            ))}
++          </ul>
++        ) : null}
++      </div>
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/PlatformShell.tsx b/src/components/platform-admin/PlatformShell.tsx
+new file mode 100644
+index 0000000..ba4f149
+--- /dev/null
++++ b/src/components/platform-admin/PlatformShell.tsx
+@@ -0,0 +1,201 @@
++"use client";
++// ============================================================================
++// ZONO — Platform Admin shell (P5.1). The premium control-plane frame: a right-
++// anchored (RTL) navigation rail, a dense operator topbar, and the ⌘K command
++// palette. Deliberately NOT the lavender customer app: light neutral canvas,
++// hairline dividers, minimal shadow — an operator always knows they left the
++// customer product. Nav items are capability-gated for UX; real authorization
++// is enforced server-side on every /platform route.
++// ============================================================================
++import { useEffect, useState, type ReactNode } from "react";
++import Link from "next/link";
++import { usePathname } from "next/navigation";
++import { Icon } from "@/components/dashboard/Icon";
++import { cn } from "@/lib/utils";
++import { signOut } from "@/lib/auth/actions";
++import { PLATFORM_NAV, PLATFORM_ROLE_LABEL, isNavGroup, type PlatformNavItem } from "./nav-model";
++import { PlatformCommandPalette } from "./PlatformCommandPalette";
++
++export interface PlatformShellProps {
++  operator: { name: string | null; role: string; caps: string[] };
++  env: string;
++  children: ReactNode;
++}
++
++function useActive() {
++  const pathname = usePathname();
++  return (href: string) =>
++    href === "/platform" ? pathname === "/platform" : pathname === href || pathname.startsWith(`${href}/`);
++}
++
++function NavContent({ caps, onNavigate }: { caps: string[]; onNavigate?: () => void }) {
++  const isActive = useActive();
++  const allowed = (cap: string) => caps.includes(cap);
++  const groupVisible = (item: PlatformNavItem) =>
++    isNavGroup(item) ? item.children.some((c) => allowed(c.cap)) : allowed(item.cap);
++
++  return (
++    <nav className="flex flex-col gap-1 p-3">
++      {PLATFORM_NAV.map((item) => {
++        if (isNavGroup(item)) {
++          if (!groupVisible(item)) return null;
++          return (
++            <div key={item.label} className="mt-2 first:mt-0">
++              <p className="text-muted/70 flex items-center gap-2 px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide">
++                <Icon name={item.icon} size={13} />{item.label}
++              </p>
++              {item.children.map((leaf) => {
++                const can = allowed(leaf.cap);
++                const active = isActive(leaf.href);
++                const cls = cn(
++                  "flex items-center gap-3 rounded-xl px-3 py-2 text-[13.5px] font-semibold transition-colors",
++                  active ? "bg-brand-soft text-brand-strong" : can ? "text-ink hover:bg-surface" : "text-muted/50 cursor-not-allowed",
++                );
++                const inner = (
++                  <>
++                    <Icon name={leaf.icon} size={16} className={active ? "text-brand" : undefined} />
++                    <span className="truncate">{leaf.label}</span>
++                    {!leaf.ready ? <span className="bg-warning-soft text-warning ms-auto rounded px-1.5 py-0.5 text-[9px] font-bold">בקרוב</span> : null}
++                    {!can ? <Icon name="Lock" size={12} className="ms-auto opacity-60" /> : null}
++                  </>
++                );
++                return can ? (
++                  <Link key={leaf.href} href={leaf.href} onClick={onNavigate} className={cls} aria-current={active ? "page" : undefined}>{inner}</Link>
++                ) : (
++                  <div key={leaf.href} className={cls} aria-disabled="true" title="אין הרשאה">{inner}</div>
++                );
++              })}
++            </div>
++          );
++        }
++        // Top-level leaf (Overview, Support, Settings)
++        const can = allowed(item.cap);
++        const active = isActive(item.href);
++        const cls = cn(
++          "flex items-center gap-3 rounded-xl px-3 py-2 text-[13.5px] font-semibold transition-colors",
++          active ? "bg-brand-soft text-brand-strong" : can ? "text-ink hover:bg-surface" : "text-muted/50 cursor-not-allowed",
++        );
++        const inner = (
++          <>
++            <Icon name={item.icon} size={16} className={active ? "text-brand" : undefined} />
++            <span className="truncate">{item.label}</span>
++            {!item.ready ? <span className="bg-warning-soft text-warning ms-auto rounded px-1.5 py-0.5 text-[9px] font-bold">בקרוב</span> : null}
++          </>
++        );
++        return can ? (
++          <Link key={item.href} href={item.href} onClick={onNavigate} className={cls} aria-current={active ? "page" : undefined}>{inner}</Link>
++        ) : (
++          <div key={item.href} className={cls} aria-disabled="true">{inner}</div>
++        );
++      })}
++    </nav>
++  );
++}
++
++function BrandMark() {
++  return (
++    <div className="flex items-center gap-2.5">
++      <span className="zono-gradient grid h-9 w-9 place-items-center rounded-xl text-[15px] font-black text-white shadow-sm">Z</span>
++      <div className="leading-tight">
++        <p className="text-ink text-[15px] font-black">ZONO</p>
++        <p className="text-muted -mt-0.5 text-[10.5px] font-bold tracking-wide">CONTROL PLANE</p>
++      </div>
++    </div>
++  );
++}
++
++export function PlatformShell({ operator, env, children }: PlatformShellProps) {
++  const [paletteOpen, setPaletteOpen] = useState(false);
++  const [mobileNav, setMobileNav] = useState(false);
++  const roleLabel = PLATFORM_ROLE_LABEL[operator.role] ?? operator.role;
++  const isProd = env === "production";
++
++  useEffect(() => {
++    function onKey(e: KeyboardEvent) {
++      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
++        e.preventDefault();
++        setPaletteOpen((o) => !o);
++      }
++    }
++    window.addEventListener("keydown", onKey);
++    return () => window.removeEventListener("keydown", onKey);
++  }, []);
++
++  return (
++    <div dir="rtl" className="min-h-screen bg-[#f6f7fb] text-ink">
++      <div className="lg:grid lg:grid-cols-[264px_1fr]">
++        {/* Desktop nav rail (right in RTL) */}
++        <aside className="border-line bg-card sticky top-0 hidden h-screen flex-col overflow-y-auto border-s lg:flex">
++          <div className="border-line flex h-16 items-center border-b px-4"><BrandMark /></div>
++          <NavContent caps={operator.caps} />
++          <div className="border-line mt-auto border-t p-3">
++            <p className="text-muted px-2 text-[11px] font-semibold">
++              {operator.name ? operator.name : "מפעיל פלטפורמה"}
++            </p>
++            <p className="text-brand-strong px-2 text-[11px] font-bold">{roleLabel}</p>
++          </div>
++        </aside>
++
++        {/* Main column */}
++        <div className="flex min-h-screen min-w-0 flex-col">
++          {/* Topbar */}
++          <header className="border-line bg-card/90 sticky top-0 z-40 flex h-16 items-center gap-3 border-b px-3 backdrop-blur sm:px-5">
++            <button type="button" className="text-ink hover:bg-surface grid h-9 w-9 place-items-center rounded-lg lg:hidden" onClick={() => setMobileNav(true)} aria-label="תפריט">
++              <Icon name="Menu" size={20} />
++            </button>
++            <div className="lg:hidden"><BrandMark /></div>
++
++            <span className={cn("hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold sm:inline-flex", isProd ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
++              <span className={cn("h-1.5 w-1.5 rounded-full", isProd ? "bg-success" : "bg-warning")} />
++              {isProd ? "Production" : env || "Development"}
++            </span>
++
++            <button
++              type="button"
++              onClick={() => setPaletteOpen(true)}
++              className="border-line text-muted hover:border-brand-light ms-auto flex h-9 items-center gap-2 rounded-xl border bg-surface px-3 text-[13px] font-semibold transition-colors"
++            >
++              <Icon name="Search" size={15} />
++              <span className="hidden sm:inline">חיפוש ופעולות</span>
++              <kbd className="border-line hidden rounded-md border bg-card px-1.5 text-[10px] font-bold sm:inline">⌘K</kbd>
++            </button>
++
++            <div className="border-line hidden items-center gap-2 border-s ps-3 sm:flex">
++              <span className="zono-gradient grid h-8 w-8 place-items-center rounded-full text-[12px] font-black text-white">
++                {(operator.name ?? "Z").trim().charAt(0)}
++              </span>
++              <div className="leading-tight">
++                <p className="text-ink max-w-[140px] truncate text-[12.5px] font-bold">{operator.name ?? "מפעיל פלטפורמה"}</p>
++                <p className="text-brand-strong text-[10.5px] font-bold">{roleLabel}</p>
++              </div>
++            </div>
++
++            <form action={signOut}>
++              <button type="submit" className="text-muted hover:text-danger grid h-9 w-9 place-items-center rounded-lg" aria-label="התנתקות" title="התנתקות">
++                <Icon name="Lock" size={17} />
++              </button>
++            </form>
++          </header>
++
++          <main className="zono-scroll min-w-0 flex-1 p-4 sm:p-6">{children}</main>
++        </div>
++      </div>
++
++      {/* Mobile off-canvas nav */}
++      {mobileNav && (
++        <div className="fixed inset-0 z-[110] lg:hidden" role="dialog" aria-modal="true">
++          <button type="button" aria-label="סגור תפריט" className="absolute inset-0 bg-ink/30 backdrop-blur-sm" onClick={() => setMobileNav(false)} />
++          <div className="border-line bg-card absolute inset-y-0 end-0 flex w-[280px] max-w-[85vw] flex-col overflow-y-auto border-s shadow-2xl">
++            <div className="border-line flex h-16 items-center justify-between border-b px-4">
++              <BrandMark />
++              <button type="button" className="text-muted grid h-8 w-8 place-items-center rounded-lg" onClick={() => setMobileNav(false)} aria-label="סגור"><Icon name="X" size={18} /></button>
++            </div>
++            <NavContent caps={operator.caps} onNavigate={() => setMobileNav(false)} />
++          </div>
++        </div>
++      )}
++
++      {paletteOpen && <PlatformCommandPalette onClose={() => setPaletteOpen(false)} caps={operator.caps} />}
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/nav-model.ts b/src/components/platform-admin/nav-model.ts
+new file mode 100644
+index 0000000..c6db909
+--- /dev/null
++++ b/src/components/platform-admin/nav-model.ts
+@@ -0,0 +1,82 @@
++// ============================================================================
++// ZONO — Platform Admin navigation model (PURE, client-safe). P5.1.
++// The single source of truth for the control-plane nav tree + the capability
++// each destination requires. Client nav gates items by capability for UX, but
++// this is NEVER the security boundary — every /platform route re-checks its
++// capability server-side (see each page's authorizePlatform() call).
++// ============================================================================
++import type { PlatformCapability } from "@/lib/platform-admin/capabilities";
++
++export interface PlatformNavLeaf {
++  label: string;
++  href: string;
++  icon: string;
++  cap: PlatformCapability;
++  /** true = a real, implemented screen; false/undefined = "בקרוב" placeholder. */
++  ready?: boolean;
++}
++export interface PlatformNavGroup {
++  label: string;
++  icon: string;
++  children: PlatformNavLeaf[];
++}
++export type PlatformNavItem = PlatformNavLeaf | PlatformNavGroup;
++
++export function isNavGroup(item: PlatformNavItem): item is PlatformNavGroup {
++  return (item as PlatformNavGroup).children !== undefined;
++}
++
++export const PLATFORM_NAV: PlatformNavItem[] = [
++  { label: "סקירה", href: "/platform", icon: "LayoutGrid", cap: "platform.customers.read", ready: true },
++  {
++    label: "לקוחות", icon: "Building2", children: [
++      { label: "ארגונים", href: "/platform/customers", icon: "Building2", cap: "platform.customers.read", ready: true },
++      { label: "משתמשים", href: "/platform/users", icon: "Users", cap: "platform.users.read" },
++    ],
++  },
++  {
++    label: "הכנסות", icon: "Banknote", children: [
++      { label: "מנויים", href: "/platform/revenue/subscriptions", icon: "BadgeCheck", cap: "platform.billing.read" },
++      { label: "תשלומים", href: "/platform/revenue/payments", icon: "Wallet", cap: "platform.billing.read" },
++      { label: "תוכניות", href: "/platform/revenue/plans", icon: "Tag", cap: "platform.billing.read" },
++    ],
++  },
++  {
++    label: "מוצר", icon: "Layers", children: [
++      { label: "גישת יכולות", href: "/platform/product/feature-access", icon: "ShieldCheck", cap: "platform.flags.read" },
++      { label: "דגלי יכולות", href: "/platform/product/feature-flags", icon: "Flag", cap: "platform.flags.read" },
++      { label: "שימוש", href: "/platform/product/usage", icon: "Activity", cap: "platform.usage.read" },
++      { label: "עלויות AI", href: "/platform/product/ai-costs", icon: "Sparkles", cap: "platform.ai.read" },
++    ],
++  },
++  {
++    label: "תפעול", icon: "Route", children: [
++      { label: "אינטגרציות", href: "/platform/operations/integrations", icon: "Globe", cap: "platform.integrations.read" },
++      { label: "עבודות ותורים", href: "/platform/operations/jobs", icon: "ListChecks", cap: "platform.ops.read" },
++      { label: "בריאות מערכת", href: "/platform/operations/system-health", icon: "Activity", cap: "platform.ops.read" },
++    ],
++  },
++  { label: "תמיכה", href: "/platform/support", icon: "Handshake", cap: "platform.support.read" },
++  {
++    label: "אבטחה", icon: "Shield", children: [
++      { label: "יומן ביקורת", href: "/platform/security/audit-log", icon: "ScrollText", cap: "platform.audit.read", ready: true },
++      { label: "מנהלי פלטפורמה", href: "/platform/security/admin-users", icon: "Fingerprint", cap: "platform.admins.read" },
++      { label: "הפעלות", href: "/platform/security/sessions", icon: "Lock", cap: "platform.audit.read" },
++    ],
++  },
++  { label: "הגדרות", href: "/platform/settings", icon: "Settings", cap: "platform.customers.read" },
++];
++
++/** Flattened leaf list (for the command palette + route/cap coverage checks). */
++export const PLATFORM_NAV_LEAVES: PlatformNavLeaf[] = PLATFORM_NAV.flatMap((item) =>
++  isNavGroup(item) ? item.children : [item],
++);
++
++/** Human labels for platform roles (header + admin surfaces). */
++export const PLATFORM_ROLE_LABEL: Record<string, string> = {
++  super_admin: "Super Admin",
++  operations: "Operations",
++  support: "Support",
++  billing_admin: "Billing Admin",
++  developer: "Developer",
++};
+diff --git a/src/components/platform-admin/ui.tsx b/src/components/platform-admin/ui.tsx
+new file mode 100644
+index 0000000..3329716
+--- /dev/null
++++ b/src/components/platform-admin/ui.tsx
+@@ -0,0 +1,167 @@
++// ============================================================================
++// ZONO — Platform Admin shared UI primitives (P5.1). PURE / server-renderable
++// (no "use client"). Premium control-plane look: light, dense, hairline
++// dividers, minimal shadow — deliberately distinct from the lavender customer
++// app so operators always know they are in the platform control plane.
++// ============================================================================
++import Link from "next/link";
++import { Icon } from "@/components/dashboard/Icon";
++import { cn } from "@/lib/utils";
++import type { PlatformMetric } from "@/lib/platform-admin/server/dal";
++
++export const PLAN_LABEL: Record<string, string> = {
++  starter: "Starter",
++  pro: "Pro",
++  team: "Team",
++  enterprise: "Enterprise",
++};
++
++export const USER_STATUS_LABEL: Record<string, string> = {
++  active: "פעיל",
++  invited: "הוזמן",
++  suspended: "מושהה",
++  disabled: "מושבת",
++};
++
++export function formatPlatformDate(iso: string | null): string {
++  if (!iso) return "—";
++  const d = new Date(iso);
++  if (Number.isNaN(d.getTime())) return "—";
++  const dd = String(d.getUTCDate()).padStart(2, "0");
++  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
++  return `${dd}.${mm}.${d.getUTCFullYear()}`;
++}
++
++export function formatPlatformDateTime(iso: string | null): string {
++  if (!iso) return "—";
++  const d = new Date(iso);
++  if (Number.isNaN(d.getTime())) return "—";
++  const hh = String(d.getUTCHours()).padStart(2, "0");
++  const min = String(d.getUTCMinutes()).padStart(2, "0");
++  return `${formatPlatformDate(iso)} · ${hh}:${min}`;
++}
++
++function formatNumber(n: number): string {
++  return new Intl.NumberFormat("en-US").format(n);
++}
++
++/** Renders a metric honoring its state — a restricted/unavailable metric is
++ *  NEVER shown as a real 0. */
++export function MetricValue({ metric, className }: { metric: PlatformMetric; className?: string }) {
++  if (metric.state === "ok" && metric.value !== null) {
++    return <span className={className}>{formatNumber(metric.value)}</span>;
++  }
++  if (metric.state === "restricted") {
++    return <span className={cn("text-muted inline-flex items-center gap-1 text-base font-bold", className)}><Icon name="Lock" size={13} />מוגבל</span>;
++  }
++  return <span className={cn("text-muted text-base font-bold", className)}>—</span>;
++}
++
++export function metricHint(metric: PlatformMetric): string | null {
++  if (metric.state === "restricted") return "אין הרשאה למדד זה";
++  if (metric.state === "unavailable") return "לא זמין כרגע";
++  return null;
++}
++
++/** Primary KPI card. */
++export function StatCard({ icon, label, metric, sub, tone = "brand" }: {
++  icon: string; label: string; metric: PlatformMetric; sub?: string;
++  tone?: "brand" | "neutral" | "success" | "warning";
++}) {
++  const toneCls: Record<string, string> = {
++    brand: "text-brand bg-brand-soft",
++    neutral: "text-muted bg-surface",
++    success: "text-success bg-success-soft",
++    warning: "text-warning bg-warning-soft",
++  };
++  const hint = metricHint(metric);
++  return (
++    <div className="border-line bg-card rounded-2xl border p-4">
++      <div className="flex items-center justify-between">
++        <span className={cn("grid h-9 w-9 place-items-center rounded-xl", toneCls[tone])}><Icon name={icon} size={17} /></span>
++        {sub ? <span className="text-muted text-[11px] font-semibold">{sub}</span> : null}
++      </div>
++      <p className="text-ink mt-3 text-3xl font-black tabular-nums leading-none"><MetricValue metric={metric} /></p>
++      <p className="text-muted mt-1.5 text-[13px] font-semibold">{label}</p>
++      {hint ? <p className="text-muted/80 mt-0.5 text-[11px]">{hint}</p> : null}
++    </div>
++  );
++}
++
++/** Compact usage tile (secondary metric strip). */
++export function UsageTile({ icon, label, metric }: { icon: string; label: string; metric: PlatformMetric }) {
++  return (
++    <div className="border-line bg-card flex items-center gap-3 rounded-xl border p-3">
++      <span className="text-muted bg-surface grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name={icon} size={15} /></span>
++      <div className="min-w-0">
++        <p className="text-ink text-lg font-black tabular-nums leading-none"><MetricValue metric={metric} /></p>
++        <p className="text-muted mt-0.5 truncate text-[12px] font-semibold">{label}</p>
++      </div>
++    </div>
++  );
++}
++
++/** Section container with title + optional action. */
++export function PanelCard({ title, icon, action, children, className }: {
++  title: string; icon?: string; action?: React.ReactNode; children: React.ReactNode; className?: string;
++}) {
++  return (
++    <section className={cn("border-line bg-card rounded-2xl border", className)}>
++      <header className="border-line flex items-center justify-between gap-3 border-b px-4 py-3">
++        <h2 className="text-ink inline-flex items-center gap-2 text-sm font-extrabold">
++          {icon ? <span className="text-brand"><Icon name={icon} size={16} /></span> : null}
++          {title}
++        </h2>
++        {action}
++      </header>
++      <div className="p-3">{children}</div>
++    </section>
++  );
++}
++
++export function PlanBadge({ plan }: { plan: string | null }) {
++  const label = plan ? (PLAN_LABEL[plan] ?? plan) : "—";
++  return <span className="border-line text-muted inline-flex items-center rounded-md border bg-surface px-2 py-0.5 text-[11px] font-bold">{label}</span>;
++}
++
++export function StatusBadge({ status }: { status: string | null }) {
++  const tone: Record<string, string> = {
++    active: "bg-success-soft text-success",
++    invited: "bg-warning-soft text-warning",
++    suspended: "bg-danger-soft text-danger",
++    disabled: "bg-surface text-muted",
++  };
++  const cls = (status && tone[status]) || "bg-surface text-muted";
++  const label = (status && USER_STATUS_LABEL[status]) || status || "—";
++  return <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold", cls)}>{label}</span>;
++}
++
++/** Short mono id chip (first 8 chars) — safe org/user id surfacing. */
++export function IdChip({ id }: { id: string }) {
++  return <span className="text-muted/80 font-mono text-[11px]" dir="ltr">{id.slice(0, 8)}</span>;
++}
++
++export function PageHeader({ eyebrow, title, description, icon }: {
++  eyebrow: string; title: string; description?: string; icon?: string;
++}) {
++  return (
++    <div className="mb-5 flex items-start gap-3">
++      {icon ? <span className="text-brand bg-brand-soft grid h-10 w-10 shrink-0 place-items-center rounded-xl"><Icon name={icon} size={20} /></span> : null}
++      <div>
++        <p className="text-brand text-[11px] font-bold tracking-wide">{eyebrow}</p>
++        <h1 className="text-ink mt-0.5 text-2xl font-black">{title}</h1>
++        {description ? <p className="text-muted mt-1 max-w-2xl text-sm">{description}</p> : null}
++      </div>
++    </div>
++  );
++}
++
++export function QuickLink({ href, icon, label }: { href: string; icon: string; label: string }) {
++  return (
++    <Link href={href} className="border-line bg-card hover:border-brand-light flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold text-ink transition-colors">
++      <span className="text-brand"><Icon name={icon} size={16} /></span>
++      {label}
++      <span className="text-muted ms-auto"><Icon name="ChevronLeft" size={15} /></span>
++    </Link>
++  );
++}
+diff --git a/src/lib/platform-admin/server/actions.ts b/src/lib/platform-admin/server/actions.ts
+new file mode 100644
+index 0000000..41a3ed2
+--- /dev/null
++++ b/src/lib/platform-admin/server/actions.ts
+@@ -0,0 +1,26 @@
++"use server";
++// ============================================================================
++// ZONO — PLATFORM ADMIN server actions (P5.1). "use server": this module may
++// export ONLY async functions (enforced by scripts/check-use-server-exports.mjs).
++// Every action delegates to the audited platform DAL — NEVER a service-role
++// client directly — and fails closed (returns an empty, non-throwing result) so
++// a non-operator learns nothing about the platform surface.
++// ============================================================================
++import { searchOrganizationsForPlatform } from "./dal";
++import type { PlatformOrgSummary } from "./dal";
++
++/**
++ * Platform-wide organization search for the command palette / directory filter.
++ * Authorization + auditing happen inside the DAL. On any authorization or query
++ * error this resolves to `{ ok:false, orgs:[] }` rather than throwing.
++ * NOTE: this module is "use server" — it may export ONLY async functions, so the
++ * result SHAPE is declared inline (no exported interface).
++ */
++export async function searchOrganizationsAction(query: string): Promise<{ ok: boolean; orgs: PlatformOrgSummary[] }> {
++  try {
++    const orgs = await searchOrganizationsForPlatform(query, 12);
++    return { ok: true, orgs };
++  } catch {
++    return { ok: false, orgs: [] };
++  }
++}
+diff --git a/src/lib/platform-admin/server/auth.ts b/src/lib/platform-admin/server/auth.ts
+index 5c35edb..37348d9 100644
+--- a/src/lib/platform-admin/server/auth.ts
++++ b/src/lib/platform-admin/server/auth.ts
+@@ -64,3 +64,31 @@ export async function assertPlatformCapability(capability: PlatformCapability):
+ export async function currentOperatorCan(capability: PlatformCapability): Promise<boolean> {
+   return operatorCan(await getCurrentPlatformOperator(), capability);
+ }
++
++/**
++ * Non-throwing page/layout guard: resolve the operator ONLY if they hold
++ * `capability`, else null. Route handlers use this to render a safe denial
++ * instead of throwing. Fail-closed like `operatorCan`.
++ */
++export async function authorizePlatform(capability: PlatformCapability): Promise<PlatformOperator | null> {
++  const operator = await getCurrentPlatformOperator();
++  return operatorCan(operator, capability) ? operator : null;
++}
++
++/**
++ * The operator's OWN display name (their own users row, by id). Service-role
++ * read of a single non-sensitive column (full_name) for the authenticated
++ * operator themself — never another user, never PII beyond their own name.
++ * Returns null if unavailable; the header degrades to role-only.
++ */
++export async function getPlatformOperatorDisplayName(userId: string): Promise<string | null> {
++  if (!isServiceRoleConfigured()) return null;
++  try {
++    const db = createServiceRoleClient();
++    const { data } = await db.from("users").select("full_name").eq("id", userId).maybeSingle();
++    const row = (data as { full_name: string | null } | null) ?? null;
++    return row?.full_name ?? null;
++  } catch {
++    return null;
++  }
++}
+diff --git a/src/lib/platform-admin/server/dal.ts b/src/lib/platform-admin/server/dal.ts
+index 4c82916..cdd4879 100644
+--- a/src/lib/platform-admin/server/dal.ts
++++ b/src/lib/platform-admin/server/dal.ts
+@@ -18,6 +18,7 @@ import "server-only";
+ import { createServiceRoleClient } from "@/lib/supabase/server";
+ import { assertPlatformCapability } from "./auth";
+ import { writePlatformAudit } from "./audit";
++import { operatorCan } from "../capabilities";
+ 
+ export interface PlatformOrgSummary {
+   id: string;
+@@ -73,3 +74,174 @@ export async function listOrganizationUsersForPlatform(orgId: string): Promise<P
+   await writePlatformAudit({ operator, capability: "platform.users.read", action: "users.list", resourceType: "user", targetOrgId: orgId, metadata: { count: rows.length } });
+   return rows.map((r) => ({ id: r.id, name: r.full_name ?? null, status: r.status ?? null, lastSeenAt: r.last_seen_at ?? null }));
+ }
++
++// ============================================================================
++// P5.1 — Platform Admin Shell reads (organization search, overview metrics,
++// recent audit). Same invariant as above: assertPlatformCapability → service-role
++// query → audit → minimal, public-safe DTO. Overview metrics are COUNT-ONLY
++// aggregates (head:true) so no row / PII ever leaves the boundary.
++// ============================================================================
++
++const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++/**
++ * Platform-wide organization search (minimal fields). Matches by name (ilike)
++ * or, when the query is a UUID, by exact id. Cap: platform.customers.read.
++ * The raw query text is NEVER audited (only its length + result count), so a
++ * search string can never leak into the audit log.
++ */
++export async function searchOrganizationsForPlatform(query: string, limit = 20): Promise<PlatformOrgSummary[]> {
++  const operator = await assertPlatformCapability("platform.customers.read");
++  const q = (query ?? "").trim();
++  const capped = Math.min(Math.max(limit, 1), 50);
++  const db = createServiceRoleClient();
++  let builder = db.from("organizations")
++    .select("id,name,plan,created_at")
++    .order("created_at", { ascending: false })
++    .limit(capped);
++  if (q) {
++    if (UUID_RE.test(q)) {
++      builder = builder.eq("id", q);
++    } else {
++      // Escape ilike metacharacters so user input can't alter the match pattern.
++      const safe = q.replace(/[\\%_]/g, (m) => `\\${m}`);
++      builder = builder.ilike("name", `%${safe}%`);
++    }
++  }
++  const { data } = await builder;
++  const rows = (data ?? []) as { id: string; name: string; plan: string | null; created_at: string }[];
++  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "customers.search", resourceType: "organization", metadata: { q_len: q.length, count: rows.length } });
++  return rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan ?? null, createdAt: r.created_at }));
++}
++
++/** A single overview metric. `state` distinguishes a real value from a value the
++ *  operator isn't authorized to see (`restricted`) or one the query couldn't
++ *  produce (`unavailable`) — the UI must never render a restricted/unavailable
++ *  metric as a real `0`. */
++export type PlatformMetricState = "ok" | "restricted" | "unavailable";
++export interface PlatformMetric { value: number | null; state: PlatformMetricState }
++export interface PlatformOverviewMetrics {
++  organizations: PlatformMetric;
++  usersTotal: PlatformMetric;
++  usersActive: PlatformMetric;
++  properties: PlatformMetric;
++  leads: PlatformMetric;
++  campaigns: PlatformMetric;
++  facebookPublishes: PlatformMetric;
++  whatsappMessages: PlatformMetric;
++  deadLetter: PlatformMetric;
++  failedPublishJobs: PlatformMetric;
++  recentOrganizations: PlatformOrgSummary[];
++  generatedAt: string;
++}
++
++type CountBuilder = (q: unknown) => unknown;
++
++/** Exact COUNT with no rows returned (head:true). Returns null on any error so a
++ *  failed aggregate surfaces as "unavailable", never as a misleading 0. */
++async function safeCount(table: string, build?: CountBuilder): Promise<number | null> {
++  try {
++    const db = createServiceRoleClient();
++    // Untyped-table access uses the repo's `as never` cast convention.
++    let q: unknown = db.from(table as never).select("*", { count: "exact", head: true });
++    if (build) q = build(q);
++    const { count, error } = (await (q as Promise<{ count: number | null; error: unknown }>));
++    if (error) return null;
++    return count ?? 0;
++  } catch {
++    return null;
++  }
++}
++
++function metric(value: number | null): PlatformMetric {
++  return value === null ? { value: null, state: "unavailable" } : { value, state: "ok" };
++}
++const RESTRICTED: PlatformMetric = { value: null, state: "restricted" };
++
++/**
++ * Safe cross-org overview aggregates for the platform owner dashboard. Every
++ * figure is an exact COUNT (no rows, no PII). Base gate: platform.customers.read
++ * (every platform role holds it). Usage figures additionally require
++ * platform.usage.read; operational health additionally requires platform.ops.read
++ * — an operator lacking those sees `restricted`, not a fabricated number. Audited
++ * once as `overview.read` (no per-metric audit spam).
++ */
++export async function getPlatformOverviewMetrics(): Promise<PlatformOverviewMetrics> {
++  const operator = await assertPlatformCapability("platform.customers.read");
++  const canUsage = operatorCan(operator, "platform.usage.read");
++  const canOps = operatorCan(operator, "platform.ops.read");
++  const db = createServiceRoleClient();
++
++  const [organizations, usersTotal, usersActive, recentRes] = await Promise.all([
++    safeCount("organizations"),
++    safeCount("users"),
++    safeCount("users", (q) => (q as { eq: (c: string, v: string) => unknown }).eq("status", "active")),
++    db.from("organizations").select("id,name,plan,created_at").order("created_at", { ascending: false }).limit(6),
++  ]);
++
++  // Usage aggregates — gated behind platform.usage.read.
++  const [properties, leads, campaigns, facebookPublishes, whatsappMessages] = canUsage
++    ? await Promise.all([
++        safeCount("properties"),
++        safeCount("leads"),
++        safeCount("distribution_campaigns"),
++        safeCount("distribution_posts", (q) => (q as { eq: (c: string, v: string) => unknown }).eq("platform", "facebook")),
++        safeCount("whatsapp_messages"),
++      ])
++    : [null, null, null, null, null];
++
++  // Operational health — gated behind platform.ops.read.
++  const [deadLetter, failedPublishJobs] = canOps
++    ? await Promise.all([
++        safeCount("meta_publish_dead_letter"),
++        safeCount("distribution_publish_jobs", (q) => (q as { in: (c: string, v: string[]) => unknown }).in("status", ["failed", "dead"])),
++      ])
++    : [null, null];
++
++  const recentRows = (recentRes.data ?? []) as { id: string; name: string; plan: string | null; created_at: string }[];
++  const recentOrganizations: PlatformOrgSummary[] = recentRows.map((r) => ({ id: r.id, name: r.name, plan: r.plan ?? null, createdAt: r.created_at }));
++
++  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "overview.read", resourceType: "platform", metadata: { orgs: organizations ?? -1, usage: canUsage, ops: canOps } });
++
++  return {
++    organizations: metric(organizations),
++    usersTotal: metric(usersTotal),
++    usersActive: metric(usersActive),
++    properties: canUsage ? metric(properties) : RESTRICTED,
++    leads: canUsage ? metric(leads) : RESTRICTED,
++    campaigns: canUsage ? metric(campaigns) : RESTRICTED,
++    facebookPublishes: canUsage ? metric(facebookPublishes) : RESTRICTED,
++    whatsappMessages: canUsage ? metric(whatsappMessages) : RESTRICTED,
++    deadLetter: canOps ? metric(deadLetter) : RESTRICTED,
++    failedPublishJobs: canOps ? metric(failedPublishJobs) : RESTRICTED,
++    recentOrganizations,
++    generatedAt: new Date().toISOString(),
++  };
++}
++
++export interface PlatformAuditEntry {
++  id: string;
++  actorLabel: string | null;
++  action: string;
++  resourceType: string | null;
++  orgId: string | null;
++  createdAt: string;
++}
++
++/**
++ * Most-recent platform audit events (safe columns only — NO ip / user_agent /
++ * old_values / new_values). Cap: platform.audit.read. Intentionally does NOT
++ * write its own audit event: auditing an audit read would create a self-
++ * referential feedback loop that fills the log on every view.
++ */
++export async function listRecentPlatformAudit(limit = 12): Promise<PlatformAuditEntry[]> {
++  await assertPlatformCapability("platform.audit.read");
++  const capped = Math.min(Math.max(limit, 1), 100);
++  const db = createServiceRoleClient();
++  const { data } = await db.from("platform_audit_log" as never)
++    .select("id,actor_label,action,resource_type,org_id,created_at")
++    .order("created_at", { ascending: false })
++    .limit(capped);
++  const rows = (data ?? []) as { id: string; actor_label: string | null; action: string; resource_type: string | null; org_id: string | null; created_at: string }[];
++  return rows.map((r) => ({ id: r.id, actorLabel: r.actor_label ?? null, action: r.action, resourceType: r.resource_type ?? null, orgId: r.org_id ?? null, createdAt: r.created_at }));
++}
+-- 
+2.43.0
+

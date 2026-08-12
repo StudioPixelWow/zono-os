@@ -12,6 +12,7 @@ import { ZonoRealtimeProvider } from "@/components/realtime/ZonoRealtimeProvider
 import { StickySystemRefreshButton } from "@/components/orchestrator/StickySystemRefreshButton";
 import { DailyGroupsPublishingProvider } from "@/components/daily-groups-publishing/DailyGroupsPublishingProvider";
 import { PwaProvider } from "@/components/mobile/PwaProvider";
+import { AccountSuspended } from "@/components/auth/AccountSuspended";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const { state } = await getSessionContext();
   if (state === "unauthenticated") redirect("/login");
+  if (state === "suspended") return <AccountSuspended />;
   if (state === "onboarding") redirect("/onboarding");
 
   const dashboardData = await getDashboardContext();

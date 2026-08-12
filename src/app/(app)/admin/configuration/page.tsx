@@ -2,13 +2,16 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { getConfiguration, type ConfigStatus } from "@/lib/configuration/service";
+import { assertLaunchAdminAccess } from "@/lib/launch/server/permissions";
+import { AdminDenied } from "@/components/admin/AdminDenied";
 
 export const dynamic = "force-dynamic";
 
 const STATUS_LABEL: Record<ConfigStatus, string> = { configured: "מוגדר", partial: "חלקי", missing: "חסר" };
 const STATUS_TONE: Record<ConfigStatus, string> = { configured: "bg-success-soft text-success", partial: "bg-warning-soft text-warning", missing: "bg-surface text-muted" };
 
-export default function ConfigurationPage() {
+export default async function ConfigurationPage() {
+  try { await assertLaunchAdminAccess(); } catch { return <AdminDenied />; }
   const items = getConfiguration();
   return (
     <div className="flex flex-col gap-5">

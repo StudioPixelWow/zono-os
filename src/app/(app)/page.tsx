@@ -28,6 +28,7 @@ import { getHomeKpiExtras, listTodayTasks, type HomeTaskItem } from "@/lib/home/
 import { listBuyerBoard } from "@/lib/buyers/repository";
 import { getAcquisitionCommandCenter } from "@/lib/acquisition/service";
 import { getBrokerWhatsapp } from "@/lib/whatsapp/inbox-service";
+import { resolveSessionCtx, readSessionSnapshot } from "@/lib/whatsapp/provider/session";
 import { getMarketingBoard } from "@/lib/marketing/service";
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
 import type {
@@ -265,8 +266,13 @@ export default async function Home() {
     const conversations = wa.waitingConversations.slice(0, 4).map((c) => ({
       id: c.id, name: c.contactName, reason: c.reason, href: c.href, urgency: c.urgency,
     }));
+    let sessionConnected = false;
+    try {
+      const ctx = await resolveSessionCtx();
+      if (ctx) sessionConnected = (await readSessionSnapshot(ctx, "bridge")).state === "connected";
+    } catch { /* ignore — fall back to activity signal */ }
     whatsapp = {
-      connected: wa.waiting + wa.urgent + wa.today + wa.unread > 0 || conversations.length > 0,
+      connected: sessionConnected || wa.waiting + wa.urgent + wa.today + wa.unread > 0 || conversations.length > 0,
       waiting: wa.waiting, urgent: wa.urgent, today: wa.today, conversations,
     };
   } catch (e) { console.error("[home] whatsapp failed:", e); }
