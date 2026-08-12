@@ -9,6 +9,8 @@ import { authorizePlatform } from "@/lib/platform-admin/server/auth";
 import { getFeatureAdoption } from "@/lib/platform-admin/server/intel";
 import { getPlatformOverviewMetrics } from "@/lib/platform-admin/server/dal";
 import { getUsageTelemetry } from "@/lib/telemetry/server/telemetry";
+import { getUsageTrends } from "@/lib/trends/server/trends";
+import { INSUFFICIENT_HISTORY_LABEL, type DailySeries } from "@/lib/trends/model";
 import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
 import { PageHeader, PanelCard, UsageTile } from "@/components/platform-admin/ui";
 import { Icon } from "@/components/dashboard/Icon";
@@ -18,11 +20,40 @@ export const dynamic = "force-dynamic";
 // Telemetry counts are authoritative (real product events) → state "ok".
 const okMetric = (n: number) => ({ value: n, state: "ok" as const });
 
+// Inline server-rendered sparkline (no client JS). Empty when no coverage.
+function Sparkline({ series, color = "var(--brand, #7c5cff)" }: { series: DailySeries; color?: string }) {
+  const pts = series.points;
+  if (pts.length < 2) return null;
+  const max = Math.max(1, ...pts.map((p) => p.value));
+  const W = 320, H = 40;
+  const step = W / Math.max(1, pts.length - 1);
+  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${(H - (p.value / max) * (H - 4) - 2).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden>
+      <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TrendBlock({ label, series }: { label: string; series: DailySeries }) {
+  return (
+    <div className="border-line rounded-xl border px-3 py-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-ink text-[13px] font-semibold">{label}</span>
+        <span className="text-muted text-[11px] tabular-nums">{series.total}</span>
+      </div>
+      {series.insufficientHistory ? (
+        <span className="text-muted text-[11px]">{INSUFFICIENT_HISTORY_LABEL} · {series.distinctDaysWithData} ימים עם נתונים</span>
+      ) : <Sparkline series={series} />}
+    </div>
+  );
+}
+
 export default async function Page() {
   const operator = await authorizePlatform("platform.usage.read");
   if (!operator) return <PlatformDenied />;
-  const [telemetry, adoption, metrics] = await Promise.all([
-    getUsageTelemetry(), getFeatureAdoption(), getPlatformOverviewMetrics(),
+  const [telemetry, adoption, metrics, trends] = await Promise.all([
+    getUsageTelemetry(), getFeatureAdoption(), getPlatformOverviewMetrics(), getUsageTrends(30),
   ]);
   const c = telemetry.counts;
 
@@ -49,6 +80,18 @@ export default async function Page() {
         ) : (
           <p className="text-muted mt-1 px-1 text-[11px]">חלון קריאה: {telemetry.windowRows} אירועים · DAU/WAU/MAU נספרים לפי משתמש מייחס ייחודי; פעילות פלטפורמה אינה נכללת (טבלה נפרדת).</p>
         )}
+      </PanelCard>
+
+      {/* ── Activity trends (30d, Israel-day buckets from domain_events) ── */}
+      <PanelCard title="מגמות פעילות (30 יום)" icon="Activity">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <TrendBlock label="משתמשים פעילים / יום" series={trends.dau} />
+          <TrendBlock label="ארגונים פעילים / יום" series={trends.activeOrgs} />
+          <TrendBlock label="אירועים / יום" series={trends.events} />
+        </div>
+        <p className="text-muted mt-3 px-1 text-[11px]" dir="ltr">
+          source: {trends.coverage.source} · history start: {trends.coverage.historyStart ?? "—"} · buckets: Asia/Jerusalem · no pre-telemetry history
+        </p>
       </PanelCard>
 
       {/* ── Module event volume (from telemetry) ── */}
