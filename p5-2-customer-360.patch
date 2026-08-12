@@ -1,0 +1,1675 @@
+From b4b7280784791b2d8a9dba01fdd21dd9c6a501e6 Mon Sep 17 00:00:00 2001
+From: Tal Zatelman <tal.pixeld@gmail.com>
+Date: Sun, 9 Aug 2026 13:26:44 +0000
+Subject: [PATCH] feat(platform-admin): P5.2 Customer 360 organization control
+ center
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Turns the P5.1 minimal org summary into a real Customer 360 at
+/platform/customers/[orgId]: a tabbed org record (Overview, Users, Product
+Usage, Marketing & Distribution, Integrations, Activity, Access, Operations,
+Billing) for ZONO staff. READ / DIAGNOSE / NAVIGATE only — no destructive or
+financially sensitive actions.
+
+Security: every read goes through the audited platform DAL (no service-role
+client in any page/component), is explicitly scoped to the target orgId AFTER
+the capability check, returns count-only/minimal DTOs, and never selects a
+token/secret/credential column. Sections are gated by independent capabilities
+(usage/integrations/ops/billing/flags/entitlements) so e.g. a support operator
+gets no billing or operational data.
+
+Data: honest metrics mapped to authoritative sources; restricted/unavailable
+never rendered as 0; deterministic explainable health chips (no scoring model);
+AI cost intentionally omitted (no schema). Directory upgraded with search + plan
+filter + sort (no N+1). New P5.2 QA (authorization, tenancy binding, DTO safety,
+route/cap). No migrations.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Cm5NAh92cekdimerQbEsCW
+---
+ package.json                                  |   1 +
+ scripts/platform-customer360-qa.ts            | 116 +++++
+ .../customers/[orgId]/access/page.tsx         |  76 +++
+ .../customers/[orgId]/activity/page.tsx       |  41 ++
+ .../customers/[orgId]/billing/page.tsx        |  67 +++
+ .../customers/[orgId]/distribution/page.tsx   |  42 ++
+ .../customers/[orgId]/integrations/page.tsx   |  40 ++
+ src/app/platform/customers/[orgId]/layout.tsx |  44 ++
+ .../customers/[orgId]/operations/page.tsx     |  42 ++
+ src/app/platform/customers/[orgId]/page.tsx   | 131 +++--
+ .../platform/customers/[orgId]/usage/page.tsx |  40 ++
+ .../platform/customers/[orgId]/users/page.tsx |  54 +++
+ .../platform-admin/CopyIdButton.tsx           |  29 ++
+ .../platform-admin/Customer360Header.tsx      |  52 ++
+ .../platform-admin/Customer360Tabs.tsx        |  48 ++
+ .../platform-admin/CustomersDirectory.tsx     |  54 ++-
+ .../platform-admin/customer360-ui.tsx         | 122 +++++
+ src/lib/platform-admin/server/dal.ts          | 458 ++++++++++++++++++
+ 18 files changed, 1363 insertions(+), 94 deletions(-)
+ create mode 100644 scripts/platform-customer360-qa.ts
+ create mode 100644 src/app/platform/customers/[orgId]/access/page.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/activity/page.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/billing/page.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/distribution/page.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/integrations/page.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/layout.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/operations/page.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/usage/page.tsx
+ create mode 100644 src/app/platform/customers/[orgId]/users/page.tsx
+ create mode 100644 src/components/platform-admin/CopyIdButton.tsx
+ create mode 100644 src/components/platform-admin/Customer360Header.tsx
+ create mode 100644 src/components/platform-admin/Customer360Tabs.tsx
+ create mode 100644 src/components/platform-admin/customer360-ui.tsx
+
+diff --git a/package.json b/package.json
+index a6e8523..ea36234 100644
+--- a/package.json
++++ b/package.json
+@@ -19,6 +19,7 @@
+     "dev-check:platform": "tsx scripts/platform-dev-check.ts",
+     "dev-check:platform-admin": "tsx scripts/platform-admin-dev-check.ts",
+     "qa:platform-admin-shell": "tsx scripts/platform-admin-shell-qa.ts",
++    "qa:platform-customer360": "tsx scripts/platform-customer360-qa.ts",
+     "dev-check:launch": "tsx scripts/launch-dev-check.ts",
+     "readiness": "tsx scripts/zono-production-readiness.ts",
+     "validate:e2e": "tsx scripts/zono-e2e-validation.ts",
+diff --git a/scripts/platform-customer360-qa.ts b/scripts/platform-customer360-qa.ts
+new file mode 100644
+index 0000000..e5890a6
+--- /dev/null
++++ b/scripts/platform-customer360-qa.ts
+@@ -0,0 +1,116 @@
++/*
++ * P5.2 — Customer 360 QA (LOCAL, no DB, no network).
++ * Proves the Customer 360 structural + authorization + tenancy + data-safety
++ * invariants without touching production.
++ * Run: npx tsx scripts/platform-customer360-qa.ts
++ */
++import { readFileSync, existsSync } from "node:fs";
++import { join } from "node:path";
++import { operatorCan, type PlatformOperator, type PlatformRole, type PlatformCapability } from "../src/lib/platform-admin";
++
++let failures = 0;
++function assert(c: boolean, label: string): void { if (c) console.log(`  ✓ ${label}`); else { failures++; console.error(`  ✗ ${label}`); } }
++const op = (role: PlatformRole, status: "active" | "suspended" = "active"): PlatformOperator => ({ userId: "u", role, status });
++const can = (o: PlatformOperator | null, c: PlatformCapability) => operatorCan(o, c);
++
++const C360_DIR = "src/app/platform/customers/[orgId]";
++// tab sub-path → required capability (MUST match Customer360Tabs + each page guard)
++const TABS: { sub: string; cap: PlatformCapability }[] = [
++  { sub: "", cap: "platform.customers.read" },
++  { sub: "users", cap: "platform.users.read" },
++  { sub: "usage", cap: "platform.usage.read" },
++  { sub: "distribution", cap: "platform.usage.read" },
++  { sub: "integrations", cap: "platform.integrations.read" },
++  { sub: "activity", cap: "platform.audit.read" },
++  { sub: "access", cap: "platform.customers.read" },
++  { sub: "operations", cap: "platform.ops.read" },
++  { sub: "billing", cap: "platform.billing.read" },
++];
++
++function main(): void {
++  console.log("P5.2 Customer 360 QA\n");
++
++  // ── 1. Every tab page exists + guards with the matching capability. ──
++  for (const t of TABS) {
++    const file = join(C360_DIR, t.sub, "page.tsx");
++    const exists = existsSync(file);
++    assert(exists, `tab "${t.sub || "overview"}" page exists`);
++    if (!exists) continue;
++    const src = readFileSync(file, "utf8");
++    const guardCap = src.match(/authorizePlatform\(\s*["']([^"']+)["']\s*\)/)?.[1];
++    assert(guardCap === t.cap, `tab "${t.sub || "overview"}" guards with ${t.cap}`);
++  }
++  // Layout is base-gated by customers.read.
++  const layout = readFileSync(join(C360_DIR, "layout.tsx"), "utf8");
++  assert(/authorizePlatform\(\s*["']platform\.customers\.read["']\s*\)/.test(layout), "Customer 360 layout gated by customers.read");
++
++  // ── 2. No direct service-role client in any Customer 360 page/component. ──
++  const uiFiles = [
++    "src/components/platform-admin/customer360-ui.tsx",
++    "src/components/platform-admin/Customer360Header.tsx",
++    "src/components/platform-admin/Customer360Tabs.tsx",
++    "src/components/platform-admin/CopyIdButton.tsx",
++    "src/components/platform-admin/CustomersDirectory.tsx",
++    ...TABS.map((t) => join(C360_DIR, t.sub, "page.tsx")),
++    join(C360_DIR, "layout.tsx"),
++  ];
++  for (const f of uiFiles) assert(!/createServiceRoleClient/.test(readFileSync(f, "utf8")), `no service-role client: ${f.replace("src/", "")}`);
++
++  // ── 3. Tenancy: every org-column equality in the Customer 360 DAL binds to the
++  //      `orgId` param — never a literal or client-controlled value. ──
++  const dal = readFileSync("src/lib/platform-admin/server/dal.ts", "utf8");
++  const c360 = dal.slice(dal.indexOf("P5.2 — CUSTOMER 360"));
++  assert(c360.length > 0, "Customer 360 DAL block located");
++  const eqMatches = [...c360.matchAll(/\beq\(\s*["'](org_id|organization_id|id)["']\s*,\s*([^),]+)\)/g)];
++  assert(eqMatches.length > 0, `found ${eqMatches.length} org-scoped equality bindings`);
++  for (const m of eqMatches) {
++    const val = m[2].trim();
++    assert(val === "orgId", `org-column ${m[1]} binds to orgId (got: ${val})`);
++  }
++  // safeCount/readOne/latestTimestamp calls must all carry orgId.
++  for (const fn of ["getOrgHeaderForPlatform", "getOrgOverviewForPlatform", "getOrgUsersForPlatform", "getOrgProductUsageForPlatform", "getOrgDistributionForPlatform", "getOrgIntegrationsForPlatform", "getOrgActivityForPlatform", "getOrgAccessForPlatform", "getOrgBillingForPlatform", "getOrgOperationsForPlatform"]) {
++    const idx = c360.indexOf(`export async function ${fn}`);
++    assert(idx >= 0, `DAL exports ${fn}`);
++    if (idx < 0) continue;
++    const next = c360.indexOf("export ", idx + 10);
++    const body = c360.slice(idx, next < 0 ? undefined : next);
++    assert(body.includes("orgId"), `${fn} scopes to orgId`);
++    assert(body.includes("assertPlatformCapability"), `${fn} enforces a platform capability`);
++  }
++
++  // ── 4. DTO safety — no secret/PII columns in ANY dal.ts select(). ──
++  const selects = [...dal.matchAll(/\.select\(\s*["'`]([^"'`]*)["'`]/g)].map((m) => m[1]);
++  const EXACT = new Set(["email", "phone", "ip", "user_agent", "signature", "raw_payload", "provider_txn_id", "token_ref", "access_token_encrypted", "refresh_token_encrypted", "session_ref", "secret_hash", "code_hash", "lease_token", "old_values", "new_values", "sync_token", "google_sub", "password"]);
++  const SUBSTR = ["token", "secret", "password", "credential"];
++  for (const sel of selects) {
++    const cols = sel.split(",").map((c) => c.trim().toLowerCase().replace(/:.*/, "").replace(/\(.*/, ""));
++    const bad = cols.filter((c) => EXACT.has(c) || SUBSTR.some((s) => c.includes(s)));
++    assert(bad.length === 0, `select is secret/PII-free: "${sel.length > 48 ? sel.slice(0, 48) + "…" : sel}"`);
++  }
++
++  // ── 5. Authorization matrix by platform role (section visibility). ──
++  assert(!can(null, "platform.customers.read"), "non-operator denied Customer 360");
++  assert(!can(op("super_admin", "suspended"), "platform.customers.read"), "suspended operator denied");
++  // super_admin sees every tab.
++  for (const t of TABS) assert(can(op("super_admin"), t.cap), `super_admin sees ${t.sub || "overview"}`);
++  // support: reads customer/usage/integrations/activity — NOT ops, NOT billing.
++  assert(can(op("support"), "platform.usage.read") && can(op("support"), "platform.integrations.read"), "support sees usage + integrations");
++  assert(!can(op("support"), "platform.ops.read"), "support: operations HIDDEN");
++  assert(!can(op("support"), "platform.billing.read"), "support: billing HIDDEN");
++  // billing_admin: billing yes; unrelated operational/usage NO.
++  assert(can(op("billing_admin"), "platform.billing.read"), "billing_admin sees billing");
++  assert(!can(op("billing_admin"), "platform.usage.read"), "billing_admin: usage/distribution HIDDEN");
++  assert(!can(op("billing_admin"), "platform.integrations.read"), "billing_admin: integrations HIDDEN");
++  assert(!can(op("billing_admin"), "platform.ops.read"), "billing_admin: operations HIDDEN");
++  // operations: ops/integrations/usage yes; billing NO.
++  assert(can(op("operations"), "platform.ops.read") && can(op("operations"), "platform.integrations.read"), "operations sees ops + integrations");
++  assert(!can(op("operations"), "platform.billing.read"), "operations: billing HIDDEN");
++  // developer: flags/entitlements yes (access sub-blocks); billing NO.
++  assert(can(op("developer"), "platform.flags.read") && can(op("developer"), "platform.entitlements.read"), "developer sees flags + entitlements");
++  assert(!can(op("developer"), "platform.billing.read"), "developer: billing HIDDEN");
++
++  console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
++  process.exit(failures === 0 ? 0 : 1);
++}
++
++main();
+diff --git a/src/app/platform/customers/[orgId]/access/page.tsx b/src/app/platform/customers/[orgId]/access/page.tsx
+new file mode 100644
+index 0000000..f17dfb0
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/access/page.tsx
+@@ -0,0 +1,76 @@
++// ZONO — Customer 360 · Access tab (P5.2). READ-ONLY plan / entitlement /
++// feature-flag snapshot. PLAN, ENTITLEMENT and FEATURE FLAG are kept
++// conceptually distinct. Plan tier: customers.read. Entitlements: entitlements.read.
++// Flags: flags.read (each gated independently). NO mutation of any kind.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgAccessForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel } from "@/components/platform-admin/customer360-ui";
++import { PanelCard, PlanBadge, formatPlatformDate } from "@/components/platform-admin/ui";
++import { KV } from "@/components/platform-admin/customer360-ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++export default async function Customer360AccessPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.customers.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const a = await getOrgAccessForPlatform(orgId);
++  const limitEntries = a.entitlements.limits ? Object.entries(a.entitlements.limits).slice(0, 12) : [];
++
++  return (
++    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
++      {/* PLAN */}
++      <PanelCard title="תוכנית (PLAN)" icon="Tag">
++        <div className="px-1 py-1">
++          <p className="text-muted mb-2 text-[12px] font-semibold">רמת התוכנית של הארגון</p>
++          <PlanBadge plan={a.planTier} />
++        </div>
++      </PanelCard>
++
++      {/* ENTITLEMENTS */}
++      <PanelCard title="זכאויות (ENTITLEMENT)" icon="ShieldCheck">
++        {a.entitlements.state === "restricted" ? (
++          <p className="text-muted flex items-center gap-1.5 px-1 py-4 text-[13px] font-semibold"><Icon name="Lock" size={14} />מוגבל להרשאה</p>
++        ) : a.entitlements.state === "unavailable" ? (
++          <p className="text-muted px-1 py-4 text-[13px]">לא זמין</p>
++        ) : !a.entitlements.plan && !a.entitlements.status && limitEntries.length === 0 ? (
++          <p className="text-muted px-1 py-4 text-[13px]">אין נתוני זכאות</p>
++        ) : (
++          <dl className="px-1">
++            <KV label="תוכנית מסחרית">{a.entitlements.plan || "—"}</KV>
++            <KV label="סטטוס">{a.entitlements.status || "—"}</KV>
++            <KV label="סיום ניסיון">{a.entitlements.trialEndsAt ? formatPlatformDate(a.entitlements.trialEndsAt) : "—"}</KV>
++            {limitEntries.map(([k, v]) => (<KV key={k} label={k}>{String(v)}</KV>))}
++          </dl>
++        )}
++      </PanelCard>
++
++      {/* FEATURE FLAGS */}
++      <PanelCard title="דגלי יכולות (FEATURE FLAG)" icon="Flag">
++        {a.flags.state === "restricted" ? (
++          <p className="text-muted flex items-center gap-1.5 px-1 py-4 text-[13px] font-semibold"><Icon name="Lock" size={14} />מוגבל להרשאה</p>
++        ) : a.flags.state === "unavailable" ? (
++          <p className="text-muted px-1 py-4 text-[13px]">לא זמין</p>
++        ) : a.flags.items.length === 0 ? (
++          <p className="text-muted px-1 py-4 text-[13px]">אין דגלים ייעודיים לארגון (חלים ברירות מחדל גלובליות)</p>
++        ) : (
++          <ul className="divide-line divide-y">
++            {a.flags.items.map((f) => (
++              <li key={f.flagKey} className="flex items-center gap-2 px-1 py-2">
++                <span className={"h-2 w-2 rounded-full " + (f.enabled ? "bg-success" : "bg-muted")} />
++                <span className="text-ink font-mono text-[12px]" dir="ltr">{f.flagKey}</span>
++                <span className="text-muted ms-auto text-[11px]">{f.enabled ? "פעיל" : "כבוי"}{f.rolloutPct !== null && f.rolloutPct < 100 ? ` · ${f.rolloutPct}%` : ""}</span>
++              </li>
++            ))}
++          </ul>
++        )}
++      </PanelCard>
++
++      <div className="border-line bg-surface col-span-full flex items-center gap-2 rounded-xl border px-4 py-3">
++        <span className="text-muted"><Icon name="Lock" size={14} /></span>
++        <span className="text-muted text-[12px] font-semibold">תצוגה לקריאה בלבד — שינוי תוכנית/זכאויות/דגלים אינו זמין ב-P5.2.</span>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/activity/page.tsx b/src/app/platform/customers/[orgId]/activity/page.tsx
+new file mode 100644
+index 0000000..779116c
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/activity/page.tsx
+@@ -0,0 +1,41 @@
++// ZONO — Customer 360 · Activity tab (P5.2). Human-readable org activity from
++// audit_log (safe columns only — no metadata/raw payloads). Cap: platform.audit.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgActivityForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, EmptyPanel } from "@/components/platform-admin/customer360-ui";
++import { PanelCard, formatPlatformDateTime } from "@/components/platform-admin/ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++export default async function Customer360ActivityPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.audit.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const entries = await getOrgActivityForPlatform(orgId, 30);
++
++  if (entries.length === 0) return <EmptyPanel icon="ScrollText" note="אין פעילות מתועדת עבור ארגון זה" />;
++
++  return (
++    <PanelCard title="ציר זמן פעילות" icon="ScrollText">
++      <ul className="flex flex-col">
++        {entries.map((e) => (
++          <li key={e.id} className="flex gap-3 px-2 py-2.5">
++            <span className="text-brand-light mt-0.5 shrink-0"><Icon name="Activity" size={15} /></span>
++            <div className="min-w-0 flex-1">
++              <div className="flex items-baseline justify-between gap-3">
++                <p className="text-ink text-[13px] font-bold">{e.summary || e.action}</p>
++                <span className="text-muted shrink-0 text-[11px]">{formatPlatformDateTime(e.createdAt)}</span>
++              </div>
++              <p className="text-muted mt-0.5 text-[11.5px]">
++                {e.category ? <span className="bg-surface border-line me-1.5 rounded border px-1.5 py-0.5 font-semibold">{e.category}</span> : null}
++                {e.entityType ? <span className="me-1.5">{e.entityType}</span> : null}
++                {e.actorName ? <span className="text-muted/80">· {e.actorName}</span> : null}
++              </p>
++            </div>
++          </li>
++        ))}
++      </ul>
++    </PanelCard>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/billing/page.tsx b/src/app/platform/customers/[orgId]/billing/page.tsx
+new file mode 100644
+index 0000000..ab5f5a9
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/billing/page.tsx
+@@ -0,0 +1,67 @@
++// ZONO — Customer 360 · Billing tab (P5.2). Commercial lifecycle snapshot from
++// subscriptions + org_plans + a payments SUMMARY. NO payment signatures / raw
++// payloads / provider txn ids. If no commercial rows exist → "אין נתוני חיוב"
++// (never fabricated revenue). READ-ONLY. Cap: platform.billing.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgBillingForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, EmptyPanel, MetricStat, KV } from "@/components/platform-admin/customer360-ui";
++import { PanelCard, PlanBadge, formatPlatformDate, formatPlatformDateTime } from "@/components/platform-admin/ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++export default async function Customer360BillingPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.billing.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const b = await getOrgBillingForPlatform(orgId);
++
++  if (!b.available) return <EmptyPanel icon="Banknote" note="אין נתוני חיוב עבור ארגון זה" />;
++
++  return (
++    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
++      <PanelCard title="מנוי" icon="BadgeCheck">
++        {b.subscription ? (
++          <dl className="px-1">
++            <KV label="תוכנית">{b.subscription.plan || "—"}</KV>
++            <KV label="סטטוס">{b.subscription.status || "—"}</KV>
++            <KV label="סיום תקופה">{b.subscription.periodEnd ? formatPlatformDate(b.subscription.periodEnd) : "—"}</KV>
++            <KV label="סיום ניסיון">{b.subscription.trialEndsAt ? formatPlatformDate(b.subscription.trialEndsAt) : "—"}</KV>
++            <KV label="ביטול בסוף תקופה">{b.subscription.cancelAtPeriodEnd ? "כן" : "לא"}</KV>
++          </dl>
++        ) : <p className="text-muted px-1 py-4 text-[13px]">אין מנוי פעיל</p>}
++      </PanelCard>
++
++      <PanelCard title="רישיון (org_plans)" icon="Tag">
++        {b.plan ? (
++          <dl className="px-1">
++            <KV label="תוכנית"><PlanBadge plan={b.plan.plan} /></KV>
++            <KV label="סטטוס">{b.plan.status || "—"}</KV>
++          </dl>
++        ) : <p className="text-muted px-1 py-4 text-[13px]">אין רישום רישוי</p>}
++      </PanelCard>
++
++      <PanelCard title="תשלומים" icon="Wallet" className="lg:col-span-2">
++        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
++          <MetricStat label="תשלומים ששולמו" metric={b.payments.paid} />
++          <MetricStat label="תשלומים שנכשלו" metric={b.payments.failed} />
++          <div className="border-line bg-surface rounded-xl border p-3">
++            <p className="text-muted text-[12px] font-semibold">תשלום אחרון</p>
++            {b.payments.latest ? (
++              <p className="text-ink mt-1 text-[13px] font-bold">
++                {b.payments.latest.amountIls !== null ? `₪${new Intl.NumberFormat("en-US").format(b.payments.latest.amountIls)}` : "—"}
++                <span className="text-muted ms-1 text-[11px] font-semibold">{b.payments.latest.status}</span>
++              </p>
++            ) : <p className="text-muted mt-1 text-[13px]">—</p>}
++            {b.payments.latest?.createdAt ? <p className="text-muted mt-0.5 text-[11px]">{formatPlatformDateTime(b.payments.latest.createdAt)}</p> : null}
++          </div>
++        </div>
++      </PanelCard>
++
++      <div className="border-line bg-surface col-span-full flex items-center gap-2 rounded-xl border px-4 py-3">
++        <span className="text-muted"><Icon name="Lock" size={14} /></span>
++        <span className="text-muted text-[12px] font-semibold">תצוגה לקריאה בלבד — ללא חיובים, זיכויים או שינויי מנוי.</span>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/distribution/page.tsx b/src/app/platform/customers/[orgId]/distribution/page.tsx
+new file mode 100644
+index 0000000..30fe7ac
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/distribution/page.tsx
+@@ -0,0 +1,42 @@
++// ZONO — Customer 360 · Marketing & Distribution tab (P5.2). Org-level counts
++// (campaigns, queued/published/failed posts, FB-group posts, social leads,
++// WhatsApp campaigns). READ-ONLY — no publishing, no impersonation. Cap: usage.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgDistributionForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, MetricStat } from "@/components/platform-admin/customer360-ui";
++import { PanelCard, formatPlatformDateTime } from "@/components/platform-admin/ui";
++
++export const dynamic = "force-dynamic";
++
++export default async function Customer360DistributionPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.usage.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const d = await getOrgDistributionForPlatform(orgId);
++
++  return (
++    <div className="flex flex-col gap-5">
++      <PanelCard title="הפצה" icon="Megaphone">
++        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
++          <MetricStat label="קמפיינים" metric={d.campaigns} />
++          <MetricStat label="פוסטים בתור" metric={d.queuedPosts} />
++          <MetricStat label="פוסטים שפורסמו" metric={d.publishedPosts} />
++          <MetricStat label="פוסטים שנכשלו" metric={d.failedPosts} />
++        </div>
++        <p className="text-muted mt-3 px-1 text-[12px]">פרסום אחרון: <span className="text-ink font-bold">{d.lastPublishedAt ? formatPlatformDateTime(d.lastPublishedAt) : "—"}</span></p>
++      </PanelCard>
++
++      <PanelCard title="קבוצות פייסבוק ותקשורת" icon="Globe">
++        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
++          <MetricStat label="פוסטים בקבוצות" metric={d.groupPosts} />
++          <MetricStat label="לידים חברתיים" metric={d.socialLeads} />
++          <MetricStat label="קמפייני וואטסאפ" metric={d.whatsappCampaigns} />
++        </div>
++      </PanelCard>
++
++      <div className="border-line bg-surface flex items-center gap-2 rounded-xl border px-4 py-3">
++        <span className="text-muted text-[12px] font-semibold">תצוגה זו לקריאה בלבד — אין פעולות פרסום או שליחה מתוך מסך הניהול.</span>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/integrations/page.tsx b/src/app/platform/customers/[orgId]/integrations/page.tsx
+new file mode 100644
+index 0000000..3c8ecb9
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/integrations/page.tsx
+@@ -0,0 +1,40 @@
++// ZONO — Customer 360 · Integrations tab (P5.2). Provider health from SAFE
++// status/timestamp columns only — never tokens/secrets. Undetermined → "לא זמין".
++// Cap: platform.integrations.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgIntegrationsForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, IntegrationBadge } from "@/components/platform-admin/customer360-ui";
++import { PanelCard, formatPlatformDateTime } from "@/components/platform-admin/ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++const INT_ICON: Record<string, string> = { meta: "Globe", whatsapp: "MessageCircle", google: "Calendar", extension: "Layers" };
++
++export default async function Customer360IntegrationsPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.integrations.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const items = await getOrgIntegrationsForPlatform(orgId);
++
++  return (
++    <PanelCard title="בריאות אינטגרציות" icon="Globe">
++      <ul className="divide-line divide-y">
++        {items.map((it) => (
++          <li key={it.key} className="flex items-center gap-3 px-2 py-3">
++            <span className="text-brand bg-surface border-line grid h-9 w-9 shrink-0 place-items-center rounded-lg border"><Icon name={INT_ICON[it.key] ?? "Globe"} size={16} /></span>
++            <div className="min-w-0 flex-1">
++              <p className="text-ink text-[13.5px] font-bold">{it.label}</p>
++              <p className="text-muted text-[12px]">
++                {it.detail ? <span className="font-mono" dir="ltr">{it.detail}</span> : "—"}
++                {it.lastActivityAt ? <> · פעיל: {formatPlatformDateTime(it.lastActivityAt)}</> : null}
++              </p>
++            </div>
++            <IntegrationBadge state={it.state} />
++          </li>
++        ))}
++      </ul>
++      <p className="text-muted mt-3 px-1 text-[11px]">מוצג סטטוס בלבד — אסימונים, סודות וקרדנציאלים לעולם אינם נחשפים.</p>
++    </PanelCard>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/layout.tsx b/src/app/platform/customers/[orgId]/layout.tsx
+new file mode 100644
+index 0000000..7445e0f
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/layout.tsx
+@@ -0,0 +1,44 @@
++// ZONO — Customer 360 layout (P5.2). Renders the org header + tab nav around
++// every Customer 360 tab. Base-gated by platform.customers.read (each tab page
++// additionally re-guards its own capability). Header fetch is authorized but not
++// audited (chrome); per-tab access events are audited by the tab DAL functions.
++import type { ReactNode } from "react";
++import Link from "next/link";
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgHeaderForPlatform } from "@/lib/platform-admin/server/dal";
++import { capabilitiesForRole } from "@/lib/platform-admin/capabilities";
++import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
++import { Customer360Header } from "@/components/platform-admin/Customer360Header";
++import { Customer360Tabs } from "@/components/platform-admin/Customer360Tabs";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++export default async function Customer360Layout({ children, params }: { children: ReactNode; params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.customers.read");
++  if (!operator) return <PlatformDenied />;
++
++  const { orgId } = await params;
++  const header = await getOrgHeaderForPlatform(orgId);
++  if (!header) {
++    return (
++      <div>
++        <Link href="/platform/customers" className="text-muted hover:text-ink mb-4 inline-flex items-center gap-1 text-[12px] font-bold"><Icon name="ArrowLeft" size={14} />ארגונים</Link>
++        <div className="border-line bg-card rounded-2xl border p-10 text-center">
++          <span className="text-muted bg-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl"><Icon name="Building2" size={22} /></span>
++          <p className="text-ink mt-3 font-black">הארגון לא נמצא</p>
++          <p className="text-muted mt-1 text-sm">לא נמצא ארגון עם המזהה המבוקש.</p>
++        </div>
++      </div>
++    );
++  }
++
++  const caps = capabilitiesForRole(operator.role);
++  return (
++    <div>
++      <Customer360Header header={header} />
++      <Customer360Tabs orgId={orgId} caps={caps} />
++      {children}
++    </div>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/operations/page.tsx b/src/app/platform/customers/[orgId]/operations/page.tsx
+new file mode 100644
+index 0000000..84daae0
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/operations/page.tsx
+@@ -0,0 +1,42 @@
++// ZONO — Customer 360 · Operations tab (P5.2). Customer-scoped failure signals:
++// failed publish jobs, failed Meta jobs, dead-letters — count + latest + a SAFE
++// reason (enum). No stack traces, no credentials, no raw payloads. Cap: ops.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgOperationsForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, MetricStat } from "@/components/platform-admin/customer360-ui";
++import { PanelCard, formatPlatformDateTime } from "@/components/platform-admin/ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++export default async function Customer360OperationsPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.ops.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const ops = await getOrgOperationsForPlatform(orgId);
++
++  return (
++    <PanelCard title="בריאות תפעולית" icon="Activity">
++      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
++        {ops.signals.map((s) => {
++          const v = s.count.value ?? 0;
++          const critical = s.key === "dead_letter" && s.count.state === "ok" && v > 0;
++          const warn = s.count.state === "ok" && v > 0 && !critical;
++          return (
++            <div key={s.key} className={"rounded-xl border p-3 " + (critical ? "border-danger/30 bg-danger-soft" : warn ? "border-warning/30 bg-warning-soft" : "border-line bg-surface")}>
++              <div className="flex items-start justify-between">
++                <MetricStat label={s.label} metric={s.count} />
++                {critical ? <Icon name="AlertTriangle" size={16} className="text-danger" /> : warn ? <Icon name="AlertCircle" size={16} className="text-warning" /> : <Icon name="CheckCircle" size={16} className="text-success" />}
++              </div>
++              <p className="text-muted mt-2 text-[11px]">
++                {s.latestAt ? <>אחרון: {formatPlatformDateTime(s.latestAt)}</> : "אין אירועים"}
++                {s.note ? <span className="text-ink font-semibold"> · {s.note}</span> : null}
++              </p>
++            </div>
++          );
++        })}
++      </div>
++      <p className="text-muted mt-3 px-1 text-[11px]">מוצגות ספירות וסיבת תקלה בטוחה בלבד (enum) — ללא stack traces או נתונים רגישים.</p>
++    </PanelCard>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/page.tsx b/src/app/platform/customers/[orgId]/page.tsx
+index 2a5e6b9..40825d4 100644
+--- a/src/app/platform/customers/[orgId]/page.tsx
++++ b/src/app/platform/customers/[orgId]/page.tsx
+@@ -1,96 +1,73 @@
+-// ZONO — Platform Admin · Organization summary (P5.1). A minimal, public-safe
+-// org view via the audited DAL: identity + plan + a minimal user roster (name /
+-// status / last-seen only — NO email, phone, CRM notes, leads, or commissions).
+-// The full Customer 360 is P5.2.
+-import Link from "next/link";
++// ZONO — Customer 360 · Overview tab (P5.2). The 10-second account summary:
++// account / CRM / marketing / communication / operations — count-only, honest,
++// capability-gated. Audited once as customer360.open (in the DAL).
+ import { authorizePlatform } from "@/lib/platform-admin/server/auth";
+-import { getOrganizationForPlatform, listOrganizationUsersForPlatform } from "@/lib/platform-admin/server/dal";
+-import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
+-import { Icon } from "@/components/dashboard/Icon";
+-import { PageHeader, PanelCard, PlanBadge, StatusBadge, IdChip, formatPlatformDate } from "@/components/platform-admin/ui";
++import { getOrgOverviewForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, HealthChip, MetricStat, distributionHealth, usageHealth, queueHealth } from "@/components/platform-admin/customer360-ui";
++import { PanelCard } from "@/components/platform-admin/ui";
+ 
+ export const dynamic = "force-dynamic";
+ 
+-export default async function PlatformOrgSummaryPage({ params }: { params: Promise<{ orgId: string }> }) {
++export default async function Customer360OverviewPage({ params }: { params: Promise<{ orgId: string }> }) {
+   const operator = await authorizePlatform("platform.customers.read");
+-  if (!operator) return <PlatformDenied />;
+-
++  if (!operator) return <RestrictedPanel />;
+   const { orgId } = await params;
+-  const org = await getOrganizationForPlatform(orgId);
+-  if (!org) {
+-    return (
+-      <div>
+-        <PageHeader eyebrow="לקוחות · ארגון" title="הארגון לא נמצא" icon="Building2" />
+-        <div className="border-line bg-card rounded-2xl border p-8 text-center">
+-          <p className="text-muted text-sm">לא נמצא ארגון עם המזהה המבוקש.</p>
+-          <Link href="/platform/customers" className="text-brand-strong mt-3 inline-flex items-center gap-1 text-sm font-bold"><Icon name="ArrowLeft" size={15} />חזרה לארגונים</Link>
+-        </div>
+-      </div>
+-    );
+-  }
++  const o = await getOrgOverviewForPlatform(orgId);
+ 
+-  // Every platform role holds users.read; guard defensively anyway.
+-  const users = await listOrganizationUsersForPlatform(orgId).catch(() => []);
++  const dist = distributionHealth(o.failedPosts);
++  const usage = usageHealth(o.recentActivityCount);
++  const queues = queueHealth(o.failedJobs, o.deadLetters);
+ 
+   return (
+-    <div>
+-      <div className="mb-4">
+-        <Link href="/platform/customers" className="text-muted hover:text-ink inline-flex items-center gap-1 text-[12px] font-bold"><Icon name="ArrowLeft" size={14} />ארגונים</Link>
++    <div className="flex flex-col gap-5">
++      {/* Explainable health chips */}
++      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
++        <HealthChip label="חשבון" status="תקין" tone="ok" />
++        <HealthChip label="הפצה" status={dist.label} tone={dist.tone} />
++        <HealthChip label="שימוש" status={usage.label} tone={usage.tone} />
++        <HealthChip label="תורים" status={queues.label} tone={queues.tone} />
+       </div>
+-      <PageHeader eyebrow="לקוחות · ארגון" title={org.name} icon="Building2" />
+ 
+-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+-        <PanelCard title="פרטי ארגון" icon="Building2">
+-          <dl className="flex flex-col gap-3 px-1 py-1 text-[13px]">
+-            <div className="flex items-center justify-between gap-3">
+-              <dt className="text-muted font-semibold">תוכנית</dt>
+-              <dd><PlanBadge plan={org.plan} /></dd>
+-            </div>
+-            <div className="flex items-center justify-between gap-3">
+-              <dt className="text-muted font-semibold">עיר</dt>
+-              <dd className="text-ink font-bold">{org.city || "—"}</dd>
+-            </div>
+-            <div className="flex items-center justify-between gap-3">
+-              <dt className="text-muted font-semibold">אונבורדינג</dt>
+-              <dd>
+-                <span className={"inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold " + (org.onboardingCompleted ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
+-                  {org.onboardingCompleted ? "הושלם" : "בתהליך"}
+-                </span>
+-              </dd>
+-            </div>
+-            <div className="flex items-center justify-between gap-3">
+-              <dt className="text-muted font-semibold">נוצר</dt>
+-              <dd className="text-ink font-bold">{formatPlatformDate(org.createdAt)}</dd>
+-            </div>
+-            <div className="flex items-center justify-between gap-3">
+-              <dt className="text-muted font-semibold">מזהה</dt>
+-              <dd><IdChip id={org.id} /></dd>
+-            </div>
+-          </dl>
++      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
++        <PanelCard title="חשבון" icon="Building2">
++          <div className="grid grid-cols-2 gap-3">
++            <MetricStat label="משתמשים פעילים" metric={o.usersActive} />
++            <MetricStat label="סה״כ משתמשים" metric={o.usersTotal} />
++          </div>
+         </PanelCard>
+ 
+-        <PanelCard title={`משתמשים (${users.length})`} icon="Users" className="lg:col-span-2">
+-          {users.length === 0 ? (
+-            <p className="text-muted px-2 py-6 text-center text-sm">אין משתמשים להצגה</p>
+-          ) : (
+-            <ul className="divide-line divide-y">
+-              {users.map((u) => (
+-                <li key={u.id} className="flex items-center gap-3 px-2 py-2.5">
+-                  <span className="text-muted bg-surface grid h-8 w-8 shrink-0 place-items-center rounded-full"><Icon name="UserCircle" size={16} /></span>
+-                  <span className="text-ink min-w-0 flex-1 truncate text-[13.5px] font-bold">{u.name || "—"}</span>
+-                  <span className="text-muted hidden text-[11px] sm:inline">{u.lastSeenAt ? `נראה ${formatPlatformDate(u.lastSeenAt)}` : "—"}</span>
+-                  <StatusBadge status={u.status} />
+-                </li>
+-              ))}
+-            </ul>
+-          )}
++        <PanelCard title="CRM" icon="Target">
++          <div className="grid grid-cols-3 gap-3">
++            <MetricStat label="נכסים" metric={o.properties} />
++            <MetricStat label="לידים" metric={o.leads} />
++            <MetricStat label="לידים חברתיים" metric={o.socialLeads} />
++          </div>
+         </PanelCard>
+-      </div>
+ 
+-      <div className="border-line bg-surface mt-5 flex items-center gap-2 rounded-xl border px-4 py-3">
+-        <span className="text-brand"><Icon name="Sparkles" size={16} /></span>
+-        <p className="text-muted text-[13px] font-semibold">תצוגת Customer 360 המלאה — מנויים, שימוש, אינטגרציות ותמיכה — תגיע ב-P5.2.</p>
++        <PanelCard title="שיווק" icon="Megaphone">
++          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
++            <MetricStat label="קמפיינים" metric={o.campaigns} />
++            <MetricStat label="בתור" metric={o.queuedPosts} />
++            <MetricStat label="פורסמו" metric={o.publishedPosts} />
++            <MetricStat label="נכשלו" metric={o.failedPosts} />
++          </div>
++        </PanelCard>
++
++        <PanelCard title="תקשורת" icon="MessageCircle">
++          <div className="grid grid-cols-2 gap-3">
++            <MetricStat label="הודעות וואטסאפ" metric={o.whatsappMessages} />
++            <MetricStat label="פרסומי פייסבוק" metric={o.facebookPublishes} />
++          </div>
++        </PanelCard>
+       </div>
++
++      <PanelCard title="תפעול" icon="Activity">
++        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
++          <MetricStat label="עבודות שנכשלו" metric={o.failedJobs} />
++          <MetricStat label="Dead-letter" metric={o.deadLetters} />
++          <MetricStat label="פעילות CRM (7 ימים)" metric={o.recentActivityCount} />
++        </div>
++      </PanelCard>
+     </div>
+   );
+ }
+diff --git a/src/app/platform/customers/[orgId]/usage/page.tsx b/src/app/platform/customers/[orgId]/usage/page.tsx
+new file mode 100644
+index 0000000..041f244
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/usage/page.tsx
+@@ -0,0 +1,40 @@
++// ZONO — Customer 360 · Product Usage tab (P5.2). Per-module signals: object
++// count + an explainable state (פעיל לאחרונה / בשימוש / ללא פעילות / לא זמין).
++// NO proprietary adoption score. Cap: platform.usage.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgProductUsageForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, ModuleUsageBadge } from "@/components/platform-admin/customer360-ui";
++import { PanelCard } from "@/components/platform-admin/ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++const MODULE_ICON: Record<string, string> = {
++  properties: "Home", leads: "Target", matching: "Handshake", journeys: "Route",
++  automations: "Settings", recommendations: "Sparkles", distribution: "Megaphone", whatsapp: "MessageCircle",
++};
++
++export default async function Customer360UsagePage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.usage.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const modules = await getOrgProductUsageForPlatform(orgId);
++
++  return (
++    <PanelCard title="שימוש במודולים" icon="Layers">
++      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
++        {modules.map((m) => (
++          <li key={m.key} className="border-line bg-surface flex items-center gap-3 rounded-xl border p-3">
++            <span className="text-brand bg-card border-line grid h-9 w-9 shrink-0 place-items-center rounded-lg border"><Icon name={MODULE_ICON[m.key] ?? "Layers"} size={16} /></span>
++            <div className="min-w-0 flex-1">
++              <p className="text-ink text-[13.5px] font-bold">{m.label}</p>
++              <p className="text-muted text-[12px] font-semibold tabular-nums">{m.total === null ? "לא זמין" : `${new Intl.NumberFormat("en-US").format(m.total)} פריטים`}</p>
++            </div>
++            <ModuleUsageBadge state={m.state} />
++          </li>
++        ))}
++      </ul>
++      <p className="text-muted mt-3 px-1 text-[11px]">מצב מבוסס על ספירת פריטים ופעילות ב-7 הימים האחרונים — ללא ציון אימוץ מלאכותי.</p>
++    </PanelCard>
++  );
++}
+diff --git a/src/app/platform/customers/[orgId]/users/page.tsx b/src/app/platform/customers/[orgId]/users/page.tsx
+new file mode 100644
+index 0000000..9d857ae
+--- /dev/null
++++ b/src/app/platform/customers/[orgId]/users/page.tsx
+@@ -0,0 +1,54 @@
++// ZONO — Customer 360 · Users tab (P5.2). READ-ONLY org user directory: name,
++// role, status, joined, last-seen. NO email/phone (privacy boundary preserved
++// from P5.0/P5.1). No role editing / reset / delete (P5.3). Cap: platform.users.read.
++import { authorizePlatform } from "@/lib/platform-admin/server/auth";
++import { getOrgUsersForPlatform } from "@/lib/platform-admin/server/dal";
++import { RestrictedPanel, EmptyPanel } from "@/components/platform-admin/customer360-ui";
++import { PanelCard, StatusBadge, formatPlatformDate } from "@/components/platform-admin/ui";
++import { Icon } from "@/components/dashboard/Icon";
++
++export const dynamic = "force-dynamic";
++
++export default async function Customer360UsersPage({ params }: { params: Promise<{ orgId: string }> }) {
++  const operator = await authorizePlatform("platform.users.read");
++  if (!operator) return <RestrictedPanel />;
++  const { orgId } = await params;
++  const { users, roleDistribution, activeCount } = await getOrgUsersForPlatform(orgId);
++
++  if (users.length === 0) return <EmptyPanel icon="Users" note="אין משתמשים בארגון זה" />;
++
++  return (
++    <div className="flex flex-col gap-5">
++      <div className="flex flex-wrap items-center gap-3">
++        <span className="border-line bg-card text-ink inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-bold">
++          <Icon name="Users" size={15} className="text-brand" />{activeCount} פעילים · {users.length} סה״כ
++        </span>
++        {roleDistribution.map((r) => (
++          <span key={r.role} className="border-line text-muted inline-flex items-center gap-1.5 rounded-xl border bg-surface px-3 py-2 text-[12px] font-semibold">
++            {r.role}<span className="text-ink font-black">{r.count}</span>
++          </span>
++        ))}
++      </div>
++
++      <PanelCard title={`משתמשים (${users.length})`} icon="Users">
++        <div className="border-line text-muted hidden grid-cols-[1.6fr_1fr_0.8fr_0.9fr_0.9fr] gap-3 border-b px-2 pb-2 text-[11px] font-bold sm:grid">
++          <span>שם</span><span>תפקיד</span><span>סטטוס</span><span>הצטרף</span><span>נראה לאחרונה</span>
++        </div>
++        <ul className="divide-line divide-y">
++          {users.map((u) => (
++            <li key={u.id} className="grid grid-cols-1 gap-1 px-2 py-2.5 sm:grid-cols-[1.6fr_1fr_0.8fr_0.9fr_0.9fr] sm:items-center sm:gap-3">
++              <span className="text-ink inline-flex items-center gap-2 text-[13.5px] font-bold">
++                <span className="text-muted bg-surface grid h-7 w-7 shrink-0 place-items-center rounded-full"><Icon name="UserCircle" size={15} /></span>
++                {u.name || "—"}
++              </span>
++              <span className="text-muted text-[12.5px] font-semibold">{u.roleName || u.roleKey || "—"}</span>
++              <span><StatusBadge status={u.status} /></span>
++              <span className="text-muted text-[12px]">{u.createdAt ? formatPlatformDate(u.createdAt) : "—"}</span>
++              <span className="text-muted text-[12px]">{u.lastSeenAt ? formatPlatformDate(u.lastSeenAt) : "—"}</span>
++            </li>
++          ))}
++        </ul>
++      </PanelCard>
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/CopyIdButton.tsx b/src/components/platform-admin/CopyIdButton.tsx
+new file mode 100644
+index 0000000..d7510c4
+--- /dev/null
++++ b/src/components/platform-admin/CopyIdButton.tsx
+@@ -0,0 +1,29 @@
++"use client";
++// Small copy-to-clipboard control for the organization id (P5.2). Purely a
++// convenience; no data access.
++import { useState } from "react";
++import { Icon } from "@/components/dashboard/Icon";
++import { cn } from "@/lib/utils";
++
++export function CopyIdButton({ id }: { id: string }) {
++  const [copied, setCopied] = useState(false);
++  async function copy() {
++    try {
++      await navigator.clipboard.writeText(id);
++      setCopied(true);
++      setTimeout(() => setCopied(false), 1400);
++    } catch { /* clipboard unavailable — no-op */ }
++  }
++  return (
++    <button
++      type="button"
++      onClick={copy}
++      className={cn("border-line inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[11px] transition-colors", copied ? "bg-success-soft text-success" : "text-muted hover:bg-surface")}
++      title="העתק מזהה ארגון"
++      dir="ltr"
++    >
++      <Icon name={copied ? "Check" : "Copy"} size={12} />
++      {id.slice(0, 8)}
++    </button>
++  );
++}
+diff --git a/src/components/platform-admin/Customer360Header.tsx b/src/components/platform-admin/Customer360Header.tsx
+new file mode 100644
+index 0000000..ec95474
+--- /dev/null
++++ b/src/components/platform-admin/Customer360Header.tsx
+@@ -0,0 +1,52 @@
++// Customer 360 organization header (P5.2). PURE / server-renderable. Safe
++// authoritative identity only — no secrets, no unnecessary PII.
++import Link from "next/link";
++import { Icon } from "@/components/dashboard/Icon";
++import { PlanBadge, MetricValue, formatPlatformDate, formatPlatformDateTime } from "./ui";
++import { CopyIdButton } from "./CopyIdButton";
++import type { OrgHeader } from "@/lib/platform-admin/server/dal";
++
++export function Customer360Header({ header }: { header: OrgHeader }) {
++  return (
++    <div className="mb-4">
++      <Link href="/platform/customers" className="text-muted hover:text-ink mb-3 inline-flex items-center gap-1 text-[12px] font-bold">
++        <Icon name="ArrowLeft" size={14} />ארגונים
++      </Link>
++      <div className="border-line bg-card rounded-2xl border p-4 sm:p-5">
++        <div className="flex flex-wrap items-start justify-between gap-3">
++          <div className="flex items-center gap-3">
++            <span className="zono-gradient grid h-12 w-12 place-items-center rounded-2xl text-lg font-black text-white"><Icon name="Building2" size={22} /></span>
++            <div>
++              <h1 className="text-ink text-xl font-black leading-tight sm:text-2xl">{header.name}</h1>
++              <div className="mt-1.5 flex flex-wrap items-center gap-2">
++                <PlanBadge plan={header.plan} />
++                <span className={"inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold " + (header.onboardingCompleted ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
++                  {header.onboardingCompleted ? "אונבורדינג הושלם" : "אונבורדינג בתהליך"}
++                </span>
++                <CopyIdButton id={header.id} />
++              </div>
++            </div>
++          </div>
++          <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
++            <div>
++              <dt className="text-muted text-[11px] font-semibold">משתמשים פעילים</dt>
++              <dd className="text-ink text-lg font-black tabular-nums"><MetricValue metric={header.usersActive} /></dd>
++            </div>
++            <div>
++              <dt className="text-muted text-[11px] font-semibold">סה״כ משתמשים</dt>
++              <dd className="text-ink text-lg font-black tabular-nums"><MetricValue metric={header.usersTotal} /></dd>
++            </div>
++            <div>
++              <dt className="text-muted text-[11px] font-semibold">נוצר</dt>
++              <dd className="text-ink text-[13px] font-bold">{formatPlatformDate(header.createdAt)}</dd>
++            </div>
++            <div>
++              <dt className="text-muted text-[11px] font-semibold">פעילות אחרונה</dt>
++              <dd className="text-ink text-[13px] font-bold">{header.lastActivityAt ? formatPlatformDateTime(header.lastActivityAt) : "—"}</dd>
++            </div>
++          </dl>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/Customer360Tabs.tsx b/src/components/platform-admin/Customer360Tabs.tsx
+new file mode 100644
+index 0000000..cd3e349
+--- /dev/null
++++ b/src/components/platform-admin/Customer360Tabs.tsx
+@@ -0,0 +1,48 @@
++"use client";
++// Customer 360 tab navigation (P5.2). Tabs are hidden when the operator lacks
++// the section capability (UX only — every tab page re-guards server-side). The
++// tab-model capability MUST match each page's authorizePlatform() guard.
++import Link from "next/link";
++import { usePathname } from "next/navigation";
++import { Icon } from "@/components/dashboard/Icon";
++import { cn } from "@/lib/utils";
++
++export interface C360Tab { key: string; label: string; sub: string; cap: string; icon: string }
++
++export const CUSTOMER360_TABS: C360Tab[] = [
++  { key: "overview", label: "סקירה", sub: "", cap: "platform.customers.read", icon: "LayoutGrid" },
++  { key: "users", label: "משתמשים", sub: "/users", cap: "platform.users.read", icon: "Users" },
++  { key: "usage", label: "שימוש", sub: "/usage", cap: "platform.usage.read", icon: "Activity" },
++  { key: "distribution", label: "שיווק והפצה", sub: "/distribution", cap: "platform.usage.read", icon: "Megaphone" },
++  { key: "integrations", label: "אינטגרציות", sub: "/integrations", cap: "platform.integrations.read", icon: "Globe" },
++  { key: "activity", label: "פעילות", sub: "/activity", cap: "platform.audit.read", icon: "ScrollText" },
++  { key: "access", label: "גישה", sub: "/access", cap: "platform.customers.read", icon: "ShieldCheck" },
++  { key: "operations", label: "תפעול", sub: "/operations", cap: "platform.ops.read", icon: "Route" },
++  { key: "billing", label: "חיוב", sub: "/billing", cap: "platform.billing.read", icon: "Banknote" },
++];
++
++export function Customer360Tabs({ orgId, caps }: { orgId: string; caps: string[] }) {
++  const pathname = usePathname();
++  const base = `/platform/customers/${orgId}`;
++  return (
++    <div className="border-line -mx-1 mb-5 flex gap-1 overflow-x-auto border-b pb-px no-scrollbar">
++      {CUSTOMER360_TABS.filter((t) => caps.includes(t.cap)).map((t) => {
++        const href = base + t.sub;
++        const active = t.sub === "" ? pathname === base : pathname === href || pathname.startsWith(`${href}/`);
++        return (
++          <Link
++            key={t.key}
++            href={href}
++            aria-current={active ? "page" : undefined}
++            className={cn(
++              "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2 text-[13px] font-bold transition-colors",
++              active ? "border-brand text-brand-strong" : "text-muted hover:text-ink border-transparent",
++            )}
++          >
++            <Icon name={t.icon} size={15} />{t.label}
++          </Link>
++        );
++      })}
++    </div>
++  );
++}
+diff --git a/src/components/platform-admin/CustomersDirectory.tsx b/src/components/platform-admin/CustomersDirectory.tsx
+index 57aa6fc..12b3192 100644
+--- a/src/components/platform-admin/CustomersDirectory.tsx
++++ b/src/components/platform-admin/CustomersDirectory.tsx
+@@ -1,35 +1,55 @@
+ "use client";
+-// Client-side filter over the already-loaded, DAL-fetched safe org directory
+-// (P5.1). This filters data the server already authorized + audited — it opens
+-// NO new data path. The platform-wide DAL search lives in the ⌘K command
+-// palette; this is the convenience filter on the directory screen.
++// Customer directory (P5.2). Search + plan filter + sort over the already-loaded,
++// DAL-fetched, audited safe org list. This filters data the server already
++// authorized — it opens NO new data path and does NOT loop per-org (no N+1).
++// Per-org usage/activity columns are intentionally deferred until an aggregated
++// group-by DAL exists (see delivery notes) rather than N+1 per row.
+ import { useMemo, useState } from "react";
+ import Link from "next/link";
+ import { Icon } from "@/components/dashboard/Icon";
+-import { PlanBadge, IdChip, formatPlatformDate } from "./ui";
++import { PlanBadge, IdChip, PLAN_LABEL, formatPlatformDate } from "./ui";
+ import type { PlatformOrgSummary } from "@/lib/platform-admin/server/dal";
+ 
++type SortKey = "created_desc" | "created_asc" | "name";
++
+ export function CustomersDirectory({ orgs }: { orgs: PlatformOrgSummary[] }) {
+   const [q, setQ] = useState("");
++  const [plan, setPlan] = useState("");
++  const [sort, setSort] = useState<SortKey>("created_desc");
++
++  const plans = useMemo(() => [...new Set(orgs.map((o) => o.plan).filter(Boolean))] as string[], [orgs]);
++
+   const filtered = useMemo(() => {
+     const s = q.trim().toLowerCase();
+-    if (!s) return orgs;
+-    return orgs.filter((o) => o.name.toLowerCase().includes(s) || o.id.toLowerCase().startsWith(s));
+-  }, [orgs, q]);
++    let list = orgs.filter((o) =>
++      (!s || o.name.toLowerCase().includes(s) || o.id.toLowerCase().startsWith(s)) &&
++      (!plan || o.plan === plan),
++    );
++    list = [...list].sort((a, b) => {
++      if (sort === "name") return a.name.localeCompare(b.name, "he");
++      const cmp = a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
++      return sort === "created_asc" ? cmp : -cmp;
++    });
++    return list;
++  }, [orgs, q, plan, sort]);
+ 
+   return (
+     <div className="border-line bg-card rounded-2xl border">
+-      <div className="border-line flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+-        <div className="border-line flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-xl border bg-surface px-3">
++      <div className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-3">
++        <div className="border-line flex h-9 min-w-[200px] flex-1 items-center gap-2 rounded-xl border bg-surface px-3">
+           <Icon name="Search" size={15} className="text-muted" />
+-          <input
+-            value={q}
+-            onChange={(e) => setQ(e.target.value)}
+-            placeholder="סינון לפי שם ארגון…"
+-            className="text-ink h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted"
+-          />
++          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="סינון לפי שם ארגון…" className="text-ink h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted" />
+         </div>
+-        <span className="text-muted text-[12px] font-semibold">{filtered.length} / {orgs.length} ארגונים</span>
++        <select value={plan} onChange={(e) => setPlan(e.target.value)} className="border-line text-ink h-9 rounded-xl border bg-surface px-2 text-[13px] font-semibold outline-none">
++          <option value="">כל התוכניות</option>
++          {plans.map((p) => <option key={p} value={p}>{PLAN_LABEL[p] ?? p}</option>)}
++        </select>
++        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="border-line text-ink h-9 rounded-xl border bg-surface px-2 text-[13px] font-semibold outline-none">
++          <option value="created_desc">חדש → ישן</option>
++          <option value="created_asc">ישן → חדש</option>
++          <option value="name">לפי שם</option>
++        </select>
++        <span className="text-muted text-[12px] font-semibold">{filtered.length} / {orgs.length}</span>
+       </div>
+ 
+       {filtered.length === 0 ? (
+diff --git a/src/components/platform-admin/customer360-ui.tsx b/src/components/platform-admin/customer360-ui.tsx
+new file mode 100644
+index 0000000..16631dc
+--- /dev/null
++++ b/src/components/platform-admin/customer360-ui.tsx
+@@ -0,0 +1,122 @@
++// ============================================================================
++// ZONO — Customer 360 shared UI primitives (P5.2). PURE / server-renderable.
++// Deterministic, explainable status — NO scoring model, NO fabricated numbers.
++// Health/status tones are computed by the pure helpers here from real metrics.
++// ============================================================================
++import { Icon } from "@/components/dashboard/Icon";
++import { cn } from "@/lib/utils";
++import type { PlatformMetric, IntegrationState, ModuleUsageState } from "@/lib/platform-admin/server/dal";
++import { MetricValue } from "./ui";
++
++export type HealthTone = "ok" | "warn" | "critical" | "neutral";
++export interface HealthStatus { tone: HealthTone; label: string }
++
++const TONE_CLS: Record<HealthTone, string> = {
++  ok: "bg-success-soft text-success",
++  warn: "bg-warning-soft text-warning",
++  critical: "bg-danger-soft text-danger",
++  neutral: "bg-surface text-muted",
++};
++const TONE_DOT: Record<HealthTone, string> = { ok: "bg-success", warn: "bg-warning", critical: "bg-danger", neutral: "bg-muted" };
++
++// ── Deterministic health derivations (documented rules) ─────────────────────
++/** Distribution: >0 failed posts → warn ("N פרסומים שנכשלו"); 0 → ok; restricted/unavailable → neutral. */
++export function distributionHealth(failedPosts: PlatformMetric): HealthStatus {
++  if (failedPosts.state !== "ok" || failedPosts.value === null) return { tone: "neutral", label: "—" };
++  if (failedPosts.value > 0) return { tone: "warn", label: `${failedPosts.value} פרסומים שנכשלו` };
++  return { tone: "ok", label: "תקין" };
++}
++/** Queues: dead-letters>0 → critical; else failed jobs>0 → warn; else ok; unknown → neutral. */
++export function queueHealth(failedJobs: PlatformMetric, deadLetters: PlatformMetric): HealthStatus {
++  if (deadLetters.state === "ok" && (deadLetters.value ?? 0) > 0) return { tone: "critical", label: `${deadLetters.value} dead-letter` };
++  if (failedJobs.state === "ok" && (failedJobs.value ?? 0) > 0) return { tone: "warn", label: `${failedJobs.value} עבודות נכשלו` };
++  if (failedJobs.state !== "ok" && deadLetters.state !== "ok") return { tone: "neutral", label: "—" };
++  return { tone: "ok", label: "תקין" };
++}
++/** Usage: recent (7d) activity>0 → ok; 0 → warn ("אין פעילות ב-7 ימים"); unknown → neutral. */
++export function usageHealth(recentActivity: PlatformMetric): HealthStatus {
++  if (recentActivity.state !== "ok" || recentActivity.value === null) return { tone: "neutral", label: "—" };
++  if (recentActivity.value > 0) return { tone: "ok", label: "פעילות ב-7 הימים האחרונים" };
++  return { tone: "warn", label: "אין פעילות ב-7 ימים" };
++}
++/** Integrations: any warning/disconnected → warn; any connected & none bad → ok; all unconfigured/unknown → neutral. */
++export function integrationsHealth(items: { state: IntegrationState }[]): HealthStatus {
++  if (items.some((i) => i.state === "disconnected")) return { tone: "warn", label: "אינטגרציה מנותקת" };
++  if (items.some((i) => i.state === "warning")) return { tone: "warn", label: "דורש תשומת לב" };
++  if (items.some((i) => i.state === "connected")) return { tone: "ok", label: "תקין" };
++  return { tone: "neutral", label: "לא מוגדר" };
++}
++
++export function HealthChip({ label, status, tone }: { label: string; status: string; tone: HealthTone }) {
++  return (
++    <div className={cn("flex items-center gap-2 rounded-xl px-3 py-2", TONE_CLS[tone])}>
++      <span className={cn("h-2 w-2 shrink-0 rounded-full", TONE_DOT[tone])} />
++      <div className="min-w-0 leading-tight">
++        <p className="text-[10.5px] font-bold opacity-80">{label}</p>
++        <p className="truncate text-[12.5px] font-black">{status}</p>
++      </div>
++    </div>
++  );
++}
++
++/** Compact labelled metric used inside metric groups. */
++export function MetricStat({ label, metric }: { label: string; metric: PlatformMetric }) {
++  return (
++    <div className="border-line bg-surface rounded-xl border p-3">
++      <p className="text-ink text-xl font-black tabular-nums leading-none"><MetricValue metric={metric} /></p>
++      <p className="text-muted mt-1 text-[12px] font-semibold">{label}</p>
++    </div>
++  );
++}
++
++export function KV({ label, children }: { label: string; children: React.ReactNode }) {
++  return (
++    <div className="flex items-center justify-between gap-3 py-1.5">
++      <dt className="text-muted text-[13px] font-semibold">{label}</dt>
++      <dd className="text-ink text-[13px] font-bold">{children}</dd>
++    </div>
++  );
++}
++
++export function IntegrationBadge({ state }: { state: IntegrationState }) {
++  const map: Record<IntegrationState, { tone: HealthTone; label: string }> = {
++    connected: { tone: "ok", label: "מחובר" },
++    warning: { tone: "warn", label: "דורש תשומת לב" },
++    disconnected: { tone: "critical", label: "מנותק" },
++    not_configured: { tone: "neutral", label: "לא מוגדר" },
++    unavailable: { tone: "neutral", label: "לא זמין" },
++  };
++  const { tone, label } = map[state];
++  return <span className={cn("inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-bold", TONE_CLS[tone])}><span className={cn("h-1.5 w-1.5 rounded-full", TONE_DOT[tone])} />{label}</span>;
++}
++
++export function ModuleUsageBadge({ state }: { state: ModuleUsageState }) {
++  const map: Record<ModuleUsageState, { tone: HealthTone; label: string }> = {
++    active_recent: { tone: "ok", label: "פעיל לאחרונה" },
++    used: { tone: "neutral", label: "בשימוש" },
++    none: { tone: "neutral", label: "ללא פעילות" },
++    unavailable: { tone: "neutral", label: "לא זמין" },
++  };
++  const { tone, label } = map[state];
++  return <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold", TONE_CLS[tone])}>{label}</span>;
++}
++
++/** Restricted panel — operator lacks the capability for this section. */
++export function RestrictedPanel({ note = "אין לך הרשאה לצפות במידע זה." }: { note?: string }) {
++  return (
++    <div className="border-line bg-card rounded-2xl border p-8 text-center">
++      <span className="text-muted bg-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl"><Icon name="Lock" size={22} /></span>
++      <p className="text-ink mt-3 font-black">מוגבל להרשאה</p>
++      <p className="text-muted mt-1 text-sm">{note}</p>
++    </div>
++  );
++}
++
++export function EmptyPanel({ icon = "FolderOpen", note }: { icon?: string; note: string }) {
++  return (
++    <div className="border-line bg-card rounded-2xl border p-8 text-center">
++      <span className="text-muted bg-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl"><Icon name={icon} size={22} /></span>
++      <p className="text-muted mt-3 text-sm font-semibold">{note}</p>
++    </div>
++  );
++}
+diff --git a/src/lib/platform-admin/server/dal.ts b/src/lib/platform-admin/server/dal.ts
+index cdd4879..d6a9807 100644
+--- a/src/lib/platform-admin/server/dal.ts
++++ b/src/lib/platform-admin/server/dal.ts
+@@ -245,3 +245,461 @@ export async function listRecentPlatformAudit(limit = 12): Promise<PlatformAudit
+   const rows = (data ?? []) as { id: string; actor_label: string | null; action: string; resource_type: string | null; org_id: string | null; created_at: string }[];
+   return rows.map((r) => ({ id: r.id, actorLabel: r.actor_label ?? null, action: r.action, resourceType: r.resource_type ?? null, orgId: r.org_id ?? null, createdAt: r.created_at }));
+ }
++
++// ============================================================================
++// P5.2 — CUSTOMER 360 (per-organization control center). Every read here is
++// EXPLICITLY scoped to a single orgId AFTER the platform capability check, uses
++// the audited service-role boundary, returns minimal/count-only DTOs, and NEVER
++// selects a credential/token/secret column. Org-scoping column differs by table
++// (org_id vs organization_id) — encoded per query below. Reads fail SAFE: a
++// missing table/column yields "unavailable", never a crash or a fabricated 0.
++// ============================================================================
++
++/** Minimal chained query-builder surface for safeCount `build` callbacks. */
++type QB = { eq: (c: string, v: unknown) => QB; in: (c: string, v: unknown[]) => QB; gte: (c: string, v: unknown) => QB };
++
++const DAY_MS = 86_400_000;
++function sinceIso(days: number): string { return new Date(Date.now() - days * DAY_MS).toISOString(); }
++
++/** Latest timestamp from a column on an org-scoped table, or null. Fail-safe. */
++async function latestTimestamp(table: string, orgCol: string, orgId: string, timeCol: string): Promise<string | null> {
++  try {
++    const db = createServiceRoleClient();
++    const { data, error } = await db.from(table as never)
++      .select(timeCol)
++      .eq(orgCol as never, orgId as never)
++      .order(timeCol, { ascending: false })
++      .limit(1)
++      .maybeSingle();
++    if (error) return null;
++    const row = data as Record<string, string> | null;
++    return row?.[timeCol] ?? null;
++  } catch {
++    return null;
++  }
++}
++
++export interface OrgHeader {
++  id: string;
++  name: string;
++  plan: string | null;
++  city: string | null;
++  onboardingCompleted: boolean;
++  createdAt: string;
++  usersActive: PlatformMetric;
++  usersTotal: PlatformMetric;
++  lastActivityAt: string | null;
++}
++
++/**
++ * Header/chrome data for the Customer 360 frame. Authorized (customers.read) but
++ * intentionally NOT audited — it is repeated shell decoration across every tab;
++ * the meaningful per-tab access events are audited by the tab DAL functions.
++ * Returns null when the org does not exist (→ safe not-found).
++ */
++export async function getOrgHeaderForPlatform(orgId: string): Promise<OrgHeader | null> {
++  await assertPlatformCapability("platform.customers.read");
++  const db = createServiceRoleClient();
++  const { data } = await db.from("organizations")
++    .select("id,name,plan,city,onboarding_completed,created_at")
++    .eq("id", orgId).maybeSingle();
++  if (!data) return null;
++  const r = data as { id: string; name: string; plan: string | null; city: string | null; onboarding_completed: boolean; created_at: string };
++  const [usersActive, usersTotal, lastActivityAt] = await Promise.all([
++    safeCount("users", (q) => (q as QB).eq("org_id", orgId).eq("status", "active")),
++    safeCount("users", (q) => (q as QB).eq("org_id", orgId)),
++    latestTimestamp("domain_events", "organization_id", orgId, "occurred_at"),
++  ]);
++  return {
++    id: r.id, name: r.name, plan: r.plan ?? null, city: r.city ?? null,
++    onboardingCompleted: !!r.onboarding_completed, createdAt: r.created_at,
++    usersActive: metric(usersActive), usersTotal: metric(usersTotal), lastActivityAt,
++  };
++}
++
++export interface OrgOverview {
++  usersActive: PlatformMetric; usersTotal: PlatformMetric;
++  properties: PlatformMetric; leads: PlatformMetric; socialLeads: PlatformMetric;
++  campaigns: PlatformMetric; queuedPosts: PlatformMetric; publishedPosts: PlatformMetric; failedPosts: PlatformMetric;
++  whatsappMessages: PlatformMetric; facebookPublishes: PlatformMetric;
++  failedJobs: PlatformMetric; deadLetters: PlatformMetric;
++  recentActivityCount: PlatformMetric; // CRM activity in last 7d (leads created)
++}
++
++/**
++ * Customer 360 overview — account/CRM/marketing/communication/operations counts
++ * for ONE org. Base gate customers.read; usage groups need usage.read; ops groups
++ * need ops.read (else `restricted`, never a fake 0). Audited once as customer360.open.
++ */
++export async function getOrgOverviewForPlatform(orgId: string): Promise<OrgOverview> {
++  const operator = await assertPlatformCapability("platform.customers.read");
++  const canUsage = operatorCan(operator, "platform.usage.read");
++  const canOps = operatorCan(operator, "platform.ops.read");
++
++  const [usersActive, usersTotal] = await Promise.all([
++    safeCount("users", (q) => (q as QB).eq("org_id", orgId).eq("status", "active")),
++    safeCount("users", (q) => (q as QB).eq("org_id", orgId)),
++  ]);
++
++  const usage = canUsage ? await Promise.all([
++    safeCount("properties", (q) => (q as QB).eq("org_id", orgId)),
++    safeCount("leads", (q) => (q as QB).eq("org_id", orgId)),
++    safeCount("social_leads", (q) => (q as QB).eq("organization_id", orgId)),
++    safeCount("distribution_campaigns", (q) => (q as QB).eq("org_id", orgId)),
++    safeCount("distribution_posts", (q) => (q as QB).eq("org_id", orgId).in("status", ["pending", "scheduled", "in_progress"])),
++    safeCount("distribution_posts", (q) => (q as QB).eq("org_id", orgId).eq("status", "published")),
++    safeCount("distribution_posts", (q) => (q as QB).eq("org_id", orgId).eq("status", "failed")),
++    safeCount("whatsapp_messages", (q) => (q as QB).eq("organization_id", orgId)),
++    safeCount("distribution_posts", (q) => (q as QB).eq("org_id", orgId).eq("platform", "facebook")),
++    safeCount("leads", (q) => (q as QB).eq("org_id", orgId).gte("created_at", sinceIso(7))),
++  ]) : null;
++
++  const ops = canOps ? await Promise.all([
++    safeCount("distribution_publish_jobs", (q) => (q as QB).eq("org_id", orgId).in("status", ["failed", "dead"])),
++    safeCount("meta_publish_dead_letter", (q) => (q as QB).eq("org_id", orgId)),
++  ]) : null;
++
++  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "customer360.open", resourceType: "organization", resourceId: orgId, targetOrgId: orgId, metadata: { usage: canUsage, ops: canOps } });
++
++  const um = (i: number): PlatformMetric => (canUsage && usage ? metric(usage[i]) : RESTRICTED);
++  const om = (i: number): PlatformMetric => (canOps && ops ? metric(ops[i]) : RESTRICTED);
++  return {
++    usersActive: metric(usersActive), usersTotal: metric(usersTotal),
++    properties: um(0), leads: um(1), socialLeads: um(2),
++    campaigns: um(3), queuedPosts: um(4), publishedPosts: um(5), failedPosts: um(6),
++    whatsappMessages: um(7), facebookPublishes: um(8), recentActivityCount: um(9),
++    failedJobs: om(0), deadLetters: om(1),
++  };
++}
++
++export interface OrgUserRow {
++  id: string; name: string | null; roleKey: string | null; roleName: string | null;
++  status: string | null; lastSeenAt: string | null; createdAt: string | null;
++}
++export interface OrgUsersResult { users: OrgUserRow[]; roleDistribution: { role: string; count: number }[]; activeCount: number; }
++
++/**
++ * Read-only user directory for ONE org (minimal fields + role; NO email/phone).
++ * Cap: platform.users.read. Audited once as customer360.users. Role distribution
++ * + active count are derived in-process (no extra query).
++ */
++export async function getOrgUsersForPlatform(orgId: string): Promise<OrgUsersResult> {
++  const operator = await assertPlatformCapability("platform.users.read");
++  const db = createServiceRoleClient();
++  // `as never` bypasses typed-select validation for the embedded roles relation.
++  const { data } = await db.from("users" as never)
++    .select("id,full_name,status,last_seen_at,created_at,roles:role_id(key,name)")
++    .eq("org_id" as never, orgId as never).limit(1000);
++  const rows = (data ?? []) as { id: string; full_name: string | null; status: string | null; last_seen_at: string | null; created_at: string | null; roles: { key: string | null; name: string | null } | null }[];
++  const users: OrgUserRow[] = rows.map((r) => ({
++    id: r.id, name: r.full_name ?? null,
++    roleKey: r.roles?.key ?? null, roleName: r.roles?.name ?? null,
++    status: r.status ?? null, lastSeenAt: r.last_seen_at ?? null, createdAt: r.created_at ?? null,
++  }));
++  const distMap = new Map<string, number>();
++  for (const u of users) { const k = u.roleName || u.roleKey || "—"; distMap.set(k, (distMap.get(k) ?? 0) + 1); }
++  const roleDistribution = [...distMap.entries()].map(([role, count]) => ({ role, count })).sort((a, b) => b.count - a.count);
++  const activeCount = users.filter((u) => u.status === "active").length;
++  await writePlatformAudit({ operator, capability: "platform.users.read", action: "customer360.users", resourceType: "user", targetOrgId: orgId, metadata: { count: users.length } });
++  return { users, roleDistribution, activeCount };
++}
++
++export type ModuleUsageState = "active_recent" | "used" | "none" | "unavailable";
++export interface ModuleUsage { key: string; label: string; total: number | null; state: ModuleUsageState }
++
++function moduleState(total: number | null, recent: number | null): ModuleUsageState {
++  if (total === null) return "unavailable";
++  if ((recent ?? 0) > 0) return "active_recent";
++  if (total > 0) return "used";
++  return "none";
++}
++
++/**
++ * Per-module product-usage signals for ONE org. Cap: platform.usage.read. Each
++ * module = total count + a 7-day "recent" count → an explainable state
++ * (active_recent / used / none / unavailable). NO proprietary adoption score.
++ * Audited once as customer360.usage.
++ */
++export async function getOrgProductUsageForPlatform(orgId: string): Promise<ModuleUsage[]> {
++  const operator = await assertPlatformCapability("platform.usage.read");
++  const since = sinceIso(7);
++  const mods: { key: string; label: string; table: string; orgCol: string; timeCol: string }[] = [
++    { key: "properties", label: "נכסים", table: "properties", orgCol: "org_id", timeCol: "created_at" },
++    { key: "leads", label: "לידים", table: "leads", orgCol: "org_id", timeCol: "created_at" },
++    { key: "matching", label: "התאמות", table: "matching_results", orgCol: "org_id", timeCol: "created_at" },
++    { key: "journeys", label: "מסעות", table: "journeys", orgCol: "org_id", timeCol: "created_at" },
++    { key: "automations", label: "אוטומציות", table: "automations", orgCol: "org_id", timeCol: "created_at" },
++    { key: "recommendations", label: "המלצות", table: "recommendations", orgCol: "organization_id", timeCol: "created_at" },
++    { key: "distribution", label: "הפצה", table: "distribution_posts", orgCol: "org_id", timeCol: "created_at" },
++    { key: "whatsapp", label: "וואטסאפ", table: "whatsapp_messages", orgCol: "organization_id", timeCol: "created_at" },
++  ];
++  const results = await Promise.all(mods.map(async (m) => {
++    const [total, recent] = await Promise.all([
++      safeCount(m.table, (q) => (q as QB).eq(m.orgCol, orgId)),
++      safeCount(m.table, (q) => (q as QB).eq(m.orgCol, orgId).gte(m.timeCol, since)),
++    ]);
++    return { key: m.key, label: m.label, total, state: moduleState(total, recent) } as ModuleUsage;
++  }));
++  await writePlatformAudit({ operator, capability: "platform.usage.read", action: "customer360.usage", resourceType: "organization", targetOrgId: orgId });
++  return results;
++}
++
++export interface OrgDistribution {
++  campaigns: PlatformMetric; queuedPosts: PlatformMetric; publishedPosts: PlatformMetric; failedPosts: PlatformMetric;
++  groupPosts: PlatformMetric; socialLeads: PlatformMetric; whatsappCampaigns: PlatformMetric;
++  lastPublishedAt: string | null;
++}
++
++/** Marketing & distribution summary for ONE org (counts). Cap: platform.usage.read.
++ *  Audited once as customer360.distribution. */
++export async function getOrgDistributionForPlatform(orgId: string): Promise<OrgDistribution> {
++  const operator = await assertPlatformCapability("platform.usage.read");
++  const [campaigns, queued, published, failed, groupPosts, socialLeads, waCampaigns, lastPublishedAt] = await Promise.all([
++    safeCount("distribution_campaigns", (q) => (q as QB).eq("org_id", orgId)),
++    safeCount("distribution_posts", (q) => (q as QB).eq("org_id", orgId).in("status", ["pending", "scheduled", "in_progress"])),
++    safeCount("distribution_posts", (q) => (q as QB).eq("org_id", orgId).eq("status", "published")),
++    safeCount("distribution_posts", (q) => (q as QB).eq("org_id", orgId).eq("status", "failed")),
++    safeCount("distribution_group_posts", (q) => (q as QB).eq("org_id", orgId).eq("status", "posted")),
++    safeCount("social_leads", (q) => (q as QB).eq("organization_id", orgId)),
++    safeCount("whatsapp_campaigns", (q) => (q as QB).eq("organization_id", orgId)),
++    latestTimestamp("distribution_posts", "org_id", orgId, "published_at"),
++  ]);
++  await writePlatformAudit({ operator, capability: "platform.usage.read", action: "customer360.distribution", resourceType: "organization", targetOrgId: orgId });
++  return {
++    campaigns: metric(campaigns), queuedPosts: metric(queued), publishedPosts: metric(published), failedPosts: metric(failed),
++    groupPosts: metric(groupPosts), socialLeads: metric(socialLeads), whatsappCampaigns: metric(waCampaigns), lastPublishedAt,
++  };
++}
++
++export type IntegrationState = "connected" | "warning" | "disconnected" | "not_configured" | "unavailable";
++export interface IntegrationHealth { key: string; label: string; state: IntegrationState; detail: string | null; lastActivityAt: string | null }
++
++async function readOne(table: string, orgCol: string, orgId: string, cols: string, order?: string): Promise<Record<string, unknown> | null | undefined> {
++  // returns undefined on error (→ unavailable), null when simply no row (→ not_configured)
++  try {
++    const db = createServiceRoleClient();
++    let b = db.from(table as never).select(cols).eq(orgCol as never, orgId as never);
++    if (order) b = b.order(order, { ascending: false });
++    const { data, error } = await b.limit(1).maybeSingle();
++    if (error) return undefined;
++    return (data as Record<string, unknown> | null) ?? null;
++  } catch {
++    return undefined;
++  }
++}
++
++/**
++ * Integration health for ONE org. Cap: platform.integrations.read. Reads ONLY
++ * safe status/health/timestamp columns from each provider table — NEVER a token,
++ * refresh token, session ref, or secret hash. Undetermined health → "unavailable"
++ * (never guessed). Audited once as customer360.integrations.
++ */
++export async function getOrgIntegrationsForPlatform(orgId: string): Promise<IntegrationHealth[]> {
++  const operator = await assertPlatformCapability("platform.integrations.read");
++  const items: IntegrationHealth[] = [];
++
++  const meta = await readOne("meta_connection", "org_id", orgId, "status,health,last_verified_at");
++  items.push(mapMeta(meta));
++
++  const wa = await readOne("whatsapp_accounts", "organization_id", orgId, "connection_status,last_connected_at,last_checked_at");
++  items.push(mapWhatsapp(wa));
++
++  const gcal = await readOne("google_connections", "org_id", orgId, "status,last_sync_at", "last_sync_at");
++  items.push(mapGoogle(gcal));
++
++  const ext = await readOne("facebook_extension_instances", "org_id", orgId, "status,last_seen_at", "last_seen_at");
++  items.push(mapExtension(ext));
++
++  await writePlatformAudit({ operator, capability: "platform.integrations.read", action: "customer360.integrations", resourceType: "organization", targetOrgId: orgId });
++  return items;
++}
++
++function base(key: string, label: string, row: Record<string, unknown> | null | undefined): IntegrationHealth | null {
++  if (row === undefined) return { key, label, state: "unavailable", detail: "לא ניתן לקבוע", lastActivityAt: null };
++  if (row === null) return { key, label, state: "not_configured", detail: "לא מוגדר", lastActivityAt: null };
++  return null;
++}
++function mapMeta(row: Record<string, unknown> | null | undefined): IntegrationHealth {
++  const b = base("meta", "Facebook / Meta", row); if (b) return b;
++  const status = String((row as Record<string, unknown>).status ?? "");
++  const health = String((row as Record<string, unknown>).health ?? "");
++  const last = ((row as Record<string, unknown>).last_verified_at as string) ?? null;
++  let state: IntegrationState = "warning";
++  if (status === "connected") state = (health === "healthy" || health === "" || health === "unknown") ? "connected" : "warning";
++  else if (status === "not_connected") state = "not_configured";
++  else if (status === "revoked" || status === "disabled") state = "disconnected";
++  else state = "warning";
++  return { key: "meta", label: "Facebook / Meta", state, detail: status || null, lastActivityAt: last };
++}
++function mapWhatsapp(row: Record<string, unknown> | null | undefined): IntegrationHealth {
++  const b = base("whatsapp", "WhatsApp", row); if (b) return b;
++  const status = String((row as Record<string, unknown>).connection_status ?? "");
++  const last = ((row as Record<string, unknown>).last_connected_at as string) ?? ((row as Record<string, unknown>).last_checked_at as string) ?? null;
++  let state: IntegrationState = "warning";
++  if (status === "connected") state = "connected";
++  else if (status === "not_configured") state = "not_configured";
++  else if (status === "sandbox" || status === "expired" || status === "missing_permissions") state = "warning";
++  else state = "warning";
++  return { key: "whatsapp", label: "WhatsApp", state, detail: status || null, lastActivityAt: last };
++}
++function mapGoogle(row: Record<string, unknown> | null | undefined): IntegrationHealth {
++  const b = base("google", "Google Calendar", row); if (b) return b;
++  const status = String((row as Record<string, unknown>).status ?? "");
++  const last = ((row as Record<string, unknown>).last_sync_at as string) ?? null;
++  let state: IntegrationState = "warning";
++  if (status === "connected" || status === "syncing") state = "connected";
++  else if (status === "disconnected") state = "disconnected";
++  else state = "warning";
++  return { key: "google", label: "Google Calendar", state, detail: status || null, lastActivityAt: last };
++}
++function mapExtension(row: Record<string, unknown> | null | undefined): IntegrationHealth {
++  const b = base("extension", "תוסף Facebook", row); if (b) return b;
++  const status = String((row as Record<string, unknown>).status ?? "");
++  const last = ((row as Record<string, unknown>).last_seen_at as string) ?? null;
++  let state: IntegrationState = "warning";
++  if (status === "ready") state = "connected";
++  else if (status === "revoked") state = "disconnected";
++  else state = "warning";
++  return { key: "extension", label: "תוסף Facebook", state, detail: status || null, lastActivityAt: last };
++}
++
++export interface OrgActivityEntry { id: string; action: string; category: string | null; entityType: string | null; summary: string | null; actorName: string | null; createdAt: string }
++
++/**
++ * Human-readable org activity timeline from `audit_log` (org-scoped). Cap:
++ * platform.audit.read. Safe columns only — NO metadata jsonb, NO raw payloads.
++ * Audited once as customer360.activity.
++ */
++export async function getOrgActivityForPlatform(orgId: string, limit = 20): Promise<OrgActivityEntry[]> {
++  const operator = await assertPlatformCapability("platform.audit.read");
++  const capped = Math.min(Math.max(limit, 1), 50);
++  const db = createServiceRoleClient();
++  const { data } = await db.from("audit_log" as never)
++    .select("id,action,category,entity_type,summary,actor_name,created_at")
++    .eq("organization_id" as never, orgId as never)
++    .order("created_at", { ascending: false })
++    .limit(capped);
++  const rows = (data ?? []) as { id: string; action: string; category: string | null; entity_type: string | null; summary: string | null; actor_name: string | null; created_at: string }[];
++  await writePlatformAudit({ operator, capability: "platform.audit.read", action: "customer360.activity", resourceType: "organization", targetOrgId: orgId, metadata: { count: rows.length } });
++  return rows.map((r) => ({ id: r.id, action: r.action, category: r.category ?? null, entityType: r.entity_type ?? null, summary: r.summary ?? null, actorName: r.actor_name ?? null, createdAt: r.created_at }));
++}
++
++export interface OrgFeatureFlag { flagKey: string; enabled: boolean; rolloutPct: number | null; minRole: string | null }
++export interface OrgAccessSnapshot {
++  planTier: string | null; // organizations.plan (always, customers.read)
++  entitlements: { available: boolean; state: PlatformMetricState; plan: string | null; status: string | null; trialEndsAt: string | null; limits: Record<string, unknown> | null };
++  flags: { available: boolean; state: PlatformMetricState; items: OrgFeatureFlag[] };
++}
++
++/**
++ * Read-only access/plan snapshot for ONE org. Plan TIER (organizations.plan) is
++ * shown to any customers.read operator. Entitlements (org_plans limits/status)
++ * require platform.entitlements.read; org-targeted feature flags require
++ * platform.flags.read — each gated INDEPENDENTLY (restricted, not fabricated).
++ * READ ONLY. Audited once as customer360.access.
++ */
++export async function getOrgAccessForPlatform(orgId: string): Promise<OrgAccessSnapshot> {
++  const operator = await assertPlatformCapability("platform.customers.read");
++  const canEnt = operatorCan(operator, "platform.entitlements.read");
++  const canFlags = operatorCan(operator, "platform.flags.read");
++  const db0 = createServiceRoleClient();
++  const { data: orgRow } = await db0.from("organizations").select("plan").eq("id", orgId).maybeSingle();
++  const planTier = ((orgRow as { plan: string | null } | null)?.plan) ?? null;
++
++  let entitlements: OrgAccessSnapshot["entitlements"] = { available: false, state: "restricted", plan: null, status: null, trialEndsAt: null, limits: null };
++  if (canEnt) {
++    const row = await readOne("org_plans", "org_id", orgId, "plan,status,trial_ends_at,limits");
++    if (row === undefined) entitlements = { available: false, state: "unavailable", plan: null, status: null, trialEndsAt: null, limits: null };
++    else if (row === null) entitlements = { available: true, state: "ok", plan: null, status: null, trialEndsAt: null, limits: null };
++    else entitlements = { available: true, state: "ok", plan: (row.plan as string) ?? null, status: (row.status as string) ?? null, trialEndsAt: (row.trial_ends_at as string) ?? null, limits: (row.limits as Record<string, unknown>) ?? null };
++  }
++
++  let flags: OrgAccessSnapshot["flags"] = { available: false, state: "restricted", items: [] };
++  if (canFlags) {
++    try {
++      const db = createServiceRoleClient();
++      const { data, error } = await db.from("feature_flags" as never)
++        .select("flag_key,enabled,rollout_pct,min_role")
++        .eq("org_id" as never, orgId as never)
++        .limit(200);
++      if (error) flags = { available: false, state: "unavailable", items: [] };
++      else {
++        const rows = (data ?? []) as { flag_key: string; enabled: boolean; rollout_pct: number | null; min_role: string | null }[];
++        flags = { available: true, state: "ok", items: rows.map((r) => ({ flagKey: r.flag_key, enabled: !!r.enabled, rolloutPct: r.rollout_pct ?? null, minRole: r.min_role ?? null })) };
++      }
++    } catch { flags = { available: false, state: "unavailable", items: [] }; }
++  }
++
++  await writePlatformAudit({ operator, capability: "platform.customers.read", action: "customer360.access", resourceType: "organization", targetOrgId: orgId, metadata: { entitlements: canEnt, flags: canFlags } });
++  return { planTier, entitlements, flags };
++}
++
++export interface OrgBilling {
++  available: boolean;
++  subscription: { plan: string | null; status: string | null; periodEnd: string | null; trialEndsAt: string | null; cancelAtPeriodEnd: boolean | null } | null;
++  plan: { plan: string | null; status: string | null } | null;
++  payments: { paid: PlatformMetric; failed: PlatformMetric; latest: { status: string | null; amountIls: number | null; provider: string | null; createdAt: string | null } | null };
++}
++
++/**
++ * Commercial/billing snapshot for ONE org. Cap: platform.billing.read. Reads
++ * subscriptions + org_plans lifecycle + a payments SUMMARY — NEVER payment
++ * signatures, raw payloads, or provider txn ids. If no commercial rows exist,
++ * `available:false` → the UI shows "אין נתונים" (not fabricated revenue).
++ * Audited once as customer360.billing.
++ */
++export async function getOrgBillingForPlatform(orgId: string): Promise<OrgBilling> {
++  const operator = await assertPlatformCapability("platform.billing.read");
++  const [sub, plan, paid, failed, latestRow] = await Promise.all([
++    readOne("subscriptions", "org_id", orgId, "plan_tier,status,period_end,trial_ends_at,cancel_at_period_end"),
++    readOne("org_plans", "org_id", orgId, "plan,status"),
++    safeCount("payments", (q) => (q as QB).eq("org_id", orgId).eq("status", "paid")),
++    safeCount("payments", (q) => (q as QB).eq("org_id", orgId).eq("status", "failed")),
++    readOne("payments", "org_id", orgId, "status,amount_ils,provider,created_at", "created_at"),
++  ]);
++  await writePlatformAudit({ operator, capability: "platform.billing.read", action: "customer360.billing", resourceType: "organization", targetOrgId: orgId });
++
++  const subscription = (sub && sub !== undefined) ? {
++    plan: (sub.plan_tier as string) ?? null, status: (sub.status as string) ?? null,
++    periodEnd: (sub.period_end as string) ?? null, trialEndsAt: (sub.trial_ends_at as string) ?? null,
++    cancelAtPeriodEnd: (sub.cancel_at_period_end as boolean) ?? null,
++  } : null;
++  const planRow = (plan && plan !== undefined) ? { plan: (plan.plan as string) ?? null, status: (plan.status as string) ?? null } : null;
++  const latest = (latestRow && latestRow !== undefined) ? {
++    status: (latestRow.status as string) ?? null, amountIls: (latestRow.amount_ils as number) ?? null,
++    provider: (latestRow.provider as string) ?? null, createdAt: (latestRow.created_at as string) ?? null,
++  } : null;
++  const available = !!(subscription || planRow || latest);
++  return { available, subscription, plan: planRow, payments: { paid: metric(paid), failed: metric(failed), latest } };
++}
++
++export interface OrgOpsSignal { key: string; label: string; count: PlatformMetric; latestAt: string | null; note: string | null }
++export interface OrgOperations { signals: OrgOpsSignal[]; latestDeadLetterReason: string | null }
++
++/**
++ * Customer-scoped operations view for ONE org. Cap: platform.ops.read. Failure
++ * counts + latest occurrence + a SAFE error summary (dead-letter `reason` enum,
++ * `safe_last_error`) — never raw stack traces, credentials, or lease tokens.
++ * Audited once as customer360.operations.
++ */
++export async function getOrgOperationsForPlatform(orgId: string): Promise<OrgOperations> {
++  const operator = await assertPlatformCapability("platform.ops.read");
++  const [failedJobs, metaFailed, deadLetters, latestJobAt, latestDlAt, dlRow] = await Promise.all([
++    safeCount("distribution_publish_jobs", (q) => (q as QB).eq("org_id", orgId).in("status", ["failed", "dead"])),
++    safeCount("meta_publish_job", (q) => (q as QB).eq("org_id", orgId).in("status", ["failed", "dead_letter"])),
++    safeCount("meta_publish_dead_letter", (q) => (q as QB).eq("org_id", orgId)),
++    latestTimestamp("distribution_publish_jobs", "org_id", orgId, "created_at"),
++    latestTimestamp("meta_publish_dead_letter", "org_id", orgId, "created_at"),
++    readOne("meta_publish_dead_letter", "org_id", orgId, "reason,created_at", "created_at"),
++  ]);
++  await writePlatformAudit({ operator, capability: "platform.ops.read", action: "customer360.operations", resourceType: "organization", targetOrgId: orgId });
++  const latestDeadLetterReason = (dlRow && dlRow !== undefined) ? ((dlRow.reason as string) ?? null) : null;
++  return {
++    signals: [
++      { key: "publish_jobs", label: "עבודות הפצה שנכשלו", count: metric(failedJobs), latestAt: latestJobAt, note: null },
++      { key: "meta_jobs", label: "עבודות Meta שנכשלו", count: metric(metaFailed), latestAt: null, note: null },
++      { key: "dead_letter", label: "Dead-letter", count: metric(deadLetters), latestAt: latestDlAt, note: latestDeadLetterReason },
++    ],
++    latestDeadLetterReason,
++  };
++}
+-- 
+2.43.0
+

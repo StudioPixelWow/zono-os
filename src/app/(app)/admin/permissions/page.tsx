@@ -2,6 +2,8 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { ACTIONS, ACTION_LABEL, NOT_APPLICABLE, RESOURCES, ROLES } from "@/lib/permissions/registry";
+import { assertLaunchAdminAccess } from "@/lib/launch/server/permissions";
+import { AdminDenied } from "@/components/admin/AdminDenied";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +13,8 @@ function minLabel(min: number): string {
   return r?.label ?? `דרגה ${min}`;
 }
 
-export default function PermissionsPage() {
+export default async function PermissionsPage() {
+  try { await assertLaunchAdminAccess(); } catch { return <AdminDenied />; }
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">

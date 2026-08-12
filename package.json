@@ -17,6 +17,10 @@
     "qa:comm-copilot": "tsx src/lib/comm-copilot/qa.ts",
     "bench:comm-copilot": "tsx scripts/bench-comm-copilot.ts",
     "dev-check:platform": "tsx scripts/platform-dev-check.ts",
+    "dev-check:platform-admin": "tsx scripts/platform-admin-dev-check.ts",
+    "qa:platform-admin-shell": "tsx scripts/platform-admin-shell-qa.ts",
+    "qa:platform-customer360": "tsx scripts/platform-customer360-qa.ts",
+    "qa:platform-user-admin": "tsx scripts/platform-user-admin-qa.ts",
     "dev-check:launch": "tsx scripts/launch-dev-check.ts",
     "readiness": "tsx scripts/zono-production-readiness.ts",
     "validate:e2e": "tsx scripts/zono-e2e-validation.ts",
@@ -30,7 +34,14 @@
     "qa:meta-connection": "tsx src/lib/meta/connection/qa.ts",
     "qa:meta-content": "tsx src/lib/meta/content/qa.ts",
     "qa:meta-publish": "tsx src/lib/meta/publish/qa.ts",
-    "test:epic3": "node --experimental-strip-types --test scripts/epic3-tests/*.ts"
+    "test:epic3": "node --experimental-strip-types --test scripts/epic3-tests/*.ts",
+    "qa:platform-access": "tsx scripts/platform-access-qa.ts",
+    "qa:platform-billing": "tsx scripts/platform-billing-qa.ts",
+    "qa:platform-ops": "tsx scripts/platform-ops-qa.ts",
+    "qa:platform-support": "tsx scripts/platform-support-qa.ts",
+    "qa:platform-impersonation": "tsx scripts/platform-impersonation-qa.ts",
+    "qa:platform-security": "tsx scripts/platform-security-qa.ts",
+    "qa:platform-intel": "tsx scripts/platform-intel-qa.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
