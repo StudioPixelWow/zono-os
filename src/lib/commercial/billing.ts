@@ -15,6 +15,8 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getOrgCommercialState } from "./state";
+import { canonicalFromSubscriptionStatus } from "./billing-state";
+import { computeOrgBillingQuantity, type OrgBillingQuantity } from "./quantity";
 import {
   composeOrgBillingState,
   type OrgBillingState,
@@ -49,5 +51,52 @@ export async function getOrgBillingState(orgId: string): Promise<OrgBillingState
     nowMs: Date.now(),
     providerConfigured: !!process.env.GROW_CHECKOUT_URL,
     generatedAt: new Date().toISOString(),
+  });
+}
+
+// Re-export the canonical quantity resolver + types (P8.2).
+export {
+  computeOrgBillingQuantity,
+  deriveQuantityEvents,
+  QUANTITY_POLICY,
+  type OrgBillingQuantity,
+  type ProviderQuantityState,
+  type QuantitySyncStatus,
+  type QuantityDisposition,
+  type QuantityChangeEvent,
+  type QuantityEventType,
+} from "./quantity";
+
+/**
+ * P8.2 — THE canonical agent-quantity resolver both Platform Admin and Customer
+ * 360 consume. Server wrapper over the PURE computeOrgBillingQuantity: reads
+ * authoritative counts (active users + pending invitations, via
+ * getOrgCommercialState) + the subscription's provider linkage, then derives.
+ * Concurrency-safe by construction (counts, not counters). Read-only; never
+ * charges, never calls the provider. lastSyncedQuantity is NULL in P8.2 (no sync
+ * has run; honestly reported as NOT_SYNCED).
+ */
+export async function getOrgBillingQuantity(orgId: string): Promise<OrgBillingQuantity> {
+  const db = createServiceRoleClient();
+  const [commercial, subRow] = await Promise.all([
+    getOrgCommercialState(orgId),
+    (db.from("subscriptions" as never).select("status,grow_subscription_id,cancel_at_period_end").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: { status: string | null; grow_subscription_id: string | null; cancel_at_period_end: boolean | null } | null }>),
+  ]);
+  const sub = subRow.data ?? null;
+  const billingState = canonicalFromSubscriptionStatus(sub?.status, {
+    customPricing: commercial.customPricingRequired,
+    cancelAtPeriodEnd: !!sub?.cancel_at_period_end,
+  });
+  return computeOrgBillingQuantity({
+    orgId,
+    activeUsers: commercial.billableAgents,           // billableAgents = active users
+    pendingInvitations: commercial.reservedSeats,     // commercial.reservedSeats = pending invites
+    isTrial: commercial.trial.isTrial,
+    billingState,
+    providerConfigured: !!process.env.GROW_CHECKOUT_URL,
+    subscriptionIdPresent: !!sub?.grow_subscription_id,
+    lastSyncedQuantity: null,                         // no real sync in P8.2 → NOT_SYNCED
+    source: "counts:users.active+org_invitations.pending",
+    calculatedAt: new Date().toISOString(),
   });
 }

@@ -19,7 +19,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { assertPlatformCapability } from "./auth";
 import { writePlatformAudit } from "./audit";
 import { operatorCan } from "../capabilities";
-import { getOrgBillingState, type OrgBillingState } from "@/lib/commercial/billing";
+import { getOrgBillingState, getOrgBillingQuantity, type OrgBillingState, type OrgBillingQuantity } from "@/lib/commercial/billing";
 
 export interface PlatformOrgSummary {
   id: string;
@@ -644,6 +644,9 @@ export interface OrgBilling {
   // Admin billing tab (billing.getOrgBillingDetail) attaches the identical object
   // from the SAME resolver → the two surfaces are provably consistent.
   canonical: OrgBillingState;
+  // P8.2 — THE canonical agent-quantity + provider-quantity model, from the SAME
+  // getOrgBillingQuantity resolver Platform Admin uses → provably consistent.
+  quantity: OrgBillingQuantity;
 }
 
 /**
@@ -655,13 +658,14 @@ export interface OrgBilling {
  */
 export async function getOrgBillingForPlatform(orgId: string): Promise<OrgBilling> {
   const operator = await assertPlatformCapability("platform.billing.read");
-  const [sub, plan, paid, failed, latestRow, canonical] = await Promise.all([
+  const [sub, plan, paid, failed, latestRow, canonical, quantity] = await Promise.all([
     readOne("subscriptions", "org_id", orgId, "plan_tier,status,period_end,trial_ends_at,cancel_at_period_end"),
     readOne("org_plans", "org_id", orgId, "plan,status"),
     safeCount("payments", (q) => (q as QB).eq("org_id", orgId).eq("status", "paid")),
     safeCount("payments", (q) => (q as QB).eq("org_id", orgId).eq("status", "failed")),
     readOne("payments", "org_id", orgId, "status,amount_ils,provider,created_at", "created_at"),
     getOrgBillingState(orgId),   // P8.1 — canonical single-source-of-truth resolver
+    getOrgBillingQuantity(orgId), // P8.2 — canonical agent-quantity resolver
   ]);
   await writePlatformAudit({ operator, capability: "platform.billing.read", action: "customer360.billing", resourceType: "organization", targetOrgId: orgId });
 
@@ -676,7 +680,7 @@ export async function getOrgBillingForPlatform(orgId: string): Promise<OrgBillin
     provider: (latestRow.provider as string) ?? null, createdAt: (latestRow.created_at as string) ?? null,
   } : null;
   const available = !!(subscription || planRow || latest);
-  return { available, subscription, plan: planRow, payments: { paid: metric(paid), failed: metric(failed), latest }, canonical };
+  return { available, subscription, plan: planRow, payments: { paid: metric(paid), failed: metric(failed), latest }, canonical, quantity };
 }
 
 export interface OrgOpsSignal { key: string; label: string; count: PlatformMetric; latestAt: string | null; note: string | null }

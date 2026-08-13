@@ -8,7 +8,7 @@ import { authorizePlatform } from "@/lib/platform-admin/server/auth";
 import { getOrgBillingDetail } from "@/lib/platform-admin/server/billing";
 import { RestrictedPanel, KV } from "@/components/platform-admin/customer360-ui";
 import { PanelCard, PlanBadge, formatPlatformDate, formatPlatformDateTime } from "@/components/platform-admin/ui";
-import { BillingStateChip, PlanCompatNote, MoneyValue, formatIls, ProviderStatusCard } from "@/components/platform-admin/billing-ui";
+import { BillingStateChip, PlanCompatNote, MoneyValue, formatIls, ProviderStatusCard, QuantityPanel } from "@/components/platform-admin/billing-ui";
 import { Icon } from "@/components/dashboard/Icon";
 import Link from "next/link";
 
@@ -45,6 +45,9 @@ export default async function Customer360BillingPage({ params }: { params: Promi
           </div>
         )}
       </div>
+
+      {/* P8.2 — canonical agent-quantity & pricing (same resolver as Platform Admin) */}
+      <QuantityPanel q={b.quantity} />
 
       {/* Billing vs Access separation note */}
       <div className="border-line bg-surface flex items-start gap-2 rounded-xl border px-4 py-3">

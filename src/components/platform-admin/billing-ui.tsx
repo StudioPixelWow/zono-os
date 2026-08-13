@@ -4,9 +4,11 @@
 // billing states are colored chips, provider status is shown truthfully. NO
 // server imports, NO event handlers, NO mutation controls (P5.5 is read-only).
 // ============================================================================
+import type { ReactNode } from "react";
 import { Icon } from "@/components/dashboard/Icon";
 import type { AvailableValue, BillingState, ProviderStatus, ProviderClass, PlanCompat } from "@/lib/platform-admin/billing/model";
 import { BILLING_STATE_LABEL } from "@/lib/platform-admin/billing/model";
+import type { OrgBillingQuantity, QuantitySyncStatus } from "@/lib/commercial/quantity";
 
 /** ₪ formatter (ILS, no fractional agorot for whole sums). */
 export function formatIls(n: number | null, currency: string | null = "ILS"): string {
@@ -101,6 +103,85 @@ export function PlanCompatNote({ compat }: { compat: PlanCompat }) {
     <span className="bg-warning-soft text-warning inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold" title={`מנוי: ${compat.raw.subscription ?? "—"} · רישיון: ${compat.raw.orgPlan ?? "—"} · ארגון: ${compat.raw.organization ?? "—"}`}>
       <Icon name="AlertTriangle" size={12} />אי-התאמת תוכנית
     </span>
+  );
+}
+
+// ── P8.2 — Agent-quantity & provider-quantity panel ─────────────────────────
+const PRICING_MODE_LABEL: Record<string, string> = {
+  standard_per_agent: "סטנדרטי · לפי סוכן",
+  custom_pricing_required: "תמחור מותאם (11+)",
+  trial: "ניסיון",
+};
+const SYNC_STATUS: Record<QuantitySyncStatus, { label: string; tone: string }> = {
+  NOT_CONFIGURED: { label: "ספק לא מוגדר", tone: "bg-surface text-muted" },
+  NOT_SYNCED: { label: "לא סונכרן", tone: "bg-info-soft text-info" },
+  SYNC_REQUIRED: { label: "נדרש סנכרון", tone: "bg-warning-soft text-warning" },
+  CUSTOM_REVIEW_REQUIRED: { label: "בדיקה מסחרית נדרשת", tone: "bg-warning-soft text-warning" },
+  SYNCED: { label: "מסונכרן", tone: "bg-success-soft text-success" },
+};
+
+function QtyStat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+  return (
+    <div className="border-line bg-surface rounded-xl border px-3 py-2.5">
+      <p className="text-ink text-2xl font-black leading-none tabular-nums">{value}</p>
+      <p className="text-muted mt-1 text-[12px] font-semibold">{label}</p>
+      {hint && <p className="text-muted/70 mt-0.5 text-[10px]">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * P8.2 — the canonical agent-quantity + provider-quantity model, rendered
+ * identically wherever it appears (Platform Admin billing tab · Customer 360).
+ * Expected monthly is a COMMERCIAL EXPECTATION only; provider quantities are
+ * shown honestly (last-synced is UNAVAILABLE until a real sync runs).
+ */
+export function QuantityPanel({ q }: { q: OrgBillingQuantity }) {
+  const sync = SYNC_STATUS[q.provider.syncStatus];
+  return (
+    <div className="border-line bg-card rounded-2xl border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-ink inline-flex items-center gap-2 text-sm font-extrabold"><span className="text-brand"><Icon name="Users" size={16} /></span>כמות סוכנים ותמחור</span>
+        <div className="flex items-center gap-2">
+          <span className="bg-brand-soft text-brand rounded-md px-2 py-0.5 text-[11px] font-bold">{PRICING_MODE_LABEL[q.pricingMode] ?? q.pricingMode}</span>
+          <span className={"rounded-md px-2 py-0.5 text-[11px] font-bold " + sync.tone} title="סטטוס סנכרון ספק">{sync.label}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <QtyStat label="סוכנים לחיוב" value={q.billableAgents} hint="פעילים (כולל בעלים)" />
+        <QtyStat label="הזמנות ממתינות" value={q.pendingInvitations} hint="שומרות מקום, לא לחיוב" />
+        <QtyStat label="מושבים שמורים" value={q.reservedSeats} hint="פעילים + ממתינות" />
+        <QtyStat
+          label="צפי חודשי"
+          value={q.expectedMonthlyIls !== null ? formatIls(q.expectedMonthlyIls) : <span className="text-warning text-base">מותאם</span>}
+          hint={q.expectedMonthlyIls !== null ? `${q.billableAgents} × ${formatIls(q.unitPriceIls)} · הערכה בלבד` : "11+ סוכנים · לפנות למכירות"}
+        />
+      </div>
+
+      {q.customPricingRequired && (
+        <div className="border-warning-soft bg-warning-soft/40 mt-3 flex items-start gap-2 rounded-xl border px-3 py-2">
+          <span className="text-warning mt-0.5"><Icon name="AlertTriangle" size={14} /></span>
+          <span className="text-ink text-[12px] font-semibold">מעל 10 סוכנים פעילים — נדרש תמחור מותאם. סנכרון הספק מושהה; אין חישוב אוטומטי של 197×N.</span>
+        </div>
+      )}
+
+      <div className="border-line mt-3 grid grid-cols-1 gap-2 rounded-xl border p-3 text-[12px] sm:grid-cols-3">
+        <div className="flex items-center justify-between sm:flex-col sm:items-start sm:gap-0.5">
+          <span className="text-muted">כמות לחיוב נוכחית</span>
+          <span className="text-ink font-bold tabular-nums">{q.provider.currentBillableQuantity}</span>
+        </div>
+        <div className="flex items-center justify-between sm:flex-col sm:items-start sm:gap-0.5">
+          <span className="text-muted">כמות צפויה לספק</span>
+          <span className="text-ink font-bold tabular-nums">{q.provider.expectedProviderQuantity.available ? q.provider.expectedProviderQuantity.value : <span className="text-muted font-semibold" title={q.provider.expectedProviderQuantity.reason}>לא זמין</span>}</span>
+        </div>
+        <div className="flex items-center justify-between sm:flex-col sm:items-start sm:gap-0.5">
+          <span className="text-muted">כמות אחרונה שסונכרנה</span>
+          <span className="text-ink font-bold tabular-nums">{q.provider.lastSyncedProviderQuantity.available ? q.provider.lastSyncedProviderQuantity.value : <span className="text-muted font-semibold" title={q.provider.lastSyncedProviderQuantity.reason}>לא סונכרן</span>}</span>
+        </div>
+      </div>
+      <p className="text-muted/70 mt-2 text-[10px]">מקור: {q.source} · צפי מסחרי בלבד — אינו הכנסה מאומתת</p>
+    </div>
   );
 }
 
