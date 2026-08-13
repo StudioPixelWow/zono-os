@@ -14,6 +14,7 @@ import {
   type OperatingLocalityInput,
 } from "@/lib/repositories/operatingLocalitiesRepository";
 import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
+import { ensureTrialSubscription } from "@/lib/commercial/store";
 import type { ListingKind, PropertyType } from "@/lib/supabase/types";
 
 export interface SelectedLocalityPayload {
@@ -110,6 +111,22 @@ export async function completeOnboarding(
       notification_preferences: payload.notificationPreferences ?? {},
       onboarding_completed: true,
     });
+
+    // P8.1 — every new office automatically enters a real 14-day trial. Idempotent:
+    // a retry never resets or duplicates it (subscriptions.PK = org_id). Trial is the
+    // canonical billing state; commercial/enforcement stay separate + unchanged.
+    try {
+      const { created } = await ensureTrialSubscription(org.id, 14);
+      if (created) {
+        const { createServiceRoleClient } = await import("@/lib/supabase/server");
+        await createServiceRoleClient().from("audit_log").insert({
+          organization_id: org.id, actor_id: user.id, actor_name: payload.fullName.trim(),
+          action: "billing.trial.started", category: "configuration",
+          entity_type: "organization", entity_id: org.id,
+          summary: "התחיל ניסיון בן 14 ימים", metadata: { trialDays: 14 } as never,
+        } as never).then(() => undefined, () => undefined);
+      }
+    } catch (e) { console.error("[onboarding] trial provisioning skipped:", e); }
 
     // Save selected localities to org + user join tables (same focus/price
     // defaults applied per locality for now).

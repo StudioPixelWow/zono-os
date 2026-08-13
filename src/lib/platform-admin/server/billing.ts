@@ -17,6 +17,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { assertPlatformCapability } from "./auth";
 import { writePlatformAudit } from "./audit";
 import { planDefinition } from "@/lib/launch/plans";
+import { getOrgBillingState, type OrgBillingState } from "@/lib/commercial/billing";
 import type { PlanTier } from "@/lib/launch/types";
 import type { SubscriptionStatus, PaymentStatus } from "@/lib/commercial/types";
 import {
@@ -313,6 +314,11 @@ export interface OrgBillingDetail {
   payments: PaymentRow[];
   failedPaymentCount: number;
   provider: ProviderStatus;
+  // P8.1 — THE canonical org billing state (single source of truth). Customer 360
+  // (dal.getOrgBillingForPlatform) attaches the identical object from the SAME
+  // resolver, so the two surfaces are provably consistent. Legacy `billingState`
+  // above is the platform display vocabulary (HEALTHY/TRIAL/…); this is canonical.
+  canonical: OrgBillingState;
 }
 
 /**
@@ -325,11 +331,12 @@ export async function getOrgBillingDetail(orgId: string): Promise<OrgBillingDeta
   const operator = await assertPlatformCapability("platform.billing.read");
   const db = createServiceRoleClient();
 
-  const [subRes, licRes, orgRes, payRes] = await Promise.all([
+  const [subRes, licRes, orgRes, payRes, canonical] = await Promise.all([
     db.from("subscriptions" as never).select(SUB_COLS).eq("org_id" as never, orgId as never).maybeSingle(),
     db.from("org_plans" as never).select("plan,status,trial_ends_at,current_period_end").eq("org_id" as never, orgId as never).maybeSingle(),
     db.from("organizations").select("name,plan").eq("id", orgId).maybeSingle(),
     db.from("payments" as never).select(PAY_COLS).eq("org_id" as never, orgId as never).order("created_at", { ascending: false }).limit(100),
+    getOrgBillingState(orgId),   // P8.1 — canonical single-source-of-truth resolver
   ]);
 
   const subRow = (subRes.data as RawSubRow | null) ?? null;
@@ -371,5 +378,6 @@ export async function getOrgBillingDetail(orgId: string): Promise<OrgBillingDeta
     priceHintIls: planDefinition(compat.canonical).priceHintIls,
     payments, failedPaymentCount: payments.filter((p) => p.status === "failed").length,
     provider: getGrowProviderStatus(),
+    canonical,
   };
 }

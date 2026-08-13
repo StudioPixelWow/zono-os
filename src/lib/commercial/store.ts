@@ -128,3 +128,26 @@ export async function getSubscription(): Promise<Subscription | null> {
   const { data } = await db.from("subscriptions" as never).select("*").maybeSingle();
   return data ? toSub(data as unknown as SubRow) : null;
 }
+
+/**
+ * P8.1 — canonical 14-day trial provisioning. IDEMPOTENT: creates a `trial`
+ * subscription ONLY when the org has no subscription yet. A repeat/retry (or an
+ * org that already has any subscription — trial, paid, cancelled) is a NO-OP and
+ * NEVER resets the trial, period, or trial_ends_at. subscriptions.PK = org_id, so
+ * a concurrent insert races safely to a single row. Service-role only.
+ * `plan_tier` is legacy/compat (the canonical per-agent model ignores it).
+ */
+export async function ensureTrialSubscription(orgId: string, trialDays = 14): Promise<{ created: boolean }> {
+  const db = createServiceRoleClient();
+  const { data: existing } = await db.from("subscriptions" as never).select("org_id").eq("org_id", orgId).maybeSingle();
+  if (existing) return { created: false };
+  const now = new Date();
+  const trialEndsAt = new Date(now.getTime() + trialDays * 86_400_000).toISOString();
+  const { error } = await db.from("subscriptions" as never).insert({
+    org_id: orgId, plan_tier: "starter", status: "trial",
+    period_start: now.toISOString(), trial_ends_at: trialEndsAt, cancel_at_period_end: false,
+  } as never);
+  // A PK/unique conflict means a concurrent request already created it → not us, no error.
+  if (error && !/duplicate key|unique|conflict/i.test(error.message)) throw new Error(error.message);
+  return { created: !error };
+}
