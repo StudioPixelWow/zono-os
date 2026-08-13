@@ -89,6 +89,15 @@ export async function getPayment(id: string): Promise<Payment | null> {
   const { data } = await db.from("payments" as never).select("*").eq("id", id).maybeSingle();
   return data ? toPayment(data as unknown as PaymentRow) : null;
 }
+/** P8.4 — create an ORG-linked pending payment for a trial→paid checkout (existing
+ *  org, no registration draft). Amount is SERVER-DERIVED by the caller; the browser
+ *  never supplies it. Service-role only. */
+export async function createOrgPayment(input: { orgId: string; planTier: PlanTier; amountIls: number }): Promise<Payment | null> {
+  const db = createServiceRoleClient();
+  const { data, error } = await db.from("payments" as never).insert({ org_id: input.orgId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow" } as never).select("*").maybeSingle();
+  if (error || !data) return null;
+  return toPayment(data as unknown as PaymentRow);
+}
 /** Mark a payment VERIFIED (paid) — only the signed webhook calls this. */
 export async function markPaymentVerified(id: string, providerTxnId: string, signature: string, rawPayload: unknown): Promise<Payment | null> {
   const db = createServiceRoleClient();
