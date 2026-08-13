@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   getOrCreateDraftProperty,
   listPropertyMedia,
@@ -62,10 +63,32 @@ function rowToInput(p: PropertyRow): PropertyInput {
   };
 }
 
+/** P7.1B block UX: at the monitoredListings cap, the wizard can't open a new
+ *  draft. Show a clean Hebrew notice (no SQL/RPC/stack) instead of crashing. */
+function ListingLimitReached() {
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-24 text-center">
+      <h1 className="text-xl font-semibold">הגעתם למכסת הנכסים בתוכנית</h1>
+      <p className="text-sm text-muted-foreground">
+        כדי להוסיף נכס חדש יש לשדרג את התוכנית או להעביר נכס קיים לארכיון.
+      </p>
+      <Link href="/properties" className="text-sm font-medium text-primary underline underline-offset-4">
+        חזרה לרשימת הנכסים
+      </Link>
+    </div>
+  );
+}
+
 export default async function NewPropertyPage() {
   // Resume an existing in-progress draft instead of inserting a new row every
   // visit — prevents the "saved twice (one with images, one without)" bug.
-  const draft = await getOrCreateDraftProperty();
+  let draft: PropertyRow;
+  try {
+    draft = await getOrCreateDraftProperty();
+  } catch (e) {
+    if (e instanceof Error && e.message === "LIMIT_REACHED") return <ListingLimitReached />;
+    throw e;
+  }
   const media = await listPropertyMedia(draft.id);
 
   return (

@@ -70,6 +70,10 @@ export async function createPropertyAction(
     const created = await createProperty(input);
     id = created.id;
   } catch (e) {
+    // Block-UX contract: clean Hebrew for the enforcement cap; never leak SQL/RPC.
+    if (e instanceof Error && e.message === "LIMIT_REACHED") {
+      return { error: "הגעתם למכסת הנכסים בתוכנית — יש לשדרג או להעביר נכס קיים לארכיון." };
+    }
     console.error("[properties] create failed:", e);
     return { error: "יצירת הנכס נכשלה. נסה/י שוב." };
   }

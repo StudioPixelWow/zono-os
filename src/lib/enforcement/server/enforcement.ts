@@ -16,9 +16,13 @@ import {
   type EnforcementMode, type EnforcementDecision, type LimitReadiness,
 } from "../model";
 
-// Atomic DB guard (enforce_limit_lock) ships in the P7.0 migration but is NOT
-// applied yet → concurrency-sensitive limits remain NEEDS_ATOMIC_GUARD until then.
-const ATOMIC_GUARD_AVAILABLE = false;
+// Atomic DB guards now exist per concurrency-sensitive limit, each proven by a
+// real two-connection race before being listed here:
+//   seats             → create_invitation_guarded  (P7.1,  proven)
+//   monitoredListings → create_property_slot_guarded (P7.1B, proven)
+// operatingAreas is still check-then-write (no guard yet) → stays NEEDS_ATOMIC_GUARD.
+// A key is marked atomic-safe ONLY after its race test passes — never on deploy alone.
+const ATOMIC_GUARDED_KEYS: ReadonlySet<LimitKey> = new Set<LimitKey>(["seats", "monitoredListings"]);
 
 type CfgRow = { scope: string; organization_id: string | null; mode: string };
 async function readConfig(controlType: "feature" | "limit", controlKey: string, orgId: string): Promise<{ mode: EnforcementMode; tableMissing: boolean }> {
@@ -91,12 +95,13 @@ export async function getEnforcementReadiness(): Promise<EnforcementReadinessRep
     const res = sample?.limits.find((l) => l.limitKey === key);
     const usageAvailable = !!res && res.mode !== "UNAVAILABLE";
     const hasCap = !!res && res.configuredLimit !== null && res.configuredLimit >= 0;
-    const r = classifyLimitReadiness(key, usageAvailable, hasCap, ATOMIC_GUARD_AVAILABLE);
+    const r = classifyLimitReadiness(key, usageAvailable, hasCap, ATOMIC_GUARDED_KEYS.has(key));
     const { mode } = await readConfig("limit", key, sampleOrg ?? "");
     limits.push({ ...r, globalMode: mode });
   }
   return {
-    atomicGuardAvailable: ATOMIC_GUARD_AVAILABLE,
+    // At least one concurrency-sensitive limit now has a proven atomic guard.
+    atomicGuardAvailable: ATOMIC_GUARDED_KEYS.size > 0,
     limits,
     generatedAt: new Date().toISOString(),
     note: "מצב צל בכל השליטות. אכיפה תופעל רק לפי קונפיגורציה מפורשת (enforcement_config) — לא ע״י פריסת קוד.",

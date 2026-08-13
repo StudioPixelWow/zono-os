@@ -10,6 +10,7 @@
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { triggerCityLearning } from "@/lib/brokerage-data/city-learning-trigger";
+import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
 import type { Database, PropertyStatus } from "@/lib/supabase/types";
 import type { PropertyFilters, PropertyInput } from "./types";
 
@@ -112,11 +113,55 @@ export async function getPropertyById(id: string): Promise<PropertyRow | null> {
   return data ?? null;
 }
 
+/**
+ * Atomic monitoredListings slot reservation (P7.1B). Server-trusted: org + owner
+ * come from the session; the effective limit + enforcement mode are resolved
+ * server-side (never from the browser). Returns the reserved draft-row id when
+ * enforcement is ACTIVE (PILOT-for-org / ENFORCED), or null in OFF/SHADOW so the
+ * caller keeps its normal insert path. Raises 'LIMIT_REACHED' when at the cap —
+ * the ONLY seat-consuming path in enforced mode (no JS check-then-insert).
+ */
+async function reservePropertySlot(orgId: string, ownerId: string): Promise<string | null> {
+  const enf = await resolveLimitEnforcementForMutation(orgId, "monitoredListings");
+  if (!enf.active) return null;
+  const svc = createServiceRoleClient();
+  const { data, error } = await (svc.rpc("create_property_slot_guarded" as never, {
+    p_org: orgId, p_owner: ownerId, p_limit: enf.configuredLimit ?? -1,
+  } as never) as unknown as Promise<{ data: string | null; error: { message?: string } | null }>);
+  if (error) {
+    if (/LIMIT_REACHED/.test(error.message ?? "")) throw new Error("LIMIT_REACHED");
+    throw new Error(error.message ?? "property slot reservation failed");
+  }
+  return data;
+}
+
 export async function createProperty(input: PropertyInput): Promise<PropertyRow> {
   const { user, profile } = await getSessionContext();
   if (!user || !profile) throw new Error("not authenticated");
 
   const supabase = await createClient();
+  const listedAt = input.status === "active" ? new Date().toISOString() : null;
+
+  // ENFORCED/PILOT: atomically reserve the slot (a real draft row) first, then
+  // enrich it via the SAME app-side UPDATE contract — no 40-column SQL coupling.
+  const reservedId = await reservePropertySlot(profile.org_id, user.id);
+  if (reservedId) {
+    const { data, error } = await supabase
+      .from("properties")
+      .update({ ...toRecord(input), listed_at: listedAt })
+      .eq("id", reservedId)
+      .select("*")
+      .single();
+    if (error) {
+      // Failed enrichment must not leak the reserved slot — release it.
+      try { await createServiceRoleClient().from("properties").delete().eq("id", reservedId); } catch { /* cleanup best-effort */ }
+      throw new Error(error.message);
+    }
+    void triggerCityLearning(profile.org_id, (data as { city?: string | null }).city, "property_created").catch(() => {});
+    return data;
+  }
+
+  // OFF/SHADOW: preserve today's exact single-insert behavior.
   const { data, error } = await supabase
     .from("properties")
     .insert({
@@ -125,7 +170,7 @@ export async function createProperty(input: PropertyInput): Promise<PropertyRow>
       owner_id: user.id,
       uploaded_by_user_id: user.id,
       assigned_agent_id: user.id,
-      listed_at: input.status === "active" ? new Date().toISOString() : null,
+      listed_at: listedAt,
     })
     .select("*")
     .single();
@@ -216,6 +261,19 @@ export async function createDraftProperty(): Promise<PropertyRow> {
   if (!user || !profile) throw new Error("not authenticated");
   await cleanupAbandonedDrafts(user.id);
   const supabase = await createClient();
+
+  // ENFORCED/PILOT: the draft row IS the monitoredListings slot — reserve it
+  // atomically (raises LIMIT_REACHED at the cap), then read the row back. The
+  // reserved row is a normal draft (identical columns), so the wizard, autosave,
+  // reuse and cleanup all treat it exactly like any other draft.
+  const reservedId = await reservePropertySlot(profile.org_id, user.id);
+  if (reservedId) {
+    const { data, error } = await supabase.from("properties").select("*").eq("id", reservedId).single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // OFF/SHADOW: preserve today's exact draft insert.
   const { data, error } = await supabase
     .from("properties")
     .insert({
