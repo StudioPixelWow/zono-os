@@ -123,14 +123,16 @@ export async function resolveLimitEnforcementForMutation(
   const active = mode === "ENFORCED" || mode === "PILOT";
   let configuredLimit: number | null = null;
   try {
-    const { defaultLimits } = await import("@/lib/launch/plans");
-    const { normalizePlanTier } = await import("@/lib/platform-admin/access/model");
+    // P7.4: the CANONICAL commercial model (flat per-agent) is the authority for
+    // default limits — obsolete tiered plan-defaults no longer govern. An explicit
+    // org override (org_plans.limits) is still honored (e.g. Pixel canary 5/30/5,
+    // or a future custom-office quantity); absent an override the default is
+    // UNLIMITED, so a real customer can never be blocked by legacy tier values.
+    const { canonicalDefaultLimits } = await import("@/lib/commercial/model");
     const { LIMIT_DEFS, effectiveConfigured } = await import("@/lib/limits/model");
     const db = createServiceRoleClient();
-    const { data: org } = await (db.from("organizations" as never).select("plan").eq("id", orgId).maybeSingle() as unknown as Promise<{ data: { plan: string | null } | null }>);
-    const { data: op } = await (db.from("org_plans" as never).select("plan,limits").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: { plan: string | null; limits: Record<string, unknown> | null } | null }>);
-    const tier = normalizePlanTier(op?.plan ?? org?.plan ?? null);
-    const planDefault = defaultLimits(tier) as never;
+    const { data: op } = await (db.from("org_plans" as never).select("limits").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: { limits: Record<string, unknown> | null } | null }>);
+    const planDefault = canonicalDefaultLimits() as never;
     const override = (op?.limits && typeof op.limits === "object") ? op.limits : null;
     const def = LIMIT_DEFS[limitKey];
     configuredLimit = effectiveConfigured(def, planDefault, override as never).value;

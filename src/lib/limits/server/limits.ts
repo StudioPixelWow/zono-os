@@ -10,7 +10,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { assertPlatformCapability } from "@/lib/platform-admin/server/auth";
 import { writePlatformAudit } from "@/lib/platform-admin/server/audit";
-import { defaultLimits } from "@/lib/launch/plans";
+import { canonicalDefaultLimits } from "@/lib/commercial/model";
 import type { PlanTier } from "@/lib/launch/types";
 import { normalizePlanTier } from "@/lib/platform-admin/access/model";
 import { israelMonthKey } from "../model";
@@ -79,8 +79,11 @@ function monthStartIso(): string {
 async function orgPlanLimits(orgId: string): Promise<{ tier: PlanTier; planDefault: PlanLimitsLike; override: Partial<PlanLimitsLike> | null }> {
   const orgRow = await one<{ plan: string | null }>("organizations", "plan", (q) => q.eq("id", orgId));
   const opRow = await one<{ plan: string | null; limits: Any | null }>("org_plans", "plan,limits", (q) => q.eq("org_id", orgId));
+  // `tier` is retained for legacy display/compat only. P7.4: the CANONICAL
+  // per-agent model supplies the default limits (obsolete tiered defaults no
+  // longer govern); an explicit org override still wins and is enforced.
   const tier = normalizePlanTier(opRow?.plan ?? orgRow?.plan ?? null);
-  const planDefault = defaultLimits(tier) as unknown as PlanLimitsLike;
+  const planDefault = canonicalDefaultLimits() as unknown as PlanLimitsLike;
   const override = (opRow?.limits && typeof opRow.limits === "object") ? (opRow.limits as Partial<PlanLimitsLike>) : null;
   return { tier, planDefault, override };
 }
