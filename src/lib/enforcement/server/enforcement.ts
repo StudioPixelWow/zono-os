@@ -18,11 +18,11 @@ import {
 
 // Atomic DB guards now exist per concurrency-sensitive limit, each proven by a
 // real two-connection race before being listed here:
-//   seats             → create_invitation_guarded  (P7.1,  proven)
-//   monitoredListings → create_property_slot_guarded (P7.1B, proven)
-// operatingAreas is still check-then-write (no guard yet) → stays NEEDS_ATOMIC_GUARD.
+//   seats             → create_invitation_guarded    (P7.1,  proven)
+//   monitoredListings → create_property_slot_guarded  (P7.1B, proven)
+//   operatingAreas    → create_operating_area_guarded (P7.2C, proven)
 // A key is marked atomic-safe ONLY after its race test passes — never on deploy alone.
-const ATOMIC_GUARDED_KEYS: ReadonlySet<LimitKey> = new Set<LimitKey>(["seats", "monitoredListings"]);
+const ATOMIC_GUARDED_KEYS: ReadonlySet<LimitKey> = new Set<LimitKey>(["seats", "monitoredListings", "operatingAreas"]);
 
 type CfgRow = { scope: string; organization_id: string | null; mode: string };
 async function readConfig(controlType: "feature" | "limit", controlKey: string, orgId: string): Promise<{ mode: EnforcementMode; tableMissing: boolean }> {

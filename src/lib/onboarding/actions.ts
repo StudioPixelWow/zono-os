@@ -13,6 +13,7 @@ import {
   setUserOperatingLocalities,
   type OperatingLocalityInput,
 } from "@/lib/repositories/operatingLocalitiesRepository";
+import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
 import type { ListingKind, PropertyType } from "@/lib/supabase/types";
 
 export interface SelectedLocalityPayload {
@@ -122,6 +123,14 @@ export async function completeOnboarding(
       property_types: payload.propertyTypes ?? [],
       deal_types: payload.dealTypes ?? [],
     }));
+    // P7.2C: under operatingAreas enforcement (PILOT/ENFORCED for this org) the
+    // org's initial area count must respect the plan cap — closes the bulk-onboard
+    // bypass. This is org-creation (one owner, fresh org → rows.length is the whole
+    // org count). SHADOW (every onboarding org today) → no-op, flow unchanged.
+    const enfAreas = await resolveLimitEnforcementForMutation(org.id, "operatingAreas");
+    if (enfAreas.active && enfAreas.configuredLimit != null && enfAreas.configuredLimit >= 0 && rows.length > enfAreas.configuredLimit) {
+      throw new Error("הגעתם למכסת אזורי הפעילות בתוכנית — צמצמו את מספר הערים.");
+    }
     await setOrgOperatingLocalities(org.id, rows);
     await setUserOperatingLocalities(user.id, rows);
 

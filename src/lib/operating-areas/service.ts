@@ -11,6 +11,7 @@
 import "server-only";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
 import type { Database } from "@/lib/supabase/types";
 
 type DB = Database["public"]["Tables"];
@@ -148,12 +149,37 @@ export async function addOperatingArea(localityId: string, opts: AddAreaOptions 
     use_for_external_listings: opts.useForExternalListings ?? true,
     use_for_recommendations: opts.useForRecommendations ?? true,
   };
-  const { data: saved, error } = await admin
-    .from("user_operating_localities")
-    .upsert(row as never, { onConflict: "user_id,locality_id" })
-    .select("id").maybeSingle();
-  if (error) throw new Error(error.message);
-  const areaId = saved?.id as string;
+  // Enforcement seam (operatingAreas). OFF/SHADOW → today's upsert unchanged.
+  // PILOT(this org)/ENFORCED → atomic guarded RPC owns lock+dup-check+count+upsert
+  // in one transaction (no JS check-then-insert; re-adding an existing area is an
+  // idempotent update that consumes no new unit). Limit is server-derived.
+  let areaId: string;
+  const enf = await resolveLimitEnforcementForMutation(orgId, "operatingAreas");
+  if (enf.active) {
+    const payload = {
+      city_name: cityName, is_active: true, added_by: callerId,
+      neighborhoods: row.neighborhoods,
+      use_for_leads: row.use_for_leads, use_for_properties: row.use_for_properties,
+      use_for_transactions: row.use_for_transactions,
+      use_for_external_listings: row.use_for_external_listings,
+      use_for_recommendations: row.use_for_recommendations,
+    };
+    const { data, error } = await (admin.rpc("create_operating_area_guarded" as never, {
+      p_user: targetUserId, p_org: orgId, p_locality: localityId, p_payload: payload, p_limit: enf.configuredLimit ?? -1,
+    } as never) as unknown as Promise<{ data: string | null; error: { message?: string } | null }>);
+    if (error) {
+      if (/LIMIT_REACHED/.test(error.message ?? "")) throw new Error("LIMIT_REACHED");
+      throw new Error(error.message ?? "operating area create failed");
+    }
+    areaId = data as string;
+  } else {
+    const { data: saved, error } = await admin
+      .from("user_operating_localities")
+      .upsert(row as never, { onConflict: "user_id,locality_id" })
+      .select("id").maybeSingle();
+    if (error) throw new Error(error.message);
+    areaId = saved?.id as string;
+  }
 
   if (opts.isPrimary) await setPrimaryOperatingArea(areaId);
 
