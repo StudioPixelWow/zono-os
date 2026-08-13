@@ -17,6 +17,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getOrgCommercialState } from "./state";
 import { canonicalFromSubscriptionStatus } from "./billing-state";
 import { computeOrgBillingQuantity, type OrgBillingQuantity } from "./quantity";
+import { reconcilePlan, type ReconcileDecision, type ReconcileSyncStatus, type ReconcileOldRow, type OrgProviderQuantityRow } from "./reconcile";
 import {
   composeOrgBillingState,
   type OrgBillingState,
@@ -99,4 +100,122 @@ export async function getOrgBillingQuantity(orgId: string): Promise<OrgBillingQu
     source: "counts:users.active+org_invitations.pending",
     calculatedAt: new Date().toISOString(),
   });
+}
+
+// Re-export the canonical reconciler core + types (P8.3).
+export {
+  reconcilePlan,
+  decideQuantityReconciliation,
+  FAILURE_CONTRACT,
+  type ReconcileDecision,
+  type ReconcileSyncStatus,
+  type ReconcileInput,
+  type ReconcileOldRow,
+  type ReconcilePlan,
+  type OrgProviderQuantityRow,
+} from "./reconcile";
+
+export interface ReconcileResult {
+  organizationId: string;
+  decision: ReconcileDecision;
+  changed: boolean;                 // did a DB write actually occur (RPC rows-affected > 0)
+  targetQuantity: number | null;
+  targetStatus: ReconcileSyncStatus;
+  providerQuantity: number | null;  // last acked — NEVER written by the reconciler
+  reason: string;
+  generatedAt: string;
+}
+
+/**
+ * P8.3 — THE single provider-quantity reconciliation chokepoint. Reads the
+ * authoritative billable quantity (getOrgBillingQuantity) + the subscription's
+ * current persisted state, computes the desired (expected quantity, sync status)
+ * via the PURE reconcilePlan, and persists through the atomic service-role RPC
+ * `reconcile_subscription_quantity` (the ONLY writer). Concurrency-safe: the RPC's
+ * rows-affected is the final arbiter — only the reconciler that actually
+ * transitioned the row emits events. NEVER writes provider_quantity, NEVER calls
+ * a provider, NEVER fakes a successful sync. Read-authoritative: quantity is
+ * derived server-side from counts, never from client input.
+ */
+export async function reconcileOrgBillingQuantity(orgId: string): Promise<ReconcileResult> {
+  const db = createServiceRoleClient();
+  const nowIso = new Date().toISOString();
+
+  const [q, subRow] = await Promise.all([
+    getOrgBillingQuantity(orgId),
+    (db.from("subscriptions" as never).select("status,cancel_at_period_end,subscription_quantity,provider_quantity,quantity_sync_status").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: { status: string | null; cancel_at_period_end: boolean | null; subscription_quantity: number | null; provider_quantity: number | null; quantity_sync_status: string | null } | null }>),
+  ]);
+  const sub = subRow.data ?? null;
+  const hasSubscription = !!sub;
+  const billingState = canonicalFromSubscriptionStatus(sub?.status, {
+    customPricing: q.customPricingRequired,
+    cancelAtPeriodEnd: !!sub?.cancel_at_period_end,
+  });
+  const oldRow: ReconcileOldRow | null = sub
+    ? { subscriptionQuantity: sub.subscription_quantity ?? null, quantitySyncStatus: sub.quantity_sync_status ?? null }
+    : null;
+
+  const plan = reconcilePlan(
+    {
+      organizationId: orgId,
+      billingState,
+      customPricingRequired: q.customPricingRequired,
+      providerConfigured: !!process.env.GROW_CHECKOUT_URL,
+      hasSubscription,
+      expectedQuantity: q.billableAgents,
+      providerQuantity: sub?.provider_quantity ?? null,
+    },
+    oldRow,
+    { action: "reconcile", at: nowIso },
+  );
+
+  let actualChanged = false;
+  if (plan.changed && hasSubscription) {
+    // Atomic conditional write via the service-role RPC. rows-affected settles
+    // concurrency: a losing concurrent reconciler gets 0 → no event duplication.
+    const { data: rows } = await (db.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: number | null }>)(
+      "reconcile_subscription_quantity",
+      { p_org: orgId, p_quantity: plan.targetQuantity, p_status: plan.targetStatus, p_now: nowIso },
+    );
+    actualChanged = (rows ?? 0) > 0;
+
+    if (actualChanged && plan.events.length) {
+      // Best-effort, non-blocking audit trail (service-role). Safe fields only —
+      // no email/token/payload/credentials. Only the winning reconciler reaches here.
+      await db.from("audit_log").insert(
+        plan.events.map((e) => ({
+          organization_id: orgId, actor_id: null, actor_name: "system:reconciler",
+          action: e.type, category: "configuration",
+          entity_type: "subscription", entity_id: orgId,
+          summary: `${e.type}: ${e.oldQuantity}->${e.newQuantity}`,
+          metadata: { oldQuantity: e.oldQuantity, newQuantity: e.newQuantity, reason: e.reason } as never,
+        })) as never,
+      ).then(() => undefined, () => undefined);
+    }
+  }
+
+  return {
+    organizationId: orgId,
+    decision: actualChanged ? plan.decision : "NO_ACTION",
+    changed: actualChanged,
+    targetQuantity: plan.targetQuantity,
+    targetStatus: plan.targetStatus,
+    providerQuantity: sub?.provider_quantity ?? null,
+    reason: actualChanged ? plan.reason : (hasSubscription ? "NO_CHANGE" : "NO_SUBSCRIPTION"),
+    generatedAt: nowIso,
+  };
+}
+
+/** Read the provider-quantity columns for display (safe fields only). */
+export async function getOrgProviderQuantityRow(orgId: string): Promise<OrgProviderQuantityRow | null> {
+  const db = createServiceRoleClient();
+  const { data } = await (db.from("subscriptions" as never).select("subscription_quantity,provider_quantity,quantity_sync_status,quantity_synced_at,quantity_sync_error").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: { subscription_quantity: number | null; provider_quantity: number | null; quantity_sync_status: string | null; quantity_synced_at: string | null; quantity_sync_error: string | null } | null }>);
+  if (!data) return null;
+  return {
+    subscriptionQuantity: data.subscription_quantity ?? null,
+    providerQuantity: data.provider_quantity ?? null,
+    quantitySyncStatus: data.quantity_sync_status ?? null,
+    quantitySyncedAt: data.quantity_synced_at ?? null,
+    quantitySyncError: data.quantity_sync_error ?? null,
+  };
 }

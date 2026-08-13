@@ -46,8 +46,8 @@ export default async function Customer360BillingPage({ params }: { params: Promi
         )}
       </div>
 
-      {/* P8.2 — canonical agent-quantity & pricing (same resolver as Platform Admin) */}
-      <QuantityPanel q={b.quantity} />
+      {/* P8.2/P8.3 — canonical agent-quantity, pricing & provider-quantity sync state */}
+      <QuantityPanel q={b.quantity} providerRow={b.providerRow} />
 
       {/* Billing vs Access separation note */}
       <div className="border-line bg-surface flex items-start gap-2 rounded-xl border px-4 py-3">

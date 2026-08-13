@@ -160,7 +160,11 @@ export function computeOrgBillingQuantity(input: QuantityComputeInput): OrgBilli
 export type QuantityEventType =
   | "billing.quantity.changed"
   | "billing.quantity.sync_required"
-  | "billing.custom_pricing.required";
+  | "billing.custom_pricing.required"
+  // P8.3 — sync-outcome events. These are ONLY legitimate after a real provider
+  // response; in P8.3 no provider call exists, so they are NEVER emitted.
+  | "billing.quantity.sync_succeeded"
+  | "billing.quantity.sync_failed";
 
 export interface QuantityChangeEvent {
   type: QuantityEventType;
