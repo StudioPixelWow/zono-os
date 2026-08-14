@@ -1,0 +1,15 @@
+diff --git a/src/components/office-website/OfficeWebsiteTemplate.tsx b/src/components/office-website/OfficeWebsiteTemplate.tsx
+index 3f6fb36..cf1f198 100644
+--- a/src/components/office-website/OfficeWebsiteTemplate.tsx
++++ b/src/components/office-website/OfficeWebsiteTemplate.tsx
+@@ -60,7 +60,9 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
+       {/* TEAM */}
+       {on("agents") && data.team.length > 0 && (
+         <SectionShell id="team" eyebrow="הצוות" title="הצוות שלנו" subtitle="הכירו את הסוכנים שילוו אתכם לאורך כל הדרך" tone="surface" action={data.team.length > 8 ? <TextLink href={`/site/${slug}/agents`}>לכל הצוות ←</TextLink> : undefined}>
+-          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">{data.team.slice(0, 8).map((m) => <TeamCard key={m.id} member={m} />)}</div>
++          <div className={data.team.length <= 3
++            ? "flex flex-wrap justify-center gap-5 [&>*]:w-full [&>*]:max-w-[260px] sm:[&>*]:w-[260px]"
++            : "grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4"}>{data.team.slice(0, 8).map((m) => <TeamCard key={m.id} member={m} />)}</div>
+         </SectionShell>
+       )}
+ 
