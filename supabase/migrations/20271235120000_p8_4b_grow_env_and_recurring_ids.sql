@@ -44,3 +44,12 @@ ALTER TABLE public.subscriptions
   ADD COLUMN IF NOT EXISTS grow_transaction_id    text,
   ADD COLUMN IF NOT EXISTS grow_transaction_token text,
   ADD COLUMN IF NOT EXISTS grow_asmachta          text;
+
+-- DEFENSE-IN-DEPTH (matches the P7.2D / P8.3 subscriptions lockdown): payments
+-- writes are already blocked by RLS (RLS enabled; only a SELECT policy), but the
+-- default Supabase grants still let anon/authenticated ATTEMPT a write. Revoke them
+-- so a customer can NEVER set payments.verified / status / environment / amount via
+-- PostgREST — blocked at BOTH the grant layer and RLS. SELECT (org-scoped read via
+-- RLS) is retained; service_role remains the sole writer (the verified webhook path).
+REVOKE INSERT, UPDATE, DELETE ON public.payments FROM anon;
+REVOKE INSERT, UPDATE, DELETE ON public.payments FROM authenticated;
