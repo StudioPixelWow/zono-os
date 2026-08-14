@@ -52,14 +52,14 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
 
       {/* FEATURED PROPERTIES (with handling agent) */}
       {on("featured_properties") && data.featured.length > 0 && (
-        <SectionShell id="properties" title="נכסים נבחרים" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
+        <SectionShell id="properties" eyebrow="נכסים נבחרים" title="הזדמנויות שלא כדאי לפספס" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">{data.featured.map((p) => <OfficePropertyCard key={p.id} property={p} />)}</div>
         </SectionShell>
       )}
 
       {/* TEAM */}
       {on("agents") && data.team.length > 0 && (
-        <SectionShell id="team" title="הצוות שלנו" subtitle="הכירו את הסוכנים שילוו אתכם לאורך כל הדרך" tone="surface" action={data.team.length > 8 ? <TextLink href={`/site/${slug}/agents`}>לכל הצוות ←</TextLink> : undefined}>
+        <SectionShell id="team" eyebrow="הצוות" title="הצוות שלנו" subtitle="הכירו את הסוכנים שילוו אתכם לאורך כל הדרך" tone="surface" action={data.team.length > 8 ? <TextLink href={`/site/${slug}/agents`}>לכל הצוות ←</TextLink> : undefined}>
           <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">{data.team.slice(0, 8).map((m) => <TeamCard key={m.id} member={m} />)}</div>
         </SectionShell>
       )}
@@ -74,13 +74,13 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
 
       {/* WHY THIS OFFICE */}
       {on("why_us") && (
-        <SectionShell title="למה לעבוד איתנו?">
-          <div className="grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+        <SectionShell eyebrow="למה אנחנו" title="למה לעבוד איתנו?" subtitle="ליווי מקצועי, היכרות עמוקה עם השוק המקומי ותוצאות מוכחות.">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {ADVANTAGES.map((a) => (
-              <div key={a.title}>
-                <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><AdvIcon name={a.icon} /></div>
+              <div key={a.title} className="group rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 transition duration-200 hover:-translate-y-0.5 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
+                <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)] ring-1 ring-[color:var(--brand-primary)]/15 transition group-hover:scale-105"><AdvIcon name={a.icon} /></div>
                 <h3 className="text-[16px] font-black text-[var(--brand-text)]">{a.title}</h3>
-                <p className="mt-1 text-[14px] leading-relaxed text-[var(--brand-muted)]">{a.text}</p>
+                <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--brand-muted)]">{a.text}</p>
               </div>
             ))}
           </div>
@@ -92,7 +92,7 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
 
       {/* TESTIMONIALS (agent-linked) */}
       {on("testimonials") && data.testimonials.length > 0 && (
-        <SectionShell id="testimonials" title="הלקוחות שלנו מספרים" tone="surface">
+        <SectionShell id="testimonials" eyebrow="המלצות" title="הלקוחות שלנו מספרים" tone="surface">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{data.testimonials.slice(0, 6).map((t, i) => <OfficeTestimonialCard key={i} t={t} />)}</div>
         </SectionShell>
       )}
@@ -251,5 +251,5 @@ function AdvIcon({ name }: { name: string }) {
     megaphone: "M3 11v2a1 1 0 001 1h3l4 4V6L7 10H4a1 1 0 00-1 1zm13-3a5 5 0 010 8",
     scale: "M12 3v18M5 7h14M7 7l-3 6a3 3 0 006 0L7 7zm10 0l-3 6a3 3 0 006 0l-3-6z",
   };
-  return <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden><path d={p[name] ?? p.map} strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden><path d={p[name] ?? p.map} strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
