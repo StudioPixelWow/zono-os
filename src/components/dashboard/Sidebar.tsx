@@ -68,6 +68,7 @@ const GROUPS: NavGroup[] = [
   { key: "intelligence", title: "מודיעין עסקי", desc: "מנהלים • מתווכים • טריטוריה", icon: "BarChart3", accent: "amber", items: [
     { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3" },
     { label: "מודיעין מתווכים", href: "/broker-intelligence", icon: "Users" },
+    { label: "מודיעין משרדים", href: "/brokerage-data/offices", icon: "Building2" },
     { label: "מודיעין שוק", href: "/market-intelligence/listings", icon: "Globe" },
     { label: "ניהול טריטוריה", href: "/territory", icon: "Map" },
     { label: "תחזיות", href: "/predictions", icon: "TrendingUp" },

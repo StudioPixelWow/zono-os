@@ -7,9 +7,19 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
 import { isAcceptableOfficeName } from "./office-name-guard";
 
 type Row = Record<string, unknown>;
+// Sentinel org that matches no rows — used when there is no session so the
+// org-scoped listing joins return nothing instead of leaking another tenant's data.
+const NO_ORG = "00000000-0000-0000-0000-000000000000";
+
+/** Resolve the current viewer's org for tenant-scoping the (org-private) link joins. */
+async function currentOrgId(): Promise<string> {
+  try { const { profile } = await getSessionContext(); return profile?.org_id ?? NO_ORG; }
+  catch { return NO_ORG; }
+}
 const s = (v: unknown): string => (typeof v === "string" && v ? v : "");
 const num = (v: unknown): number | null => (typeof v === "number" ? v : v == null || v === "" ? null : Number(v));
 
@@ -34,19 +44,22 @@ export interface OfficeProfile {
 /** Full office profile, or null when the office doesn't exist / is rejected. */
 export async function getBrokerageOfficeProfile(officeId: string): Promise<OfficeProfile | null> {
   const db = createServiceRoleClient();
+  const orgId = await currentOrgId();
 
   const { data: officeRow } = await db.from("brokerage_offices" as never).select("*").eq("id", officeId).maybeSingle();
   if (!officeRow) return null;
   const o = officeRow as Row;
 
-  // Agents linked to this office.
+  // Agents linked to this office (GLOBAL public roster — shared market intelligence).
   const { data: agentRows } = await db.from("brokerage_agents" as never)
     .select("id,full_name,city,primary_phone,whatsapp_phone,confidence_score,status")
     .eq("office_id", officeId).order("confidence_score", { ascending: false }).limit(500);
 
-  // Links for this office → per-agent counts + listing ids.
+  // Links for this office → per-agent counts + listing ids. TENANT-SAFE: the link
+  // table is org-scoped, so we filter to the VIEWER's org — an office profile shows
+  // only the listings THIS tenant's scan observed, never another tenant's inventory.
   const { data: linkRows } = await db.from("brokerage_external_listing_links" as never)
-    .select("external_listing_id,agent_id").eq("office_id", officeId).limit(5000);
+    .select("external_listing_id,agent_id").eq("office_id", officeId).eq("organization_id", orgId).limit(5000);
   const linkList = (linkRows ?? []) as Row[];
   const listingIds = Array.from(new Set(linkList.map((r) => s(r.external_listing_id)).filter(Boolean)));
   const perAgent = new Map<string, Set<string>>();
@@ -108,10 +121,12 @@ export interface OfficesIndex {
  *  counts. Person-name/rejected offices are excluded (read-time guard). */
 export async function getBrokerageOfficesIndex(): Promise<OfficesIndex> {
   const db = createServiceRoleClient();
+  const orgId = await currentOrgId();
   const [offRes, agentRes, linkRes] = await Promise.all([
     db.from("brokerage_offices" as never).select("id,name,brand_network,city,primary_phone,status,confidence_score").order("confidence_score", { ascending: false }).limit(5000),
     db.from("brokerage_agents" as never).select("office_id").not("office_id", "is", null).limit(50000),
-    db.from("brokerage_external_listing_links" as never).select("office_id,external_listing_id").not("office_id", "is", null).limit(50000),
+    // TENANT-SAFE: listing counts come only from the VIEWER's org's observed links.
+    db.from("brokerage_external_listing_links" as never).select("office_id,external_listing_id").not("office_id", "is", null).eq("organization_id", orgId).limit(50000),
   ]);
 
   const agentCount = new Map<string, number>();

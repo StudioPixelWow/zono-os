@@ -5,6 +5,7 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
 import { resolveBrandBranch } from "../brand-identity/resolver";
 import { attributeLink, stronger, type Attribution, type LinkFacts } from "./attribution";
 import { OFFICE_INVENTORY_VERSION, type OfficeInventory, type InventoryListing, type CountBy, type BrokerInventory } from "./types";
@@ -19,6 +20,10 @@ function priceBand(p: number | null): string | null { if (p == null || p <= 0) r
 /** Full office inventory with attribution (direct + broker-derived). */
 export async function getOfficeInventory(officeId: string): Promise<OfficeInventory | null> {
   const db = createServiceRoleClient();
+  // TENANT-SAFE: the link table is org-scoped — resolve the viewer's org so the
+  // inventory reflects only listings THIS tenant observed, never another tenant's.
+  let orgId = "00000000-0000-0000-0000-000000000000";
+  try { const { profile } = await getSessionContext(); if (profile?.org_id) orgId = profile.org_id; } catch { /* no session → sentinel (no rows) */ }
   const { data: officeRow } = await db.from("brokerage_offices" as never).select("*").eq("id", officeId).maybeSingle();
   if (!officeRow) return null;
   const o = officeRow as Row;
@@ -33,9 +38,9 @@ export async function getOfficeInventory(officeId: string): Promise<OfficeInvent
 
   // Links: explicit (office_id = office) + derived (agent_id in office brokers).
   const cols = "external_listing_id,agent_id,office_id,match_reasons,status";
-  const explicitRes = await db.from("brokerage_external_listing_links" as never).select(cols).eq("office_id", officeId).limit(50000);
+  const explicitRes = await db.from("brokerage_external_listing_links" as never).select(cols).eq("office_id", officeId).eq("organization_id", orgId).limit(50000);
   const derivedRes = brokerIds.length
-    ? await db.from("brokerage_external_listing_links" as never).select(cols).in("agent_id", brokerIds).limit(50000)
+    ? await db.from("brokerage_external_listing_links" as never).select(cols).in("agent_id", brokerIds).eq("organization_id", orgId).limit(50000)
     : { data: [] as unknown };
   const rawLinks: Row[] = [...((explicitRes.data ?? []) as Row[]), ...((derivedRes.data ?? []) as Row[])];
 

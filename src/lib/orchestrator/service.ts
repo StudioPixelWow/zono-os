@@ -213,7 +213,24 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
           }
           competitors = "עודכן";
         } catch (e) { console.error("[orchestrator] competitor snapshot skipped:", e); }
-        return { summary: `ידע אזור: ${learned} · חקר מתחרים: ${competitors}` };
+        // P9.1D — Office intelligence: auto-populate the broker→office graph from
+        // the SAME automatic pipeline. Deterministic + tenant-safe, no external
+        // keys, no fabrication:
+        //  • resolveBrokerageLinksForOrg(orgId) — org-scoped read of THIS org's
+        //    has_agent listings; seeds global broker agents + writes the org-scoped
+        //    external_listing_links bridge.
+        //  • resolveBrokerOfficesForOrg(orgId) — clusters agents into offices ONLY
+        //    on real shared-phone evidence (isAcceptableOfficeName guard), so a
+        //    "מודיעין משרדים" landscape appears for the city with no manual action.
+        let offices = "—";
+        try {
+          const { resolveBrokerageLinksForOrg } = await import("@/lib/brokerage-data/service");
+          const { resolveBrokerOfficesForOrg } = await import("@/lib/brokerage-data/office-resolution");
+          const links = await resolveBrokerageLinksForOrg(organizationId, { recordAudit: false });
+          const off = await resolveBrokerOfficesForOrg(organizationId);
+          offices = `${links.linksCreated} קישורים · ${off.officeCandidatesCreated} משרדים`;
+        } catch (e) { console.error("[orchestrator] office resolution skipped:", e); }
+        return { summary: `ידע אזור: ${learned} · חקר מתחרים: ${competitors} · משרדים: ${offices}` };
       }));
     }
 
