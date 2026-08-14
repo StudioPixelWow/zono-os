@@ -146,6 +146,14 @@ export default async function Home() {
       // P9.0D — real city-discovery status so a fresh office sees "ZONO is
       // scanning your city" (honest counts) instead of a cold empty area.
       const discovery = await getCityDiscovery(act.identity.orgId, act.identity.city, act.identity.localityCode);
+      // P9.0D — refresh discovery on EVERY entry for a new office too (the phase
+      // short-circuit below would otherwise skip the dashboard-load orchestrator).
+      // Non-blocking + staleness-gated inside the orchestrator; scrapes at most
+      // once per stale window. This is why a returning user sees fresh listings.
+      after(async () => {
+        try { await runOrchestratorForSession("dashboard_load", { skipRevalidation: true, source: "dashboard_load" }); }
+        catch { /* best-effort */ }
+      });
       return (
         <NewOfficeCommandCenter
           identity={act.identity}

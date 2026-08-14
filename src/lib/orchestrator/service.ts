@@ -79,12 +79,24 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
 
     runId = await createRunRow({ organizationId, userId, trigger, source });
 
-    // STEP 1 — External Listings Sync (Yad2/Madlan) — scrape only on cron.
+    // STEP 1 — External Listings Sync (Yad2/Madlan).
+    // P9.0D: refresh listings on ENTRY too (login/dashboard_load), not just cron,
+    // so the office's data updates every time they come in. Cost stays bounded:
+    // gated on APIFY_TOKEN, BOUNDED quick mode on passive triggers, and the whole
+    // orchestrator is already staleness-gated (ORCHESTRATOR_STALE_MS) for these
+    // triggers — so it scrapes at most once per stale-window per org, not on every
+    // render. Cron keeps the full nightly refresh.
+    const passiveEntry = trigger === "login" || trigger === "dashboard_load";
     if (input.skipExternalSync) {
       steps.push(skippedStep("external_sync", "בוצע בסנכרון הצ'אנקים (דפדפן)"));
     } else if (trigger === "scheduled_cron") {
       steps.push(await runStep("external_sync", false, async () => {
         const s = await syncExternalListingsForOrganization(organizationId);
+        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן: ${s.inserted} חדשים · ${s.updated} עודכנו` };
+      }));
+    } else if (passiveEntry && process.env.APIFY_TOKEN) {
+      steps.push(await runStep("external_sync", false, async () => {
+        const s = await syncExternalListingsForOrganization(organizationId, { mode: "quick" });
         return { status: s.success ? "success" : "partial", summary: `יד2/מדלן: ${s.inserted} חדשים · ${s.updated} עודכנו` };
       }));
     } else {
