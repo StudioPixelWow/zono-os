@@ -8,7 +8,7 @@
 // No circular deps: this file does NOT import deals/service (which imports it).
 // ============================================================================
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { logActivityEvent } from "@/lib/activity/service";
 import { EVENT_TYPES } from "@/lib/activity/types";
 import { touchJourney } from "@/lib/journey/repository";
@@ -31,7 +31,9 @@ export async function syncPropertyOnDealWon(supabase: SB, orgId: string, propert
   // Sale vs rental from the most recent linked canonical deal.
   const { data: deal } = await supabase.from("deals").select("type").eq("property_id", propertyId).eq("org_id", orgId).order("created_at", { ascending: false }).limit(1).maybeSingle();
   const newStatus = deal?.type === "rent" ? "rented" : "sold";
-  const { error } = await supabase.from("properties").update({ status: newStatus } as never).eq("id", propertyId).eq("org_id", orgId);
+  // P7.2D: properties no longer accept authenticated writes → write via service-role,
+  // still scoped to the caller's org (session-derived orgId, verified above by the read).
+  const { error } = await createServiceRoleClient().from("properties").update({ status: newStatus } as never).eq("id", propertyId).eq("org_id", orgId);
   if (error) return;
   await logActivityEvent({
     eventType: EVENT_TYPES.propertySold, entityType: "property", entityId: propertyId,

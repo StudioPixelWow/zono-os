@@ -13,6 +13,8 @@ import {
   setUserOperatingLocalities,
   type OperatingLocalityInput,
 } from "@/lib/repositories/operatingLocalitiesRepository";
+import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
+import { ensureTrialSubscription } from "@/lib/commercial/store";
 import type { ListingKind, PropertyType } from "@/lib/supabase/types";
 
 export interface SelectedLocalityPayload {
@@ -64,6 +66,20 @@ export async function completeOnboarding(
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
+  // P9.0 idempotency fast-path: if this user already belongs to an org (a prior
+  // onboarding succeeded), never create a second — go straight to the dashboard.
+  // This covers refresh / back-button / re-submit; the DB partial-unique index on
+  // organizations.created_by_user_id covers the true concurrent race. (The read is
+  // isolated so the NEXT_REDIRECT throw is NOT swallowed by a catch.)
+  let alreadyOnboarded = false;
+  try {
+    const { createServiceRoleClient } = await import("@/lib/supabase/server");
+    const { data: existingProfile } = await createServiceRoleClient()
+      .from("users").select("org_id").eq("id", user.id).maybeSingle();
+    alreadyOnboarded = !!existingProfile?.org_id;
+  } catch { /* fall through to normal creation */ }
+  if (alreadyOnboarded) { revalidatePath("/", "layout"); redirect("/"); }
+
   if (!payload.organizationName?.trim()) return { error: "נא להזין שם ארגון." };
   if (!payload.fullName?.trim()) return { error: "נא להזין שם מלא." };
   const localities = payload.localities ?? [];
@@ -84,7 +100,7 @@ export async function completeOnboarding(
       default_property_types: payload.propertyTypes ?? [],
       default_deal_types: payload.dealTypes ?? [],
       onboarding_completed: true,
-    });
+    }, { createdByUserId: user.id });
 
     const roleId = await getRoleIdByKey(org.id, roleKey);
 
@@ -110,6 +126,22 @@ export async function completeOnboarding(
       onboarding_completed: true,
     });
 
+    // P8.1 — every new office automatically enters a real 14-day trial. Idempotent:
+    // a retry never resets or duplicates it (subscriptions.PK = org_id). Trial is the
+    // canonical billing state; commercial/enforcement stay separate + unchanged.
+    try {
+      const { created } = await ensureTrialSubscription(org.id, 14);
+      if (created) {
+        const { createServiceRoleClient } = await import("@/lib/supabase/server");
+        await createServiceRoleClient().from("audit_log").insert({
+          organization_id: org.id, actor_id: user.id, actor_name: payload.fullName.trim(),
+          action: "billing.trial.started", category: "configuration",
+          entity_type: "organization", entity_id: org.id,
+          summary: "התחיל ניסיון בן 14 ימים", metadata: { trialDays: 14 } as never,
+        } as never).then(() => undefined, () => undefined);
+      }
+    } catch (e) { console.error("[onboarding] trial provisioning skipped:", e); }
+
     // Save selected localities to org + user join tables (same focus/price
     // defaults applied per locality for now).
     const rows: OperatingLocalityInput[] = localities.map((l) => ({
@@ -122,6 +154,14 @@ export async function completeOnboarding(
       property_types: payload.propertyTypes ?? [],
       deal_types: payload.dealTypes ?? [],
     }));
+    // P7.2C: under operatingAreas enforcement (PILOT/ENFORCED for this org) the
+    // org's initial area count must respect the plan cap — closes the bulk-onboard
+    // bypass. This is org-creation (one owner, fresh org → rows.length is the whole
+    // org count). SHADOW (every onboarding org today) → no-op, flow unchanged.
+    const enfAreas = await resolveLimitEnforcementForMutation(org.id, "operatingAreas");
+    if (enfAreas.active && enfAreas.configuredLimit != null && enfAreas.configuredLimit >= 0 && rows.length > enfAreas.configuredLimit) {
+      throw new Error("הגעתם למכסת אזורי הפעילות בתוכנית — צמצמו את מספר הערים.");
+    }
     await setOrgOperatingLocalities(org.id, rows);
     await setUserOperatingLocalities(user.id, rows);
 

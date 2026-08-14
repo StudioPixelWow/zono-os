@@ -18,7 +18,16 @@ function revalidate() {
 }
 
 export async function addOperatingAreaAction(localityId: string, opts: AddAreaOptions = {}) {
-  const r = await addOperatingArea(localityId, opts);
+  let r: Awaited<ReturnType<typeof addOperatingArea>>;
+  try {
+    r = await addOperatingArea(localityId, opts);
+  } catch (e) {
+    // Block-UX contract: clean Hebrew for the enforcement cap; never leak SQL/RPC/stack.
+    if (e instanceof Error && e.message === "LIMIT_REACHED") {
+      throw new Error("הגעתם למכסת אזורי הפעילות בתוכנית — יש לשדרג או להסיר אזור קיים כדי להוסיף חדש.");
+    }
+    throw e;
+  }
   await logAudit({ action: "operating_area.add", category: "area", entityType: "operating_area", entityId: r.areaId, summary: `נוספה עיר פעילות: ${r.cityName}` });
   revalidate();
   return r;

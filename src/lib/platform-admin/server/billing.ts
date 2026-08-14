@@ -17,6 +17,9 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { assertPlatformCapability } from "./auth";
 import { writePlatformAudit } from "./audit";
 import { planDefinition } from "@/lib/launch/plans";
+import { getOrgBillingState, getOrgBillingQuantity, getOrgProviderQuantityRow, type OrgBillingState, type OrgBillingQuantity, type OrgProviderQuantityRow } from "@/lib/commercial/billing";
+import { getOrgLifecycleStatus } from "@/lib/commercial/lifecycle-server";
+import type { OrgLifecycleStatus } from "@/lib/commercial/lifecycle";
 import type { PlanTier } from "@/lib/launch/types";
 import type { SubscriptionStatus, PaymentStatus } from "@/lib/commercial/types";
 import {
@@ -134,16 +137,19 @@ export async function getPlatformRevenueOverview(): Promise<RevenueOverview> {
   let payingOrgs: AvailableValue<number> = unavail("שגיאת קריאה");
   try {
     // One read of the safe columns for all verified+paid payments; aggregate in memory.
+    // P8.4B: `environment` isolates sandbox from production — verified REVENUE counts
+    // ONLY production (a sandbox test payment is never real revenue). Non-production
+    // (incl. missing env) is excluded conservatively.
     const { data, error } = await db.from("payments" as never)
-      .select("org_id,amount_ils,created_at,status,verified").limit(20000);
+      .select("org_id,amount_ils,created_at,status,verified,environment").limit(20000);
     if (error) throw error;
-    const rows = ((data ?? []) as { org_id: string | null; amount_ils: number | null; created_at: string; status: string; verified: boolean }[]);
-    const verifiedPaid = rows.filter((r) => r.verified && r.status === "paid");
-    paymentsVerifiedPaid = avail(verifiedPaid.length, "count(payments WHERE verified AND status='paid')");
+    const rows = ((data ?? []) as { org_id: string | null; amount_ils: number | null; created_at: string; status: string; verified: boolean; environment: string | null }[]);
+    const verifiedPaid = rows.filter((r) => r.verified && r.status === "paid" && r.environment === "production");
+    paymentsVerifiedPaid = avail(verifiedPaid.length, "count(payments WHERE verified AND status='paid' AND env='production')");
     paymentsFailed = avail(rows.filter((r) => r.status === "failed").length, "count(payments WHERE status='failed')");
-    verifiedRevenueIls = avail(verifiedPaid.reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND status='paid')");
-    thisMonthRevenueIls = avail(verifiedPaid.filter((r) => r.created_at >= monthStartIso).reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND paid AND created_at>=month_start)");
-    payingOrgs = avail(new Set(verifiedPaid.map((r) => r.org_id).filter((x): x is string => !!x)).size, "count(distinct org_id WHERE verified AND paid)");
+    verifiedRevenueIls = avail(verifiedPaid.reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND paid AND production)");
+    thisMonthRevenueIls = avail(verifiedPaid.filter((r) => r.created_at >= monthStartIso).reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND paid AND production AND created_at>=month_start)");
+    payingOrgs = avail(new Set(verifiedPaid.map((r) => r.org_id).filter((x): x is string => !!x)).size, "count(distinct org_id WHERE verified AND paid AND production)");
   } catch {
     // leave all as unavailable
   }
@@ -313,6 +319,20 @@ export interface OrgBillingDetail {
   payments: PaymentRow[];
   failedPaymentCount: number;
   provider: ProviderStatus;
+  // P8.1 — THE canonical org billing state (single source of truth). Customer 360
+  // (dal.getOrgBillingForPlatform) attaches the identical object from the SAME
+  // resolver, so the two surfaces are provably consistent. Legacy `billingState`
+  // above is the platform display vocabulary (HEALTHY/TRIAL/…); this is canonical.
+  canonical: OrgBillingState;
+  // P8.2 — THE canonical agent-quantity + provider-quantity model, from the SAME
+  // getOrgBillingQuantity resolver Customer 360 uses → provably consistent.
+  quantity: OrgBillingQuantity;
+  // P8.3 — PERSISTED provider-quantity state from the subscription row (what the
+  // reconciler wrote): expected subscription qty, last-acked provider qty (NULL
+  // until real sync), sync status, last synced at. NULL when no subscription.
+  providerRow: OrgProviderQuantityRow | null;
+  // P8.5A — read-only lifecycle status + outstanding reconciliation action.
+  lifecycle: OrgLifecycleStatus;
 }
 
 /**
@@ -325,11 +345,15 @@ export async function getOrgBillingDetail(orgId: string): Promise<OrgBillingDeta
   const operator = await assertPlatformCapability("platform.billing.read");
   const db = createServiceRoleClient();
 
-  const [subRes, licRes, orgRes, payRes] = await Promise.all([
+  const [subRes, licRes, orgRes, payRes, canonical, quantity, providerRow, lifecycle] = await Promise.all([
     db.from("subscriptions" as never).select(SUB_COLS).eq("org_id" as never, orgId as never).maybeSingle(),
     db.from("org_plans" as never).select("plan,status,trial_ends_at,current_period_end").eq("org_id" as never, orgId as never).maybeSingle(),
     db.from("organizations").select("name,plan").eq("id", orgId).maybeSingle(),
     db.from("payments" as never).select(PAY_COLS).eq("org_id" as never, orgId as never).order("created_at", { ascending: false }).limit(100),
+    getOrgBillingState(orgId),   // P8.1 — canonical single-source-of-truth resolver
+    getOrgBillingQuantity(orgId), // P8.2 — canonical agent-quantity resolver
+    getOrgProviderQuantityRow(orgId), // P8.3 — persisted provider-quantity state
+    getOrgLifecycleStatus(orgId),      // P8.5A — read-only lifecycle/reconciliation status
   ]);
 
   const subRow = (subRes.data as RawSubRow | null) ?? null;
@@ -371,5 +395,9 @@ export async function getOrgBillingDetail(orgId: string): Promise<OrgBillingDeta
     priceHintIls: planDefinition(compat.canonical).priceHintIls,
     payments, failedPaymentCount: payments.filter((p) => p.status === "failed").length,
     provider: getGrowProviderStatus(),
+    canonical,
+    quantity,
+    providerRow,
+    lifecycle,
   };
 }

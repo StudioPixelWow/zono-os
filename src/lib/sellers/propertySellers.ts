@@ -1,7 +1,8 @@
 /**
  * property_sellers repository + readiness validation (RLS-scoped, server-only).
  */
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 
 export type PropertySellerRow = Database["public"]["Tables"]["property_sellers"]["Row"];
@@ -122,7 +123,11 @@ async function syncLegacyPrimarySeller(supabase: Awaited<ReturnType<typeof creat
       .order("created_at", { ascending: true })
       .limit(1);
     const primary = (data ?? [])[0]?.seller_id ?? null;
-    await supabase.from("properties").update({ seller_id: primary } as never).eq("id", propertyId);
+    // P7.2D: properties no longer accept authenticated writes → write via service-role,
+    // scoped to the caller's org (session-derived) so no cross-org property is touched.
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return;
+    await createServiceRoleClient().from("properties").update({ seller_id: primary } as never).eq("id", propertyId).eq("org_id", profile.org_id);
   } catch { /* compat bridge is best-effort */ }
 }
 

@@ -8,7 +8,7 @@ import { authorizePlatform } from "@/lib/platform-admin/server/auth";
 import { getOrgBillingDetail } from "@/lib/platform-admin/server/billing";
 import { RestrictedPanel, KV } from "@/components/platform-admin/customer360-ui";
 import { PanelCard, PlanBadge, formatPlatformDate, formatPlatformDateTime } from "@/components/platform-admin/ui";
-import { BillingStateChip, PlanCompatNote, MoneyValue, formatIls, ProviderStatusCard } from "@/components/platform-admin/billing-ui";
+import { BillingStateChip, PlanCompatNote, MoneyValue, formatIls, ProviderStatusCard, QuantityPanel } from "@/components/platform-admin/billing-ui";
 import { Icon } from "@/components/dashboard/Icon";
 import Link from "next/link";
 
@@ -45,6 +45,36 @@ export default async function Customer360BillingPage({ params }: { params: Promi
           </div>
         )}
       </div>
+
+      {/* P8.5A — outstanding lifecycle / reconciliation action (read-only; same resolver as Customer 360) */}
+      {b.lifecycle.action !== "NO_ACTION" && (
+        <div className="border-line bg-surface flex items-start gap-2 rounded-xl border px-4 py-3">
+          <span className="text-muted mt-0.5"><Icon name="AlertTriangle" size={14} /></span>
+          <span className="text-ink text-[12px] font-semibold">
+            פעולה ממתינה: <span className="text-brand">{b.lifecycle.action}</span>
+            {b.lifecycle.pending && <span className="text-warning"> · {b.lifecycle.pending}</span>}
+            <span className="text-muted font-normal"> — {b.lifecycle.reason}</span>
+          </span>
+        </div>
+      )}
+
+      {/* P8.5A — grace window (7 calendar days). Billing state ≠ access; no blocking. */}
+      {b.lifecycle.grace.active && (
+        <div className="border-warning-soft bg-warning-soft/30 rounded-xl border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-warning"><Icon name="AlertTriangle" size={14} /></span>
+            <span className="text-ink text-[12px] font-bold">תקופת חסד {b.lifecycle.grace.expired ? "— פגה" : `— נותרו ${b.lifecycle.grace.daysRemaining} ימים`}</span>
+          </div>
+          <div className="text-muted mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+            <span>התחילה: {b.lifecycle.grace.startedAt ? formatPlatformDate(b.lifecycle.grace.startedAt) : "—"}</span>
+            <span>מסתיימת: {b.lifecycle.grace.endsAt ? formatPlatformDate(b.lifecycle.grace.endsAt) : "—"}</span>
+            <span>הנתונים נשמרים במלואם — החיוב אינו חוסם גישה</span>
+          </div>
+        </div>
+      )}
+
+      {/* P8.2/P8.3 — canonical agent-quantity, pricing & provider-quantity sync state */}
+      <QuantityPanel q={b.quantity} providerRow={b.providerRow} />
 
       {/* Billing vs Access separation note */}
       <div className="border-line bg-surface flex items-start gap-2 rounded-xl border px-4 py-3">

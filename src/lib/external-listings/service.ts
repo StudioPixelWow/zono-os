@@ -1094,22 +1094,33 @@ export async function promoteExternalListing(listingId: string): Promise<string>
   if (!listing) throw new Error("listing not found");
   if (listing.promoted_property_id) return listing.promoted_property_id;
 
-  const { data, error } = await supabase
-    .from("properties")
-    .insert({
-      org_id: profile.org_id, owner_id: user.id, uploaded_by_user_id: user.id,
-      title: listing.title ?? "נכס חיצוני",
-      type: (listing.property_type as Database["public"]["Tables"]["properties"]["Row"]["type"]) ?? "apartment",
-      listing_kind: listing.deal_type === "rent" ? "rent" : "sale", status: "draft",
-      price: listing.price ?? 0, rooms: listing.rooms ?? null, size_sqm: listing.sqm ?? null, city: listing.city ?? null,
-      description: listing.description ?? null,
-      property_origin: "external_imported", source_type: "external", external_source: listing.source,
-      ownership_scope: "shared", exclusivity_scope: "external_unknown", listing_rights: "public_information_only",
-      is_internal_inventory: false, is_external_inventory: true,
-      source_listing_id: listing.source_id, source_listing_url: listing.listing_url, source_last_synced_at: listing.last_synced_at,
-    })
-    .select("id").single();
-  if (error) throw new Error(error.message);
+  // P7.2D: promotion creates a property ROW → it must (a) go through service-role
+  // (properties no longer accept authenticated writes) and (b) respect the
+  // monitoredListings guard under enforcement. Reserve the slot atomically (the
+  // draft row IS the slot), then enrich it with the external payload; OFF/SHADOW →
+  // a direct service-role insert. org/owner are session-derived (never browser).
+  const svc = createServiceRoleClient();
+  const orgId = profile.org_id;
+  const enrich = {
+    title: listing.title ?? "נכס חיצוני",
+    type: (listing.property_type as Database["public"]["Tables"]["properties"]["Row"]["type"]) ?? "apartment",
+    listing_kind: (listing.deal_type === "rent" ? "rent" : "sale") as "rent" | "sale", status: "draft" as const,
+    price: listing.price ?? 0, rooms: listing.rooms ?? null, size_sqm: listing.sqm ?? null, city: listing.city ?? null,
+    description: listing.description ?? null,
+    property_origin: "external_imported", source_type: "external", external_source: listing.source,
+    ownership_scope: "shared", exclusivity_scope: "external_unknown", listing_rights: "public_information_only",
+    is_internal_inventory: false, is_external_inventory: true,
+    source_listing_id: listing.source_id, source_listing_url: listing.listing_url, source_last_synced_at: listing.last_synced_at,
+  };
+  const { reservePropertySlot } = await import("@/lib/properties/repository");
+  const reservedId = await reservePropertySlot(orgId, user.id); // raises LIMIT_REACHED at cap
+  let data: { id: string }; let error: { message?: string } | null;
+  if (reservedId) {
+    ({ data, error } = await (svc.from("properties").update(enrich as never).eq("id", reservedId).eq("org_id", orgId).select("id").single() as unknown as Promise<{ data: { id: string }; error: { message?: string } | null }>));
+  } else {
+    ({ data, error } = await (svc.from("properties").insert({ org_id: orgId, owner_id: user.id, uploaded_by_user_id: user.id, ...enrich } as never).select("id").single() as unknown as Promise<{ data: { id: string }; error: { message?: string } | null }>));
+  }
+  if (error) throw new Error(error.message ?? "promote failed");
   await supabase.from("external_listings").update({ promoted_property_id: data.id, status: "promoted", primary_property_id: data.id }).eq("id", listingId);
   await logActivityEvent({ eventType: "property.created", entityType: "property", entityId: data.id, title: `נכס חיצוני קודם ל-CRM (${listing.source})` });
   try {

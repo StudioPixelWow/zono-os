@@ -5,6 +5,9 @@ import type { TaskPriority, TaskStatus } from "@/lib/supabase/types";
 import { createPropertyTask, setTaskStatus } from "./repository";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { emitBusinessEvent } from "@/lib/kernel/emit";
+import { DOMAIN_EVENTS } from "@/lib/kernel/events";
+import { sanitizeTelemetryMetadata } from "@/lib/telemetry/model";
 // A "use server" module may export ONLY async functions — the picker options
 // therefore live in ./options and are imported (never re-exported) here.
 import { TASK_PRIORITY_OPTIONS } from "./options";
@@ -45,8 +48,15 @@ export async function createTaskAction(input: NewTaskInput): Promise<{ ok: boole
   const db = await createClient();
   const { data, error } = await db.from("tasks").insert(payload as never).select("id").single();
   if (error || !data) return { ok: false, error: error?.message ?? "יצירת המשימה נכשלה." };
+  const id = (data as { id: string }).id;
   try { revalidatePath("/today"); } catch { /* noop */ }
-  return { ok: true, id: (data as { id: string }).id };
+  // P6.0 telemetry — best-effort; emit NEVER throws, so it cannot turn a
+  // successful task creation into a failure. Org/actor derived server-side.
+  await emitBusinessEvent({
+    type: DOMAIN_EVENTS.taskCreated, entityType: "task", entityId: id,
+    metadata: sanitizeTelemetryMetadata({ priority, has_entity: !!input.entity, entity_kind: input.entity?.kind ?? null, source: "command_center" }),
+  });
+  return { ok: true, id };
 }
 
 export interface TaskActionState {
@@ -83,6 +93,14 @@ export async function setTaskStatusAction(
     const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
     console.error("[tasks] status update failed:", e);
     return { error: `עדכון המשימה נכשל: ${msg}` };
+  }
+  // P6.0 telemetry — only a completion is a meaningful usage event; other
+  // transitions are not in the taxonomy. Best-effort, never blocks.
+  if (status === "done") {
+    await emitBusinessEvent({
+      type: DOMAIN_EVENTS.taskCompleted, entityType: "task", entityId: taskId,
+      metadata: sanitizeTelemetryMetadata({ source: "property_cockpit" }),
+    });
   }
   revalidatePath(`/properties/${propertyId}`);
   revalidatePath("/properties");

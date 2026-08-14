@@ -78,9 +78,15 @@ export async function saveDraft(token: string, patch: { data?: RegistrationData;
 }
 
 // ── Payments ────────────────────────────────────────────────────────────────
+// P8.4B: every payment is stamped with the Grow environment it was created under
+// (from GROW_ENV). Verified revenue counts ONLY 'production' — sandbox test
+// payments are isolated and never fabricate revenue. Unset GROW_ENV → 'sandbox'.
+function growEnvName(): "sandbox" | "production" {
+  return (process.env.GROW_ENV ?? "sandbox").toLowerCase() === "production" ? "production" : "sandbox";
+}
 export async function createPayment(input: { draftId: string; planTier: PlanTier; amountIls: number }): Promise<Payment | null> {
   const db = createServiceRoleClient();
-  const { data, error } = await db.from("payments" as never).insert({ draft_id: input.draftId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow" } as never).select("*").maybeSingle();
+  const { data, error } = await db.from("payments" as never).insert({ draft_id: input.draftId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow", environment: growEnvName() } as never).select("*").maybeSingle();
   if (error || !data) return null;
   return toPayment(data as unknown as PaymentRow);
 }
@@ -88,6 +94,15 @@ export async function getPayment(id: string): Promise<Payment | null> {
   const db = createServiceRoleClient();
   const { data } = await db.from("payments" as never).select("*").eq("id", id).maybeSingle();
   return data ? toPayment(data as unknown as PaymentRow) : null;
+}
+/** P8.4 — create an ORG-linked pending payment for a trial→paid checkout (existing
+ *  org, no registration draft). Amount is SERVER-DERIVED by the caller; the browser
+ *  never supplies it. Service-role only. */
+export async function createOrgPayment(input: { orgId: string; planTier: PlanTier; amountIls: number }): Promise<Payment | null> {
+  const db = createServiceRoleClient();
+  const { data, error } = await db.from("payments" as never).insert({ org_id: input.orgId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow", environment: growEnvName() } as never).select("*").maybeSingle();
+  if (error || !data) return null;
+  return toPayment(data as unknown as PaymentRow);
 }
 /** Mark a payment VERIFIED (paid) — only the signed webhook calls this. */
 export async function markPaymentVerified(id: string, providerTxnId: string, signature: string, rawPayload: unknown): Promise<Payment | null> {
@@ -127,4 +142,27 @@ export async function getSubscription(): Promise<Subscription | null> {
   const db = await createClient();
   const { data } = await db.from("subscriptions" as never).select("*").maybeSingle();
   return data ? toSub(data as unknown as SubRow) : null;
+}
+
+/**
+ * P8.1 — canonical 14-day trial provisioning. IDEMPOTENT: creates a `trial`
+ * subscription ONLY when the org has no subscription yet. A repeat/retry (or an
+ * org that already has any subscription — trial, paid, cancelled) is a NO-OP and
+ * NEVER resets the trial, period, or trial_ends_at. subscriptions.PK = org_id, so
+ * a concurrent insert races safely to a single row. Service-role only.
+ * `plan_tier` is legacy/compat (the canonical per-agent model ignores it).
+ */
+export async function ensureTrialSubscription(orgId: string, trialDays = 14): Promise<{ created: boolean }> {
+  const db = createServiceRoleClient();
+  const { data: existing } = await db.from("subscriptions" as never).select("org_id").eq("org_id", orgId).maybeSingle();
+  if (existing) return { created: false };
+  const now = new Date();
+  const trialEndsAt = new Date(now.getTime() + trialDays * 86_400_000).toISOString();
+  const { error } = await db.from("subscriptions" as never).insert({
+    org_id: orgId, plan_tier: "starter", status: "trial",
+    period_start: now.toISOString(), trial_ends_at: trialEndsAt, cancel_at_period_end: false,
+  } as never);
+  // A PK/unique conflict means a concurrent request already created it → not us, no error.
+  if (error && !/duplicate key|unique|conflict/i.test(error.message)) throw new Error(error.message);
+  return { created: !error };
 }

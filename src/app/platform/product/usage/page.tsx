@@ -1,26 +1,127 @@
-// ZONO — Platform · Product Usage (P5.11). Cross-org adoption + core usage from
-// AUTHORITATIVE product tables (P5.10). Telemetry table usage_events is empty, so
-// adoption is derived from data presence and that is stated honestly. No
-// fabricated usage. Cap: platform.usage.read.
+// ZONO — Platform · Product Usage (P6.0). Now backed by the CANONICAL telemetry
+// source (domain_events) via the shared telemetry read layer — the same source
+// that powers Customer 360 usage and Owner Intelligence activity. DAU/WAU/MAU,
+// active organizations, and module event volume come from real product events;
+// module ADOPTION (has-ever-used) is still derived from authoritative product
+// tables and is labelled as such. Every metric states its source. No fabricated
+// usage, no backfilled history. Cap: platform.usage.read.
 import { authorizePlatform } from "@/lib/platform-admin/server/auth";
 import { getFeatureAdoption } from "@/lib/platform-admin/server/intel";
 import { getPlatformOverviewMetrics } from "@/lib/platform-admin/server/dal";
+import { getUsageTelemetry } from "@/lib/telemetry/server/telemetry";
+import { getUsageTrends } from "@/lib/trends/server/trends";
+import { INSUFFICIENT_HISTORY_LABEL, type DailySeries } from "@/lib/trends/model";
 import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
 import { PageHeader, PanelCard, UsageTile } from "@/components/platform-admin/ui";
 import { Icon } from "@/components/dashboard/Icon";
 
 export const dynamic = "force-dynamic";
 
+// Telemetry counts are authoritative (real product events) → state "ok".
+const okMetric = (n: number) => ({ value: n, state: "ok" as const });
+
+// Inline server-rendered sparkline (no client JS). Empty when no coverage.
+function Sparkline({ series, color = "var(--brand, #7c5cff)" }: { series: DailySeries; color?: string }) {
+  const pts = series.points;
+  if (pts.length < 2) return null;
+  const max = Math.max(1, ...pts.map((p) => p.value));
+  const W = 320, H = 40;
+  const step = W / Math.max(1, pts.length - 1);
+  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${(H - (p.value / max) * (H - 4) - 2).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden>
+      <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TrendBlock({ label, series }: { label: string; series: DailySeries }) {
+  return (
+    <div className="border-line rounded-xl border px-3 py-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-ink text-[13px] font-semibold">{label}</span>
+        <span className="text-muted text-[11px] tabular-nums">{series.total}</span>
+      </div>
+      {series.insufficientHistory ? (
+        <span className="text-muted text-[11px]">{INSUFFICIENT_HISTORY_LABEL} · {series.distinctDaysWithData} ימים עם נתונים</span>
+      ) : <Sparkline series={series} />}
+    </div>
+  );
+}
+
 export default async function Page() {
   const operator = await authorizePlatform("platform.usage.read");
   if (!operator) return <PlatformDenied />;
-  const [adoption, metrics] = await Promise.all([getFeatureAdoption(), getPlatformOverviewMetrics()]);
+  const [telemetry, adoption, metrics, trends] = await Promise.all([
+    getUsageTelemetry(), getFeatureAdoption(), getPlatformOverviewMetrics(), getUsageTrends(30),
+  ]);
+  const c = telemetry.counts;
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="מוצר" title="שימוש במוצר" description="אימוץ מודולים וליבת שימוש חוצה-ארגונים — נגזר מנתוני מוצר אמיתיים. ללא נתוני שימוש מפוברקים." icon="Activity" />
+      <PageHeader eyebrow="מוצר" title="שימוש במוצר" description="פעילות מוצר אמיתית מטלמטריה קנונית (domain_events) — משתמשים פעילים, אימוץ מודולים ונפח אירועים. ללא נתונים מפוברקים." icon="Activity" />
 
-      <PanelCard title="אימוץ מודולים" icon="Activity">
+      {/* ── Canonical telemetry: DAU/WAU/MAU + active orgs ── */}
+      <PanelCard title="משתמשים וארגונים פעילים" icon="Activity">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <UsageTile icon="Users" label="DAU (יומי)" metric={okMetric(c.dau)} />
+          <UsageTile icon="Users" label="WAU (שבועי)" metric={okMetric(c.wau)} />
+          <UsageTile icon="Users" label="MAU (חודשי)" metric={okMetric(c.mau)} />
+          <UsageTile icon="Building2" label="ארגונים פעילים (7ד')" metric={okMetric(c.activeOrgsWeek)} />
+          <UsageTile icon="Activity" label="אירועים 24ש'" metric={okMetric(c.events24h)} />
+          <UsageTile icon="Activity" label="אירועים 7ד'" metric={okMetric(c.events7d)} />
+        </div>
+        <p className="text-muted mt-3 px-1 text-[11px]" dir="ltr">מקור: {telemetry.source}</p>
+        {!telemetry.hasData ? (
+          <div className="border-warning-soft bg-warning-soft/40 mt-3 flex items-center gap-2 rounded-lg border px-3 py-2">
+            <span className="text-warning"><Icon name="AlertCircle" size={13} /></span>
+            <span className="text-ink text-[12px] font-semibold">אין עדיין אירועי טלמטריה בחלון — הטלמטריה מתמלאת מרגע הפריסה; אין השלמת היסטוריה מלאכותית.</span>
+          </div>
+        ) : (
+          <p className="text-muted mt-1 px-1 text-[11px]">חלון קריאה: {telemetry.windowRows} אירועים · DAU/WAU/MAU נספרים לפי משתמש מייחס ייחודי; פעילות פלטפורמה אינה נכללת (טבלה נפרדת).</p>
+        )}
+      </PanelCard>
+
+      {/* ── Activity trends (30d, Israel-day buckets from domain_events) ── */}
+      <PanelCard title="מגמות פעילות (30 יום)" icon="Activity">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <TrendBlock label="משתמשים פעילים / יום" series={trends.dau} />
+          <TrendBlock label="ארגונים פעילים / יום" series={trends.activeOrgs} />
+          <TrendBlock label="אירועים / יום" series={trends.events} />
+        </div>
+        <p className="text-muted mt-3 px-1 text-[11px]" dir="ltr">
+          source: {trends.coverage.source} · history start: {trends.coverage.historyStart ?? "—"} · buckets: Asia/Jerusalem · no pre-telemetry history
+        </p>
+      </PanelCard>
+
+      {/* ── Module event volume (from telemetry) ── */}
+      <PanelCard title="נפח אירועים לפי מודול" icon="Layers">
+        {telemetry.modules.length === 0 ? (
+          <p className="text-muted px-1 py-3 text-[13px]">אין אירועי מודול בחלון 30 הימים.</p>
+        ) : (
+          <div className="border-line overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[420px] border-collapse text-[13px]">
+              <thead>
+                <tr className="border-line bg-surface border-b text-[12px]">
+                  {["מודול", "אירועים 7ד'", "אירועים 30ד'"].map((h) => <th key={h} className="text-muted px-3 py-2.5 text-start font-bold">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {telemetry.modules.map((m) => (
+                  <tr key={m.key} className="border-line border-b last:border-0">
+                    <td className="text-ink px-3 py-2.5 font-semibold">{m.label}</td>
+                    <td className="text-ink px-3 py-2.5 tabular-nums">{m.events7d}</td>
+                    <td className="text-muted px-3 py-2.5 tabular-nums">{m.events30d}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </PanelCard>
+
+      {/* ── Module adoption (presence-based, clearly labelled) ── */}
+      <PanelCard title="אימוץ מודולים (נוכחות נתונים)" icon="Layers">
         <div className="border-line overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[560px] border-collapse text-[13px]">
             <thead>
@@ -52,6 +153,7 @@ export default async function Page() {
         </div>
       </PanelCard>
 
+      {/* ── Core cross-org usage tiles ── */}
       <PanelCard title="ליבת שימוש (חוצה-ארגונים)" icon="Megaphone">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <UsageTile icon="Megaphone" label="קמפייני הפצה" metric={metrics.campaigns} />
@@ -62,7 +164,7 @@ export default async function Page() {
 
       <div className="border-line bg-surface flex items-center gap-2 rounded-xl border px-4 py-3">
         <span className="text-muted"><Icon name="AlertCircle" size={14} /></span>
-        <span className="text-muted text-[12px] font-semibold">טלמטריית שימוש (usage_events) אינה מאוכלסת — אימוץ נגזר מנוכחות נתוני מוצר אמיתיים. שימוש עדכני מפורט יידרש הפעלת טלמטריה.</span>
+        <span className="text-muted text-[12px] font-semibold">טלמטריה קנונית מ-domain_events מזינה גם את לקוח 360 ומודיעין בעלים — הגדרה אחת, ללא שלוש הגדרות מתחרות. אימוץ מבוסס-נוכחות מסומן בנפרד. שימוש עדכני מתמלא מרגע האינסטרומנטציה.</span>
       </div>
     </div>
   );

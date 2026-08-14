@@ -97,6 +97,32 @@ export const DOMAIN_EVENTS = {
   automationRunRequested: "automation.run_requested",
   automationRunCompleted: "automation.run_completed",
   automationRunFailed: "automation.run_failed",
+  // ── P6.0 telemetry taxonomy additions (additive; back the meaningful-usage set) ──
+  // Property engagement
+  propertyViewed: "property.viewed",
+  // Matching / recommendations
+  matchingExecuted: "matching.executed",
+  recommendationGenerated: "recommendation.generated",
+  recommendationOpened: "recommendation.opened",
+  // Distribution / campaigns
+  campaignCreated: "campaign.created",
+  publishRequested: "publish.requested",
+  publishSucceeded: "publish.succeeded",
+  publishFailed: "publish.failed",
+  // WhatsApp operational (NEVER message content — operational metadata only)
+  whatsappMessageSent: "whatsapp.message_sent",
+  whatsappMessageFailed: "whatsapp.message_failed",
+  // Integrations (connect/disconnect + sync outcomes)
+  integrationConnected: "integration.connected",
+  integrationDisconnected: "integration.disconnected",
+  integrationSyncSucceeded: "integration.sync_succeeded",
+  integrationSyncFailed: "integration.sync_failed",
+  // AI feature invocation (P6.0 tracks invocation only — cost/tokens is P6.1)
+  aiInvoked: "ai.invoked",
+  aiCompleted: "ai.completed",
+  aiFailed: "ai.failed",
+  // Auth / session (tracked for security analytics; EXCLUDED from meaningful DAU/WAU/MAU)
+  authLogin: "auth.login",
 } as const;
 
 export type DomainEventType = (typeof DOMAIN_EVENTS)[keyof typeof DOMAIN_EVENTS];
@@ -105,4 +131,6 @@ export type DomainEventType = (typeof DOMAIN_EVENTS)[keyof typeof DOMAIN_EVENTS]
 export type DomainEntityType =
   | "organization" | "agent" | "buyer" | "seller" | "lead" | "property"
   | "external_listing" | "deal" | "task" | "meeting" | "journey" | "document"
-  | "facebook" | "whatsapp" | "communication" | "automation";
+  | "facebook" | "whatsapp" | "communication" | "automation"
+  // P6.0 telemetry taxonomy entities
+  | "matching" | "recommendation" | "campaign" | "publish" | "integration" | "ai" | "session";

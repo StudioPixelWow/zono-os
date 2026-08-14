@@ -23,22 +23,41 @@ export async function getOrganizationById(id: string): Promise<Organization | nu
   return data ?? null;
 }
 
-/** Create an organization and seed its default system roles (service-role). */
+/**
+ * Create an organization and seed its default system roles (service-role).
+ *
+ * P9.0 idempotency: when `opts.createdByUserId` is supplied, the org is stamped
+ * with it. A concurrent double-submit / retry by the SAME user violates the
+ * partial unique index `organizations_created_by_user_uq` (23505) — we catch it
+ * and return the org that already exists for that user, so onboarding never
+ * creates two organizations (or an orphaned owner-less one). Role seeding is
+ * idempotent (unique(org_id,key) DO NOTHING).
+ */
 export async function createOrganizationWithRoles(
   input: OrganizationInsert,
+  opts: { createdByUserId?: string } = {},
 ): Promise<Organization> {
   const supabase = createServiceRoleClient();
+  const row = (opts.createdByUserId ? { ...input, created_by_user_id: opts.createdByUserId } : input) as OrganizationInsert;
 
   const { data: org, error } = await supabase
     .from("organizations")
-    .insert(input)
+    .insert(row)
     .select("*")
     .single();
-  if (error) throw new Error(`Failed to create organization: ${error.message}`);
 
-  const { error: rolesError } = await supabase.rpc("seed_org_default_roles", {
-    p_org: org.id,
-  });
+  if (error) {
+    // Concurrent creation by the same user → return the existing org (idempotent).
+    const isUnique = error.code === "23505" || /created_by_user_uq|duplicate key|unique/i.test(error.message);
+    if (isUnique && opts.createdByUserId) {
+      const { data: existing } = await supabase
+        .from("organizations").select("*").eq("created_by_user_id" as never, opts.createdByUserId as never).maybeSingle();
+      if (existing) return existing as Organization;
+    }
+    throw new Error(`Failed to create organization: ${error.message}`);
+  }
+
+  const { error: rolesError } = await supabase.rpc("seed_org_default_roles", { p_org: org.id });
   if (rolesError) throw new Error(`Failed to seed roles: ${rolesError.message}`);
 
   return org;

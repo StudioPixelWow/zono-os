@@ -8,7 +8,6 @@ import Link from "next/link";
 import type { PropertyMarketingPayload } from "@/lib/property-marketing/data";
 import { money, SectionShell } from "@/components/agent-website/ui";
 import { OfficePropertyCard } from "@/components/office-website/ui";
-import { MobileStickyCta } from "@/components/agent-website/MobileStickyCta";
 import { PropertyGallery } from "./PropertyGallery";
 import { PropertyLeadForm } from "./PropertyLeadForm";
 import { PropertyShare } from "./PropertyShare";
@@ -26,7 +25,7 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
   ].filter(Boolean) as { v: string; l: string }[];
 
   return (
-    <div id="top" dir="rtl" style={{ ...(d.brand.tokens as Record<string, string>) }} className="min-h-screen bg-[var(--brand-background)] text-[var(--brand-text)] antialiased">
+    <div id="top" dir="rtl" style={{ ...(d.brand.tokens as Record<string, string>) }} className="min-h-screen bg-[var(--brand-background)] pb-[84px] text-[var(--brand-text)] antialiased sm:pb-[76px]">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[var(--brand-border)] bg-[var(--brand-background)]/90 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-5 sm:px-8">
@@ -45,24 +44,24 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
         </div>
         <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
-          <div className="relative -mt-24 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.5)] sm:p-8 lg:-mt-28 lg:max-w-2xl">
-            {d.statusLabel && <span className="inline-block rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)]">{d.statusLabel}</span>}
-            <h1 className="mt-3 text-3xl font-black leading-tight text-[var(--brand-text)] sm:text-4xl">{d.title}</h1>
-            <p className="mt-2 text-[15px] text-[var(--brand-muted)]">{d.address.display}{!d.address.exact && " (אזור)"}</p>
+          <div className="relative z-10 mx-auto -mt-28 w-full max-w-3xl overflow-hidden rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-background)]/95 p-7 text-center shadow-[0_40px_90px_-40px_rgba(15,23,42,0.6)] backdrop-blur-xl sm:-mt-32 sm:p-10">
+            {d.statusLabel && <span className="inline-block rounded-full bg-[var(--brand-primary)] px-4 py-1.5 text-[12px] font-bold tracking-wide text-[var(--brand-on-primary)]">{d.statusLabel}</span>}
+            <h1 className="mt-4 text-3xl font-black leading-[1.1] text-[var(--brand-text)] sm:text-[40px]">{d.title}</h1>
+            <p className="mt-2.5 text-[15px] text-[var(--brand-muted)]">{d.address.display}{!d.address.exact && " (אזור)"}</p>
             {priceLabel && (
-              <div className="mt-4 flex items-baseline gap-3">
-                <span className="text-3xl font-black text-[color:var(--brand-link)]">{priceLabel}</span>
-                {d.priceBefore && d.price && d.priceBefore > d.price && <span className="text-[15px] text-[var(--brand-muted)] line-through">{money(d.priceBefore)}</span>}
+              <div className="mt-5 flex items-baseline justify-center gap-3">
+                <span className="text-4xl font-black text-[color:var(--brand-link)] sm:text-5xl">{priceLabel}</span>
+                {d.priceBefore && d.price && d.priceBefore > d.price && <span className="text-[16px] text-[var(--brand-muted)] line-through">{money(d.priceBefore)}</span>}
               </div>
             )}
             {specs.length > 0 && (
-              <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3 border-t border-[var(--brand-border)] pt-4">
-                {specs.map((s, i) => <div key={i}><div className="text-xl font-black text-[var(--brand-text)]">{s.v}</div><div className="text-[12px] font-semibold text-[var(--brand-muted)]">{s.l}</div></div>)}
+              <div className="mx-auto mt-6 flex max-w-lg flex-wrap items-stretch justify-center divide-x divide-x-reverse divide-[var(--brand-border)] border-t border-[var(--brand-border)] pt-5">
+                {specs.map((s, i) => <div key={i} className="px-6 first:pr-0"><div className="text-2xl font-black text-[var(--brand-text)]">{s.v}</div><div className="mt-0.5 text-[12px] font-semibold text-[var(--brand-muted)]">{s.l}</div></div>)}
               </div>
             )}
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] px-6 py-3.5 text-[15px] font-bold text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)]">לתיאום ביקור בנכס</a>
-              {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] px-6 py-3.5 text-[15px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">שלחו הודעה</a>}
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
+              <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[15px] font-bold text-[var(--brand-on-primary)] shadow-lg shadow-[color:var(--brand-primary)]/20 transition hover:bg-[color:var(--brand-primary-hover)]">לתיאום ביקור בנכס</a>
+              {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] px-7 py-3.5 text-[15px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">שלחו הודעה</a>}
             </div>
           </div>
         </div>
@@ -190,7 +189,38 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
         </div>
       </footer>
 
-      <MobileStickyCta whatsapp={A?.whatsapp ?? null} tel={A?.tel ?? (d.office.phone ? `tel:${d.office.phone.replace(/[^0-9+]/g, "")}` : null)} />
+      {/* STICKY AGENT BAR — fixed across the bottom, desktop + mobile */}
+      <PropertyAgentBar data={d} />
+    </div>
+  );
+}
+
+function PropertyAgentBar({ data: d }: { data: PropertyMarketingPayload }) {
+  const A = d.agent;
+  const tel = A?.tel ?? (d.office.phone ? `tel:${d.office.phone.replace(/[^0-9+]/g, "")}` : null);
+  const whatsapp = A?.whatsapp ? `${A.whatsapp}?text=${encodeURIComponent(d.shareText)}` : null;
+  const name = A?.name ?? d.office.name;
+  const subtitle = A?.title || d.office.name;
+  const initial = name.slice(0, 1);
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--brand-border)] bg-[var(--brand-background)]/95 backdrop-blur-xl shadow-[0_-12px_40px_-24px_rgba(15,23,42,0.5)]">
+      <div className="mx-auto flex w-full max-w-7xl items-center gap-3 px-4 py-2.5 sm:px-8 sm:py-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {A?.photo ? (
+            <img src={A.photo} alt={name} className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-[var(--brand-soft)] sm:h-12 sm:w-12" />
+          ) : (
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-[17px] font-black text-[color:var(--brand-primary)] sm:h-12 sm:w-12">{initial}</div>
+          )}
+          <div className="min-w-0">
+            <div className="truncate text-[14px] font-black leading-tight text-[var(--brand-text)] sm:text-[15px]">{name}</div>
+            <div className="truncate text-[12px] text-[var(--brand-muted)] sm:text-[13px]">{subtitle}</div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-[13px] font-bold text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)] sm:px-6 sm:text-[14px]">דברו איתי</a>}
+          {tel && <a href={tel} className="rounded-xl border border-[var(--brand-border)] px-4 py-2.5 text-[13px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)] sm:px-6 sm:text-[14px]">התקשרו</a>}
+        </div>
+      </div>
     </div>
   );
 }

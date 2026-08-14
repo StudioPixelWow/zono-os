@@ -14,10 +14,18 @@ export interface WizardActionState {
   error?: string;
 }
 
-/** Create an empty draft on wizard entry; returns the new id. */
-export async function createDraftPropertyAction(): Promise<{ id: string }> {
-  const draft = await createDraftProperty();
-  return { id: draft.id };
+/** Create an empty draft on wizard entry; returns the new id (or a clean Hebrew
+ *  error when the monitoredListings cap is reached — never a raw SQL/RPC leak). */
+export async function createDraftPropertyAction(): Promise<{ id?: string; error?: string }> {
+  try {
+    const draft = await createDraftProperty();
+    return { id: draft.id };
+  } catch (e) {
+    if (e instanceof Error && e.message === "LIMIT_REACHED") {
+      return { error: "הגעתם למכסת הנכסים בתוכנית — יש לשדרג או להעביר נכס קיים לארכיון." };
+    }
+    throw e;
+  }
 }
 
 /** Debounced autosave of the whole form into the draft. */

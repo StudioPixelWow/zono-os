@@ -4,8 +4,10 @@
 // link), see invite status, list agents, change role, activate/deactivate.
 // Org-scoped via RLS. No auth user is created here — agents join via the link.
 // ============================================================================
-import { createClient } from "@/lib/supabase/server";
+import "server-only";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
 
 async function ctx() {
   const { user, profile } = await getSessionContext();
@@ -13,7 +15,10 @@ async function ctx() {
   const supabase = await createClient();
   let isManager = false;
   try { const { data } = await supabase.rpc("has_min_role", { p_min: "manager" }); isManager = data === true; } catch { /* default */ }
-  return { userId: user.id, orgId: profile.org_id, isManager, supabase };
+  // P7.2D: writes go through the service-role client (org_invitations no longer
+  // accepts authenticated/RLS writes). Authorization (manager+, org scope) is
+  // enforced HERE in server code — org_id is session-derived, never from the browser.
+  return { userId: user.id, orgId: profile.org_id, isManager, supabase, svc: createServiceRoleClient() };
 }
 
 export interface AgentRow {
@@ -58,21 +63,54 @@ export async function getTeamAdmin(): Promise<TeamAdmin> {
 }
 
 export async function createInvitation(input: { email: string; fullName?: string; roleKey?: string }): Promise<{ token: string }> {
-  const { orgId, userId, isManager, supabase } = await ctx();
+  const { orgId, userId, isManager, svc } = await ctx();
   if (!isManager) throw new Error("נדרשת הרשאת מנהל/בעלים");
+  // Server-side validation (stays in app code; RPC owns only the atomic DB section).
+  const email = input.email.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("כתובת אימייל לא תקינה");
+  const roleKey = input.roleKey || "agent";
   const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, "");
   const expires = new Date(Date.now() + 14 * 86_400_000).toISOString();
-  const { error } = await supabase.from("org_invitations").insert({
-    org_id: orgId, email: input.email.trim().toLowerCase(), full_name: input.fullName?.trim() || null,
-    role_key: input.roleKey || "agent", token, status: "pending", invited_by: userId, expires_at: expires,
+
+  // Resolve enforcement mode for THIS org (service-role, server-derived limit).
+  const enf = await resolveLimitEnforcementForMutation(orgId, "seats");
+
+  if (enf.active) {
+    // PILOT(this org)/ENFORCED → atomic guarded RPC owns lock+count+dup-check+insert.
+    // No JS check-then-insert here: the RPC is the ONLY seat-consuming path in this mode.
+    const svc = createServiceRoleClient();
+    const payload = {
+      email, full_name: input.fullName?.trim() || null, role_key: roleKey,
+      token, invited_by: userId, expires_at: expires,
+    };
+    const { error } = await (svc.rpc("create_invitation_guarded" as never, {
+      p_org: orgId, p_payload: payload, p_limit: enf.configuredLimit ?? -1,
+    } as never) as unknown as Promise<{ error: { message?: string } | null }>);
+    if (error) {
+      const msg = error.message ?? "";
+      if (/LIMIT_REACHED/.test(msg)) throw new Error("LIMIT_REACHED");
+      if (/DUPLICATE_PENDING/.test(msg)) throw new Error("כבר קיימת הזמנה ממתינה לכתובת זו");
+      if (/INVALID_EMAIL/.test(msg)) throw new Error("כתובת אימייל לא תקינה");
+      throw new Error("יצירת ההזמנה נכשלה");
+    }
+    return { token };
+  }
+
+  // OFF/SHADOW → same behavior, now via service-role (authz already checked:
+  // isManager above + session-derived org_id). No authenticated direct write.
+  const { error } = await svc.from("org_invitations").insert({
+    org_id: orgId, email, full_name: input.fullName?.trim() || null,
+    role_key: roleKey, token, status: "pending", invited_by: userId, expires_at: expires,
   });
   if (error) throw new Error(error.message);
   return { token };
 }
 
 export async function cancelInvitation(id: string): Promise<void> {
-  const { orgId, supabase } = await ctx();
-  const { error } = await supabase.from("org_invitations").update({ status: "cancelled" }).eq("org_id", orgId).eq("id", id);
+  const { orgId, isManager, svc } = await ctx();
+  if (!isManager) throw new Error("נדרשת הרשאת מנהל/בעלים");
+  // Service-role write, scoped to the caller's org (session-derived) → no cross-org.
+  const { error } = await svc.from("org_invitations").update({ status: "cancelled" }).eq("org_id", orgId).eq("id", id);
   if (error) throw new Error(error.message);
 }
 

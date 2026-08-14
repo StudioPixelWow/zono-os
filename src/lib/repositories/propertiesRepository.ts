@@ -107,8 +107,9 @@ function mapRowToCard(
 /**
  * Load properties for the dashboard "recommended" strip.
  *
- * - Not configured (no real Supabase env) → mock data, source "mock".
- * - Configured but table empty → mock data, source "mock" (fallback).
+ * - Not configured (no real Supabase env, i.e. local dev) → mock data, source "mock".
+ * - Configured but table empty → HONEST EMPTY (source "supabase"). P9.0: a real new
+ *   office must NEVER be shown fabricated demo properties — zero data means zero.
  * - Configured with rows → mapped Supabase data, source "supabase".
  * - Query failure → throws (caller renders an error state).
  */
@@ -132,7 +133,9 @@ export async function listDashboardProperties(): Promise<DashboardPropertiesResu
   }
 
   if (!data || data.length === 0) {
-    return { properties: mockProperties, source: "mock" };
+    // P9.0: configured DB + empty table = a genuine zero-state office. Return an
+    // honest empty list (NOT fabricated mock data presented as real listings).
+    return { properties: [], source: "supabase" };
   }
 
   const ids = (data as PropertyRow[]).map((r) => r.id);

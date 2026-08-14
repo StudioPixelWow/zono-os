@@ -10,6 +10,7 @@
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { triggerCityLearning } from "@/lib/brokerage-data/city-learning-trigger";
+import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
 import type { Database, PropertyStatus } from "@/lib/supabase/types";
 import type { PropertyFilters, PropertyInput } from "./types";
 
@@ -112,27 +113,85 @@ export async function getPropertyById(id: string): Promise<PropertyRow | null> {
   return data ?? null;
 }
 
-export async function createProperty(input: PropertyInput): Promise<PropertyRow> {
-  const { user, profile } = await getSessionContext();
-  if (!user || !profile) throw new Error("not authenticated");
+/**
+ * Atomic monitoredListings slot reservation (P7.1B). Server-trusted: org + owner
+ * come from the session; the effective limit + enforcement mode are resolved
+ * server-side (never from the browser). Returns the reserved draft-row id when
+ * enforcement is ACTIVE (PILOT-for-org / ENFORCED), or null in OFF/SHADOW so the
+ * caller keeps its normal insert path. Raises 'LIMIT_REACHED' when at the cap —
+ * the ONLY seat-consuming path in enforced mode (no JS check-then-insert).
+ */
+export async function reservePropertySlot(orgId: string, ownerId: string): Promise<string | null> {
+  const enf = await resolveLimitEnforcementForMutation(orgId, "monitoredListings");
+  if (!enf.active) return null;
+  const svc = createServiceRoleClient();
+  const { data, error } = await (svc.rpc("create_property_slot_guarded" as never, {
+    p_org: orgId, p_owner: ownerId, p_limit: enf.configuredLimit ?? -1,
+  } as never) as unknown as Promise<{ data: string | null; error: { message?: string } | null }>);
+  if (error) {
+    if (/LIMIT_REACHED/.test(error.message ?? "")) throw new Error("LIMIT_REACHED");
+    throw new Error(error.message ?? "property slot reservation failed");
+  }
+  return data;
+}
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
+/**
+ * P7.2D — server-side write authority for `properties`. The table no longer accepts
+ * authenticated/RLS writes; every mutation runs via SERVICE-ROLE with authorization
+ * enforced HERE, reproducing the old RLS exactly: org is session-derived (never from
+ * the browser) and the caller's role is checked via has_min_role (agent+ for
+ * create/update, manager+ for delete). Writes are scoped `.eq("org_id", orgId)` so a
+ * forged/cross-org row id can never be mutated (no service-role IDOR).
+ */
+async function propertyWriteCtx(minRole: "agent" | "manager"): Promise<{ orgId: string; userId: string; svc: ReturnType<typeof createServiceRoleClient> }> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile?.org_id) throw new Error("not authenticated");
+  const auth = await createClient();
+  const { data: ok } = await auth.rpc("has_min_role", { p_min: minRole });
+  if (ok !== true) throw new Error("אין הרשאה מספקת לפעולה זו.");
+  return { orgId: profile.org_id, userId: user.id, svc: createServiceRoleClient() };
+}
+
+export async function createProperty(input: PropertyInput): Promise<PropertyRow> {
+  const { orgId, userId, svc } = await propertyWriteCtx("agent");
+  const listedAt = input.status === "active" ? new Date().toISOString() : null;
+
+  // ENFORCED/PILOT: atomically reserve the slot (a real draft row) first, then
+  // enrich it via the SAME app-side UPDATE contract — no 40-column SQL coupling.
+  const reservedId = await reservePropertySlot(orgId, userId);
+  if (reservedId) {
+    const { data, error } = await svc
+      .from("properties")
+      .update({ ...toRecord(input), listed_at: listedAt })
+      .eq("id", reservedId).eq("org_id", orgId)
+      .select("*")
+      .single();
+    if (error) {
+      // Failed enrichment must not leak the reserved slot — release it.
+      try { await svc.from("properties").delete().eq("id", reservedId).eq("org_id", orgId); } catch { /* cleanup best-effort */ }
+      throw new Error(error.message);
+    }
+    void triggerCityLearning(orgId, (data as { city?: string | null }).city, "property_created").catch(() => {});
+    return data;
+  }
+
+  // OFF/SHADOW: same insert (org/owner session-derived), now via service-role.
+  const { data, error } = await svc
     .from("properties")
     .insert({
       ...toRecord(input),
-      org_id: profile.org_id,
-      owner_id: user.id,
-      uploaded_by_user_id: user.id,
-      assigned_agent_id: user.id,
-      listed_at: input.status === "active" ? new Date().toISOString() : null,
+      org_id: orgId,
+      owner_id: userId,
+      uploaded_by_user_id: userId,
+      assigned_agent_id: userId,
+      listed_at: listedAt,
     })
     .select("*")
     .single();
   if (error) throw new Error(error.message);
   // Fire-and-forget: learn the city's brokerage market if it's new/weak/stale.
   // Never awaited → property creation is never blocked or failed by learning.
-  void triggerCityLearning(profile.org_id, (data as { city?: string | null }).city, "property_created").catch(() => {});
+  void triggerCityLearning(orgId, (data as { city?: string | null }).city, "property_created").catch(() => {});
   return data;
 }
 
@@ -140,11 +199,11 @@ export async function updateProperty(
   id: string,
   input: PropertyInput,
 ): Promise<PropertyRow> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const { orgId, svc } = await propertyWriteCtx("agent");
+  const { data, error } = await svc
     .from("properties")
     .update(toRecord(input))
-    .eq("id", id)
+    .eq("id", id).eq("org_id", orgId)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -155,11 +214,11 @@ export async function setPropertyStatus(
   id: string,
   status: PropertyStatus,
 ): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const { orgId, svc } = await propertyWriteCtx("agent");
+  const { error } = await svc
     .from("properties")
     .update({ status })
-    .eq("id", id);
+    .eq("id", id).eq("org_id", orgId);
   if (error) throw new Error(error.message);
 }
 
@@ -212,17 +271,28 @@ export async function discardDraft(id: string): Promise<void> {
 
 /** Create an empty draft so media + autosave have a property id to attach to. */
 export async function createDraftProperty(): Promise<PropertyRow> {
-  const { user, profile } = await getSessionContext();
-  if (!user || !profile) throw new Error("not authenticated");
-  await cleanupAbandonedDrafts(user.id);
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const { orgId, userId, svc } = await propertyWriteCtx("agent");
+  await cleanupAbandonedDrafts(userId);
+
+  // ENFORCED/PILOT: the draft row IS the monitoredListings slot — reserve it
+  // atomically (raises LIMIT_REACHED at the cap), then read the row back. The
+  // reserved row is a normal draft (identical columns), so the wizard, autosave,
+  // reuse and cleanup all treat it exactly like any other draft.
+  const reservedId = await reservePropertySlot(orgId, userId);
+  if (reservedId) {
+    const { data, error } = await svc.from("properties").select("*").eq("id", reservedId).eq("org_id", orgId).single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // OFF/SHADOW: same draft insert (org/owner session-derived), now via service-role.
+  const { data, error } = await svc
     .from("properties")
     .insert({
-      org_id: profile.org_id,
-      owner_id: user.id,
-      uploaded_by_user_id: user.id,
-      assigned_agent_id: user.id,
+      org_id: orgId,
+      owner_id: userId,
+      uploaded_by_user_id: userId,
+      assigned_agent_id: userId,
       title: "טיוטה ללא שם",
       type: "apartment",
       listing_kind: "sale",
@@ -265,11 +335,11 @@ export async function getOrCreateDraftProperty(): Promise<PropertyRow> {
 
 /** Autosave the full form into an existing draft/property. */
 export async function saveDraft(id: string, input: PropertyInput): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const { orgId, svc } = await propertyWriteCtx("agent");
+  const { error } = await svc
     .from("properties")
     .update(toRecord(input))
-    .eq("id", id);
+    .eq("id", id).eq("org_id", orgId);
   if (error) throw new Error(error.message);
 }
 
@@ -278,14 +348,14 @@ export async function markPublished(
   id: string,
   primaryImageUrl: string | null,
 ): Promise<void> {
-  const supabase = await createClient();
+  const { orgId, svc } = await propertyWriteCtx("agent");
 
   // Fallback: if no primary image was passed, use the property's primary media
   // row, or the first image in the gallery — so cards/details never show a
   // broken/placeholder image when the gallery actually has photos.
   let cover = primaryImageUrl;
   if (!cover) {
-    const { data: imgs } = await supabase
+    const { data: imgs } = await svc
       .from("property_media")
       .select("url,is_primary,sort_order")
       .eq("property_id", id)
@@ -296,14 +366,14 @@ export async function markPublished(
     cover = (imgs?.[0]?.url as string) ?? null;
   }
 
-  const { error } = await supabase
+  const { error } = await svc
     .from("properties")
     .update({
       status: "published",
       published_at: new Date().toISOString(),
       primary_image_url: cover,
     })
-    .eq("id", id);
+    .eq("id", id).eq("org_id", orgId);
   if (error) throw new Error(error.message);
 }
 
