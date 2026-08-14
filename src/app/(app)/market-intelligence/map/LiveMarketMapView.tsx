@@ -196,7 +196,7 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
     <IntelligencePage wide>
       <MarketIntelNav active="map" crumbs={[{ label: "מפת שוק חיה" }]} />
       <IntelligenceHeader
-        emoji="🗺️" eyebrow="LIVE MARKET MAP" title="מפת שוק חיה"
+        emoji="🗺️" eyebrow="מפת שוק חיה" title="מפת שוק חיה"
         subtitle="דשבורד טריטוריה, מודיעין משוקלל, שכבות חכמות, סינון חי, השוואה ותצוגות שמורות."
         actions={
           <IntelligenceActionBar>

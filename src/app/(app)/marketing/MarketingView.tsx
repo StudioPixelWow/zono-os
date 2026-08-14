@@ -48,7 +48,7 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
       <div className="bg-card border-line overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)]">
         <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="min-w-0">
-            <p className="text-brand text-xs font-bold">ZONO Marketing OS</p>
+            <p className="text-brand text-xs font-bold">ZONO · שיווק</p>
             <h1 className="text-ink mt-0.5 text-2xl font-black sm:text-3xl">מרכז השיווק והקמפיינים</h1>
             <p className="text-muted mt-1 max-w-xl text-sm">מה לקדם היום, באילו ערוצים, למי ולמה — פרסום מפוקח אנושית. שום דבר לא מתפרסם או נשלח אוטומטית.</p>
           </div>

@@ -88,7 +88,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Transactions Intelligence OS</p>
+          <p className="text-brand text-xs font-bold">ZONO · מודיעין עסקאות</p>
           <h1 className="text-ink mt-1 text-2xl font-black">עסקאות בעיר שלי{agentCity ? ` · ${agentCity}` : ""}</h1>
           <p className="text-muted mt-1 text-sm">עסקאות אמת שנמכרו בעיר ובשכונות שלך — מחירי מכירה רשמיים. דטרמיניסטי, ללא נתונים מומצאים.</p>
         </div>

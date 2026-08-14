@@ -314,7 +314,7 @@ export function ActivityRadarSection({ t, data }: { t: Translate; data: Dashboar
       <div className="bg-card border-line rounded-[24px] border p-5 shadow-[var(--shadow-card)]">
         <div className="mb-4 flex items-center gap-2">
           <span className="zono-ai-gradient grid h-8 w-8 place-items-center rounded-xl text-white"><Icon name="Locate" size={16} /></span>
-          <h3 className="text-ink text-base font-black">AI Opportunity Radar</h3>
+          <h3 className="text-ink text-base font-black">רדאר הזדמנויות AI</h3>
         </div>
         {data.opportunities.length === 0 ? (
           <EmptyState />
@@ -348,7 +348,7 @@ function ScoreRing({ score }: { score: number }) {
       </svg>
       <div className="text-center">
         <p className="text-5xl font-black text-white tabular-nums">{Math.round(score)}</p>
-        <p className="text-[11px] font-bold tracking-widest text-white/60">AI SCORE</p>
+        <p className="text-[11px] font-bold tracking-widest text-white/60">ציון AI</p>
       </div>
     </div>
   );

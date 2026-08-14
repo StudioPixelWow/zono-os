@@ -62,7 +62,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
       ) : (
         <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
           <div>
-            <p className="text-brand text-xs font-bold">ZONO Inventory Acquisition</p>
+            <p className="text-brand text-xs font-bold">ZONO · גיוס מלאי</p>
             <h1 className="text-ink mt-1 text-2xl font-black">מודיעין גיוס נכסים</h1>
             <p className="text-muted mt-1 text-sm">הפיכת מודעות חיצוניות להזדמנויות גיוס — בעלים פרטיים, ביקוש קונים, ועסקאות דו״צ.</p>
           </div>

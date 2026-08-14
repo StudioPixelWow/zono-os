@@ -107,7 +107,7 @@ export function LegalTemplatesView({
           <Icon name="FileText" size={24} className="text-white" />
         </div>
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Legal OS</p>
+          <p className="text-brand text-xs font-bold">ZONO · משפטי</p>
           <h1 className="text-ink mt-0.5 text-2xl font-black">מסמכים משפטיים ותבניות</h1>
           <p className="text-muted mt-1 max-w-2xl text-sm leading-relaxed">
             ספריית תבניות משפטיות והמסמכים שנוצרו מהן — יצירה, עריכה, הכנה לחתימה וחתימה ידנית. כל מסמך

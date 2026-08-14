@@ -41,7 +41,7 @@ export function AgentWebsiteView({ config, analytics }: { config: AgentWebsiteCo
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">Agent Website Generator</p>
+          <p className="text-brand text-xs font-bold">מחולל אתר סוכן</p>
           <h1 className="text-ink mt-1 text-2xl font-black">האתר האישי שלי</h1>
           <p className="text-muted mt-1 text-sm">אתר אישי שמתעדכן אוטומטית מ-ZONO: הנכסים שלך, האזורים שלך, עסקאות ולידים — ישירות אליך.</p>
         </div>

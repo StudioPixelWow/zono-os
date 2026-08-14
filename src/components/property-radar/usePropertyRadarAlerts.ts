@@ -1,20 +1,26 @@
 "use client";
 // ============================================================================
-// ZONO Property Radar™ — global alert hook.
-// Loads unread/high+urgent alerts, subscribes to Supabase Realtime on
-// property_alerts (degrading to polling if realtime is unavailable), enforces
-// quiet-mode + the per-10-min popup rate limit, and exposes a small queue API
-// for the global popup.
+// ZONO Property Radar™ — global opportunity DIGEST hook (P9.1B).
+// ----------------------------------------------------------------------------
+// The old behaviour auto-advanced a full-screen modal per opportunity, re-fired
+// on a 30s poll (because `shown` stayed eligible), never drained the "N waiting"
+// count, and its `fixed inset-0` overlay intercepted page clicks. A fresh batch
+// of many opportunities made the app unusable.
+//
+// This hook instead drives ONE non-blocking DIGEST banner:
+//   • counts only genuinely-NEW (`unread`) high/urgent alerts (server-side),
+//   • shows at most ONE banner ("ZONO found N opportunities in <city>"),
+//   • on view/postpone it DRAINS the whole batch to `shown` (seen) on the SERVER,
+//     so a refresh never replays already-seen opportunities,
+//   • re-appears only when genuinely new alerts arrive (top id changes),
+//   • never covers the viewport, so dashboard CTAs stay clickable.
+// Individual opportunities are browsed intentionally in the Property Radar center.
 // ============================================================================
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  createPropertyAlertReminderAction,
   fetchUnreadPropertyAlertsAction,
-  markPropertyAlertClickedAction,
-  markPropertyAlertContactedAction,
-  markPropertyAlertDismissedAction,
-  markPropertyAlertShownAction,
+  markAllPropertyAlertsSeenAction,
 } from "@/lib/property-radar/alerts/actions";
 import {
   DEFAULT_POPUP_SETTINGS,
@@ -22,24 +28,15 @@ import {
   type PropertyRadarAlertMetadata,
   type PropertyRadarPopupSettings,
 } from "@/lib/property-radar/alerts/types";
+import {
+  INITIAL_DIGEST_STATE,
+  deriveCity,
+  digestReducer,
+  isDigestVisible,
+} from "./digest-logic";
 
-const TEN_MINUTES = 10 * 60 * 1000;
 const POLL_MS = 30_000;
-// Module-level wrapper so the React purity lint doesn't flag Date.now() usage.
-const nowMs = () => Date.now();
 
-function priorityRank(p: string): number {
-  return p === "urgent" ? 3 : p === "high" ? 2 : p === "medium" ? 1 : 0;
-}
-function sortAlerts(a: PropertyRadarAlertDTO[]): PropertyRadarAlertDTO[] {
-  return [...a].sort(
-    (x, y) =>
-      priorityRank(y.priority) - priorityRank(x.priority) ||
-      Date.parse(y.createdAt) - Date.parse(x.createdAt),
-  );
-}
-
-// Defensive map from a realtime postgres_changes row → DTO.
 function rowToDTO(row: Record<string, unknown>): PropertyRadarAlertDTO | null {
   if (!row || typeof row.id !== "string") return null;
   return {
@@ -57,91 +54,29 @@ function rowToDTO(row: Record<string, unknown>): PropertyRadarAlertDTO | null {
   };
 }
 
-const ACTIVE_STATUSES = new Set(["unread", "shown"]);
-const POPUP_PRIORITIES = new Set(["high", "urgent"]);
-
 export interface UsePropertyRadarAlerts {
-  alerts: PropertyRadarAlertDTO[];
-  activeAlert: PropertyRadarAlertDTO | null;
-  unreadCount: number;
-  compactCount: number;
-  isRateLimited: boolean;
+  /** EXACT count of NEW (unseen) high/urgent opportunities. */
+  count: number;
+  /** City for the digest copy (most common among the preview), or null. */
+  city: string | null;
+  /** Whether the single digest banner should be visible right now. */
+  digestVisible: boolean;
   isQuiet: boolean;
   isRealtimeConnected: boolean;
   settings: PropertyRadarPopupSettings;
-  showNextAlert: () => void;
-  openNextNow: () => void;
-  dismissAlert: (id: string) => void;
-  markContacted: (id: string) => void;
-  markClicked: (id: string) => void;
-  closeActive: (id: string) => void;
-  createReminder: (id: string) => Promise<boolean>;
+  /** Drain the whole batch to `shown` (seen) on the server + hide the banner. */
+  acknowledge: () => void;
 }
 
 export function usePropertyRadarAlerts(orgId: string | null): UsePropertyRadarAlerts {
-  const [queue, setQueue] = useState<PropertyRadarAlertDTO[]>([]);
-  const [activeAlert, setActiveAlert] = useState<PropertyRadarAlertDTO | null>(null);
+  const [state, dispatch] = useReducer(digestReducer, INITIAL_DIGEST_STATE);
+  const [preview, setPreview] = useState<PropertyRadarAlertDTO[]>([]);
   const [settings, setSettings] = useState<PropertyRadarPopupSettings>(DEFAULT_POPUP_SETTINGS);
   const [isRealtimeConnected, setRealtimeConnected] = useState(false);
-  const [shownStamps, setShownStamps] = useState<number[]>([]);
 
   const isQuiet = settings.quietModeEnabled || !settings.popupAlertsEnabled;
 
-  // Render-time rate-limit derived from state (no ref reads during render).
-  const recentShown = shownStamps.filter((t) => t >= nowMs() - TEN_MINUTES).length;
-  const isRateLimited = recentShown >= settings.maxPopupsPer10Minutes;
-
-  // Mirrors for reading the latest values inside callbacks/effects (allowed).
-  const stampsRef = useRef<number[]>([]);
-  const queueRef = useRef<PropertyRadarAlertDTO[]>([]);
-  const activeRef = useRef<PropertyRadarAlertDTO | null>(null);
-  useEffect(() => { stampsRef.current = shownStamps; }, [shownStamps]);
-  useEffect(() => { queueRef.current = queue; }, [queue]);
-  useEffect(() => { activeRef.current = activeAlert; }, [activeAlert]);
-
-  // Merge new alerts into the queue (dedup by id, keep active untouched).
-  const enqueue = useCallback((incoming: PropertyRadarAlertDTO[]) => {
-    setQueue((prev) => {
-      const byId = new Map(prev.map((a) => [a.id, a]));
-      for (const a of incoming) {
-        if (!ACTIVE_STATUSES.has(a.status) || !POPUP_PRIORITIES.has(a.priority)) continue;
-        byId.set(a.id, a);
-      }
-      return sortAlerts([...byId.values()]);
-    });
-  }, []);
-
-  const removeFromQueue = useCallback((id: string) => {
-    setQueue((prev) => prev.filter((a) => a.id !== id));
-    setActiveAlert((cur) => (cur?.id === id ? null : cur));
-  }, []);
-
-  // Promote the next queued alert into the modal, respecting quiet + rate limit.
-  // Reads the latest values from refs (allowed inside a callback).
-  const showNextAlert = useCallback(
-    (force = false) => {
-      if (activeRef.current) return; // one at a time
-      if (isQuiet) return;
-      const now = Date.now();
-      const recent = stampsRef.current.filter((t) => t >= now - TEN_MINUTES);
-      if (!force && recent.length >= settings.maxPopupsPer10Minutes) return;
-      const next = sortAlerts(queueRef.current).find((a) => ACTIVE_STATUSES.has(a.status));
-      if (!next) return;
-      const stamps = [...recent, now];
-      stampsRef.current = stamps;
-      setShownStamps(stamps);
-      setActiveAlert(next);
-      void markPropertyAlertShownAction(next.id);
-    },
-    [isQuiet, settings.maxPopupsPer10Minutes],
-  );
-
-  // Auto-advance: whenever the queue changes and nothing is showing, try to show.
-  useEffect(() => {
-    if (!activeAlert && queue.length > 0) showNextAlert();
-  }, [queue, activeAlert, showNextAlert]);
-
-  // Initial load + polling reconcile (works regardless of realtime).
+  // Initial load + 30s reconcile poll (authoritative; realtime is a bonus).
   useEffect(() => {
     if (!orgId) return;
     let cancelled = false;
@@ -149,15 +84,18 @@ export function usePropertyRadarAlerts(orgId: string | null): UsePropertyRadarAl
       fetchUnreadPropertyAlertsAction().then((res) => {
         if (cancelled || !res.ok) return;
         setSettings(res.data.settings);
-        enqueue(res.data.alerts);
+        setPreview(res.data.alerts);
+        dispatch({ type: "fetch", count: res.data.count, topId: res.data.alerts[0]?.id ?? null });
       });
     };
     load();
     const t = setInterval(load, POLL_MS);
     return () => { cancelled = true; clearInterval(t); };
-  }, [orgId, enqueue]);
+  }, [orgId]);
 
-  // Realtime subscription (best-effort; polling covers the gap if it fails).
+  // Realtime: a genuinely NEW insert bumps the count + surfaces the digest; other
+  // transitions (dismissed/contacted/shown) are reconciled by the next poll.
+  // Best-effort — polling covers any gap.
   useEffect(() => {
     if (!orgId) return;
     const supabase = createClient();
@@ -168,17 +106,10 @@ export function usePropertyRadarAlerts(orgId: string | null): UsePropertyRadarAl
         { event: "INSERT", schema: "public", table: "property_alerts", filter: `org_id=eq.${orgId}` },
         (payload) => {
           const dto = rowToDTO(payload.new as Record<string, unknown>);
-          if (dto) enqueue([dto]);
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "property_alerts", filter: `org_id=eq.${orgId}` },
-        (payload) => {
-          const dto = rowToDTO(payload.new as Record<string, unknown>);
-          if (!dto) return;
-          if (!ACTIVE_STATUSES.has(dto.status)) removeFromQueue(dto.id);
-          else enqueue([dto]);
+          if (!dto || dto.status !== "unread") return;
+          if (dto.priority !== "high" && dto.priority !== "urgent") return;
+          setPreview((prev) => (prev.some((a) => a.id === dto.id) ? prev : [dto, ...prev].slice(0, 30)));
+          dispatch({ type: "insert", id: dto.id });
         },
       )
       .subscribe((status) => setRealtimeConnected(status === "SUBSCRIBED"));
@@ -186,48 +117,26 @@ export function usePropertyRadarAlerts(orgId: string | null): UsePropertyRadarAl
       setRealtimeConnected(false);
       void supabase.removeChannel(channel);
     };
-  }, [orgId, enqueue, removeFromQueue]);
+  }, [orgId]);
 
-  const dismissAlert = useCallback((id: string) => {
-    void markPropertyAlertDismissedAction(id);
-    removeFromQueue(id);
-  }, [removeFromQueue]);
-
-  const markContacted = useCallback((id: string) => {
-    void markPropertyAlertContactedAction(id);
-    removeFromQueue(id);
-  }, [removeFromQueue]);
-
-  const markClicked = useCallback((id: string) => {
-    void markPropertyAlertClickedAction(id);
+  // Drain: mark every NEW alert seen on the SERVER, optimistically hide, and
+  // remember this batch so a race before the write commits can't replay it. A
+  // later, genuinely-new alert (different top id) re-shows the digest.
+  const acknowledge = useCallback(() => {
+    dispatch({ type: "acknowledge" });
+    setPreview([]);
+    void markAllPropertyAlertsSeenAction();
   }, []);
 
-  const createReminder = useCallback(async (id: string) => {
-    const res = await createPropertyAlertReminderAction(id);
-    return res.ok ? res.data.taskCreated : false;
-  }, []);
-
-  const unreadCount = queue.length;
-  const compactCount = useMemo(
-    () => queue.filter((a) => a.id !== activeAlert?.id).length,
-    [queue, activeAlert],
-  );
+  const city = useMemo(() => deriveCity(preview), [preview]);
 
   return {
-    alerts: queue,
-    activeAlert,
-    unreadCount,
-    compactCount,
-    isRateLimited,
+    count: state.count,
+    city,
+    digestVisible: isDigestVisible(state, isQuiet),
     isQuiet,
     isRealtimeConnected,
     settings,
-    showNextAlert: () => showNextAlert(false),
-    openNextNow: () => showNextAlert(true),
-    dismissAlert,
-    markContacted,
-    markClicked,
-    closeActive: removeFromQueue,
-    createReminder,
+    acknowledge,
   };
 }

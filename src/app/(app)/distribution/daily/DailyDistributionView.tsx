@@ -135,7 +135,7 @@ function Header() {
   return (
     <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
       <div>
-        <p className="text-brand text-xs font-bold">ZONO Assisted Distribution</p>
+        <p className="text-brand text-xs font-bold">ZONO · הפצה מונחית</p>
         <h1 className="text-ink mt-1 text-2xl font-black">שולחן פרסום יומי</h1>
         <p className="text-muted mt-1 text-sm">זונו הכין את הפרסום. העתק, פתח את הקהילה, פרסם ידנית וסמן שבוצע. ללא פרסום אוטומטי.</p>
       </div>

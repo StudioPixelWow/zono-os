@@ -203,7 +203,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
         <div className="bg-brand-soft/40 pointer-events-none absolute -top-28 -start-24 h-64 w-64 rounded-full blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-brand text-[11px] font-black tracking-[0.2em]">NATIONAL BROKERAGE KNOWLEDGE GRAPH</p>
+            <p className="text-brand text-[11px] font-black tracking-[0.2em]">גרף ידע ארצי של משרדי תיווך</p>
             <h1 className="text-ink mt-1 text-3xl font-black sm:text-4xl">🏢 Brokerage Intelligence Workspace™</h1>
             <p className="text-muted mt-2 max-w-2xl text-sm leading-relaxed">
               ZONO בונה ומתחזק את גרף המודיעין של שוק התיווך. המערכת חוקרת אוטונומית; אתם מנהלים מודיעין, לא מזינים נתונים. המספרים משקפים כיסוי נוכחי — לא מאגר מלא.

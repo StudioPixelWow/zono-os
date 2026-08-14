@@ -33,7 +33,7 @@ export function DistributionView({ board }: { board: DistributionBoard }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Social Community Intelligence</p>
+          <p className="text-brand text-xs font-bold">ZONO · מודיעין קהילות</p>
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין קהילות והפצה</h1>
           <p className="text-muted mt-1 text-sm">בשלב זה ZONO מכין את הפרסום. הסוכן מפרסם ידנית ומסמן שהפרסום בוצע. ללא פרסום אוטומטי, ללא סיסמאות.</p>
         </div>

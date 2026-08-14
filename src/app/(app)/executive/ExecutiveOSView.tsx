@@ -87,7 +87,7 @@ export function ExecutiveOSView({ os, deals }: { os: ExecutiveOS; deals: ExecDea
       <div className="bg-card border-line overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)]">
         <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="min-w-0">
-            <p className="text-brand text-xs font-bold">ZONO Executive Intelligence OS</p>
+            <p className="text-brand text-xs font-bold">ZONO · מודיעין מנהלים</p>
             <h1 className="text-ink mt-0.5 text-2xl font-black sm:text-3xl">מרכז הפיקוד הניהולי</h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${STATE_TONE[os.health.state]}`}>{STATE_HE[os.health.state]}</span>

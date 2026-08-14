@@ -36,7 +36,7 @@ function ScoreRing({ score }: { score: number }) {
 
 export function MatchingSection({ matches = buyerMatches, note = matchingNote }: { matches?: BuyerMatch[]; note?: string } = {}) {
   return (
-    <SectionShell title="התאמות חכמות" eyebrow="AI Matching" actionHref="/matches" actionLabel="לכל ההתאמות">
+    <SectionShell title="התאמות חכמות" eyebrow="התאמות AI" actionHref="/matches" actionLabel="לכל ההתאמות">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {matches.map((m, i) => (
           <motion.article

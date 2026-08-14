@@ -77,23 +77,61 @@ async function readPopupSettings(
   };
 }
 
-/** Unread/shown, high/urgent alerts for the current org + popup settings. */
+/**
+ * NEW (unseen) high/urgent alerts for the current org + an EXACT unseen count +
+ * popup settings. P9.1B — the global surface is a DIGEST, so it only counts
+ * genuinely-new (`unread`) alerts. `shown` = "seen" (the user acknowledged the
+ * digest) and is deliberately excluded here so acknowledged opportunities never
+ * re-trigger; they remain browsable in the Property Radar center. The preview
+ * list is capped (city/copy derivation) while `count` is the true total, so a
+ * 250-opportunity batch reports "250", not "30".
+ */
 export async function fetchUnreadPropertyAlerts(): Promise<FetchPropertyAlertsResult> {
+  const { db, orgId } = await ctx();
+  const [listRes, countRes] = await Promise.all([
+    db
+      .from(RADAR_TABLES.alerts as never)
+      .select(
+        "id, alert_type, title, message, priority, status, opportunity_score, created_at, linked_property_id, property_source_id, metadata",
+      )
+      .eq("org_id", orgId)
+      .eq("status", "unread" as never)
+      .in("priority", ["high", "urgent"] as never)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    db
+      .from(RADAR_TABLES.alerts as never)
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("status", "unread" as never)
+      .in("priority", ["high", "urgent"] as never),
+  ]);
+  if (listRes.error) throw new Error(listRes.error.message);
+  const alerts = ((listRes.data ?? []) as unknown as AlertRow[]).map(toDTO);
+  const count = countRes.count ?? alerts.length;
+  const settings = await readPopupSettings(db, orgId);
+  return { alerts, count, settings };
+}
+
+/**
+ * Drain the digest: flip every NEW (`unread`) high/urgent alert for this org to
+ * `shown` (= seen) in ONE statement. Called when the user views or postpones the
+ * digest, so a page refresh never replays already-seen opportunities. Only
+ * `unread` rows are touched — `dismissed`/`contacted`/`read` are never resurrected
+ * or overwritten. Org-scoped (RLS + explicit filter). Batch-size agnostic
+ * (handles 1 or 250 in a single update). Returns the number of rows drained.
+ */
+export async function markAllPropertyAlertsSeen(): Promise<{ seen: number }> {
   const { db, orgId } = await ctx();
   const { data, error } = await db
     .from(RADAR_TABLES.alerts as never)
-    .select(
-      "id, alert_type, title, message, priority, status, opportunity_score, created_at, linked_property_id, property_source_id, metadata",
-    )
+    .update({ status: "shown", shown_at: new Date().toISOString() } as never)
     .eq("org_id", orgId)
-    .in("status", ["unread", "shown"] as never)
+    .eq("status", "unread" as never)
     .in("priority", ["high", "urgent"] as never)
-    .order("created_at", { ascending: false })
-    .limit(30);
+    .select("id");
   if (error) throw new Error(error.message);
-  const alerts = ((data ?? []) as unknown as AlertRow[]).map(toDTO);
-  const settings = await readPopupSettings(db, orgId);
-  return { alerts, settings };
+  return { seen: (data as unknown as { id: string }[] | null)?.length ?? 0 };
 }
 
 async function patchAlert(alertId: string, patch: Record<string, unknown>): Promise<void> {

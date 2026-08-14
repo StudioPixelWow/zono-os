@@ -22,7 +22,7 @@ export function RoutingView({ board }: { board: RoutingBoard }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Lead Routing Intelligence</p>
+          <p className="text-brand text-xs font-bold">ZONO · ניתוב לידים</p>
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין הקצאת לידים</h1>
           <p className="text-muted mt-1 text-sm">מי הכי סביר לסגור כל ליד — לפי טריטוריה, מומחיות, המרה ועומס. תאומי מודיעין לכל סוכן.</p>
         </div>

@@ -7,6 +7,7 @@
 import {
   createPropertyAlertReminder,
   fetchUnreadPropertyAlerts,
+  markAllPropertyAlertsSeen,
   markPropertyAlertClicked,
   markPropertyAlertContacted,
   markPropertyAlertDismissed,
@@ -29,6 +30,10 @@ export async function fetchUnreadPropertyAlertsAction(): Promise<Result<FetchPro
 
 export async function markPropertyAlertShownAction(alertId: string): Promise<Result<null>> {
   try { await markPropertyAlertShown(alertId); return { ok: true, data: null }; } catch (e) { return fail(e); }
+}
+/** P9.1B — drain the whole digest (all NEW high/urgent alerts → seen) in one call. */
+export async function markAllPropertyAlertsSeenAction(): Promise<Result<{ seen: number }>> {
+  try { return { ok: true, data: await markAllPropertyAlertsSeen() }; } catch (e) { return fail(e); }
 }
 export async function markPropertyAlertClickedAction(alertId: string): Promise<Result<null>> {
   try { await markPropertyAlertClicked(alertId); return { ok: true, data: null }; } catch (e) { return fail(e); }

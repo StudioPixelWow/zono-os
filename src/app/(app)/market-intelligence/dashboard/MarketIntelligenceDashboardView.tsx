@@ -27,7 +27,7 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
 
       <IntelligenceHeader
         emoji="🌍"
-        eyebrow="MARKET INTELLIGENCE"
+        eyebrow="מודיעין שוק"
         title="דשבורד מודיעין שוק"
         subtitle="מה השתנה · מה דורש תשומת לב · היכן ההזדמנויות."
       />

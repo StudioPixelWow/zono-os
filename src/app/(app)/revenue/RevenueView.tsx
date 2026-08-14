@@ -40,7 +40,7 @@ export function RevenueView({ board }: { board: RevenueBoard }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Revenue Intelligence OS</p>
+          <p className="text-brand text-xs font-bold">ZONO · מודיעין הכנסות</p>
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין הכנסות</h1>
           <p className="text-muted mt-1 text-sm">כמה הכנסה צפויה, כמה בסיכון, כמה חסר ליעד, ואיזו פעולה תגדיל הכנסה מהר ביותר.</p>
         </div>

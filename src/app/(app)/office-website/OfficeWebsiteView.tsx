@@ -40,7 +40,7 @@ export function OfficeWebsiteView({ config, analytics }: { config: OfficeWebsite
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">Office Website Generator</p>
+          <p className="text-brand text-xs font-bold">מחולל אתר משרד</p>
           <h1 className="text-ink mt-1 text-2xl font-black">אתר המשרד</h1>
           <p className="text-muted mt-1 text-sm">אתר ציבורי שמתעדכן אוטומטית מ-ZONO: נכסים, סוכנים, אזורים, עסקאות ולידים — ללא בנייה ידנית.</p>
         </div>

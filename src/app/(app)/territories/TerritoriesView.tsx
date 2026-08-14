@@ -41,7 +41,7 @@ export function TerritoriesView({ cc }: { cc: TerritoryCommandCenter }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">Territory Intelligence OS</p>
+          <p className="text-brand text-xs font-bold">מודיעין טריטוריה</p>
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין טריטוריות</h1>
           <p className="text-muted mt-1 text-sm">איפה לעבוד, איפה לגייס, איפה להתרחב — מבוסס עסקאות, מלאי, ביקוש ומתחרים. דטרמיניסטי ומוסבר.</p>
         </div>

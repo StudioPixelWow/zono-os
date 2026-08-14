@@ -52,7 +52,7 @@ export function AutomationView({ cc, health }: { cc: AutomationCommandCenter; he
             <div className="flex items-center gap-2">
               <span className="bg-card text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="Zap" size={18} /></span>
               <div>
-                <p className="text-brand text-xs font-bold">ZONO Automation OS</p>
+                <p className="text-brand text-xs font-bold">ZONO · אוטומציה</p>
                 <h1 className="text-ink text-2xl font-black sm:text-3xl">מרכז האוטומציות</h1>
               </div>
             </div>

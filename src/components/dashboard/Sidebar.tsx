@@ -34,11 +34,11 @@ const ACCENTS: Record<Accent, { iconBg: string; ring: string; activeItem: string
  *  duplicates, no dead links. Surfaces without a dedicated page (e.g. approvals,
  *  missions) live inside their hub and are reachable via the ⌘K palette. */
 const GROUPS: NavGroup[] = [
-  { key: "command", title: "מרכז הבקרה", desc: "בית • Daily OS • Broker Brain", icon: "Flame", accent: "purple", items: [
+  { key: "command", title: "מרכז הבקרה", desc: "בית • מרכז יומי • מוח הברוקר", icon: "Flame", accent: "purple", items: [
     { label: "דף הבית", href: "/", icon: "Home" },
-    { label: "היום · Daily OS", href: "/today", icon: "Sun" },
+    { label: "היום · מרכז יומי", href: "/today", icon: "Sun" },
     { label: "מוח הברוקר", href: "/brain", icon: "Sparkles" },
-    { label: "Mission Control", href: "/mission-control", icon: "Target" },
+    { label: "מרכז בקרה", href: "/mission-control", icon: "Target" },
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
   ]},
   { key: "office", title: "המשרד שלי", desc: "אנשים • נכסים • הצעות • עסקאות", icon: "Building2", accent: "blue", items: [
@@ -62,15 +62,15 @@ const GROUPS: NavGroup[] = [
     { label: "מודיעין קבוצות", href: "/distribution/groups/intelligence", icon: "BarChart3" },
     { label: "מרכז בקרת פרסום", href: "/publishing-control", icon: "Shield" },
     { label: "קמפיינים", href: "/distribution/campaign-wizard", icon: "Target" },
-    { label: "Marketing OS", href: "/marketing", icon: "BarChart3" },
-    { label: "Creative Studio", href: "/creative-studio", icon: "Presentation" },
+    { label: "מרכז שיווק", href: "/marketing", icon: "BarChart3" },
+    { label: "סטודיו יצירה", href: "/creative-studio", icon: "Presentation" },
   ]},
-  { key: "intelligence", title: "מודיעין עסקי", desc: "Executive • Territory • תחזיות", icon: "BarChart3", accent: "amber", items: [
-    { label: "Executive OS", href: "/executive", icon: "BarChart3" },
-    { label: "Territory OS", href: "/territory", icon: "Map" },
+  { key: "intelligence", title: "מודיעין עסקי", desc: "מנהלים • טריטוריה • תחזיות", icon: "BarChart3", accent: "amber", items: [
+    { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3" },
+    { label: "ניהול טריטוריה", href: "/territory", icon: "Map" },
     { label: "תחזיות", href: "/predictions", icon: "TrendingUp" },
-    { label: "Knowledge Graph", href: "/graph", icon: "Layers" },
-    { label: "Marketplace Intelligence", href: "/marketplace", icon: "Globe" },
+    { label: "גרף ידע", href: "/graph", icon: "Layers" },
+    { label: "מודיעין זירה", href: "/marketplace", icon: "Globe" },
     { label: "מפת חום שוק", href: "/market-intelligence/map", icon: "MapPin" },
   ]},
   { key: "sites", title: "אתרים ופורטלים", desc: "אתרי משרד/סוכן • דפי נחיתה • פורטלים", icon: "Globe", accent: "blue", items: [
@@ -80,12 +80,12 @@ const GROUPS: NavGroup[] = [
     { label: "אתרים ודפי נחיתה", href: "/website", icon: "LayoutGrid" },
     { label: "פורטלים (קונה/מוכר)", href: "/portals", icon: "Users" },
   ]},
-  { key: "ops", title: "אוטומציה ותפעול", desc: "Automation • Workflows • Voice AI", icon: "Route", accent: "green", items: [
-    { label: "Automation OS", href: "/automation", icon: "Route" },
-    { label: "Workflows", href: "/workflow-builder", icon: "ListChecks" },
+  { key: "ops", title: "אוטומציה ותפעול", desc: "אוטומציה • תהליכים • עוזר קולי", icon: "Route", accent: "green", items: [
+    { label: "מרכז אוטומציה", href: "/automation", icon: "Route" },
+    { label: "תהליכי עבודה", href: "/workflow-builder", icon: "ListChecks" },
     { label: "מסעות לקוח", href: "/journeys", icon: "Activity" },
-    { label: "Voice AI", href: "/voice", icon: "Mic" },
-    { label: "Self-Learning", href: "/learning", icon: "Sparkles" },
+    { label: "עוזר קולי", href: "/voice", icon: "Mic" },
+    { label: "למידה עצמית", href: "/learning", icon: "Sparkles" },
   ]},
   { key: "system", title: "ניהול מערכת", desc: "האזור האישי • צוות • חיבורים • הגדרות", icon: "Settings", accent: "slate", items: [
     { label: "האזור האישי", href: "/my-profile", icon: "UserCircle" },

@@ -159,7 +159,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
           <div className="flex items-start gap-3">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-soft text-2xl text-brand-strong">🏢</span>
             <div className="min-w-0">
-            <p className="text-[11px] font-black tracking-wide text-brand">BROKERAGE INTELLIGENCE</p>
+            <p className="text-[11px] font-black tracking-wide text-brand">מודיעין תיווך</p>
             <h1 className="text-2xl font-black text-ink sm:text-3xl">מודיעין משרדי תיווך</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted">בניית גרף מודיעין מלא של משרדי תיווך, סוכנים, טריטוריות וקשרי שוק. כל סריקת מודעות חיצונית עוברת זיהוי זהויות מול שכבת הליבה הזו — מידע ציבורי/עסקי בלבד, ללא מחיקה אוטומטית.</p>
             <div className="mt-2">

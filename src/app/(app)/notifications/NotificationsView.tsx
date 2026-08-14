@@ -59,7 +59,7 @@ export function NotificationsView({ feed }: { feed: NotificationFeed; active?: s
       <div className="bg-card border-line overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)]">
         <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="min-w-0">
-            <p className="text-brand text-xs font-bold">ZONO Attention Center</p>
+            <p className="text-brand text-xs font-bold">ZONO · מרכז התראות</p>
             <h1 className="text-ink mt-0.5 text-2xl font-black sm:text-3xl">מה דורש את תשומת ליבך</h1>
             <p className="text-muted mt-1 max-w-xl text-sm">
               {clear ? "הכל טופל — אין התראות פעילות כרגע." : urgent.length > 0 ? `${urgent.length} פריטים דחופים דורשים טיפול עכשיו, ועוד ${unread.length - urgent.length} שיכולים להמתין.` : `${unread.length} עדכונים ממתינים — כולם יכולים להמתין מעט.`}

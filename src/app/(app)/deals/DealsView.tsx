@@ -47,7 +47,7 @@ export function DealsView({ board }: { board: DealsBoard }) {
       <div className="bg-card border-line overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)]">
         <div className="bg-brand-soft flex flex-wrap items-start justify-between gap-3 p-5">
           <div>
-            <p className="text-brand text-xs font-bold">ZONO Deal Execution OS</p>
+            <p className="text-brand text-xs font-bold">ZONO · ניהול עסקאות</p>
             <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מרכז שליטה בעסקאות</h1>
             <p className="text-muted mt-1 max-w-xl text-sm">כל עסקה פעילה — מסע, משא ומתן, סיכון ועמלה במקום אחד. דטרמיניסטי, ללא יצירת קשר אוטומטית.</p>
           </div>

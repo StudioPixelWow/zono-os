@@ -29,7 +29,7 @@ export function SocialLeadsView({ board }: { board: SocialLeadsBoard }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Social Lead Capture OS</p>
+          <p className="text-brand text-xs font-bold">ZONO · לכידת לידים מרשתות</p>
           <h1 className="text-ink mt-1 text-2xl font-black">לידים חברתיים</h1>
           <p className="text-muted mt-1 text-sm">הפיכת אינטראקציות חברתיות להזדמנויות עסקיות מובנות. כל המרה היא פעולה אנושית מאושרת — ללא יצירת קשר/מענה אוטומטי.</p>
         </div>

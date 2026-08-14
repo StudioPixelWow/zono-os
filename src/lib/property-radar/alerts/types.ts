@@ -53,7 +53,10 @@ export interface PropertyRadarPopupSettings {
 }
 
 export interface FetchPropertyAlertsResult {
+  /** Preview slice of NEW (unseen) alerts — capped for city/copy derivation. */
   alerts: PropertyRadarAlertDTO[];
+  /** EXACT count of NEW (unseen) high/urgent alerts (not capped by the preview). */
+  count: number;
   settings: PropertyRadarPopupSettings;
 }
 

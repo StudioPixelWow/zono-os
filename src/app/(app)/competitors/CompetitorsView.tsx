@@ -37,7 +37,7 @@ export function CompetitorsView({ board, embedded = false }: { board: Board; emb
       ) : (
         <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
           <div>
-            <p className="text-brand text-xs font-bold">ZONO Competitor Intelligence</p>
+            <p className="text-brand text-xs font-bold">ZONO · מודיעין מתחרים</p>
             <h1 className="text-ink mt-1 text-2xl font-black">מודיעין מתחרים</h1>
             <p className="text-muted mt-1 text-sm">מי שולט בכל אזור, מי מתחזק, מי נחלש, ואיפה כדאי למקד מאמצי גיוס.</p>
           </div>

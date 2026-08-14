@@ -39,7 +39,7 @@ export default async function MarketListingsPage({ searchParams }: { searchParam
 
       <IntelligenceHeader
         emoji="🌍"
-        eyebrow="MARKET LISTINGS"
+        eyebrow="נכסי שוק"
         title="נכסי השוק"
         subtitle="כל הנכסים החיצוניים שנסרקו מיד2, מדלן ומקורות שוק נוספים."
         actions={

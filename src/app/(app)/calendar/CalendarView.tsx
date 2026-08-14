@@ -194,7 +194,7 @@ function Hero({ plan, nextMeeting, intel }: { plan: DayPlan; nextMeeting: Calend
       <div className="pointer-events-none absolute -left-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(37,99,235,0.35),transparent_70%)] blur-2xl" />
       <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-white/60"><Icon name="Calendar" size={13} /> ZONO Calendar OS</div>
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-white/60"><Icon name="Calendar" size={13} /> ZONO · יומן</div>
           <h1 className="mt-1 text-2xl font-black sm:text-3xl">מרכז השליטה ביומן</h1>
           <p className="mt-1 text-[13px] text-white/70">
             {nextMeeting ? <>הפגישה הבאה: <span className="font-bold text-white">{nextMeeting.title}</span> · {time(nextMeeting.start)}</> : "אין פגישות קרובות ביומן."}

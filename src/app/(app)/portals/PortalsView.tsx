@@ -43,7 +43,7 @@ export function PortalsView({ cc }: { cc: PortalCommandCenter }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">Client Portal OS</p>
+          <p className="text-brand text-xs font-bold">פורטל לקוחות</p>
           <h1 className="text-ink mt-1 text-2xl font-black">פורטלים ללקוחות</h1>
           <p className="text-muted mt-1 text-sm">פורטלים מאובטחים ומאושרים לקונים ומוכרים. צור פורטל מתוך עמוד הקונה/המוכר/הנכס, אשר את הסקשנים, והעתק קישור.</p>
         </div>

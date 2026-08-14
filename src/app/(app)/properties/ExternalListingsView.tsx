@@ -352,7 +352,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
     <section className="flex flex-col gap-5">
       <div className="bg-card border-line flex flex-wrap items-center justify-between gap-3 rounded-[20px] border p-4">
         <div>
-          <p className="text-ink flex items-center gap-1.5 text-base font-black">AI Market Intelligence <Icon name="Sparkles" size={15} className="text-brand" /></p>
+          <p className="text-ink flex items-center gap-1.5 text-base font-black">מודיעין שוק AI <Icon name="Sparkles" size={15} className="text-brand" /></p>
           <p className="text-muted text-xs">עסקאות ונתונים דומים המשפיעים על השוק · {filtered.length} תוצאות · מדורג לפי AI Score</p>
         </div>
         {/* P9.1 — the manual scan / import / debug controls are ZONO-STAFF ONLY.
@@ -377,7 +377,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
             </select>
             <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Sparkles" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
             <Button size="sm" variant="ghost" onClick={geocodeNow} disabled={pending} leadingIcon={<Icon name="MapPin" size={15} />}>גאוקד עכשיו</Button>
-            <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
+            <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>ניתוח AI</Button>
             <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
             <Link href="/broker-intelligence"><Button size="sm" variant="ghost">מודיעין מתווכים</Button></Link>
             <Link href="/acquisition"><Button size="sm" variant="ghost">מודיעין גיוס</Button></Link>

@@ -72,7 +72,7 @@ export function BrokerIntelligenceView({ board, cityFilter }: { board: BrokerBoa
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Broker Intelligence</p>
+          <p className="text-brand text-xs font-bold">ZONO · מודיעין מתווכים</p>
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין מתווכים</h1>
           <p className="text-muted mt-1 text-sm">זיהוי מקור הפרסום של מודעות חיצוניות — מוכר פרטי / מתווך / משרד תיווך. מידע עסקי ציבורי בלבד.</p>
         </div>
