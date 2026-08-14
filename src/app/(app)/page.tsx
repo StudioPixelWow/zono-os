@@ -31,6 +31,7 @@ import { getBrokerWhatsapp } from "@/lib/whatsapp/inbox-service";
 import { resolveSessionCtx, readSessionSnapshot } from "@/lib/whatsapp/provider/session";
 import { getMarketingBoard } from "@/lib/marketing/service";
 import { getOfficeActivation } from "@/lib/activation/activation-server";
+import { getCityDiscovery } from "@/lib/activation/city-discovery-server";
 import { buildOfficeTheme, OFFICE_THEME_DEFAULTS } from "@/lib/brand-identity/office-theme";
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
 import { NewOfficeCommandCenter } from "@/components/home-control/NewOfficeCommandCenter";
@@ -142,11 +143,15 @@ export default async function Home() {
     const act = await getOfficeActivation();
     if (act && act.activation.phase === "new") {
       const theme = buildOfficeTheme(act.brand.primary, act.brand.secondary, act.brand.accent);
+      // P9.0D — real city-discovery status so a fresh office sees "ZONO is
+      // scanning your city" (honest counts) instead of a cold empty area.
+      const discovery = await getCityDiscovery(act.identity.orgId, act.identity.city, act.identity.localityCode);
       return (
         <NewOfficeCommandCenter
           identity={act.identity}
           activation={act.activation}
           trial={act.trial}
+          discovery={discovery}
           themeVars={{ ...OFFICE_THEME_DEFAULTS, ...theme.vars }}
           hasBrand={theme.hasBrand}
         />

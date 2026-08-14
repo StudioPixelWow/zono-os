@@ -14,12 +14,14 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { CAPABILITIES, CAPABILITY_STATE_LABEL, type CapabilityState } from "@/lib/activation/capabilities";
-import type { ActivationState, OfficeIdentity, OfficeTrial } from "@/lib/activation/activation";
+import type { ActivationState, OfficeIdentity, OfficeTrial, CityDiscovery } from "@/lib/activation/activation";
 
 export interface NewOfficeCommandCenterProps {
   identity: OfficeIdentity;
   activation: ActivationState;
   trial: OfficeTrial | null;
+  /** P9.0D — real city-discovery status (honest counts; never fabricated). */
+  discovery?: CityDiscovery;
   /** Always-present --office-* CSS vars (ZONO purple defaults, office brand overrides). */
   themeVars: Record<string, string>;
   hasBrand: boolean;
@@ -41,7 +43,7 @@ function Reveal({ i = 0, children, className }: { i?: number; children: React.Re
   );
 }
 
-export function NewOfficeCommandCenter({ identity, activation, trial, themeVars, hasBrand }: NewOfficeCommandCenterProps) {
+export function NewOfficeCommandCenter({ identity, activation, trial, discovery, themeVars, hasBrand }: NewOfficeCommandCenterProps) {
   const cityLine = useMemo(() => {
     const bits = [identity.city].filter(Boolean) as string[];
     if (identity.subdistrict && identity.subdistrict !== identity.city) bits.push(`נפת ${identity.subdistrict}`);
@@ -242,6 +244,56 @@ export function NewOfficeCommandCenter({ identity, activation, trial, themeVars,
               <Link href="/settings/operating-areas" className="text-xs font-semibold text-[var(--office-accent-strong)]">נהל אזורי פעילות</Link>
             </div>
           </div>
+
+          {/* P9.0D — real city-discovery status band (ZONO DISCOVERY, kept
+              distinct from OFFICE DATA). All counts are real; 0 → honest scan state. */}
+          {discovery && (
+            <div className="mt-3 rounded-2xl border border-line bg-[var(--office-badge)]/40 p-4"
+              style={{ background: "linear-gradient(140deg,#f6f4ff,#eef0ff)" }}>
+              <div className="flex items-center gap-2">
+                <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[var(--office-accent-strong)] shadow-card",
+                  (discovery.phase === "scanning" || discovery.phase === "not_started") && "zono-reveal")}>
+                  <Icon name={discovery.phase === "ready" ? "Building2" : "Sparkles"} className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  {discovery.phase === "ready" ? (
+                    <>
+                      <p className="text-sm font-bold text-ink">ZONO מצאה {discovery.discoveredListings} נכסים ב{identity.city ?? "אזור"} עבורך</p>
+                      <p className="text-xs text-muted">
+                        {discovery.noBrokerCount > 0 ? `${discovery.noBrokerCount} ללא תיווך · ` : ""}
+                        {discovery.mapPoints > 0 ? `${discovery.mapPoints} על המפה · ` : ""}
+                        אלה נכסים שאותרו ממקורות חיצוניים — לא הנכסים שלך.
+                      </p>
+                    </>
+                  ) : discovery.phase === "scanning" ? (
+                    <>
+                      <p className="text-sm font-bold text-ink">ZONO כבר סורקת את {identity.city ?? "האזור"} שלך…</p>
+                      <p className="text-xs text-muted">מאתרים נכסים חדשים, מזהים מודעות ללא תיווך ובונים את מפת האזור. התוצאות יופיעו כאן.</p>
+                    </>
+                  ) : discovery.phase === "no_results" ? (
+                    <>
+                      <p className="text-sm font-bold text-ink">סריקת {identity.city ?? "האזור"} הושלמה</p>
+                      <p className="text-xs text-muted">אין כרגע מודעות חדשות ממקורות חיצוניים — נמשיך לנטר ולעדכן אותך אוטומטית.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-bold text-ink">ZONO מתחילה לעבוד על {identity.city ?? "האזור"} שלך</p>
+                      <p className="text-xs text-muted">
+                        {discovery.neighborhoods > 0 ? `${discovery.neighborhoods} שכונות זוהו · ` : ""}
+                        הסריקה המקומית תרוץ אוטומטית ותתחיל למלא את הזירה בנתונים אמיתיים.
+                      </p>
+                    </>
+                  )}
+                </div>
+                {discovery.phase === "ready" && (
+                  <Link href="/external-listings" className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold"
+                    style={{ background: "var(--office-accent)", color: "var(--office-accent-ink)" }}>
+                    צפה בנכסים
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* honest map activate-state (no blank, no fake) */}
           <div className="mt-3 overflow-hidden rounded-2xl border border-line">
