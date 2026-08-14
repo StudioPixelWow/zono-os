@@ -65,8 +65,10 @@ const GROUPS: NavGroup[] = [
     { label: "מרכז שיווק", href: "/marketing", icon: "BarChart3" },
     { label: "סטודיו יצירה", href: "/creative-studio", icon: "Presentation" },
   ]},
-  { key: "intelligence", title: "מודיעין עסקי", desc: "מנהלים • טריטוריה • תחזיות", icon: "BarChart3", accent: "amber", items: [
+  { key: "intelligence", title: "מודיעין עסקי", desc: "מנהלים • מתווכים • טריטוריה", icon: "BarChart3", accent: "amber", items: [
     { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3" },
+    { label: "מודיעין מתווכים", href: "/broker-intelligence", icon: "Users" },
+    { label: "מודיעין שוק", href: "/market-intelligence/listings", icon: "Globe" },
     { label: "ניהול טריטוריה", href: "/territory", icon: "Map" },
     { label: "תחזיות", href: "/predictions", icon: "TrendingUp" },
     { label: "גרף ידע", href: "/graph", icon: "Layers" },
