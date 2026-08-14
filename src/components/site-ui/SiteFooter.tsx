@@ -37,7 +37,7 @@ export function SiteFooter({ nav, areas = [] }: { nav: SiteNavModel; areas?: { n
         </div>
         <div className="border-line mt-8 flex flex-col items-center gap-1 border-t pt-5 text-center">
           <span className="text-muted text-[11px]">{nav.brand.name} · המלאי מתעדכן אוטומטית</span>
-          <span className="text-muted/70 text-[10.5px] font-semibold tracking-wide">Powered by ZONO</span>
+          <span className="text-muted/70 text-[10.5px] font-semibold tracking-wide">מופעל על ידי ZONO</span>
         </div>
       </div>
     </footer>

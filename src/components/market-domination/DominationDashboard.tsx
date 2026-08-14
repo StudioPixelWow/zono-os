@@ -51,7 +51,7 @@ export async function DominationDashboard() {
   return (
     <div dir="rtl" className="flex flex-col gap-5">
       <div className="bg-brand-soft rounded-[22px] p-5">
-        <p className="text-brand text-xs font-bold">ZONO Local Market Domination</p>
+        <p className="text-brand text-xs font-bold">ZONO · שליטה בשוק המקומי</p>
         <h1 className="text-ink mt-1 text-2xl font-black">🏆 שליטה בשוק המקומי</h1>
         <p className="text-muted mt-1 text-sm">כל עיר, שכונה ורחוב הופכים לשוק מנוהל: איפה אנחנו שולטים, איפה חסר, ומה התוכנית להשתלט.</p>
       </div>

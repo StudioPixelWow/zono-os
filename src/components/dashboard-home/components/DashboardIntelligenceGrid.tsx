@@ -91,7 +91,7 @@ export function AiMissionControlCard({ t, missions, dealProbabilityPct }: { t: T
   const progress = Math.round((done / items.length) * 100);
   return (
     <div className="bg-card border-line flex flex-col gap-4 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
-      <h3 className="text-ink text-base font-black">AI Mission Control</h3>
+      <h3 className="text-ink text-base font-black">מרכז בקרת AI</h3>
       <div className="flex items-center gap-4">
         <div className="relative grid h-24 w-24 shrink-0 place-items-center">
           <svg viewBox="0 0 100 100" className="absolute inset-0 -rotate-90">

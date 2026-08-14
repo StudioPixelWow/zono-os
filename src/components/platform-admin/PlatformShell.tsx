@@ -98,7 +98,7 @@ function BrandMark() {
       <span className="zono-gradient grid h-9 w-9 place-items-center rounded-xl text-[15px] font-black text-white shadow-sm">Z</span>
       <div className="leading-tight">
         <p className="text-ink text-[15px] font-black">ZONO</p>
-        <p className="text-muted -mt-0.5 text-[10.5px] font-bold tracking-wide">CONTROL PLANE</p>
+        <p className="text-muted -mt-0.5 text-[10.5px] font-bold tracking-wide">לוח בקרה</p>
       </div>
     </div>
   );

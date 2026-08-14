@@ -107,13 +107,28 @@ const propTag = (p: RawProp): string | null =>
     ?? (p.listing_kind ? TAG_BY_LISTING[p.listing_kind] ?? null : null);
 
 /** Canonical public payload for the office site. "disabled" when unpublished, null when unknown. */
-export async function getOfficeSite(slug: string): Promise<OfficeSitePayload | "disabled" | null> {
+export async function getOfficeSite(
+  slug: string,
+  opts: { previewForOwner?: boolean } = {},
+): Promise<OfficeSitePayload | "disabled" | null> {
   if (!slug) return null;
   const admin = createServiceRoleClient();
   const { data: siteRow } = await admin.from("office_websites").select("*").eq("slug", slug).maybeSingle();
   if (!siteRow) return null;
   const s = siteRow as Record<string, unknown> & { id: string; organization_id: string; status: string };
-  if (s.status !== "published") return "disabled";
+  // Owner draft preview: a signed-in viewer from this office's org can see the
+  // unpublished draft (via ?preview); everyone else gets the "not active" page.
+  if (s.status !== "published") {
+    let allowed = false;
+    if (opts.previewForOwner) {
+      try {
+        const { getSessionContext } = await import("@/lib/auth/session");
+        const { profile } = await getSessionContext();
+        allowed = !!profile && profile.org_id === s.organization_id;
+      } catch { /* not signed in → not allowed */ }
+    }
+    if (!allowed) return "disabled";
+  }
   const orgId = s.organization_id;
 
   const [propsR, usersR, agentSitesR, officeBrandR, reviewsR, txnR, orgR] = await Promise.all([

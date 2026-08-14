@@ -44,7 +44,7 @@ export default function SettingsHubPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft rounded-[22px] p-5">
-        <p className="text-brand text-xs font-bold">Settings</p>
+        <p className="text-brand text-xs font-bold">הגדרות</p>
         <h1 className="text-ink mt-1 text-2xl font-black">הגדרות וניהול</h1>
         <p className="text-muted mt-1 text-sm">כל ההגדרות, כלי הניהול והאדמין במקום אחד.</p>
       </div>

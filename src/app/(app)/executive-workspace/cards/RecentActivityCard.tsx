@@ -10,14 +10,14 @@ export async function RecentActivityCard() {
   const os = await loadExecutiveOS().catch(() => null);
   if (!os) {
     return (
-      <CardShell title="פעילות ניהולית אחרונה" subtitle="ציר הזמן מ-Executive OS" source="executive-os.timeline">
+      <CardShell title="פעילות ניהולית אחרונה" subtitle="ציר הזמן ממרכז המנהלים" source="executive-os.timeline">
         <CardUnavailable note="ציר הפעילות אינו זמין כעת" />
       </CardShell>
     );
   }
   const items = os.timeline.slice(0, 6);
   return (
-    <CardShell title="פעילות ניהולית אחרונה" subtitle="ציר הזמן מ-Executive OS" source="executive-os.timeline">
+    <CardShell title="פעילות ניהולית אחרונה" subtitle="ציר הזמן ממרכז המנהלים" source="executive-os.timeline">
       {items.length === 0 ? (
         <p className="text-muted text-[12px]">אין פעילות מתועדת כרגע.</p>
       ) : (

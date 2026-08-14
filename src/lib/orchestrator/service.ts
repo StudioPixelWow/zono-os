@@ -96,8 +96,16 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
       }));
     } else if (passiveEntry && process.env.APIFY_TOKEN) {
       steps.push(await runStep("external_sync", false, async () => {
-        const s = await syncExternalListingsForOrganization(organizationId, { mode: "quick" });
-        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן: ${s.inserted} חדשים · ${s.updated} עודכנו` };
+        // Adaptive depth so an office reaches ~1000 listings AUTOMATICALLY: while
+        // it is still below the target market picture it gets a FULL catch-up scan
+        // (≤500/city/source ≈ 1000); once populated it drops to "quick" maintenance
+        // top-ups. Bounded either way + staleness-gated, so it scrapes at most once
+        // per stale-window and self-checkpoints under its wall-clock budget.
+        const db = createServiceRoleClient() as Db;
+        const { count } = await db.from("external_listings").select("id", { count: "exact", head: true }).eq("org_id", organizationId);
+        const mode = (count ?? 0) < 400 ? "full" : "quick";
+        const s = await syncExternalListingsForOrganization(organizationId, { mode });
+        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (${mode}): ${s.inserted} חדשים · ${s.updated} עודכנו` };
       }));
     } else {
       steps.push(skippedStep("external_sync", "סריקה מתבצעת ידנית או ב-cron"));
@@ -120,6 +128,61 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
       return { summary: `גשר מקורות שוק: ${bridge.upserted} עודכנו · ${bridge.newSources.length} חדשים · ${bridge.priceDrops.length} ירידות מחיר` };
     });
     steps.push(bridgeStep);
+
+    // STEP 3.5 — Broker detection. Auto-identifies brokers among the freshly
+    // scanned listings (registers broker/agency publishers, matches private
+    // listings that share a broker's phone/name, badges each listing) so
+    // "מודיעין מתווכים" is populated WITHOUT a manual "זהה מתווכים" click.
+    // Session-only + RLS-safe: runBrokerDetectionForOrg resolves the org from the
+    // session and runs under RLS (its queries are org-scoped by policy, NOT by an
+    // explicit filter) — so it must NEVER be called with a service-role client.
+    // Cron detection is handled separately; here we skip it honestly.
+    if (sessionScoped) {
+      steps.push(await runStep("broker_detection", false, async () => {
+        const { runBrokerDetectionForOrg } = await import("@/lib/broker/service");
+        // TWO passes converge in one refresh: pass 1 classifies each listing
+        // (broker/agency/private) and registers publishers that were ALREADY
+        // broker-typed; on a fresh office that's 0. Pass 2 now SEES the freshly
+        // classified broker/agency listings, creates their broker_profiles, and
+        // matches private listings that share a broker's phone/name. Idempotent.
+        await runBrokerDetectionForOrg();
+        const d = await runBrokerDetectionForOrg();
+        return { summary: `מתווכים: ${d.matched} זוהו · ${d.needsReview} לבדיקה · ${d.unknown} פרטיים` };
+      }));
+    } else {
+      steps.push(skippedStep("broker_detection", "cron — אין הקשר סשן (RLS)"));
+    }
+
+    // STEP 3.6 — Area intelligence. The moment the office's city has scanned
+    // data, AUTO-START competitor research + area/brokerage knowledge — the same
+    // principle as the automatic city scan (a new office is never a cold system).
+    // Both engines are session-scoped and self-throttle (city-learning 6h; the
+    // competitor snapshot is idempotent per day), so entering the dashboard keeps
+    // them fresh without a manual click. Best-effort: never breaks the run.
+    if (sessionScoped) {
+      steps.push(await runStep("area_intelligence", false, async () => {
+        let learned = "—";
+        try {
+          const db = createServiceRoleClient() as Db;
+          const { data } = await db.from("organizations").select("city").eq("id", organizationId).single();
+          const city = (data?.city as string | null) ?? null;
+          if (city) {
+            const { triggerCityLearning } = await import("@/lib/brokerage-data/city-learning-trigger");
+            const o = await triggerCityLearning(organizationId, city, "external_listing_city_detected");
+            learned = o.actionTaken;
+          }
+        } catch (e) { console.error("[orchestrator] city learning skipped:", e); }
+        let competitors = "—";
+        try {
+          const { runCompetitorIntelligenceSnapshotJob } = await import("@/lib/competitor-intelligence/engine");
+          await runCompetitorIntelligenceSnapshotJob();
+          competitors = "עודכן";
+        } catch (e) { console.error("[orchestrator] competitor snapshot skipped:", e); }
+        return { summary: `ידע אזור: ${learned} · חקר מתחרים: ${competitors}` };
+      }));
+    } else {
+      steps.push(skippedStep("area_intelligence", "cron — אין הקשר סשן"));
+    }
 
     // STEP 4 — Market Snapshots. Session path uses the session-scoped function;
     // cron path uses the explicit-orgId, service-role variant.

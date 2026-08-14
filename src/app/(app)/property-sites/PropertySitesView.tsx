@@ -45,7 +45,7 @@ export function PropertySitesView({ items }: { items: PropertySiteItem[] }) {
     <div className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">Property Sites</p>
+          <p className="text-brand text-xs font-bold">אתרי נכסים</p>
           <h1 className="text-ink mt-1 text-2xl font-black">אתרי נכסים</h1>
           <p className="text-muted mt-1 text-sm">דף נחיתה שיווקי לכל נכס — תצוגה מקדימה והעתקת קישור לשיתוף.</p>
         </div>

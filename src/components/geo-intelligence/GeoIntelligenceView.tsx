@@ -63,7 +63,7 @@ export function GeoIntelligenceView({ areas, insights, dataMode, notes }: Props)
       {/* Header */}
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Geo Intelligence</p>
+          <p className="text-brand text-xs font-bold">ZONO · מודיעין גאוגרפי</p>
           <h1 className="text-ink mt-1 flex items-center gap-2 text-2xl font-black"><Icon name="Map" size={22} /> מפת מודיעין חכמה</h1>
           <p className="text-muted mt-1 text-sm">בחרו שכבה כדי לראות איפה יקר, איפה יש ביקוש, איפה מעט היצע, איפה כדאי לפרסם ואיפה לגייס בלעדיות.</p>
         </div>

@@ -151,8 +151,8 @@ export function CreativeDnaView({
             <Icon name="Fingerprint" size={24} className="text-white" />
           </div>
           <div>
-            <p className="text-brand text-xs font-bold">ZONO Studio → Creative DNA</p>
-            <h1 className="text-ink mt-0.5 text-2xl font-black">Creative DNA</h1>
+            <p className="text-brand text-xs font-bold">ZONO Studio → זהות יצירתית</p>
+            <h1 className="text-ink mt-0.5 text-2xl font-black">זהות יצירתית</h1>
             <p className="text-muted mt-1 max-w-2xl text-sm leading-relaxed">
               ספריית מודעות ייחוס שממנה ZONO לומד את שפת העיצוב שלך ומיישם אותה ביצירת קריאייטיב — מבלי
               להעתיק מודעה או לוגו של מתחרה 1:1.
@@ -458,8 +458,8 @@ function ProfileDetail({
           {profile.analysis_summary && (
             <DnaField label="סיכום ניתוח" value={profile.analysis_summary} />
           )}
-          {profile.style_prompt && <DnaField label="Style Prompt" value={profile.style_prompt} mono />}
-          {profile.negative_prompt && <DnaField label="Negative Prompt" value={profile.negative_prompt} mono />}
+          {profile.style_prompt && <DnaField label="פרומפט סגנון" value={profile.style_prompt} mono />}
+          {profile.negative_prompt && <DnaField label="פרומפט שלילי" value={profile.negative_prompt} mono />}
         </div>
       )}
 

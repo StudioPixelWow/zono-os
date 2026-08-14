@@ -20,7 +20,7 @@ export default async function WhatsappCoveragePage() {
       <header className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <span className="bg-brand text-white grid h-9 w-9 place-items-center rounded-xl"><Icon name="MessageCircle" size={18} /></span>
-          <h1 className="text-ink text-2xl font-black">WhatsApp OS — מטריצת 86 הפיצ׳רים</h1>
+          <h1 className="text-ink text-2xl font-black">מרכז WhatsApp — מטריצת 86 הפיצ׳רים</h1>
         </div>
         <p className="text-muted text-sm">״WeBot Killer״ — מיפוי מלא של 86 היכולות לשכבות ZONO. סטטוס אמיתי: מה מוטמע דטרמיניסטית, מה חלקי, ומה תלוי ב-Meta/WhatsApp API רשמי.</p>
       </header>

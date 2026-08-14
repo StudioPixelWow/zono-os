@@ -131,7 +131,7 @@ export async function GroupsIntelligenceView({ selectedId }: { selectedId?: stri
   return (
     <div dir="rtl" className="flex flex-col gap-5">
       <div className="bg-brand-soft rounded-[22px] p-5">
-        <p className="text-brand text-xs font-bold">ZONO Facebook Groups Intelligence</p>
+        <p className="text-brand text-xs font-bold">ZONO · מודיעין קבוצות פייסבוק</p>
         <h1 className="text-ink mt-1 text-2xl font-black">📊 מרכז מודיעין קבוצות</h1>
         <p className="text-muted mt-1 text-sm">כל קבוצה הופכת לנכס עם ביצועים, איכות ותובנות — מבוסס על הנתונים האמיתיים של הקבוצות.</p>
       </div>

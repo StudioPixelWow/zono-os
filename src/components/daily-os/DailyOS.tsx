@@ -52,7 +52,7 @@ export function DailyOS({ data }: { data: DData }) {
         {tab === "morning" && (
           <div className="space-y-4">
             <Link href="/brain" className="bg-brand flex items-center justify-between gap-3 rounded-2xl p-3.5 text-white shadow-[var(--shadow-card)]">
-              <div><div className="text-[11px] font-bold opacity-90">🧠 מוח הברוקר · AI Broker Brain</div><div className="mt-0.5 text-[14px] font-black">אמור מטרה — קבל תוכנית פעולה</div></div>
+              <div><div className="text-[11px] font-bold opacity-90">🧠 מוח הברוקר</div><div className="mt-0.5 text-[14px] font-black">אמור מטרה — קבל תוכנית פעולה</div></div>
               <span className="text-[13px] font-black">←</span>
             </Link>
             <div className="grid grid-cols-2 gap-2">
@@ -63,7 +63,7 @@ export function DailyOS({ data }: { data: DData }) {
             <section><h2 className="text-ink mb-2 text-[15px] font-black">🗓️ ציר הזמן של היום</h2>{data.timeline.length === 0 ? <Empty t="אין אירועים מתוזמנים היום." /> : <div className="space-y-2">{data.timeline.map((e, i) => (
               <Link key={i} href={e.href} className="bg-surface flex items-center gap-3 rounded-2xl p-3"><span className="text-lg">{e.icon}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="text-ink line-clamp-1 text-[13px] font-bold">{e.title}</span><span className="text-muted shrink-0 text-[10px]">{new Date(e.at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span></div>{e.detail && <div className="text-muted text-[11px]">{e.detail}</div>}</div></Link>
             ))}</div>}
-            <Link href="/calendar" className="btn-zono-secondary mt-2 block rounded-xl py-2.5 text-center text-[13px] font-bold">היומן המלא (Calendar OS) ←</Link>
+            <Link href="/calendar" className="btn-zono-secondary mt-2 block rounded-xl py-2.5 text-center text-[13px] font-bold">היומן המלא ←</Link>
             <Link href="/automation" className="btn-zono-secondary mt-2 block rounded-xl py-2.5 text-center text-[13px] font-bold">מרכז האוטומציות (Automation OS) ←</Link></section>
           </div>
         )}

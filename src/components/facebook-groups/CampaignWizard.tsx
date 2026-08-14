@@ -45,7 +45,7 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
     <div dir="rtl" className="flex flex-col gap-4">
       <div className="bg-brand-soft flex items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Facebook Groups</p>
+          <p className="text-brand text-xs font-bold">ZONO · קבוצות פייסבוק</p>
           <h1 className="text-ink mt-1 flex items-center gap-2 text-2xl font-black"><Icon name="Megaphone" size={22} /> אשף קמפיין לקבוצות</h1>
           <p className="text-muted mt-1 text-sm">בונה קמפיין שיווק לנכס בקבוצות פייסבוק. שום דבר לא מתפרסם ללא חיבור ואישור.</p>
         </div>

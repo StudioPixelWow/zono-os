@@ -28,7 +28,16 @@ interface ExtRow {
 export interface PriceChange { providerKey: string; sourceId: string | null; provider: string; externalId: string; city: string | null; neighborhood: string | null; prevPrice: number; nextPrice: number; }
 export interface BridgeResult {
   upserted: number;
-  newSources: { providerKey: string; provider: string; externalId: string; sourceId: string | null; city: string | null; neighborhood: string | null; price: number | null; hasAgent: boolean | null; opportunityScore: number | null; listingUrl: string | null; title: string | null }[];
+  newSources: {
+    providerKey: string; provider: string; externalId: string; sourceId: string | null;
+    city: string | null; neighborhood: string | null; price: number | null; hasAgent: boolean | null;
+    opportunityScore: number | null; listingUrl: string | null; title: string | null;
+    // P9.1B — full display fields so the Radar popup card renders rich (image,
+    // price, rooms, m², floor, address, phone) instead of just city + score.
+    rooms: number | null; sizeSqm: number | null; floor: string | null; imageUrl: string | null;
+    phone: string | null; contactName: string | null; street: string | null; addressText: string | null;
+    propertyType: string | null; publishedAt: string | null;
+  }[];
   priceDrops: PriceChange[];
 }
 
@@ -108,6 +117,9 @@ export async function syncExternalListingsToMarketSources(organizationId: string
         providerKey: k, provider: r.source, externalId: r.source_id, sourceId,
         city: r.city, neighborhood: r.neighborhood, price: r.price, hasAgent: r.has_agent,
         opportunityScore: r.opportunity_score, listingUrl: r.listing_url, title: r.title,
+        rooms: r.rooms, sizeSqm: r.sqm ?? r.area_sqm ?? null, floor: r.floor != null ? String(r.floor) : null,
+        imageUrl: firstImage(r.images), phone: r.contact_phone, contactName: r.contact_name,
+        street: r.street, addressText: r.address, propertyType: r.property_type, publishedAt: r.published_at,
       });
     } else if (before.price != null && r.price != null && r.price < before.price) {
       const delta = r.price - before.price; // negative
@@ -166,7 +178,18 @@ export async function emitMarketEventsAndAlerts(organizationId: string, bridge: 
         title: n.hasAgent === false ? "נכס פרטי חדש באזור שלך" : "נכס חדש בעל פוטנציאל גבוה",
         message: [n.title, n.city].filter(Boolean).join(" · ") || "נכס חדש זוהה",
         priority: "high", status: "unread", opportunity_score: n.opportunityScore ?? null,
-        metadata: { marketPropertySourceId: n.sourceId, provider: n.provider, externalId: n.externalId, listingUrl: n.listingUrl, city: n.city } as never,
+        // P9.1B — RICH metadata so the popup card shows the full initial property
+        // picture (image, price, rooms, m², floor, address, provider, call) instead
+        // of just city + score. Keys match PropertyRadarAlertCard's reader.
+        metadata: {
+          marketPropertySourceId: n.sourceId, provider: n.provider, externalId: n.externalId,
+          externalUrl: n.listingUrl, city: n.city, neighborhood: n.neighborhood,
+          street: n.street, addressText: n.addressText ?? ([n.street, n.neighborhood, n.city].filter(Boolean).join(", ") || n.city),
+          price: n.price, rooms: n.rooms, sizeSqm: n.sizeSqm, floor: n.floor,
+          propertyType: n.propertyType, imageUrl: n.imageUrl, publishedAt: n.publishedAt,
+          phone: n.phone, contactName: n.contactName, callUrl: n.phone ? `tel:${n.phone}` : null,
+          opportunityScore: n.opportunityScore,
+        } as never,
       }));
       try { const { error } = await db.from("property_alerts" as never).insert(alertRows as never); if (!error) alertsCreated += alertRows.length; } catch { /* best-effort */ }
     }

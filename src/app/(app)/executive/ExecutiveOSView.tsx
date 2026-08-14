@@ -153,7 +153,7 @@ export function ExecutiveOSView({ os, deals }: { os: ExecutiveOS; deals: ExecDea
                 </div>
               ))}</div>
             )}
-            <p className="text-muted mt-2 text-[10px]">מבוסס על זמינות ועומס מ-Calendar OS — ללא חישוב ציון חדש.</p>
+            <p className="text-muted mt-2 text-[10px]">מבוסס על זמינות ועומס מהיומן — ללא חישוב ציון חדש.</p>
           </Section>
 
           {/* ── Batch 5.6G · Canonical Journey projection ──────────────────

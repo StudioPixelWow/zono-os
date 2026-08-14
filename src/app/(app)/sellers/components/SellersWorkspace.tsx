@@ -233,7 +233,7 @@ function Hero({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <p className="text-brand text-xs font-bold tracking-wide">Seller Intelligence OS</p>
+        <p className="text-brand text-xs font-bold tracking-wide">מודיעין מוכרים</p>
         <h1 className="text-ink text-2xl font-black sm:text-[28px]">המוכרים שלך</h1>
         <p className="text-muted mt-0.5 text-sm font-medium">
           ניהול חכם של מוכרים, נכסים, סיכוני נטישה ופעולות מומלצות

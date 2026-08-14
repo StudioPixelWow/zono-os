@@ -108,9 +108,57 @@ export async function fetchUnreadPropertyAlerts(): Promise<FetchPropertyAlertsRe
   ]);
   if (listRes.error) throw new Error(listRes.error.message);
   const alerts = ((listRes.data ?? []) as unknown as AlertRow[]).map(toDTO);
+  await enrichAlertsFromMarketSource(db, alerts);
   const count = countRes.count ?? alerts.length;
   const settings = await readPopupSettings(db, orgId);
   return { alerts, count, settings };
+}
+
+/**
+ * P9.1B — backfill the RICH card fields (image, price, rooms, m², floor, address,
+ * phone) onto alerts whose metadata is thin. Alerts created by the older path
+ * stored only city + score; the full picture lives on the linked
+ * market_property_sources row. We resolve it at READ time (by
+ * metadata.marketPropertySourceId) and fill only the MISSING fields — so both old
+ * and new alerts render a complete card. Best-effort: never throws.
+ */
+async function enrichAlertsFromMarketSource(
+  db: Awaited<ReturnType<typeof createClient>>,
+  alerts: PropertyRadarAlertDTO[],
+): Promise<void> {
+  try {
+    const ids = [...new Set(alerts.map((a) => a.metadata?.marketPropertySourceId).filter((x): x is string => !!x))];
+    if (!ids.length) return;
+    const { data } = await db
+      .from("market_property_sources" as never)
+      .select("id, title, city, neighborhood, street, address_text, property_type, price, rooms, floor, size_sqm, image_url, phone, contact_name, published_at, external_url")
+      .in("id", ids as never);
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const r of (data ?? []) as Record<string, unknown>[]) byId.set(r.id as string, r);
+    for (const a of alerts) {
+      const src = a.metadata?.marketPropertySourceId ? byId.get(a.metadata.marketPropertySourceId) : null;
+      if (!src) continue;
+      const m = a.metadata ?? (a.metadata = {});
+      const pick = (cur: unknown, next: unknown) => (cur == null || cur === "" ? (next ?? cur) : cur);
+      m.imageUrl = pick(m.imageUrl, src.image_url) as string | null;
+      m.price = pick(m.price, src.price) as number | null;
+      m.rooms = pick(m.rooms, src.rooms) as number | null;
+      m.sizeSqm = pick(m.sizeSqm, src.size_sqm) as number | null;
+      m.floor = pick(m.floor, src.floor) as string | null;
+      m.street = pick(m.street, src.street) as string | null;
+      m.neighborhood = pick(m.neighborhood, src.neighborhood) as string | null;
+      m.city = pick(m.city, src.city) as string | null;
+      m.addressText = pick(m.addressText, src.address_text) as string | null;
+      m.propertyType = pick(m.propertyType, src.property_type) as string | null;
+      m.publishedAt = pick(m.publishedAt, src.published_at) as string | null;
+      m.phone = pick(m.phone, src.phone) as string | null;
+      m.contactName = pick(m.contactName, src.contact_name) as string | null;
+      m.externalUrl = pick(m.externalUrl, src.external_url) as string | null;
+      if (!m.callUrl && m.phone) m.callUrl = `tel:${m.phone}`;
+    }
+  } catch (e) {
+    console.error("[radar] alert enrichment skipped:", e);
+  }
 }
 
 /**

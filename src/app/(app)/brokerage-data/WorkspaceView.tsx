@@ -1679,7 +1679,7 @@ function CrmRelationshipPanel() {
 
           {/* Chief of Staff CRM understanding */}
           <div className="rounded-xl border border-violet-500/40 bg-surface px-3 py-2">
-            <b className="text-violet-800">🧠 ה-Chief of Staff רואה קשרי CRM:</b>
+            <b className="text-violet-800">🧠 ראש המטה רואה קשרי CRM:</b>
             <ul className="mt-1 flex flex-col gap-0.5">{data.dashboard.chiefOfStaffStatements.map((s, i) => <li key={i} className="text-muted text-[11px]">• {s}</li>)}</ul>
           </div>
 
@@ -1959,7 +1959,7 @@ function RelationshipGraphPanel() {
           {/* CoS + Decision */}
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="border-line bg-surface rounded-xl border px-3 py-2">
-              <b className="text-sky-800">🗣️ ה-Chief of Staff מסיק מהקשרים:</b>
+              <b className="text-sky-800">🗣️ ראש המטה מסיק מהקשרים:</b>
               <ul className="mt-1 flex flex-col gap-0.5">{data.chiefOfStaffAnswers.map((a, i) => <li key={i} className="text-muted text-[11px]">• {a.statement}</li>)}</ul>
             </div>
             <div className="border-line bg-surface rounded-xl border px-3 py-2">
@@ -2024,7 +2024,7 @@ function OrgMemoryPanel() {
           {/* Chief of Staff answers + decision improvements */}
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="border-line bg-surface rounded-xl border px-3 py-2">
-              <b className="text-indigo-800">🗣️ ה-Chief of Staff נזכר:</b>
+              <b className="text-indigo-800">🗣️ ראש המטה נזכר:</b>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {data.chiefOfStaffAnswers.map((a, i) => <li key={i} className="text-muted text-[11px]"><b className="text-ink">{a.question}</b> {a.answer}</li>)}
               </ul>
@@ -2106,7 +2106,7 @@ function TruthEnginePanel() {
           {/* Executive integration — CoS consumes truth */}
           {data.executive && (
             <div className="rounded-xl border border-emerald-500/40 bg-surface px-3 py-2">
-              <b className="text-emerald-800">🧠 השפעה על ה-Chief of Staff:</b>
+              <b className="text-emerald-800">🧠 השפעה על ראש המטה:</b>
               <span className="text-muted"> ביטחון AI {data.executive.cosAiConfidence} → מותאם-אמון <b className="text-emerald-800">{data.executive.truthAdjustedConfidence}</b>. {data.executive.note}</span>
             </div>
           )}
@@ -2176,10 +2176,10 @@ function ChiefOfStaffPanel() {
     <section className="border-brand rounded-3xl border-2 bg-gradient-to-l from-brand-soft/40 to-transparent p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-brand-strong text-xl font-black">🧠 ה-Chief of Staff של ZONO — דשבורד מנכ״ל</h2>
+          <h2 className="text-brand-strong text-xl font-black">🧠 ראש המטה של ZONO — דשבורד מנכ״ל</h2>
           <p className="text-muted mt-1 text-[12px]">שכבת התזמור מעל כל מנועי ZONO: מסתכל, מתעדף, מחבר וממליץ — לעולם לא מקור אמת ולא מבצע אוטומטית. מבוסס-ראיות בלבד.</p>
         </div>
-        <button onClick={run} disabled={pending} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "הפעל Chief of Staff"}</button>
+        <button onClick={run} disabled={pending} className="bg-brand-strong rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-60">{pending ? "מנתח…" : "הפעל את ראש המטה"}</button>
       </div>
       {err && <p className="mt-2 font-semibold text-rose-700">{err}</p>}
       {data && (

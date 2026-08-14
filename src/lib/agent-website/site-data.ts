@@ -187,13 +187,28 @@ export async function getAgentListing(slug: string, filters: PropertyFilters = {
  * Canonical public payload for the agent site. Returns "disabled" for an
  * unpublished site and null when the slug resolves to nothing.
  */
-export async function getAgentSite(slug: string): Promise<AgentSitePayload | "disabled" | null> {
+export async function getAgentSite(
+  slug: string,
+  opts: { previewForOwner?: boolean } = {},
+): Promise<AgentSitePayload | "disabled" | null> {
   if (!slug) return null;
   const admin = createServiceRoleClient();
   const { data: siteRow } = await admin.from("agent_websites").select("*").eq("slug", slug).maybeSingle();
   if (!siteRow) return null;
   const s = siteRow as Record<string, unknown> & { id: string; organization_id: string; user_id: string; status: string };
-  if (s.status !== "published") return "disabled";
+  // Owner draft preview (via ?preview): a signed-in viewer from this agent's org
+  // can see the unpublished draft; everyone else gets the "not active" page.
+  if (s.status !== "published") {
+    let allowed = false;
+    if (opts.previewForOwner) {
+      try {
+        const { getSessionContext } = await import("@/lib/auth/session");
+        const { profile } = await getSessionContext();
+        allowed = !!profile && profile.org_id === s.organization_id;
+      } catch { /* not signed in → not allowed */ }
+    }
+    if (!allowed) return "disabled";
+  }
   const orgId = s.organization_id, agentId = s.user_id;
 
   const [propsR, agentBrandR, officeBrandR, twinR, locR, soldR, orgR] = await Promise.all([

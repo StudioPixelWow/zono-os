@@ -128,7 +128,7 @@ function Hero({ pending, onRecompute }: { pending: boolean; onRecompute: () => v
         style={{ background: "radial-gradient(120% 130% at 85% 0%, rgba(124,58,237,0.12) 0%, rgba(168,139,250,0.07) 40%, rgba(255,255,255,0) 72%)" }} />
       <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-right">
         <div className="min-w-0">
-          <p className="text-brand text-xs font-bold tracking-wide">ZONO Competitor Intelligence</p>
+          <p className="text-brand text-xs font-bold tracking-wide">ZONO · מודיעין מתחרים</p>
           <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מודיעין מתחרים</h1>
           <p className="text-muted mt-1.5 max-w-xl text-sm">מערכת מתקדמת למעקב בזמן אמת אחר פעילות המתחרים וההזדמנויות בשוק</p>
           <div className="mt-4 flex justify-center sm:justify-start"><Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב מודיעין מתחרים</Button></div>

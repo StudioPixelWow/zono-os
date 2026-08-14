@@ -15,7 +15,7 @@ export async function WhatsappDashboardSection() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="MessageCircle" size={16} /></span>
-          <h2 className="text-ink text-lg font-black">WhatsApp OS</h2>
+          <h2 className="text-ink text-lg font-black">מרכז WhatsApp</h2>
         </div>
         <Link href="/whatsapp" className="text-brand-strong text-sm font-bold hover:underline">למרכז הוואטסאפ ←</Link>
       </div>

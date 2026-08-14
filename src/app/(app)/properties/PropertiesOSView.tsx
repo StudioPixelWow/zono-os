@@ -482,7 +482,7 @@ function StickyAICopilotPanel({ atRisk, needMarketing }: { atRisk: number; needM
         <div className="zono-ai-gradient rounded-[22px] p-5 text-white shadow-[var(--shadow-lift)]">
           <div className="flex items-center gap-2">
             <Icon name="Sparkles" size={18} />
-            <p className="text-base font-black">AI Copilot</p>
+            <p className="text-base font-black">עוזר AI</p>
             <span className="bg-white/15 rounded-full px-2 py-0.5 text-[10px] font-bold">BETA</span>
           </div>
           <p className="text-white/80 mt-0.5 text-xs">תמיד כאן לעזור</p>

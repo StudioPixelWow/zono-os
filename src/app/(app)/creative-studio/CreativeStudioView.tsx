@@ -370,10 +370,10 @@ function DnaEditor({ dna, et, eid, r, wrap }: { dna: Dna | null; et: string; eid
     <section className="flex flex-col gap-3">
       <h2 className="text-ink text-lg font-black">עריכת פרופיל DNA</h2>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Field label="DNA Summary" value={summary} onChange={setSummary} />
-        <Field label="Visual Personality" value={visual} onChange={setVisual} />
-        <Field label="Copywriting Tone" value={tone} onChange={setTone} />
-        <Field label="Real Estate Positioning" value={positioning} onChange={setPositioning} />
+        <Field label="תקציר DNA" value={summary} onChange={setSummary} />
+        <Field label="אישיות ויזואלית" value={visual} onChange={setVisual} />
+        <Field label="טון קופירייטינג" value={tone} onChange={setTone} />
+        <Field label="מיצוב נדל״ן" value={positioning} onChange={setPositioning} />
         <Field label="הערות סוכן" value={agentNotes} onChange={setAgentNotes} />
         <Field label="הערות משרד" value={officeNotes} onChange={setOfficeNotes} />
         <Field label="הערות מוכר" value={sellerNotes} onChange={setSellerNotes} />
@@ -1506,7 +1506,7 @@ function QuickCreativeSection({ outputs, et, eid, wrap, canViewPrompt, orgId, us
       <div><h2 className="text-ink text-lg font-black">יצירה מהירה</h2><p className="text-muted text-[12px]">לחצו, מלאו טופס קצר וקבלו 4 וריאציות עיצוב ממותגות ומוכנות לפרסום.</p></div>
       {/* BUILD SIGNATURE — proves which build is running (diagnostic only) */}
       <div dir="ltr" className="bg-surface border-line text-muted flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 font-mono text-[10px]">
-        <span className="text-brand-strong font-bold">ZONO Build Signature</span>
+        <span className="text-brand-strong font-bold">חתימת ZONO</span>
         <span>commit: <b className="text-ink">{BUILD_SIGNATURE.commit}</b></span>
         <span>branch: {BUILD_SIGNATURE.branch}</span>
         <span>signed: {BUILD_SIGNATURE.signedAt}</span>

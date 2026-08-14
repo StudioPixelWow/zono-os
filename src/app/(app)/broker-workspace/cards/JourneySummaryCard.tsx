@@ -8,7 +8,7 @@ export async function JourneySummaryCard() {
   const journey = await loadBrokerJourney().catch(() => null);
   if (!journey) {
     return (
-      <CardShell title="המסעות שלי" subtitle="Journey Center · שלך בלבד" source="journey-center({owner})">
+      <CardShell title="המסעות שלי" subtitle="מרכז מסעות · שלך בלבד" source="journey-center({owner})">
         <CardUnavailable note="נתוני המסעות אינם זמינים כעת" />
       </CardShell>
     );
@@ -21,7 +21,7 @@ export async function JourneySummaryCard() {
     </div>
   );
   return (
-    <CardShell title="המסעות שלי" subtitle="Journey Center · שלך בלבד" source="journey-center({owner})">
+    <CardShell title="המסעות שלי" subtitle="מרכז מסעות · שלך בלבד" source="journey-center({owner})">
       <div className="grid grid-cols-4 gap-2">
         {stat("פעילים", k.active, "text-ink")}
         {stat("ממתינים", k.waiting, "text-brand")}

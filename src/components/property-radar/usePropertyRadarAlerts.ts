@@ -57,14 +57,16 @@ function rowToDTO(row: Record<string, unknown>): PropertyRadarAlertDTO | null {
 export interface UsePropertyRadarAlerts {
   /** EXACT count of NEW (unseen) high/urgent opportunities. */
   count: number;
-  /** City for the digest copy (most common among the preview), or null. */
+  /** City for the copy (most common among the preview), or null. */
   city: string | null;
-  /** Whether the single digest banner should be visible right now. */
+  /** The single top opportunity to surface as a RICH card (one at a time). */
+  topAlert: PropertyRadarAlertDTO | null;
+  /** Whether the single opportunity surface should be visible right now. */
   digestVisible: boolean;
   isQuiet: boolean;
   isRealtimeConnected: boolean;
   settings: PropertyRadarPopupSettings;
-  /** Drain the whole batch to `shown` (seen) on the server + hide the banner. */
+  /** Drain the whole batch to `shown` (seen) on the server + hide the surface. */
   acknowledge: () => void;
 }
 
@@ -129,10 +131,12 @@ export function usePropertyRadarAlerts(orgId: string | null): UsePropertyRadarAl
   }, []);
 
   const city = useMemo(() => deriveCity(preview), [preview]);
+  const topAlert = preview[0] ?? null;
 
   return {
     count: state.count,
     city,
+    topAlert,
     digestVisible: isDigestVisible(state, isQuiet),
     isQuiet,
     isRealtimeConnected,

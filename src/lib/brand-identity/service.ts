@@ -75,6 +75,13 @@ export async function saveBrandProfile(input: SaveBrandInput): Promise<void> {
   patch.ai_design_profile = buildAiDesignProfile(merged) as unknown as Json;
 
   await supabase.from("brand_identity_profiles").update(patch as never).eq("org_id", orgId).eq("entity_type", input.entityType).eq("entity_id", input.entityId);
+
+  // P9.1B — propagate the agent's brand photo to users.avatar_url so the same
+  // image shows EVERYWHERE the app reads the user avatar (topbar, headers,
+  // generated site/marketing images), not only inside Brand & Identity.
+  if (input.entityType === "agent" && typeof patch.profile_image_url === "string" && patch.profile_image_url) {
+    await supabase.from("users").update({ avatar_url: patch.profile_image_url } as never).eq("id", input.entityId).then(() => undefined, () => undefined);
+  }
 }
 
 export async function saveBrandColors(entityType: string, entityId: string, c: { primary: string; secondary: string; accent: string; palette: string[]; confidence: number; source: string }): Promise<void> {

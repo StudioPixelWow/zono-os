@@ -50,7 +50,7 @@ export function LaunchReadinessView({ score: s0, deploy: d0 }: { score: Producti
 
       {/* Overall launch readiness */}
       <div className={`flex flex-col items-center gap-2 rounded-[20px] border p-6 ${BAND_STYLE[score.band]}`}>
-        <p className="text-xs font-bold opacity-80">Launch Readiness</p>
+        <p className="text-xs font-bold opacity-80">מוכנות להשקה</p>
         <p className="text-5xl font-black">{score.launchReadinessPercent}%</p>
         <span className="rounded-full border border-current/30 px-3 py-0.5 text-sm font-bold">{BAND_LABEL[score.band]}</span>
       </div>

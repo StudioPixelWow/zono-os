@@ -67,7 +67,7 @@ export function OfficeWebsiteView({ config, analytics }: { config: OfficeWebsite
               <span className="text-muted text-[12px]">{config.view_count} צפיות</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {publicUrl && <a href={publicUrl} target="_blank" rel="noreferrer" className="text-brand-strong text-[12px] font-bold">תצוגה מקדימה ↗</a>}
+              {publicUrl && <a href={`${publicUrl}${config.status === "published" ? "" : "?preview=1"}`} target="_blank" rel="noreferrer" className="text-brand-strong text-[12px] font-bold">תצוגה מקדימה ↗</a>}
               <Button size="sm" variant="secondary" onClick={copyLink} disabled={pending}>העתק קישור</Button>
               {config.status !== "published"
                 ? <Button size="sm" onClick={() => run(publishOfficeWebsiteAction)} disabled={pending}>פרסם אתר</Button>

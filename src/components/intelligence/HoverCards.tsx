@@ -45,7 +45,7 @@ export function BrokerHoverCard({ id, name, summary, className }: { id?: string 
             {summary.office && <Row label="משרד" value={summary.office} />}
             <Row label="שליטה אזורית" value={val(summary.zoneDominance)} />
             <Row label="נתח שוק" value={pct01(summary.marketShare)} />
-            <Row label="Winning DNA" value={val(summary.winningDna)} />
+            <Row label="נוסחה מנצחת" value={val(summary.winningDna)} />
           </span>
         </span>
       )}

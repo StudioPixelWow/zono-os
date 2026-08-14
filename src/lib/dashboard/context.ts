@@ -19,11 +19,12 @@ export async function getDashboardContext(): Promise<DashboardContextData> {
     const { profile, organization } = await getSessionContext();
     if (!profile) return EMPTY_DASHBOARD_CONTEXT;
 
+    const supabase = await createClient();
+
     // Role label (Hebrew) from the roles table.
     let roleKey: string | null = null;
     let roleLabel: string | null = null;
     if (profile.role_id) {
-      const supabase = await createClient();
       const { data } = await supabase
         .from("roles")
         .select("key, name")
@@ -34,6 +35,24 @@ export async function getDashboardContext(): Promise<DashboardContextData> {
         roleLabel = data.name;
       }
     }
+
+    // Effective avatar: the agent photo uploaded in Brand & Identity lives in
+    // brand_identity_profiles.profile_image_url — NOT users.avatar_url. Fall back
+    // to it (then the office logo) so the photo shows EVERYWHERE the topbar/avatar
+    // renders, even when avatar_url was never separately set.
+    let brandAvatar: string | null = null;
+    try {
+      const { data: bip } = await supabase
+        .from("brand_identity_profiles")
+        .select("profile_image_url, logo_url, profile_image_status")
+        .eq("entity_type", "agent")
+        .eq("entity_id", profile.id)
+        .maybeSingle();
+      const row = bip as { profile_image_url: string | null; logo_url: string | null; profile_image_status: string | null } | null;
+      if (row && row.profile_image_status !== "removed") {
+        brandAvatar = row.profile_image_url ?? row.logo_url ?? null;
+      }
+    } catch { /* best-effort — avatar just falls back to the initial */ }
 
     const locRows = await getCurrentUserOperatingLocalities();
     const localities = locRows.map((l) => ({
@@ -55,7 +74,7 @@ export async function getDashboardContext(): Promise<DashboardContextData> {
         roleKey,
         roleLabel,
         title: profile.title,
-        avatarUrl: profile.avatar_url ?? null,
+        avatarUrl: profile.avatar_url ?? brandAvatar,
         onboardingCompleted: profile.onboarding_completed,
         propertyTypes: profile.property_types ?? [],
         dealTypes: profile.deal_types ?? [],

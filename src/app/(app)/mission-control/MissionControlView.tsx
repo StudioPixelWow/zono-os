@@ -153,7 +153,7 @@ export function MissionControlView({ data }: { data: MissionControlDTO }) {
 
           {/* Pipeline snapshot from existing recommendations (no recompute) */}
           {actionCenter.recommendations && (
-            <TerminalSection title="צבר ההמלצות" subtitle="מתוך ה-AI Coach הקיים">
+            <TerminalSection title="צבר ההמלצות" subtitle="מתוך מאמן ה-AI הקיים">
               <MetricGrid>
                 <Metric label="סה״כ" value={String(actionCenter.recommendations.total)} />
                 <Metric label="עדיפות גבוהה" value={String(actionCenter.recommendations.highPriority)} accent />

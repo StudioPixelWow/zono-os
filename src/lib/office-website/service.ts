@@ -14,6 +14,16 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
 
+/** True when a signed-in viewer belongs to `orgId` (for owner draft previews). */
+async function viewerBelongsToOrg(orgId: string): Promise<boolean> {
+  try {
+    const { profile } = await getSessionContext();
+    return !!profile && profile.org_id === orgId;
+  } catch {
+    return false;
+  }
+}
+
 async function ctx() {
   const { user, profile } = await getSessionContext();
   if (!user || !profile) throw new Error("not authenticated");
@@ -111,13 +121,22 @@ const propRow = (p: { id: string; title: string; price: number; city: string | n
   id: p.id, title: p.title, price: p.price, city: p.city, neighborhood: p.neighborhood, rooms: p.rooms, area: p.size_sqm, type: p.type, status: p.status, image: p.primary_image_url ?? null, tag: STATUS_TAG[p.status] ?? null,
 });
 
-export async function getPublicOfficeSite(slug: string): Promise<PublicSite | "disabled" | null> {
+export async function getPublicOfficeSite(
+  slug: string,
+  opts: { previewForOwner?: boolean } = {},
+): Promise<PublicSite | "disabled" | null> {
   if (!slug) return null;
   const admin = createServiceRoleClient();
   const { data: site } = await admin.from("office_websites").select("*").eq("slug", slug).maybeSingle();
   if (!site) return null;
   const s = site as Record<string, unknown> & { id: string; organization_id: string; status: string };
-  if (s.status !== "published") return "disabled";
+  // Draft/disabled sites are hidden from the public — EXCEPT an owner preview:
+  // if ?preview and the signed-in viewer belongs to this office's org, render the
+  // draft so they can see the site before publishing.
+  if (s.status !== "published") {
+    const allowed = opts.previewForOwner && (await viewerBelongsToOrg(s.organization_id));
+    if (!allowed) return "disabled";
+  }
   const orgId = s.organization_id;
 
   const [propsR, agentsR, projectsR, terrR, txnR, kpiPropsR, kpiAgentsR, kpiTerrR] = await Promise.all([

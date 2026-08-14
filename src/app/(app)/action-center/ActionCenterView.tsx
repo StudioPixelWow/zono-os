@@ -69,7 +69,7 @@ export function ActionCenterView({ data }: { data: ActionCenterDTO }) {
       <MissionDraftsMini />
 
       {/* Recommended Actions (existing AI Coach) */}
-      <TerminalSection title="פעולות מומלצות" subtitle="AI Coach קיים בלבד — לא נוצרות חדשות" action={
+      <TerminalSection title="פעולות מומלצות" subtitle="מאמן AI קיים בלבד — לא נוצרות חדשות" action={
         recommendations ? <Pill tone="neutral">{recommendations.highPriority} בעדיפות גבוהה</Pill> : null
       }>
         <div className="mb-3 flex flex-wrap gap-2">
@@ -94,7 +94,7 @@ export function ActionCenterView({ data }: { data: ActionCenterDTO }) {
               );
             })}
           </div>
-        ) : <TerminalEmpty text={recommendations ? "אין פעולות בקטגוריה זו." : "אין כרגע המלצות AI Coach."} />}
+        ) : <TerminalEmpty text={recommendations ? "אין פעולות בקטגוריה זו." : "אין כרגע המלצות ממאמן ה-AI."} />}
       </TerminalSection>
 
       {/* Opportunity Queue */}

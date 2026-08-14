@@ -75,9 +75,10 @@ export function BrokerIntelligenceView({ board, cityFilter }: { board: BrokerBoa
           <p className="text-brand text-xs font-bold">ZONO · מודיעין מתווכים</p>
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין מתווכים</h1>
           <p className="text-muted mt-1 text-sm">זיהוי מקור הפרסום של מודעות חיצוניות — מוכר פרטי / מתווך / משרד תיווך. מידע עסקי ציבורי בלבד.</p>
+          <p className="text-success mt-1 flex items-center gap-1 text-xs font-bold"><Icon name="Sparkles" size={13} /> הזיהוי מתבצע אוטומטית אחרי כל סריקה — אין צורך בלחיצה.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => run(runBrokerDetectionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>זהה מתווכים</Button>
+          <Button size="sm" variant="secondary" onClick={() => run(runBrokerDetectionAction)} disabled={pending} leadingIcon={<Icon name="RefreshCw" size={15} />}>בדוק מתווכים חדשים</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowNew((v) => !v)} leadingIcon={<Icon name="Plus" size={15} />}>מתווך חדש</Button>
         </div>
       </div>

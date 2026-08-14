@@ -113,7 +113,7 @@ function TodayTab({ data }: { data: BrokerWorkspace }) {
 
       <Section title="🗓️ היומן">
         <Link href="/calendar" className="bg-card border-line block rounded-2xl border p-3">
-          <div className="text-ink text-[13px] font-black">Calendar OS — סדר היום, מסלול ופגישות</div>
+          <div className="text-ink text-[13px] font-black">יומן — סדר היום, מסלול ופגישות</div>
           <div className="text-muted mt-0.5 text-[12px]">כל הפגישות, המשימות והמעקבים במקום אחד.</div>
           <div className="text-brand mt-2 text-center text-[12px] font-bold">פתח יומן ←</div>
         </Link>

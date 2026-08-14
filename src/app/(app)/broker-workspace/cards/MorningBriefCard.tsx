@@ -13,7 +13,7 @@ export async function MorningBriefCard() {
   const [os, journey] = await Promise.all([loadDailyOS().catch(() => null), loadBrokerJourney().catch(() => null)]);
   const brief = buildBrokerMorningBrief(os, journey, os ? brokerPriorities(os) : []);
   return (
-    <CardShell title="התדריך הבוקר" subtitle="מורכב מ-Daily OS · תור · מסעות — ללא ייצור טקסט" source="compose (broker-scoped)">
+    <CardShell title="התדריך הבוקר" subtitle="מורכב ממרכז יומי · תור · מסעות — ללא ייצור טקסט" source="compose (broker-scoped)">
       {brief.empty ? (
         <CardUnavailable note="אין כרגע מספיק נתונים לתדריך" />
       ) : (

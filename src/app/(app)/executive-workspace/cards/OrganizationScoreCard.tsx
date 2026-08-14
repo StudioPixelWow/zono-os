@@ -12,13 +12,13 @@ export async function OrganizationScoreCard() {
   const score = os?.score ?? null;
   if (!score) {
     return (
-      <CardShell title="ציון הארגון" subtitle="מ-Chief of Staff · לא מחושב מחדש" source="executive-os">
+      <CardShell title="ציון הארגון" subtitle="מראש המטה · לא מחושב מחדש" source="executive-os">
         <CardUnavailable note="ציון הארגון אינו זמין כעת" />
       </CardShell>
     );
   }
   return (
-    <CardShell title="ציון הארגון" subtitle="מ-Chief of Staff · לא מחושב מחדש" source="executive-os">
+    <CardShell title="ציון הארגון" subtitle="מראש המטה · לא מחושב מחדש" source="executive-os">
       <div className="flex items-center gap-4">
         <div className="text-center">
           <div className={`text-4xl font-black leading-none ${scoreTone(score.overall)}`}>{score.overall}</div>

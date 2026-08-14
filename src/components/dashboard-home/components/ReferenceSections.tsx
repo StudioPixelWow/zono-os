@@ -369,7 +369,7 @@ export function AICommandCenterSection({ t, data }: { t: Translate; data: Dashbo
       <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-brand/30 blur-3xl" />
       <div className="relative mb-6 flex items-center gap-2">
         <span className="zono-ai-gradient grid h-9 w-9 place-items-center rounded-xl text-white"><Icon name="Sparkles" size={18} /></span>
-        <h2 className="text-xl font-black text-white">AI Command Center</h2>
+        <h2 className="text-xl font-black text-white">מרכז פיקוד AI</h2>
       </div>
       {!hasData ? (
         <EmptyStateDark className="relative" />

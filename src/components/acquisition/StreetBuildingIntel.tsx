@@ -54,7 +54,7 @@ export async function StreetBuildingIntel({ city }: { city?: string }) {
     <div dir="rtl" className="flex flex-col gap-5">
       <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Inventory Acquisition</p>
+          <p className="text-brand text-xs font-bold">ZONO · גיוס מלאי</p>
           <h1 className="text-ink mt-1 text-2xl font-black">🏘️ מודיעין רחובות ובניינים</h1>
           <p className="text-muted mt-1 text-sm">איפה לגייס מלאי — לפי פעילות עסקאות ברמת רחוב ובניין. מזין את מנוע גיוס הבלעדיות.</p>
         </div>

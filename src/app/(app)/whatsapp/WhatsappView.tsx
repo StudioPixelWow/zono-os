@@ -40,7 +40,7 @@ export function WhatsappView({ cc }: { cc: WhatsappCommandCenter }) {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="bg-brand text-white grid h-9 w-9 place-items-center rounded-xl"><Icon name="MessageCircle" size={18} /></span>
-            <h1 className="text-ink text-2xl font-black">WhatsApp OS</h1>
+            <h1 className="text-ink text-2xl font-black">מרכז WhatsApp</h1>
             <span className="bg-surface text-muted rounded-full px-2 py-0.5 text-[11px] font-bold">{CONN_LABEL[cc.connectionStatus] ?? cc.connectionStatus}</span>
           </div>
           <p className="text-muted text-sm">מערכת WhatsApp AI לסוכני נדל״ן — תיבה מאוחדת, הסמכה, שחזור שיחות, מעקבים, קמפיינים ואישורים. ללא שליחה אוטומטית, ללא שמירת אסימונים. כל הודעה: טיוטה ← אישור ← שליחה ידנית.</p>

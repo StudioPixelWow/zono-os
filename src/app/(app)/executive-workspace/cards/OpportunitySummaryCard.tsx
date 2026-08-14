@@ -7,14 +7,14 @@ export async function OpportunitySummaryCard() {
   const os = await loadExecutiveOS().catch(() => null);
   if (!os) {
     return (
-      <CardShell title="תמצית הזדמנויות" subtitle="מ-Chief of Staff · לא מדורג מחדש" source="executive-os">
+      <CardShell title="תמצית הזדמנויות" subtitle="מראש המטה · לא מדורג מחדש" source="executive-os">
         <CardUnavailable note="תמצית ההזדמנויות אינה זמינה כעת" />
       </CardShell>
     );
   }
   const opps = os.opportunities.slice(0, 3);
   return (
-    <CardShell title="תמצית הזדמנויות" subtitle="מ-Chief of Staff · לא מדורג מחדש" source="executive-os">
+    <CardShell title="תמצית הזדמנויות" subtitle="מראש המטה · לא מדורג מחדש" source="executive-os">
       {opps.length === 0 ? (
         <p className="text-muted text-[12px]">אין הזדמנויות בולטות כרגע.</p>
       ) : (

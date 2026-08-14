@@ -29,9 +29,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function OfficeSitePage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function OfficeSitePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ preview?: string }> }) {
   const { slug } = await params;
-  const site = await getOfficeSite(slug).catch(() => null);
+  const { preview } = await searchParams;
+  const site = await getOfficeSite(slug, { previewForOwner: preview != null }).catch(() => null);
 
   if (site && site !== "disabled") {
     try {

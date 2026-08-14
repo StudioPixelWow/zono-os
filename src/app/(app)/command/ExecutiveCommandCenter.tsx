@@ -104,7 +104,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
       <div className="bg-brand-soft rounded-[22px] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-brand text-xs font-bold">ZONO Decision Intelligence</p>
+            <p className="text-brand text-xs font-bold">ZONO · מודיעין החלטות</p>
             <h1 className="text-ink mt-1 text-2xl font-black">מרכז פיקוד</h1>
             <p className="text-muted mt-1 text-sm">{p.executive_summary}</p>
             <p className="text-brand-strong mt-2 flex items-center gap-1.5 text-sm font-bold">
