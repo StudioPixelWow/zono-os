@@ -7,6 +7,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { RealEstatePropertyCard } from "@/components/property/RealEstatePropertyCard";
+import { ContextualZeroState } from "@/components/common/ContextualZeroState";
 import {
   PROPERTY_STATUS_LABELS,
   PROPERTY_STATUS_OPTIONS,
@@ -186,20 +187,15 @@ export function PropertiesListView({
           לא ניתן לטעון את הנכסים כעת. נסה/י לרענן.
         </div>
       ) : properties.length === 0 ? (
-        <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
-          <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl">
-            <Icon name="Building2" size={26} />
-          </span>
-          <p className="text-ink text-lg font-extrabold">אין נכסים להצגה</p>
-          <p className="text-muted max-w-sm text-sm">
-            עדיין לא הוספת נכסים, או שאין נכסים שתואמים לסינון. אפשר להוסיף נכס חדש.
-          </p>
-          <Link href="/properties/new">
-            <Button leadingIcon={<Icon name="Plus" size={18} strokeWidth={2.2} />}>
-              הוסף נכס ראשון
-            </Button>
-          </Link>
-        </div>
+        // P9.0C contextual zero-state — premium, value-forward, real CTA to /properties/new.
+        <ContextualZeroState
+          icon="Building2"
+          title="הנכס הראשון שלך מתחיל כאן."
+          value="ברגע שתוסיף נכס, ZONO תתחיל למפות אותו, להתאים לו קונים, לבנות לו שיווק ולעקוב אחרי המסע שלו עד העסקה."
+          cta="הוסף נכס ראשון"
+          href="/properties/new"
+          className="rounded-[24px] py-16"
+        />
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {properties.map((p) => (

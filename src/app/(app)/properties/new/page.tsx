@@ -6,6 +6,7 @@ import {
 } from "@/lib/properties/repository";
 import { propertyLocation } from "@/lib/properties/labels";
 import type { PropertyInput } from "@/lib/properties/types";
+import { getSessionContext } from "@/lib/auth/session";
 import { PropertyWizard } from "./PropertyWizard";
 
 export const dynamic = "force-dynamic";
@@ -91,10 +92,21 @@ export default async function NewPropertyPage() {
   }
   const media = await listPropertyMedia(draft.id);
 
+  // P9.0C — city-first context: prefill the office's primary city into a fresh
+  // draft (contextual only; the agent can change it, and nothing is committed
+  // until they save). Never overrides a city the draft already has.
+  const initial = rowToInput(draft);
+  if (!initial.city) {
+    try {
+      const { organization, profile } = await getSessionContext();
+      initial.city = organization?.city ?? profile?.primary_city ?? organization?.operating_cities?.[0] ?? null;
+    } catch { /* best-effort prefill */ }
+  }
+
   return (
     <PropertyWizard
       draftId={draft.id}
-      initial={rowToInput(draft)}
+      initial={initial}
       initialMedia={media}
     />
   );
