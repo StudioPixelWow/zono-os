@@ -86,7 +86,7 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [], count
           <div className="mb-4">
             <div className="flex items-center gap-2">
               <span className="bg-brand-strong text-card grid h-7 w-7 place-items-center rounded-lg text-[13px] font-black">Z</span>
-              <h3 className="text-ink text-xl font-black">ZONO Creative Engine</h3>
+              <h3 className="text-ink text-xl font-black">ZONO · מנוע יצירה</h3>
             </div>
             <p className="text-muted mt-1 text-sm font-bold">בוחן 12 רעיונות ומפיק את {count} המודעות החזקות ביותר עבור הנכס שלך</p>
           </div>

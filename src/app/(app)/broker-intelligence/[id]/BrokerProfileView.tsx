@@ -171,8 +171,45 @@ export function BrokerProfileView({ detail }: { detail: BrokerDetail }) {
           </>
         )}
       </div>
+
+      {/* Deals / activity timeline (from the shared activity store). */}
+      <div dir="rtl" className="flex flex-col gap-3">
+        <h3 className="text-ink text-sm font-extrabold">פעילות ועסקאות ({detail.activity.length})</h3>
+        {detail.activity.length === 0 ? (
+          <p className="text-muted bg-card border-line rounded-[22px] border p-5 text-sm">אין עדיין פעילות מתועדת למתווך זה. פעולות (זיהוי, אימות, סימון מתחרה, עסקאות) יופיעו כאן.</p>
+        ) : (
+          <div className="bg-card border-line flex flex-col gap-2 rounded-[22px] border p-4">
+            {detail.activity.map((a, i) => (
+              <div key={i} className="border-line/50 flex items-start gap-3 border-b pb-2 last:border-0 last:pb-0">
+                <span className="bg-brand-soft text-brand mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg"><Icon name="Activity" size={14} /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-ink text-sm font-bold">{a.title ?? BROKER_EVENT_LABEL[a.eventType] ?? a.eventType}</p>
+                  {a.description && <p className="text-muted truncate text-xs">{a.description}</p>}
+                </div>
+                <span className="text-muted shrink-0 text-[11px]">{fmtActivityDate(a.occurredAt)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+const BROKER_EVENT_LABEL: Record<string, string> = {
+  "broker.profile_created": "נוצר פרופיל מתווך",
+  "broker.match_approved": "התאמה אושרה",
+  "broker.match_rejected": "התאמה נדחתה",
+  "broker.verified": "מתווך אומת",
+  "broker.marked_competitor": "סומן כמתחרה",
+  "broker.unmarked_competitor": "הוסר סימון מתחרה",
+  "broker.merged": "מוזג עם פרופיל אחר",
+};
+
+function fmtActivityDate(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms).toLocaleDateString("he-IL", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {

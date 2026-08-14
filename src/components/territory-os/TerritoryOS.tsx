@@ -34,7 +34,7 @@ export function TerritoryOS({ data }: { data: TData }) {
     <div dir="rtl" className="mx-auto max-w-5xl px-4 pb-24 pt-5">
       <div className="bg-brand-soft rounded-[22px] p-5">
         <div className="flex items-start justify-between gap-3">
-          <div><p className="text-brand text-xs font-bold">ZONO Territory Intelligence</p><h1 className="text-ink text-2xl font-black">🗺️ מערכת הפעלת הטריטוריה{data.city ? ` · ${data.city}` : ""}</h1></div>
+          <div><p className="text-brand text-xs font-bold">ZONO · מודיעין טריטוריה</p><h1 className="text-ink text-2xl font-black">🗺️ מערכת הפעלת הטריטוריה{data.city ? ` · ${data.city}` : ""}</h1></div>
           <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-lg font-black ${bandCls(sc.overall)}`}>{sc.overall}</span>
         </div>
         <p className="text-muted mt-2 text-[13px]">{sc.aiSummary}</p>

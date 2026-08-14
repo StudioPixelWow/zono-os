@@ -180,7 +180,7 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
       {/* AI insights — the engine's explanation embeds the value, so only show it
           when a real value exists (otherwise it would read "₪0"). */}
       {!noData && (
-        <Section title="AI Insights" icon="Sparkles">
+        <Section title="תובנות AI" icon="Sparkles">
           <div className="border-line bg-card rounded-card border p-5 shadow-card">
             <p className="text-muted mb-4 text-sm leading-relaxed">{r.explanation}</p>
             <div className="grid gap-5 sm:grid-cols-2">

@@ -151,7 +151,7 @@ export function CreativeDnaView({
             <Icon name="Fingerprint" size={24} className="text-white" />
           </div>
           <div>
-            <p className="text-brand text-xs font-bold">ZONO Studio → זהות יצירתית</p>
+            <p className="text-brand text-xs font-bold">סטודיו ZONO → זהות יצירתית</p>
             <h1 className="text-ink mt-0.5 text-2xl font-black">זהות יצירתית</h1>
             <p className="text-muted mt-1 max-w-2xl text-sm leading-relaxed">
               ספריית מודעות ייחוס שממנה ZONO לומד את שפת העיצוב שלך ומיישם אותה ביצירת קריאייטיב — מבלי

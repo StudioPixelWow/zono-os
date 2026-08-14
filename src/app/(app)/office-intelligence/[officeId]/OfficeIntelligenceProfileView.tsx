@@ -71,7 +71,7 @@ export function OfficeIntelligenceProfileView({ dto }: { dto: AgencyIntelligence
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Winning DNA */}
-        <TerminalSection title="Winning DNA" subtitle="התנהגות · תמחור · פעילות · פרופיל מלאי ושוק" why={report?.strengths.map((x) => x.label) ?? []} whySource="Agency Reports">
+        <TerminalSection title="נוסחה מנצחת" subtitle="התנהגות · תמחור · פעילות · פרופיל מלאי ושוק" why={report?.strengths.map((x) => x.label) ?? []} whySource="Agency Reports">
           <div className="flex flex-col gap-2.5">
             <BarMeter label="עוצמת שוק" value={s.marketStrength} />
             <BarMeter label="מלאי" value={s.inventory} />
@@ -153,7 +153,7 @@ export function OfficeIntelligenceProfileView({ dto }: { dto: AgencyIntelligence
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* AI Coach */}
-        <TerminalSection title="AI Coach" subtitle="המלצות קיימות בלבד — לא נוצרות חדשות">
+        <TerminalSection title="מאמן AI" subtitle="המלצות קיימות בלבד — לא נוצרות חדשות">
           {report?.recommendations.length ? report.recommendations.slice(0, 6).map((r, i) => (
             <div key={i} className="border-line mb-2 rounded-xl border p-3 last:mb-0">
               <div className="flex items-start justify-between gap-2">

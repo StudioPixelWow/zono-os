@@ -97,7 +97,7 @@ function Header({ mode, onMode, view }: { mode: Mode; onMode: (m: Mode) => void;
     <div className="bg-brand-soft rounded-[22px] p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO Website Builder</p>
+          <p className="text-brand text-xs font-bold">ZONO · בונה אתרים</p>
           <h1 className="text-ink text-2xl font-black sm:text-3xl">🌐 מרכז השליטה באתרים</h1>
         </div>
         {health && <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${bandCls[health.band]}`}>בריאות אתר {health.score}</span>}

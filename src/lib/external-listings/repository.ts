@@ -83,8 +83,11 @@ export const externalListingRepository = {
     const base = () => supabase
       .from("external_listings")
       .select("*")
+      // Private/no-broker = NOT flagged as having an agent (false OR null) — robust
+      // to rows where the source didn't set has_agent explicitly, so the "new
+      // properties in your area (no broker)" feed shows discovered private listings.
       .neq("status", "removed")
-      .eq("has_agent", false)
+      .not("has_agent", "is", true)
       .not("contact_phone", "is", null)
       .order("first_seen_at", { ascending: false })
       .order("imported_at", { ascending: false })

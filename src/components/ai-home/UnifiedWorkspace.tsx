@@ -313,11 +313,11 @@ function AskZonoDock({ questions }: { questions: string[] }) {
 
   return (
     <>
-      <button onClick={() => setOpen((v) => !v)} className="fixed bottom-5 left-5 z-40 rounded-full bg-sky-700 px-5 py-3 text-sm font-black text-white shadow-xl">💬 Ask ZONO</button>
+      <button onClick={() => setOpen((v) => !v)} className="fixed bottom-5 left-5 z-40 rounded-full bg-sky-700 px-5 py-3 text-sm font-black text-white shadow-xl">💬 שאל את ZONO</button>
       {open && (
         <div dir="rtl" className="fixed bottom-20 left-5 z-40 flex max-h-[70vh] w-[min(420px,92vw)] flex-col rounded-2xl border-2 border-sky-600/40 bg-surface p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sky-800 font-black">Ask ZONO</span>
+            <span className="text-sky-800 font-black">שאל את ZONO</span>
             <button onClick={() => setOpen(false)} className="text-muted text-sm">✕</button>
           </div>
           <div className="mb-2 flex flex-wrap gap-1">

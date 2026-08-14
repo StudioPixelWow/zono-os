@@ -363,6 +363,13 @@ export async function getBrokerBoard(cityFilter?: string): Promise<BrokerBoard> 
   };
 }
 
+export interface BrokerActivityItem {
+  eventType: string;
+  title: string | null;
+  description: string | null;
+  occurredAt: string;
+}
+
 export interface BrokerDetail {
   profile: BrokerProfileRow;
   aliases: DB["broker_aliases"]["Row"][];
@@ -370,6 +377,7 @@ export interface BrokerDetail {
   serviceAreas: DB["broker_service_areas"]["Row"][];
   externalListings: DB["external_listings"]["Row"][];
   logoAssets: DB["broker_logo_assets"]["Row"][];
+  activity: BrokerActivityItem[];
   isCompetitor: boolean;
 }
 
@@ -377,17 +385,23 @@ export async function getBrokerProfileDetail(id: string): Promise<BrokerDetail |
   const supabase = await createClient();
   const { data: profile } = await supabase.from("broker_profiles").select("*").eq("id", id).maybeSingle();
   if (!profile) return null;
-  const [{ data: aliases }, { data: sources }, { data: areas }, { data: listings }, { data: logos }] = await Promise.all([
+  const [{ data: aliases }, { data: sources }, { data: areas }, { data: listings }, { data: logos }, { data: activity }] = await Promise.all([
     supabase.from("broker_aliases").select("*").eq("broker_id", id).limit(100),
     supabase.from("broker_sources").select("*").eq("broker_id", id).limit(100),
     supabase.from("broker_service_areas").select("*").eq("broker_id", id).limit(100),
     supabase.from("external_listings").select("*").eq("detected_broker_id", id).order("opportunity_score", { ascending: false }).limit(100),
     supabase.from("broker_logo_assets").select("*").eq("broker_id", id).order("created_at", { ascending: false }).limit(50),
+    // Broker deals/activity timeline from the shared activity store (org-scoped by RLS).
+    supabase.from("activity_events" as never).select("event_type,title,description,occurred_at")
+      .eq("entity_type" as never, "broker" as never).eq("entity_id" as never, id as never)
+      .order("occurred_at" as never, { ascending: false }).limit(50),
   ]);
+  const activityRows = (activity ?? []) as { event_type: string; title: string | null; description: string | null; occurred_at: string }[];
   return {
     profile, aliases: aliases ?? [], sources: sources ?? [], serviceAreas: areas ?? [],
     externalListings: (listings ?? []) as DB["external_listings"]["Row"][],
     logoAssets: logos ?? [],
+    activity: activityRows.map((a) => ({ eventType: a.event_type, title: a.title, description: a.description, occurredAt: a.occurred_at })),
     isCompetitor: (profile.metadata as { is_competitor?: boolean } | null)?.is_competitor === true,
   };
 }
