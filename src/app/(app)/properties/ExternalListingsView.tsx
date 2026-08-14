@@ -355,29 +355,36 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
           <p className="text-ink flex items-center gap-1.5 text-base font-black">AI Market Intelligence <Icon name="Sparkles" size={15} className="text-brand" /></p>
           <p className="text-muted text-xs">עסקאות ונתונים דומים המשפיעים על השוק · {filtered.length} תוצאות · מדורג לפי AI Score</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => run(importYad2Action)} disabled={pending}>יד2</Button>
-          <Button size="sm" variant="secondary" onClick={() => run(importMadlanAction)} disabled={pending}>מדלן</Button>
-          <select
-            value={syncMode}
-            onChange={(e) => setSyncMode(e.target.value as typeof syncMode)}
-            className="bg-surface border-line text-ink h-8 rounded-lg border px-2 text-[12px] font-semibold"
-            title="מצב סנכרון — קובע כמה מודעות לעיר נמשכות"
-          >
-            <option value="quick">סנכרון מהיר (50/עיר)</option>
-            <option value="standard">סנכרון רגיל (250/עיר)</option>
-            <option value="full">סנכרון מלא (500/עיר)</option>
-            {isAdmin && <option value="backfill">סנכרון מתקדם (1000/עיר)</option>}
-          </select>
-          <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Sparkles" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
-          <Button size="sm" variant="ghost" onClick={geocodeNow} disabled={pending} leadingIcon={<Icon name="MapPin" size={15} />}>גאוקד עכשיו</Button>
-          <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
-          <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
-          <Link href="/broker-intelligence"><Button size="sm" variant="ghost">מודיעין מתווכים</Button></Link>
-          <Link href="/acquisition"><Button size="sm" variant="ghost">מודיעין גיוס</Button></Link>
-          <Button size="sm" variant="ghost" onClick={recalcBrain} disabled={pending}>חשב מרכז פיקוד מחדש</Button>
-          <Button size="sm" variant="ghost" onClick={loadDiag} disabled={pending}>דיבאג ייבוא</Button>
-        </div>
+        {/* P9.1 — the manual scan / import / debug controls are ZONO-STAFF ONLY.
+            A customer (office owner or agent) never sees them: their city is
+            scanned AUTOMATICALLY (onboarding bootstrap + refresh-on-entry) and
+            they only ever see listings scoped to their own org/cities. isAdmin
+            here resolves to a platform operator, NOT an office manager. */}
+        {isAdmin && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => run(importYad2Action)} disabled={pending}>יד2</Button>
+            <Button size="sm" variant="secondary" onClick={() => run(importMadlanAction)} disabled={pending}>מדלן</Button>
+            <select
+              value={syncMode}
+              onChange={(e) => setSyncMode(e.target.value as typeof syncMode)}
+              className="bg-surface border-line text-ink h-8 rounded-lg border px-2 text-[12px] font-semibold"
+              title="מצב סנכרון — קובע כמה מודעות לעיר נמשכות"
+            >
+              <option value="quick">סנכרון מהיר (50/עיר)</option>
+              <option value="standard">סנכרון רגיל (250/עיר)</option>
+              <option value="full">סנכרון מלא (500/עיר)</option>
+              <option value="backfill">סנכרון מתקדם (1000/עיר)</option>
+            </select>
+            <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Sparkles" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
+            <Button size="sm" variant="ghost" onClick={geocodeNow} disabled={pending} leadingIcon={<Icon name="MapPin" size={15} />}>גאוקד עכשיו</Button>
+            <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>AI Analysis</Button>
+            <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
+            <Link href="/broker-intelligence"><Button size="sm" variant="ghost">מודיעין מתווכים</Button></Link>
+            <Link href="/acquisition"><Button size="sm" variant="ghost">מודיעין גיוס</Button></Link>
+            <Button size="sm" variant="ghost" onClick={recalcBrain} disabled={pending}>חשב מרכז פיקוד מחדש</Button>
+            <Button size="sm" variant="ghost" onClick={loadDiag} disabled={pending}>דיבאג ייבוא</Button>
+          </div>
+        )}
       </div>
 
       <SyncProgressPanel progress={progress} syncing={syncing} elapsedMs={syncStartTs ? nowTs - syncStartTs : 0} />

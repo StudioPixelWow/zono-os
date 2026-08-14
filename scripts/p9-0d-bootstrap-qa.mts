@@ -22,8 +22,8 @@ ok(/from "next\/server"/.test(onboarding), "imports after from next/server");
 console.log("\nP9.0D · COST GUARD — provider scan is gated + bounded");
 ok(/if \(process\.env\.APIFY_TOKEN\)/.test(onboarding),
   "the external scan is GATED on APIFY_TOKEN (clean no-op when unconfigured)");
-ok(/syncExternalListingsForOrganization\([^)]*\{ mode: "quick" \}/.test(onboarding),
-  "the scan uses BOUNDED quick mode (≤50/city), not full/backfill");
+ok(/syncExternalListingsForOrganization\([^)]*\{ mode: "(quick|standard)" \}/.test(onboarding),
+  "the one-time signup scan uses a BOUNDED mode (quick/standard, ≤250/city), not full/backfill");
 ok(!/mode: "full"|mode: "backfill"/.test(onboarding),
   "onboarding never launches full/backfill (unbounded) scans");
 ok(!/property-radar|PROPERTY_RADAR_PROVIDER/i.test(onboarding),

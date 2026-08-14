@@ -10,7 +10,7 @@
 import "server-only";
 import { externalListingRepository, type ExternalListingRow } from "@/lib/external-listings/repository";
 import { enrichListingsBuyerMatches, type ListingMatchSummary } from "@/lib/external-listings/service";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentPlatformOperator } from "@/lib/platform-admin/server/auth";
 
 export interface MarketListingsData {
   listings: ExternalListingRow[];
@@ -25,15 +25,20 @@ export async function loadMarketListings(): Promise<MarketListingsData> {
   let isAdmin = false;
   let matches: Record<string, ListingMatchSummary> = {};
   try {
-    const supabase = await createClient();
-    const [listingsRes, statsRes, adminRes] = await Promise.all([
+    // P9.1 — "isAdmin" gates the MANUAL scan / import / debug tooling on the
+    // market-listings surface. It must mean ZONO PLATFORM STAFF, not an office
+    // manager: a customer (even the office owner) never triggers scans manually —
+    // their city is scanned automatically and they only see their own listings.
+    // Previously this was has_min_role("manager"), which leaked staff tooling to
+    // every office owner. Now it resolves to a real platform operator.
+    const [listingsRes, statsRes, operator] = await Promise.all([
       externalListingRepository.listForOrg(),
       externalListingRepository.marketStats(),
-      supabase.rpc("has_min_role", { p_min: "manager" }),
+      getCurrentPlatformOperator().catch(() => null),
     ]);
     listings = listingsRes;
     marketStats = statsRes;
-    isAdmin = adminRes.data === true;
+    isAdmin = operator !== null;
     try {
       matches = await enrichListingsBuyerMatches(listings.map((l) => ({
         id: l.id, title: l.title, city: l.city, neighborhood: l.neighborhood, price: l.price,

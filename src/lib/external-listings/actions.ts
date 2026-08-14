@@ -9,8 +9,21 @@ export interface ExternalActionState {
   summary?: SyncSummary;
 }
 
+// P9.1 — the MANUAL scan/import actions are ZONO-STAFF ONLY. A customer never
+// triggers a scrape by hand: their city is scanned automatically (onboarding
+// bootstrap + refresh-on-entry, which call the service directly, NOT these
+// actions). This guard is defense-in-depth behind the now-hidden admin UI:
+// even a hand-crafted request from an office user is rejected. Throws so each
+// action's own try/catch turns it into a clean error state.
+async function assertScanOperator(): Promise<void> {
+  const { getCurrentPlatformOperator } = await import("@/lib/platform-admin/server/auth");
+  const operator = await getCurrentPlatformOperator().catch(() => null);
+  if (!operator) throw new Error("פעולה זו זמינה לצוות ZONO בלבד — סריקת הערים שלך מתבצעת אוטומטית.");
+}
+
 async function doSync(opts: { sources?: string[]; localityId?: string | null; mode?: SyncMode }): Promise<ExternalActionState> {
   try {
+    await assertScanOperator();
     const summary = await runImport(opts);
     revalidatePath("/properties");
     return { summary };
@@ -45,6 +58,7 @@ export async function startSyncJobAction(
   mode?: SyncMode,
 ): Promise<{ plan?: SyncPlan; error?: string }> {
   try {
+    await assertScanOperator();
     const plan = await startSyncJob({ localityId: localityId || null, sources: source ? [source] : undefined, mode });
     return { plan };
   } catch (e) {
@@ -54,6 +68,7 @@ export async function startSyncJobAction(
 
 export async function runSyncChunkAction(jobId: string, city: string, source: string, perCity: number): Promise<ChunkResult> {
   try {
+    await assertScanOperator();
     return await runSyncChunk(jobId, city, source, perCity);
   } catch (e) {
     return { found: 0, inserted: 0, updated: 0, error: e instanceof Error ? e.message : "שגיאה" };
@@ -62,6 +77,7 @@ export async function runSyncChunkAction(jobId: string, city: string, source: st
 
 export async function finishSyncJobAction(jobId: string, cities: string[], errorCount = 0): Promise<ExternalActionState> {
   try {
+    await assertScanOperator();
     const summary = await finishSyncJob(jobId, cities, errorCount);
     revalidatePath("/properties");
     // Fire-and-forget: learn the brokerage market for each synced city if it's

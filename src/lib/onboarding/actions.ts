@@ -202,7 +202,12 @@ export async function completeOnboarding(
         // bounded (quick mode, one office). NO fabrication — real provider only.
         if (process.env.APIFY_TOKEN) {
           const { syncExternalListingsForOrganization } = await import("@/lib/external-listings/service");
-          void syncExternalListingsForOrganization(bootstrapOrgId, { mode: "quick" })
+          // The ONE-TIME signup scan uses "standard" (≤250/city) so a new office
+          // opens to a THOROUGH picture of its registration city — not a thin
+          // sample. Still bounded (only the office's own operating cities, one
+          // pass). The per-login refresh-on-entry stays "quick" for cost. NO
+          // fabrication — real Yad2/Madlan via the provider only.
+          void syncExternalListingsForOrganization(bootstrapOrgId, { mode: "standard" })
             .catch((e) => console.error("[onboarding] bootstrap scan skipped:", e));
         }
       } catch (e) {

@@ -53,12 +53,21 @@ export default async function MarketListingsPage({ searchParams }: { searchParam
 
       {f && <p className="text-muted text-xs">{f.hint}</p>}
 
-      {/* Onboarding empty state (the view below owns the real "סנכרן עכשיו"). */}
+      {/* Empty state. Customers (isAdmin=false) get an AUTOMATIC-scan message —
+          their city is scanned for them; they never click a manual button. Only
+          platform staff see the manual "סנכרן עכשיו" flow owned by the view below. */}
       {listings.length === 0 && (
-        <IntelligenceEmptyState
-          title="עדיין אין נכסי שוק חיצוניים זמינים"
-          steps={["סנכרן נכסים חיצוניים — לחץ ״סנכרן עכשיו״ למטה", "רענן מערכת", "חזור לכאן לעיון בנכסי השוק"]}
-        />
+        isAdmin ? (
+          <IntelligenceEmptyState
+            title="עדיין אין נכסי שוק חיצוניים זמינים"
+            steps={["סנכרן נכסים חיצוניים — לחץ ״סנכרן עכשיו״ למטה", "רענן מערכת", "חזור לכאן לעיון בנכסי השוק"]}
+          />
+        ) : (
+          <IntelligenceEmptyState
+            title="ZONO סורקת את הערים שלך"
+            steps={["המערכת סורקת אוטומטית את יד2 ומדלן לפי הערים שבחרת", "נכסי השוק יופיעו כאן ברגע שהסריקה תושלם", "אין צורך בפעולה — הכול קורה מאחורי הקלעים"]}
+          />
+        )
       )}
 
       <ExternalListingsView listings={listings} marketStats={marketStats} isAdmin={isAdmin} matches={matches} />
