@@ -307,9 +307,34 @@ export async function composeCompetitorDashboard(): Promise<CompetitorDashboard>
 /**
  * Daily snapshot: classify latest public listings, upsert competitor profiles +
  * listing links, persist area metrics, and create de-duplicated alerts.
+ * Session entry point (managers+ get the full org market view).
  */
 export async function runCompetitorIntelligenceSnapshotJob(): Promise<CompetitorSnapshotResult> {
   const access = await getCompetitorAccess();
+  return snapshotWithAccess(access);
+}
+
+/**
+ * Cron/service-role entry point — runs the SAME snapshot for an explicit org
+ * WITHOUT a session. Tenant-safe: buildIntelligence scopes every org-specific
+ * read/write by access.orgId (org cities, our listings, competitor profiles/
+ * links/metrics/alerts). The ONLY shared reads are PUBLIC market data by city
+ * (market_property_sources / _events) — the intended shared-market architecture.
+ * fullMarketView=true skips the per-agent city restriction (there is no agent).
+ */
+export async function runCompetitorIntelligenceSnapshotForOrg(orgId: string): Promise<CompetitorSnapshotResult> {
+  const access: CompetitorAccess = {
+    db: createServiceRoleClient(),
+    orgId,
+    userId: "system:cron",
+    roleKey: "owner",
+    role: "office_owner",
+    fullMarketView: true,
+  };
+  return snapshotWithAccess(access);
+}
+
+async function snapshotWithAccess(access: CompetitorAccess): Promise<CompetitorSnapshotResult> {
   const repo = createCompetitorRepository(access.db);
   const intel = await buildIntelligence(access);
   const now = new Date();

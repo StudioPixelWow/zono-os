@@ -1,0 +1,430 @@
+diff --git a/scripts/p9-1c-orchestrator-qa.mts b/scripts/p9-1c-orchestrator-qa.mts
+new file mode 100644
+index 0000000..d10fe02
+--- /dev/null
++++ b/scripts/p9-1c-orchestrator-qa.mts
+@@ -0,0 +1,150 @@
++// ============================================================================
++// P9.1C — AUTOMATIC INTELLIGENCE ORCHESTRATOR QA (STATIC; no DB/network).
++// Proves the launch-blocking invariants of the cron-reliable, tenant-safe
++// orchestrator by analysing the ACTUAL source (not a mock):
++//   1. TENANT ISOLATION — every service-role-reachable read in the broker
++//      detection chain is EXPLICITLY org-scoped (.eq("org_id", …)); no read
++//      relies on RLS alone. An unscoped read = launch-blocking FAIL.
++//   2. CRON ENTRY POINTS — service-role, org-scoped wrappers exist for broker
++//      detection + competitor snapshot and are wired into the cron path.
++//   3. RELIABLE EXECUTION MODEL — cron runs the deep adaptive scan; dashboard
++//      load is lightweight ("quick") only; area intelligence runs on cron.
++//   4. IDEMPOTENCY — the writes that overlapping triggers race on all upsert on
++//      an org-qualified conflict key (no duplicate rows across cron/entry/boot).
++//   5. NO SERVICE-ROLE LEAK — the detection chain never reads the sensitive
++//      tables without an org filter.
++// Run: npx tsx scripts/p9-1c-orchestrator-qa.mts
++// ============================================================================
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { dirname, resolve } from "node:path";
++
++const __dirname = dirname(fileURLToPath(import.meta.url));
++const root = resolve(__dirname, "..");
++const read = (p: string) => readFileSync(resolve(root, p), "utf8");
++
++let fail = 0;
++const ok = (c: boolean, l: string) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) fail++; };
++const section = (t: string) => console.log("\n" + t);
++
++/** Extract a function/arrow body by brace-matching from the first `{` after a marker. */
++function bodyAfter(src: string, marker: string): string {
++  const i = src.indexOf(marker);
++  if (i < 0) return "";
++  const open = src.indexOf("{", i);
++  if (open < 0) return "";
++  let depth = 0;
++  for (let j = open; j < src.length; j++) {
++    const c = src[j];
++    if (c === "{") depth++;
++    else if (c === "}") { depth--; if (depth === 0) return src.slice(open, j + 1); }
++  }
++  return src.slice(open);
++}
++
++/**
++ * For a given table, assert that EVERY `.from("<table>")…select(` read statement
++ * in `body` also contains `.eq("org_id"` (or the given orgCol) before the
++ * statement terminates. Insert/upsert/update statements are ignored (they carry
++ * org_id in the payload / are keyed by an org-scoped id). A read statement is the
++ * text from `.from("table")` up to the next `;`.
++ */
++function everyReadOrgScoped(body: string, table: string, orgCol = "org_id"): { total: number; unscoped: number } {
++  let total = 0, unscoped = 0;
++  const re = new RegExp(`\\.from\\(\\s*["'\`]${table}["'\`]`, "g");
++  let m: RegExpExecArray | null;
++  while ((m = re.exec(body)) !== null) {
++    const start = m.index;
++    const end = body.indexOf(";", start);
++    const stmt = body.slice(start, end < 0 ? undefined : end);
++    // Only READ statements (a .select without insert/upsert/update/delete).
++    const isRead = /\.select\(/.test(stmt) && !/\.(insert|upsert|update|delete)\(/.test(stmt);
++    if (!isRead) continue;
++    total++;
++    if (!new RegExp(`\\.eq\\(\\s*["'\`]${orgCol}["'\`]`).test(stmt)) unscoped++;
++  }
++  return { total, unscoped };
++}
++
++// ── 1. TENANT ISOLATION — broker detection chain ────────────────────────────
++section("P9.1C · 1 — Broker detection chain is EXPLICITLY org-scoped (tenant-safe under service-role)");
++const brokerSrc = read("src/lib/broker/service.ts");
++for (const fn of ["ensureBrokerProfilesFromListings", "loadCandidates", "detectForOrg"]) {
++  const body = bodyAfter(brokerSrc, `function ${fn}`);
++  ok(body.length > 0, `${fn}: body located`);
++  for (const table of ["external_listings", "broker_profiles", "broker_aliases"]) {
++    const { total, unscoped } = everyReadOrgScoped(body, table);
++    if (total === 0) continue;
++    ok(unscoped === 0, `${fn}: all ${total} read(s) of "${table}" are org-scoped (${unscoped} unscoped)`);
++  }
++}
++
++// ── 2. CRON ENTRY POINTS exist + are service-role/org-scoped ─────────────────
++section("P9.1C · 2 — Service-role, org-scoped cron entry points exist");
++ok(/export async function runBrokerDetectionForOrgServiceRole\(orgId: string\)/.test(brokerSrc), "broker: runBrokerDetectionForOrgServiceRole(orgId) exported");
++const brokerCronBody = bodyAfter(brokerSrc, "function runBrokerDetectionForOrgServiceRole");
++ok(/createServiceRoleClient/.test(brokerCronBody), "broker cron wrapper uses service-role client");
++ok(/detectForOrg\(db, orgId\)[\s\S]*detectForOrg\(db, orgId\)/.test(brokerCronBody), "broker cron wrapper runs TWO converging passes");
++
++const compSrc = read("src/lib/competitor-intelligence/engine.ts");
++ok(/export async function runCompetitorIntelligenceSnapshotForOrg\(orgId: string\)/.test(compSrc), "competitor: runCompetitorIntelligenceSnapshotForOrg(orgId) exported");
++const compCronBody = bodyAfter(compSrc, "function runCompetitorIntelligenceSnapshotForOrg");
++ok(/createServiceRoleClient\(\)/.test(compCronBody), "competitor cron entry builds a service-role access");
++ok(/fullMarketView:\s*true/.test(compCronBody), "competitor cron entry uses fullMarketView (no per-agent session scope)");
++ok(/orgId,/.test(compCronBody), "competitor cron entry binds the explicit orgId");
++ok(/async function snapshotWithAccess\(access: CompetitorAccess\)/.test(compSrc), "competitor: shared snapshotWithAccess(access) used by BOTH entry points");
++ok(bodyAfter(compSrc, "function runCompetitorIntelligenceSnapshotJob").includes("snapshotWithAccess(access)"), "session snapshot delegates to snapshotWithAccess");
++
++// ── 3. RELIABLE EXECUTION MODEL in the orchestrator ─────────────────────────
++section("P9.1C · 3 — Orchestrator: cron is the deep/reliable path; dashboard load is lightweight");
++const orch = read("src/lib/orchestrator/service.ts");
++// dashboard/login passive entry runs the LIGHTWEIGHT quick top-up (not "full").
++const passiveBranch = orch.slice(orch.indexOf("passiveEntry && process.env.APIFY_TOKEN"), orch.indexOf("} else {", orch.indexOf("passiveEntry && process.env.APIFY_TOKEN")));
++ok(/mode:\s*"quick"/.test(passiveBranch), "passive entry (dashboard_load/login) uses quick maintenance only");
++ok(!/mode\s*=\s*\(count/.test(passiveBranch), "passive entry no longer runs the heavy adaptive full scan in after()");
++// cron runs the adaptive deep scan.
++const cronBranch = orch.slice(orch.indexOf('trigger === "scheduled_cron"'), orch.indexOf("passiveEntry && process.env.APIFY_TOKEN"));
++ok(/< 800 \? "full" : "quick"/.test(cronBranch), "cron runs the adaptive deep scan (full until populated, then quick)");
++// area intelligence runs on cron too (not gated to sessions-only).
++const areaStep = bodyAfter(orch, '"area_intelligence"');
++ok(/runCompetitorIntelligenceSnapshotForOrg\(organizationId\)/.test(orch), "area_intelligence uses the org-scoped competitor snapshot on cron");
++ok(/triggerCityLearning\(organizationId, city/.test(orch), "area_intelligence triggers city learning with explicit org");
++ok(!/skippedStep\("area_intelligence"/.test(orch), "area_intelligence is NEVER skipped for cron (runs on every trigger)");
++// broker detection has a cron service-role fallback.
++ok(/runBrokerDetectionForOrgServiceRole\(organizationId\)/.test(orch), "broker_detection has a cron service-role fallback when external_sync didn't run");
++ok(/externalSyncRan/.test(orch), "broker_detection avoids redundant scan when external_sync already detected");
++
++// ── 4. IDEMPOTENCY — overlapping triggers never duplicate ───────────────────
++section("P9.1C · 4 — Idempotency: racing triggers upsert on org-qualified conflict keys");
++const extSrc = read("src/lib/external-listings/service.ts");
++ok(/onConflict:\s*"org_id,source,source_id"/.test(extSrc), "external_listings upsert keyed by org_id,source,source_id");
++const compRepo = read("src/lib/competitor-intelligence/repository.ts");
++ok(/onConflict:\s*"org_id,normalized_name"/.test(compRepo), "competitor profiles upsert keyed by org_id,normalized_name");
++ok(/onConflict:\s*"org_id,competitor_profile_id,market_property_source_id"/.test(compRepo), "competitor links upsert keyed by org+profile+source");
++ok(/onConflict:\s*"org_id,competitor_profile_id,city,neighborhood,period,period_start"/.test(compRepo), "competitor area metrics upsert keyed by org+profile+area+period");
++// broker profiles: detection dedups by normalized phone/name within the org before insert.
++ok(/if \(normPhone && byPhone\.has\(normPhone\)\) continue;/.test(brokerSrc), "broker auto-register dedups by normalized phone within org");
++ok(/if \(!normPhone && normName && byName\.has\(normName\)\) continue;/.test(brokerSrc), "broker auto-register dedups by normalized name within org");
++
++// ── 5. CONCURRENCY / LOCK — one run per org, expiry-recoverable ──────────────
++section("P9.1C · 5 — Lock: one run per org, expired locks recoverable (no permanent stale lock)");
++const locks = read("src/lib/orchestrator/locks.ts");
++ok(/organization_id: organizationId/.test(locks) && /lock_token: token/.test(locks), "lock keyed per organization");
++ok(/expired && force/.test(locks), "only an EXPIRED lock can be taken over (valid lock never stolen)");
++ok(/releaseOrchestratorLock/.test(orch) && /finally/.test(orch), "lock always released in finally");
++
++// ── 6. COMPETITOR REPO — persistence writes carry org_id; org reads scoped ───
++section("P9.1C · 6 — Competitor persistence is org-scoped; only PUBLIC market data is shared by city");
++const repoBody = compRepo;
++ok(/orgCities\([\s\S]*?\.eq\("organization_id", orgId\)/.test(repoBody), "orgCities scoped by organization_id");
++ok(/ourActiveByCity\([\s\S]*?\.eq\("org_id", orgId\)/.test(repoBody), "ourActiveByCity scoped by org_id");
++ok(/upsertProfile\(orgId[\s\S]*?org_id: orgId/.test(repoBody), "competitor profile write carries org_id");
++// market data reads are by city (shared public architecture) — assert they are NOT org-filtered (by design).
++ok(/marketListings\([\s\S]*?\.in\("city"/.test(repoBody), "public market listings read by city (shared architecture, by design)");
++// orgCities fallback: fresh office with empty user_operating_localities still gets a scope.
++const orgCitiesBody = bodyAfter(repoBody, "async orgCities(orgId: string)");
++ok(/from\("external_listings"[\s\S]*?\.eq\("org_id", orgId\)/.test(orgCitiesBody), "orgCities fallback derives cities from the org's OWN listings (org-scoped) when localities empty");
++ok(orgCitiesBody.includes("if (cities.length) return cities;"), "orgCities prefers explicit localities, falls back only when empty");
++
++console.log(`\n${fail === 0 ? "✅ PASS" : "❌ FAIL"} — P9.1C orchestrator QA (${fail} failure${fail === 1 ? "" : "s"})`);
++process.exit(fail === 0 ? 0 : 1);
+diff --git a/src/lib/broker/service.ts b/src/lib/broker/service.ts
+index f90ffbb..22ea7c2 100644
+--- a/src/lib/broker/service.ts
++++ b/src/lib/broker/service.ts
+@@ -97,10 +97,12 @@ export async function importBrokersFromCsv(rows: BrokerInput[]): Promise<CsvImpo
+ // ── Detection: match external listings → broker profiles ─────────────────────
+ export interface DetectionSummary { scanned: number; matched: number; needsReview: number; unknown: number }
+ 
+-async function loadCandidates(supabase: Client): Promise<BrokerCandidate[]> {
++async function loadCandidates(supabase: Client, orgId: string): Promise<BrokerCandidate[]> {
++  // TENANT-SAFE: explicit org filter on BOTH tables so cron/service-role never
++  // loads another org's broker directory into the matcher.
+   const [{ data: profiles }, { data: aliases }] = await Promise.all([
+-    supabase.from("broker_profiles").select("id,normalized_name,normalized_agency,normalized_phone,primary_city").limit(2000),
+-    supabase.from("broker_aliases").select("broker_id,alias_type,normalized_value").limit(8000),
++    supabase.from("broker_profiles").select("id,normalized_name,normalized_agency,normalized_phone,primary_city").eq("org_id", orgId).limit(2000),
++    supabase.from("broker_aliases").select("broker_id,alias_type,normalized_value").eq("org_id", orgId).limit(8000),
+   ]);
+   const aliasMap = new Map<string, AliasLike[]>();
+   for (const a of aliases ?? []) {
+@@ -120,14 +122,19 @@ async function loadCandidates(supabase: Client): Promise<BrokerCandidate[]> {
+  * evidence; created as 'unverified'. Deduped by normalized phone, else name.
+  */
+ export async function ensureBrokerProfilesFromListings(db: Client, orgId: string): Promise<number> {
++  // TENANT-SAFE: every read is EXPLICITLY org-scoped (.eq("org_id", orgId)), NOT
++  // relying on RLS — so this is correct under BOTH the RLS session client AND the
++  // service-role cron client. Without these filters a service-role run would read
++  // (and create broker profiles from) EVERY org's listings → cross-tenant leak.
+   const { data: listings } = await db
+     .from("external_listings")
+     .select("id,contact_name,contact_phone,detected_broker_name,city,listing_source_type,listing_url,source")
++    .eq("org_id", orgId)
+     .eq("status", "active").is("promoted_property_id", null)
+     .in("listing_source_type", ["broker", "agency", "office"]).limit(2000);
+   if (!listings?.length) return 0;
+ 
+-  const { data: existing } = await db.from("broker_profiles").select("id,normalized_name,normalized_phone");
++  const { data: existing } = await db.from("broker_profiles").select("id,normalized_name,normalized_phone").eq("org_id", orgId);
+   const byPhone = new Map<string, string>(); const byName = new Map<string, string>();
+   for (const b of existing ?? []) { if (b.normalized_phone) byPhone.set(b.normalized_phone, b.id); if (b.normalized_name) byName.set(b.normalized_name, b.id); }
+ 
+@@ -172,10 +179,13 @@ export async function detectForOrg(db: Client, orgId: string): Promise<Detection
+   // Auto-register newly seen broker/agency publishers into the broker DB first,
+   // so detection can match listings to real profiles.
+   try { await ensureBrokerProfilesFromListings(db, orgId); } catch (e) { console.error("[broker] auto-register failed:", e); }
+-  const candidates = await loadCandidates(db);
++  const candidates = await loadCandidates(db, orgId);
++  // TENANT-SAFE: only THIS org's active listings are scanned/updated. Under
++  // service-role (cron) an unscoped read here would scan+mutate every org's rows.
+   const { data: listings } = await db
+     .from("external_listings")
+     .select("id,contact_name,contact_phone,contact_type,city,has_agent")
++    .eq("org_id", orgId)
+     .eq("status", "active").is("promoted_property_id", null)
+     .eq("broker_detection_locked", false).limit(1000);
+   if (!listings?.length) return summary;
+@@ -183,7 +193,7 @@ export async function detectForOrg(db: Client, orgId: string): Promise<Detection
+   const nameById = new Map<string, string>();
+   const typeById = new Map<string, string>();
+   if (candidates.length) {
+-    const { data } = await db.from("broker_profiles").select("id,display_name,broker_type");
++    const { data } = await db.from("broker_profiles").select("id,display_name,broker_type").eq("org_id", orgId);
+     for (const b of data ?? []) { nameById.set(b.id, b.display_name); typeById.set(b.id, b.broker_type); }
+   }
+   const now = new Date().toISOString();
+@@ -244,6 +254,20 @@ export async function runBrokerDetectionForOrg(): Promise<DetectionSummary> {
+   return detectForOrg(supabase as unknown as Client, profile.org_id);
+ }
+ 
++/**
++ * Cron/service-role wrapper — org-scoped WITHOUT a session. Safe because every
++ * query inside detectForOrg / ensureBrokerProfilesFromListings / loadCandidates
++ * now filters explicitly by org_id (RLS is bypassed under service-role, so the
++ * explicit filter is what enforces tenant isolation). Runs TWO converging passes
++ * exactly like the session path. Never used with request-scoped user input.
++ */
++export async function runBrokerDetectionForOrgServiceRole(orgId: string): Promise<DetectionSummary> {
++  const { createServiceRoleClient } = await import("@/lib/supabase/server");
++  const db = createServiceRoleClient() as unknown as Client;
++  await detectForOrg(db, orgId);
++  return detectForOrg(db, orgId);
++}
++
+ // ── Review workflow (admin-gated) ────────────────────────────────────────────
+ export async function decideMatchReview(reviewId: string, decision: "approved" | "rejected"): Promise<void> {
+   const { user } = await requireProfile();
+diff --git a/src/lib/competitor-intelligence/engine.ts b/src/lib/competitor-intelligence/engine.ts
+index 1d9676d..8788772 100644
+--- a/src/lib/competitor-intelligence/engine.ts
++++ b/src/lib/competitor-intelligence/engine.ts
+@@ -307,9 +307,34 @@ export async function composeCompetitorDashboard(): Promise<CompetitorDashboard>
+ /**
+  * Daily snapshot: classify latest public listings, upsert competitor profiles +
+  * listing links, persist area metrics, and create de-duplicated alerts.
++ * Session entry point (managers+ get the full org market view).
+  */
+ export async function runCompetitorIntelligenceSnapshotJob(): Promise<CompetitorSnapshotResult> {
+   const access = await getCompetitorAccess();
++  return snapshotWithAccess(access);
++}
++
++/**
++ * Cron/service-role entry point — runs the SAME snapshot for an explicit org
++ * WITHOUT a session. Tenant-safe: buildIntelligence scopes every org-specific
++ * read/write by access.orgId (org cities, our listings, competitor profiles/
++ * links/metrics/alerts). The ONLY shared reads are PUBLIC market data by city
++ * (market_property_sources / _events) — the intended shared-market architecture.
++ * fullMarketView=true skips the per-agent city restriction (there is no agent).
++ */
++export async function runCompetitorIntelligenceSnapshotForOrg(orgId: string): Promise<CompetitorSnapshotResult> {
++  const access: CompetitorAccess = {
++    db: createServiceRoleClient(),
++    orgId,
++    userId: "system:cron",
++    roleKey: "owner",
++    role: "office_owner",
++    fullMarketView: true,
++  };
++  return snapshotWithAccess(access);
++}
++
++async function snapshotWithAccess(access: CompetitorAccess): Promise<CompetitorSnapshotResult> {
+   const repo = createCompetitorRepository(access.db);
+   const intel = await buildIntelligence(access);
+   const now = new Date();
+diff --git a/src/lib/competitor-intelligence/repository.ts b/src/lib/competitor-intelligence/repository.ts
+index ff7e27a..8317a08 100644
+--- a/src/lib/competitor-intelligence/repository.ts
++++ b/src/lib/competitor-intelligence/repository.ts
+@@ -83,7 +83,22 @@ export function createCompetitorRepository(db: Db) {
+         .select("city_name")
+         .eq("organization_id", orgId)
+         .eq("is_active", true);
+-      return [...new Set(((data ?? []) as unknown as { city_name: string | null }[]).map((r) => (r.city_name ?? "").trim()).filter(Boolean))];
++      const cities = [...new Set(((data ?? []) as unknown as { city_name: string | null }[]).map((r) => (r.city_name ?? "").trim()).filter(Boolean))];
++      if (cities.length) return cities;
++      // P9.1C fallback — a freshly-onboarded office often has NO
++      // user_operating_localities rows yet (its area is registered at org level /
++      // discovered from the scan), which left the competitor market scope EMPTY and
++      // competitor intelligence stuck at 0. Derive the monitored cities from the
++      // org's OWN scanned listings instead: org-scoped (tenant-safe) AND it uses
++      // the exact city strings that market_property_sources were bridged with
++      // (e.g. "Rehovot"), so the public-market scope lines up with real data.
++      const { data: own } = await db
++        .from("external_listings" as never)
++        .select("city")
++        .eq("org_id", orgId)
++        .not("city", "is", null)
++        .limit(2000);
++      return [...new Set(((own ?? []) as unknown as { city: string | null }[]).map((r) => (r.city ?? "").trim()).filter(Boolean))];
+     },
+ 
+     /** Public market listings in the org's monitored cities (optionally filtered). */
+diff --git a/src/lib/orchestrator/service.ts b/src/lib/orchestrator/service.ts
+index 9ddb93d..ddd332c 100644
+--- a/src/lib/orchestrator/service.ts
++++ b/src/lib/orchestrator/service.ts
+@@ -86,27 +86,40 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
+     // orchestrator is already staleness-gated (ORCHESTRATOR_STALE_MS) for these
+     // triggers — so it scrapes at most once per stale-window per org, not on every
+     // render. Cron keeps the full nightly refresh.
++    // P9.1C — RELIABLE EXECUTION MODEL:
++    //  • scheduled_cron  → the DEEP, adaptive catch-up scan (reaches ~1000 where
++    //    providers return it). This is the reliable, session-independent path.
++    //  • dashboard_load/login → LIGHTWEIGHT "quick" maintenance top-up ONLY. The
++    //    heavy scan NO LONGER runs inside the dashboard `after()` (that best-effort
++    //    post-response work was being dropped/killed on Vercel and blew the
++    //    function budget). Business-critical depth lives on cron; on-entry is a
++    //    small freshness check that is fine to miss because cron guarantees it.
+     const passiveEntry = trigger === "login" || trigger === "dashboard_load";
++    let externalSyncRan = false; // did syncOrg (which runs broker detection) execute?
+     if (input.skipExternalSync) {
+       steps.push(skippedStep("external_sync", "בוצע בסנכרון הצ'אנקים (דפדפן)"));
+     } else if (trigger === "scheduled_cron") {
+       steps.push(await runStep("external_sync", false, async () => {
+-        const s = await syncExternalListingsForOrganization(organizationId);
+-        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן: ${s.inserted} חדשים · ${s.updated} עודכנו` };
+-      }));
+-    } else if (passiveEntry && process.env.APIFY_TOKEN) {
+-      steps.push(await runStep("external_sync", false, async () => {
+-        // Adaptive depth so an office reaches ~1000 listings AUTOMATICALLY: while
+-        // it is still below the target market picture it gets a FULL catch-up scan
+-        // (≤500/city/source ≈ 1000); once populated it drops to "quick" maintenance
+-        // top-ups. Bounded either way + staleness-gated, so it scrapes at most once
+-        // per stale-window and self-checkpoints under its wall-clock budget.
++        // Adaptive depth: while the office is still below a useful market picture
++        // it gets a FULL catch-up scan (≤500/city/source ≈ ~1000 for a single-city
++        // office); once populated it drops to "quick" nightly maintenance. Bounded
++        // (per-city + per-run city caps) and self-checkpointing under its wall-clock
++        // budget, so cost stays predictable. Honest: never guaranteed 1000 — that
++        // depends on how many listings the providers actually return.
+         const db = createServiceRoleClient() as Db;
+         const { count } = await db.from("external_listings").select("id", { count: "exact", head: true }).eq("org_id", organizationId);
+-        const mode = (count ?? 0) < 400 ? "full" : "quick";
++        const mode = (count ?? 0) < 800 ? "full" : "quick";
+         const s = await syncExternalListingsForOrganization(organizationId, { mode });
++        externalSyncRan = true;
+         return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (${mode}): ${s.inserted} חדשים · ${s.updated} עודכנו` };
+       }));
++    } else if (passiveEntry && process.env.APIFY_TOKEN) {
++      steps.push(await runStep("external_sync", false, async () => {
++        // Lightweight maintenance only — bounded "quick" top-up. Depth is cron's job.
++        const s = await syncExternalListingsForOrganization(organizationId, { mode: "quick" });
++        externalSyncRan = true;
++        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (רענון קל): ${s.inserted} חדשים · ${s.updated} עודכנו` };
++      }));
+     } else {
+       steps.push(skippedStep("external_sync", "סריקה מתבצעת ידנית או ב-cron"));
+     }
+@@ -137,6 +150,11 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
+     // session and runs under RLS (its queries are org-scoped by policy, NOT by an
+     // explicit filter) — so it must NEVER be called with a service-role client.
+     // Cron detection is handled separately; here we skip it honestly.
++    // Session path uses the RLS wrapper. Cron path: detection ALREADY ran inside
++    // the external_sync (syncOrg → detectForOrg, now explicitly org-scoped and
++    // therefore tenant-safe under service-role), so we skip the redundant scan.
++    // If cron ran WITHOUT external_sync (skipped/failed), we still detect via the
++    // service-role, org-scoped wrapper so brokers are never left stale on cron.
+     if (sessionScoped) {
+       steps.push(await runStep("broker_detection", false, async () => {
+         const { runBrokerDetectionForOrg } = await import("@/lib/broker/service");
+@@ -149,8 +167,14 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
+         const d = await runBrokerDetectionForOrg();
+         return { summary: `מתווכים: ${d.matched} זוהו · ${d.needsReview} לבדיקה · ${d.unknown} פרטיים` };
+       }));
++    } else if (!externalSyncRan) {
++      steps.push(await runStep("broker_detection", false, async () => {
++        const { runBrokerDetectionForOrgServiceRole } = await import("@/lib/broker/service");
++        const d = await runBrokerDetectionForOrgServiceRole(organizationId);
++        return { summary: `מתווכים (cron): ${d.matched} זוהו · ${d.needsReview} לבדיקה · ${d.unknown} פרטיים` };
++      }));
+     } else {
+-      steps.push(skippedStep("broker_detection", "cron — אין הקשר סשן (RLS)"));
++      steps.push(skippedStep("broker_detection", "בוצע במסגרת סנכרון המקורות"));
+     }
+ 
+     // STEP 3.6 — Area intelligence. The moment the office's city has scanned
+@@ -159,7 +183,14 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
+     // Both engines are session-scoped and self-throttle (city-learning 6h; the
+     // competitor snapshot is idempotent per day), so entering the dashboard keeps
+     // them fresh without a manual click. Best-effort: never breaks the run.
+-    if (sessionScoped) {
++    // P9.1C — area intelligence now runs on the CRON path too (not only sessions),
++    // using tenant-safe, explicitly org-scoped entry points that need no session:
++    //  • triggerCityLearning(orgId, city, …) already takes an explicit org.
++    //  • runCompetitorIntelligenceSnapshotForOrg(orgId) is the service-role variant
++    //    (org-scoped writes; only PUBLIC market data is read by city).
++    // This is what makes competitor research + area knowledge AUTOMATIC without the
++    // customer keeping the dashboard open.
++    {
+       steps.push(await runStep("area_intelligence", false, async () => {
+         let learned = "—";
+         try {
+@@ -174,14 +205,16 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
+         } catch (e) { console.error("[orchestrator] city learning skipped:", e); }
+         let competitors = "—";
+         try {
+-          const { runCompetitorIntelligenceSnapshotJob } = await import("@/lib/competitor-intelligence/engine");
+-          await runCompetitorIntelligenceSnapshotJob();
++          const engine = await import("@/lib/competitor-intelligence/engine");
++          if (sessionScoped) {
++            await engine.runCompetitorIntelligenceSnapshotJob();
++          } else {
++            await engine.runCompetitorIntelligenceSnapshotForOrg(organizationId);
++          }
+           competitors = "עודכן";
+         } catch (e) { console.error("[orchestrator] competitor snapshot skipped:", e); }
+         return { summary: `ידע אזור: ${learned} · חקר מתחרים: ${competitors}` };
+       }));
+-    } else {
+-      steps.push(skippedStep("area_intelligence", "cron — אין הקשר סשן"));
+     }
+ 
+     // STEP 4 — Market Snapshots. Session path uses the session-scoped function;

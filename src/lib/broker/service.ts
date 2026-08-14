@@ -97,10 +97,12 @@ export async function importBrokersFromCsv(rows: BrokerInput[]): Promise<CsvImpo
 // ── Detection: match external listings → broker profiles ─────────────────────
 export interface DetectionSummary { scanned: number; matched: number; needsReview: number; unknown: number }
 
-async function loadCandidates(supabase: Client): Promise<BrokerCandidate[]> {
+async function loadCandidates(supabase: Client, orgId: string): Promise<BrokerCandidate[]> {
+  // TENANT-SAFE: explicit org filter on BOTH tables so cron/service-role never
+  // loads another org's broker directory into the matcher.
   const [{ data: profiles }, { data: aliases }] = await Promise.all([
-    supabase.from("broker_profiles").select("id,normalized_name,normalized_agency,normalized_phone,primary_city").limit(2000),
-    supabase.from("broker_aliases").select("broker_id,alias_type,normalized_value").limit(8000),
+    supabase.from("broker_profiles").select("id,normalized_name,normalized_agency,normalized_phone,primary_city").eq("org_id", orgId).limit(2000),
+    supabase.from("broker_aliases").select("broker_id,alias_type,normalized_value").eq("org_id", orgId).limit(8000),
   ]);
   const aliasMap = new Map<string, AliasLike[]>();
   for (const a of aliases ?? []) {
@@ -120,14 +122,19 @@ async function loadCandidates(supabase: Client): Promise<BrokerCandidate[]> {
  * evidence; created as 'unverified'. Deduped by normalized phone, else name.
  */
 export async function ensureBrokerProfilesFromListings(db: Client, orgId: string): Promise<number> {
+  // TENANT-SAFE: every read is EXPLICITLY org-scoped (.eq("org_id", orgId)), NOT
+  // relying on RLS — so this is correct under BOTH the RLS session client AND the
+  // service-role cron client. Without these filters a service-role run would read
+  // (and create broker profiles from) EVERY org's listings → cross-tenant leak.
   const { data: listings } = await db
     .from("external_listings")
     .select("id,contact_name,contact_phone,detected_broker_name,city,listing_source_type,listing_url,source")
+    .eq("org_id", orgId)
     .eq("status", "active").is("promoted_property_id", null)
     .in("listing_source_type", ["broker", "agency", "office"]).limit(2000);
   if (!listings?.length) return 0;
 
-  const { data: existing } = await db.from("broker_profiles").select("id,normalized_name,normalized_phone");
+  const { data: existing } = await db.from("broker_profiles").select("id,normalized_name,normalized_phone").eq("org_id", orgId);
   const byPhone = new Map<string, string>(); const byName = new Map<string, string>();
   for (const b of existing ?? []) { if (b.normalized_phone) byPhone.set(b.normalized_phone, b.id); if (b.normalized_name) byName.set(b.normalized_name, b.id); }
 
@@ -172,10 +179,13 @@ export async function detectForOrg(db: Client, orgId: string): Promise<Detection
   // Auto-register newly seen broker/agency publishers into the broker DB first,
   // so detection can match listings to real profiles.
   try { await ensureBrokerProfilesFromListings(db, orgId); } catch (e) { console.error("[broker] auto-register failed:", e); }
-  const candidates = await loadCandidates(db);
+  const candidates = await loadCandidates(db, orgId);
+  // TENANT-SAFE: only THIS org's active listings are scanned/updated. Under
+  // service-role (cron) an unscoped read here would scan+mutate every org's rows.
   const { data: listings } = await db
     .from("external_listings")
     .select("id,contact_name,contact_phone,contact_type,city,has_agent")
+    .eq("org_id", orgId)
     .eq("status", "active").is("promoted_property_id", null)
     .eq("broker_detection_locked", false).limit(1000);
   if (!listings?.length) return summary;
@@ -183,7 +193,7 @@ export async function detectForOrg(db: Client, orgId: string): Promise<Detection
   const nameById = new Map<string, string>();
   const typeById = new Map<string, string>();
   if (candidates.length) {
-    const { data } = await db.from("broker_profiles").select("id,display_name,broker_type");
+    const { data } = await db.from("broker_profiles").select("id,display_name,broker_type").eq("org_id", orgId);
     for (const b of data ?? []) { nameById.set(b.id, b.display_name); typeById.set(b.id, b.broker_type); }
   }
   const now = new Date().toISOString();
@@ -242,6 +252,20 @@ export async function runBrokerDetectionForOrg(): Promise<DetectionSummary> {
   const { profile } = await requireProfile();
   const supabase = await createClient();
   return detectForOrg(supabase as unknown as Client, profile.org_id);
+}
+
+/**
+ * Cron/service-role wrapper — org-scoped WITHOUT a session. Safe because every
+ * query inside detectForOrg / ensureBrokerProfilesFromListings / loadCandidates
+ * now filters explicitly by org_id (RLS is bypassed under service-role, so the
+ * explicit filter is what enforces tenant isolation). Runs TWO converging passes
+ * exactly like the session path. Never used with request-scoped user input.
+ */
+export async function runBrokerDetectionForOrgServiceRole(orgId: string): Promise<DetectionSummary> {
+  const { createServiceRoleClient } = await import("@/lib/supabase/server");
+  const db = createServiceRoleClient() as unknown as Client;
+  await detectForOrg(db, orgId);
+  return detectForOrg(db, orgId);
 }
 
 // ── Review workflow (admin-gated) ────────────────────────────────────────────

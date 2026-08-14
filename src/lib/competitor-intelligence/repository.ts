@@ -83,7 +83,22 @@ export function createCompetitorRepository(db: Db) {
         .select("city_name")
         .eq("organization_id", orgId)
         .eq("is_active", true);
-      return [...new Set(((data ?? []) as unknown as { city_name: string | null }[]).map((r) => (r.city_name ?? "").trim()).filter(Boolean))];
+      const cities = [...new Set(((data ?? []) as unknown as { city_name: string | null }[]).map((r) => (r.city_name ?? "").trim()).filter(Boolean))];
+      if (cities.length) return cities;
+      // P9.1C fallback — a freshly-onboarded office often has NO
+      // user_operating_localities rows yet (its area is registered at org level /
+      // discovered from the scan), which left the competitor market scope EMPTY and
+      // competitor intelligence stuck at 0. Derive the monitored cities from the
+      // org's OWN scanned listings instead: org-scoped (tenant-safe) AND it uses
+      // the exact city strings that market_property_sources were bridged with
+      // (e.g. "Rehovot"), so the public-market scope lines up with real data.
+      const { data: own } = await db
+        .from("external_listings" as never)
+        .select("city")
+        .eq("org_id", orgId)
+        .not("city", "is", null)
+        .limit(2000);
+      return [...new Set(((own ?? []) as unknown as { city: string | null }[]).map((r) => (r.city ?? "").trim()).filter(Boolean))];
     },
 
     /** Public market listings in the org's monitored cities (optionally filtered). */

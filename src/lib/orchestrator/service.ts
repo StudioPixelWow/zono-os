@@ -86,26 +86,39 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
     // orchestrator is already staleness-gated (ORCHESTRATOR_STALE_MS) for these
     // triggers — so it scrapes at most once per stale-window per org, not on every
     // render. Cron keeps the full nightly refresh.
+    // P9.1C — RELIABLE EXECUTION MODEL:
+    //  • scheduled_cron  → the DEEP, adaptive catch-up scan (reaches ~1000 where
+    //    providers return it). This is the reliable, session-independent path.
+    //  • dashboard_load/login → LIGHTWEIGHT "quick" maintenance top-up ONLY. The
+    //    heavy scan NO LONGER runs inside the dashboard `after()` (that best-effort
+    //    post-response work was being dropped/killed on Vercel and blew the
+    //    function budget). Business-critical depth lives on cron; on-entry is a
+    //    small freshness check that is fine to miss because cron guarantees it.
     const passiveEntry = trigger === "login" || trigger === "dashboard_load";
+    let externalSyncRan = false; // did syncOrg (which runs broker detection) execute?
     if (input.skipExternalSync) {
       steps.push(skippedStep("external_sync", "בוצע בסנכרון הצ'אנקים (דפדפן)"));
     } else if (trigger === "scheduled_cron") {
       steps.push(await runStep("external_sync", false, async () => {
-        const s = await syncExternalListingsForOrganization(organizationId);
-        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן: ${s.inserted} חדשים · ${s.updated} עודכנו` };
+        // Adaptive depth: while the office is still below a useful market picture
+        // it gets a FULL catch-up scan (≤500/city/source ≈ ~1000 for a single-city
+        // office); once populated it drops to "quick" nightly maintenance. Bounded
+        // (per-city + per-run city caps) and self-checkpointing under its wall-clock
+        // budget, so cost stays predictable. Honest: never guaranteed 1000 — that
+        // depends on how many listings the providers actually return.
+        const db = createServiceRoleClient() as Db;
+        const { count } = await db.from("external_listings").select("id", { count: "exact", head: true }).eq("org_id", organizationId);
+        const mode = (count ?? 0) < 800 ? "full" : "quick";
+        const s = await syncExternalListingsForOrganization(organizationId, { mode });
+        externalSyncRan = true;
+        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (${mode}): ${s.inserted} חדשים · ${s.updated} עודכנו` };
       }));
     } else if (passiveEntry && process.env.APIFY_TOKEN) {
       steps.push(await runStep("external_sync", false, async () => {
-        // Adaptive depth so an office reaches ~1000 listings AUTOMATICALLY: while
-        // it is still below the target market picture it gets a FULL catch-up scan
-        // (≤500/city/source ≈ 1000); once populated it drops to "quick" maintenance
-        // top-ups. Bounded either way + staleness-gated, so it scrapes at most once
-        // per stale-window and self-checkpoints under its wall-clock budget.
-        const db = createServiceRoleClient() as Db;
-        const { count } = await db.from("external_listings").select("id", { count: "exact", head: true }).eq("org_id", organizationId);
-        const mode = (count ?? 0) < 400 ? "full" : "quick";
-        const s = await syncExternalListingsForOrganization(organizationId, { mode });
-        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (${mode}): ${s.inserted} חדשים · ${s.updated} עודכנו` };
+        // Lightweight maintenance only — bounded "quick" top-up. Depth is cron's job.
+        const s = await syncExternalListingsForOrganization(organizationId, { mode: "quick" });
+        externalSyncRan = true;
+        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (רענון קל): ${s.inserted} חדשים · ${s.updated} עודכנו` };
       }));
     } else {
       steps.push(skippedStep("external_sync", "סריקה מתבצעת ידנית או ב-cron"));
@@ -137,6 +150,11 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
     // session and runs under RLS (its queries are org-scoped by policy, NOT by an
     // explicit filter) — so it must NEVER be called with a service-role client.
     // Cron detection is handled separately; here we skip it honestly.
+    // Session path uses the RLS wrapper. Cron path: detection ALREADY ran inside
+    // the external_sync (syncOrg → detectForOrg, now explicitly org-scoped and
+    // therefore tenant-safe under service-role), so we skip the redundant scan.
+    // If cron ran WITHOUT external_sync (skipped/failed), we still detect via the
+    // service-role, org-scoped wrapper so brokers are never left stale on cron.
     if (sessionScoped) {
       steps.push(await runStep("broker_detection", false, async () => {
         const { runBrokerDetectionForOrg } = await import("@/lib/broker/service");
@@ -149,8 +167,14 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
         const d = await runBrokerDetectionForOrg();
         return { summary: `מתווכים: ${d.matched} זוהו · ${d.needsReview} לבדיקה · ${d.unknown} פרטיים` };
       }));
+    } else if (!externalSyncRan) {
+      steps.push(await runStep("broker_detection", false, async () => {
+        const { runBrokerDetectionForOrgServiceRole } = await import("@/lib/broker/service");
+        const d = await runBrokerDetectionForOrgServiceRole(organizationId);
+        return { summary: `מתווכים (cron): ${d.matched} זוהו · ${d.needsReview} לבדיקה · ${d.unknown} פרטיים` };
+      }));
     } else {
-      steps.push(skippedStep("broker_detection", "cron — אין הקשר סשן (RLS)"));
+      steps.push(skippedStep("broker_detection", "בוצע במסגרת סנכרון המקורות"));
     }
 
     // STEP 3.6 — Area intelligence. The moment the office's city has scanned
@@ -159,7 +183,14 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
     // Both engines are session-scoped and self-throttle (city-learning 6h; the
     // competitor snapshot is idempotent per day), so entering the dashboard keeps
     // them fresh without a manual click. Best-effort: never breaks the run.
-    if (sessionScoped) {
+    // P9.1C — area intelligence now runs on the CRON path too (not only sessions),
+    // using tenant-safe, explicitly org-scoped entry points that need no session:
+    //  • triggerCityLearning(orgId, city, …) already takes an explicit org.
+    //  • runCompetitorIntelligenceSnapshotForOrg(orgId) is the service-role variant
+    //    (org-scoped writes; only PUBLIC market data is read by city).
+    // This is what makes competitor research + area knowledge AUTOMATIC without the
+    // customer keeping the dashboard open.
+    {
       steps.push(await runStep("area_intelligence", false, async () => {
         let learned = "—";
         try {
@@ -174,14 +205,16 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
         } catch (e) { console.error("[orchestrator] city learning skipped:", e); }
         let competitors = "—";
         try {
-          const { runCompetitorIntelligenceSnapshotJob } = await import("@/lib/competitor-intelligence/engine");
-          await runCompetitorIntelligenceSnapshotJob();
+          const engine = await import("@/lib/competitor-intelligence/engine");
+          if (sessionScoped) {
+            await engine.runCompetitorIntelligenceSnapshotJob();
+          } else {
+            await engine.runCompetitorIntelligenceSnapshotForOrg(organizationId);
+          }
           competitors = "עודכן";
         } catch (e) { console.error("[orchestrator] competitor snapshot skipped:", e); }
         return { summary: `ידע אזור: ${learned} · חקר מתחרים: ${competitors}` };
       }));
-    } else {
-      steps.push(skippedStep("area_intelligence", "cron — אין הקשר סשן"));
     }
 
     // STEP 4 — Market Snapshots. Session path uses the session-scoped function;
