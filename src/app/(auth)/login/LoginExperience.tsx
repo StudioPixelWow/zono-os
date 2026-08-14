@@ -144,6 +144,10 @@ export function LoginExperience() {
               </div>
             </div>
 
+            <p className="zauth-alt" style={{ marginTop: -4, marginBottom: 4, textAlign: "start" }}>
+              <Link href="/forgot-password" className="zauth-link">שכחת סיסמה?</Link>
+            </p>
+
             <button type="submit" disabled={pending} className="zauth-btn">
               <span>{pending ? "מתחבר…" : "התחברות"}</span>
               {!pending && <ArrowLeft size={18} className="zauth-btn-arrow" aria-hidden="true" />}
