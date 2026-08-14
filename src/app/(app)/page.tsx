@@ -30,7 +30,10 @@ import { getAcquisitionCommandCenter } from "@/lib/acquisition/service";
 import { getBrokerWhatsapp } from "@/lib/whatsapp/inbox-service";
 import { resolveSessionCtx, readSessionSnapshot } from "@/lib/whatsapp/provider/session";
 import { getMarketingBoard } from "@/lib/marketing/service";
+import { getOfficeActivation } from "@/lib/activation/activation-server";
+import { buildOfficeTheme, OFFICE_THEME_DEFAULTS } from "@/lib/brand-identity/office-theme";
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
+import { NewOfficeCommandCenter } from "@/components/home-control/NewOfficeCommandCenter";
 import type {
   HomeActivityItem, HomeRec, HomeHero, HomeNowItem, HomePipeline,
   HomeFollowUpItem, HomeAcquisition, HomeNextDeal, HomePrivateListing,
@@ -128,6 +131,31 @@ function mapActivity(rows: ActivityEventRow[]): HomeActivityItem[] {
 }
 
 export default async function Home() {
+  // ── P9.0B — FIRST-LOGIN WOW branch ─────────────────────────────────────────
+  // A brand-new office (no operational business data yet) gets the personalized
+  // command center, and we SHORT-CIRCUIT the entire ~20-service intelligence
+  // stack (Phase 13 perf) — an empty office never pays for engines that have
+  // nothing to show. "activating"/"active" offices fall through to the full
+  // dashboard (which now renders honest zero-states). Best-effort: any failure
+  // degrades to the normal dashboard.
+  try {
+    const act = await getOfficeActivation();
+    if (act && act.activation.phase === "new") {
+      const theme = buildOfficeTheme(act.brand.primary, act.brand.secondary, act.brand.accent);
+      return (
+        <NewOfficeCommandCenter
+          identity={act.identity}
+          activation={act.activation}
+          trial={act.trial}
+          themeVars={{ ...OFFICE_THEME_DEFAULTS, ...theme.vars }}
+          hasBrand={theme.hasBrand}
+        />
+      );
+    }
+  } catch (e) {
+    console.error("[home] activation resolve failed — falling back to dashboard:", e);
+  }
+
   const { profile } = await getSessionContext();
   const agentName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "סוכן";
   const cityName = profile?.primary_city ?? undefined;

@@ -10,40 +10,11 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import {
   ACTIVATION_COUNT_SOURCES, computeActivation,
-  type ActivationMilestoneKey, type ActivationState,
+  type ActivationMilestoneKey,
+  type OfficeActivationResult, type OfficeBrand, type OfficeIdentity, type OfficeTrial,
 } from "./activation";
 
-export interface OfficeIdentity {
-  orgId: string;
-  officeName: string;
-  officeLogoUrl: string | null;
-  ownerName: string;
-  ownerFirstName: string;
-  ownerAvatarUrl: string | null;
-  city: string | null;
-  subdistrict: string | null;
-  localityCode: string | null;
-}
-
-export interface OfficeBrand {
-  primary: string | null;
-  secondary: string | null;
-  accent: string | null;
-  logoUrl: string | null;
-}
-
-export interface OfficeTrial {
-  active: boolean;
-  endsAt: string | null;
-  daysLeft: number | null;
-}
-
-export interface OfficeActivationResult {
-  activation: ActivationState;
-  identity: OfficeIdentity;
-  brand: OfficeBrand;
-  trial: OfficeTrial | null;
-}
+export type { OfficeActivationResult, OfficeBrand, OfficeIdentity, OfficeTrial } from "./activation";
 
 type Db = ReturnType<typeof createServiceRoleClient>;
 

@@ -105,6 +105,39 @@ export interface ActivationState {
   hasOperationalData: boolean;
 }
 
+// ── Serializable presentational view-models (shared by server + client) ────────
+export interface OfficeIdentity {
+  orgId: string;
+  officeName: string;
+  officeLogoUrl: string | null;
+  ownerName: string;
+  ownerFirstName: string;
+  ownerAvatarUrl: string | null;
+  city: string | null;
+  subdistrict: string | null;
+  localityCode: string | null;
+}
+
+export interface OfficeBrand {
+  primary: string | null;
+  secondary: string | null;
+  accent: string | null;
+  logoUrl: string | null;
+}
+
+export interface OfficeTrial {
+  active: boolean;
+  endsAt: string | null;
+  daysLeft: number | null;
+}
+
+export interface OfficeActivationResult {
+  activation: ActivationState;
+  identity: OfficeIdentity;
+  brand: OfficeBrand;
+  trial: OfficeTrial | null;
+}
+
 /** Percent-complete threshold at which an office with data is treated as fully "active". */
 export const ACTIVE_PHASE_THRESHOLD = 70;
 
