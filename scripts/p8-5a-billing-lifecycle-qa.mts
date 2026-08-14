@@ -5,7 +5,7 @@
 import {
   reconcileBillingLifecycleDecision, decideTrialExpiry, decideRecovery,
   decidePaymentFailureTransition, decideCancellationStage, LIFECYCLE_CONTRACT,
-  GRACE_PERIOD_DECISION, type LifecycleInput,
+  GRACE_PERIOD, GRACE_PERIOD_DAYS, computeGraceWindow, graceEndsAtFrom, type LifecycleInput,
 } from "../src/lib/commercial/lifecycle.ts";
 import { BILLING_STATES } from "../src/lib/commercial/billing-state.ts";
 
@@ -39,12 +39,34 @@ ok(decide({ billingState: "payment_due", hasVerifiedProductionPayment: false }).
 ok(decide({ billingState: "payment_failed", hasVerifiedProductionPayment: false }).action === "PAYMENT_REQUIRED", "payment_failed, no payment → PAYMENT_REQUIRED");
 ok(decidePaymentFailureTransition("active") === "payment_failed", "active → payment_failed (failure ladder)");
 ok(decidePaymentFailureTransition("payment_failed") === "grace", "payment_failed → grace");
-ok(decidePaymentFailureTransition("grace") === null, "grace → (no auto next: duration is a product decision)");
-ok(GRACE_PERIOD_DECISION.status === "PRODUCT_DECISION_REQUIRED", "grace duration = PRODUCT_DECISION_REQUIRED (not invented)");
+ok(decidePaymentFailureTransition("grace") === null, "grace → (no auto next; expiry does NOT suspend/cancel)");
+ok(GRACE_PERIOD.status === "LOCKED" && GRACE_PERIOD.days === 7 && GRACE_PERIOD_DAYS === 7, "grace duration LOCKED at 7 calendar days");
 {
   const rec = decide({ billingState: "grace", hasVerifiedProductionPayment: true });
   ok(rec.action === "RECOVERY_AVAILABLE" && rec.targetState === "active", "grace + verified prod payment → RECOVERY_AVAILABLE → active");
   ok(decideRecovery({ billingState: "payment_due", hasVerifiedProductionPayment: true }).available === true, "payment_due + verified prod → recovery available");
+}
+
+console.log("\nP8.5A · grace window = 7 calendar days (locked; display + idempotent expiry)");
+{
+  const endsMs = NOW + 7 * DAY;                 // grace started today, ends in 7 days
+  const w = computeGraceWindow("grace", iso(endsMs), NOW);
+  ok(w.active === true && w.daysRemaining === 7 && w.expired === false, "fresh grace → active, 7 days remaining, not expired");
+  ok(w.startedAt === iso(endsMs - 7 * DAY), "startedAt = endsAt − 7 days (derived)");
+  const mid = computeGraceWindow("grace", iso(NOW + 3 * DAY), NOW);
+  ok(mid.daysRemaining === 3 && mid.expired === false, "mid-grace → 3 days remaining, not expired");
+  const expired = computeGraceWindow("grace", iso(NOW - DAY), NOW);
+  ok(expired.expired === true && expired.daysRemaining === 0, "past grace_until → expired, 0 days remaining");
+  // Idempotent: repeated evaluation of an expired window yields identical result.
+  const e2 = computeGraceWindow("grace", iso(NOW - DAY), NOW);
+  ok(JSON.stringify(expired) === JSON.stringify(e2), "grace expiry is idempotent (pure projection, no mutation)");
+  // Not in grace → inactive window regardless of grace_until.
+  ok(computeGraceWindow("active", iso(NOW + 7 * DAY), NOW).active === false, "not in grace state → window inactive");
+  ok(graceEndsAtFrom(NOW) === iso(NOW + 7 * DAY), "graceEndsAtFrom = now + 7 days (entry write)");
+  // Grace expiry does NOT auto-suspend/cancel — decision stays PAYMENT_REQUIRED, not cancellation.
+  const dec = decide({ billingState: "grace", hasVerifiedProductionPayment: false });
+  ok(dec.action === "PAYMENT_REQUIRED" && dec.targetState === null, "expired grace, no payment → PAYMENT_REQUIRED (NO auto suspend/cancel/delete)");
+  ok(/SEPARATE future product decision/i.test(GRACE_PERIOD.onExpiry), "post-grace access = SEPARATE future decision (not in P8)");
 }
 
 console.log("\nP8.5A · sandbox payment does NOT trigger production recovery");

@@ -12,7 +12,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { canonicalFromSubscriptionStatus, type BillingState } from "./billing-state";
 import { getOrgBillingQuantity } from "./billing";
-import { reconcileBillingLifecycleDecision, type LifecycleAction, type LifecycleDecision, type OrgLifecycleStatus } from "./lifecycle";
+import { reconcileBillingLifecycleDecision, computeGraceWindow, graceEndsAtFrom, type LifecycleAction, type LifecycleDecision, type OrgLifecycleStatus, type GraceWindow } from "./lifecycle";
 
 // canonical BillingState → legacy subscriptions.status (the column's vocabulary).
 const CANON_TO_LEGACY: Partial<Record<BillingState, string>> = {
@@ -32,15 +32,16 @@ interface SubRow {
   cancel_at_period_end: boolean | null; provider_quantity: number | null;
   quantity_sync_status: string | null; grow_transaction_id: string | null;
   grow_transaction_token: string | null; grow_asmachta: string | null;
+  grace_until: string | null;
 }
 
-async function readLifecycle(orgId: string): Promise<{ sub: SubRow | null; decision: LifecycleDecision; nowIso: string }> {
+async function readLifecycle(orgId: string): Promise<{ sub: SubRow | null; decision: LifecycleDecision; grace: GraceWindow; nowIso: string }> {
   const db = createServiceRoleClient();
   const nowIso = new Date().toISOString();
   const nowMs = Date.parse(nowIso);
   const [q, subRes, prodPaidRes] = await Promise.all([
     getOrgBillingQuantity(orgId),
-    (db.from("subscriptions" as never).select("status,period_end,trial_ends_at,cancel_at_period_end,provider_quantity,quantity_sync_status,grow_transaction_id,grow_transaction_token,grow_asmachta").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: SubRow | null }>),
+    (db.from("subscriptions" as never).select("status,period_end,trial_ends_at,cancel_at_period_end,provider_quantity,quantity_sync_status,grow_transaction_id,grow_transaction_token,grow_asmachta,grace_until").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: SubRow | null }>),
     // A VERIFIED, PAID, PRODUCTION payment (sandbox never qualifies for revenue state).
     (db.from("payments" as never).select("id").eq("org_id", orgId).eq("verified", true).eq("status", "paid").eq("environment", "production").limit(1) as unknown as Promise<{ data: Array<{ id: string }> | null }>),
   ]);
@@ -55,15 +56,45 @@ async function readLifecycle(orgId: string): Promise<{ sub: SubRow | null; decis
     providerConfigured: !!process.env.GROW_CHECKOUT_URL, hasRecurringIdentifiers: !!(sub?.grow_transaction_id && sub?.grow_transaction_token && sub?.grow_asmachta),
     unitPriceIls: q.unitPriceIls,
   });
-  return { sub, decision, nowIso };
+  const grace = computeGraceWindow(billingState, sub?.grace_until ?? null, nowMs);
+  return { sub, decision, grace, nowIso };
 }
 
 /** READ-ONLY lifecycle status for display (Platform Admin + Customer 360). Runs the
  *  pure engine over authoritative DB state WITHOUT executing any transition. */
 export async function getOrgLifecycleStatus(orgId: string): Promise<OrgLifecycleStatus> {
-  const { decision } = await readLifecycle(orgId);
+  const { decision, grace } = await readLifecycle(orgId);
   const pending = decision.providerDependent && !process.env.GROW_CHECKOUT_URL ? "PENDING_SANDBOX_CREDENTIALS" as const : null;
-  return { organizationId: orgId, ...decision, pending };
+  return { organizationId: orgId, ...decision, pending, grace };
+}
+
+/**
+ * Begin the 7-day grace window after a VERIFIED PRODUCTION payment failure. Atomic
+ * + idempotent: sets status='grace_period' + grace_until = now + 7 days ONLY when
+ * the org is active/pending_payment/suspended (a conditional update — a second call
+ * once already in grace matches 0 rows and NEVER resets grace_until). Never deletes
+ * or suspends data. The FAILURE TRIGGER is provider-dependent (a real failed Grow
+ * callback); this writer is the ZONO-side entry, ready for that path.
+ */
+export async function beginGraceWindow(orgId: string): Promise<{ ok: boolean; started: boolean }> {
+  const db = createServiceRoleClient();
+  const now = new Date();
+  const graceUntil = graceEndsAtFrom(now.getTime());
+  const { data } = await (db.from("subscriptions" as never)
+    .update({ status: "grace_period", grace_until: graceUntil, updated_at: now.toISOString() } as never)
+    .eq("org_id", orgId)
+    .in("status", ["active", "pending_payment", "suspended"] as never)
+    .select("org_id")
+    .maybeSingle() as unknown as Promise<{ data: { org_id: string } | null }>);
+  const started = !!data;
+  if (started) {
+    await db.from("audit_log").insert({
+      organization_id: orgId, actor_id: null, actor_name: "system:lifecycle",
+      action: "billing.grace.started", category: "configuration", entity_type: "subscription", entity_id: orgId,
+      summary: `billing.grace.started: grace_until ${graceUntil}`, metadata: { graceUntil, graceDays: 7 } as never,
+    } as never).then(() => undefined, () => undefined);
+  }
+  return { ok: true, started };
 }
 
 /**

@@ -58,7 +58,7 @@ export const LIFECYCLE_CONTRACT: Record<BillingState, LifecycleStateMeta> = {
   },
   grace: {
     allowedPrev: prevOf("grace"), allowedNext: ["active", "cancelled"],
-    trigger: "post-failure grace window (duration = PRODUCT_DECISION_REQUIRED)", providerDependency: "verification",
+    trigger: "post-failure grace window (7 calendar days)", providerDependency: "verification",
     customerMeaning: "תקופת חסד", billingContinues: true,
     quantitySyncAllowed: false, cancellationAllowed: true, recoveryAllowed: true,
   },
@@ -165,7 +165,38 @@ export interface LifecycleDecision {
 export type OrgLifecycleStatus = LifecycleDecision & {
   organizationId: string;
   pending: "PENDING_SANDBOX_CREDENTIALS" | null;
+  grace: GraceWindow;
 };
+
+// ── Grace period (LOCKED PRODUCT DECISION: 7 calendar days) ──────────────────
+export const GRACE_PERIOD_DAYS = 7;
+const GRACE_DAY_MS = 86_400_000;
+
+export interface GraceWindow {
+  active: boolean;               // is the org currently in the grace state?
+  startedAt: string | null;      // endsAt − 7 days (derived)
+  endsAt: string | null;         // subscriptions.grace_until
+  daysRemaining: number | null;  // whole calendar days left (clamped ≥ 0)
+  expired: boolean;              // now > endsAt — grace lapsed. NO auto suspend/cancel/delete.
+}
+
+/** The grace window ends exactly 7 calendar days after it begins (entry write). */
+export function graceEndsAtFrom(nowMs: number): string {
+  return new Date(nowMs + GRACE_PERIOD_DAYS * GRACE_DAY_MS).toISOString();
+}
+
+/** PURE grace-window projection for display + expiry. Active only while the state
+ *  is `grace`. `expired` is derived from grace_until, so repeated evaluation is
+ *  idempotent (same result, no mutation) and never suspends/cancels/deletes. */
+export function computeGraceWindow(billingState: BillingState, graceUntil: string | null, nowMs: number): GraceWindow {
+  if (billingState !== "grace" || !graceUntil) {
+    return { active: false, startedAt: null, endsAt: null, daysRemaining: null, expired: false };
+  }
+  const endsMs = new Date(graceUntil).getTime();
+  const startedAt = new Date(endsMs - GRACE_PERIOD_DAYS * GRACE_DAY_MS).toISOString();
+  const daysRemaining = Math.max(0, Math.ceil((endsMs - nowMs) / GRACE_DAY_MS));
+  return { active: true, startedAt, endsAt: graceUntil, daysRemaining, expired: nowMs > endsMs };
+}
 
 /**
  * THE reconciliation brain. Returns exactly ONE primary action for the org's
@@ -212,9 +243,14 @@ export function reconcileBillingLifecycleDecision(input: LifecycleInput): Lifecy
   return { action: "NO_ACTION", targetState: null, providerDependent: false, reason: "reconciled — nothing owed" };
 }
 
-// ── Grace-period product decision (do NOT invent a duration) ─────────────────
-export const GRACE_PERIOD_DECISION = {
-  status: "PRODUCT_DECISION_REQUIRED" as const,
-  field: "grace duration (days) — no approved value exists; state/transition modeled, duration NOT invented",
-  accessDuringGrace: "no access enforcement in P8.5A (billing state ≠ access state)",
+// ── Grace period (LOCKED: 7 calendar days) ───────────────────────────────────
+export const GRACE_PERIOD = {
+  status: "LOCKED" as const,
+  days: GRACE_PERIOD_DAYS,                    // 7 calendar days
+  entry: "a VERIFIED PRODUCTION payment failure may move active/payment_due → grace",
+  recovery: "a VERIFIED PRODUCTION payment during grace → active immediately (sandbox NEVER qualifies)",
+  onExpiry: "NO auto suspend/cancel/delete; org + users + properties + CRM stay fully intact. " +
+            "Access behavior after grace is a SEPARATE future product decision (not in P8).",
+  accessDuringGrace: "no access enforcement in P8 (billing state ≠ access state)",
+  idempotent: "expiry is derived from grace_until — repeated evaluation mutates nothing",
 } as const;
