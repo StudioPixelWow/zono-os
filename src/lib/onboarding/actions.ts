@@ -194,6 +194,17 @@ export async function completeOnboarding(
         for (const city of bootstrapCities) {
           void triggerCityLearning(bootstrapOrgId, city, "onboarding_primary_city");
         }
+        // P9.0D — when the external provider is configured, run ONE BOUNDED quick
+        // scan (≤50/city) so the office gets real discovered listings immediately
+        // instead of waiting for the nightly cron. Gated on APIFY_TOKEN so it is a
+        // clean no-op (no failed job) when unconfigured. Idempotent upsert; the
+        // nightly cron backstops anything the request budget truncates. Cost stays
+        // bounded (quick mode, one office). NO fabrication — real provider only.
+        if (process.env.APIFY_TOKEN) {
+          const { syncExternalListingsForOrganization } = await import("@/lib/external-listings/service");
+          void syncExternalListingsForOrganization(bootstrapOrgId, { mode: "quick" })
+            .catch((e) => console.error("[onboarding] bootstrap scan skipped:", e));
+        }
       } catch (e) {
         console.error("[onboarding] city bootstrap skipped:", e);
       }
