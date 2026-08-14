@@ -8,7 +8,7 @@ export {
   type EntitlementKey, type LimitCheck,
 } from "./plans";
 export {
-  ONBOARDING_STEPS, ONBOARDING_STEP_KEYS, emptyProgress, computeOnboarding, markStep,
+  ONBOARDING_STEPS, ONBOARDING_STEP_KEYS, ONBOARDING_AUTODETECT, emptyProgress, computeOnboarding, markStep,
 } from "./onboarding";
 export { computeProductionScore } from "./production-score";
 export { DIAGNOSTIC_CHECKS, rollupDiagnostics, buildDiagnosticsReport, configCheck } from "./diagnostics";

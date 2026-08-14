@@ -12,6 +12,7 @@ import { newCorrelationId } from "@/lib/platform/logging/ids";
 import {
   defaultLimits, betaActiveFor, computeOnboarding, markStep, emptyProgress,
   buildDiagnosticsReport, computeProductionScore, aggregateByName, sanitizeUsageEvent,
+  ONBOARDING_AUTODETECT,
 } from "../index";
 import type {
   BetaEnrollment, DiagnosticCheck, DiagnosticsReport, FeedbackContext, FeedbackInput, FeedbackType,
@@ -60,15 +61,16 @@ export async function getOnboardingState(): Promise<OnboardingState> {
   const now = new Date().toISOString();
   // org always exists at this point.
   if (!progress.steps.org_created) progress = markStep(progress, "org_created", now);
-  // Best-effort existence checks against real tables (guarded; unknown → 0).
-  const [areas, buyers, sellers] = await Promise.all([
-    repo.count("user_operating_localities", "organization_id", ctx.orgId),
-    repo.count("buyers", "organization_id", ctx.orgId),
-    repo.count("sellers", "organization_id", ctx.orgId),
-  ]);
-  if (areas > 0 && !progress.steps.operating_areas) progress = markStep(progress, "operating_areas", now);
-  if (buyers > 0 && !progress.steps.first_buyers) progress = markStep(progress, "first_buyers", now);
-  if (sellers > 0 && !progress.steps.first_seller_opportunity) progress = markStep(progress, "first_seller_opportunity", now);
+  // Auto-detect steps from REAL org-scoped tables. Table+column come from the
+  // canonical ONBOARDING_AUTODETECT map (P9.0B fix: buyers/sellers were queried
+  // by the non-existent `organization_id` column → the guarded count swallowed
+  // the error → the step never completed). The map is regression-tested.
+  const counts = await Promise.all(
+    ONBOARDING_AUTODETECT.map((d) => repo.count(d.table, d.column, ctx.orgId)),
+  );
+  ONBOARDING_AUTODETECT.forEach((d, i) => {
+    if (counts[i] > 0 && !progress.steps[d.key]) progress = markStep(progress, d.key, now);
+  });
 
   // Persist any newly auto-detected steps (best-effort).
   try { await repo.saveOnboarding(ctx.orgId, progress); } catch { /* read-only fallback */ }
