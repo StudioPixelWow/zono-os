@@ -18,6 +18,20 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
 
 export const ONBOARDING_STEP_KEYS: OnboardingStepKey[] = ONBOARDING_STEPS.map((s) => s.key);
 
+/**
+ * Canonical auto-detect mapping: which real, org-scoped table+column proves a
+ * step is genuinely done. This is the SINGLE SOURCE OF TRUTH for onboarding
+ * auto-detection — the server layer iterates it, and the P9.0B regression test
+ * asserts every (table,column) pair actually exists in the schema, so a wrong
+ * column (the P9.0B bug: buyers/sellers were queried by `organization_id` which
+ * does not exist → silent 0 → step never completed) can never regress.
+ */
+export const ONBOARDING_AUTODETECT: { key: OnboardingStepKey; table: string; column: string }[] = [
+  { key: "operating_areas", table: "organization_operating_localities", column: "organization_id" },
+  { key: "first_buyers", table: "buyers", column: "org_id" },
+  { key: "first_seller_opportunity", table: "sellers", column: "org_id" },
+];
+
 export function emptyProgress(): OnboardingProgress {
   return { steps: {}, dismissed: false, completedAt: null };
 }

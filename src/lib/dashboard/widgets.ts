@@ -1,8 +1,8 @@
 /**
  * Home-dashboard widget data — real, organization-scoped, mapped to the existing
- * presentation view-models (src/types/dashboard). Each function falls back to the
- * mock view-model only when the org genuinely has no data yet, so the dashboard
- * never renders empty. Server-only.
+ * presentation view-models (src/types/dashboard). P9.0B honest-data contract: an
+ * org with no data yields honest EMPTY view-models (never fabricated demo rows or
+ * market KPIs). Consumers render contextual zero-states. Server-only.
  */
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
@@ -10,10 +10,6 @@ import { listMatchBoard } from "@/lib/matching-intelligence/service";
 import { buildMarketAnalysis } from "@/lib/external-listings/service";
 import { ladder, stageDef, stageLabel } from "@/lib/journey-canonical";
 import { formatShekels } from "@/lib/utils";
-import {
-  journeyProperties as mockJourneyProps,
-  journeyStages as mockJourneyStages, marketStats as mockMarket,
-} from "@/data/mock";
 import type { BuyerMatch, HotOpportunity, JourneyProperty, JourneyRailStage, MarketStat, RecentDeal, Tone } from "@/types/dashboard";
 
 const GRADIENTS = ["from-violet-200 to-indigo-300", "from-emerald-200 to-teal-300", "from-amber-200 to-orange-300", "from-sky-200 to-blue-300"];
@@ -92,6 +88,11 @@ export async function getMatchWidgets(): Promise<{ matches: BuyerMatch[]; note: 
 // The rail is now the canonical PROPERTY ladder, read from `journeys`.
 const RAIL_KEYS = ladder("property").map((s) => ({ key: s.key, label: s.label }));
 
+/** Honest empty rail: the real canonical ladder with zero counts (structure, not fabricated data). */
+function emptyRail(): JourneyRailStage[] {
+  return RAIL_KEYS.map((k) => ({ key: k.key, label: k.label, count: 0, state: "upcoming" as const }));
+}
+
 export async function getJourneyWidgets(): Promise<{ stages: JourneyRailStage[]; properties: JourneyProperty[] }> {
   const supabase = await createClient();
   const [{ data: journeys }, { data: props }] = await Promise.all([
@@ -100,7 +101,9 @@ export async function getJourneyWidgets(): Promise<{ stages: JourneyRailStage[];
       .eq("entity_type", "property"),
     supabase.from("properties").select("id,title,city,status").neq("status", "archived").limit(200),
   ]);
-  if (!journeys?.length) return { stages: mockJourneyStages, properties: mockJourneyProps };
+  // P9.0B honest zero-state: a real empty org shows the ladder structure with
+  // zero counts and NO properties — never fabricated journey demo rows.
+  if (!journeys?.length) return { stages: emptyRail(), properties: [] };
 
   const rows = (journeys as { entity_id: string; current_stage: string; last_activity_at: string | null }[])
     .map((j) => ({ property_id: j.entity_id, current_stage: j.current_stage, last_activity_at: j.last_activity_at }));
@@ -145,7 +148,7 @@ export async function getJourneyWidgets(): Promise<{ stages: JourneyRailStage[];
       imageUrl: jImage.get(j.property_id) ?? null, href: `/properties/${j.property_id}`,
     };
   });
-  return { stages, properties: properties.length ? properties : mockJourneyProps };
+  return { stages, properties };
 }
 
 // ── Recent deals (sold / rented properties) ──────────────────────────────────
@@ -165,9 +168,11 @@ export async function getDealWidgets(): Promise<RecentDeal[]> {
 
 // ── Market intelligence (external listings market analysis) ──────────────────
 export async function getMarketWidgets(): Promise<MarketStat[]> {
+  // P9.0B: a real empty office must NEVER receive fabricated market KPIs
+  // (price/m², transactions, market changes). Empty analysis → honest empty [].
   let a;
-  try { a = await buildMarketAnalysis(); } catch { return mockMarket; }
-  if (!a.localities.length && !a.priceDrops) return mockMarket;
+  try { a = await buildMarketAnalysis(); } catch { return []; }
+  if (!a.localities.length && !a.priceDrops) return [];
   const avgSqm = a.localities.length ? Math.round(a.localities.reduce((s, l) => s + l.avgSqmPrice, 0) / a.localities.length) : 0;
   const totalListings = a.localities.reduce((s, l) => s + l.count, 0);
   const belowAvg = a.localities.reduce((s, l) => s + l.belowAverage, 0);
