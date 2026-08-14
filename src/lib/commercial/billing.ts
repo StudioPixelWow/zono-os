@@ -42,7 +42,7 @@ export async function getOrgBillingState(orgId: string): Promise<OrgBillingState
   const [commercial, subRow, payRows] = await Promise.all([
     getOrgCommercialState(orgId),
     (db.from("subscriptions" as never).select("status,period_end,trial_ends_at,grow_subscription_id,cancel_at_period_end").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: BillingSubInput | null }>),
-    (db.from("payments" as never).select("status,amount_ils,verified,verified_at,created_at").eq("org_id", orgId) as unknown as Promise<{ data: BillingPayInput[] | null }>),
+    (db.from("payments" as never).select("status,amount_ils,verified,verified_at,created_at,environment").eq("org_id", orgId) as unknown as Promise<{ data: BillingPayInput[] | null }>),
   ]);
   return composeOrgBillingState({
     orgId,

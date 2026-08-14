@@ -78,9 +78,15 @@ export async function saveDraft(token: string, patch: { data?: RegistrationData;
 }
 
 // ── Payments ────────────────────────────────────────────────────────────────
+// P8.4B: every payment is stamped with the Grow environment it was created under
+// (from GROW_ENV). Verified revenue counts ONLY 'production' — sandbox test
+// payments are isolated and never fabricate revenue. Unset GROW_ENV → 'sandbox'.
+function growEnvName(): "sandbox" | "production" {
+  return (process.env.GROW_ENV ?? "sandbox").toLowerCase() === "production" ? "production" : "sandbox";
+}
 export async function createPayment(input: { draftId: string; planTier: PlanTier; amountIls: number }): Promise<Payment | null> {
   const db = createServiceRoleClient();
-  const { data, error } = await db.from("payments" as never).insert({ draft_id: input.draftId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow" } as never).select("*").maybeSingle();
+  const { data, error } = await db.from("payments" as never).insert({ draft_id: input.draftId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow", environment: growEnvName() } as never).select("*").maybeSingle();
   if (error || !data) return null;
   return toPayment(data as unknown as PaymentRow);
 }
@@ -94,7 +100,7 @@ export async function getPayment(id: string): Promise<Payment | null> {
  *  never supplies it. Service-role only. */
 export async function createOrgPayment(input: { orgId: string; planTier: PlanTier; amountIls: number }): Promise<Payment | null> {
   const db = createServiceRoleClient();
-  const { data, error } = await db.from("payments" as never).insert({ org_id: input.orgId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow" } as never).select("*").maybeSingle();
+  const { data, error } = await db.from("payments" as never).insert({ org_id: input.orgId, plan_tier: input.planTier, amount_ils: input.amountIls, status: "pending", provider: "grow", environment: growEnvName() } as never).select("*").maybeSingle();
   if (error || !data) return null;
   return toPayment(data as unknown as PaymentRow);
 }

@@ -135,16 +135,19 @@ export async function getPlatformRevenueOverview(): Promise<RevenueOverview> {
   let payingOrgs: AvailableValue<number> = unavail("שגיאת קריאה");
   try {
     // One read of the safe columns for all verified+paid payments; aggregate in memory.
+    // P8.4B: `environment` isolates sandbox from production — verified REVENUE counts
+    // ONLY production (a sandbox test payment is never real revenue). Non-production
+    // (incl. missing env) is excluded conservatively.
     const { data, error } = await db.from("payments" as never)
-      .select("org_id,amount_ils,created_at,status,verified").limit(20000);
+      .select("org_id,amount_ils,created_at,status,verified,environment").limit(20000);
     if (error) throw error;
-    const rows = ((data ?? []) as { org_id: string | null; amount_ils: number | null; created_at: string; status: string; verified: boolean }[]);
-    const verifiedPaid = rows.filter((r) => r.verified && r.status === "paid");
-    paymentsVerifiedPaid = avail(verifiedPaid.length, "count(payments WHERE verified AND status='paid')");
+    const rows = ((data ?? []) as { org_id: string | null; amount_ils: number | null; created_at: string; status: string; verified: boolean; environment: string | null }[]);
+    const verifiedPaid = rows.filter((r) => r.verified && r.status === "paid" && r.environment === "production");
+    paymentsVerifiedPaid = avail(verifiedPaid.length, "count(payments WHERE verified AND status='paid' AND env='production')");
     paymentsFailed = avail(rows.filter((r) => r.status === "failed").length, "count(payments WHERE status='failed')");
-    verifiedRevenueIls = avail(verifiedPaid.reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND status='paid')");
-    thisMonthRevenueIls = avail(verifiedPaid.filter((r) => r.created_at >= monthStartIso).reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND paid AND created_at>=month_start)");
-    payingOrgs = avail(new Set(verifiedPaid.map((r) => r.org_id).filter((x): x is string => !!x)).size, "count(distinct org_id WHERE verified AND paid)");
+    verifiedRevenueIls = avail(verifiedPaid.reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND paid AND production)");
+    thisMonthRevenueIls = avail(verifiedPaid.filter((r) => r.created_at >= monthStartIso).reduce((s, r) => s + (Number(r.amount_ils) || 0), 0), "sum(amount_ils WHERE verified AND paid AND production AND created_at>=month_start)");
+    payingOrgs = avail(new Set(verifiedPaid.map((r) => r.org_id).filter((x): x is string => !!x)).size, "count(distinct org_id WHERE verified AND paid AND production)");
   } catch {
     // leave all as unavailable
   }

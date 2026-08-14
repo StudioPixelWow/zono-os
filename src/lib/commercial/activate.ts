@@ -15,6 +15,12 @@ export interface ActivateInput {
   orgId: string;
   recurringDebitId: string | null;   // Grow recurring code → stored as grow_subscription_id
   quantity: number;                  // provider-ACKNOWLEDGED quantity (verified)
+  // P8.4B: identifiers needed to later change the recurring amount / cancel it,
+  // and the environment the provider transaction ran under (sandbox|production).
+  transactionId?: string | null;
+  transactionToken?: string | null;
+  asmachta?: string | null;
+  environment?: "sandbox" | "production" | null;
 }
 
 /**
@@ -31,6 +37,10 @@ export async function activateOrgSubscriptionFromVerifiedPayment(input: Activate
     .update({
       status: "active",
       grow_subscription_id: input.recurringDebitId,
+      grow_transaction_id: input.transactionId ?? null,
+      grow_transaction_token: input.transactionToken ?? null,
+      grow_asmachta: input.asmachta ?? null,
+      provider_env: input.environment ?? null,
       subscription_quantity: input.quantity,
       provider_quantity: input.quantity,      // ACK — verified provider confirmation ONLY
       quantity_sync_status: "synced",
@@ -48,6 +58,8 @@ export async function activateOrgSubscriptionFromVerifiedPayment(input: Activate
   const { error: insErr } = await db.from("subscriptions" as never).insert({
     org_id: input.orgId, plan_tier: "starter", status: "active",
     period_start: now, grow_subscription_id: input.recurringDebitId,
+    grow_transaction_id: input.transactionId ?? null, grow_transaction_token: input.transactionToken ?? null,
+    grow_asmachta: input.asmachta ?? null, provider_env: input.environment ?? null,
     subscription_quantity: input.quantity, provider_quantity: input.quantity,
     quantity_sync_status: "synced", quantity_synced_at: now, cancel_at_period_end: false,
   } as never);

@@ -54,6 +54,7 @@ export interface BillingPayInput {
   verified: boolean;
   verified_at: string | null;
   created_at: string;
+  environment?: string | null;   // P8.4B: 'sandbox' | 'production'; only production is revenue
 }
 
 /**
@@ -80,7 +81,10 @@ export function composeOrgBillingState(input: {
     customPricing: commercial.customPricingRequired,
     cancelAtPeriodEnd: !!sub?.cancel_at_period_end,
   });
-  const verified = pays.filter((p) => p.verified === true && p.status === "paid");
+  // Verified REVENUE = verified + paid + PRODUCTION only. A sandbox test payment
+  // is never counted as real revenue (P8.4B transaction isolation). A missing/absent
+  // environment is treated as NON-production (conservative — never fabricate revenue).
+  const verified = pays.filter((p) => p.verified === true && p.status === "paid" && p.environment === "production");
   // Trial expiry with no verified payment → payment_due (DESIGN — no enforcement).
   if (billingState === "trialing" && trialExpired && verified.length === 0) billingState = "payment_due";
 

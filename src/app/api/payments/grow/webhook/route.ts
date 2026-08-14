@@ -114,7 +114,11 @@ export async function POST(req: NextRequest) {
       // manage it. Here we ack the org's current billable count via activation.
       const { getOrgBillingQuantity } = await import("@/lib/commercial/billing");
       const q = await getOrgBillingQuantity(payment.orgId);
-      await activateOrgSubscriptionFromVerifiedPayment({ orgId: payment.orgId, recurringDebitId: recurringId, quantity: q.billableAgents });
+      await activateOrgSubscriptionFromVerifiedPayment({
+        orgId: payment.orgId, recurringDebitId: recurringId, quantity: q.billableAgents,
+        transactionId, transactionToken, asmachta: d.asmachta ?? null,
+        environment: growCreds().env === "production" ? "production" : "sandbox",
+      });
     }
 
     // approveTransaction — acknowledgment only (docs: transaction processes even if
