@@ -18,6 +18,8 @@ import { assertPlatformCapability } from "./auth";
 import { writePlatformAudit } from "./audit";
 import { planDefinition } from "@/lib/launch/plans";
 import { getOrgBillingState, getOrgBillingQuantity, getOrgProviderQuantityRow, type OrgBillingState, type OrgBillingQuantity, type OrgProviderQuantityRow } from "@/lib/commercial/billing";
+import { getOrgLifecycleStatus } from "@/lib/commercial/lifecycle-server";
+import type { OrgLifecycleStatus } from "@/lib/commercial/lifecycle";
 import type { PlanTier } from "@/lib/launch/types";
 import type { SubscriptionStatus, PaymentStatus } from "@/lib/commercial/types";
 import {
@@ -329,6 +331,8 @@ export interface OrgBillingDetail {
   // reconciler wrote): expected subscription qty, last-acked provider qty (NULL
   // until real sync), sync status, last synced at. NULL when no subscription.
   providerRow: OrgProviderQuantityRow | null;
+  // P8.5A — read-only lifecycle status + outstanding reconciliation action.
+  lifecycle: OrgLifecycleStatus;
 }
 
 /**
@@ -341,7 +345,7 @@ export async function getOrgBillingDetail(orgId: string): Promise<OrgBillingDeta
   const operator = await assertPlatformCapability("platform.billing.read");
   const db = createServiceRoleClient();
 
-  const [subRes, licRes, orgRes, payRes, canonical, quantity, providerRow] = await Promise.all([
+  const [subRes, licRes, orgRes, payRes, canonical, quantity, providerRow, lifecycle] = await Promise.all([
     db.from("subscriptions" as never).select(SUB_COLS).eq("org_id" as never, orgId as never).maybeSingle(),
     db.from("org_plans" as never).select("plan,status,trial_ends_at,current_period_end").eq("org_id" as never, orgId as never).maybeSingle(),
     db.from("organizations").select("name,plan").eq("id", orgId).maybeSingle(),
@@ -349,6 +353,7 @@ export async function getOrgBillingDetail(orgId: string): Promise<OrgBillingDeta
     getOrgBillingState(orgId),   // P8.1 — canonical single-source-of-truth resolver
     getOrgBillingQuantity(orgId), // P8.2 — canonical agent-quantity resolver
     getOrgProviderQuantityRow(orgId), // P8.3 — persisted provider-quantity state
+    getOrgLifecycleStatus(orgId),      // P8.5A — read-only lifecycle/reconciliation status
   ]);
 
   const subRow = (subRes.data as RawSubRow | null) ?? null;
@@ -393,5 +398,6 @@ export async function getOrgBillingDetail(orgId: string): Promise<OrgBillingDeta
     canonical,
     quantity,
     providerRow,
+    lifecycle,
   };
 }

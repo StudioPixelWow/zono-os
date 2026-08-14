@@ -12,7 +12,7 @@
 // Decision A (next-cycle, no proration) and Decision B (custom→standard needs
 // approval) are encoded.
 // ============================================================================
-import { BILLING_STATES, STATE_CONTRACT, canTransition, type BillingState } from "./billing-state";
+import { BILLING_STATES, canTransition, type BillingState } from "./billing-state";
 import { decideRecurringUpdate } from "./recurring-decision";
 
 // ── Per-state lifecycle contract (extends the P8.0 STATE_CONTRACT) ───────────
@@ -159,6 +159,13 @@ export interface LifecycleDecision {
   providerDependent: boolean;         // true → cannot complete without a real Grow call
   reason: string;
 }
+
+/** Read-only lifecycle status surfaced to Platform Admin + Customer 360 (pure type
+ *  so client components can import it without touching a server module). */
+export type OrgLifecycleStatus = LifecycleDecision & {
+  organizationId: string;
+  pending: "PENDING_SANDBOX_CREDENTIALS" | null;
+};
 
 /**
  * THE reconciliation brain. Returns exactly ONE primary action for the org's

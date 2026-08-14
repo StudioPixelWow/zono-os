@@ -12,7 +12,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { canonicalFromSubscriptionStatus, type BillingState } from "./billing-state";
 import { getOrgBillingQuantity } from "./billing";
-import { reconcileBillingLifecycleDecision, type LifecycleAction, type LifecycleDecision } from "./lifecycle";
+import { reconcileBillingLifecycleDecision, type LifecycleAction, type LifecycleDecision, type OrgLifecycleStatus } from "./lifecycle";
 
 // canonical BillingState → legacy subscriptions.status (the column's vocabulary).
 const CANON_TO_LEGACY: Partial<Record<BillingState, string>> = {
@@ -34,6 +34,38 @@ interface SubRow {
   grow_transaction_token: string | null; grow_asmachta: string | null;
 }
 
+async function readLifecycle(orgId: string): Promise<{ sub: SubRow | null; decision: LifecycleDecision; nowIso: string }> {
+  const db = createServiceRoleClient();
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.parse(nowIso);
+  const [q, subRes, prodPaidRes] = await Promise.all([
+    getOrgBillingQuantity(orgId),
+    (db.from("subscriptions" as never).select("status,period_end,trial_ends_at,cancel_at_period_end,provider_quantity,quantity_sync_status,grow_transaction_id,grow_transaction_token,grow_asmachta").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: SubRow | null }>),
+    // A VERIFIED, PAID, PRODUCTION payment (sandbox never qualifies for revenue state).
+    (db.from("payments" as never).select("id").eq("org_id", orgId).eq("verified", true).eq("status", "paid").eq("environment", "production").limit(1) as unknown as Promise<{ data: Array<{ id: string }> | null }>),
+  ]);
+  const sub = subRes.data ?? null;
+  const billingState = canonicalFromSubscriptionStatus(sub?.status, { customPricing: q.customPricingRequired, cancelAtPeriodEnd: !!sub?.cancel_at_period_end });
+  const decision = reconcileBillingLifecycleDecision({
+    billingState, nowMs, trialEndsAt: sub?.trial_ends_at ?? null,
+    hasVerifiedProductionPayment: (prodPaidRes.data?.length ?? 0) > 0,
+    billableAgents: q.billableAgents, customPricingRequired: q.customPricingRequired,
+    providerQuantity: sub?.provider_quantity ?? null, quantitySyncStatus: sub?.quantity_sync_status ?? null,
+    cancelRequested: !!sub?.cancel_at_period_end, periodEnd: sub?.period_end ?? null,
+    providerConfigured: !!process.env.GROW_CHECKOUT_URL, hasRecurringIdentifiers: !!(sub?.grow_transaction_id && sub?.grow_transaction_token && sub?.grow_asmachta),
+    unitPriceIls: q.unitPriceIls,
+  });
+  return { sub, decision, nowIso };
+}
+
+/** READ-ONLY lifecycle status for display (Platform Admin + Customer 360). Runs the
+ *  pure engine over authoritative DB state WITHOUT executing any transition. */
+export async function getOrgLifecycleStatus(orgId: string): Promise<OrgLifecycleStatus> {
+  const { decision } = await readLifecycle(orgId);
+  const pending = decision.providerDependent && !process.env.GROW_CHECKOUT_URL ? "PENDING_SANDBOX_CREDENTIALS" as const : null;
+  return { organizationId: orgId, ...decision, pending };
+}
+
 /**
  * Reconcile one org's billing lifecycle. Read-authoritative; the only writes are
  * TRIAL_EXPIRED and RECOVERY_AVAILABLE, both via the atomic transition RPC
@@ -42,33 +74,7 @@ interface SubRow {
  */
 export async function reconcileBillingLifecycle(orgId: string): Promise<LifecycleReconcileResult> {
   const db = createServiceRoleClient();
-  const nowIso = new Date().toISOString();
-  const nowMs = Date.parse(nowIso);
-
-  const [q, subRes, prodPaidRes] = await Promise.all([
-    getOrgBillingQuantity(orgId),
-    (db.from("subscriptions" as never).select("status,period_end,trial_ends_at,cancel_at_period_end,provider_quantity,quantity_sync_status,grow_transaction_id,grow_transaction_token,grow_asmachta").eq("org_id", orgId).maybeSingle() as unknown as Promise<{ data: SubRow | null }>),
-    // A VERIFIED, PAID, PRODUCTION payment (sandbox never qualifies for revenue state).
-    (db.from("payments" as never).select("id").eq("org_id", orgId).eq("verified", true).eq("status", "paid").eq("environment", "production").limit(1) as unknown as Promise<{ data: Array<{ id: string }> | null }>),
-  ]);
-  const sub = subRes.data ?? null;
-  const hasVerifiedProductionPayment = (prodPaidRes.data?.length ?? 0) > 0;
-
-  const billingState = canonicalFromSubscriptionStatus(sub?.status, {
-    customPricing: q.customPricingRequired,
-    cancelAtPeriodEnd: !!sub?.cancel_at_period_end,
-  });
-  const hasRecurringIdentifiers = !!(sub?.grow_transaction_id && sub?.grow_transaction_token && sub?.grow_asmachta);
-
-  const decision = reconcileBillingLifecycleDecision({
-    billingState, nowMs, trialEndsAt: sub?.trial_ends_at ?? null,
-    hasVerifiedProductionPayment,
-    billableAgents: q.billableAgents, customPricingRequired: q.customPricingRequired,
-    providerQuantity: sub?.provider_quantity ?? null, quantitySyncStatus: sub?.quantity_sync_status ?? null,
-    cancelRequested: !!sub?.cancel_at_period_end, periodEnd: sub?.period_end ?? null,
-    providerConfigured: !!process.env.GROW_CHECKOUT_URL, hasRecurringIdentifiers,
-    unitPriceIls: q.unitPriceIls,
-  });
+  const { sub, decision, nowIso } = await readLifecycle(orgId);
 
   let executed = false;
   let pending: LifecycleReconcileResult["pending"] = null;

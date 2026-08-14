@@ -46,6 +46,18 @@ export default async function Customer360BillingPage({ params }: { params: Promi
         )}
       </div>
 
+      {/* P8.5A — outstanding lifecycle / reconciliation action (read-only; same resolver as Customer 360) */}
+      {b.lifecycle.action !== "NO_ACTION" && (
+        <div className="border-line bg-surface flex items-start gap-2 rounded-xl border px-4 py-3">
+          <span className="text-muted mt-0.5"><Icon name="AlertTriangle" size={14} /></span>
+          <span className="text-ink text-[12px] font-semibold">
+            פעולה ממתינה: <span className="text-brand">{b.lifecycle.action}</span>
+            {b.lifecycle.pending && <span className="text-warning"> · {b.lifecycle.pending}</span>}
+            <span className="text-muted font-normal"> — {b.lifecycle.reason}</span>
+          </span>
+        </div>
+      )}
+
       {/* P8.2/P8.3 — canonical agent-quantity, pricing & provider-quantity sync state */}
       <QuantityPanel q={b.quantity} providerRow={b.providerRow} />
 
