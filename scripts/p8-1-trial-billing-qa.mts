@@ -70,9 +70,9 @@ console.log("\nP8.1 · commercial ≠ billing ≠ revenue (strict separation)");
   ok(s.billableAgents === 4, "billableAgents = 4 active (owner incl.)");
   // A verified payment DOES become revenue — and ONLY the verified sum.
   const pays: BillingPayInput[] = [
-    { status: "paid", amount_ils: 788, verified: true, verified_at: iso(NOW - DAY), created_at: iso(NOW - DAY) },
-    { status: "paid", amount_ils: 999, verified: false, verified_at: null, created_at: iso(NOW - 2 * DAY) }, // unverified — excluded
-    { status: "failed", amount_ils: 788, verified: false, verified_at: null, created_at: iso(NOW - 3 * DAY) },
+    { status: "paid", amount_ils: 788, verified: true, verified_at: iso(NOW - DAY), created_at: iso(NOW - DAY), environment: "production" },
+    { status: "paid", amount_ils: 999, verified: false, verified_at: null, created_at: iso(NOW - 2 * DAY), environment: "production" }, // unverified — excluded
+    { status: "failed", amount_ils: 788, verified: false, verified_at: null, created_at: iso(NOW - 3 * DAY), environment: "production" },
   ];
   const s2 = compose({ commercial: comm(4), sub: { status: "active", period_end: iso(NOW + 20 * DAY), trial_ends_at: null, grow_subscription_id: "grow_x", cancel_at_period_end: false }, pays });
   ok(s2.verifiedRevenue.available === true && s2.verifiedRevenue.value!.amountIls === 788 && s2.verifiedRevenue.value!.count === 1, "verifiedRevenue = ONLY signed/paid sum (788, count 1) — unverified 999 excluded");
@@ -122,7 +122,7 @@ console.log("\nP8.1 · Platform Admin ⇔ Customer 360 consistency (SAME resolve
   // inputs MUST yield an identical object. Prove determinism of the pure core.
   const commercial = comm(6, { isTrial: true, trialEndsAt: iso(NOW + 7 * DAY) });
   const sub = trialSub(NOW + 7 * DAY);
-  const pays: BillingPayInput[] = [{ status: "paid", amount_ils: 1182, verified: true, verified_at: iso(NOW - DAY), created_at: iso(NOW - DAY) }];
+  const pays: BillingPayInput[] = [{ status: "paid", amount_ils: 1182, verified: true, verified_at: iso(NOW - DAY), created_at: iso(NOW - DAY), environment: "production" }];
   const a = compose({ commercial, sub, pays });
   const b = compose({ commercial, sub, pays });
   ok(JSON.stringify(a) === JSON.stringify(b), "identical inputs → byte-identical OrgBillingState (deterministic single source of truth)");
