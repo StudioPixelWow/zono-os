@@ -11,6 +11,7 @@ import { DEAL_STAGE_LABEL, DEAL_STAGE_ORDER, OBJECTION_LABEL, type DealStage } f
 import { advanceDealStageAction, recomputeDealsAction, resolveObjectionAction, setDealTaskStatusAction } from "@/lib/deals/actions";
 import type { DealsBoard, DealRow } from "@/lib/deals/service";
 import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
+import { ContextualZeroState } from "@/components/common/ContextualZeroState";
 
 const PRIORITY: Record<string, string> = { high: "text-danger", medium: "text-warning", low: "text-muted" };
 const SEVERITY: Record<string, string> = { critical: "text-danger", high: "text-danger", medium: "text-warning", low: "text-muted" };
@@ -50,7 +51,10 @@ export function DealsView({ board }: { board: DealsBoard }) {
             <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מרכז שליטה בעסקאות</h1>
             <p className="text-muted mt-1 max-w-xl text-sm">כל עסקה פעילה — מסע, משא ומתן, סיכון ועמלה במקום אחד. דטרמיניסטי, ללא יצירת קשר אוטומטית.</p>
           </div>
-          <Button onClick={build} loading={runner.busyId === "build"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{runner.busyId === "build" ? "בונה…" : "בנה עסקאות"}</Button>
+          {/* P9.0C: "בנה עסקאות" recomputes Deal-Twins from active matches — it
+              no-ops for a fresh office (no matches yet). Show it only when deals
+              already exist; a fresh office gets a real create CTA in the empty state. */}
+          {!empty && <Button onClick={build} loading={runner.busyId === "build"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{runner.busyId === "build" ? "בונה…" : "בנה עסקאות"}</Button>}
         </div>
         {!empty && (
           <div className="grid grid-cols-1 gap-px bg-[color:var(--line)] sm:grid-cols-3">
@@ -63,12 +67,18 @@ export function DealsView({ board }: { board: DealsBoard }) {
       <ActionFeedback runner={runner} />
 
       {empty ? (
-        <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
-          <span className="bg-brand-soft text-brand grid h-16 w-16 place-items-center rounded-3xl"><Icon name="Handshake" size={28} /></span>
-          <p className="text-ink text-lg font-extrabold">אין עדיין עסקאות מנוהלות</p>
-          <p className="text-muted max-w-sm text-sm">עסקאות נבנות מהתאמות פעילות (Match Intelligence). לחצו ״בנה עסקאות״ כדי ליצור Deal Twin לכל הזדמנות פעילה עם מסע, משימות והתנגדויות.</p>
-          <Button onClick={build} loading={runner.busyId === "build"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />} className="mt-2">בנה עסקאות</Button>
-        </div>
+        // P9.0C contextual zero-state — real create CTA (Quick-Create deal), never
+        // the match-dependent "בנה עסקאות" no-op. A fresh office can open its first deal now.
+        <ContextualZeroState
+          icon="Handshake"
+          title="העסקה הראשונה שתנהל ב-ZONO תופיע כאן."
+          value="פתח עסקה וקבל מסע מובנה, משימות, ניהול משא ומתן וניתוח סיכון — הכול במקום אחד. עם התקדמות המשרד, ZONO גם תבנה עסקאות אוטומטית מהתאמות פעילות."
+          cta="פתח עסקה ראשונה"
+          onCta={() => window.dispatchEvent(new CustomEvent("zono:new-deal"))}
+          secondaryLabel="הוסף קונה"
+          secondaryHref="/buyers/new"
+          className="rounded-[24px] py-16"
+        />
       ) : (
         <>
           {/* KPI strip */}

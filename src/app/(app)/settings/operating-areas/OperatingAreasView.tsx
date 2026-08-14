@@ -13,6 +13,7 @@ import {
   setPrimaryOperatingAreaAction, syncOperatingAreaAction, updateOperatingAreaAction,
 } from "@/lib/operating-areas/actions";
 import type { OperatingArea } from "@/lib/operating-areas/service";
+import { ContextualZeroState } from "@/components/common/ContextualZeroState";
 
 const TOGGLES: { key: "useForLeads" | "useForProperties" | "useForTransactions" | "useForExternalListings" | "useForRecommendations"; field: "useForLeads" | "useForProperties" | "useForTransactions" | "useForExternalListings" | "useForRecommendations"; label: string }[] = [
   { key: "useForLeads", field: "useForLeads", label: "לידים" },
@@ -43,11 +44,15 @@ export function OperatingAreasView({ areas, canManageOthers }: { areas: Operatin
       <ActionFeedback runner={runner} />
 
       {areas.length === 0 ? (
-        <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-14 text-center">
-          <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="MapPin" size={26} /></span>
-          <p className="text-ink text-lg font-extrabold">לא הוגדרו אזורי פעילות</p>
-          <p className="text-muted max-w-sm text-sm">הוסף עיר כדי למשוך עסקאות, נכסים והמלצות עבורה.</p>
-        </div>
+        // P9.0C contextual zero-state — CTA focuses the real "add city" search above.
+        <ContextualZeroState
+          icon="MapPin"
+          title="איפה נמצא הזון שלך?"
+          value="בחר את הערים והשכונות שבהן אתה עובד — ZONO תתחיל למשוך עבורן עסקאות, נכסים חיצוניים, מודיעין שוק והמלצות מקומיות."
+          cta="בחר עיר ראשונה"
+          onCta={() => document.getElementById("op-area-search")?.focus()}
+          className="rounded-[24px] py-14"
+        />
       ) : (
         <div className="flex flex-col gap-3">
           <p className="text-ink text-sm font-extrabold">הערים הפעילות שלי ({areas.length})</p>
@@ -93,6 +98,7 @@ function AddCity({ runner }: { runner: ReturnType<typeof useActionRunner> }) {
       <p className="text-ink mb-2 text-sm font-extrabold">הוסף עיר</p>
       <div className="relative">
         <input
+          id="op-area-search"
           value={q}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => results.length && setOpen(true)}
