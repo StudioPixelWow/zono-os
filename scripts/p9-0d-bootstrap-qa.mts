@@ -19,9 +19,13 @@ console.log("\nP9.0D · non-blocking (does not block onboarding/redirect)");
 ok(/\bafter\(/.test(onboarding), "city bootstrap scheduled via after() — non-blocking");
 ok(/from "next\/server"/.test(onboarding), "imports after from next/server");
 
-console.log("\nP9.0D · COST GUARD — no expensive provider scan launched at signup");
-ok(!/syncExternalListingsForOrganization|startSyncJob|runSyncChunk|runImport\(/.test(onboarding),
-  "onboarding does NOT launch an Apify external-listings scan (cost-bounded; nightly crons cover it)");
+console.log("\nP9.0D · COST GUARD — provider scan is gated + bounded");
+ok(/if \(process\.env\.APIFY_TOKEN\)/.test(onboarding),
+  "the external scan is GATED on APIFY_TOKEN (clean no-op when unconfigured)");
+ok(/syncExternalListingsForOrganization\([^)]*\{ mode: "quick" \}/.test(onboarding),
+  "the scan uses BOUNDED quick mode (≤50/city), not full/backfill");
+ok(!/mode: "full"|mode: "backfill"/.test(onboarding),
+  "onboarding never launches full/backfill (unbounded) scans");
 ok(!/property-radar|PROPERTY_RADAR_PROVIDER/i.test(onboarding),
   "onboarding does NOT launch Property Radar (requires provider config)");
 
