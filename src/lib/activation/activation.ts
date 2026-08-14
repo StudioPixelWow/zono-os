@@ -138,6 +138,20 @@ export interface OfficeActivationResult {
   trial: OfficeTrial | null;
 }
 
+// ── P9.0D city-discovery view-model (shared by server + client) ────────────────
+export type CityDiscoveryPhase = "not_started" | "scanning" | "ready" | "no_results";
+
+export interface CityDiscovery {
+  phase: CityDiscoveryPhase;
+  city: string | null;
+  discoveredListings: number;
+  noBrokerCount: number;
+  mapPoints: number;
+  neighborhoods: number;
+  scanRunning: boolean;
+  lastScanAt: string | null;
+}
+
 /** Percent-complete threshold at which an office with data is treated as fully "active". */
 export const ACTIVE_PHASE_THRESHOLD = 70;
 
