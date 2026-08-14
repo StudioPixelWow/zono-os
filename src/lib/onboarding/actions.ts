@@ -66,6 +66,20 @@ export async function completeOnboarding(
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
+  // P9.0 idempotency fast-path: if this user already belongs to an org (a prior
+  // onboarding succeeded), never create a second — go straight to the dashboard.
+  // This covers refresh / back-button / re-submit; the DB partial-unique index on
+  // organizations.created_by_user_id covers the true concurrent race. (The read is
+  // isolated so the NEXT_REDIRECT throw is NOT swallowed by a catch.)
+  let alreadyOnboarded = false;
+  try {
+    const { createServiceRoleClient } = await import("@/lib/supabase/server");
+    const { data: existingProfile } = await createServiceRoleClient()
+      .from("users").select("org_id").eq("id", user.id).maybeSingle();
+    alreadyOnboarded = !!existingProfile?.org_id;
+  } catch { /* fall through to normal creation */ }
+  if (alreadyOnboarded) { revalidatePath("/", "layout"); redirect("/"); }
+
   if (!payload.organizationName?.trim()) return { error: "נא להזין שם ארגון." };
   if (!payload.fullName?.trim()) return { error: "נא להזין שם מלא." };
   const localities = payload.localities ?? [];
@@ -86,7 +100,7 @@ export async function completeOnboarding(
       default_property_types: payload.propertyTypes ?? [],
       default_deal_types: payload.dealTypes ?? [],
       onboarding_completed: true,
-    });
+    }, { createdByUserId: user.id });
 
     const roleId = await getRoleIdByKey(org.id, roleKey);
 

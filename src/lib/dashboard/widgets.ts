@@ -11,8 +11,8 @@ import { buildMarketAnalysis } from "@/lib/external-listings/service";
 import { ladder, stageDef, stageLabel } from "@/lib/journey-canonical";
 import { formatShekels } from "@/lib/utils";
 import {
-  buyerMatches as mockMatches, hotOpportunities as mockOpps, journeyProperties as mockJourneyProps,
-  journeyStages as mockJourneyStages, marketStats as mockMarket, recentDeals as mockDeals,
+  journeyProperties as mockJourneyProps,
+  journeyStages as mockJourneyStages, marketStats as mockMarket,
 } from "@/data/mock";
 import type { BuyerMatch, HotOpportunity, JourneyProperty, JourneyRailStage, MarketStat, RecentDeal, Tone } from "@/types/dashboard";
 
@@ -65,7 +65,7 @@ export async function getOpportunityWidgets(): Promise<HotOpportunity[]> {
     .from("opportunity_signals")
     .select("id,entity_type,entity_id,title,opportunity_score,recommended_action,description")
     .eq("status", "open").order("opportunity_score", { ascending: false }).limit(8);
-  if (!data?.length) return mockOpps;
+  if (!data?.length) return [];   // P9.0: real empty org → honest empty (no fabricated opportunities)
   return data.map((o) => {
     const m = OPP_META[o.entity_type] ?? { kind: "הזדמנות", tone: "purple" as Tone, icon: "Sparkles" };
     return { id: o.id, kind: m.kind, tone: m.tone, icon: m.icon, title: o.title, relation: o.recommended_action ?? o.description ?? "", cta: "פתח", score: o.opportunity_score, href: entityHref(o.entity_type, o.entity_id) };
@@ -75,9 +75,9 @@ export async function getOpportunityWidgets(): Promise<HotOpportunity[]> {
 // ── Smart matches (Matching Intelligence) ────────────────────────────────────
 export async function getMatchWidgets(): Promise<{ matches: BuyerMatch[]; note: string }> {
   let board;
-  try { board = await listMatchBoard(); } catch { return { matches: mockMatches, note: "" }; }
+  try { board = await listMatchBoard(); } catch { return { matches: [], note: "" }; }
   const items = [...board.bestOpportunities, ...board.highestClosing].slice(0, 3);
-  if (!items.length) return { matches: mockMatches, note: "" };
+  if (!items.length) return { matches: [], note: "" };   // P9.0: honest empty (no fabricated matches)
   const matches: BuyerMatch[] = items.map((m) => {
     const [name, property] = m.title.split("←").map((s) => s.trim());
     return { id: m.matchId, name: name || "קונה", budgetLabel: "", want: property ?? "", property: property ?? "", score: parseInt(m.meta.replace(/\D/g, ""), 10) || 0, reasons: [m.meta], href: "/matches" };
@@ -154,7 +154,7 @@ export async function getDealWidgets(): Promise<RecentDeal[]> {
   const { data } = await supabase
     .from("properties").select("id,type,city,price,updated_at,status")
     .in("status", ["sold", "rented"]).order("updated_at", { ascending: false }).limit(6);
-  if (!data?.length) return mockDeals;
+  if (!data?.length) return [];   // P9.0: real empty org → honest empty (no fabricated recent deals)
   const typeLabel: Record<string, string> = { apartment: "דירה", house: "בית", penthouse: "פנטהאוז", garden_apartment: "דירת גן", duplex: "דופלקס", studio: "סטודיו", commercial: "מסחרי" };
   return data.map((d, i) => ({
     id: d.id, type: typeLabel[d.type as string] ?? "נכס", city: d.city ?? "—",
