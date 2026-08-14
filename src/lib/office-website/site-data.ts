@@ -146,22 +146,32 @@ export async function getOfficeSite(
   // Per-agent brand-identity photos (real headshots). Preferred over the
   // agent_websites profile image, which can be a stock placeholder — mirrors the
   // agent site's resolution so a person shows the SAME photo everywhere.
-  const { data: agentBrandRows } = await admin.from("brand_identity_profiles").select("entity_id,profile_image_url").eq("org_id", orgId);
-  const agentPhotoByUser = new Map(((agentBrandRows ?? []) as { entity_id: string; profile_image_url: string | null }[]).map((r) => [r.entity_id, r.profile_image_url ?? null]));
+  const { data: agentBrandRows } = await admin.from("brand_identity_profiles")
+    .select("entity_id,entity_type,profile_image_url,brand_primary,brand_secondary,brand_accent,logo_url").eq("org_id", orgId);
+  type BrandRow = { entity_id: string; entity_type: string | null; profile_image_url: string | null; brand_primary: string | null; brand_secondary: string | null; brand_accent: string | null; logo_url: string | null };
+  const brandRows = (agentBrandRows ?? []) as BrandRow[];
+  const agentPhotoByUser = new Map(brandRows.map((r) => [r.entity_id, r.profile_image_url ?? null]));
 
   // ── Brand → tokens (office colors from brand_identity, office_websites fallback) ─
+  // The office brand lives on the OFFICE entity (entity_id = orgId). A fresh office
+  // often has none yet — but the owner set their brand on the AGENT entity (e.g.
+  // Landsman gold #FBBF24). Fall back to a real in-org agent brand so the public
+  // site uses the office's ACTUAL identity instead of the generic ZONO blue.
   const officeBrand = (officeBrandR.data ?? null) as Record<string, unknown> | null;
+  const brandFallback = brandRows.find((r) => r.entity_id === orgId && r.brand_primary)
+    ?? brandRows.find((r) => r.brand_primary)
+    ?? null;
   const effective = resolveEffectiveBrand(null, officeBrand);
   const officeThemeColors = {
-    brand_primary: (officeBrand?.brand_primary as string | null) ?? ((s.theme as { accent?: string } | null)?.accent ?? null),
-    brand_secondary: officeBrand?.brand_secondary ?? null,
-    brand_accent: officeBrand?.brand_accent ?? null,
+    brand_primary: (officeBrand?.brand_primary as string | null) ?? brandFallback?.brand_primary ?? ((s.theme as { accent?: string } | null)?.accent ?? null),
+    brand_secondary: (officeBrand?.brand_secondary as string | null) ?? brandFallback?.brand_secondary ?? null,
+    brand_accent: (officeBrand?.brand_accent as string | null) ?? brandFallback?.brand_accent ?? null,
   };
   const tokens = buildBrandTokens({
     primary: (officeThemeColors.brand_primary as string | null) ?? effective.primary,
     secondary: officeThemeColors.brand_secondary as string | null,
     accent: officeThemeColors.brand_accent as string | null,
-    logo: (s.logo_url as string | null) ?? effective.logo,
+    logo: (s.logo_url as string | null) ?? brandFallback?.logo_url ?? effective.logo,
     profileImage: null,
   });
   const themeRaw = (s.theme as { preset?: unknown } | null)?.preset;

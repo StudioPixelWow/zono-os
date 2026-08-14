@@ -30,7 +30,7 @@ export function AgentHeader({ brandName, logo, nav, whatsapp, tel, phoneLabel }:
         {/* Right (RTL start): brand */}
         <a href="#top" className="flex items-center gap-2.5">
           {logo
-            ? <img src={logo} alt={brandName} className="h-9 w-auto max-w-[150px] object-contain" />
+            ? <img src={logo} alt={brandName} className="h-11 w-auto max-w-[190px] object-contain sm:h-12" />
             : <span className="text-lg font-black text-[var(--brand-text)]">{brandName}</span>}
         </a>
 

@@ -106,6 +106,15 @@ export function buildBrandTokens(brand: Pick<EffectiveBrand, "primary" | "second
   const link = toHex(...linkRgb);
   const onPrimary = onColor(primaryRgb);
 
+  // Immersive HERO anchor. A light brand (e.g. gold) must never fill a big hero
+  // band as a flat pale block with white text — it reads cheap and fails contrast.
+  // Use the office's dark secondary when it is genuinely dark; otherwise derive a
+  // deep tone from the primary. The hero then renders as a premium dark band with
+  // the bright brand color used for accents (numbers, CTA) — luxury, on-brand,
+  // and always readable in white. Dark brands (navy) keep looking like a dark hero.
+  const heroAnchor = luminance(secondaryRgb) < 0.22 ? secondaryRgb : mix(primaryRgb, INK, 0.76);
+  const heroTint = mix(heroAnchor, primaryRgb, 0.24);
+
   const vars: Record<string, string> = {
     "--brand-primary": primary,
     "--brand-primary-hover": hover,
@@ -119,6 +128,10 @@ export function buildBrandTokens(brand: Pick<EffectiveBrand, "primary" | "second
     "--brand-muted": "#64748b",
     "--brand-border": "#e8eaf0",
     "--brand-on-primary": onPrimary,
+    // Immersive hero band (deep, brand-tinted) + always-white ink on it.
+    "--brand-hero": toHex(...heroAnchor),
+    "--brand-hero-2": toHex(...heroTint),
+    "--brand-on-hero": "#ffffff",
     // Bridge to the existing brokerage-site theme vars so shared components
     // (PropertyCard, SiteHero) inherit the same accent without a second system.
     "--site-accent": link,
