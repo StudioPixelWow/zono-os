@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth/session";
 import { provisionUserProfile } from "@/lib/repositories/userRepository";
@@ -175,6 +176,28 @@ export async function completeOnboarding(
     } catch (geoError) {
       console.error("[onboarding] neighborhood discovery skipped:", geoError);
     }
+
+    // P9.0D — AUTOMATIC CITY BOOTSTRAP. Kick off the office's city intelligence
+    // the moment onboarding succeeds, so a fresh office is never a cold system.
+    // FREE/INTERNAL only: brokerage/city learning from data ZONO already owns
+    // (throttled + idempotent + never throws). Runs via `after()` so it does NOT
+    // block onboarding/redirect. NEIGHBORHOODS already ran above. EXPENSIVE
+    // provider scans (Apify listings) are deliberately NOT launched here — the
+    // nightly external-listings/master crons already pick up the new org (its
+    // operating locality was just written), keeping signup cost bounded. No
+    // fabrication: this only schedules real discovery over real sources.
+    const bootstrapOrgId = org.id;
+    const bootstrapCities = localities.map((l) => l.nameHe);
+    after(async () => {
+      try {
+        const { triggerCityLearning } = await import("@/lib/brokerage-data/city-learning-trigger");
+        for (const city of bootstrapCities) {
+          void triggerCityLearning(bootstrapOrgId, city, "onboarding_primary_city");
+        }
+      } catch (e) {
+        console.error("[onboarding] city bootstrap skipped:", e);
+      }
+    });
   } catch (error) {
     console.error("[onboarding] failed:", error);
     return { error: "אירעה שגיאה בשמירת הנתונים. נסה/י שוב." };
