@@ -55,25 +55,34 @@ export async function getOfficeActivation(): Promise<OfficeActivationResult | nu
   // ── Team size (users in this org) ───────────────────────────────────────────
   const teamSize = await countScoped(db, "users", "org_id", orgId);
 
-  // ── Brand configured (real primary color set on the office brand profile) ────
+  // ── Brand configured (real primary color set on the office's EFFECTIVE brand) ─
+  // The brand studio saves the owner's brand as entity_type='agent' (with
+  // office inheritance), so an office may have colors on the 'agent' profile and
+  // no separate 'office' row. Detect the effective brand from ANY of the org's
+  // profiles, preferring 'office' when present. (P9.1 fix: an office-only check
+  // never completed the "brand configured" milestone for a solo-owner office.)
   let brand: OfficeBrand = { primary: null, secondary: null, accent: null, logoUrl: organization.logo_url ?? null };
   try {
     const { data } = await db
       .from("brand_identity_profiles" as never)
-      .select("brand_primary,brand_secondary,brand_accent,logo_url,profile_image_url")
-      .eq("org_id" as never, orgId as never)
-      .eq("entity_type" as never, "office" as never)
-      .maybeSingle();
-    const row = data as {
-      brand_primary: string | null; brand_secondary: string | null; brand_accent: string | null;
-      logo_url: string | null; profile_image_url: string | null;
-    } | null;
-    if (row) {
+      .select("entity_type,brand_primary,brand_secondary,brand_accent,logo_url,profile_image_url")
+      .eq("org_id" as never, orgId as never);
+    const rows = (data ?? []) as Array<{
+      entity_type: string | null; brand_primary: string | null; brand_secondary: string | null;
+      brand_accent: string | null; logo_url: string | null; profile_image_url: string | null;
+    }>;
+    const withColor = rows.filter((r) => !!r.brand_primary);
+    const pick = withColor.find((r) => r.entity_type === "office")
+      ?? withColor[0]
+      ?? rows.find((r) => r.entity_type === "office")
+      ?? rows[0]
+      ?? null;
+    if (pick) {
       brand = {
-        primary: row.brand_primary,
-        secondary: row.brand_secondary,
-        accent: row.brand_accent,
-        logoUrl: organization.logo_url ?? row.logo_url ?? null,
+        primary: pick.brand_primary,
+        secondary: pick.brand_secondary,
+        accent: pick.brand_accent,
+        logoUrl: organization.logo_url ?? pick.logo_url ?? null,
       };
     }
   } catch { /* honest: treat as not configured */ }
