@@ -4,6 +4,7 @@
 // profile page. Real connected data only.
 // ============================================================================
 import { getBrokerageOfficesIndex } from "@/lib/brokerage-data/office-profile";
+import { getSessionContext } from "@/lib/auth/session";
 import { OfficesIndexView } from "./OfficesIndexView";
 
 export const dynamic = "force-dynamic";
@@ -15,5 +16,8 @@ export default async function BrokerageOfficesIndexPage() {
   } catch (e) {
     console.error("[brokerage-offices] index load failed:", e);
   }
-  return <OfficesIndexView index={index} />;
+  // Viewer's operating city drives the hero copy (falls back gracefully).
+  let city: string | null = null;
+  try { const { profile } = await getSessionContext(); city = profile?.primary_city ?? null; } catch { /* no session */ }
+  return <OfficesIndexView index={index} city={city} />;
 }
