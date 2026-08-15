@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { logActivityEvent } from "@/lib/activity/service";
+import { isQaSuppressAuthorized } from "./qa-lead";
 
 async function ctx() {
   const { user, profile } = await getSessionContext();
@@ -161,8 +162,13 @@ export async function getPublicAgentProperties(slug: string): Promise<PublicAgen
 }
 
 // ── Lead engine (public → CRM lead OWNED by the agent) ───────────────────────
-export async function submitAgentLead(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }) {
+export async function submitAgentLead(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }, opts?: { qaToken?: string | null }) {
   if (!slug || (!input.phone && !input.email)) return { ok: false, error: "חסר טלפון או אימייל" };
+  // P9.6C — server-authoritative QA suppression: EXTERNAL delivery (WhatsApp/
+  // email/SMS/marketing automation) is suppressed ONLY when the request carries
+  // the secret QA token matching ZONO_QA_LEAD_TOKEN. A public visitor cannot set
+  // this; normal public leads (no/invalid token) behave EXACTLY as before.
+  const suppressExternal = isQaSuppressAuthorized(opts?.qaToken, process.env.ZONO_QA_LEAD_TOKEN);
   const admin = createServiceRoleClient();
   const { data: site } = await admin.from("agent_websites").select("id,organization_id,user_id,status").eq("slug", slug).maybeSingle();
   if (!site || (site as { status: string }).status !== "published") return { ok: false, error: "האתר אינו זמין" };
@@ -188,7 +194,7 @@ export async function submitAgentLead(slug: string, input: { sourceSection: stri
   if (leadId) {
     try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר הסוכן" }); } catch { /* best-effort */ }
     // Emit the canonical kernel event so downstream subscribers react to agent-site leads too.
-    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "agent_website", intent } }); } catch { /* best-effort */ }
+    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "agent_website", intent, ...(suppressExternal ? { suppressExternal: true, qa: true } : {}) } }); } catch { /* best-effort */ }
   }
   return { ok: true };
 }

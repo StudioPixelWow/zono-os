@@ -33,9 +33,11 @@ export async function toggleAgentSectionAction(section: string, enabled: boolean
 }
 
 // ── Public action (NO auth — service-role; called from the public agent site) ─
-export async function submitAgentLeadAction(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }): Promise<AgentSiteActionState> {
+export async function submitAgentLeadAction(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }, qaToken?: string | null): Promise<AgentSiteActionState> {
   try {
-    const r = await submitAgentLead(slug, input);
+    // qaToken is validated server-side against ZONO_QA_LEAD_TOKEN inside
+    // submitAgentLead; an absent/invalid token → normal external delivery.
+    const r = await submitAgentLead(slug, input, { qaToken });
     if (!r.ok) return { error: r.error ?? "השליחה נכשלה" };
     return { ok: true, message: "תודה! ניצור איתך קשר בהקדם." };
   } catch { return { error: "השליחה נכשלה — נסה שוב" }; }

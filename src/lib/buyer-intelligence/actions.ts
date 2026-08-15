@@ -51,6 +51,36 @@ export async function recalcBuyerIntelligenceAction(buyerId: string): Promise<Bu
   return {};
 }
 
+export interface ReconcileActionState {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  total?: number;
+  created?: number;
+  alreadyPresent?: number;
+  failed?: number;
+}
+
+/**
+ * Backfill buyer intelligence for every buyer in the caller's org that is
+ * missing it (legacy/imported/bulk-created buyers). Reuses the canonical
+ * `initializeBuyerIntelligence` per buyer — no raw SQL, no duplicated scoring.
+ * RLS-scoped to the caller's org, idempotent, safe to rerun. One call replaces
+ * opening each buyer and clicking "activate" individually.
+ */
+export async function reconcileBuyerIntelligenceAction(): Promise<ReconcileActionState> {
+  const { user, profile } = await getSessionContext();
+  if (!user || !profile) return { error: "לא מחובר/ת." };
+  try {
+    const { reconcileBuyerIntelligenceForOrg } = await import("./reconcile");
+    const r = await reconcileBuyerIntelligenceForOrg();
+    revalidatePath("/buyers");
+    return { ok: true, ...r, message: `הושלם — ${r.created} הופעלו · ${r.alreadyPresent} קיימים · ${r.failed} נכשלו` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "השלמת מודיעין הקונים נכשלה" };
+  }
+}
+
 /**
  * ⚠️ RETIRED — Batch 5.5 (Part 7).
  *

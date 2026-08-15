@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { submitAgentLeadAction } from "@/lib/agent-website/actions";
 
 type Variant = "buyer_request" | "valuation" | "contact";
@@ -11,6 +12,10 @@ export function AgentLeadForm({ slug, variant, cta, accent = "var(--brand-primar
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [f, setF] = useState({ fullName: "", phone: "", city: "", propertyType: "", rooms: "", budget: "", timeline: "", message: "" });
+  // QA suppression token (from ?qa_token=…). Passed through to the server, which
+  // validates it against ZONO_QA_LEAD_TOKEN; an absent/wrong token is a no-op, so
+  // normal public visitors behave exactly as before. No secret is ever exposed here.
+  const qaToken = useSearchParams().get("qa_token");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault(); setError(null);
@@ -19,7 +24,7 @@ export function AgentLeadForm({ slug, variant, cta, accent = "var(--brand-primar
         sourceSection: variant, fullName: f.fullName || undefined, phone: f.phone || undefined, city: f.city || undefined,
         propertyType: f.propertyType || undefined, rooms: f.rooms || undefined, budget: f.budget || undefined,
         timeline: f.timeline || undefined, message: f.message || undefined,
-      });
+      }, qaToken);
       if (r.error) setError(r.error); else setDone(true);
     });
   };

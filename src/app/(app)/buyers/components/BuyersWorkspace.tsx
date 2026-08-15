@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { reconcileBuyerIntelligenceAction } from "@/lib/buyer-intelligence/actions";
 import type { BuyerRow } from "@/lib/buyers/labels";
 import { buyerPreferences, TEMPERATURE_LABELS } from "@/lib/buyers/labels";
 import {
@@ -80,6 +82,19 @@ export function BuyersWorkspace({
   const [kpi, setKpi] = useState<KpiKey | null>(null);
   const [view, setView] = useState<"table" | "cards">("table");
   const [openId, setOpenId] = useState<string | null>(null);
+  const router = useRouter();
+  const [reconciling, startReconcile] = useTransition();
+  const [reconcileMsg, setReconcileMsg] = useState<string | null>(null);
+  // Backfill intelligence for any buyers missing it (legacy/imported/bulk) —
+  // one click runs the canonical initializeBuyerIntelligence per missing buyer.
+  const runReconcile = () => {
+    setReconcileMsg(null);
+    startReconcile(async () => {
+      const r = await reconcileBuyerIntelligenceAction();
+      setReconcileMsg(r.error ?? r.message ?? null);
+      router.refresh();
+    });
+  };
 
   // Build insights once per data change.
   const insights = useMemo<BuyerInsight[]>(() => {
@@ -179,7 +194,7 @@ export function BuyersWorkspace({
   if (buyers.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <Hero onExport={exportCsv} view={view} setView={setView} canExport={false} />
+        <Hero onExport={exportCsv} view={view} setView={setView} canExport={false} onReconcile={runReconcile} reconciling={reconciling} reconcileMsg={reconcileMsg} />
         <BuyerEmptyState kind="no-buyers" />
       </div>
     );
@@ -187,7 +202,7 @@ export function BuyersWorkspace({
 
   return (
     <div className="flex flex-col gap-6">
-      <Hero onExport={exportCsv} view={view} setView={setView} canExport />
+      <Hero onExport={exportCsv} view={view} setView={setView} canExport onReconcile={runReconcile} reconciling={reconciling} reconcileMsg={reconcileMsg} />
 
       <BuyerKpiStrip kpis={kpis} active={kpi} onSelect={(k) => setKpi((cur) => (cur === k ? null : k))} />
 
@@ -224,11 +239,17 @@ function Hero({
   view,
   setView,
   canExport,
+  onReconcile,
+  reconciling,
+  reconcileMsg,
 }: {
   onExport: () => void;
   view: "table" | "cards";
   setView: (v: "table" | "cards") => void;
   canExport: boolean;
+  onReconcile: () => void;
+  reconciling: boolean;
+  reconcileMsg: string | null;
 }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -260,6 +281,9 @@ function Hero({
         </div>
         <Button variant="ghost" size="md" onClick={onExport} disabled={!canExport} leadingIcon={<Icon name="Download" size={16} />}>
           ייצוא
+        </Button>
+        <Button variant="ghost" size="md" onClick={onReconcile} loading={reconciling} title={reconcileMsg ?? "השלמת מודיעין לכל הקונים החסרים"} leadingIcon={<Icon name="Sparkles" size={16} />}>
+          השלמת מודיעין
         </Button>
         <Link href="/buyers/new">
           <Button leadingIcon={<Icon name="Plus" size={18} strokeWidth={2.2} />}>קונה חדש</Button>

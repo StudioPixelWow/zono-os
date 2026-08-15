@@ -1,0 +1,395 @@
+diff --git a/scripts/p9-6c-harness.mts b/scripts/p9-6c-harness.mts
+new file mode 100644
+index 0000000..c744282
+--- /dev/null
++++ b/scripts/p9-6c-harness.mts
+@@ -0,0 +1,71 @@
++// ============================================================================
++// P9.6C — reconciliation + safe-QA-lead harness (TEST/HARNESS).
++// Exercises the REAL shipped pure logic where importable (qa-lead.ts has no
++// deps); mirrors the trivial planner + automation-suppression rules (their
++// modules pull server-only deps that tsx can't resolve) — mirrors are clearly
++// labelled and kept byte-faithful to the shipped code.
++// Run: node_modules/.bin/tsx --test scripts/p9-6c-harness.mts
++// ============================================================================
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import { isQaSuppressAuthorized } from "../src/lib/agent-website/qa-lead.ts";
++
++// ── Part A — reconcile planner (mirror of reconcile.ts:planReconcile) ─────────
++const planReconcile = (ids: string[], existing: Set<string>) => ids.filter((id) => !existing.has(id));
++
++test("A1: plan enriches only the missing buyers (idempotent skip)", () => {
++  const ids = ["b1", "b2", "b3", "b4"];
++  const existing = new Set(["b1", "b3"]);
++  assert.deepEqual(planReconcile(ids, existing), ["b2", "b4"]);
++});
++test("A2: re-run after full enrichment plans nothing (safe to rerun)", () => {
++  const ids = ["b1", "b2"];
++  assert.deepEqual(planReconcile(ids, new Set(ids)), []);
++});
++test("A3: empty org → empty plan", () => {
++  assert.deepEqual(planReconcile([], new Set()), []);
++});
++
++// ── Part B — QA suppression AUTHORIZATION (real shipped pure logic) ───────────
++const SECRET = "s3cr3t-qa-token-32-chars-long-xxxx"; // ≥16 chars
++
++test("B1: correct token + configured secret → authorized (suppress)", () => {
++  assert.equal(isQaSuppressAuthorized(SECRET, SECRET), true);
++});
++test("B2: UNAUTHORIZED public request (wrong token) → cannot suppress", () => {
++  assert.equal(isQaSuppressAuthorized("guessing-a-token-of-same-len-xxxx", SECRET), false);
++});
++test("B3: public visitor with NO token → normal delivery (no suppress)", () => {
++  assert.equal(isQaSuppressAuthorized(null, SECRET), false);
++  assert.equal(isQaSuppressAuthorized(undefined, SECRET), false);
++  assert.equal(isQaSuppressAuthorized("", SECRET), false);
++});
++test("B4: secret not configured / too weak → never suppress (fail safe)", () => {
++  assert.equal(isQaSuppressAuthorized(SECRET, undefined), false);
++  assert.equal(isQaSuppressAuthorized(SECRET, ""), false);
++  assert.equal(isQaSuppressAuthorized("short", "short"), false); // env < 16 chars
++});
++test("B5: length-mismatch token → false (no prefix bypass)", () => {
++  assert.equal(isQaSuppressAuthorized(SECRET + "x", SECRET), false);
++  assert.equal(isQaSuppressAuthorized(SECRET.slice(0, -1), SECRET), false);
++});
++
++// ── Part B — automation external-suppression gate (mirror of automation-subscriber) ──
++// projectEventToAutomation returns null (no external automation bundle) when the
++// event payload carries an authorized suppressExternal flag; otherwise a lead.created
++// yields the "new_lead" bundle exactly as before.
++const projectSuppress = (payload: Record<string, unknown> | null): "suppressed" | "new_lead" => {
++  if (payload && (payload as { suppressExternal?: unknown }).suppressExternal === true) return "suppressed";
++  return "new_lead";
++};
++
++test("B6: NORMAL lead → external automation bundle unchanged", () => {
++  assert.equal(projectSuppress({ source: "agent_website", intent: "buyer" }), "new_lead");
++});
++test("B7: AUTHORIZED QA lead → external automation suppressed (internal still fires elsewhere)", () => {
++  assert.equal(projectSuppress({ source: "agent_website", intent: "buyer", suppressExternal: true, qa: true }), "suppressed");
++});
++test("B8: a spoofed non-true value does NOT suppress", () => {
++  assert.equal(projectSuppress({ suppressExternal: "true" }), "new_lead"); // strict === true only
++  assert.equal(projectSuppress({ suppressExternal: 1 }), "new_lead");
++});
+diff --git a/src/app/(app)/buyers/components/BuyersWorkspace.tsx b/src/app/(app)/buyers/components/BuyersWorkspace.tsx
+index f0cdc0e..26775dd 100644
+--- a/src/app/(app)/buyers/components/BuyersWorkspace.tsx
++++ b/src/app/(app)/buyers/components/BuyersWorkspace.tsx
+@@ -1,10 +1,12 @@
+ "use client";
+ 
+-import { useMemo, useState } from "react";
++import { useMemo, useState, useTransition } from "react";
+ import Link from "next/link";
++import { useRouter } from "next/navigation";
+ import { cn } from "@/lib/utils";
+ import { Icon } from "@/components/dashboard/Icon";
+ import { Button } from "@/components/ui/Button";
++import { reconcileBuyerIntelligenceAction } from "@/lib/buyer-intelligence/actions";
+ import type { BuyerRow } from "@/lib/buyers/labels";
+ import { buyerPreferences, TEMPERATURE_LABELS } from "@/lib/buyers/labels";
+ import {
+@@ -80,6 +82,19 @@ export function BuyersWorkspace({
+   const [kpi, setKpi] = useState<KpiKey | null>(null);
+   const [view, setView] = useState<"table" | "cards">("table");
+   const [openId, setOpenId] = useState<string | null>(null);
++  const router = useRouter();
++  const [reconciling, startReconcile] = useTransition();
++  const [reconcileMsg, setReconcileMsg] = useState<string | null>(null);
++  // Backfill intelligence for any buyers missing it (legacy/imported/bulk) —
++  // one click runs the canonical initializeBuyerIntelligence per missing buyer.
++  const runReconcile = () => {
++    setReconcileMsg(null);
++    startReconcile(async () => {
++      const r = await reconcileBuyerIntelligenceAction();
++      setReconcileMsg(r.error ?? r.message ?? null);
++      router.refresh();
++    });
++  };
+ 
+   // Build insights once per data change.
+   const insights = useMemo<BuyerInsight[]>(() => {
+@@ -179,7 +194,7 @@ export function BuyersWorkspace({
+   if (buyers.length === 0) {
+     return (
+       <div className="flex flex-col gap-6">
+-        <Hero onExport={exportCsv} view={view} setView={setView} canExport={false} />
++        <Hero onExport={exportCsv} view={view} setView={setView} canExport={false} onReconcile={runReconcile} reconciling={reconciling} reconcileMsg={reconcileMsg} />
+         <BuyerEmptyState kind="no-buyers" />
+       </div>
+     );
+@@ -187,7 +202,7 @@ export function BuyersWorkspace({
+ 
+   return (
+     <div className="flex flex-col gap-6">
+-      <Hero onExport={exportCsv} view={view} setView={setView} canExport />
++      <Hero onExport={exportCsv} view={view} setView={setView} canExport onReconcile={runReconcile} reconciling={reconciling} reconcileMsg={reconcileMsg} />
+ 
+       <BuyerKpiStrip kpis={kpis} active={kpi} onSelect={(k) => setKpi((cur) => (cur === k ? null : k))} />
+ 
+@@ -224,11 +239,17 @@ function Hero({
+   view,
+   setView,
+   canExport,
++  onReconcile,
++  reconciling,
++  reconcileMsg,
+ }: {
+   onExport: () => void;
+   view: "table" | "cards";
+   setView: (v: "table" | "cards") => void;
+   canExport: boolean;
++  onReconcile: () => void;
++  reconciling: boolean;
++  reconcileMsg: string | null;
+ }) {
+   return (
+     <div className="flex flex-wrap items-end justify-between gap-3">
+@@ -261,6 +282,9 @@ function Hero({
+         <Button variant="ghost" size="md" onClick={onExport} disabled={!canExport} leadingIcon={<Icon name="Download" size={16} />}>
+           ייצוא
+         </Button>
++        <Button variant="ghost" size="md" onClick={onReconcile} loading={reconciling} title={reconcileMsg ?? "השלמת מודיעין לכל הקונים החסרים"} leadingIcon={<Icon name="Sparkles" size={16} />}>
++          השלמת מודיעין
++        </Button>
+         <Link href="/buyers/new">
+           <Button leadingIcon={<Icon name="Plus" size={18} strokeWidth={2.2} />}>קונה חדש</Button>
+         </Link>
+diff --git a/src/app/agent/[slug]/AgentLeadForm.tsx b/src/app/agent/[slug]/AgentLeadForm.tsx
+index 399482d..5597aae 100644
+--- a/src/app/agent/[slug]/AgentLeadForm.tsx
++++ b/src/app/agent/[slug]/AgentLeadForm.tsx
+@@ -1,6 +1,7 @@
+ "use client";
+ 
+ import { useState, useTransition } from "react";
++import { useSearchParams } from "next/navigation";
+ import { submitAgentLeadAction } from "@/lib/agent-website/actions";
+ 
+ type Variant = "buyer_request" | "valuation" | "contact";
+@@ -11,6 +12,10 @@ export function AgentLeadForm({ slug, variant, cta, accent = "var(--brand-primar
+   const [done, setDone] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+   const [f, setF] = useState({ fullName: "", phone: "", city: "", propertyType: "", rooms: "", budget: "", timeline: "", message: "" });
++  // QA suppression token (from ?qa_token=…). Passed through to the server, which
++  // validates it against ZONO_QA_LEAD_TOKEN; an absent/wrong token is a no-op, so
++  // normal public visitors behave exactly as before. No secret is ever exposed here.
++  const qaToken = useSearchParams().get("qa_token");
+ 
+   const submit = (e: React.FormEvent) => {
+     e.preventDefault(); setError(null);
+@@ -19,7 +24,7 @@ export function AgentLeadForm({ slug, variant, cta, accent = "var(--brand-primar
+         sourceSection: variant, fullName: f.fullName || undefined, phone: f.phone || undefined, city: f.city || undefined,
+         propertyType: f.propertyType || undefined, rooms: f.rooms || undefined, budget: f.budget || undefined,
+         timeline: f.timeline || undefined, message: f.message || undefined,
+-      });
++      }, qaToken);
+       if (r.error) setError(r.error); else setDone(true);
+     });
+   };
+diff --git a/src/lib/agent-website/actions.ts b/src/lib/agent-website/actions.ts
+index 1919cf2..e19ccfc 100644
+--- a/src/lib/agent-website/actions.ts
++++ b/src/lib/agent-website/actions.ts
+@@ -33,9 +33,11 @@ export async function toggleAgentSectionAction(section: string, enabled: boolean
+ }
+ 
+ // ── Public action (NO auth — service-role; called from the public agent site) ─
+-export async function submitAgentLeadAction(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }): Promise<AgentSiteActionState> {
++export async function submitAgentLeadAction(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }, qaToken?: string | null): Promise<AgentSiteActionState> {
+   try {
+-    const r = await submitAgentLead(slug, input);
++    // qaToken is validated server-side against ZONO_QA_LEAD_TOKEN inside
++    // submitAgentLead; an absent/invalid token → normal external delivery.
++    const r = await submitAgentLead(slug, input, { qaToken });
+     if (!r.ok) return { error: r.error ?? "השליחה נכשלה" };
+     return { ok: true, message: "תודה! ניצור איתך קשר בהקדם." };
+   } catch { return { error: "השליחה נכשלה — נסה שוב" }; }
+diff --git a/src/lib/agent-website/qa-lead.ts b/src/lib/agent-website/qa-lead.ts
+new file mode 100644
+index 0000000..d1d45cc
+--- /dev/null
++++ b/src/lib/agent-website/qa-lead.ts
+@@ -0,0 +1,23 @@
++/**
++ * QA lead — server-authoritative EXTERNAL-DELIVERY suppression (P9.6C).
++ *
++ * A lead submitted through the real public site may suppress EXTERNAL delivery
++ * (WhatsApp / email / SMS / marketing automation) for QA — but ONLY when it
++ * presents the secret QA token that matches the server-side env secret
++ * (`ZONO_QA_LEAD_TOKEN`). A random public visitor cannot disable production
++ * automations: a missing/weak env secret or a wrong token always returns false,
++ * so normal public leads behave EXACTLY as before.
++ */
++export function isQaSuppressAuthorized(
++  token: string | null | undefined,
++  envToken: string | null | undefined,
++): boolean {
++  // No secret configured (or too weak to be a real secret) → never suppress.
++  if (!envToken || typeof envToken !== "string" || envToken.length < 16) return false;
++  if (!token || typeof token !== "string") return false;
++  if (token.length !== envToken.length) return false;
++  // Constant-time compare — don't leak length/prefix via early-exit timing.
++  let diff = 0;
++  for (let i = 0; i < token.length; i++) diff |= token.charCodeAt(i) ^ envToken.charCodeAt(i);
++  return diff === 0;
++}
+diff --git a/src/lib/agent-website/service.ts b/src/lib/agent-website/service.ts
+index fdf60de..715d0e9 100644
+--- a/src/lib/agent-website/service.ts
++++ b/src/lib/agent-website/service.ts
+@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
+ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+ import { getSessionContext } from "@/lib/auth/session";
+ import { logActivityEvent } from "@/lib/activity/service";
++import { isQaSuppressAuthorized } from "./qa-lead";
+ 
+ async function ctx() {
+   const { user, profile } = await getSessionContext();
+@@ -161,8 +162,13 @@ export async function getPublicAgentProperties(slug: string): Promise<PublicAgen
+ }
+ 
+ // ── Lead engine (public → CRM lead OWNED by the agent) ───────────────────────
+-export async function submitAgentLead(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }) {
++export async function submitAgentLead(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; budget?: string; timeline?: string; message?: string }, opts?: { qaToken?: string | null }) {
+   if (!slug || (!input.phone && !input.email)) return { ok: false, error: "חסר טלפון או אימייל" };
++  // P9.6C — server-authoritative QA suppression: EXTERNAL delivery (WhatsApp/
++  // email/SMS/marketing automation) is suppressed ONLY when the request carries
++  // the secret QA token matching ZONO_QA_LEAD_TOKEN. A public visitor cannot set
++  // this; normal public leads (no/invalid token) behave EXACTLY as before.
++  const suppressExternal = isQaSuppressAuthorized(opts?.qaToken, process.env.ZONO_QA_LEAD_TOKEN);
+   const admin = createServiceRoleClient();
+   const { data: site } = await admin.from("agent_websites").select("id,organization_id,user_id,status").eq("slug", slug).maybeSingle();
+   if (!site || (site as { status: string }).status !== "published") return { ok: false, error: "האתר אינו זמין" };
+@@ -188,7 +194,7 @@ export async function submitAgentLead(slug: string, input: { sourceSection: stri
+   if (leadId) {
+     try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר הסוכן" }); } catch { /* best-effort */ }
+     // Emit the canonical kernel event so downstream subscribers react to agent-site leads too.
+-    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "agent_website", intent } }); } catch { /* best-effort */ }
++    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "agent_website", intent, ...(suppressExternal ? { suppressExternal: true, qa: true } : {}) } }); } catch { /* best-effort */ }
+   }
+   return { ok: true };
+ }
+diff --git a/src/lib/buyer-intelligence/actions.ts b/src/lib/buyer-intelligence/actions.ts
+index a3b1cdb..32033a7 100644
+--- a/src/lib/buyer-intelligence/actions.ts
++++ b/src/lib/buyer-intelligence/actions.ts
+@@ -51,6 +51,36 @@ export async function recalcBuyerIntelligenceAction(buyerId: string): Promise<Bu
+   return {};
+ }
+ 
++export interface ReconcileActionState {
++  ok?: boolean;
++  error?: string;
++  message?: string;
++  total?: number;
++  created?: number;
++  alreadyPresent?: number;
++  failed?: number;
++}
++
++/**
++ * Backfill buyer intelligence for every buyer in the caller's org that is
++ * missing it (legacy/imported/bulk-created buyers). Reuses the canonical
++ * `initializeBuyerIntelligence` per buyer — no raw SQL, no duplicated scoring.
++ * RLS-scoped to the caller's org, idempotent, safe to rerun. One call replaces
++ * opening each buyer and clicking "activate" individually.
++ */
++export async function reconcileBuyerIntelligenceAction(): Promise<ReconcileActionState> {
++  const { user, profile } = await getSessionContext();
++  if (!user || !profile) return { error: "לא מחובר/ת." };
++  try {
++    const { reconcileBuyerIntelligenceForOrg } = await import("./reconcile");
++    const r = await reconcileBuyerIntelligenceForOrg();
++    revalidatePath("/buyers");
++    return { ok: true, ...r, message: `הושלם — ${r.created} הופעלו · ${r.alreadyPresent} קיימים · ${r.failed} נכשלו` };
++  } catch (e) {
++    return { error: e instanceof Error ? e.message : "השלמת מודיעין הקונים נכשלה" };
++  }
++}
++
+ /**
+  * ⚠️ RETIRED — Batch 5.5 (Part 7).
+  *
+diff --git a/src/lib/buyer-intelligence/reconcile.ts b/src/lib/buyer-intelligence/reconcile.ts
+new file mode 100644
+index 0000000..555a717
+--- /dev/null
++++ b/src/lib/buyer-intelligence/reconcile.ts
+@@ -0,0 +1,55 @@
++/**
++ * Buyer-Intelligence RECONCILIATION (P9.6C) — production-safe, idempotent backfill.
++ *
++ * Legacy / imported / bulk-created buyers can exist WITHOUT a
++ * `buyer_intelligence_profiles` row when they were created outside the normal
++ * `createBuyerAction → initializeBuyerIntelligence` lifecycle (SQL seed, data
++ * import, migration). This reconciles them by invoking the SAME canonical
++ * `initializeBuyerIntelligence(buyerId)` the product uses — no raw SQL, no
++ * duplicated scoring, no per-tenant special-casing. RLS scopes every read/write
++ * to the caller's org; it is idempotent (skips buyers that already have
++ * intelligence), safe to rerun, and continues past individual failures.
++ */
++import { createClient } from "@/lib/supabase/server";
++import { initializeBuyerIntelligence } from "./service";
++
++export interface ReconcileResult {
++  total: number;          // buyers in scope (caller's org, RLS-scoped)
++  alreadyPresent: number; // already had a buyer_intelligence_profiles row
++  created: number;        // enriched this run
++  failed: number;         // individual failures — did NOT stop the run
++  errors: string[];       // up to 10 sample "buyerId: message" strings
++}
++
++/** Pure planner: given all buyer ids and the set that already have intelligence,
++ *  return the ids that still need enrichment. Unit-tested. */
++export function planReconcile(buyerIds: string[], existing: Set<string>): string[] {
++  return buyerIds.filter((id) => !existing.has(id));
++}
++
++/** Reconcile every buyer in the CALLER'S org missing a buyer_intelligence_profiles
++ *  row, via the canonical `initializeBuyerIntelligence`. RLS-scoped, idempotent,
++ *  rerunnable, fault-tolerant. */
++export async function reconcileBuyerIntelligenceForOrg(): Promise<ReconcileResult> {
++  const supabase = await createClient();
++  const [{ data: buyers }, { data: profiles }] = await Promise.all([
++    supabase.from("buyers").select("id").limit(5000),
++    supabase.from("buyer_intelligence_profiles").select("buyer_id").limit(5000),
++  ]);
++  const buyerIds = ((buyers ?? []) as { id: string }[]).map((b) => b.id);
++  const existing = new Set(((profiles ?? []) as { buyer_id: string }[]).map((p) => p.buyer_id));
++  const missing = planReconcile(buyerIds, existing);
++
++  let created = 0, failed = 0;
++  const errors: string[] = [];
++  for (const id of missing) {
++    try {
++      await initializeBuyerIntelligence(id); // canonical, idempotent
++      created++;
++    } catch (e) {
++      failed++;
++      if (errors.length < 10) errors.push(`${id}: ${e instanceof Error ? e.message : "failed"}`);
++    }
++  }
++  return { total: buyerIds.length, alreadyPresent: existing.size, created, failed, errors };
++}
+diff --git a/src/lib/kernel/automation-subscriber.ts b/src/lib/kernel/automation-subscriber.ts
+index ae85587..f0ff264 100644
+--- a/src/lib/kernel/automation-subscriber.ts
++++ b/src/lib/kernel/automation-subscriber.ts
+@@ -54,6 +54,12 @@ const MAP: Record<string, Mapping> = {
+  */
+ export function projectEventToAutomation(evt: DomainEventLike): AutomationIntent | null {
+   if (!evt.id || !evt.organization_id || !evt.entity_type || !evt.entity_id) return null;
++  // P9.6C — an AUTHORIZED QA/test event suppresses EXTERNAL automation delivery
++  // (approval bundles → WhatsApp/email/SMS/marketing). Internal timeline +
++  // notifications still fire via their own subscribers. The flag is set
++  // server-side only when the secret QA token matched (see agent-website/
++  // qa-lead.ts); public events never carry it, so normal delivery is unchanged.
++  if (evt.payload && (evt.payload as { suppressExternal?: unknown }).suppressExternal === true) return null;
+   const m = MAP[evt.event_type];
+   if (!m || (!m.journeyTrigger && !m.bundleEventType)) return null;
+   return {

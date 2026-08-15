@@ -54,6 +54,12 @@ const MAP: Record<string, Mapping> = {
  */
 export function projectEventToAutomation(evt: DomainEventLike): AutomationIntent | null {
   if (!evt.id || !evt.organization_id || !evt.entity_type || !evt.entity_id) return null;
+  // P9.6C — an AUTHORIZED QA/test event suppresses EXTERNAL automation delivery
+  // (approval bundles → WhatsApp/email/SMS/marketing). Internal timeline +
+  // notifications still fire via their own subscribers. The flag is set
+  // server-side only when the secret QA token matched (see agent-website/
+  // qa-lead.ts); public events never carry it, so normal delivery is unchanged.
+  if (evt.payload && (evt.payload as { suppressExternal?: unknown }).suppressExternal === true) return null;
   const m = MAP[evt.event_type];
   if (!m || (!m.journeyTrigger && !m.bundleEventType)) return null;
   return {
