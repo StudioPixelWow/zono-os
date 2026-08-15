@@ -59,6 +59,20 @@ export function normalizeIlsPrice(price: string | null | undefined): string | nu
   return `₪${Number(digits).toLocaleString("en-US")}`;
 }
 
+/** Israeli phone → human display that ALWAYS keeps the leading 0, dash-grouped
+ *  (05X-XXX-XXXX) so the image model cannot drop the leading digit. Accepts
+ *  0-prefixed, +972 and bare 9-digit inputs. Returns the input unchanged when it
+ *  cannot be parsed. Pure. */
+export function formatPhoneForAd(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  let d = phone.replace(/\D/g, "");
+  if (d.startsWith("972")) d = `0${d.slice(3)}`;   // +972 5X… → 05X…
+  else if (!d.startsWith("0")) d = `0${d}`;         // bare 5X… → 05X… (never lose the leading 0)
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;   // mobile 05X-XXX-XXXX
+  if (d.length === 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;    // landline 0X-XXX-XXXX
+  return d || phone;
+}
+
 /** Source-Data Lock: the manifest is the ONLY text the ad may contain. */
 export function buildSourceManifest(spec: AdSpec): SourceManifest {
   return {
@@ -131,6 +145,7 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     "OBJECTIVE — premium CREATIVE-FIRST, not accuracy-first. The goal is VISUAL EXCELLENCE: generate a full luxury advertising campaign comparable to the world's best real-estate campaigns. Take creative risks, use complex layouts and rich composition. Priority order: (1) VISUAL EXCELLENCE — the stunning, art-directed luxury campaign is the primary KPI; (2) DATA INTEGRITY — preserve the supplied text and never FABRICATE a phone, price, address or name (a non-negotiable floor, but it must NEVER flatten or simplify the design); (3) BRAND CONSISTENCY. Do not prioritize speed. Do not simplify the layout, reduce creativity, or collapse into a safe template/card to satisfy a checklist — that is a FAILURE even if every word is correct.",
 
     "PROPERTY HERO RULE: the real property photography is the hero and the emotional anchor (~65–80% of the frame), integrated into a DESIGNED composition — not a full-bleed photo with a caption. Use art-director techniques: cinematic crop, depth, negative space, an elegant type system, refined dividers and brand accents. Treat it like a luxury architectural-magazine COVER, not a property card.",
+    "PROPERTY-IMAGE HARD LOCK (absolute, overrides every creative idea): the SUPPLIED property reference photo IS the property — it MUST be the visible hero of the ad, rendered as the real building/interior it shows. You may only relight, color-grade, crop and compose AROUND it. You must NEVER replace, omit, hide or substitute it with any other subject or invented scene. STRICTLY FORBIDDEN as the hero or background: vehicles, trucks, vans, delivery/logistics/moving imagery, boxes or packages, giant number/‘money’/coins/cash scenes, any other company's brand or logo, stock lifestyle scenes, a different or AI-invented building or interior, or any subject that is not the supplied property. If the concept/brief mentions price, urgency, value or ‘conversion’, express that with TYPOGRAPHY and premium layout ONLY — never by inventing a scene. An ad whose hero image is anything other than the supplied property photo is a CRITICAL FAILURE and must be rejected.",
     "VISUAL STORYTELLING: respect architecture, composition, interior design, lighting and depth. Do not cover important rooms or block architectural features. Let the property breathe and create desire through atmosphere.",
 
     // ── TEXT-LOCK (spec §3) — EXACT strings, never altered ─────────────────────
@@ -144,7 +159,7 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
     address ? `• {{property_address}} = "${address}"  ← HIGHLY VISIBLE and prominent. NOT tiny footer text, NOT legal copy. This is mandatory, large and easy to read.` : "",
     priceLine ? `• {{price}} = "${priceLine}"  ← Israeli real-estate format EXACTLY as written (₪ then digits with comma thousands, NO space after ₪). Render it LARGER than the other supporting text with the STRONGEST visual emphasis — it is the primary commercial element, second only to the headline. Confident and premium, never shouty.` : "",
     spec.agentName ? `• {{agent_name}} = "${spec.agentName}"` : "",
-    spec.agentPhone ? `• {{agent_phone}} = "${spec.agentPhone}"  (Latin digits, keep LTR, impossible to miss yet never promotional)` : "",
+    spec.agentPhone ? `• {{agent_phone}} = "${formatPhoneForAd(spec.agentPhone)}"  (Latin digits, keep LTR, impossible to miss yet never promotional; render ALL digits EXACTLY including the LEADING 0 — an Israeli number always begins with 0; NEVER drop, hide, trim or omit the leading zero)` : "",
     spec.logoText ? `• {{office_name}} = "${spec.logoText}"` : "",
     spec.cta ? `• Optional short CTA = "${spec.cta}" — include ONLY if it does not harm Hebrew spelling accuracy; otherwise omit it.` : "",
     "════ END TEXT-LOCK ════",
