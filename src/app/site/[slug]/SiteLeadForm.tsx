@@ -28,7 +28,7 @@ export function SiteLeadForm({ slug, variant, cta }: { slug: string; variant: Va
 
   if (done) return <div className="rounded-2xl bg-[#ecfdf5] p-5 text-center text-[#065f46] font-bold">תודה! ניצור איתך קשר בהקדם ✓</div>;
 
-  const input = "w-full rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7C3AED]";
+  const input = "w-full rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm outline-none focus:border-[color:var(--brand-primary)]";
   return (
     <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {variant === "valuation" && <>
@@ -47,7 +47,7 @@ export function SiteLeadForm({ slug, variant, cta }: { slug: string; variant: Va
         <input className={input} placeholder="טלפון" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} required />
         <textarea className={`${input} sm:col-span-2`} placeholder="במה נוכל לעזור?" rows={3} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} />
       </>}
-      <button type="submit" disabled={pending} className="rounded-xl bg-[#7C3AED] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60 sm:col-span-2">{pending ? "שולח…" : cta}</button>
+      <button type="submit" disabled={pending} className="rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-[var(--brand-on-primary)] disabled:opacity-60 sm:col-span-2">{pending ? "שולח…" : cta}</button>
       {error && <p className="text-sm font-semibold text-[#dc2626] sm:col-span-2">{error}</p>}
       <p className="text-[11px] text-[#9ca3af] sm:col-span-2">בלחיצה על השליחה אתה מאשר שניצור איתך קשר. המידע מאובטח.</p>
     </form>
