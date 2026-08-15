@@ -27,7 +27,7 @@ function Empty({ t }: { t: string }) { return <div className="bg-card border-lin
 export function TerritoryOS({ data }: { data: TData }) {
   const [tab, setTab] = useState<Tab>("home");
   const sc = data.score;
-  const cityLabel = (data.city ?? "").trim() || "האזור שלך";
+  const cityLabel = (data.city ?? "").trim() || "אזור הפעילות";
   // Real, evidence-backed counts (never vanity zeros) for the hero.
   const kpis = [
     { label: "אזורים במעקב", value: data.neighborhoods.length },

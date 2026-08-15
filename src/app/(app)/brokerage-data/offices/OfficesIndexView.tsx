@@ -16,7 +16,7 @@ export function OfficesIndexView({ index, city }: { index: OfficesIndex; city: s
   const [cityF, setCityF] = useState("");
   const [brand, setBrand] = useState("");
 
-  const cityLabel = (city ?? "").trim() || "האזור שלך";
+  const cityLabel = (city ?? "").trim() || "אזור הפעילות שלך";
   const hasData = index.totals.offices > 0;
   const officesWithActivity = index.offices.filter((o) => o.listingCount > 0).length;
 
