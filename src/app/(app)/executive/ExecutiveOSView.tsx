@@ -82,7 +82,7 @@ export function ExecutiveOSView({ os, deals }: { os: ExecutiveOS; deals: ExecDea
   const hasMoney = deals && deals.activeCount > 0;
 
   return (
-    <div dir="rtl" className="mx-auto max-w-6xl px-4 pb-24 pt-5">
+    <div dir="rtl" className="mx-auto max-w-none px-4 pb-24 pt-5">
       {/* ── Cinematic executive hero ────────────────────────────────────────── */}
       <div className="bg-card border-line overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)]">
         <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-4 p-5">

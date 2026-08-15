@@ -36,7 +36,7 @@ export function OfficesIndexView({ index, city }: { index: OfficesIndex; city: s
   }, [index.offices, q, cityF, brand]);
 
   return (
-    <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-5 p-4 sm:p-6">
+    <div dir="rtl" className="mx-auto flex max-w-none flex-col gap-5 p-4 sm:p-6">
       <Link href="/brokerage-data" className="text-muted hover:text-ink w-fit text-[12px] font-bold">← דאטה משרדי תיווך</Link>
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}

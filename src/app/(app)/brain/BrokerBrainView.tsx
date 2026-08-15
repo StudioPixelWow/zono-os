@@ -43,7 +43,7 @@ export function BrokerBrainView() {
   };
 
   return (
-    <div dir="rtl" className="mx-auto max-w-2xl px-4 pb-24 pt-5">
+    <div dir="rtl" className="mx-auto max-w-none px-4 pb-24 pt-5">
       {/* Header */}
       <div className="bg-brand-soft rounded-[22px] p-5">
         <p className="text-brand text-xs font-bold">ZONO · מוח הפעולה</p>

@@ -96,7 +96,7 @@ export function BrokerDirectoryView({ directory }: { directory: BrokerDirectory 
   const resolvedCount = brokers.filter((b) => b.resolved).length;
 
   return (
-    <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-4 p-4 sm:p-6">
+    <div dir="rtl" className="mx-auto flex max-w-none flex-col gap-4 p-4 sm:p-6">
       <header className="flex items-start gap-3">
         <span className="bg-brand-soft text-brand-strong grid h-12 w-12 place-items-center rounded-2xl text-2xl">👤</span>
         <div>

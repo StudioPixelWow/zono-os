@@ -36,7 +36,7 @@ export function PredictionsView({ report }: { report: PredictionReport | null })
   ].filter((c) => c.value > 0) : [];
 
   return (
-    <div dir="rtl" className="mx-auto max-w-[1600px] px-4 pb-16 pt-6 sm:px-6">
+    <div dir="rtl" className="mx-auto max-w-none px-4 pb-16 pt-6 sm:px-6">
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 px-6 py-8 text-white sm:px-9 sm:py-10">
         <div className="absolute -top-24 -left-16 -z-10 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
