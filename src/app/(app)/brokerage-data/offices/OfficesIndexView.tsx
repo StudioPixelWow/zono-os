@@ -9,10 +9,12 @@ import { DirectoryStatusPanel } from "@/components/office-intelligence/Directory
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
 
-export function OfficesIndexView({ index }: { index: OfficesIndex }) {
+export function OfficesIndexView({ index, city: viewerCity }: { index: OfficesIndex; city?: string | null }) {
   const [q, setQ] = useState("");
   const [city, setCity] = useState("");
   const [brand, setBrand] = useState("");
+  // Directory panel default = selected filter → viewer's operating city → first.
+  const directoryCity = city || (viewerCity ?? "") || index.cities[0] || "";
 
   const filtered = useMemo(() => {
     const needle = q.trim();
@@ -33,8 +35,9 @@ export function OfficesIndexView({ index }: { index: OfficesIndex }) {
       </section>
 
       {/* City office directory — live directory ingestion status (WHO EXISTS).
-          Keyed to the selected city, defaulting to the first operating city. */}
-      <DirectoryStatusPanel city={city || index.cities[0] || ""} />
+          Keyed to the selected filter city, defaulting to the viewer's
+          operating city (e.g. רחובות for Landsman), then the first city. */}
+      <DirectoryStatusPanel city={directoryCity} />
 
       {/* Filters */}
       <div className="border-line bg-card flex flex-wrap items-center gap-2 rounded-2xl border p-3">
