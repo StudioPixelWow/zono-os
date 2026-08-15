@@ -1,0 +1,115 @@
+diff --git a/src/app/(app)/predictions/PredictionsView.tsx b/src/app/(app)/predictions/PredictionsView.tsx
+index 0e47592..5872c13 100644
+--- a/src/app/(app)/predictions/PredictionsView.tsx
++++ b/src/app/(app)/predictions/PredictionsView.tsx
+@@ -27,33 +27,60 @@ export function PredictionsView({ report }: { report: PredictionReport | null })
+   const preds = report?.predictions ?? [];
+   const real = preds.filter((p) => p.probability != null).sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0));
+   const insufficient = preds.filter((p) => p.probability == null);
++  const featured = real[0] ?? null;
++  const rest = real.slice(1);
++  const chips = report ? [
++    { label: "תחזיות פעילות", value: report.counts.total },
++    { label: "ניתנות לפעולה", value: report.counts.actionable },
++    { label: "נתונים גבוהים", value: report.counts.highConfidence },
++  ].filter((c) => c.value > 0) : [];
+ 
+   return (
+-    <div dir="rtl" className="mx-auto max-w-2xl px-4 pb-24 pt-5">
+-      <div className="bg-brand-soft rounded-[22px] p-5">
+-        <p className="text-brand text-xs font-bold">ZONO · מנוע התחזיות</p>
+-        <h1 className="text-ink mt-1 text-2xl font-black">🔮 תחזיות</h1>
+-        <p className="text-muted mt-1 text-sm leading-relaxed">תחזיות הסתברותיות מבוססות אותות קיימים — נטישת מוכרים, סגירת קונים, המרת לידים, מהירות מכירה, שחיקת קמפיינים, עומס, מעקבים, עסקאות וטריטוריה. לא ודאויות.</p>
+-      </div>
+-
+-      {report && (
+-        <div className="mt-4 grid grid-cols-3 gap-2">
+-          <Stat label="תחזיות" value={report.counts.total} />
+-          <Stat label="ניתנות לפעולה" value={report.counts.actionable} />
+-          <Stat label="נתונים גבוהים" value={report.counts.highConfidence} />
+-        </div>
+-      )}
++    <div dir="rtl" className="mx-auto max-w-[1600px] px-4 pb-16 pt-6 sm:px-6">
++      {/* ── HERO ─────────────────────────────────────────────────────────── */}
++      <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 px-6 py-8 text-white sm:px-9 sm:py-10">
++        <div className="absolute -top-24 -left-16 -z-10 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
++        <div className="mb-1 text-[12px] font-bold tracking-wide text-indigo-300">ZONO · מנוע התחזיות</div>
++        <h1 className="text-3xl font-black leading-tight sm:text-4xl">מה ZONO רואה שעומד לקרות?</h1>
++        <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-slate-300">ZONO מנתחת את הפעילות באזור שלך ומזהה שינויים, סיכונים והזדמנויות לפני שהם הופכים לברורים — תחזיות הסתברותיות מבוססות אותות, לא ודאויות.</p>
++        {chips.length > 0 && (
++          <div className="mt-6 flex flex-wrap gap-3">
++            {chips.map((c) => (
++              <div key={c.label} className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 backdrop-blur-md">
++                <div className="text-2xl font-black tabular-nums sm:text-3xl">{c.value}</div>
++                <div className="mt-0.5 text-[12px] font-semibold text-slate-300">{c.label}</div>
++              </div>
++            ))}
++          </div>
++        )}
++      </section>
+ 
+       {!report && <p className="text-muted mt-6 text-center text-sm">טעינת התחזיות נכשלה — נסה שוב.</p>}
+ 
+       {report && (
+-        <div className="mt-4 space-y-3">
+-          {real.map((p) => <PredictionCard key={p.kind} p={p} />)}
++        <div className="mt-6 space-y-6">
++          {featured && (
++            <section>
++              <h2 className="text-ink mb-3 text-[17px] font-black">התחזית החשובה ביותר כרגע</h2>
++              <div className="rounded-3xl ring-2 ring-[color:var(--brand)]/25">
++                <PredictionCard p={featured} featured />
++              </div>
++            </section>
++          )}
++
++          {rest.length > 0 && (
++            <section>
++              <h2 className="text-ink mb-3 text-[15px] font-black">תחזיות נוספות</h2>
++              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
++                {rest.map((p) => <PredictionCard key={p.kind} p={p} />)}
++              </div>
++            </section>
++          )}
+ 
+           {insufficient.length > 0 && (
+             <div className="bg-card border-line rounded-[20px] border p-4">
+-              <div className="mb-2 flex items-center gap-2"><span className="text-muted"><Icon name="Minus" size={15} /></span><h3 className="text-ink text-sm font-extrabold">אין עדיין מספיק נתונים ({insufficient.length})</h3></div>
+-              <div className="space-y-2">
++              <div className="mb-2 flex items-center gap-2"><span className="text-muted"><Icon name="Minus" size={15} /></span><h3 className="text-ink text-sm font-extrabold">ZONO עדיין אוספת נתונים ({insufficient.length})</h3></div>
++              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                 {insufficient.map((p) => (
+                   <div key={p.kind} className="bg-surface rounded-xl p-3">
+                     <p className="text-ink text-[13px] font-bold">{p.label}</p>
+@@ -72,17 +99,17 @@ export function PredictionsView({ report }: { report: PredictionReport | null })
+   );
+ }
+ 
+-function PredictionCard({ p }: { p: Prediction }) {
++function PredictionCard({ p, featured = false }: { p: Prediction; featured?: boolean }) {
+   return (
+-    <div className="bg-card border-line rounded-[20px] border p-4">
++    <div className={cn("bg-card border-line h-full rounded-[20px] border", featured ? "p-5 sm:p-6" : "p-4")}>
+       <div className="flex items-start justify-between gap-3">
+         <div className="min-w-0">
+-          <p className="text-ink text-sm font-extrabold">{p.label}</p>
+-          <p className="text-muted mt-0.5 text-[12px]">{p.outcome}</p>
++          <p className={cn("text-ink font-extrabold", featured ? "text-lg" : "text-sm")}>{p.label}</p>
++          <p className={cn("text-muted mt-0.5", featured ? "text-[13px]" : "text-[12px]")}>{p.outcome}</p>
+         </div>
+         <div className="shrink-0 text-left">
+-          <div className={cn("text-2xl font-black", probCls(p.probability ?? 0))}>{p.probability}% <span className="text-muted text-sm font-bold">{TREND[p.trend]}</span></div>
+-          <div className="text-muted text-[10px] font-bold">ביטחון {p.confidence}</div>
++          <div className={cn("font-black", featured ? "text-4xl" : "text-2xl", probCls(p.probability ?? 0))}>{p.probability}% <span className="text-muted text-sm font-bold">{TREND[p.trend]}</span></div>
++          <div className="text-muted text-[10px] font-bold">רמת ביטחון {p.confidence}</div>
+         </div>
+       </div>
+ 
+@@ -111,7 +138,3 @@ function PredictionCard({ p }: { p: Prediction }) {
+     </div>
+   );
+ }
+-
+-function Stat({ label, value }: { label: string; value: number }) {
+-  return <div className="bg-card border-line rounded-2xl border p-3 text-center"><div className="text-brand text-xl font-black">{value}</div><div className="text-muted text-[11px] font-bold">{label}</div></div>;
+-}
