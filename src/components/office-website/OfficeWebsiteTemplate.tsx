@@ -6,12 +6,12 @@
 // team, property→agent, testimonial→agent. Every section render/fallback/hide.
 // ============================================================================
 import Link from "next/link";
-import type { OfficeSitePayload } from "@/lib/office-website/site-data";
+import type { OfficeSitePayload, OfficeTeamMember, OfficeProperty } from "@/lib/office-website/site-data";
 import { AgentHeader, type HeaderNavItem } from "@/components/agent-website/AgentHeader";
 import { PropertySearch } from "@/components/agent-website/PropertySearch";
 import { ExpertiseMap } from "@/components/agent-website/ExpertiseMap";
 import { MobileStickyCta } from "@/components/agent-website/MobileStickyCta";
-import { SectionShell, TextLink, StatStrip, AreaChips } from "@/components/agent-website/ui";
+import { SectionShell, TextLink, StatStrip, AreaChips, money } from "@/components/agent-website/ui";
 import { OfficePropertyCard, TeamCard, OfficeTestimonialCard } from "./ui";
 import { SiteLeadForm } from "@/app/site/[slug]/SiteLeadForm";
 
@@ -50,15 +50,23 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
       {/* PROPERTY SEARCH */}
       <div className="relative z-10"><PropertySearch slug={slug} areas={areaNames} types={types} basePath="/site" /></div>
 
-      {/* FEATURED PROPERTIES (with handling agent) */}
-      {on("featured_properties") && data.featured.length > 0 && (
-        <SectionShell id="properties" eyebrow="נכסים נבחרים" title="הזדמנויות שלא כדאי לפספס" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">{data.featured.map((p) => <OfficePropertyCard key={p.id} property={p} />)}</div>
-        </SectionShell>
+      {/* FEATURED PROPERTIES (with handling agent) — or a buyer marketing state
+          when the office has no inventory yet (never a dead empty section). */}
+      {on("featured_properties") && (
+        data.featured.length > 0 ? (
+          <SectionShell id="properties" eyebrow="נכסים נבחרים" title="הזדמנויות שלא כדאי לפספס" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
+            {data.featured.length === 1
+              ? <FeaturedProperty property={data.featured[0]} />
+              : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">{data.featured.map((p) => <OfficePropertyCard key={p.id} property={p} />)}</div>}
+          </SectionShell>
+        ) : data.recommended.length === 0 ? (
+          <BuyerCta data={data} />
+        ) : null
       )}
 
-      {/* TEAM */}
-      {on("agents") && data.team.length > 0 && (
+      {/* TEAM — a single agent becomes a FEATURED EXPERT (never a lonely card). */}
+      {on("agents") && data.team.length === 1 && <FeaturedAgent member={data.team[0]} />}
+      {on("agents") && data.team.length > 1 && (
         <SectionShell id="team" eyebrow="הצוות" title="הצוות שלנו" subtitle="הכירו את הסוכנים שילוו אתכם לאורך כל הדרך" tone="surface" action={data.team.length > 8 ? <TextLink href={`/site/${slug}/agents`}>לכל הצוות ←</TextLink> : undefined}>
           <div className={data.team.length <= 3
             ? "flex flex-wrap justify-center gap-5 [&>*]:w-full [&>*]:max-w-[260px] sm:[&>*]:w-[260px]"
@@ -115,6 +123,80 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
     </div>
   );
 }
+
+// ── Single agent → a featured expert composition (never a lonely card) ────────
+function FeaturedAgent({ member }: { member: OfficeTeamMember }) {
+  return (
+    <SectionShell id="team" eyebrow="הצוות שלנו" title="המומחה שמלווה אתכם" tone="surface">
+      <div className="grid items-center gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12">
+        <div className="relative mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-[28px] bg-[var(--brand-soft)] shadow-[0_30px_70px_-30px_rgba(15,23,42,0.55)] ring-1 ring-[var(--brand-border)]">
+          {member.photo
+            ? <img src={member.photo} alt={member.name} className="h-full w-full object-cover object-top" />
+            : <div className="grid h-full w-full place-items-center text-7xl font-black text-[color:var(--brand-primary)]">{member.name.slice(0, 1)}</div>}
+        </div>
+        <div>
+          <h3 className="text-3xl font-black leading-tight text-[var(--brand-text)] sm:text-4xl lg:text-5xl">{member.name}</h3>
+          {member.title && <p className="mt-2 text-[17px] font-bold text-[color:var(--brand-link)]">{member.title}</p>}
+          <p className="mt-4 max-w-lg text-[16px] leading-relaxed text-[var(--brand-muted)]">ליווי אישי לאורך כל הדרך — מהשיחה הראשונה ועד לחתימה. כאן כדי למצוא לכם את העסקה הנכונה.</p>
+          {(member.areas.length > 0 || member.activeProperties > 0) && (
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              {member.areas.slice(0, 4).map((a) => <span key={a} className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-background)] px-3.5 py-1.5 text-[13px] font-semibold text-[var(--brand-text)]">{a}</span>)}
+              {member.activeProperties > 0 && <span className="rounded-full bg-[var(--brand-soft)] px-3.5 py-1.5 text-[13px] font-bold text-[color:var(--brand-primary)]">{member.activeProperties} נכסים פעילים</span>}
+            </div>
+          )}
+          <div className="mt-7 flex flex-wrap gap-3">
+            {member.href && <Link href={member.href} className="rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[15px] font-black text-[var(--brand-on-primary)] shadow-lg transition hover:-translate-y-0.5">לפרופיל המלא ←</Link>}
+            {member.whatsapp && <a href={member.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-7 py-3.5 text-[15px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">שלחו WhatsApp</a>}
+          </div>
+        </div>
+      </div>
+    </SectionShell>
+  );
+}
+
+// ── No inventory yet → a buyer marketing state (never a dead empty section) ────
+function BuyerCta({ data }: { data: OfficeSitePayload }) {
+  const area = data.areas[0]?.name;
+  return (
+    <SectionShell id="properties" eyebrow="נכסים" title={area ? `מחפשים נכס ב${area}?` : "מחפשים את הנכס הבא שלכם?"} subtitle="המלאי שלנו מתעדכן באופן שוטף. ספרו לנו מה אתם מחפשים ונעדכן אתכם ברגע שתופיע הזדמנות שמתאימה בדיוק לכם.">
+      <div className="mx-auto max-w-xl rounded-[24px] border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 shadow-[0_18px_44px_-26px_rgba(15,23,42,0.3)] sm:p-8">
+        <SiteLeadForm slug={data.slug} variant="contact" cta="ספרו לנו מה אתם מחפשים" />
+      </div>
+    </SectionShell>
+  );
+}
+
+// ── A single property → one cinematic featured listing (not a lonely grid cell) ─
+function FeaturedProperty({ property }: { property: OfficeProperty }) {
+  const loc = [property.neighborhood, property.city].filter(Boolean).join(", ");
+  const price = property.listingKind === "rent"
+    ? (money(property.monthlyRent) ? `${money(property.monthlyRent)} / חודש` : null)
+    : money(property.price);
+  const meta = [
+    property.rooms != null ? `${property.rooms} חד׳` : null,
+    property.sizeSqm != null ? `${property.sizeSqm} מ״ר` : null,
+    property.floor != null ? `קומה ${property.floor}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="grid items-stretch gap-6 overflow-hidden rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-background)] shadow-[0_24px_60px_-34px_rgba(15,23,42,0.45)] lg:grid-cols-[1.4fr_1fr]">
+      <div className="relative aspect-[16/10] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto">
+        {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
+        {property.image
+          ? <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
+          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><HouseGlyphLg /></div>}
+      </div>
+      <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">
+        <h3 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{property.title}</h3>
+        {loc && <p className="text-[15px] text-[var(--brand-muted)]">{loc}</p>}
+        {price && <p className="text-3xl font-black text-[color:var(--brand-link)]">{price}</p>}
+        {meta.length > 0 && <p className="text-[15px] font-semibold text-[var(--brand-text)]">{meta.join(" · ")}</p>}
+        <div className="mt-3"><Link href={property.href} className="inline-flex rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[15px] font-black text-[var(--brand-on-primary)] shadow-lg transition hover:-translate-y-0.5">לפרטי הנכס ←</Link></div>
+      </div>
+    </div>
+  );
+}
+
+function HouseGlyphLg() { return <svg viewBox="0 0 24 24" width={56} height={56} fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden><path d="M3 11l9-7 9 7M5 10v9h5v-5h4v5h5v-9" strokeLinejoin="round" strokeLinecap="round" /></svg>; }
 
 function Hero({ data }: { data: OfficeSitePayload }) {
   const { office, brand } = data;
