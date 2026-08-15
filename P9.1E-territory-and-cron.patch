@@ -1,0 +1,320 @@
+diff --git a/scripts/p9-1e-territory-isolation-qa.mts b/scripts/p9-1e-territory-isolation-qa.mts
+new file mode 100644
+index 0000000..6496689
+--- /dev/null
++++ b/scripts/p9-1e-territory-isolation-qa.mts
+@@ -0,0 +1,43 @@
++// ============================================================================
++// P9.1E — TERRITORY ISOLATION QA (PURE; no DB/network).
++// Proves the canonical territory-membership predicate that scopes office
++// intelligence to an org's operating market — so a Rehovot org NEVER sees a
++// Kiryat Bialik office merely because it exists in the shared global graph.
++// Run: npx tsx scripts/p9-1e-territory-isolation-qa.mts
++// ============================================================================
++import { officeInTerritory, normalizeCityKey } from "../src/lib/brokerage-data/territory-logic.ts";
++
++let fail = 0;
++const ok = (c: boolean, l: string) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) fail++; };
++
++// Landsman Rehovot territory: canonical He + En + provider string.
++const rehovot = new Set(["רחובות", "rehovot"].map(normalizeCityKey));
++const noBridge = new Set<string>();
++
++console.log("P9.1E · Rehovot org must EXCLUDE foreign-city (Kiryat Bialik) offices");
++ok(officeInTerritory({ id: "o1", city: "Rehovot" }, rehovot, noBridge) === true, "Rehovot office → included");
++ok(officeInTerritory({ id: "o2", city: "רחובות" }, rehovot, noBridge) === true, "רחובות office → included");
++ok(officeInTerritory({ id: "kb1", city: "Kiryat Bialik" }, rehovot, noBridge) === false, "RE/MAX Kiryat Bialik → EXCLUDED");
++ok(officeInTerritory({ id: "kb2", city: "קריית ביאליק" }, rehovot, noBridge) === false, "Anglo Saxon קריית ביאליק → EXCLUDED");
++ok(officeInTerritory({ id: "kb3", city: "Kiryat Motzkin" }, rehovot, noBridge) === false, "Kiryat Motzkin office → EXCLUDED");
++ok(officeInTerritory({ id: "h1", city: "Haifa" }, rehovot, noBridge) === false, "Haifa office → EXCLUDED");
++
++console.log("\nP9.1E · Org bridge overrides city (org observed it through its own listings)");
++ok(officeInTerritory({ id: "nat1", city: "Tel Aviv" }, rehovot, new Set(["nat1"])) === true, "office the org actually observed → included regardless of HQ city");
++ok(officeInTerritory({ id: "kb1", city: "Kiryat Bialik" }, rehovot, new Set(["other"])) === false, "unrelated bridge id does not include a foreign office");
++
++console.log("\nP9.1E · UNKNOWN ≠ everything (empty territory + no bridge → nothing)");
++ok(officeInTerritory({ id: "o1", city: "Rehovot" }, new Set(), noBridge) === false, "no territory + no bridge → EXCLUDED (never global-dump)");
++
++console.log("\nP9.1E · Kiryat Bialik org sees its own territory (isolation is symmetric)");
++const kb = new Set(["kiryat bialik", "קריית ביאליק"].map(normalizeCityKey));
++ok(officeInTerritory({ id: "kb1", city: "Kiryat Bialik" }, kb, noBridge) === true, "KB org → KB office included");
++ok(officeInTerritory({ id: "o1", city: "Rehovot" }, kb, noBridge) === false, "KB org → Rehovot office EXCLUDED");
++
++console.log("\nP9.1E · normalizeCityKey never collapses different-script city names of DIFFERENT cities");
++ok(normalizeCityKey("Rehovot") === normalizeCityKey(" rehovot "), "casing/space normalized");
++ok(normalizeCityKey("רחובות") !== normalizeCityKey("קריית ביאליק"), "distinct Hebrew cities stay distinct");
++ok(normalizeCityKey("Rehovot") !== normalizeCityKey("Kiryat Bialik"), "distinct English cities stay distinct");
++
++console.log(`\n${fail === 0 ? "✅ PASS" : "❌ FAIL"} — P9.1E territory isolation QA (${fail} failure${fail === 1 ? "" : "s"})`);
++process.exit(fail === 0 ? 0 : 1);
+diff --git a/src/app/api/cron/zono-master-sync/route.ts b/src/app/api/cron/zono-master-sync/route.ts
+index f7f24d4..1492636 100644
+--- a/src/app/api/cron/zono-master-sync/route.ts
++++ b/src/app/api/cron/zono-master-sync/route.ts
+@@ -1,15 +1,70 @@
+ import { NextResponse, type NextRequest } from "next/server";
+ import { organizationsWithActiveLocalities } from "@/lib/external-listings/service";
+ import { runZonoOrchestrator } from "@/lib/orchestrator";
++import { createServiceRoleClient } from "@/lib/supabase/server";
+ 
+ export const runtime = "nodejs";
+ export const maxDuration = 300;
+ 
++// Stop starting new orgs before Vercel's maxDuration=300 kills us mid-org.
++const SOFT_BUDGET_MS = 240_000;
++
++/**
++ * Order orgs LEAST-RECENTLY-RUN first so a never-run org (a freshly onboarded
++ * office) is always processed before heavy incumbents. Previously the sequential
++ * loop ran orgs in an arbitrary order and timed out on the first big org, so new
++ * offices (e.g. Landsman Rehovot) were never reached and their office/broker
++ * intelligence never populated. Orgs with no prior cron run sort first.
++ */
++async function orderByStalestCron(orgIds: string[]): Promise<string[]> {
++  try {
++    const db = createServiceRoleClient();
++    const { data } = await db
++      .from("zono_orchestrator_runs" as never)
++      .select("organization_id,started_at")
++      .in("organization_id", orgIds as never)
++      .eq("trigger", "scheduled_cron")
++      .order("started_at", { ascending: false })
++      .limit(5000);
++    const last = new Map<string, string>();
++    for (const r of ((data ?? []) as { organization_id: string; started_at: string }[])) {
++      if (!last.has(r.organization_id)) last.set(r.organization_id, r.started_at);
++    }
++    return [...orgIds].sort((a, b) => (last.get(a) ?? "").localeCompare(last.get(b) ?? ""));
++  } catch {
++    return orgIds;
++  }
++}
++
++/**
++ * Best-effort: close orchestrator runs stuck in "running" past the lock lifetime,
++ * so a killed invocation never leaves a run reading as active (and never blocks
++ * the freshness/status UI).
++ */
++async function closeStuckRuns(): Promise<void> {
++  try {
++    const db = createServiceRoleClient();
++    const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
++    await db
++      .from("zono_orchestrator_runs" as never)
++      .update({ status: "failed", error: "פג זמן הריצה (נסגר אוטומטית)", finished_at: new Date().toISOString() } as never)
++      .eq("status", "running")
++      .lt("started_at", cutoff);
++  } catch {
++    /* best-effort */
++  }
++}
++
+ /**
+- * ZONO Master Sync (Vercel Cron). Runs the full orchestration per organization:
+- * external sync → transactions → bridge → events → alerts. Secured by CRON_SECRET.
+- * Service-role; session-scoped recompute (snapshots/decision-brain) runs on the
+- * next dashboard load. Supersedes the per-pipeline crons (kept for compatibility).
++ * ZONO Master Sync (Vercel Cron, 01:00). INTELLIGENCE AGGREGATION per org —
++ * bridge → broker detection → area + OFFICE intelligence → market snapshots →
++ * decision brain → events/alerts. Secured by CRON_SECRET. Service-role.
++ *
++ * The heavy Apify scrape is intentionally SKIPPED here (skipExternalSync) and runs
++ * on the dedicated external-listings-sync cron, so every org here is DB-only and
++ * fast — the loop reliably covers ALL orgs within one invocation instead of timing
++ * out on the first heavy org. Combined with least-recently-run ordering + a soft
++ * time budget, a new office is guaranteed to be processed.
+  */
+ export async function GET(req: NextRequest) {
+   const secret = process.env.CRON_SECRET;
+@@ -18,13 +73,20 @@ export async function GET(req: NextRequest) {
+     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+   }
+   try {
+-    const orgs = await organizationsWithActiveLocalities();
+-    const results = [];
++    await closeStuckRuns();
++    const orgs = await orderByStalestCron(await organizationsWithActiveLocalities());
++    const results: unknown[] = [];
++    const startedAt = Date.now();
+     for (const orgId of orgs) {
++      if (Date.now() - startedAt > SOFT_BUDGET_MS) {
++        results.push({ organizationId: orgId, status: "deferred", reason: "soft time budget — next cron continues" });
++        continue;
++      }
+       const r = await runZonoOrchestrator({
+         organizationId: orgId,
+         trigger: "scheduled_cron",
+         force: true,
++        skipExternalSync: true,
+         source: "zono-master-sync",
+       });
+       results.push({ organizationId: orgId, status: r.status, durationMs: r.durationMs, steps: r.steps.map((s) => ({ name: s.name, status: s.status, summary: s.summary })) });
+diff --git a/src/lib/brokerage-data/office-profile.ts b/src/lib/brokerage-data/office-profile.ts
+index f493e19..fe8d639 100644
+--- a/src/lib/brokerage-data/office-profile.ts
++++ b/src/lib/brokerage-data/office-profile.ts
+@@ -9,6 +9,7 @@ import "server-only";
+ import { createServiceRoleClient } from "@/lib/supabase/server";
+ import { getSessionContext } from "@/lib/auth/session";
+ import { isAcceptableOfficeName } from "./office-name-guard";
++import { getOrgIntelligenceTerritory, officeInTerritory } from "./territory";
+ 
+ type Row = Record<string, unknown>;
+ // Sentinel org that matches no rows — used when there is no session so the
+@@ -117,11 +118,12 @@ export interface OfficesIndex {
+   totals: { offices: number; agents: number; listings: number };
+ }
+ 
+-/** Directory of all real (active, evidence-backed) offices with agent + listing
+- *  counts. Person-name/rejected offices are excluded (read-time guard). */
++/** Directory of offices RELEVANT TO THE VIEWER'S ORG TERRITORY (not the whole
++ *  global graph). Person-name/rejected offices are excluded (read-time guard). */
+ export async function getBrokerageOfficesIndex(): Promise<OfficesIndex> {
+   const db = createServiceRoleClient();
+   const orgId = await currentOrgId();
++  const territory = await getOrgIntelligenceTerritory(orgId);
+   const [offRes, agentRes, linkRes] = await Promise.all([
+     db.from("brokerage_offices" as never).select("id,name,brand_network,city,primary_phone,status,confidence_score").order("confidence_score", { ascending: false }).limit(5000),
+     db.from("brokerage_agents" as never).select("office_id").not("office_id", "is", null).limit(50000),
+@@ -131,14 +133,25 @@ export async function getBrokerageOfficesIndex(): Promise<OfficesIndex> {
+ 
+   const agentCount = new Map<string, number>();
+   for (const r of (agentRes.data ?? []) as Row[]) { const oid = s(r.office_id); if (oid) agentCount.set(oid, (agentCount.get(oid) ?? 0) + 1); }
++  // Org bridge: offices THIS org actually observed in its own listings — always
++  // territory-relevant regardless of the office's canonical city.
++  const orgOfficeIds = new Set<string>();
+   const listingSets = new Map<string, Set<string>>();
+   for (const r of (linkRes.data ?? []) as Row[]) {
+     const oid = s(r.office_id), lid = s(r.external_listing_id);
+-    if (oid && lid) (listingSets.get(oid) ?? listingSets.set(oid, new Set()).get(oid)!).add(lid);
++    if (!oid) continue;
++    orgOfficeIds.add(oid);
++    if (lid) (listingSets.get(oid) ?? listingSets.set(oid, new Set()).get(oid)!).add(lid);
+   }
+ 
++  // TERRITORY ISOLATION (P9.1E): an office appears only when relevant to THIS
++  // org's operating market — its canonical city is in the org's territory, OR the
++  // org observed it through its own listings (org bridge). A globally-known office
++  // in an unrelated city (e.g. Kiryat Bialik) NEVER appears in a Rehovot org's
++  // view merely because it exists in the shared graph. No hardcoded cities.
+   const offices: OfficeIndexItem[] = ((offRes.data ?? []) as Row[])
+-    .filter((r) => (s(r.status) || "active") === "active" && isAcceptableOfficeName(s(r.name)))
++    .filter((r) => (s(r.status) || "active") === "active" && isAcceptableOfficeName(s(r.name))
++      && officeInTerritory({ id: s(r.id), city: s(r.city) || null }, territory.cityKeys, orgOfficeIds))
+     .map((r) => ({
+       id: s(r.id), name: s(r.name), brandNetwork: s(r.brand_network) || null, city: s(r.city) || null,
+       phone: s(r.primary_phone) || null, confidenceScore: Number(r.confidence_score ?? 0),
+diff --git a/src/lib/brokerage-data/territory-logic.ts b/src/lib/brokerage-data/territory-logic.ts
+new file mode 100644
+index 0000000..8bb8466
+--- /dev/null
++++ b/src/lib/brokerage-data/territory-logic.ts
+@@ -0,0 +1,40 @@
++// ============================================================================
++// 🗺️ Territory membership — PURE logic (client-safe, no server imports).
++// The canonical predicate that scopes office/broker intelligence to an org's
++// operating market. Kept separate from the DB resolver so it is unit-testable.
++// ============================================================================
++
++export interface OrgTerritory {
++  orgId: string;
++  /** Normalized city keys to match observed data against (lowercased/trimmed). */
++  cityKeys: Set<string>;
++  /** Human-readable canonical names (for labels/debug). */
++  canonicalNames: string[];
++  localityIds: string[];
++  /** True when the org has no resolvable territory (nothing should be shown). */
++  empty: boolean;
++}
++
++/** Normalize a city string for cross-source matching (script-preserving — never
++ *  collapses different-language names of DIFFERENT cities, only casing/space). */
++export function normalizeCityKey(v: string | null | undefined): string {
++  return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
++}
++
++/**
++ * Canonical territory-membership predicate (pure). An office is in an org's
++ * territory when the org has OBSERVED it through its own listings (org bridge) OR
++ * its canonical city is one of the org's operating cities. A globally-known office
++ * in an unrelated city is NEVER in territory just because it exists. When the org
++ * has no resolvable territory AND no bridge evidence, nothing is in territory
++ * (UNKNOWN ≠ everything).
++ */
++export function officeInTerritory(
++  office: { id: string; city: string | null },
++  cityKeys: Set<string>,
++  orgOfficeIds: Set<string>,
++): boolean {
++  if (office.id && orgOfficeIds.has(office.id)) return true;
++  if (cityKeys.size === 0) return false;
++  return cityKeys.has(normalizeCityKey(office.city));
++}
+diff --git a/src/lib/brokerage-data/territory.ts b/src/lib/brokerage-data/territory.ts
+new file mode 100644
+index 0000000..4a65063
+--- /dev/null
++++ b/src/lib/brokerage-data/territory.ts
+@@ -0,0 +1,62 @@
++// ============================================================================
++// 🗺️ Canonical org intelligence TERRITORY resolver (server-only, service-role).
++// ----------------------------------------------------------------------------
++// P9.1E territory isolation: an org's CITY intelligence must contain only
++// entities relevant to that org's configured operating market — NOT every entity
++// that exists globally in the shared graph. This is the ONE canonical resolver;
++// every city-scoped office/broker read model must use it. The pure membership
++// logic lives in ./territory-logic (unit-tested); this file only resolves the
++// org's territory from authoritative data. It never scopes by a single free-text
++// city string alone — it resolves the org's operating localities to canonical
++// He/En names AND the exact provider strings present in the org's own scanned
++// data, so "רחובות" and "Rehovot" both match while "Kiryat Bialik" never does.
++// ============================================================================
++import "server-only";
++import { createServiceRoleClient } from "@/lib/supabase/server";
++import { normalizeCityKey, type OrgTerritory } from "./territory-logic";
++
++export { normalizeCityKey, officeInTerritory, type OrgTerritory } from "./territory-logic";
++
++/**
++ * Resolve the org's canonical operating territory. Priority:
++ *   1. organization_operating_localities → israel_localities (canonical He + En)
++ *   2. the exact city strings present in the org's OWN external_listings (the
++ *      provider format, e.g. "Rehovot", so the shared graph lines up with data)
++ * Both are unioned into cityKeys. No free-text-only scoping; no hardcoded cities.
++ */
++export async function getOrgIntelligenceTerritory(orgId: string): Promise<OrgTerritory> {
++  const db = createServiceRoleClient();
++  const names = new Set<string>();
++  const localityIds: string[] = [];
++
++  try {
++    const { data: locs } = await db
++      .from("organization_operating_localities" as never)
++      .select("locality_id")
++      .eq("organization_id", orgId);
++    for (const r of ((locs ?? []) as { locality_id: string }[])) if (r.locality_id) localityIds.push(r.locality_id);
++    if (localityIds.length) {
++      const { data: il } = await db
++        .from("israel_localities" as never)
++        .select("name_he,name_en")
++        .in("id", localityIds as never);
++      for (const r of ((il ?? []) as { name_he: string | null; name_en: string | null }[])) {
++        if (r.name_he) names.add(r.name_he);
++        if (r.name_en) names.add(r.name_en);
++      }
++    }
++  } catch { /* fall through to data-derived cities */ }
++
++  try {
++    const { data: el } = await db
++      .from("external_listings" as never)
++      .select("city")
++      .eq("org_id", orgId)
++      .not("city", "is", null)
++      .limit(2000);
++    for (const r of ((el ?? []) as { city: string | null }[])) if (r.city) names.add(r.city);
++  } catch { /* best-effort */ }
++
++  const cityKeys = new Set([...names].map((n) => normalizeCityKey(n)).filter(Boolean));
++  return { orgId, cityKeys, canonicalNames: [...names], localityIds, empty: cityKeys.size === 0 };
++}

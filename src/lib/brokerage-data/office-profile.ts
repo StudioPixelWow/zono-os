@@ -9,6 +9,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { isAcceptableOfficeName } from "./office-name-guard";
+import { getOrgIntelligenceTerritory, officeInTerritory } from "./territory";
 
 type Row = Record<string, unknown>;
 // Sentinel org that matches no rows — used when there is no session so the
@@ -117,11 +118,12 @@ export interface OfficesIndex {
   totals: { offices: number; agents: number; listings: number };
 }
 
-/** Directory of all real (active, evidence-backed) offices with agent + listing
- *  counts. Person-name/rejected offices are excluded (read-time guard). */
+/** Directory of offices RELEVANT TO THE VIEWER'S ORG TERRITORY (not the whole
+ *  global graph). Person-name/rejected offices are excluded (read-time guard). */
 export async function getBrokerageOfficesIndex(): Promise<OfficesIndex> {
   const db = createServiceRoleClient();
   const orgId = await currentOrgId();
+  const territory = await getOrgIntelligenceTerritory(orgId);
   const [offRes, agentRes, linkRes] = await Promise.all([
     db.from("brokerage_offices" as never).select("id,name,brand_network,city,primary_phone,status,confidence_score").order("confidence_score", { ascending: false }).limit(5000),
     db.from("brokerage_agents" as never).select("office_id").not("office_id", "is", null).limit(50000),
@@ -131,14 +133,25 @@ export async function getBrokerageOfficesIndex(): Promise<OfficesIndex> {
 
   const agentCount = new Map<string, number>();
   for (const r of (agentRes.data ?? []) as Row[]) { const oid = s(r.office_id); if (oid) agentCount.set(oid, (agentCount.get(oid) ?? 0) + 1); }
+  // Org bridge: offices THIS org actually observed in its own listings — always
+  // territory-relevant regardless of the office's canonical city.
+  const orgOfficeIds = new Set<string>();
   const listingSets = new Map<string, Set<string>>();
   for (const r of (linkRes.data ?? []) as Row[]) {
     const oid = s(r.office_id), lid = s(r.external_listing_id);
-    if (oid && lid) (listingSets.get(oid) ?? listingSets.set(oid, new Set()).get(oid)!).add(lid);
+    if (!oid) continue;
+    orgOfficeIds.add(oid);
+    if (lid) (listingSets.get(oid) ?? listingSets.set(oid, new Set()).get(oid)!).add(lid);
   }
 
+  // TERRITORY ISOLATION (P9.1E): an office appears only when relevant to THIS
+  // org's operating market — its canonical city is in the org's territory, OR the
+  // org observed it through its own listings (org bridge). A globally-known office
+  // in an unrelated city (e.g. Kiryat Bialik) NEVER appears in a Rehovot org's
+  // view merely because it exists in the shared graph. No hardcoded cities.
   const offices: OfficeIndexItem[] = ((offRes.data ?? []) as Row[])
-    .filter((r) => (s(r.status) || "active") === "active" && isAcceptableOfficeName(s(r.name)))
+    .filter((r) => (s(r.status) || "active") === "active" && isAcceptableOfficeName(s(r.name))
+      && officeInTerritory({ id: s(r.id), city: s(r.city) || null }, territory.cityKeys, orgOfficeIds))
     .map((r) => ({
       id: s(r.id), name: s(r.name), brandNetwork: s(r.brand_network) || null, city: s(r.city) || null,
       phone: s(r.primary_phone) || null, confidenceScore: Number(r.confidence_score ?? 0),
