@@ -61,8 +61,11 @@ export async function getMapIntelligence(): Promise<MapIntelligenceDTO> {
   const counts: Record<MapLayer, number> = { external: 0, office: 0, mine: 0, new: 0, offmarket: 0, opportunity: 0 };
 
   // ── External market listings ───────────────────────────────────────────────
+  // external_listings stores coordinates as lat/lng (NOT latitude/longitude —
+  // that is the internal `properties` shape). Reading the wrong field silently
+  // dropped every geocoded external point and left the map empty.
   for (const l of external) {
-    const lat = num((l as { latitude?: unknown }).latitude), lng = num((l as { longitude?: unknown }).longitude);
+    const lat = num((l as { lat?: unknown }).lat), lng = num((l as { lng?: unknown }).lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     const layers: MapLayer[] = ["external"];
     counts.external++;
@@ -118,7 +121,7 @@ export async function getMapIntelligence(): Promise<MapIntelligenceDTO> {
   const agg = new Map<string, { city: string; neighborhood: string; sumLat: number; sumLng: number; n: number; priv: number }>();
   for (const l of external) {
     if (!l.neighborhood) continue;
-    const lat = num((l as { latitude?: unknown }).latitude), lng = num((l as { longitude?: unknown }).longitude);
+    const lat = num((l as { lat?: unknown }).lat), lng = num((l as { lng?: unknown }).lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     const city = l.city ?? "";
     const key = `${city}|${l.neighborhood}`;

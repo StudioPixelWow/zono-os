@@ -177,8 +177,9 @@ export function PropertyRadarLiveView({ initial }: { initial: PropertyRadarLiveD
         <div className="flex items-center gap-2">
           <span className="grid h-10 w-10 place-items-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/30"><Activity size={20} /></span>
           <div>
-            <h1 className="text-xl font-black text-ink">Property Radar — מרכז פיקוד חי</h1>
-            <p className="flex items-center gap-1.5 text-xs font-bold text-ink/55">
+            <h1 className="text-2xl font-black text-ink sm:text-3xl">Property Radar</h1>
+            <p className="mt-0.5 text-[13px] font-semibold text-ink/60">מה קורה עכשיו באזור שלך — ZONO מקפיצה רק את מה שדורש תשומת לב.</p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-ink/50">
               <span className={`inline-block h-2 w-2 rounded-full ${live ? "bg-emerald-500 animate-pulse" : "bg-ink/30"}`} />
               {live ? "מחובר בזמן אמת" : "מסונכרן"} · עודכן {timeAgo(data.generatedAt)}
             </p>
@@ -196,15 +197,21 @@ export function PropertyRadarLiveView({ initial }: { initial: PropertyRadarLiveD
         </div>
       </header>
 
-      {/* KPI strip */}
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {kpiCards.map((c) => (
-          <button key={c.label} onClick={c.filter} className={`flex flex-col items-start rounded-2xl border p-3 text-right transition hover:scale-[1.02] ${c.hot ? "border-red-200 bg-red-50/70" : "border-white/40 bg-white/70"} backdrop-blur-xl`}>
-            <span className="text-[11px] font-bold text-ink/55">{c.label}</span>
-            <span key={`${c.label}-${c.value}-${pulse}`} className={`text-2xl font-black ${c.hot ? "text-red-600" : "text-brand-strong"}`}>{fmt(c.value)}</span>
-          </button>
-        ))}
-      </div>
+      {/* KPI strip — only meaningful (>0) signals; zero-noise is monitoring, not empty. */}
+      {kpiCards.some((c) => c.value > 0) ? (
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {kpiCards.filter((c) => c.value > 0).map((c) => (
+            <button key={c.label} onClick={c.filter} className={`flex flex-col items-start rounded-2xl border p-3 text-right transition hover:scale-[1.02] ${c.hot ? "border-red-200 bg-red-50/70" : "border-white/40 bg-white/70"} backdrop-blur-xl`}>
+              <span className="text-[11px] font-bold text-ink/55">{c.label}</span>
+              <span key={`${c.label}-${c.value}-${pulse}`} className={`text-2xl font-black ${c.hot ? "text-red-600" : "text-brand-strong"}`}>{fmt(c.value)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-3 rounded-2xl border border-white/40 bg-white/70 p-4 text-center text-[13px] font-semibold text-ink/60 backdrop-blur-xl">
+          ZONO עוקבת אחרי השוק באזור שלך — נתריע ברגע שנזהה שינוי, נכס חדש או הזדמנות.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">

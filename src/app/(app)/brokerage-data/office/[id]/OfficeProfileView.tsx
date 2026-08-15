@@ -62,29 +62,50 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
   const comp = competitive ?? null;
   const dec = decisions ?? null;
   const website = p.website ? (p.website.startsWith("http") ? p.website : `https://${p.website}`) : null;
+  // Honest hero chips — only counts that actually have a value.
+  const heroChips = [
+    { label: "סוכנים", value: p.stats.agentCount },
+    { label: "נכסים", value: p.stats.listingCount },
+    { label: "ערים", value: p.stats.cities.length },
+    { label: "שכונות", value: p.stats.neighborhoods.length },
+  ].filter((c) => c.value > 0);
   return (
-    <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-4 p-4 sm:p-6">
+    <div dir="rtl" className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 pb-16 pt-6 sm:px-6">
       <Link href="/brokerage-data" className="text-muted hover:text-ink w-fit text-[12px] font-bold">← חזרה למודיעין משרדי תיווך</Link>
 
-      {/* Header */}
-      <section className="border-brand/40 bg-brand-soft/40 rounded-2xl border p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <span className="bg-brand-soft text-brand-strong grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl font-black">{(p.name || "?").trim().charAt(0)}</span>
+      {/* ── HERO — office identity + honest KPIs ─────────────────────────── */}
+      <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 px-6 py-8 text-white sm:px-9 sm:py-10">
+        <div className="absolute -top-24 -left-16 -z-10 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/10 text-2xl font-black text-white ring-1 ring-white/15">{(p.name || "?").trim().charAt(0)}</span>
             <div className="min-w-0">
-              <h1 className="text-brand-strong text-2xl font-black">{p.name}</h1>
-              <p className="text-muted mt-1 text-[12px]">{[p.brandNetwork, p.city].filter(Boolean).join(" · ") || "—"}</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
-                {p.phone && <span dir="ltr" className="text-ink font-bold">📞 {p.phone}</span>}
-                {website && <a href={website} target="_blank" rel="noreferrer" className="text-brand-strong font-bold" dir="ltr">🌐 {p.website}</a>}
-                {p.email && <span className="text-muted" dir="ltr">✉ {p.email}</span>}
-                {!p.phone && !website && !p.email && <span className="text-muted">אין פרטי קשר מאומתים עדיין</span>}
+              <div className="mb-1 text-[12px] font-bold tracking-wide text-indigo-300">ZONO · מודיעין משרד</div>
+              <h1 className="text-3xl font-black leading-tight sm:text-4xl">{p.name}</h1>
+              <p className="mt-1 text-[13px] font-semibold text-slate-300">{[p.brandNetwork, p.city].filter(Boolean).join(" · ") || "—"}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px]">
+                {p.phone && <span dir="ltr" className="font-bold text-slate-100">📞 {p.phone}</span>}
+                {website && <a href={website} target="_blank" rel="noreferrer" className="font-bold text-indigo-300 hover:text-indigo-200" dir="ltr">🌐 {p.website}</a>}
+                {p.email && <span className="text-slate-300" dir="ltr">✉ {p.email}</span>}
+                {!p.phone && !website && !p.email && <span className="text-slate-400">אין פרטי קשר מאומתים עדיין</span>}
               </div>
             </div>
           </div>
-          <span className="bg-surface rounded-full px-3 py-1 text-[12px] font-bold">{STATUS_HE[p.status] ?? p.status}</span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-[12px] font-bold text-white ring-1 ring-white/15">{STATUS_HE[p.status] ?? p.status}</span>
         </div>
-        <p className="text-muted mt-3 text-[11px] leading-relaxed">{STATUS_EXPLAIN[p.status] ?? ""} עודכן לאחרונה: {fmtDate(p.lastSeenAt)}{p.lastVerifiedAt ? ` · אומת: ${fmtDate(p.lastVerifiedAt)}` : ""}.</p>
+
+        {heroChips.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-3">
+            {heroChips.map((c) => (
+              <div key={c.label} className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 backdrop-blur-md">
+                <div className="text-2xl font-black tabular-nums sm:text-3xl">{fmt(c.value)}</div>
+                <div className="mt-0.5 text-[12px] font-semibold text-slate-300">{c.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="mt-4 text-[11px] leading-relaxed text-slate-400">{STATUS_EXPLAIN[p.status] ?? ""} עודכן לאחרונה: {fmtDate(p.lastSeenAt)}{p.lastVerifiedAt ? ` · אומת: ${fmtDate(p.lastVerifiedAt)}` : ""} · ביטחון {Math.round(p.confidenceScore)}% · איכות דאטה {Math.round(p.dataQualityScore)}%.</p>
       </section>
 
       {/* Decision Engine — prioritized, evidence-based actions (27.4) */}
@@ -127,16 +148,6 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
       {/* Mission Engine — turn decisions into executable missions (27.5) */}
       {officeId && <MissionsSection officeId={officeId} initial={missions ?? []} />}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="סוכנים" value={p.stats.agentCount} tone="green" />
-        <Stat label="נכסים" value={p.stats.listingCount} tone="green" />
-        <Stat label="ערים" value={p.stats.cities.length} />
-        <Stat label="שכונות" value={p.stats.neighborhoods.length} />
-        <Stat label="ביטחון" value={`${Math.round(p.confidenceScore)}%`} />
-        <Stat label="איכות דאטה" value={`${Math.round(p.dataQualityScore)}%`} />
-      </div>
-
       {/* Office Inventory (direct + derived through brokers) — Phase 26.5 */}
       {inv && (
         <section className="border-line bg-card rounded-2xl border p-4">
@@ -172,7 +183,7 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
       {rank.length > 0 && (
         <section className="border-line bg-card rounded-2xl border p-4">
           <h2 className="text-ink mb-2 text-sm font-black">🧠 מודיעין מתווכים — מובילים לפי פעילות</h2>
-          <div className="flex flex-col gap-1.5">
+          <div className="grid gap-1.5 xl:grid-cols-2">
             {rank.slice(0, 12).map((b, i) => (
               <Link key={b.id} href={`/brokerage-data?broker=${b.id}&name=${encodeURIComponent(b.name)}`} className="border-line bg-surface hover:border-brand/40 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm transition-colors">
                 <span className="text-ink truncate font-bold">{i + 1}. {b.name}{b.topAreas.length ? <span className="text-muted font-normal"> · {b.topAreas.join(", ")}</span> : ""}</span>
@@ -285,7 +296,7 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
       <section className="border-line bg-card rounded-2xl border p-4">
         <h2 className="text-ink mb-2 text-sm font-black">סוכני המשרד ({fmt(p.agents.length)})</h2>
         {p.agents.length === 0 ? <p className="text-muted text-xs">אין סוכנים משויכים עדיין.</p> : (
-          <div className="flex flex-col gap-1.5">
+          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
             {p.agents.map((a) => (
               <Link key={a.id} href={`/brokerage-data?broker=${a.id}&name=${encodeURIComponent(a.fullName)}`}
                 className="border-line bg-surface hover:border-brand/40 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm transition-colors">
@@ -311,7 +322,7 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
           inv.listings.length === 0 ? (
             <p className="text-muted rounded-xl border border-dashed border-line bg-surface px-3 py-4 text-center text-xs">עדיין לא שויכו נכסים למשרד הזה.</p>
           ) : (
-            <div className="flex flex-col gap-1.5">
+            <div className="grid gap-1.5 xl:grid-cols-2">
               {inv.listings.map((l) => (
                 <div key={l.listingId} className="border-line bg-surface rounded-xl border px-3 py-2 text-sm">
                   <div className="flex items-center justify-between gap-2">
@@ -334,7 +345,7 @@ export function OfficeProfileView({ profile, inventory, ranking, territory, comp
         ) : p.listings.length === 0 ? (
           <p className="text-muted rounded-xl border border-dashed border-line bg-surface px-3 py-4 text-center text-xs">עדיין לא שויכו נכסים למשרד הזה.</p>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <div className="grid gap-1.5 xl:grid-cols-2">
             {p.listings.map((l) => (
               <div key={l.id} className="border-line bg-surface flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm">
                 <div className="min-w-0"><div className="text-ink truncate font-bold">{l.title ?? "מודעה"}</div><div className="text-muted truncate text-[11px]">{[l.neighborhood, l.city, l.source].filter(Boolean).join(" · ") || "—"}</div></div>

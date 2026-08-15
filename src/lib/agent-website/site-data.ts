@@ -13,6 +13,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { resolveEffectiveBrand } from "@/lib/brand-identity/engine";
 import { buildBrandTokens, waLink, type BrandTokens } from "./brand-tokens";
+import { deriveBrandColorFromLogo } from "@/lib/office-website/logo-brand-color";
 import { isSiteTheme, type SiteTheme } from "@/lib/brokerage-site/branding";
 
 // ── Public-safe shapes ───────────────────────────────────────────────────────
@@ -155,7 +156,8 @@ export async function getAgentListing(slug: string, filters: PropertyFilters = {
   ]);
 
   const effective = resolveEffectiveBrand((agentBrandR.data ?? null) as Record<string, unknown> | null, (officeBrandR.data ?? null) as Record<string, unknown> | null);
-  const tokens = buildBrandTokens({ primary: effective.primary, secondary: effective.secondary, accent: effective.accent, logo: effective.logo, profileImage: effective.profileImage ?? (s.profile_image_url as string | null) });
+  const derivedPrimary = effective.primary ? null : await deriveBrandColorFromLogo(effective.logo);
+  const tokens = buildBrandTokens({ primary: effective.primary ?? derivedPrimary, secondary: effective.secondary, accent: effective.accent, logo: effective.logo, profileImage: effective.profileImage ?? (s.profile_image_url as string | null) });
   const themeRaw = (s.theme as { preset?: unknown } | null)?.preset;
 
   let properties = ((propsR.data ?? []) as RawProp[]).map((p) => toProperty(slug, p));
@@ -228,8 +230,10 @@ export async function getAgentSite(
   const agentBrand = (agentBrandR.data ?? null) as Record<string, unknown> | null;
   const officeBrand = (officeBrandR.data ?? null) as Record<string, unknown> | null;
   const effective = resolveEffectiveBrand(agentBrand, officeBrand);
+  // No configured brand color anywhere → adopt the logo's own dominant hue.
+  const derivedPrimary = effective.primary ? null : await deriveBrandColorFromLogo(effective.logo);
   const tokens: BrandTokens = buildBrandTokens({
-    primary: effective.primary,
+    primary: effective.primary ?? derivedPrimary,
     secondary: effective.secondary,
     accent: effective.accent,
     logo: effective.logo,

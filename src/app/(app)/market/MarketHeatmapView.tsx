@@ -34,12 +34,8 @@ export function MarketHeatmapView({ cells }: { cells: MarketHeatmapCell[] }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
-        <div>
-          <p className="text-brand text-xs font-bold">ZONO · מודיעין שוק</p>
-          <h1 className="text-ink mt-1 text-2xl font-black">מדדי ביקוש ומחירים</h1>
-          <p className="text-muted mt-1 text-sm">ביקוש, היצע והזדמנויות לכל אזור פעילות — מנתוני המודעות, הקונים והנכסים שלך.</p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-muted text-[13px]">ביקוש, היצע והזדמנויות לכל אזור פעילות — מנתוני המודעות, הקונים והנכסים שלך.</p>
         <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Map" size={16} />}>
           {pending ? "מחשב…" : "חשב מדדי ביקוש מחדש"}
         </Button>

@@ -14,6 +14,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { resolveEffectiveBrand } from "@/lib/brand-identity/engine";
 import { buildBrandTokens, waLink } from "@/lib/agent-website/brand-tokens";
+import { deriveBrandColorFromLogo } from "./logo-brand-color";
 import { isSiteTheme, type SiteTheme } from "@/lib/brokerage-site/branding";
 
 // ── Public-safe shapes ───────────────────────────────────────────────────────
@@ -167,11 +168,17 @@ export async function getOfficeSite(
     brand_secondary: (officeBrand?.brand_secondary as string | null) ?? brandFallback?.brand_secondary ?? null,
     brand_accent: (officeBrand?.brand_accent as string | null) ?? brandFallback?.brand_accent ?? null,
   };
+  const configuredPrimary = officeThemeColors.brand_primary as string | null;
+  const logoUrl = (s.logo_url as string | null) ?? brandFallback?.logo_url ?? effective.logo;
+  // Last resort before the generic default: when NO brand color is configured
+  // anywhere, adopt the office logo's own dominant hue (a gold logo → a gold
+  // site). Nothing hardcoded per tenant; best-effort with safe neutral fallback.
+  const derivedPrimary = configuredPrimary ? null : await deriveBrandColorFromLogo(logoUrl);
   const tokens = buildBrandTokens({
-    primary: (officeThemeColors.brand_primary as string | null) ?? effective.primary,
+    primary: configuredPrimary ?? derivedPrimary ?? effective.primary,
     secondary: officeThemeColors.brand_secondary as string | null,
     accent: officeThemeColors.brand_accent as string | null,
-    logo: (s.logo_url as string | null) ?? brandFallback?.logo_url ?? effective.logo,
+    logo: logoUrl,
     profileImage: null,
   });
   const themeRaw = (s.theme as { preset?: unknown } | null)?.preset;

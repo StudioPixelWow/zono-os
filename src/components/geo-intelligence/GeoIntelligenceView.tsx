@@ -60,16 +60,15 @@ export function GeoIntelligenceView({ areas, insights, dataMode, notes }: Props)
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
+      {/* Section header — slim toolbar (page hero sets the tone). */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-brand text-xs font-bold">ZONO · מודיעין גאוגרפי</p>
-          <h1 className="text-ink mt-1 flex items-center gap-2 text-2xl font-black"><Icon name="Map" size={22} /> מפת מודיעין חכמה</h1>
-          <p className="text-muted mt-1 text-sm">בחרו שכבה כדי לראות איפה יקר, איפה יש ביקוש, איפה מעט היצע, איפה כדאי לפרסם ואיפה לגייס בלעדיות.</p>
+          <h2 className="text-ink flex items-center gap-2 text-lg font-black"><Icon name="Map" size={20} /> מפת מודיעין חכמה</h2>
+          <p className="text-muted mt-0.5 text-[13px]">בחרו שכבה כדי לראות איפה יקר, איפה ביקוש, איפה מעט היצע ואיפה כדאי לפעול.</p>
         </div>
         <div className="flex items-center gap-2">
           <span className={cn("rounded-full px-3 py-1 text-[11px] font-bold", dataMode === "mock" || dataMode === "empty" ? "bg-warning-soft text-warning" : "bg-success-soft text-success")}>{MODE_LABEL[dataMode]}</span>
-          <button onClick={() => setShowInsights((v) => !v)} className="bg-brand text-brand-fg inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#2563eb)" }}>
+          <button onClick={() => setShowInsights((v) => !v)} className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#2563eb)" }}>
             <Icon name="Sparkles" size={15} /> תובנות AI
           </button>
         </div>
