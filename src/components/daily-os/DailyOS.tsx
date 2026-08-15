@@ -37,18 +37,56 @@ function EntityRow({ e }: { e: ScoredEntity }) {
 export function DailyOS({ data }: { data: DData }) {
   const [tab, setTab] = useState<Tab>("morning");
   const b = data.briefing;
+  // Real signal chips (never vanity zeros) — what actually needs attention today.
+  const heroChips = [
+    { label: "פעולות דחופות", value: data.actionFeed.length },
+    { label: "ממתינים לתשובה", value: data.conversation.whatsappWaiting },
+    { label: "ממתין לאישורך", value: data.approvals.length },
+    { label: "אירועים היום", value: data.timeline.length },
+  ].filter((c) => c.value > 0);
 
   return (
-    <div dir="rtl" className="mx-auto max-w-2xl px-4 pb-24 pt-5">
-      <div className="bg-brand-soft rounded-[22px] p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div><h1 className="text-ink text-2xl font-black">{b.greeting}</h1><p className="text-muted mt-1 text-[13px]">{b.aiSummary}</p></div>
-          <div className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-xl font-black ${scoreCls(b.dailyScore)}`}>{b.dailyScore}</div>
+    <div dir="rtl" className="mx-auto max-w-[1600px] px-4 pb-16 pt-6 sm:px-6">
+      {/* ── MORNING HERO (score demoted; focus + real signals lead) ────────── */}
+      <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 px-6 py-8 text-white sm:px-9">
+        <div className="absolute -top-24 -left-16 -z-10 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-black leading-tight sm:text-4xl">{b.greeting}</h1>
+            <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-slate-300">{b.aiSummary}</p>
+            <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 backdrop-blur-md">
+              <span className="text-[12px] font-bold text-indigo-300">המיקוד להיום</span>
+              <span className="text-[14px] font-black text-white">{b.focus}</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-center backdrop-blur-md">
+            <div className="text-[11px] font-semibold text-slate-300">הקצב שלך היום</div>
+            <div className="text-2xl font-black tabular-nums">{b.dailyScore}<span className="text-[13px] text-slate-400">/100</span></div>
+          </div>
         </div>
-        <div className="bg-card mt-3 rounded-2xl p-3"><div className="text-muted text-[11px] font-bold">🎯 המיקוד להיום</div><div className="text-ink mt-0.5 text-[14px] font-black">{b.focus}</div></div>
+        {heroChips.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-3">
+            {heroChips.map((c) => (
+              <div key={c.label} className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 backdrop-blur-md">
+                <div className="text-2xl font-black tabular-nums sm:text-3xl">{c.value}</div>
+                <div className="mt-0.5 text-[12px] font-semibold text-slate-300">{c.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── STICKY TOP SEGMENTED CONTROL (replaces the bottom app-in-app nav) ── */}
+      <div className="bg-card/95 border-line sticky top-0 z-20 -mx-4 mt-4 flex gap-1 overflow-x-auto border-b px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border sm:px-2">
+        {TABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`shrink-0 rounded-xl px-4 py-2 text-[13px] font-bold transition ${tab === t.id ? "bg-brand-soft text-brand" : "text-muted hover:text-ink"}`}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <div className="mt-4">
+      <div className="mt-5">
         {tab === "morning" && (
           <div className="space-y-4">
             <Link href="/brain" className="bg-brand flex items-center justify-between gap-3 rounded-2xl p-3.5 text-white shadow-[var(--shadow-card)]">
@@ -111,9 +149,6 @@ export function DailyOS({ data }: { data: DData }) {
         {tab === "morning" && data.notes.length > 0 && <div className="text-muted mt-3 space-y-1 text-[11px]">{data.notes.map((n, i) => <p key={i}>• {n}</p>)}</div>}
       </div>
 
-      <nav className="bg-card/95 border-line fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-2xl justify-between border-t px-1 py-1.5 backdrop-blur">
-        {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[9px] font-bold transition ${tab === t.id ? "text-brand bg-brand-soft" : "text-muted"}`}><span className="text-sm leading-none">{t.icon}</span>{t.label}</button>)}
-      </nav>
     </div>
   );
 }
