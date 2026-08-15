@@ -6,65 +6,38 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// Stop starting new orgs before Vercel's maxDuration=300 kills us mid-org.
-const SOFT_BUDGET_MS = 240_000;
+const SOFT_BUDGET_MS = 250_000;         // stop starting new orgs before the 300s kill
+const STALE_MS = 15 * 60 * 1000;        // a run older than this with no finish is a zombie
 
 /**
- * Order orgs LEAST-RECENTLY-RUN first so a never-run org (a freshly onboarded
- * office) is always processed before heavy incumbents. Previously the sequential
- * loop ran orgs in an arbitrary order and timed out on the first big org, so new
- * offices (e.g. Landsman Rehovot) were never reached and their office/broker
- * intelligence never populated. Orgs with no prior cron run sort first.
+ * Stale-run recovery. A serverless timeout is a SIGKILL — the orchestrator's
+ * `finally` finalizer never runs, so the row stays `status='running'` forever
+ * (observed: 50 zombie rows since 2026-06-27). Mark anything still running past
+ * the stale window as `timed_out` so health is never falsely "running".
+ * Going-forward, the time-box + skipExternalSync below prevent new zombies.
  */
-async function orderByStalestCron(orgIds: string[]): Promise<string[]> {
+async function closeStuckRuns(): Promise<number> {
   try {
     const db = createServiceRoleClient();
+    const cutoff = new Date(Date.now() - STALE_MS).toISOString();
     const { data } = await db
-      .from("zono_orchestrator_runs" as never)
-      .select("organization_id,started_at")
-      .in("organization_id", orgIds as never)
-      .eq("trigger", "scheduled_cron")
-      .order("started_at", { ascending: false })
-      .limit(5000);
-    const last = new Map<string, string>();
-    for (const r of ((data ?? []) as { organization_id: string; started_at: string }[])) {
-      if (!last.has(r.organization_id)) last.set(r.organization_id, r.started_at);
-    }
-    return [...orgIds].sort((a, b) => (last.get(a) ?? "").localeCompare(last.get(b) ?? ""));
-  } catch {
-    return orgIds;
-  }
-}
-
-/**
- * Best-effort: close orchestrator runs stuck in "running" past the lock lifetime,
- * so a killed invocation never leaves a run reading as active (and never blocks
- * the freshness/status UI).
- */
-async function closeStuckRuns(): Promise<void> {
-  try {
-    const db = createServiceRoleClient();
-    const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
-    await db
-      .from("zono_orchestrator_runs" as never)
-      .update({ status: "failed", error: "פג זמן הריצה (נסגר אוטומטית)", finished_at: new Date().toISOString() } as never)
+      .from("zono_orchestrator_runs")
+      .update({ status: "timed_out", finished_at: new Date().toISOString(), error: "stale run auto-recovered" })
       .eq("status", "running")
-      .lt("started_at", cutoff);
+      .lt("started_at", cutoff)
+      .select("id");
+    return (data ?? []).length;
   } catch {
-    /* best-effort */
+    return 0;
   }
 }
 
 /**
- * ZONO Master Sync (Vercel Cron, 01:00). INTELLIGENCE AGGREGATION per org —
- * bridge → broker detection → area + OFFICE intelligence → market snapshots →
- * decision brain → events/alerts. Secured by CRON_SECRET. Service-role.
- *
- * The heavy Apify scrape is intentionally SKIPPED here (skipExternalSync) and runs
- * on the dedicated external-listings-sync cron, so every org here is DB-only and
- * fast — the loop reliably covers ALL orgs within one invocation instead of timing
- * out on the first heavy org. Combined with least-recently-run ordering + a soft
- * time budget, a new office is guaranteed to be processed.
+ * ZONO Master Sync (Vercel Cron). Intelligence AGGREGATION only — external
+ * discovery is now the hourly market-watch's job (`external-listings-sync`), so
+ * this runs with `skipExternalSync` and stays well under the function limit.
+ * Time-boxed + per-run stale recovery so runs always reach a terminal state.
+ * Secured by CRON_SECRET. Service-role.
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -72,26 +45,33 @@ export async function GET(req: NextRequest) {
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  const startedAt = Date.now();
   try {
-    await closeStuckRuns();
-    const orgs = await orderByStalestCron(await organizationsWithActiveLocalities());
-    const results: unknown[] = [];
-    const startedAt = Date.now();
+    const recovered = await closeStuckRuns();
+    const orgs = await organizationsWithActiveLocalities();
+    const results = [];
+    let processed = 0;
     for (const orgId of orgs) {
-      if (Date.now() - startedAt > SOFT_BUDGET_MS) {
-        results.push({ organizationId: orgId, status: "deferred", reason: "soft time budget — next cron continues" });
-        continue;
-      }
+      if (Date.now() - startedAt > SOFT_BUDGET_MS) break; // time-box; remaining orgs next run
       const r = await runZonoOrchestrator({
         organizationId: orgId,
         trigger: "scheduled_cron",
         force: true,
-        skipExternalSync: true,
         source: "zono-master-sync",
+        skipExternalSync: true, // external discovery handled by the hourly market watch
       });
       results.push({ organizationId: orgId, status: r.status, durationMs: r.durationMs, steps: r.steps.map((s) => ({ name: s.name, status: s.status, summary: s.summary })) });
+      processed++;
     }
-    return NextResponse.json({ ok: true, organizations: orgs.length, results });
+    return NextResponse.json({
+      ok: true,
+      recovered,
+      organizations: orgs.length,
+      processed,
+      skipped: orgs.length - processed,
+      durationMs: Date.now() - startedAt,
+      results,
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "cron failed" }, { status: 500 });
   }
