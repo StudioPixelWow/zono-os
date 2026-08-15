@@ -1,55 +1,53 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { organizationsWithActiveLocalities, syncExternalListingsForOrganization } from "@/lib/external-listings/service";
+import { organizationsWithActiveLocalities, syncExternalListingsForOrganization, type SyncMode } from "@/lib/external-listings/service";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+// Stop starting new orgs past this; leaves headroom under the 300s function limit.
 const SOFT_BUDGET_MS = 250_000;
-// Below this inventory size an org gets a FULL catch-up scan to grow toward ~1000;
-// once populated it drops to a QUICK newest-first maintenance top-up.
-const DEEP_TARGET = 800;
+// UTC hour reserved for the deep nightly reconciliation pass.
+const NIGHTLY_HOUR_UTC = 2;
 
 /**
- * Order orgs LEAST-RECENTLY-SCANNED first (never-scanned first) so a thin / newly
- * onboarded office gets its deep scan before already-populated incumbents. This is
- * why a stuck-at-100 office (e.g. Landsman Rehovot, last scanned once) is scanned
- * first on the next run instead of waiting behind a heavy incumbent.
+ * Order orgs stalest-first by their most recent import job, so that across the
+ * hourly runs every active org is eventually covered even when a single run is
+ * time-boxed before finishing them all. Never-synced orgs sort first.
  */
 async function orderByStalestScan(orgIds: string[]): Promise<string[]> {
+  if (orgIds.length <= 1) return orgIds;
   try {
     const db = createServiceRoleClient();
     const { data } = await db
-      .from("import_jobs" as never)
+      .from("import_jobs")
       .select("org_id,created_at")
-      .in("org_id", orgIds as never)
-      .order("created_at", { ascending: false })
-      .limit(5000);
-    const last = new Map<string, string>();
-    for (const r of ((data ?? []) as { org_id: string; created_at: string }[])) if (!last.has(r.org_id)) last.set(r.org_id, r.created_at);
-    return [...orgIds].sort((a, b) => (last.get(a) ?? "").localeCompare(last.get(b) ?? ""));
+      .in("org_id", orgIds)
+      .order("created_at", { ascending: false });
+    const lastByOrg = new Map<string, number>();
+    for (const r of (data ?? []) as { org_id: string; created_at: string }[]) {
+      if (!lastByOrg.has(r.org_id)) lastByOrg.set(r.org_id, new Date(r.created_at).getTime());
+    }
+    return [...orgIds].sort((a, b) => (lastByOrg.get(a) ?? 0) - (lastByOrg.get(b) ?? 0));
   } catch {
-    return orgIds;
-  }
-}
-
-async function listingCount(orgId: string): Promise<number> {
-  try {
-    const db = createServiceRoleClient();
-    const { count } = await db.from("external_listings" as never).select("id", { count: "exact", head: true }).eq("org_id", orgId);
-    return count ?? 0;
-  } catch {
-    return 0;
+    return orgIds; // ordering is best-effort; correctness does not depend on it
   }
 }
 
 /**
- * Nightly external-listings sync (Vercel Cron, 02:00). Secured by CRON_SECRET.
- * ADAPTIVE DEPTH: a thin office gets a FULL catch-up scan (≤500/source) to grow
- * toward ~1000; a populated office gets a QUICK newest-first maintenance top-up.
- * Newest-first + upsert dedup means repeated full runs accumulate the provider's
- * available inventory over successive nights. Stalest-org first + a soft time
- * budget guarantee a thin office is actually reached and deep-scanned.
+ * HOURLY MARKET WATCH (Vercel Cron `0 * * * *`). Secured by CRON_SECRET.
+ *
+ * Reuses the canonical external-listings sync engine — NOT a new crawler:
+ *   · every hour  → INCREMENTAL "quick" pass (recent-first, small, cost-aware)
+ *   · 02:00 UTC   → DEEP "standard" reconciliation window
+ *
+ * No login / dashboard / after() dependency. Stalest-first org ordering,
+ * time-boxed, and per-org failure isolation so one org/provider can't kill the
+ * sweep. Per-org evidence is written by the engine to `import_jobs`.
+ *
+ * Claim-My-Listings hook (P9.2A-L): each new/changed listing produced here is
+ * the input the ClaimCandidateResolver will consume. Seam is READY / NO_WRITE —
+ * no claim rows are written until that migration is approved.
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -57,24 +55,39 @@ export async function GET(req: NextRequest) {
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  const startedAt = Date.now();
+  const isNightly = new Date().getUTCHours() === NIGHTLY_HOUR_UTC;
+  const mode: SyncMode = isNightly ? "standard" : "quick";
+
   try {
     const orgs = await orderByStalestScan(await organizationsWithActiveLocalities());
     const results: unknown[] = [];
-    const startedAt = Date.now();
+    let processed = 0;
+    let failed = 0;
+
     for (const orgId of orgs) {
-      if (Date.now() - startedAt > SOFT_BUDGET_MS) {
-        results.push({ organizationId: orgId, status: "deferred", reason: "soft time budget — next cron continues" });
-        continue;
-      }
-      const mode = (await listingCount(orgId)) < DEEP_TARGET ? "full" : "quick";
+      if (Date.now() - startedAt > SOFT_BUDGET_MS) break; // time-box; remaining orgs picked up next hour (stalest-first)
       try {
-        const s = await syncExternalListingsForOrganization(orgId, { mode });
-        results.push({ organizationId: orgId, mode, inserted: s.inserted, updated: s.updated, success: s.success });
+        results.push(await syncExternalListingsForOrganization(orgId, { mode }));
       } catch (e) {
-        results.push({ organizationId: orgId, mode, success: false, error: e instanceof Error ? e.message : "sync failed" });
+        failed++;
+        results.push({ success: false, organizationId: orgId, error: e instanceof Error ? e.message : "sync failed" });
       }
+      processed++;
     }
-    return NextResponse.json({ ok: true, organizations: orgs.length, results });
+
+    return NextResponse.json({
+      ok: true,
+      window: isNightly ? "nightly-deep" : "hourly-incremental",
+      mode,
+      orgsTotal: orgs.length,
+      processed,
+      skipped: orgs.length - processed,
+      failed,
+      durationMs: Date.now() - startedAt,
+      results,
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "cron failed" }, { status: 500 });
   }
