@@ -16,6 +16,7 @@ import {
   type NormalizedExternalListing,
 } from "./providers";
 import { calculateExternalOpportunityScore, missingFields, qualityScores } from "./scoring";
+import { enrichmentBudgetOk, pastDeadline, isPrivateOpportunity } from "./budget";
 import { detectForOrg } from "@/lib/broker/service";
 import { reconcileListingLifecycle, recalculateListingSignals, calculateMarketAcceptanceScoresForOrganization, calculateMarketAcceptanceAggregatesForOrganization } from "@/lib/market-acceptance";
 import { calculateBrokerMarketIntelligenceForOrganization } from "@/lib/broker-market-intelligence";
@@ -68,12 +69,22 @@ export interface SyncSummary {
   inserted: number;
   updated: number;
   errors: string[];
+  /** True when the org sync stopped early at the app deadline (listings saved,
+   *  remaining cities / heavy enrichment left for the next cycle). Not a failure. */
+  deferred?: boolean;
+  /** True when the heavy per-org analytics chain was skipped at the deadline. */
+  enrichmentDeferred?: boolean;
+  /** Cities not reached this run (resume next cycle, stalest-first). */
+  citiesRemaining?: string[];
 }
 
 export interface SyncOptions {
   localityId?: string | null;
   sources?: string[];
   mode?: SyncMode;
+  /** Absolute epoch-ms hard deadline. The sync intentionally stops before this
+   *  (city loop + heavy enrichment) so it never hits the serverless SIGKILL. */
+  deadline?: number;
 }
 
 async function activeLocalities(db: DB, orgId: string, localityId?: string | null): Promise<{ id: string; name: string }[]> {
@@ -108,7 +119,7 @@ async function upsertListings(
     const opp = calculateExternalOpportunityScore({
       priceVsAreaAvg: avgSqm > 0 && sqmP != null ? sqmP / avgSqm : null,
       completeness: q.data_completeness_score,
-      privateOwner: n.hasAgent === false,
+      privateOwner: isPrivateOpportunity(n.hasAgent),
       duplicateConfidence: 0,
       buyerFit: false,
       localityActive: true,
@@ -247,10 +258,17 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   // time to import. Remaining cities are recorded in the cursor for resume.
   const syncStart = Date.now();
   const SOFT_BUDGET_MS = 230_000; // leaves margin under maxDuration=300s
+  // Reserve enough time AFTER the city loop to either run or cleanly DEFER the
+  // heavy enrichment chain — so the org sync always exits before the SIGKILL.
+  const ENRICHMENT_RESERVE_MS = 40_000;
+  const pastHardDeadline = () => pastDeadline(opts.deadline, Date.now());
 
   for (const loc of localities) {
-    if (completedCities.length > 0 && Date.now() - syncStart > SOFT_BUDGET_MS) {
-      await log(`עצירה מבוקרת לאחר ${completedCities.length} ערים (תקציב זמן) — ניתן להמשיך בלחיצה נוספת`, "warn");
+    const pastSoft = completedCities.length > 0 && Date.now() - syncStart > SOFT_BUDGET_MS;
+    if (pastSoft || pastHardDeadline()) {
+      summary.deferred = true;
+      summary.citiesRemaining = allCityNames.filter((c) => !completedCities.includes(c));
+      await log(`עצירה מבוקרת לאחר ${completedCities.length} ערים (תקציב זמן/מועד יעד) — הערים הנותרות ימשיכו בסבב הבא`, "warn");
       break;
     }
     // Sources run SEQUENTIALLY (fastest one first) and we CHECKPOINT after EACH
@@ -313,59 +331,75 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     } catch { /* checkpoint is best-effort */ }
   }
 
+  // ── Deadline-gated enrichment ──────────────────────────────────────────────
+  // The heavy per-org analytics chain is the main time sink and the historical
+  // cause of the 300s SIGKILL. Listings are ALREADY persisted above, so if the
+  // app deadline (minus reserve) is reached we DEFER the remaining enrichment to
+  // the next cycle / master-sync — a clean partial, never a killed run.
+  const enrichBudgetOk = () => enrichmentBudgetOk(opts.deadline, ENRICHMENT_RESERVE_MS, Date.now());
+  const deferEnrichment = async (why: string) => { summary.enrichmentDeferred = true; await log(`העשרת מודיעין נדחתה לסבב הבא (${why}) — המודעות כבר נשמרו`, "warn"); };
+
   // Broker detection on the freshly-synced listings — best-effort, never breaks
   // the import, and never overwrites human-locked (approved/rejected) listings.
-  try {
-    const bd = await detectForOrg(db, orgId);
-    await logDebug("broker_detection", { broker_detection_total: bd.scanned, broker_auto_matched: bd.matched, broker_needs_review: bd.needsReview, broker_unknown: bd.unknown });
-    await log(`זיהוי מתווכים: ${bd.scanned} נסרקו · ${bd.matched} אוטומטי · ${bd.needsReview} לבדיקה · ${bd.unknown} לא ידוע`);
-  } catch (e) {
-    console.error("[broker] detection during sync failed:", e);
-  }
+  if (enrichBudgetOk()) {
+    try {
+      const bd = await detectForOrg(db, orgId);
+      await logDebug("broker_detection", { broker_detection_total: bd.scanned, broker_auto_matched: bd.matched, broker_needs_review: bd.needsReview, broker_unknown: bd.unknown });
+      await log(`זיהוי מתווכים: ${bd.scanned} נסרקו · ${bd.matched} אוטומטי · ${bd.needsReview} לבדיקה · ${bd.unknown} לא ידוע`);
+    } catch (e) {
+      console.error("[broker] detection during sync failed:", e);
+    }
+  } else { await deferEnrichment("תקציב זמן"); }
 
   // Geocode freshly-synced listings that still lack real coordinates, so they
-  // show on the live map. Best-effort + capped (serverless time + API quota);
-  // never invents coordinates and never breaks the import.
-  try {
-    const geo = await geocodeOrgExternalListings(db, orgId);
-    if (geo.attempted > 0) await log(`גיאוקודינג: ${geo.success} מוקמו · ${geo.failed} נכשלו · ${geo.skipped} ללא כתובת (מתוך ${geo.attempted})`);
-  } catch (e) {
-    console.error("[geocode] external listings geocode during sync failed:", e);
+  // show on the live map. Best-effort + capped (serverless time + API quota).
+  if (enrichBudgetOk()) {
+    try {
+      const geo = await geocodeOrgExternalListings(db, orgId);
+      if (geo.attempted > 0) await log(`גיאוקודינג: ${geo.success} מוקמו · ${geo.failed} נכשלו · ${geo.skipped} ללא כתובת (מתוך ${geo.attempted})`);
+    } catch (e) {
+      console.error("[geocode] external listings geocode during sync failed:", e);
+    }
   }
 
-  // Broker Identity Resolution against the national Brokerage Data layer — link
-  // each external listing to a known agent/office (auto/review/candidate). Core
-  // data enrichment; best-effort, never overwrites human-confirmed links.
-  try {
-    const { resolveBrokerageLinksForOrg } = await import("@/lib/brokerage-data/service");
-    const r = await resolveBrokerageLinksForOrg(orgId);
-    if (r.scanned > 0) await log(`זיהוי משרדי תיווך: ${r.linked} קושרו · ${r.review} לבדיקה · ${r.candidates} מועמדים (מתוך ${r.scanned})`);
-  } catch (e) {
-    console.error("[brokerage-data] identity resolution during sync failed:", e);
+  // Broker Identity Resolution against the national Brokerage Data layer.
+  if (enrichBudgetOk()) {
+    try {
+      const { resolveBrokerageLinksForOrg } = await import("@/lib/brokerage-data/service");
+      const r = await resolveBrokerageLinksForOrg(orgId);
+      if (r.scanned > 0) await log(`זיהוי משרדי תיווך: ${r.linked} קושרו · ${r.review} לבדיקה · ${r.candidates} מועמדים (מתוך ${r.scanned})`);
+    } catch (e) {
+      console.error("[brokerage-data] identity resolution during sync failed:", e);
+    }
   }
 
-  // Market Acceptance Intelligence™ — record lifecycle evidence (best-effort,
-  // never breaks the sync). Disappearance is only asserted for cities scanned
-  // this run; "seen this run" is keyed off last_synced_at >= the sync start.
-  try {
-    await reconcileListingLifecycle(orgId, {
-      seenSince: new Date(syncStart).toISOString(),
-      scannedCities: completedCities,
-    });
-    await recalculateListingSignals(orgId); // MAI-2 evidence signals (no scoring)
-    await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
-    await calculateMarketAcceptanceAggregatesForOrganization(orgId); // MAI-4 market aggregates
-    await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
-    await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
-    await calculateBrokerCompetitiveIntelligenceForOrganization(orgId); // MAI-8 broker competitive intelligence
-    await calculateBrokerWinningDNAForOrganization(orgId); // MAI-9 broker winning DNA
-    await calculateBrokerGapAnalysisForOrganization(orgId); // MAI-10 broker gap analysis & zone dominance
-    await generateBrokerCoachForOrganization(orgId); // MAI-11 evidence-based broker coach
-    await generateBrokerGrowthStrategy(orgId); // MAI-12 autonomous growth strategy
-    await evaluateMAIModelsForOrganization(orgId); // MAI-13 self-learning & model calibration (measures only)
-  } catch (e) {
-    console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap/coach/strategy/calibration reconcile (syncOrg) failed:", e);
-  }
+  // Market Acceptance Intelligence™ — record lifecycle evidence + scoring. The
+  // essentials (lifecycle/signals/scores/aggregates) run first; the HEAVY
+  // org-wide analytics tail (MAI-6…13) is re-gated so a large org defers it
+  // rather than overrunning the invocation. master-sync (daily) also runs it.
+  if (enrichBudgetOk()) {
+    try {
+      await reconcileListingLifecycle(orgId, {
+        seenSince: new Date(syncStart).toISOString(),
+        scannedCities: completedCities,
+      });
+      await recalculateListingSignals(orgId); // MAI-2 evidence signals (no scoring)
+      await calculateMarketAcceptanceScoresForOrganization(orgId); // MAI-3 confidence scoring
+      await calculateMarketAcceptanceAggregatesForOrganization(orgId); // MAI-4 market aggregates
+      if (enrichBudgetOk()) {
+        await calculateBrokerMarketIntelligenceForOrganization(orgId); // MAI-6 broker market intelligence
+        await calculateAreaLeaderEngineForOrganization(orgId); // MAI-7 area leaders & market dominance
+        await calculateBrokerCompetitiveIntelligenceForOrganization(orgId); // MAI-8 broker competitive intelligence
+        await calculateBrokerWinningDNAForOrganization(orgId); // MAI-9 broker winning DNA
+        await calculateBrokerGapAnalysisForOrganization(orgId); // MAI-10 broker gap analysis & zone dominance
+        await generateBrokerCoachForOrganization(orgId); // MAI-11 evidence-based broker coach
+        await generateBrokerGrowthStrategy(orgId); // MAI-12 autonomous growth strategy
+        await evaluateMAIModelsForOrganization(orgId); // MAI-13 self-learning & model calibration (measures only)
+      } else { await deferEnrichment("תקציב זמן — ניתוח כבד נדחה"); }
+    } catch (e) {
+      console.error("[market-acceptance] lifecycle/signals/scores/aggregates/broker/area/competitive/dna/gap/coach/strategy/calibration reconcile (syncOrg) failed:", e);
+    }
+  } else { await deferEnrichment("תקציב זמן"); }
 
   summary.success = summary.errors.length === 0;
   await db.from("import_jobs").update({ status: summary.errors.length ? "completed_with_errors" : "completed", total_found: totalFound, total_imported: summary.inserted, total_updated: summary.updated, error: summary.errors.length ? summary.errors.slice(0, 5).join("; ") : null, finished_at: new Date().toISOString() }).eq("id", jobId);
