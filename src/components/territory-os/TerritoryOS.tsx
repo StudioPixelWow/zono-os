@@ -22,74 +22,117 @@ const priHe: Record<string, string> = { high: "גבוה", medium: "בינוני"
 const bandCls = (v: number) => (v >= 70 ? "bg-success-soft text-success" : v >= 45 ? "bg-warning-soft text-warning" : "bg-danger-soft text-danger");
 const HEAT: Record<string, string> = { hot: "🔥", warm: "🌤️", opportunity: "💡", cool: "❄️", cold: "🧊" };
 
-function Tile({ l, v }: { l: string; v: number | string }) {
-  return <div className="bg-card border-line rounded-2xl border px-3 py-3 text-center shadow-[var(--shadow-card)]"><div className="text-brand text-2xl font-black">{v}</div><div className="text-muted text-[11px] font-bold">{l}</div></div>;
-}
 function Empty({ t }: { t: string }) { return <div className="bg-card border-line text-muted rounded-2xl border p-6 text-center text-[13px]">{t}</div>; }
 
 export function TerritoryOS({ data }: { data: TData }) {
   const [tab, setTab] = useState<Tab>("home");
   const sc = data.score;
+  const cityLabel = (data.city ?? "").trim() || "האזור שלך";
+  // Real, evidence-backed counts (never vanity zeros) for the hero.
+  const kpis = [
+    { label: "אזורים במעקב", value: data.neighborhoods.length },
+    { label: "אזורי שליטה", value: data.marketShare.dominant.length },
+    { label: "אזורים לחיזוק", value: data.marketShare.weak.length },
+    { label: "יעדי גיוס", value: data.acquisitionPlan.length },
+  ].filter((k) => k.value > 0);
+  const bandHe: Record<string, string> = { dominant: "שליטה", strong: "חזק", contested: "תחרותי", weak: "חלש" };
+
   return (
-    <div dir="rtl" className="mx-auto max-w-5xl px-4 pb-24 pt-5">
-      <div className="bg-brand-soft rounded-[22px] p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div><p className="text-brand text-xs font-bold">ZONO · מודיעין טריטוריה</p><h1 className="text-ink text-2xl font-black">🗺️ מערכת הפעלת הטריטוריה{data.city ? ` · ${data.city}` : ""}</h1></div>
-          <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-lg font-black ${bandCls(sc.overall)}`}>{sc.overall}</span>
-        </div>
-        <p className="text-muted mt-2 text-[13px]">{sc.aiSummary}</p>
+    <div dir="rtl" className="mx-auto max-w-[1600px] px-4 pb-16 pt-6 sm:px-6">
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
+      <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 px-6 py-8 text-white sm:px-9 sm:py-10">
+        <div className="absolute -top-24 -left-16 -z-10 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
+        <div className="mb-1 text-[12px] font-bold tracking-wide text-indigo-300">ZONO · מודיעין טריטוריה</div>
+        <h1 className="text-3xl font-black leading-tight sm:text-4xl">מרכז השליטה שלך ב{cityLabel}</h1>
+        <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-slate-300">תמונת מצב חיה של השוק, המתחרים וההזדמנויות באזור הפעילות שלך — מבוסס נתונים שנצפו.</p>
+        {kpis.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-3">
+            {kpis.map((k) => (
+              <div key={k.label} className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 backdrop-blur-md">
+                <div className="text-2xl font-black tabular-nums sm:text-3xl">{k.value}</div>
+                <div className="mt-0.5 text-[12px] font-semibold text-slate-300">{k.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── STICKY SEGMENTED CONTROL (replaces the bottom app-in-app tab bar) ── */}
+      <div className="bg-card/95 border-line sticky top-0 z-20 -mx-4 mt-4 flex gap-1 overflow-x-auto border-b px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border sm:px-2">
+        {TABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`shrink-0 rounded-xl px-4 py-2 text-[13px] font-bold transition ${tab === t.id ? "bg-brand-soft text-brand" : "text-muted hover:text-ink"}`}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <div className="mt-4">
+      <div className="mt-5">
         {tab === "home" && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              <Tile l="ציון" v={sc.overall} /><Tile l="כיסוי" v={`${sc.coverage}%`} /><Tile l="נתח שוק" v={`${sc.marketShare}%`} /><Tile l="חדירה" v={`${sc.penetration}%`} /><Tile l="צמיחה" v={sc.growth} />
-            </div>
-            <section>
-              <h2 className="text-ink mb-2 text-[15px] font-black">📈 סקירת מנהל</h2>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                {[["שליטה", data.executive.domination], ["חדירה", `${data.executive.penetration}%`], ["צמיחה", data.executive.growth], ["גיוס", data.executive.recruitment], ["הרחבה", data.executive.expansion], ["חלשים", data.executive.weakTerritories]].map(([l, v]) => <Tile key={String(l)} l={l as string} v={v as number} />)}
-              </div>
+          <div className="grid gap-5 lg:grid-cols-[1.15fr_1fr]">
+            {/* Recommendations lead (action first) */}
+            <section className="order-2 lg:order-1">
+              <h2 className="text-ink mb-3 text-[17px] font-black">תוכנית הפעולה של ZONO</h2>
+              {data.recommendations.length === 0 ? <Empty t="ZONO אוספת נתונים כדי לבנות עבורך תוכנית פעולה לאזור." /> : <div className="space-y-3">{data.recommendations.slice(0, 5).map((r, i) => <RecRow key={i} r={r} />)}</div>}
             </section>
-            <section><h2 className="text-ink mb-2 text-[15px] font-black">✨ המלצות מובילות</h2>{data.recommendations.length === 0 ? <Empty t="אין המלצות כרגע." /> : <div className="space-y-2">{data.recommendations.slice(0, 5).map((r, i) => <RecRow key={i} r={r} />)}</div>}</section>
-            {data.notes.map((n, i) => <p key={i} className="text-muted text-[11px]">• {n}</p>)}
+
+            {/* Territory strength — SECONDARY, explained (not the hero) */}
+            <aside className="order-1 space-y-4 lg:order-2">
+              <div className="bg-card border-line rounded-2xl border p-5">
+                <div className="flex items-center justify-between">
+                  <div className="text-ink text-[14px] font-black">חוזק הטריטוריה</div>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${bandCls(sc.overall)}`}>{bandHe[sc.band] ?? sc.band}</span>
+                </div>
+                <div className="mt-1 flex items-baseline gap-1"><span className="text-ink text-4xl font-black tabular-nums">{sc.overall}</span><span className="text-muted text-[13px] font-bold">/100</span></div>
+                <p className="text-muted mt-2 text-[12.5px] leading-relaxed">{sc.aiSummary}</p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <MiniStat l="כיסוי אזורים" v={`${sc.coverage}%`} />
+                  <MiniStat l="נוכחות מוערכת" v={`${sc.marketShare}%`} />
+                  <MiniStat l="חדירה" v={`${sc.penetration}%`} />
+                  <MiniStat l="מומנטום" v={String(sc.growth)} />
+                </div>
+                <p className="text-muted mt-3 text-[10.5px]">מדדים מוערכים מנתוני הפעילות שנצפתה — לא נתח שוק רשמי.</p>
+              </div>
+              {data.notes.length > 0 && <div className="bg-surface border-line rounded-2xl border p-4">{data.notes.map((n, i) => <p key={i} className="text-muted text-[11.5px]">• {n}</p>)}</div>}
+            </aside>
           </div>
         )}
 
-        {tab === "hoods" && <div className="space-y-2">{data.neighborhoods.length === 0 ? <Empty t="אין נתוני שכונות." /> : data.neighborhoods.map((n) => <HoodRow key={n.key} n={n} />)}</div>}
-        {tab === "streets" && <div className="space-y-2">{data.streets.length === 0 ? <Empty t="אין נתוני רחובות." /> : data.streets.map((st) => <StreetRow key={st.key} st={st} />)}</div>}
-        {tab === "buildings" && <div className="space-y-2">{data.buildings.length === 0 ? <Empty t="אין נתוני בניינים." /> : data.buildings.map((b) => <BuildingRow key={b.key} b={b} />)}</div>}
+        {tab === "hoods" && <div className="grid gap-2 sm:grid-cols-2">{data.neighborhoods.length === 0 ? <Empty t="ZONO ממפה את השכונות באזור שלך." /> : data.neighborhoods.map((n) => <HoodRow key={n.key} n={n} />)}</div>}
+        {tab === "streets" && <div className="grid gap-2 sm:grid-cols-2">{data.streets.length === 0 ? <Empty t="אין עדיין נתוני רחובות — נאספים מהפעילות שנצפית." /> : data.streets.map((st) => <StreetRow key={st.key} st={st} />)}</div>}
+        {tab === "buildings" && <div className="grid gap-2 sm:grid-cols-2">{data.buildings.length === 0 ? <Empty t="אין עדיין נתוני בניינים." /> : data.buildings.map((b) => <BuildingRow key={b.key} b={b} />)}</div>}
 
         {tab === "share" && (
-          <div className="space-y-5">
-            <ShareCol title="🏆 אזורי שליטה" items={data.marketShare.dominant.map((d) => ({ name: d.name, detail: d.share != null ? `נתח ${d.share}%` : "" }))} />
-            <ShareCol title="⚠️ אזורים חלשים" items={data.marketShare.weak.map((w) => ({ name: w.name, detail: `ציון ${w.score}` }))} />
-            <ShareCol title="🕳️ ללא נוכחות" items={data.marketShare.missing.map((m) => ({ name: m.name, detail: "אזור הרחבה" }))} />
-            <ShareCol title="🚀 אזורי הרחבה" items={data.marketShare.expansion.map((e) => ({ name: e.name, detail: e.why }))} />
-            {data.campaigns.length > 0 && <section><h2 className="text-ink mb-2 text-[15px] font-black">📣 קמפיינים מומלצים</h2><div className="space-y-2">{data.campaigns.map((c, i) => <Link key={i} href={c.href} className="bg-surface flex items-center justify-between rounded-2xl p-3"><div><div className="text-ink text-[13px] font-bold">{c.title}</div><div className="text-muted text-[11px]">{c.why}</div></div><span className="bg-brand-soft text-brand rounded-full px-2 py-0.5 text-[10px] font-bold">{c.type}</span></Link>)}</div></section>}
+          <div className="grid gap-5 sm:grid-cols-2">
+            <ShareCol title="אזורי שליטה" items={data.marketShare.dominant.map((d) => ({ name: d.name, detail: d.share != null ? `נוכחות ${d.share}%` : "" }))} />
+            <ShareCol title="אזורים לחיזוק" items={data.marketShare.weak.map((w) => ({ name: w.name, detail: `ציון ${w.score}` }))} />
+            <ShareCol title="ללא נוכחות שנצפתה" items={data.marketShare.missing.map((m) => ({ name: m.name, detail: "אזור הרחבה" }))} />
+            <ShareCol title="אזורי הרחבה" items={data.marketShare.expansion.map((e) => ({ name: e.name, detail: e.why }))} />
+            {data.campaigns.length > 0 && <section className="sm:col-span-2"><h2 className="text-ink mb-2 text-[15px] font-black">קמפיינים מומלצים</h2><div className="grid gap-2 sm:grid-cols-2">{data.campaigns.map((c, i) => <Link key={i} href={c.href} className="bg-surface flex items-center justify-between rounded-2xl p-3"><div><div className="text-ink text-[13px] font-bold">{c.title}</div><div className="text-muted text-[11px]">{c.why}</div></div><span className="bg-brand-soft text-brand rounded-full px-2 py-0.5 text-[10px] font-bold">{c.type}</span></Link>)}</div></section>}
           </div>
         )}
 
-        {tab === "acq" && <div className="space-y-2">{data.acquisitionPlan.length === 0 ? <Empty t="אין יעדי גיוס כרגע." /> : data.acquisitionPlan.map((a, i) => <AcqRow key={i} a={a} />)}</div>}
+        {tab === "acq" && <div className="grid gap-2 sm:grid-cols-2">{data.acquisitionPlan.length === 0 ? <Empty t="אין יעדי גיוס כרגע — יופיעו כשתזוהה הזדמנות." /> : data.acquisitionPlan.map((a, i) => <AcqRow key={i} a={a} />)}</div>}
 
         {tab === "plans" && (
           <div className="space-y-4">
-            <div className="bg-warning-soft text-warning rounded-2xl p-3 text-[12px] font-bold">📌 כל משימה בתוכנית דורשת אישור לפני ביצוע.</div>
-            {data.plans.map((p) => (
-              <section key={p.horizon}><h2 className="text-ink mb-2 text-[15px] font-black">תוכנית {p.label}</h2>{p.tasks.length === 0 ? <Empty t="אין משימות בטווח זה." /> : <div className="space-y-2">{p.tasks.map((t, i) => <div key={i} className="bg-surface flex items-center gap-3 rounded-2xl p-3"><span className="bg-brand-soft text-brand rounded-lg px-2 py-1 text-[11px] font-bold">{t.area}</span><span className="text-ink text-[13px] font-semibold">{t.task}</span></div>)}</div>}</section>
-            ))}
+            <div className="bg-warning-soft text-warning rounded-2xl p-3 text-[12px] font-bold">כל משימה בתוכנית דורשת אישור לפני ביצוע.</div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {data.plans.map((p) => (
+                <section key={p.horizon}><h2 className="text-ink mb-2 text-[15px] font-black">תוכנית {p.label}</h2>{p.tasks.length === 0 ? <Empty t="אין משימות בטווח זה." /> : <div className="space-y-2">{p.tasks.map((t, i) => <div key={i} className="bg-surface flex items-center gap-3 rounded-2xl p-3"><span className="bg-brand-soft text-brand rounded-lg px-2 py-1 text-[11px] font-bold">{t.area}</span><span className="text-ink text-[13px] font-semibold">{t.task}</span></div>)}</div>}</section>
+              ))}
+            </div>
           </div>
         )}
 
         {tab === "ask" && <AskTab />}
       </div>
-
-      <nav className="bg-card/95 border-line fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-5xl justify-between border-t px-1 py-1.5 backdrop-blur">
-        {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-bold transition ${tab === t.id ? "text-brand bg-brand-soft" : "text-muted"}`}><span className="text-sm leading-none">{t.icon}</span>{t.label}</button>)}
-      </nav>
     </div>
   );
+}
+
+function MiniStat({ l, v }: { l: string; v: string }) {
+  return <div className="bg-surface rounded-xl px-3 py-2 text-center"><div className="text-ink text-[16px] font-black tabular-nums">{v}</div><div className="text-muted text-[10.5px] font-bold">{l}</div></div>;
 }
 
 function RecRow({ r }: { r: TData["recommendations"][number] }) {
