@@ -31,7 +31,7 @@ export async function brandPreviewAction(input: { entityType?: string; entityId?
   catch (e) { return { error: e instanceof Error ? e.message : "טעינת המותג נכשלה" }; }
 }
 export async function generateQuickCreativeAction(g: GenerateQuickInput): Promise<QcActionState> {
-  try { const r = await generateQuickCreative(g); revalidate(g.entityType, g.entityId); return { ok: true, message: `נוצרו ${r.created} וריאציות` }; }
+  try { const r = await generateQuickCreative(g); revalidate(g.entityType, g.entityId); return { ok: true, message: `נוצרו ${r.created} וריאציות`, warnings: r.warning ? [r.warning] : undefined }; }
   catch (e) { return { error: e instanceof Error ? e.message : "היצירה נכשלה" }; }
 }
 /** "3 options" flow: AI writes 3 editable Hebrew design-direction briefs. */

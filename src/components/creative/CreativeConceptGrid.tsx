@@ -28,7 +28,7 @@ export function CreativeConceptGrid({
   scored: boolean;             // show Wow scores
   scores: number[];            // 12 pseudo wow scores
   qaRisk: ("low" | "medium" | "high")[];
-  selectedSet: Set<number>;    // the 2 chosen concepts
+  selectedSet: Set<number>;    // the chosen winners (count-driven — matches the real production count)
   selectPhase: boolean;        // highlight winners + dim the rest
 }) {
   return (

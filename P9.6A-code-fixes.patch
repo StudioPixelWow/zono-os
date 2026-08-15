@@ -1,0 +1,331 @@
+diff --git a/src/components/agent-website/AgentWebsiteTemplate.tsx b/src/components/agent-website/AgentWebsiteTemplate.tsx
+index 650c4a2..e5a2913 100644
+--- a/src/components/agent-website/AgentWebsiteTemplate.tsx
++++ b/src/components/agent-website/AgentWebsiteTemplate.tsx
+@@ -8,7 +8,7 @@
+ import Link from "next/link";
+ import type { AgentSitePayload, SiteProperty } from "@/lib/agent-website/site-data";
+ import { AgentHeader, type HeaderNavItem } from "./AgentHeader";
+-import { PropertySearch } from "./PropertySearch";
++import { PropertyExplorer } from "./PropertyExplorer";
+ import { ExpertiseMap } from "./ExpertiseMap";
+ import { Testimonials } from "./Testimonials";
+ import { MobileStickyCta } from "./MobileStickyCta";
+@@ -46,19 +46,16 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
+       {/* ── HERO ─────────────────────────────────────────────────────────── */}
+       {on("hero") && <Hero data={data} />}
+ 
+-      {/* ── PROPERTY SEARCH ──────────────────────────────────────────────── */}
+-      <div className="relative z-10">
+-        <PropertySearch slug={slug} areas={agent.areas} types={types} />
+-      </div>
+-
+-      {/* ── FEATURED PROPERTIES — or a buyer marketing state when the agent has
+-             no inventory yet (never a dead empty section). ─────────────────── */}
++      {/* ── PROPERTY SEARCH + FEATURED — LIVE in-page filtering (P9.6A/P1-1).
++             The search bar filters the agent's real inventory instantly on this
++             page (no navigation, no reload). A single listing keeps the
++             cinematic treatment; no inventory → a buyer marketing state. ────── */}
+       {on("featured_properties") && (
+-        data.featured.length > 0 ? (
++        data.allProperties.length > 1 ? (
++          <PropertyExplorer properties={data.allProperties} areas={agent.areas} types={types} propertiesHref={propertiesHref} />
++        ) : data.featured.length === 1 ? (
+           <SectionShell id="properties" title="נכסים נבחרים" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
+-            {data.featured.length === 1
+-              ? <FeaturedProperty property={data.featured[0]} />
+-              : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">{data.featured.map((p) => <AgentPropertyCard key={p.id} property={p} />)}</div>}
++            <FeaturedProperty property={data.featured[0]} />
+           </SectionShell>
+         ) : data.recommended.length === 0 ? (
+           <BuyerCta data={data} />
+diff --git a/src/components/agent-website/PropertyExplorer.tsx b/src/components/agent-website/PropertyExplorer.tsx
+new file mode 100644
+index 0000000..1b7cbc5
+--- /dev/null
++++ b/src/components/agent-website/PropertyExplorer.tsx
+@@ -0,0 +1,131 @@
++"use client";
++// ============================================================================
++// Homepage property explorer — LIVE in-page filtering (P9.6A / P1-1).
++// The search bar filters the agent's real public inventory instantly on the
++// same page (no navigation, no full reload, no draft/preview route break).
++// Keeps the overlapping search-bar layout + the properties grid beneath it.
++// Owner/tenant scoping is preserved: it only ever filters the properties the
++// server already resolved for this agent.
++// ============================================================================
++import { useMemo, useState } from "react";
++import type { SiteProperty } from "@/lib/agent-website/site-data";
++import { AgentPropertyCard, TextLink } from "./ui";
++
++const TYPE_LABELS: Record<string, string> = {
++  apartment: "דירה", house: "בית פרטי", private_house: "בית פרטי", penthouse: "פנטהאוז",
++  garden_apartment: "דירת גן", duplex: "דופלקס", cottage: "קוטג׳", lot: "מגרש", land: "מגרש",
++  commercial: "מסחרי", office: "משרד", studio: "סטודיו",
++};
++const label = (t: string) => TYPE_LABELS[t] ?? t;
++const ROOMS = ["1", "2", "3", "4", "5", "6"];
++const PRICES = [500_000, 1_000_000, 1_500_000, 2_000_000, 3_000_000, 5_000_000];
++const fmtPrice = (n: number) => `₪${(n / 1_000_000).toLocaleString("he-IL", { maximumFractionDigits: 1 })}M`;
++
++type Filters = { q: string; area: string; type: string; max: string; rooms: string };
++const EMPTY: Filters = { q: "", area: "", type: "", max: "", rooms: "" };
++
++export function PropertyExplorer({
++  properties, areas, types, propertiesHref,
++}: { properties: SiteProperty[]; areas: string[]; types: string[]; propertiesHref: string }) {
++  const [f, setF] = useState<Filters>(EMPTY);
++  const [open, setOpen] = useState(false);
++  const active = Object.values(f).some(Boolean);
++
++  const results = useMemo(() => {
++    const q = f.q.trim().toLowerCase();
++    const max = Number(f.max), rooms = Number(f.rooms);
++    return properties.filter((p) => {
++      if (q && ![p.title, p.city, p.neighborhood].filter(Boolean).some((v) => (v as string).toLowerCase().includes(q))) return false;
++      if (f.area && !((p.city && (p.city.includes(f.area) || f.area.includes(p.city))) || (p.neighborhood && p.neighborhood.includes(f.area)))) return false;
++      if (f.type && p.type !== f.type) return false;
++      if (Number.isFinite(max) && max > 0 && (p.price ?? p.monthlyRent ?? Infinity) > max) return false;
++      if (Number.isFinite(rooms) && rooms > 0 && (p.rooms ?? 0) < rooms) return false;
++      return true;
++    });
++  }, [f, properties]);
++
++  const sel = "w-full rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-3 py-3 text-[14px] text-[var(--brand-text)] outline-none transition focus:border-[color:var(--brand-primary)]";
++
++  return (
++    <div>
++      {/* ── Search / filter bar (overlaps the hero like before) ─────────────── */}
++      <div className="relative z-10 mx-auto -mt-8 w-full max-w-7xl px-5 sm:px-8">
++        <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-3 shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)]">
++          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
++            <div className="order-3 flex items-center justify-between gap-2 lg:order-1">
++              <span className="flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-[14px] font-bold text-[var(--brand-on-primary)]">
++                <SearchIcon /> {results.length} נכסים{active ? " · מסוננים" : ""}
++              </span>
++              {active && (
++                <button type="button" onClick={() => setF(EMPTY)} className="rounded-xl border border-[var(--brand-border)] px-4 py-3 text-[14px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)] lg:hidden">
++                  נקה
++                </button>
++              )}
++            </div>
++            <div className="order-1 hidden flex-1 items-center gap-2 lg:order-2 lg:flex">
++              {areas.length > 0 && (
++                <select aria-label="אזור" className={sel} value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
++                  <option value="">אזור</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}
++                </select>
++              )}
++              {types.length > 0 && (
++                <select aria-label="סוג נכס" className={sel} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
++                  <option value="">סוג נכס</option>{types.map((t) => <option key={t} value={t}>{label(t)}</option>)}
++                </select>
++              )}
++              <select aria-label="מחיר" className={sel} value={f.max} onChange={(e) => setF({ ...f, max: e.target.value })}>
++                <option value="">טווח מחיר</option>{PRICES.map((p) => <option key={p} value={p}>עד {fmtPrice(p)}</option>)}
++              </select>
++              <select aria-label="חדרים" className={sel} value={f.rooms} onChange={(e) => setF({ ...f, rooms: e.target.value })}>
++                <option value="">חדרים</option>{ROOMS.map((r) => <option key={r} value={r}>{r}+ חדרים</option>)}
++              </select>
++              {active && (
++                <button type="button" onClick={() => setF(EMPTY)} className="shrink-0 rounded-xl border border-[var(--brand-border)] px-4 py-3 text-[14px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">
++                  נקה
++                </button>
++              )}
++            </div>
++            <input
++              aria-label="חיפוש חופשי"
++              className={`${sel} order-2 flex-1 lg:order-3 lg:max-w-xs`}
++              placeholder="חיפוש לפי כתובת, שכונה או מפתח…"
++              value={f.q}
++              onChange={(e) => setF({ ...f, q: e.target.value })}
++            />
++            <button type="button" onClick={() => setOpen((v) => !v)} className="order-4 rounded-xl border border-[var(--brand-border)] px-4 py-3 text-[14px] font-bold text-[var(--brand-text)] lg:hidden">
++              {open ? "הסתרת פילטרים" : "פילטרים"}
++            </button>
++          </div>
++          {open && (
++            <div className="mt-2 grid grid-cols-2 gap-2 lg:hidden">
++              {areas.length > 0 && <select aria-label="אזור" className={sel} value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}><option value="">אזור</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>}
++              {types.length > 0 && <select aria-label="סוג נכס" className={sel} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}><option value="">סוג נכס</option>{types.map((t) => <option key={t} value={t}>{label(t)}</option>)}</select>}
++              <select aria-label="מחיר" className={sel} value={f.max} onChange={(e) => setF({ ...f, max: e.target.value })}><option value="">טווח מחיר</option>{PRICES.map((p) => <option key={p} value={p}>עד {fmtPrice(p)}</option>)}</select>
++              <select aria-label="חדרים" className={sel} value={f.rooms} onChange={(e) => setF({ ...f, rooms: e.target.value })}><option value="">חדרים</option>{ROOMS.map((r) => <option key={r} value={r}>{r}+ חדרים</option>)}</select>
++            </div>
++          )}
++        </div>
++      </div>
++
++      {/* ── Filtered grid ──────────────────────────────────────────────────── */}
++      <section id="properties" className="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8 lg:py-20">
++        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
++          <h2 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{active ? "תוצאות חיפוש" : "נכסים נבחרים"}</h2>
++          <TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>
++        </div>
++        {results.length === 0 ? (
++          <div className="rounded-[24px] border border-dashed border-[var(--brand-border)] py-16 text-center">
++            <p className="text-[16px] font-semibold text-[var(--brand-muted)]">לא נמצאו נכסים התואמים לחיפוש.</p>
++            <button type="button" onClick={() => setF(EMPTY)} className="mt-3 text-[14px] font-bold text-[color:var(--brand-link)] transition hover:opacity-80">ניקוי סינון</button>
++          </div>
++        ) : (
++          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
++            {results.map((p) => <AgentPropertyCard key={p.id} property={p} />)}
++          </div>
++        )}
++      </section>
++    </div>
++  );
++}
++
++function SearchIcon() { return <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden><circle cx={11} cy={11} r={7} /><path d="M21 21l-4-4" strokeLinecap="round" /></svg>; }
+diff --git a/src/components/creative/CreativeConceptGrid.tsx b/src/components/creative/CreativeConceptGrid.tsx
+index 97ea03b..23a61c7 100644
+--- a/src/components/creative/CreativeConceptGrid.tsx
++++ b/src/components/creative/CreativeConceptGrid.tsx
+@@ -28,7 +28,7 @@ export function CreativeConceptGrid({
+   scored: boolean;             // show Wow scores
+   scores: number[];            // 12 pseudo wow scores
+   qaRisk: ("low" | "medium" | "high")[];
+-  selectedSet: Set<number>;    // the 2 chosen concepts
++  selectedSet: Set<number>;    // the chosen winners (count-driven — matches the real production count)
+   selectPhase: boolean;        // highlight winners + dim the rest
+ }) {
+   return (
+diff --git a/src/components/creative/CreativeGenerationModal.tsx b/src/components/creative/CreativeGenerationModal.tsx
+index 5e6f523..513cbc3 100644
+--- a/src/components/creative/CreativeGenerationModal.tsx
++++ b/src/components/creative/CreativeGenerationModal.tsx
+@@ -24,13 +24,16 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [], count
+   const [tick, setTick] = useState(0); // rotating ticker index
+   const startedComplete = useRef(false);
+ 
+-  // 12 deterministic pseudo Wow scores + QA risk + the 2 selected winners.
++  // 12 deterministic pseudo Wow scores + QA risk + the `count` selected winners.
++  // The number of winners MUST equal the real production count (`count`), so the
++  // header, the "נבחרו להפקה" counter and the highlighted cards never disagree
++  // with how many final ads are actually produced downstream.
+   const { scores, qaRisk, selectedSet } = useMemo(() => {
+     const s = Array.from({ length: CONCEPTS.length }, (_, i) => 72 + ((i * 37 + 13) % 27)); // 72..98
+     const risk: ("low" | "medium" | "high")[] = s.map((v) => (v >= 90 ? "low" : v >= 82 ? "medium" : "high"));
+     const order = [...s.keys()].sort((a, b) => s[b] - s[a]);
+-    return { scores: s, qaRisk: risk, selectedSet: new Set(order.slice(0, 2)) };
+-  }, []);
++    return { scores: s, qaRisk: risk, selectedSet: new Set(order.slice(0, count)) };
++  }, [count]);
+ 
+   useEffect(() => {
+     const id = setInterval(() => setT((p) => Math.min(p + 0.01, 0.92)), 200);
+@@ -51,8 +54,8 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [], count
+   const generated = final ? 12 : Math.min(12, Math.round((tt / 0.45) * 12));
+   const scored = final || tt >= 0.55;
+   const selectPhase = final || tt >= 0.78;
+-  const rejected = selectPhase ? 10 : 0;
+-  const selectedCount = selectPhase ? 2 : 0;
++  const rejected = selectPhase ? Math.max(0, CONCEPTS.length - count) : 0;
++  const selectedCount = selectPhase ? count : 0;
+   const finalAdsCount = final ? count : 0;
+   // Honest completion: count real successes; flag a full failure (no images).
+   const successCount = finalAds.filter((a) => a.imageUrl || !a.failed).length;
+diff --git a/src/lib/agent-website/site-data.ts b/src/lib/agent-website/site-data.ts
+index ac4889e..59af701 100644
+--- a/src/lib/agent-website/site-data.ts
++++ b/src/lib/agent-website/site-data.ts
+@@ -81,6 +81,7 @@ export interface AgentSitePayload {
+   stats: SiteStat[]; // big trust-numbers strip (only real data)
+   featured: SiteProperty[];
+   recommended: SiteProperty[]; // second discovery — excludes featured
++  allProperties: SiteProperty[]; // full public inventory (featured-first) for live in-page filtering
+   mapPoints: SiteProperty[]; // geocoded subset for the expertise map
+   areas: SiteArea[];
+   testimonials: { name: string; area: string | null; text: string; rating: number | null }[];
+@@ -336,6 +337,7 @@ export async function getAgentSite(
+     stats,
+     featured,
+     recommended,
++    allProperties: [...featured, ...all.filter((p) => !featuredSet.has(p.id))],
+     mapPoints,
+     areas,
+     testimonials,
+diff --git a/src/lib/creative-studio/quick-creative-actions.ts b/src/lib/creative-studio/quick-creative-actions.ts
+index be14648..c446079 100644
+--- a/src/lib/creative-studio/quick-creative-actions.ts
++++ b/src/lib/creative-studio/quick-creative-actions.ts
+@@ -31,7 +31,7 @@ export async function brandPreviewAction(input: { entityType?: string; entityId?
+   catch (e) { return { error: e instanceof Error ? e.message : "טעינת המותג נכשלה" }; }
+ }
+ export async function generateQuickCreativeAction(g: GenerateQuickInput): Promise<QcActionState> {
+-  try { const r = await generateQuickCreative(g); revalidate(g.entityType, g.entityId); return { ok: true, message: `נוצרו ${r.created} וריאציות` }; }
++  try { const r = await generateQuickCreative(g); revalidate(g.entityType, g.entityId); return { ok: true, message: `נוצרו ${r.created} וריאציות`, warnings: r.warning ? [r.warning] : undefined }; }
+   catch (e) { return { error: e instanceof Error ? e.message : "היצירה נכשלה" }; }
+ }
+ /** "3 options" flow: AI writes 3 editable Hebrew design-direction briefs. */
+diff --git a/src/lib/creative-studio/quick-creative-service.ts b/src/lib/creative-studio/quick-creative-service.ts
+index 21c5b2a..982197e 100644
+--- a/src/lib/creative-studio/quick-creative-service.ts
++++ b/src/lib/creative-studio/quick-creative-service.ts
+@@ -386,7 +386,7 @@ export async function buildConceptBriefs(g: GenerateQuickInput): Promise<{ brief
+     return { briefs: fallback, source: "fallback" };
+   }
+ }
+-export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ requestId: string; created: number }> {
++export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ requestId: string; created: number; warning?: string }> {
+   const { orgId, userId, supabase } = await ctx();
+   const missing = validateRequired(g.requestType, g.input);
+   if (missing.length) throw new Error(`חסרים שדות חובה: ${missing.join(", ")}`);
+@@ -477,7 +477,11 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
+           : reasons.some((x) => x.includes("נכסים לרפרנס"))
+             ? "אין תמונות רפרנס — הוסף תמונות לנכס או לוגו/תמונת סוכן למותג"
+             : reasons.join(" · ");
+-        throw new Error(`לא נוצרו תמונות AI אמיתיות — ${hint}`);
++        // P1-3: a quality/provider shortfall WARNS, it never BLOCKS. The option
++        // rows are already persisted above; return them with a non-blocking
++        // warning so the flow completes and the agent sees the result instead of
++        // an aborting error. Generation must continue.
++        return { requestId, created: adIds.length, warning: `ייתכן שלא נוצרו תמונות AI מלאות — ${hint}. אפשר לשפר את התוצאה, ממשיכים ביצירה.` };
+       }
+       return { requestId, created: adIds.length };
+     }
+@@ -568,7 +572,11 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
+           : reasons.some((x) => x.includes("נכסים לרפרנס"))
+             ? "אין תמונות רפרנס — הוסף תמונות לנכס או לוגו/תמונת סוכן למותג"
+             : reasons.join(" · ");
+-        throw new Error(`לא נוצרו תמונות AI אמיתיות — ${hint}`);
++        // P1-3: a quality/provider shortfall WARNS, it never BLOCKS. The option
++        // rows are already persisted above; return them with a non-blocking
++        // warning so the flow completes and the agent sees the result instead of
++        // an aborting error. Generation must continue.
++        return { requestId, created: adIds.length, warning: `ייתכן שלא נוצרו תמונות AI מלאות — ${hint}. אפשר לשפר את התוצאה, ממשיכים ביצירה.` };
+       }
+       return { requestId, created: adIds.length };
+     }
+diff --git a/src/lib/matching-intelligence/repository.ts b/src/lib/matching-intelligence/repository.ts
+index 9b20bf2..378d235 100644
+--- a/src/lib/matching-intelligence/repository.ts
++++ b/src/lib/matching-intelligence/repository.ts
+@@ -1,5 +1,15 @@
+ /**
+  * Matching Intelligence repositories — RLS-scoped (server-only).
++ *
++ * TABLE OWNERSHIP (P9.6A / P1-4):
++ *   `match_intelligence_profiles` is the CANONICAL Agent Matching Intelligence
++ *   output — the ONE source every agent-facing matching surface reads (Matches
++ *   board, buyer/property/seller detail, Today/dashboard widget, client portal).
++ *   It is produced by `generateMatchesForOrg()` in ./service.ts.
++ *
++ *   `matching_results` is a LEGACY / raw-scoring / QA-seed table. No agent-facing
++ *   product screen reads it; its only runtime consumer is the platform-admin
++ *   Customer-360 usage COUNT. Never point an agent screen at `matching_results`.
+  */
+ import { createClient } from "@/lib/supabase/server";
+ import type { Database } from "@/lib/supabase/types";
+diff --git a/src/lib/platform-admin/server/dal.ts b/src/lib/platform-admin/server/dal.ts
+index f642e60..648cfbe 100644
+--- a/src/lib/platform-admin/server/dal.ts
++++ b/src/lib/platform-admin/server/dal.ts
+@@ -429,6 +429,8 @@ export async function getOrgProductUsageForPlatform(orgId: string): Promise<Modu
+   const mods: { key: string; label: string; table: string; orgCol: string; timeCol: string }[] = [
+     { key: "properties", label: "נכסים", table: "properties", orgCol: "org_id", timeCol: "created_at" },
+     { key: "leads", label: "לידים", table: "leads", orgCol: "org_id", timeCol: "created_at" },
++    // NOTE (P1-4): admin usage COUNT only. `matching_results` is the legacy/raw/QA-seed
++    // table — the canonical agent-facing matching output is `match_intelligence_profiles`.
+     { key: "matching", label: "התאמות", table: "matching_results", orgCol: "org_id", timeCol: "created_at" },
+     { key: "journeys", label: "מסעות", table: "journeys", orgCol: "org_id", timeCol: "created_at" },
+     { key: "automations", label: "אוטומציות", table: "automations", orgCol: "org_id", timeCol: "created_at" },

@@ -24,13 +24,16 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [], count
   const [tick, setTick] = useState(0); // rotating ticker index
   const startedComplete = useRef(false);
 
-  // 12 deterministic pseudo Wow scores + QA risk + the 2 selected winners.
+  // 12 deterministic pseudo Wow scores + QA risk + the `count` selected winners.
+  // The number of winners MUST equal the real production count (`count`), so the
+  // header, the "נבחרו להפקה" counter and the highlighted cards never disagree
+  // with how many final ads are actually produced downstream.
   const { scores, qaRisk, selectedSet } = useMemo(() => {
     const s = Array.from({ length: CONCEPTS.length }, (_, i) => 72 + ((i * 37 + 13) % 27)); // 72..98
     const risk: ("low" | "medium" | "high")[] = s.map((v) => (v >= 90 ? "low" : v >= 82 ? "medium" : "high"));
     const order = [...s.keys()].sort((a, b) => s[b] - s[a]);
-    return { scores: s, qaRisk: risk, selectedSet: new Set(order.slice(0, 2)) };
-  }, []);
+    return { scores: s, qaRisk: risk, selectedSet: new Set(order.slice(0, count)) };
+  }, [count]);
 
   useEffect(() => {
     const id = setInterval(() => setT((p) => Math.min(p + 0.01, 0.92)), 200);
@@ -51,8 +54,8 @@ export function CreativeGenerationModal({ complete, onView, finalAds = [], count
   const generated = final ? 12 : Math.min(12, Math.round((tt / 0.45) * 12));
   const scored = final || tt >= 0.55;
   const selectPhase = final || tt >= 0.78;
-  const rejected = selectPhase ? 10 : 0;
-  const selectedCount = selectPhase ? 2 : 0;
+  const rejected = selectPhase ? Math.max(0, CONCEPTS.length - count) : 0;
+  const selectedCount = selectPhase ? count : 0;
   const finalAdsCount = final ? count : 0;
   // Honest completion: count real successes; flag a full failure (no images).
   const successCount = finalAds.filter((a) => a.imageUrl || !a.failed).length;

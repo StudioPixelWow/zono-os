@@ -81,6 +81,7 @@ export interface AgentSitePayload {
   stats: SiteStat[]; // big trust-numbers strip (only real data)
   featured: SiteProperty[];
   recommended: SiteProperty[]; // second discovery — excludes featured
+  allProperties: SiteProperty[]; // full public inventory (featured-first) for live in-page filtering
   mapPoints: SiteProperty[]; // geocoded subset for the expertise map
   areas: SiteArea[];
   testimonials: { name: string; area: string | null; text: string; rating: number | null }[];
@@ -336,6 +337,7 @@ export async function getAgentSite(
     stats,
     featured,
     recommended,
+    allProperties: [...featured, ...all.filter((p) => !featuredSet.has(p.id))],
     mapPoints,
     areas,
     testimonials,

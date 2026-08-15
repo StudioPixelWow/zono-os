@@ -8,7 +8,7 @@
 import Link from "next/link";
 import type { AgentSitePayload, SiteProperty } from "@/lib/agent-website/site-data";
 import { AgentHeader, type HeaderNavItem } from "./AgentHeader";
-import { PropertySearch } from "./PropertySearch";
+import { PropertyExplorer } from "./PropertyExplorer";
 import { ExpertiseMap } from "./ExpertiseMap";
 import { Testimonials } from "./Testimonials";
 import { MobileStickyCta } from "./MobileStickyCta";
@@ -46,19 +46,16 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       {on("hero") && <Hero data={data} />}
 
-      {/* ── PROPERTY SEARCH ──────────────────────────────────────────────── */}
-      <div className="relative z-10">
-        <PropertySearch slug={slug} areas={agent.areas} types={types} />
-      </div>
-
-      {/* ── FEATURED PROPERTIES — or a buyer marketing state when the agent has
-             no inventory yet (never a dead empty section). ─────────────────── */}
+      {/* ── PROPERTY SEARCH + FEATURED — LIVE in-page filtering (P9.6A/P1-1).
+             The search bar filters the agent's real inventory instantly on this
+             page (no navigation, no reload). A single listing keeps the
+             cinematic treatment; no inventory → a buyer marketing state. ────── */}
       {on("featured_properties") && (
-        data.featured.length > 0 ? (
+        data.allProperties.length > 1 ? (
+          <PropertyExplorer properties={data.allProperties} areas={agent.areas} types={types} propertiesHref={propertiesHref} />
+        ) : data.featured.length === 1 ? (
           <SectionShell id="properties" title="נכסים נבחרים" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
-            {data.featured.length === 1
-              ? <FeaturedProperty property={data.featured[0]} />
-              : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">{data.featured.map((p) => <AgentPropertyCard key={p.id} property={p} />)}</div>}
+            <FeaturedProperty property={data.featured[0]} />
           </SectionShell>
         ) : data.recommended.length === 0 ? (
           <BuyerCta data={data} />

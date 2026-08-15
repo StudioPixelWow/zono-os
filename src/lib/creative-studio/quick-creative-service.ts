@@ -386,7 +386,7 @@ export async function buildConceptBriefs(g: GenerateQuickInput): Promise<{ brief
     return { briefs: fallback, source: "fallback" };
   }
 }
-export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ requestId: string; created: number }> {
+export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ requestId: string; created: number; warning?: string }> {
   const { orgId, userId, supabase } = await ctx();
   const missing = validateRequired(g.requestType, g.input);
   if (missing.length) throw new Error(`חסרים שדות חובה: ${missing.join(", ")}`);
@@ -477,7 +477,11 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           : reasons.some((x) => x.includes("נכסים לרפרנס"))
             ? "אין תמונות רפרנס — הוסף תמונות לנכס או לוגו/תמונת סוכן למותג"
             : reasons.join(" · ");
-        throw new Error(`לא נוצרו תמונות AI אמיתיות — ${hint}`);
+        // P1-3: a quality/provider shortfall WARNS, it never BLOCKS. The option
+        // rows are already persisted above; return them with a non-blocking
+        // warning so the flow completes and the agent sees the result instead of
+        // an aborting error. Generation must continue.
+        return { requestId, created: adIds.length, warning: `ייתכן שלא נוצרו תמונות AI מלאות — ${hint}. אפשר לשפר את התוצאה, ממשיכים ביצירה.` };
       }
       return { requestId, created: adIds.length };
     }
@@ -568,7 +572,11 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           : reasons.some((x) => x.includes("נכסים לרפרנס"))
             ? "אין תמונות רפרנס — הוסף תמונות לנכס או לוגו/תמונת סוכן למותג"
             : reasons.join(" · ");
-        throw new Error(`לא נוצרו תמונות AI אמיתיות — ${hint}`);
+        // P1-3: a quality/provider shortfall WARNS, it never BLOCKS. The option
+        // rows are already persisted above; return them with a non-blocking
+        // warning so the flow completes and the agent sees the result instead of
+        // an aborting error. Generation must continue.
+        return { requestId, created: adIds.length, warning: `ייתכן שלא נוצרו תמונות AI מלאות — ${hint}. אפשר לשפר את התוצאה, ממשיכים ביצירה.` };
       }
       return { requestId, created: adIds.length };
     }

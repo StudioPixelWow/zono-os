@@ -429,6 +429,8 @@ export async function getOrgProductUsageForPlatform(orgId: string): Promise<Modu
   const mods: { key: string; label: string; table: string; orgCol: string; timeCol: string }[] = [
     { key: "properties", label: "נכסים", table: "properties", orgCol: "org_id", timeCol: "created_at" },
     { key: "leads", label: "לידים", table: "leads", orgCol: "org_id", timeCol: "created_at" },
+    // NOTE (P1-4): admin usage COUNT only. `matching_results` is the legacy/raw/QA-seed
+    // table — the canonical agent-facing matching output is `match_intelligence_profiles`.
     { key: "matching", label: "התאמות", table: "matching_results", orgCol: "org_id", timeCol: "created_at" },
     { key: "journeys", label: "מסעות", table: "journeys", orgCol: "org_id", timeCol: "created_at" },
     { key: "automations", label: "אוטומציות", table: "automations", orgCol: "org_id", timeCol: "created_at" },

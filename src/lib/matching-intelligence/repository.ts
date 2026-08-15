@@ -1,5 +1,15 @@
 /**
  * Matching Intelligence repositories — RLS-scoped (server-only).
+ *
+ * TABLE OWNERSHIP (P9.6A / P1-4):
+ *   `match_intelligence_profiles` is the CANONICAL Agent Matching Intelligence
+ *   output — the ONE source every agent-facing matching surface reads (Matches
+ *   board, buyer/property/seller detail, Today/dashboard widget, client portal).
+ *   It is produced by `generateMatchesForOrg()` in ./service.ts.
+ *
+ *   `matching_results` is a LEGACY / raw-scoring / QA-seed table. No agent-facing
+ *   product screen reads it; its only runtime consumer is the platform-admin
+ *   Customer-360 usage COUNT. Never point an agent screen at `matching_results`.
  */
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
