@@ -285,13 +285,13 @@ export function getProvider(source: string): PropertyProvider {
   return source === "madlan" ? new MadlanProvider() : new Yad2Provider();
 }
 
-export async function runYad2Scraper(locality: string): Promise<NormalizedExternalListing[]> {
+export async function runYad2Scraper(locality: string, limit: number = MAX_LISTINGS_PER_CITY): Promise<NormalizedExternalListing[]> {
   const p = new Yad2Provider();
-  return (await p.searchListings(locality)).map((r) => p.normalizeListing(r));
+  return (await p.searchListings(locality, limit)).map((r) => p.normalizeListing(r));
 }
-export async function runMadlanScraper(locality: string): Promise<NormalizedExternalListing[]> {
+export async function runMadlanScraper(locality: string, limit: number = MAX_LISTINGS_PER_CITY): Promise<NormalizedExternalListing[]> {
   const p = new MadlanProvider();
-  return (await p.searchListings(locality)).map((r) => p.normalizeListing(r));
+  return (await p.searchListings(locality, limit)).map((r) => p.normalizeListing(r));
 }
 
 export function isApifyConfigured(): boolean {
