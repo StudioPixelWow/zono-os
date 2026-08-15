@@ -6,7 +6,7 @@ import { submitAgentLeadAction } from "@/lib/agent-website/actions";
 type Variant = "buyer_request" | "valuation" | "contact";
 
 /** Public lead form on the agent site. Posts via an auth-free action. */
-export function AgentLeadForm({ slug, variant, cta, accent = "#7C3AED" }: { slug: string; variant: Variant; cta: string; accent?: string }) {
+export function AgentLeadForm({ slug, variant, cta, accent = "var(--brand-primary)" }: { slug: string; variant: Variant; cta: string; accent?: string }) {
   const [pending, start] = useTransition();
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export function AgentLeadForm({ slug, variant, cta, accent = "#7C3AED" }: { slug
   };
 
   if (done) return <div className="rounded-2xl bg-[#ecfdf5] p-5 text-center font-bold text-[#065f46]">תודה! ניצור איתך קשר בהקדם ✓</div>;
-  const input = "w-full rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7C3AED]";
+  const input = "w-full rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm outline-none focus:border-[color:var(--brand-primary)]";
   return (
     <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {variant === "buyer_request" && <>
@@ -45,7 +45,7 @@ export function AgentLeadForm({ slug, variant, cta, accent = "#7C3AED" }: { slug
         <input className={input} placeholder="טלפון" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} required />
         <textarea className={`${input} sm:col-span-2`} placeholder="במה אוכל לעזור?" rows={3} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} />
       </>}
-      <button type="submit" disabled={pending} style={{ backgroundColor: accent }} className="rounded-xl px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60 sm:col-span-2">{pending ? "שולח…" : cta}</button>
+      <button type="submit" disabled={pending} style={{ backgroundColor: accent, color: "var(--brand-on-primary)" }} className="rounded-xl px-5 py-2.5 text-sm font-bold disabled:opacity-60 sm:col-span-2">{pending ? "שולח…" : cta}</button>
       {error && <p className="text-sm font-semibold text-[#dc2626] sm:col-span-2">{error}</p>}
       <p className="text-[11px] text-[#9ca3af] sm:col-span-2">בלחיצה אתה מאשר שניצור איתך קשר.</p>
     </form>
