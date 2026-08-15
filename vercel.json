@@ -17,6 +17,10 @@
       "schedule": "15 * * * *"
     },
     {
+      "path": "/api/cron/madlan-directory-refresh",
+      "schedule": "30 3 * * *"
+    },
+    {
       "path": "/api/cron/brokerage-knowledge",
       "schedule": "40 4 * * *"
     },
