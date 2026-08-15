@@ -6,13 +6,13 @@
 // Consumes the sanitised AgentSitePayload only (no private CRM data).
 // ============================================================================
 import Link from "next/link";
-import type { AgentSitePayload } from "@/lib/agent-website/site-data";
+import type { AgentSitePayload, SiteProperty } from "@/lib/agent-website/site-data";
 import { AgentHeader, type HeaderNavItem } from "./AgentHeader";
 import { PropertySearch } from "./PropertySearch";
 import { ExpertiseMap } from "./ExpertiseMap";
 import { Testimonials } from "./Testimonials";
 import { MobileStickyCta } from "./MobileStickyCta";
-import { AgentPropertyCard, SectionShell, TextLink, StatStrip, ProofPoints } from "./ui";
+import { AgentPropertyCard, SectionShell, TextLink, StatStrip, ProofPoints, money } from "./ui";
 import { AgentLeadForm } from "@/app/agent/[slug]/AgentLeadForm";
 
 const ADVANTAGES: { icon: string; title: string; text: string }[] = [
@@ -51,13 +51,18 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
         <PropertySearch slug={slug} areas={agent.areas} types={types} />
       </div>
 
-      {/* ── FEATURED PROPERTIES ──────────────────────────────────────────── */}
-      {on("featured_properties") && data.featured.length > 0 && (
-        <SectionShell id="properties" title="נכסים נבחרים" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {data.featured.map((p) => <AgentPropertyCard key={p.id} property={p} />)}
-          </div>
-        </SectionShell>
+      {/* ── FEATURED PROPERTIES — or a buyer marketing state when the agent has
+             no inventory yet (never a dead empty section). ─────────────────── */}
+      {on("featured_properties") && (
+        data.featured.length > 0 ? (
+          <SectionShell id="properties" title="נכסים נבחרים" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
+            {data.featured.length === 1
+              ? <FeaturedProperty property={data.featured[0]} />
+              : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">{data.featured.map((p) => <AgentPropertyCard key={p.id} property={p} />)}</div>}
+          </SectionShell>
+        ) : data.recommended.length === 0 ? (
+          <BuyerCta data={data} />
+        ) : null
       )}
 
       {/* ── EXPERTISE MAP + AREA EXPERTISE ───────────────────────────────── */}
@@ -113,6 +118,49 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
       <Footer data={data} nav={nav} />
 
       <MobileStickyCta whatsapp={agent.whatsapp} tel={agent.tel} />
+    </div>
+  );
+}
+
+// ── No inventory yet → a buyer marketing state (never a dead empty section) ────
+function BuyerCta({ data }: { data: AgentSitePayload }) {
+  const area = data.agent.areas[0];
+  return (
+    <SectionShell id="properties" title={area ? `מחפשים נכס ב${area}?` : "מחפשים את הבית הבא שלכם?"}>
+      <p className="mx-auto -mt-4 mb-8 max-w-2xl text-center text-[16px] leading-relaxed text-[var(--brand-muted)]">הנכסים שאני משווק מתעדכנים כאן באופן שוטף. ספרו לי מה אתם מחפשים ואעדכן אתכם ברגע שתופיע הזדמנות שמתאימה בדיוק לכם.</p>
+      <div className="mx-auto max-w-xl rounded-[24px] border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 shadow-[0_18px_44px_-26px_rgba(15,23,42,0.3)] sm:p-8">
+        <AgentLeadForm slug={data.slug} variant="buyer_request" cta="ספרו לי מה אתם מחפשים" accent={data.brand.primary} />
+      </div>
+    </SectionShell>
+  );
+}
+
+// ── A single property → one cinematic featured listing ────────────────────────
+function FeaturedProperty({ property }: { property: SiteProperty }) {
+  const loc = [property.neighborhood, property.city].filter(Boolean).join(", ");
+  const price = property.listingKind === "rent"
+    ? (money(property.monthlyRent) ? `${money(property.monthlyRent)} / חודש` : null)
+    : money(property.price);
+  const meta = [
+    property.rooms != null ? `${property.rooms} חד׳` : null,
+    property.sizeSqm != null ? `${property.sizeSqm} מ״ר` : null,
+    property.floor != null ? `קומה ${property.floor}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="grid items-stretch gap-6 overflow-hidden rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-background)] shadow-[0_24px_60px_-34px_rgba(15,23,42,0.45)] lg:grid-cols-[1.4fr_1fr]">
+      <div className="relative aspect-[16/10] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto">
+        {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
+        {property.image
+          ? <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
+          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><svg viewBox="0 0 24 24" width={56} height={56} fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden><path d="M3 11l9-7 9 7M5 10v9h5v-5h4v5h5v-9" strokeLinejoin="round" strokeLinecap="round" /></svg></div>}
+      </div>
+      <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">
+        <h3 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{property.title}</h3>
+        {loc && <p className="text-[15px] text-[var(--brand-muted)]">{loc}</p>}
+        {price && <p className="text-3xl font-black text-[color:var(--brand-link)]">{price}</p>}
+        {meta.length > 0 && <p className="text-[15px] font-semibold text-[var(--brand-text)]">{meta.join(" · ")}</p>}
+        <div className="mt-3"><Link href={property.href} className="inline-flex rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[15px] font-black text-[var(--brand-on-primary)] shadow-lg transition hover:-translate-y-0.5">לפרטי הנכס ←</Link></div>
+      </div>
     </div>
   );
 }

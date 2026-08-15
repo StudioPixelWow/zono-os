@@ -136,8 +136,9 @@ export default async function AgentHomePage({ params }: { params: Promise<{ slug
 
 // ── Local luxury pieces (agent home only; real data, hide-when-empty) ─────────
 const fmtIls = (n: number | null) => (n == null ? null : `₪${n.toLocaleString("he-IL")}`);
-const A_GRADIENT = "var(--site-gradient, linear-gradient(135deg,#7c3aed,#a78bfa))";
-const A_ACCENT = "var(--site-accent, #7c3aed)";
+// Resolve from brand tokens (agent/office identity); never the ZONO app purple.
+const A_GRADIENT = "var(--site-gradient, linear-gradient(135deg, var(--brand-primary, #0f4c81), var(--brand-secondary, #0b3a63)))";
+const A_ACCENT = "var(--site-accent, var(--brand-primary, #0f4c81))";
 
 function AgentSpotlight({ slug, p }: { slug: string; p: { id: string; title: string; price: number | null; image: string | null; badge: string | null } }) {
   return (
