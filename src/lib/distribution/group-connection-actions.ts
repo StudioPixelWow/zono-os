@@ -9,7 +9,8 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 import {
   requestGroupScan, getGroupConnectionOverview, listGroupSyncEvents,
-  type GroupConnectionOverview, type SyncEventView, type ActionResult,
+  listImportedGroups, setGroupPublishSelection,
+  type GroupConnectionOverview, type SyncEventView, type ActionResult, type ImportedGroupView,
 } from "./group-import-service";
 import { revokeAllInstances } from "./extension-service";
 import { getSessionContext } from "@/lib/auth/session";
@@ -31,6 +32,18 @@ export async function getGroupConnectionOverviewAction(): Promise<GroupConnectio
 /** Recent append-only import/sync audit trail. */
 export async function listGroupSyncEventsAction(limit = 30): Promise<SyncEventView[]> {
   return listGroupSyncEvents(limit);
+}
+
+/** The imported groups with a per-group yes/no publish flag (for the panel list). */
+export async function listImportedGroupsAction(): Promise<ImportedGroupView[]> {
+  return listImportedGroups();
+}
+
+/** Toggle a single group's publish selection (yes/no). Revalidates the panel. */
+export async function setGroupPublishSelectionAction(groupId: string, selected: boolean): Promise<ActionResult> {
+  const res = await setGroupPublishSelection(groupId, selected);
+  revalidatePath(PATH);
+  return res;
 }
 
 /** Disconnect the extension for this org (revoke all instances). Manager+ only. */

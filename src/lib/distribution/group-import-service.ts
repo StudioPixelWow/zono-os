@@ -235,3 +235,62 @@ export async function requestGroupScan(): Promise<ActionResult> {
   await audit(db, { orgId: c.orgId, userId: c.userId, instanceId: i.instance_id, action: "scan_requested" });
   return { ok: true };
 }
+
+// ── Imported-group list + per-group publish selection (agent picks yes/no) ────
+// A group the extension imported starts as "discovered" (imported, NOT eligible
+// to publish). The agent explicitly activates the ones they want → status
+// "active", which is the canonical publish-eligibility flag consumed downstream
+// (campaigns → posts → jobs). Toggling never deletes a group.
+export interface ImportedGroupView {
+  id: string;
+  name: string;
+  url: string | null;
+  membersCount: number | null;
+  status: string;                 // active | discovered | unavailable | manual…
+  selected: boolean;              // status === "active"
+}
+
+/** Every group the extension imported for the signed-in user's org, ordered
+ *  selected-first then by name, each with a yes/no publish flag. */
+export async function listImportedGroups(limit = 1000): Promise<ImportedGroupView[]> {
+  const c = await ctx(); if (!c) return [];
+  const db: any = createServiceRoleClient();
+  const { data } = await db.from(GROUPS)
+    .select("id,name,group_url,members_count,status")
+    .eq("org_id", c.orgId).in("source", ["scan", "import"])
+    .order("name", { ascending: true }).limit(limit);
+  return ((data ?? []) as any[])
+    .map((r) => ({
+      id: r.id as string,
+      name: (r.name as string) ?? "",
+      url: (r.group_url as string) ?? null,
+      membersCount: typeof r.members_count === "number" ? r.members_count : null,
+      status: (r.status as string) ?? "discovered",
+      selected: r.status === "active",
+    }))
+    // selected groups first, then alphabetical (already name-ordered from the query)
+    .sort((a, b) => (a.selected === b.selected ? 0 : a.selected ? -1 : 1));
+}
+
+/** Toggle whether a group is selected for publishing. true → status "active"
+ *  (eligible), false → "discovered" (imported, not published to). Org-scoped;
+ *  writes an append-only audit event. Never deletes the group. */
+export async function setGroupPublishSelection(groupId: string, selected: boolean): Promise<ActionResult> {
+  const c = await ctx(); if (!c) return { ok: false, error: "unauthorized" };
+  if (!groupId) return { ok: false, error: "missing_group" };
+  const db: any = createServiceRoleClient();
+  const { data: row } = await db.from(GROUPS)
+    .select("id,external_group_id").eq("id", groupId).eq("org_id", c.orgId).maybeSingle();
+  const r = row as { id: string; external_group_id: string | null } | null;
+  if (!r) return { ok: false, error: "not_found" };
+  const { error } = await db.from(GROUPS)
+    .update({ status: selected ? "active" : "discovered", updated_at: new Date().toISOString() })
+    .eq("id", groupId).eq("org_id", c.orgId);
+  if (error) return { ok: false, error: error.message };
+  await audit(db, {
+    orgId: c.orgId, userId: c.userId, instanceId: null,
+    action: selected ? "group_selected" : "group_unselected",
+    externalGroupId: r.external_group_id, groupId, details: { selected },
+  });
+  return { ok: true };
+}

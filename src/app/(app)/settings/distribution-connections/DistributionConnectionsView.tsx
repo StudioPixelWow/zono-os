@@ -287,6 +287,20 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
             </div>
           </div>
 
+          {/* Pairing code — surfaced at the TOP of the section so it's visible the
+              instant it's generated (it previously rendered below the fold). */}
+          {pairingCode && (
+            <div className="border-brand/40 bg-brand-soft mt-4 rounded-xl border-2 p-4">
+              <p className="text-ink text-sm font-bold">קוד חיבור (תקף ל-10 דקות, חד-פעמי)</p>
+              <p className="text-brand-strong my-2 text-3xl font-black tracking-widest" dir="ltr">{pairingCode}</p>
+              <ol className="text-muted mt-1 grid list-decimal gap-1 pe-5 text-xs">
+                <li>פתח את תוסף ZONO ל-Chrome</li>
+                <li>הדבק את הקוד הזה בשדה החיבור</li>
+                <li>לחץ ״חבר״ והשאר את Facebook פתוח בדפדפן</li>
+              </ol>
+            </div>
+          )}
+
           {/* Live status */}
           <div className="mt-3 grid gap-1.5 text-sm">
             <p className="text-muted">סטטוס: <span className="text-ink font-bold">{PATH_STATUS_LABEL[paths.extension.status]}</span></p>
@@ -322,20 +336,6 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
                 <li>לחץ «טען תוסף לא ארוז» (Load unpacked) ובחר את התיקייה.</li>
                 <li>אשר את בקשת הרשאת הגישה לדומיין של ZONO.</li>
                 <li>חזור לכאן ולחץ «התחל חיבור תוסף».</li>
-              </ol>
-            </div>
-          )}
-
-          {/* Pairing instructions + code */}
-          {pairingCode && (
-            <div className="border-brand/30 bg-brand-soft mt-4 rounded-xl border p-4">
-              <p className="text-ink text-sm font-bold">קוד חיבור (תקף ל-10 דקות, חד-פעמי)</p>
-              <p className="text-brand-strong my-2 text-2xl font-black tracking-widest" dir="ltr">{pairingCode}</p>
-              <ol className="text-muted mt-1 grid list-decimal gap-1 pe-5 text-xs">
-                <li>התקן את תוסף ZONO ל-Chrome</li>
-                <li>פתח את התוסף</li>
-                <li>הזן את קוד החיבור הזה</li>
-                <li>השאר את Facebook פתוח בדפדפן</li>
               </ol>
             </div>
           )}

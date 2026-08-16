@@ -4,8 +4,8 @@ import type { FacebookPathView } from "@/lib/distribution/facebook-connection-pa
 import type { MetaIntegrationView } from "@/lib/distribution/meta-pages";
 import type { GroupDestination, GroupTaskStatus } from "@/lib/distribution/extension-service";
 import { getMetaOAuthConfig } from "@/lib/distribution/meta-oauth";
-import { getGroupConnectionOverviewAction, listGroupSyncEventsAction } from "@/lib/distribution/group-connection-actions";
-import type { GroupConnectionOverview, SyncEventView } from "@/lib/distribution/group-import-service";
+import { getGroupConnectionOverviewAction, listGroupSyncEventsAction, listImportedGroupsAction } from "@/lib/distribution/group-connection-actions";
+import type { GroupConnectionOverview, SyncEventView, ImportedGroupView } from "@/lib/distribution/group-import-service";
 import { DistributionConnectionsView } from "./DistributionConnectionsView";
 import { FacebookGroupsImportPanel } from "./FacebookGroupsImportPanel";
 
@@ -45,8 +45,9 @@ export default async function DistributionConnectionsPage({
   let groupTasks: GroupTaskStatus[] = [];
   let groupOverview: GroupConnectionOverview | null = null;
   let groupSyncEvents: SyncEventView[] = [];
+  let importedGroups: ImportedGroupView[] = [];
   try {
-    [connections, paths, metaIntegration, groups, groupTasks, groupOverview, groupSyncEvents] = await Promise.all([
+    [connections, paths, metaIntegration, groups, groupTasks, groupOverview, groupSyncEvents, importedGroups] = await Promise.all([
       getDistributionConnectionsAction(),
       getFacebookConnectionPathsAction(),
       getMetaIntegrationAction(),
@@ -54,6 +55,7 @@ export default async function DistributionConnectionsPage({
       listGroupTaskStatusesAction(),
       getGroupConnectionOverviewAction(),
       listGroupSyncEventsAction(),
+      listImportedGroupsAction(),
     ]);
   } catch (e) {
     console.error("[distribution-connections] load failed:", e);
@@ -62,7 +64,7 @@ export default async function DistributionConnectionsPage({
   return (
     <>
       <DistributionConnectionsView initial={connections} compliance={CONNECTION_COMPLIANCE} paths={paths} metaConfigured={metaConfigured} metaIntegration={metaIntegration} groups={groups} groupTasks={groupTasks} notice={notice} />
-      {groupOverview && <FacebookGroupsImportPanel overview={groupOverview} events={groupSyncEvents} />}
+      {groupOverview && <FacebookGroupsImportPanel overview={groupOverview} events={groupSyncEvents} groups={importedGroups} />}
     </>
   );
 }
