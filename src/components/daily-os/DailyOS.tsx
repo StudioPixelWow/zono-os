@@ -10,6 +10,7 @@ import Link from "next/link";
 import type { DailyOS as DData, DailyAction, ExecutiveDaily } from "@/lib/daily-os/types";
 import type { ScoredEntity } from "@/lib/broker-workspace/types";
 import { getExecutiveDailyAction, askDailyAction } from "@/lib/daily-os/actions";
+import { KpiCard, IconSurface } from "@/components/ui/action-surfaces";
 
 type Tab = "morning" | "actions" | "convo" | "deals" | "growth" | "approvals" | "exec" | "ask";
 const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -28,8 +29,18 @@ const kindIcon: Record<string, string> = { call: "📞", send: "📤", price: "�
 const urgCls: Record<string, string> = { critical: "bg-danger-soft text-danger", high: "bg-danger-soft text-danger", medium: "bg-warning-soft text-warning", low: "bg-surface text-muted" };
 const urgHe: Record<string, string> = { critical: "קריטי", high: "דחוף", medium: "בינוני", low: "רגיל" };
 
-function Tile({ l, v }: { l: string; v: number | string }) { return <div className="bg-card border-line rounded-2xl border px-2 py-2.5 text-center shadow-[var(--shadow-card)]"><div className="text-brand text-xl font-black">{v}</div><div className="text-muted text-[10px] font-bold">{l}</div></div>; }
-function Empty({ t }: { t: string }) { return <div className="bg-card border-line text-muted rounded-2xl border p-6 text-center text-[13px]">{t}</div>; }
+// Number-first KPI unit (§8) — shared compact KpiCard so every metric row on
+// /today gets the same premium hierarchy instead of a tiny bespoke tile.
+function Tile({ l, v }: { l: string; v: number | string }) { return <KpiCard label={l} value={v} variant="compact" className="text-center" />; }
+// Contextual empty (§13) — a purposeful glyph + message, not a bare gray box.
+function Empty({ t }: { t: string }) {
+  return (
+    <div className="bg-card border-line flex flex-col items-center gap-2 rounded-2xl border border-dashed p-6 text-center">
+      <IconSurface name="Inbox" tier="m" accent="neutral" variant="soft" />
+      <p className="text-muted text-[13px] font-semibold">{t}</p>
+    </div>
+  );
+}
 function EntityRow({ e }: { e: ScoredEntity }) {
   return <Link href={e.href} className="bg-surface flex items-center gap-3 rounded-2xl p-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[12px] font-black ${e.healthScore != null ? scoreCls(e.healthScore) : "bg-surface text-muted"}`}>{e.healthScore ?? "—"}</span><div className="min-w-0 flex-1"><div className="text-ink line-clamp-1 text-[13px] font-bold">{e.name}</div>{e.reason && <div className="text-muted line-clamp-1 text-[11px]">{e.reason}</div>}</div>{e.riskLabel && <span className="bg-danger-soft text-danger shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold">{e.riskLabel}</span>}</Link>;
 }

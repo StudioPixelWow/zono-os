@@ -6,6 +6,7 @@ import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { recalcMatchesAction } from "@/lib/matching-intelligence/actions";
+import { ConnectionPulse, ProcessStages } from "@/components/ui/motion";
 import { STAGE_LABELS, type MatchStage } from "@/lib/matching-intelligence/playbook";
 import type { MatchBoard, MatchBoardItem } from "@/lib/matching-intelligence/service";
 
@@ -52,7 +53,7 @@ export function MatchesView({ rows, board }: { rows: MatchRow[]; board: MatchBoa
           <p className="text-brand text-xs font-bold tracking-wide">Matching Intelligence OS · מוח העסקאות</p>
           <h1 className="text-ink text-2xl font-black">התאמות ועסקאות</h1>
         </div>
-        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={18} />}>{pending ? "מחשב…" : "חשב התאמות מחדש"}</Button>
+        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="GitCompareArrows" size={18} />}>{pending ? "מחשב…" : "חשב התאמות מחדש"}</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
 
@@ -64,19 +65,23 @@ export function MatchesView({ rows, board }: { rows: MatchRow[]; board: MatchBoa
 
       {/* Board */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <BoardCard icon="Sparkles" title="הזדמנויות חמות" items={board.bestOpportunities} accent="bg-success-soft text-success" />
+        <BoardCard icon="Flame" title="הזדמנויות חמות" items={board.bestOpportunities} accent="bg-success-soft text-success" />
         <BoardCard icon="TrendingUp" title="הסתברות סגירה גבוהה" items={board.highestClosing} accent="bg-brand-soft text-brand" />
         <BoardCard icon="AlertTriangle" title="עסקאות בסיכון" items={board.dealsAtRisk} accent="bg-danger-soft text-danger" />
         <BoardCard icon="Clock" title="התאמות תקועות" items={board.stalled} accent="bg-warning-soft text-warning" />
       </div>
 
       {rows.length === 0 ? (
-        <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
-          <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Sparkles" size={26} /></span>
-          <p className="text-ink text-lg font-extrabold">אין התאמות עדיין</p>
-          <p className="text-muted max-w-sm text-sm">לחיצה על ״חשב התאמות מחדש״ — ZONO יצליב בין קונים לנכסים פעילים וייצר עסקאות פוטנציאליות עם הסתברות סגירה.</p>
-          <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={18} />}>חשב התאמות</Button>
-        </div>
+        pending ? (
+          <ProcessStages title="מחשבים התאמות" active={1} stages={["טוענים קונים ונכסים פעילים", "מצליבים דרישות מול היצע", "מדרגים הסתברות סגירה ועמלה"]} />
+        ) : (
+          <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
+            <ConnectionPulse className="mb-1" />
+            <p className="text-ink text-lg font-extrabold">אין התאמות עדיין</p>
+            <p className="text-muted max-w-sm text-sm">לחיצה על ״חשב התאמות מחדש״ — ZONO יצליב בין קונים לנכסים פעילים וייצר עסקאות פוטנציאליות עם הסתברות סגירה.</p>
+            <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="GitCompareArrows" size={18} />}>חשב התאמות</Button>
+          </div>
+        )
       ) : (
         <div className="bg-card border-line overflow-x-auto rounded-[20px] border">
           <table className="w-full min-w-[680px] text-start text-sm">

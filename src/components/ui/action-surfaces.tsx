@@ -49,26 +49,32 @@ export function IconSurface({
 }
 
 // ── ActionCard (§3/§10) — a premium command launcher, icon leads meaning ─────
+// tone="dark" (§7) makes it work on navy/purple command surfaces with high
+// contrast, subtle depth, and a strong icon treatment (no neon/glow overuse).
 export function ActionCard({
-  name, label, subtext, accent = "brand", shortcut, onClick, disabled, className,
-}: { name: string; label: string; subtext?: string; accent?: Accent; shortcut?: string; onClick?: () => void; disabled?: boolean; className?: string }) {
+  name, label, subtext, accent = "brand", shortcut, onClick, disabled, className, tone = "light", badge,
+}: { name: string; label: string; subtext?: string; accent?: Accent; shortcut?: string; onClick?: () => void; disabled?: boolean; className?: string; tone?: "light" | "dark"; badge?: string }) {
+  const dark = tone === "dark";
   return (
     <button
-      type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label}
+      type="button" onClick={onClick} disabled={disabled} aria-label={label} title={disabled && badge ? badge : label}
       className={cn(
-        "group relative flex items-center gap-3 rounded-2xl border border-line bg-card p-4 text-right shadow-card transition-all",
-        "hover:-translate-y-0.5 hover:border-transparent hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand,#6d28d9)]/40",
-        disabled && "cursor-not-allowed opacity-55 hover:translate-y-0 hover:shadow-card", className)}
+        "group relative flex items-center gap-3 rounded-2xl border p-4 text-right transition-all",
+        dark
+          ? "border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(15,10,40,0.35)] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          : "border-line bg-card shadow-card hover:-translate-y-0.5 hover:border-transparent hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand,#6d28d9)]/40",
+        disabled && "cursor-not-allowed opacity-55 hover:translate-y-0 hover:shadow-none", className)}
     >
-      <IconSurface name={name} tier="l" accent={accent} variant="soft" className="transition-transform group-hover:scale-[1.06]" />
+      <IconSurface name={name} tier="l" accent={accent} variant={dark ? "solid" : "soft"} className="transition-transform group-hover:scale-[1.06]" />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className="text-ink truncate text-[15px] font-black">{label}</span>
-          {shortcut && <kbd className="text-muted border-line hidden rounded border px-1.5 text-[10px] font-bold sm:inline">{shortcut}</kbd>}
+          <span className={cn("truncate text-[15px] font-black", dark ? "text-white" : "text-ink")}>{label}</span>
+          {shortcut && <kbd className={cn("hidden rounded border px-1.5 text-[10px] font-bold sm:inline", dark ? "border-white/20 text-white/60" : "text-muted border-line")}>{shortcut}</kbd>}
+          {disabled && badge && <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", dark ? "bg-white/10 text-white/55" : "bg-surface text-muted")}>{badge}</span>}
         </span>
-        {subtext && <span className="text-muted mt-0.5 block truncate text-xs">{subtext}</span>}
+        {subtext && <span className={cn("mt-0.5 block truncate text-xs", dark ? "text-white/55" : "text-muted")}>{subtext}</span>}
       </span>
-      <Icon name="ChevronLeft" size={18} strokeWidth={2.2} className="text-muted transition-transform group-hover:-translate-x-0.5" />
+      <Icon name="ChevronLeft" size={18} strokeWidth={2.2} className={cn("transition-transform group-hover:-translate-x-0.5", dark ? "text-white/45" : "text-muted")} />
     </button>
   );
 }
@@ -78,23 +84,67 @@ export function ActionGrid({ children, className }: { children: ReactNode; class
   return <div className={cn("grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3", className)}>{children}</div>;
 }
 
-// ── KpiCard (§11) — number first, icon secondary, real drill-down ────────────
+// ── KpiCard (§11/§8) — number first, icon secondary, real drill-down ─────────
+// variants: default · emphasis (accent field + bigger number) · compact ·
+// interactive (implied by onClick) · dark (on command surfaces). No fake trends.
+export type KpiVariant = "default" | "emphasis" | "compact" | "dark";
 export function KpiCard({
-  label, value, icon, accent = "brand", hint, onClick, className,
-}: { label: string; value: string | number; icon?: string; accent?: Accent; hint?: string; onClick?: () => void; className?: string }) {
+  label, value, icon, accent = "brand", hint, onClick, className, variant = "default", iconSurface = false,
+}: { label: string; value: string | number; icon?: string; accent?: Accent; hint?: string; onClick?: () => void; className?: string; variant?: KpiVariant; iconSurface?: boolean }) {
   const a = ACCENT[accent];
+  const dark = variant === "dark";
+  const emphasis = variant === "emphasis";
+  const compact = variant === "compact";
   const Comp: "button" | "div" = onClick ? "button" : "div";
   return (
     <Comp
       {...(onClick ? { onClick, type: "button" as const } : {})}
-      className={cn("group relative flex flex-col items-start rounded-2xl border border-line bg-card p-4 text-right shadow-card transition-all",
-        onClick && "hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand,#6d28d9)]/40", className)}>
-      {icon && <Icon name={icon} size={ICON_SIZE.m} strokeWidth={ICON_STROKE.m} className={cn("absolute left-4 top-4 opacity-70", a.fg)} />}
-      <span className="text-ink text-3xl font-black leading-none tracking-tight">{value}</span>
-      <span className="text-muted mt-1.5 text-xs font-bold">{label}</span>
-      {hint && <span className="text-muted/80 mt-1 text-[11px]">{hint}</span>}
+      className={cn("group relative flex flex-col items-start rounded-2xl border text-right transition-all",
+        compact ? "p-3" : "p-4",
+        dark ? "border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(15,10,40,0.3)]"
+          : emphasis ? cn("border-transparent shadow-card", a.soft)
+          : "border-line bg-card shadow-card",
+        onClick && (dark
+          ? "hover:-translate-y-0.5 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          : "hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand,#6d28d9)]/40"), className)}>
+      {icon && (iconSurface
+        ? <span className="absolute left-3 top-3"><IconSurface name={icon} tier="s" accent={accent} variant={dark ? "solid" : "soft"} /></span>
+        : <Icon name={icon} size={compact ? ICON_SIZE.s : ICON_SIZE.m} strokeWidth={ICON_STROKE.m} className={cn("absolute left-4 top-4 opacity-70", dark ? "text-white/70" : a.fg)} />)}
+      <span className={cn("font-black leading-none tracking-tight", dark ? "text-white" : "text-ink", emphasis ? "text-4xl" : compact ? "text-2xl" : "text-3xl")}>{value}</span>
+      <span className={cn("font-bold", compact ? "mt-1 text-[11px]" : "mt-1.5 text-xs", dark ? "text-white/60" : "text-muted")}>{label}</span>
+      {hint && <span className={cn("mt-1 text-[11px]", dark ? "text-white/45" : "text-muted/80")}>{hint}</span>}
     </Comp>
   );
+}
+
+// ── Module icon-identity map (§9) — canonical module → icon + accent ─────────
+// Distinct, meaningful iconography per module (no generic sparkle as identity).
+export const MODULE_ICON: Record<string, { icon: string; accent: Accent }> = {
+  properties:          { icon: "Building2",     accent: "brand" },
+  property:            { icon: "Building2",     accent: "brand" },
+  leads:               { icon: "UserPlus",      accent: "info" },
+  buyers:              { icon: "Search",        accent: "info" },
+  sellers:             { icon: "KeyRound",      accent: "warn" },
+  matching:            { icon: "GitCompareArrows", accent: "brand" },
+  matches:             { icon: "GitCompareArrows", accent: "brand" },
+  deals:               { icon: "Handshake",     accent: "success" },
+  tasks:               { icon: "ListChecks",    accent: "neutral" },
+  meetings:            { icon: "CalendarClock", accent: "info" },
+  tours:               { icon: "MapPin",        accent: "info" },
+  creative:            { icon: "Palette",       accent: "brand" },
+  distribution:        { icon: "Share2",        accent: "brand" },
+  market_intelligence: { icon: "Map",           accent: "info" },
+  broker_intelligence: { icon: "Network",       accent: "brand" },
+  office_intelligence: { icon: "Building",      accent: "neutral" },
+  notifications:       { icon: "Bell",          accent: "warn" },
+  settings:            { icon: "SlidersHorizontal", accent: "neutral" },
+  calendar:            { icon: "Calendar",      accent: "info" },
+  ai:                  { icon: "Sparkles",      accent: "brand" }, // reserved for genuine AI only
+};
+
+/** Resolve a module's canonical icon/accent (falls back to a neutral dot). */
+export function moduleIcon(key: string): { icon: string; accent: Accent } {
+  return MODULE_ICON[key] ?? { icon: "Circle", accent: "neutral" };
 }
 
 // ── StatusBadge (§12) — scannable status symbol + surface ────────────────────
