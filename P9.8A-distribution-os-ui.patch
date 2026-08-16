@@ -1,0 +1,938 @@
+diff --git a/browser-extension/zono-facebook-assistant/background.js b/browser-extension/zono-facebook-assistant/background.js
+index 862e986..039a57c 100644
+--- a/browser-extension/zono-facebook-assistant/background.js
++++ b/browser-extension/zono-facebook-assistant/background.js
+@@ -14,7 +14,7 @@
+ // No new queue, no publishing model here — the server owns the canonical state.
+ // ============================================================================
+ const DEFAULT_BASE = "https://zono-os-ro2s.vercel.app";
+-const VERSION = "0.2.0";
++const VERSION = "1.0.2";
+ 
+ async function getBase() {
+   const { zonoBase } = await chrome.storage.local.get(["zonoBase"]);
+@@ -77,6 +77,18 @@ async function triggerGroupScan() {
+   }
+ }
+ 
++// P9.8: after all group chunks are submitted, report the COMPLETE id set so the
++// server reconciles vanished groups → unavailable (never deletes, preserves choice).
++async function submitScanComplete(seenIds) {
++  const creds = await getCreds();
++  if (!creds || !Array.isArray(seenIds)) return { ok: false };
++  const base = await getBase();
++  const res = await fetch(`${base}/api/extension/facebook/groups/reconcile`, {
++    method: "POST", headers: authHeaders(creds), body: JSON.stringify({ seenExternalIds: seenIds }),
++  }).catch(() => null);
++  return res ? await res.json().catch(() => ({ ok: false })) : { ok: false };
++}
++
+ async function submitGroups(groups) {
+   const creds = await getCreds();
+   if (!creds || !Array.isArray(groups) || !groups.length) return { ok: false, error: "no groups" };
+@@ -177,6 +189,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+       case "HEARTBEAT": sendResponse(await heartbeat(msg.facebookSessionDetected, msg.facebookProfileName)); break;
+       case "SCAN_NOW": await triggerGroupScan(); sendResponse({ ok: true }); break;
+       case "GROUPS_SCANNED": sendResponse(await submitGroups(msg.groups)); break;
++      case "GROUPS_SCAN_COMPLETE": sendResponse(await submitScanComplete(msg.seenIds)); break;
+       case "COMMENTS_SCANNED": sendResponse(await submitComments(msg.comments)); break;
+       case "GET_WATCHED": sendResponse({ watched: await getWatchedPosts() }); break;
+       case "NEXT_POST": sendResponse(await fetchNextPost()); break;
+diff --git a/browser-extension/zono-facebook-assistant/content.js b/browser-extension/zono-facebook-assistant/content.js
+index eb91af5..3113ab8 100644
+--- a/browser-extension/zono-facebook-assistant/content.js
++++ b/browser-extension/zono-facebook-assistant/content.js
+@@ -122,6 +122,10 @@
+       let res = await sendMessage({ type: "GROUPS_SCANNED", groups: chunk });
+       if (!res || !res.ok) { await sleep(1500); res = await sendMessage({ type: "GROUPS_SCANNED", groups: chunk }); }
+     }
++    // P9.8: completion signal with the COMPLETE joined-groups id set so the server can
++    // reconcile groups no longer present → UNAVAILABLE (never deletes, preserves choice).
++    const seenIds = groups.map((g) => g.externalGroupId).filter(Boolean);
++    await sendMessage({ type: "GROUPS_SCAN_COMPLETE", seenIds });
+   }
+ 
+   // ── 3) Comment ingest (P5) — only for OUR posts ─────────────────────────────
+diff --git a/browser-extension/zono-facebook-assistant/manifest.json b/browser-extension/zono-facebook-assistant/manifest.json
+index cd8aef4..cc1d9b7 100644
+--- a/browser-extension/zono-facebook-assistant/manifest.json
++++ b/browser-extension/zono-facebook-assistant/manifest.json
+@@ -1,20 +1,33 @@
+ {
+   "manifest_version": 3,
+   "name": "ZONO Facebook Assistant",
+-  "version": "0.3.0",
+-  "description": "Browser-assisted publishing helper for ZONO. Imports the groups you are a member of, shows prepared posts for Facebook Groups, captures comments on your ZONO posts. You publish manually and confirm. No auto-posting, no credential access.",
+-  "permissions": ["storage", "alarms", "tabs"],
++  "version": "1.0.2",
++  "description": "ZONO's manual publishing helper for Facebook Groups: imports your groups, shows prepared posts, captures comments. Publish by hand.",
++  "permissions": [
++    "storage",
++    "alarms",
++    "tabs"
++  ],
+   "host_permissions": [
+     "https://*.facebook.com/*",
+     "https://zono-os-ro2s.vercel.app/*"
+   ],
+-  "background": { "service_worker": "background.js" },
+-  "action": { "default_popup": "popup.html", "default_title": "ZONO Facebook Assistant" },
++  "background": {
++    "service_worker": "background.js"
++  },
++  "action": {
++    "default_popup": "popup.html",
++    "default_title": "ZONO Facebook Assistant"
++  },
+   "content_scripts": [
+     {
+-      "matches": ["https://*.facebook.com/*"],
+-      "js": ["content.js"],
++      "matches": [
++        "https://*.facebook.com/*"
++      ],
++      "js": [
++        "content.js"
++      ],
+       "run_at": "document_idle"
+     }
+   ]
+-}
++}
+\ No newline at end of file
+diff --git a/scripts/p9-8-harness.mts b/scripts/p9-8-harness.mts
+new file mode 100644
+index 0000000..10eb13a
+--- /dev/null
++++ b/scripts/p9-8-harness.mts
+@@ -0,0 +1,51 @@
++// ============================================================================
++// P9.8 — Facebook Distribution Intelligence: pure-logic regression tests.
++// group-network reconciliation planner + property marketing-health formula.
++// Run: npx tsx scripts/p9-8-harness.mts
++// ============================================================================
++import { planReconcile, type GroupStateRow } from "../src/lib/distribution/group-network-core.ts";
++import { computeMarketingHealth } from "../src/lib/distribution/property-marketing-health.ts";
++
++let pass = 0, fail = 0;
++const ok = (name: string, cond: boolean) => { if (cond) pass++; else { fail++; console.log(`FAIL: ${name}`); } };
++
++// ── Reconciliation planner (§A / §B6) ────────────────────────────────────────
++const rows: GroupStateRow[] = [
++  { id: "g1", externalGroupId: "111", status: "discovered", source: "scan" }, // still seen → unchanged
++  { id: "g2", externalGroupId: "222", status: "discovered", source: "scan" }, // vanished → unavailable
++  { id: "g3", externalGroupId: "333", status: "active", source: "scan" },     // vanished but ACTIVE → preserve
++  { id: "g4", externalGroupId: "444", status: "ignored", source: "scan" },    // vanished but IGNORED → preserve
++  { id: "g5", externalGroupId: "555", status: "unavailable", source: "scan" },// seen again → restore
++  { id: "g6", externalGroupId: null, status: "active", source: "manual" },    // manual → never touched
++];
++const plan = planReconcile(rows, ["111", "555"]);
++ok("vanished discovered → unavailable", plan.toUnavailable.includes("g2"));
++ok("vanished ACTIVE preserved (not unavailable)", !plan.toUnavailable.includes("g3"));
++ok("vanished IGNORED preserved (not unavailable)", !plan.toUnavailable.includes("g4"));
++ok("manual never marked unavailable", !plan.toUnavailable.includes("g6"));
++ok("reappeared unavailable → restore", plan.toRestore.includes("g5"));
++ok("still-seen discovered stays (not unavailable/restore)", !plan.toUnavailable.includes("g1") && !plan.toRestore.includes("g1"));
++ok("only one group marked unavailable", plan.toUnavailable.length === 1);
++// Idempotency: re-running with the same batch produces no NEW unavailable (g2 now unavailable).
++const rows2 = rows.map((r) => (r.id === "g2" ? { ...r, status: "unavailable" } : r));
++const plan2 = planReconcile(rows2, ["111", "555"]);
++ok("idempotent: no re-mark of already-unavailable", plan2.toUnavailable.length === 0);
++const emptyScan = planReconcile(rows, []);
++ok("empty scan preserves active/ignored/manual", !emptyScan.toUnavailable.includes("g3") && !emptyScan.toUnavailable.includes("g4") && !emptyScan.toUnavailable.includes("g6"));
++ok("empty scan marks all neutral discovered unavailable", emptyScan.toUnavailable.includes("g1") && emptyScan.toUnavailable.includes("g2"));
++
++// ── Marketing health (§Q) — deterministic formula ────────────────────────────
++const full = computeMarketingHealth({ hasApprovedCreative: true, activeGroups: 12, futureScheduledPosts: 7, daysSinceLastPublication: 2, facebookLeads: 6 });
++ok("full signals → 100", full.score === 100);
++const empty = computeMarketingHealth({ hasApprovedCreative: false, activeGroups: 0, futureScheduledPosts: 0, daysSinceLastPublication: null, facebookLeads: 0 });
++ok("no signals → 0", empty.score === 0);
++ok("no creative → creative factor earns 0", empty.factors[0].earned === 0);
++ok("creative present → 25", computeMarketingHealth({ hasApprovedCreative: true, activeGroups: 0, futureScheduledPosts: 0, daysSinceLastPublication: null, facebookLeads: 0 }).score === 25);
++ok("recency 10d → half recency (10)", computeMarketingHealth({ hasApprovedCreative: false, activeGroups: 0, futureScheduledPosts: 0, daysSinceLastPublication: 10, facebookLeads: 0 }).score === 10);
++ok("recency 20d → 0 recency", computeMarketingHealth({ hasApprovedCreative: false, activeGroups: 0, futureScheduledPosts: 0, daysSinceLastPublication: 20, facebookLeads: 0 }).score === 0);
++ok("5 active groups → half group weight (10)", computeMarketingHealth({ hasApprovedCreative: false, activeGroups: 5, futureScheduledPosts: 0, daysSinceLastPublication: null, facebookLeads: 0 }).score === 10);
++ok("score never exceeds 100", computeMarketingHealth({ hasApprovedCreative: true, activeGroups: 999, futureScheduledPosts: 99, daysSinceLastPublication: 0, facebookLeads: 999 }).score === 100);
++ok("every factor has a reason label", full.factors.every((f) => f.label.length > 0));
++
++console.log(`\n${pass}/${pass + fail} passed`);
++if (fail > 0) process.exit(1);
+diff --git a/scripts/p9-8a-harness.mts b/scripts/p9-8a-harness.mts
+new file mode 100644
+index 0000000..3635404
+--- /dev/null
++++ b/scripts/p9-8a-harness.mts
+@@ -0,0 +1,33 @@
++// ============================================================================
++// P9.8A — Distribution OS pure-logic tests: smart-alert rules + coverage math.
++// Run: npx tsx scripts/p9-8a-harness.mts
++// ============================================================================
++import { derivePropertyAlerts, buildDistributionAlerts, type PropertyAlertSignals } from "../src/lib/distribution/distribution-alerts-core.ts";
++
++let pass = 0, fail = 0;
++const ok = (n: string, c: boolean) => { if (c) pass++; else { fail++; console.log(`FAIL: ${n}`); } };
++
++const S = (o: Partial<PropertyAlertSignals>): PropertyAlertSignals => ({
++  propertyId: "p", title: "נכס", hasApprovedCreative: true, activeGroups: 5,
++  futureScheduledPosts: 3, daysSinceLastPublication: 1, coveragePct: 80, selectedGroups: 5, ...o,
++});
++
++ok("healthy property → no alerts", derivePropertyAlerts(S({})).length === 0);
++ok("no approved creative → action alert", derivePropertyAlerts(S({ hasApprovedCreative: false })).some((a) => a.key.endsWith("no_creative") && a.severity === "action"));
++ok("active groups + no plan + never published → no_plan", derivePropertyAlerts(S({ futureScheduledPosts: 0, daysSinceLastPublication: null })).some((a) => a.key.endsWith("no_plan")));
++ok("no_plan NOT raised when a future post exists", !derivePropertyAlerts(S({ futureScheduledPosts: 2, daysSinceLastPublication: null })).some((a) => a.key.endsWith("no_plan")));
++ok("stale (>7d) → warn", derivePropertyAlerts(S({ daysSinceLastPublication: 9 })).some((a) => a.key.endsWith("stale") && a.severity === "warn"));
++ok("fresh (<=7d) → no stale", !derivePropertyAlerts(S({ daysSinceLastPublication: 5 })).some((a) => a.key.endsWith("stale")));
++ok("low coverage (<50%) → warn", derivePropertyAlerts(S({ coveragePct: 30 })).some((a) => a.key.endsWith("low_coverage")));
++ok("full coverage → no low_coverage", !derivePropertyAlerts(S({ coveragePct: 100 })).some((a) => a.key.endsWith("low_coverage")));
++ok("no selected groups → no coverage alert", !derivePropertyAlerts(S({ selectedGroups: 0, coveragePct: 0 })).some((a) => a.key.endsWith("low_coverage")));
++ok("every alert has a CTA", derivePropertyAlerts(S({ hasApprovedCreative: false, daysSinceLastPublication: 9, coveragePct: 20 })).every((a) => a.cta.length > 0));
++
++// aggregation: action severity sorts before warn; cap respected
++const many: PropertyAlertSignals[] = Array.from({ length: 30 }, (_, i) => S({ propertyId: `p${i}`, hasApprovedCreative: false, daysSinceLastPublication: 9 }));
++const agg = buildDistributionAlerts(many, 20);
++ok("aggregation cap respected", agg.length === 20);
++ok("action alerts sort before warn", agg[0].severity === "action");
++
++console.log(`\n${pass}/${pass + fail} passed`);
++if (fail > 0) process.exit(1);
+diff --git a/src/app/(app)/distribution/groups/GroupsView.tsx b/src/app/(app)/distribution/groups/GroupsView.tsx
+index 1d85617..2421d92 100644
+--- a/src/app/(app)/distribution/groups/GroupsView.tsx
++++ b/src/app/(app)/distribution/groups/GroupsView.tsx
+@@ -9,10 +9,18 @@ import Link from "next/link";
+ import { Icon } from "@/components/dashboard/Icon";
+ import { cn } from "@/lib/utils";
+ import { useActionRunner } from "@/components/ui/useActionRunner";
+-import { addGroupAction, recomputeGroupScoresAction, recordGroupLeadAction } from "@/lib/distribution/groups-actions";
++import { addGroupAction, recomputeGroupScoresAction, recordGroupLeadAction, setGroupNetworkStatusAction } from "@/lib/distribution/groups-actions";
+ import { REGION_LABEL, GROUP_CATEGORY_LABEL } from "@/lib/distribution/groups-engine";
++import { GROUP_STATUS_LABEL, type GroupNetworkStatus } from "@/lib/distribution/group-network-core";
+ import type { GroupRow, GroupsAnalytics } from "@/lib/distribution/groups-service";
+ 
++const STATUS_TONE: Record<string, string> = {
++  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
++  discovered: "bg-sky-50 text-sky-700 border-sky-200",
++  ignored: "bg-surface text-muted border-line",
++  unavailable: "bg-amber-50 text-amber-700 border-amber-200",
++};
++
+ const PROP_TYPE_HE: Record<string, string> = {
+   apartment: "דירה", garden_apartment: "דירת גן", penthouse: "פנטהאוז", duplex: "דופלקס",
+   private_house: "בית פרטי", commercial: "מסחרי", land: "מגרש",
+@@ -42,6 +50,13 @@ export function GroupsView({ groups, analytics }: { groups: GroupRow[]; analytic
+     return { ok: r.ok, message: r.ok ? `חושבו ציונים ל-${r.data.groups} קבוצות` : r.error };
+   }, { id: "recompute", pendingMessage: "מחשב ביצועים מנתוני אמת…", success: (r) => r.message });
+ 
++  // P9.8 group-network state: activate / ignore / restore. Persists to distribution_groups.
++  const setStatus = (g: GroupRow, status: GroupNetworkStatus) => runner.run(async () => {
++    const r = await setGroupNetworkStatusAction([g.id], status);
++    return { ok: r.ok, message: r.ok ? `${g.name} — ${GROUP_STATUS_LABEL[status]}` : r.error };
++  }, { id: `st-${g.id}`, pendingMessage: "מעדכן…", success: (r) => r.message });
++  const counts = groups.reduce((a, g) => { const s = (g.status || "discovered"); a[s] = (a[s] ?? 0) + 1; return a; }, {} as Record<string, number>);
++
+   return (
+     <main dir="rtl" className="mx-auto w-full max-w-6xl px-4 py-8">
+       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+@@ -115,6 +130,19 @@ export function GroupsView({ groups, analytics }: { groups: GroupRow[]; analytic
+             </Section>
+           )}
+ 
++          {/* P9.8 — group network state overview */}
++          <Section title="רשת הקבוצות שלי" icon="Users">
++            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
++              {(["active", "discovered", "ignored", "unavailable"] as GroupNetworkStatus[]).map((s) => (
++                <div key={s} className={cn("rounded-card border p-4 shadow-card", STATUS_TONE[s])}>
++                  <p className="text-xs font-bold opacity-80">{GROUP_STATUS_LABEL[s]}</p>
++                  <p className="mt-1 text-2xl font-black">{counts[s] ?? 0}</p>
++                </div>
++              ))}
++            </div>
++            <p className="text-muted mt-2 text-[11px]">קבוצה חדשה נמצאת כ״נמצאה״ ואינה מפרסמת עד שתסמן אותה כ״פעילה״. הרשימה מתעדכנת אוטומטית בסריקה — קבוצה שכבר לא נמצאת מסומנת ״לא זמינה״ ולא נמחקת.</p>
++          </Section>
++
+           {/* Registry */}
+           <Section title="רישום הקבוצות" icon="ListChecks">
+             <div className="border-line bg-card overflow-hidden rounded-card border shadow-card">
+@@ -134,7 +162,15 @@ export function GroupsView({ groups, analytics }: { groups: GroupRow[]; analytic
+                   <span className={cn("font-black", scoreColor(g.performanceScore))}>{g.performanceScore}</span>
+                   <span className={cn("font-black", scoreColor(g.leadScore))}>{g.totalLeads}</span>
+                   <span className="text-muted">{g.totalPosts}</span>
+-                  <button onClick={() => setLeadFor(g)} className="text-brand justify-self-end text-xs font-bold">+ ליד</button>
++                  <span className="col-span-2 flex items-center justify-end gap-2 sm:col-span-1">
++                    <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold", STATUS_TONE[g.status] ?? STATUS_TONE.discovered)}>{GROUP_STATUS_LABEL[(g.status as GroupNetworkStatus)] ?? g.status}</span>
++                    {g.status === "active"
++                      ? <button onClick={() => setStatus(g, "ignored")} disabled={runner.busyId === `st-${g.id}`} className="text-muted text-xs font-bold disabled:opacity-50">הסתר</button>
++                      : g.status === "unavailable"
++                        ? <button onClick={() => setStatus(g, "discovered")} disabled={runner.busyId === `st-${g.id}`} className="text-brand text-xs font-bold disabled:opacity-50">שחזר</button>
++                        : <button onClick={() => setStatus(g, "active")} disabled={runner.busyId === `st-${g.id}`} className="text-emerald-600 text-xs font-bold disabled:opacity-50">הפעל</button>}
++                    <button onClick={() => setLeadFor(g)} className="text-brand text-xs font-bold">+ ליד</button>
++                  </span>
+                 </div>
+               ))}
+             </div>
+diff --git a/src/app/(app)/properties/[id]/PropertyDistributionCard.tsx b/src/app/(app)/properties/[id]/PropertyDistributionCard.tsx
+new file mode 100644
+index 0000000..8f73ab5
+--- /dev/null
++++ b/src/app/(app)/properties/[id]/PropertyDistributionCard.tsx
+@@ -0,0 +1,86 @@
++"use client";
++// ============================================================================
++// ZONO — Property Distribution + Marketing Health card (P9.8A §4/§5/§6).
++// Premium, RTL. Real canonical data only (deterministic health + real coverage);
++// no fabricated reach/impressions. Loads via getPropertyDistributionAction.
++// ============================================================================
++import { useEffect, useState } from "react";
++import { Icon } from "@/components/dashboard/Icon";
++import { cn } from "@/lib/utils";
++import { getPropertyDistributionAction } from "@/lib/distribution/property-distribution-actions";
++import type { PropertyDistribution } from "@/lib/distribution/property-distribution-service";
++
++const healthTone = (n: number) => (n >= 75 ? "text-emerald-600" : n >= 45 ? "text-amber-600" : "text-red-600");
++const ring = (n: number) => (n >= 75 ? "#059669" : n >= 45 ? "#d97706" : "#dc2626");
++
++export function PropertyDistributionCard({ propertyId }: { propertyId: string }) {
++  const [data, setData] = useState<PropertyDistribution | null>(null);
++  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
++
++  useEffect(() => {
++    let live = true;
++    getPropertyDistributionAction(propertyId)
++      .then((r) => { if (!live) return; if (r.ok) { setData(r.data); setState("ready"); } else setState("error"); })
++      .catch(() => live && setState("error"));
++    return () => { live = false; };
++  }, [propertyId]);
++
++  if (state === "loading") return <Shell><p className="text-muted text-sm">טוען נתוני הפצה…</p></Shell>;
++  if (state === "error" || !data) return <Shell><p className="text-muted text-sm">לא ניתן לטעון כרגע נתוני הפצה.</p></Shell>;
++
++  const h = data.health;
++  const cov = data.coverage;
++  return (
++    <Shell>
++      <div className="flex items-center justify-between gap-3">
++        <h3 className="text-ink flex items-center gap-2 font-black"><Icon name="Send" size={18} className="text-brand" /> מרכז הפצת הנכס</h3>
++        <span className="text-muted text-xs">{data.activeGroups} קבוצות פעילות ברשת</span>
++      </div>
++
++      <div className="mt-4 grid gap-4 sm:grid-cols-[auto_1fr]">
++        {/* Health ring */}
++        <div className="flex items-center gap-3">
++          <div className="relative grid h-20 w-20 place-items-center">
++            <svg viewBox="0 0 36 36" className="h-20 w-20 -rotate-90"><circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--brand-border,#e5e5ea)" strokeWidth="3.4" /><circle cx="18" cy="18" r="15.9" fill="none" stroke={ring(h.score)} strokeWidth="3.4" strokeDasharray={`${h.score}, 100`} strokeLinecap="round" /></svg>
++            <div className="absolute text-center"><p className={cn("text-xl font-black leading-none", healthTone(h.score))}>{h.score}</p><p className="text-muted text-[10px]">בריאות</p></div>
++          </div>
++          <div className="text-xs">
++            {h.factors.map((f) => (
++              <p key={f.label} className={cn("flex items-center gap-1", f.ok ? "text-ink" : "text-muted")}>
++                <span className={f.ok ? "text-emerald-600" : "text-amber-600"}>{f.ok ? "✓" : "⚠"}</span> {f.label}
++              </p>
++            ))}
++          </div>
++        </div>
++
++        {/* Coverage + metrics */}
++        <div className="grid gap-3">
++          <div>
++            <div className="mb-1 flex items-center justify-between text-xs"><span className="text-muted font-bold">כיסוי הפצה</span><span className="text-ink font-black">{cov.confirmedGroups}/{cov.selectedGroups} · {cov.pct}%</span></div>
++            <div className="bg-surface h-2.5 w-full overflow-hidden rounded-full"><div className="bg-brand h-full rounded-full" style={{ width: `${cov.pct}%` }} /></div>
++            {cov.selectedGroups - cov.confirmedGroups > 0 && <p className="text-muted mt-1 text-[11px]">{cov.selectedGroups - cov.confirmedGroups} קבוצות עדיין ללא פרסום מאושר לנכס.</p>}
++          </div>
++          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
++            <Metric label="פרסומים החודש" value={data.postsThisMonth} />
++            <Metric label="מתוזמנים" value={data.futureScheduledPosts} />
++            <Metric label="לידים מ-FB" value={data.facebookLeads} accent />
++            <Metric label="פרסום אחרון" text={data.daysSinceLastPublication == null ? "טרם" : `לפני ${data.daysSinceLastPublication}י׳`} />
++          </div>
++        </div>
++      </div>
++      <p className="text-muted mt-3 text-[11px]">״פורסם״ נספר רק כאשר הפרסום אושר ידנית בפועל. נתונים אמיתיים בלבד — ללא חשיפות/הקלקות מדומות.</p>
++    </Shell>
++  );
++}
++
++function Shell({ children }: { children: React.ReactNode }) {
++  return <section dir="rtl" className="border-line bg-card rounded-card border p-5 shadow-card">{children}</section>;
++}
++function Metric({ label, value, text, accent }: { label: string; value?: number; text?: string; accent?: boolean }) {
++  return (
++    <div className={cn("rounded-xl border p-2.5 text-center", accent ? "border-brand bg-brand-soft" : "border-line bg-surface")}>
++      <p className={cn("text-lg font-black", accent ? "text-brand-strong" : "text-ink")}>{text ?? value ?? 0}</p>
++      <p className="text-muted text-[10px] font-bold">{label}</p>
++    </div>
++  );
++}
+diff --git a/src/app/(app)/properties/[id]/page.tsx b/src/app/(app)/properties/[id]/page.tsx
+index 65432d8..0f92b41 100644
+--- a/src/app/(app)/properties/[id]/page.tsx
++++ b/src/app/(app)/properties/[id]/page.tsx
+@@ -24,6 +24,7 @@ import {
+   getEntityTimeline,
+ } from "@/lib/activity/service";
+ import { PropertyDetailView } from "./PropertyDetailView";
++import { PropertyDistributionCard } from "./PropertyDistributionCard";
+ import { CommunicationSection } from "@/components/communication/CommunicationSection";
+ import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
+ import { ApprovalBundleSection } from "@/components/approval-bundle/ApprovalBundleSection";
+@@ -90,6 +91,7 @@ export default async function PropertyDetailsPage({
+   // stacking endlessly below). Every module is reused as-is; nothing changes logic.
+   const marketingSlot = (
+     <div className="flex flex-col gap-5">
++      <PropertyDistributionCard propertyId={id} />
+       <PropertyMarketingActionCenter propertyId={id} />
+       <PropertyMarketingLog propertyId={id} />
+       <CommunicationSection entityType="property" entityId={id} />
+diff --git a/src/app/api/extension/facebook/groups/reconcile/route.ts b/src/app/api/extension/facebook/groups/reconcile/route.ts
+new file mode 100644
+index 0000000..cba30eb
+--- /dev/null
++++ b/src/app/api/extension/facebook/groups/reconcile/route.ts
+@@ -0,0 +1,23 @@
++// ============================================================================
++// POST /api/extension/facebook/groups/reconcile  (P9.8 group-network reconcile)
++// Authenticated by extension instance. Receives the COMPLETE set of external group
++// ids the user is currently a member of (a full-scan completion signal) and marks
++// any org scan-group no longer present → UNAVAILABLE (never deletes, preserves the
++// agent's ACTIVE/IGNORED choices and manual groups). No FB credentials involved.
++// ============================================================================
++import { NextResponse, type NextRequest } from "next/server";
++import { authInstance } from "@/lib/distribution/extension-service";
++import { reconcileScannedGroups } from "@/lib/distribution/group-network-service";
++
++export async function POST(req: NextRequest) {
++  const inst = await authInstance(req.headers.get("x-zono-instance-id"), req.headers.get("x-zono-extension-secret"));
++  if (!inst) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
++
++  let body: { seenExternalIds?: unknown };
++  try { body = await req.json(); } catch { body = {}; }
++  const seen = Array.isArray(body.seenExternalIds) ? body.seenExternalIds.filter((x): x is string => typeof x === "string") : null;
++  if (!seen) return NextResponse.json({ ok: false, error: "seenExternalIds[] required" }, { status: 400 });
++
++  const result = await reconcileScannedGroups(inst.orgId, inst.userId, seen);
++  return NextResponse.json({ ok: true, ...result });
++}
+diff --git a/src/app/api/extension/facebook/groups/route.ts b/src/app/api/extension/facebook/groups/route.ts
+index 56cddc0..5bb257a 100644
+--- a/src/app/api/extension/facebook/groups/route.ts
++++ b/src/app/api/extension/facebook/groups/route.ts
+@@ -15,12 +15,14 @@ export async function POST(req: NextRequest) {
+   const inst = await authInstance(req.headers.get("x-zono-instance-id"), req.headers.get("x-zono-extension-secret"));
+   if (!inst) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+ 
+-  let body: { groups?: ScannedGroup[] };
++  let body: { groups?: ScannedGroup[]; fullScan?: boolean };
+   try { body = await req.json(); } catch { body = {}; }
+   if (!Array.isArray(body.groups)) {
+     return NextResponse.json({ ok: false, error: "groups[] required" }, { status: 400 });
+   }
+ 
+-  const result = await importScannedGroups(inst, body.groups);
++  // fullScan=true marks the batch as the COMPLETE joined-groups list, enabling
++  // reconciliation (mark vanished groups unavailable). Absent/false = partial.
++  const result = await importScannedGroups(inst, body.groups, { fullScan: body.fullScan === true });
+   return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+ }
+diff --git a/src/lib/distribution/distribution-alerts-core.ts b/src/lib/distribution/distribution-alerts-core.ts
+new file mode 100644
+index 0000000..db68ef6
+--- /dev/null
++++ b/src/lib/distribution/distribution-alerts-core.ts
+@@ -0,0 +1,53 @@
++// ============================================================================
++// ZONO — Distribution Smart Alerts (P9.8A §24) PURE core. No DB — unit-tested.
++// Deterministic, actionable rules over real per-property distribution signals.
++// Never noisy: one alert per genuine condition, each with a clear next action.
++// ============================================================================
++export interface PropertyAlertSignals {
++  propertyId: string;
++  title: string;
++  hasApprovedCreative: boolean;
++  activeGroups: number;
++  futureScheduledPosts: number;
++  daysSinceLastPublication: number | null;
++  coveragePct: number;        // 0..100 (confirmed/selected)
++  selectedGroups: number;
++}
++
++export type AlertSeverity = "action" | "warn" | "info";
++export interface DistributionAlert {
++  key: string; severity: AlertSeverity; propertyId: string; title: string;
++  message: string; cta: string;
++}
++
++const STALE_DAYS = 7;
++const LOW_COVERAGE_PCT = 50;
++
++/** Derive the alerts for ONE property. Order = most actionable first. Pure. */
++export function derivePropertyAlerts(s: PropertyAlertSignals): DistributionAlert[] {
++  const out: DistributionAlert[] = [];
++  const base = { propertyId: s.propertyId, title: s.title };
++  // No approved creative → cannot attach an image (blocks premium posts).
++  if (!s.hasApprovedCreative) {
++    out.push({ ...base, key: `${s.propertyId}:no_creative`, severity: "action", message: `“${s.title}” — אין קריאייטיב מאושר`, cta: "צור קריאייטיב" });
++  }
++  // Active groups but no plan → nothing will publish.
++  if (s.activeGroups > 0 && s.futureScheduledPosts === 0 && (s.daysSinceLastPublication == null || s.daysSinceLastPublication > STALE_DAYS)) {
++    out.push({ ...base, key: `${s.propertyId}:no_plan`, severity: "action", message: `“${s.title}” — אין תוכנית הפצה עתידית`, cta: "בנה תוכנית הפצה" });
++  }
++  // Stale — published once but long ago.
++  if (s.daysSinceLastPublication != null && s.daysSinceLastPublication > STALE_DAYS) {
++    out.push({ ...base, key: `${s.propertyId}:stale`, severity: "warn", message: `“${s.title}” — עברו ${s.daysSinceLastPublication} ימים מהפרסום האחרון`, cta: "פרסם שוב" });
++  }
++  // Low coverage — selected many groups, few confirmed.
++  if (s.selectedGroups > 0 && s.coveragePct < LOW_COVERAGE_PCT) {
++    out.push({ ...base, key: `${s.propertyId}:low_coverage`, severity: "warn", message: `“${s.title}” — כיסוי הפצה נמוך (${s.coveragePct}%)`, cta: "השלם פרסום לקבוצות" });
++  }
++  return out;
++}
++
++/** Aggregate alerts across properties, most actionable first, capped to avoid spam. */
++export function buildDistributionAlerts(properties: PropertyAlertSignals[], limit = 20): DistributionAlert[] {
++  const rank: Record<AlertSeverity, number> = { action: 0, warn: 1, info: 2 };
++  return properties.flatMap(derivePropertyAlerts).sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, limit);
++}
+diff --git a/src/lib/distribution/group-import-service.ts b/src/lib/distribution/group-import-service.ts
+index dd9dcdb..dc89a9d 100644
+--- a/src/lib/distribution/group-import-service.ts
++++ b/src/lib/distribution/group-import-service.ts
+@@ -17,6 +17,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
+ import { isServiceRoleConfigured } from "@/lib/supabase/env";
+ import { getSessionContext } from "@/lib/auth/session";
+ import { classifyGroup } from "./groups-engine";
++import { reconcileScannedGroups } from "./group-network-service";
+ import type { AuthedInstance } from "./extension-service";
+ 
+ /* eslint-disable @typescript-eslint/no-explicit-any */
+@@ -43,6 +44,7 @@ export interface ImportResult {
+   updated: number;    // existing groups refreshed
+   skipped: number;    // invalid rows ignored
+   total: number;      // valid rows received
++  markedUnavailable?: number; // scan-groups no longer seen (full-scan reconciliation)
+   error?: string;
+ }
+ 
+@@ -69,7 +71,7 @@ async function audit(db: any, e: {
+  * external_group_id). Attributes each to the org + importing user, classifies it,
+  * and writes an append-only audit event. Re-scans update stats, never duplicate.
+  */
+-export async function importScannedGroups(inst: AuthedInstance, groups: ScannedGroup[]): Promise<ImportResult> {
++export async function importScannedGroups(inst: AuthedInstance, groups: ScannedGroup[], opts?: { fullScan?: boolean }): Promise<ImportResult> {
+   if (!isServiceRoleConfigured()) return { ok: false, imported: 0, updated: 0, skipped: 0, total: 0, error: "service unavailable" };
+   const db: any = createServiceRoleClient();
+   const now = new Date().toISOString();
+@@ -113,7 +115,9 @@ export async function importScannedGroups(inst: AuthedInstance, groups: ScannedG
+       external_group_id: g.externalGroupId, group_url: normUrl(g.url),
+       members_count: g.membersCount ?? 0, privacy_level: g.privacyLevel ?? "public",
+       category: cls.category, region: cls.region, property_types: cls.propertyTypes, language: "he",
+-      status: "active", classification_source: "auto",
++      // P9.8 §B4: a newly DISCOVERED group is NOT auto-eligible for publishing — the
++      // agent must explicitly activate it. (Manual adds set their own status.)
++      status: "discovered", classification_source: "auto",
+       source: "scan", is_member: g.isMember ?? true, member_role: g.memberRole ?? null,
+       imported_by: inst.userId, imported_at: now, last_synced_at: now, created_by: inst.userId,
+     }).select("id").maybeSingle();
+@@ -137,7 +141,16 @@ export async function importScannedGroups(inst: AuthedInstance, groups: ScannedG
+     capabilities: { group_read: true },
+   }).eq("id", inst.id);
+ 
+-  return { ok: true, imported, updated, skipped, total: valid.length };
++  // P9.8 §A/§B6: on a COMPLETE scan, reconcile groups no longer seen → unavailable
++  // (never delete, preserve active/ignored/manual). A partial scan skips this so it
++  // can't wrongly hide groups the batch didn't cover.
++  let markedUnavailable = 0;
++  if (opts?.fullScan) {
++    const rec = await reconcileScannedGroups(inst.orgId, inst.userId, valid.map((g) => g.externalGroupId));
++    markedUnavailable = rec.markedUnavailable;
++  }
++
++  return { ok: true, imported, updated, skipped, total: valid.length, markedUnavailable };
+ }
+ 
+ // ── Pull-model scan request (ZONO UI asks → extension reads on heartbeat) ─────
+diff --git a/src/lib/distribution/group-network-core.ts b/src/lib/distribution/group-network-core.ts
+new file mode 100644
+index 0000000..c253602
+--- /dev/null
++++ b/src/lib/distribution/group-network-core.ts
+@@ -0,0 +1,44 @@
++// ============================================================================
++// ZONO — Facebook GROUP NETWORK pure core (P9.8). No server-only, no DB — safe to
++// import from tests. Holds the state vocabulary + the reconciliation planner.
++// ============================================================================
++export type GroupNetworkStatus = "discovered" | "active" | "ignored" | "unavailable";
++export const GROUP_STATUS_LABEL: Record<GroupNetworkStatus, string> = {
++  discovered: "נמצאה", active: "פעילה", ignored: "מוסתרת", unavailable: "לא זמינה",
++};
++
++export interface GroupStateRow { id: string; externalGroupId: string | null; status: string | null; source: string | null }
++export interface ReconcilePlan {
++  toUnavailable: string[];   // scan-sourced groups no longer seen → mark unavailable (never delete)
++  toRestore: string[];       // previously-unavailable groups seen again → restore to discovered
++  unchanged: number;
++}
++
++/**
++ * Decide the reconciliation for a COMPLETE scan batch (P9.8 §A/§B6):
++ *  - a scan-sourced group NOT in the seen set → UNAVAILABLE (preserve history, no delete)
++ *  - an UNAVAILABLE group seen again → restore to DISCOVERED (agent re-decides)
++ *  - ACTIVE / IGNORED choices are PRESERVED even if temporarily missing (never auto-flip
++ *    an agent's decision; only 'discovered'/'unavailable'/null auto-manage)
++ *  - MANUAL groups (source='manual') are never touched by scan reconciliation
++ * Pure: caller supplies the org's current rows + the freshly-seen external ids.
++ */
++export function planReconcile(current: GroupStateRow[], seenExternalIds: string[]): ReconcilePlan {
++  const seen = new Set(seenExternalIds.filter(Boolean));
++  const toUnavailable: string[] = [];
++  const toRestore: string[] = [];
++  let unchanged = 0;
++  for (const g of current) {
++    const isScan = g.source !== "manual";
++    const present = g.externalGroupId ? seen.has(g.externalGroupId) : false;
++    const neutral = g.status === "discovered" || g.status === "unavailable" || g.status === null;
++    if (isScan && !present && neutral && g.status !== "unavailable") {
++      toUnavailable.push(g.id);
++    } else if (isScan && present && g.status === "unavailable") {
++      toRestore.push(g.id);
++    } else {
++      unchanged++;
++    }
++  }
++  return { toUnavailable, toRestore, unchanged };
++}
+diff --git a/src/lib/distribution/group-network-service.ts b/src/lib/distribution/group-network-service.ts
+new file mode 100644
+index 0000000..b03d82c
+--- /dev/null
++++ b/src/lib/distribution/group-network-service.ts
+@@ -0,0 +1,91 @@
++// ============================================================================
++// ZONO — Facebook GROUP NETWORK state + reconciliation (P9.8, server-only).
++// ----------------------------------------------------------------------------
++// Turns the raw distribution_groups registry into a managed "רשת הקבוצות שלי":
++// a persistent DISCOVERED / ACTIVE / IGNORED / UNAVAILABLE state model + an
++// idempotent reconciliation that survives re-scans WITHOUT duplicating groups,
++// deleting history, or overriding the agent's ACTIVE/IGNORED choices.
++//
++// Reuses the EXISTING schema — distribution_groups.status is free-form text, so
++// no migration is required (see P9.8 architecture note). Nothing here publishes,
++// automates, or touches Facebook credentials.
++// ============================================================================
++import "server-only";
++import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
++import { getSessionContext } from "@/lib/auth/session";
++import { planReconcile, type GroupNetworkStatus } from "./group-network-core";
++
++export { GROUP_STATUS_LABEL, planReconcile } from "./group-network-core";
++export type { GroupNetworkStatus, GroupStateRow, ReconcilePlan } from "./group-network-core";
++
++// ── DB apply ─────────────────────────────────────────────────────────────────
++const GROUPS = "distribution_groups";
++const AUDIT = "distribution_group_sync_events";
++
++type Ctx = { orgId: string; userId: string | null };
++async function ctx(): Promise<Ctx | null> {
++  const { profile } = await getSessionContext();
++  if (!profile?.org_id) return null;
++  return { orgId: profile.org_id, userId: profile.id ?? null };
++}
++
++export interface SetStatusResult { ok: boolean; updated: number; error?: string }
++
++/** Set the network status for one or more of the org's groups (agent choice).
++ *  RLS user-scoped; only groups belonging to the caller's org are affected. */
++export async function setGroupNetworkStatus(groupIds: string[], status: GroupNetworkStatus): Promise<SetStatusResult> {
++  const c = await ctx(); if (!c) return { ok: false, updated: 0, error: "unauthorized" };
++  const ids = [...new Set((groupIds ?? []).filter(Boolean))];
++  if (!ids.length) return { ok: false, updated: 0, error: "no groups" };
++  const db = await createClient();
++  const { data, error } = await db.from(GROUPS as never)
++    .update({ status, updated_at: new Date().toISOString() } as never)
++    .eq("org_id", c.orgId).in("id", ids as never).select("id");
++  if (error) return { ok: false, updated: 0, error: error.message };
++  return { ok: true, updated: (data as unknown as unknown[])?.length ?? 0 };
++}
++
++/** Apply a reconciliation after a COMPLETE scan (service-role; explicit org). Marks
++ *  vanished scan groups unavailable and restores reappeared ones — idempotent, never
++ *  deletes, never overrides an active/ignored choice. Returns the applied counts. */
++export async function reconcileScannedGroups(orgId: string, userId: string | null, seenExternalIds: string[]): Promise<{ markedUnavailable: number; restored: number }> {
++  const db = createServiceRoleClient();
++  const { data } = await db.from(GROUPS as never)
++    .select("id,external_group_id,status,source").eq("org_id", orgId);
++  const rows = ((data ?? []) as unknown as Array<{ id: string; external_group_id: string | null; status: string | null; source: string | null }>)
++    .map((r) => ({ id: r.id, externalGroupId: r.external_group_id, status: r.status, source: r.source }));
++  const plan = planReconcile(rows, seenExternalIds);
++  const now = new Date().toISOString();
++  if (plan.toUnavailable.length) {
++    await db.from(GROUPS as never).update({ status: "unavailable", updated_at: now } as never).eq("org_id", orgId).in("id", plan.toUnavailable as never);
++    await db.from(AUDIT as never).insert({ org_id: orgId, user_id: userId, action: "groups_marked_unavailable", details: { count: plan.toUnavailable.length } } as never);
++  }
++  if (plan.toRestore.length) {
++    await db.from(GROUPS as never).update({ status: "discovered", updated_at: now } as never).eq("org_id", orgId).in("id", plan.toRestore as never);
++    await db.from(AUDIT as never).insert({ org_id: orgId, user_id: userId, action: "groups_restored", details: { count: plan.toRestore.length } } as never);
++  }
++  return { markedUnavailable: plan.toUnavailable.length, restored: plan.toRestore.length };
++}
++
++// ── Directory snapshot for the network UI ────────────────────────────────────
++export interface GroupNetworkCounts { discovered: number; active: number; ignored: number; unavailable: number; total: number }
++
++/** Counts by network status for the org — powers "ZONO מצאה X קבוצות" + tabs. */
++export async function getGroupNetworkCounts(): Promise<GroupNetworkCounts> {
++  const c = await ctx();
++  const empty: GroupNetworkCounts = { discovered: 0, active: 0, ignored: 0, unavailable: 0, total: 0 };
++  if (!c) return empty;
++  const db = await createClient();
++  const { data } = await db.from(GROUPS as never).select("status").eq("org_id", c.orgId);
++  const rows = (data ?? []) as unknown as Array<{ status: string | null }>;
++  const out = { ...empty };
++  for (const r of rows) {
++    out.total++;
++    const s = (r.status ?? "discovered") as GroupNetworkStatus;
++    if (s === "active") out.active++;
++    else if (s === "ignored") out.ignored++;
++    else if (s === "unavailable") out.unavailable++;
++    else out.discovered++;
++  }
++  return out;
++}
+diff --git a/src/lib/distribution/groups-actions.ts b/src/lib/distribution/groups-actions.ts
+index 0dc6813..d986769 100644
+--- a/src/lib/distribution/groups-actions.ts
++++ b/src/lib/distribution/groups-actions.ts
+@@ -9,6 +9,10 @@ import {
+   type GroupRow, type AddGroupInput, type PropertyGroupReco, type GroupsAnalytics,
+   type RecordPostInput, type RecordLeadInput,
+ } from "./groups-service";
++import {
++  setGroupNetworkStatus, getGroupNetworkCounts,
++  type GroupNetworkStatus, type GroupNetworkCounts,
++} from "./group-network-service";
+ 
+ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+ const fail = (e: unknown): { ok: false; error: string } => ({ ok: false, error: e instanceof Error ? e.message : "אירעה שגיאה." });
+@@ -34,3 +38,16 @@ export async function recordGroupPostAction(input: RecordPostInput): Promise<Res
+ export async function recordGroupLeadAction(input: RecordLeadInput): Promise<Result<{ id: string }>> {
+   try { const d = await recordGroupLead(input); revalidatePath("/distribution/groups"); return { ok: true, data: d }; } catch (e) { return fail(e); }
+ }
++
++// ── P9.8 group-network state (activate / ignore / restore / discover) ─────────
++export async function setGroupNetworkStatusAction(groupIds: string[], status: GroupNetworkStatus): Promise<Result<{ updated: number }>> {
++  try {
++    const r = await setGroupNetworkStatus(groupIds, status);
++    if (!r.ok) return { ok: false, error: r.error ?? "עדכון נכשל." };
++    revalidatePath("/distribution/groups");
++    return { ok: true, data: { updated: r.updated } };
++  } catch (e) { return fail(e); }
++}
++export async function getGroupNetworkCountsAction(): Promise<Result<GroupNetworkCounts>> {
++  try { return { ok: true, data: await getGroupNetworkCounts() }; } catch (e) { return fail(e); }
++}
+diff --git a/src/lib/distribution/property-distribution-actions.ts b/src/lib/distribution/property-distribution-actions.ts
+new file mode 100644
+index 0000000..46725ee
+--- /dev/null
++++ b/src/lib/distribution/property-distribution-actions.ts
+@@ -0,0 +1,19 @@
++"use server";
++// ============================================================================
++// ZONO — Property Distribution + smart-alerts server actions (P9.8A).
++// ============================================================================
++import {
++  getPropertyDistribution, getDistributionAlerts,
++  type PropertyDistribution,
++} from "./property-distribution-service";
++import type { DistributionAlert } from "./distribution-alerts-core";
++
++type Result<T> = { ok: true; data: T } | { ok: false; error: string };
++const fail = (e: unknown): { ok: false; error: string } => ({ ok: false, error: e instanceof Error ? e.message : "אירעה שגיאה." });
++
++export async function getPropertyDistributionAction(propertyId: string): Promise<Result<PropertyDistribution | null>> {
++  try { return { ok: true, data: await getPropertyDistribution(propertyId) }; } catch (e) { return fail(e); }
++}
++export async function getDistributionAlertsAction(): Promise<Result<DistributionAlert[]>> {
++  try { return { ok: true, data: await getDistributionAlerts() }; } catch (e) { return fail(e); }
++}
+diff --git a/src/lib/distribution/property-distribution-service.ts b/src/lib/distribution/property-distribution-service.ts
+new file mode 100644
+index 0000000..d9662ca
+--- /dev/null
++++ b/src/lib/distribution/property-distribution-service.ts
+@@ -0,0 +1,127 @@
++// ============================================================================
++// ZONO — Property Distribution metrics + Marketing Health (P9.8A, server-only).
++// ----------------------------------------------------------------------------
++// Computes a property's distribution facts from CANONICAL data only and feeds the
++// deterministic Marketing Health formula (P9.8). Every number distinguishes real
++// publish state (only publish_state='published' counts as published — §33) and is
++// org + property scoped (§34). No fabricated reach/impressions/clicks. Reuses the
++// existing schema — no migration.
++// ============================================================================
++import "server-only";
++import { createClient } from "@/lib/supabase/server";
++import { getSessionContext } from "@/lib/auth/session";
++import { computeMarketingHealth, type MarketingHealth } from "./property-marketing-health";
++import { buildDistributionAlerts, type DistributionAlert } from "./distribution-alerts-core";
++
++type Ctx = { orgId: string; userId: string | null };
++async function ctx(): Promise<Ctx | null> {
++  const { profile } = await getSessionContext();
++  if (!profile?.org_id) return null;
++  return { orgId: profile.org_id, userId: profile.id ?? null };
++}
++
++const daysBetween = (iso: string | null): number | null =>
++  iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)) : null;
++
++export interface PropertyDistribution {
++  propertyId: string;
++  activeGroups: number;           // org groups in ACTIVE state
++  approvedCreatives: number;      // approved Creative Studio outputs for this property
++  postsThisMonth: number;         // CONFIRMED published posts this calendar month
++  futureScheduledPosts: number;   // scheduled ahead (a plan exists)
++  facebookLeads: number;          // leads attributed to facebook for this property
++  daysSinceLastPublication: number | null;
++  lastPublicationAt: string | null;
++  nextScheduledAt: string | null;
++  coverage: { selectedGroups: number; confirmedGroups: number; pct: number }; // §5 real coverage
++  health: MarketingHealth;        // §6 deterministic score + reasons
++}
++
++/**
++ * All distribution facts for one property, from canonical tables. "Published" means
++ * publish_state='published' ONLY — prepared/claimed/awaiting never count (§33).
++ */
++export async function getPropertyDistribution(propertyId: string): Promise<PropertyDistribution | null> {
++  const c = await ctx(); if (!c || !propertyId) return null;
++  const db = await createClient();
++  const nowIso = new Date().toISOString();
++  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
++
++  const [activeG, creatives, published, future, fbLeads, selectedGroups] = await Promise.all([
++    db.from("distribution_groups" as never).select("id", { count: "exact", head: true }).eq("org_id", c.orgId).eq("status", "active"),
++    db.from("zono_quick_creative_outputs" as never).select("id", { count: "exact", head: true }).eq("org_id", c.orgId).eq("property_id", propertyId).eq("is_approved", true),
++    db.from("distribution_posts" as never).select("group_id,published_at").eq("org_id", c.orgId).eq("property_id", propertyId).eq("publish_state", "published").order("published_at", { ascending: false }).limit(500),
++    db.from("distribution_posts" as never).select("scheduled_at").eq("org_id", c.orgId).eq("property_id", propertyId).gt("scheduled_at", nowIso).not("publish_state", "in", "(published,cancelled,dead_letter)").order("scheduled_at", { ascending: true }).limit(200),
++    db.from("leads" as never).select("id", { count: "exact", head: true }).eq("org_id", c.orgId).eq("property_id", propertyId).eq("source", "facebook"),
++    db.from("distribution_posts" as never).select("group_id").eq("org_id", c.orgId).eq("property_id", propertyId).not("group_id", "is", null).limit(1000),
++  ]);
++
++  const activeGroups = activeG.count ?? 0;
++  const approvedCreatives = creatives.count ?? 0;
++  const publishedRows = ((published.data ?? []) as unknown as Array<{ group_id: string | null; published_at: string | null }>);
++  const futureRows = ((future.data ?? []) as unknown as Array<{ scheduled_at: string | null }>);
++  const selectedRows = ((selectedGroups.data ?? []) as unknown as Array<{ group_id: string | null }>);
++
++  const postsThisMonth = publishedRows.filter((p) => p.published_at && p.published_at >= monthStart).length;
++  const lastPublicationAt = publishedRows[0]?.published_at ?? null;
++  const nextScheduledAt = futureRows[0]?.scheduled_at ?? null;
++
++  // Coverage = distinct groups selected for this property vs distinct groups where a
++  // publication was CONFIRMED. Only confirmed publish state counts (§5, §33).
++  const selectedSet = new Set(selectedRows.map((r) => r.group_id).filter(Boolean) as string[]);
++  const confirmedSet = new Set(publishedRows.map((r) => r.group_id).filter(Boolean) as string[]);
++  const selectedCount = selectedSet.size;
++  const confirmedCount = [...confirmedSet].filter((g) => selectedSet.has(g)).length;
++  const pct = selectedCount > 0 ? Math.round((confirmedCount / selectedCount) * 100) : 0;
++
++  const facebookLeads = fbLeads.count ?? 0;
++  const daysSinceLastPublication = daysBetween(lastPublicationAt);
++  const health = computeMarketingHealth({
++    hasApprovedCreative: approvedCreatives > 0,
++    activeGroups,
++    futureScheduledPosts: futureRows.length,
++    daysSinceLastPublication,
++    facebookLeads,
++  });
++
++  return {
++    propertyId,
++    activeGroups,
++    approvedCreatives,
++    postsThisMonth,
++    futureScheduledPosts: futureRows.length,
++    facebookLeads,
++    daysSinceLastPublication,
++    lastPublicationAt,
++    nextScheduledAt,
++    coverage: { selectedGroups: selectedCount, confirmedGroups: confirmedCount, pct },
++    health,
++  };
++}
++
++// ── Org-level smart alerts (P9.8A §24) — bounded to properties IN distribution ─
++/** Deterministic alerts across the org's properties that have distribution activity
++ *  (a distribution_post exists). Bounded so it never fans out over the whole catalog. */
++export async function getDistributionAlerts(): Promise<DistributionAlert[]> {
++  const c = await ctx(); if (!c) return [];
++  const db = await createClient();
++  const { data: postRows } = await db.from("distribution_posts" as never)
++    .select("property_id").eq("org_id", c.orgId).not("property_id", "is", null).limit(2000);
++  const ids = [...new Set(((postRows ?? []) as unknown as Array<{ property_id: string | null }>).map((r) => r.property_id).filter(Boolean) as string[])].slice(0, 40);
++  if (!ids.length) return [];
++  const { data: propRows } = await db.from("properties" as never).select("id,title").in("id", ids as never);
++  const titles = new Map(((propRows ?? []) as unknown as Array<{ id: string; title: string | null }>).map((p) => [p.id, p.title ?? "נכס"]));
++  const signals = [];
++  for (const id of ids) {
++    const d = await getPropertyDistribution(id);
++    if (!d) continue;
++    if (d.activeGroups === 0 && d.coverage.selectedGroups === 0 && d.futureScheduledPosts === 0) continue;
++    signals.push({
++      propertyId: id, title: titles.get(id) ?? "נכס",
++      hasApprovedCreative: d.approvedCreatives > 0, activeGroups: d.activeGroups,
++      futureScheduledPosts: d.futureScheduledPosts, daysSinceLastPublication: d.daysSinceLastPublication,
++      coveragePct: d.coverage.pct, selectedGroups: d.coverage.selectedGroups,
++    });
++  }
++  return buildDistributionAlerts(signals);
++}
+diff --git a/src/lib/distribution/property-marketing-health.ts b/src/lib/distribution/property-marketing-health.ts
+new file mode 100644
+index 0000000..442068e
+--- /dev/null
++++ b/src/lib/distribution/property-marketing-health.ts
+@@ -0,0 +1,43 @@
++// ============================================================================
++// ZONO — Property Marketing Health (P9.8 §Q). PURE, deterministic, explainable.
++// A 0–100 score computed from REAL distribution signals with an explicit weighted
++// formula — no AI certainty, no fabricated numbers. Every point is attributable to
++// a listed factor, and each factor states WHY it did or didn't contribute.
++// ============================================================================
++export interface MarketingHealthSignals {
++  hasApprovedCreative: boolean;
++  activeGroups: number;            // groups in ACTIVE state assigned to the org
++  futureScheduledPosts: number;    // distribution_posts scheduled ahead (a plan exists)
++  daysSinceLastPublication: number | null; // null = never published
++  facebookLeads: number;           // leads attributed to facebook for this property
++}
++
++export interface HealthFactor { ok: boolean; weight: number; earned: number; label: string }
++export interface MarketingHealth { score: number; factors: HealthFactor[] }
++
++const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
++
++/**
++ * Weights (sum 100): approved creative 25 · active groups 20 (scaled to 10 groups) ·
++ * distribution plan 20 · recency 20 (≤7d full, ≤14d half) · facebook leads 15
++ * (scaled to 5). Deterministic and testable.
++ */
++export function computeMarketingHealth(s: MarketingHealthSignals): MarketingHealth {
++  const creative = s.hasApprovedCreative ? 25 : 0;
++  const groups = Math.round(clamp(s.activeGroups, 0, 10) / 10 * 20);
++  const plan = s.futureScheduledPosts > 0 ? 20 : 0;
++  const recency = s.daysSinceLastPublication == null ? 0
++    : s.daysSinceLastPublication <= 7 ? 20
++      : s.daysSinceLastPublication <= 14 ? 10 : 0;
++  const leads = Math.round(clamp(s.facebookLeads, 0, 5) / 5 * 15);
++
++  const factors: HealthFactor[] = [
++    { ok: creative > 0, weight: 25, earned: creative, label: s.hasApprovedCreative ? "קריאייטיב מאושר קיים" : "אין קריאייטיב מאושר" },
++    { ok: groups >= 10, weight: 20, earned: groups, label: s.activeGroups > 0 ? `${s.activeGroups} קבוצות פעילות` : "אין קבוצות פעילות" },
++    { ok: plan > 0, weight: 20, earned: plan, label: s.futureScheduledPosts > 0 ? `תוכנית הפצה (${s.futureScheduledPosts} פרסומים מתוזמנים)` : "אין תוכנית הפצה עתידית" },
++    { ok: recency === 20, weight: 20, earned: recency, label: s.daysSinceLastPublication == null ? "טרם פורסם" : `פורסם לפני ${s.daysSinceLastPublication} ימים` },
++    { ok: leads > 0, weight: 15, earned: leads, label: s.facebookLeads > 0 ? `${s.facebookLeads} לידים מפייסבוק` : "אין עדיין לידים מפייסבוק" },
++  ];
++  const score = clamp(creative + groups + plan + recency + leads, 0, 100);
++  return { score, factors };
++}
