@@ -3,20 +3,17 @@
 import { useMemo, useState } from "react";
 import type { CenterGroup } from "@/lib/distribution/center-data";
 import { createGroupAction, updateGroupStatusAction, deleteGroupAction } from "@/lib/distribution/center-actions";
-import type { DistGroupStatus } from "@/lib/distribution/db-types";
 import { cn } from "@/lib/utils";
 import { Glass, SectionHeading, ScoreBar, EmptyState, Icon, compact } from "./shared";
 import type { RunAction } from "./DistributionCenterView";
 
 const STATUS_LABEL: Record<string, string> = {
-  active: "פעילה", inactive: "לא פעילה", blocked: "חסומה", pending: "ממתינה",
+  active: "מפורסם", inactive: "לא מפורסם", blocked: "חסומה", pending: "ממתינה", discovered: "נמצאה",
 };
 const STATUS_TONE: Record<string, string> = {
   active: "bg-success-soft text-success", inactive: "bg-line/70 text-muted",
   blocked: "bg-danger-soft text-danger", pending: "bg-warning-soft text-warning",
-};
-const STATUS_CYCLE: Record<string, DistGroupStatus> = {
-  active: "inactive", inactive: "active", blocked: "active", pending: "active",
+  discovered: "bg-sky-50 text-sky-700",
 };
 
 type SortKey = "members" | "performance" | "name";
@@ -245,10 +242,12 @@ export function GroupLibrarySection({
                     <td className="px-4 py-3"><ScoreBar value={g.performanceScore} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <button type="button" disabled={busy} title="החלף סטטוס"
-                          onClick={() => runAction(() => updateGroupStatusAction({ id: g.id, status: STATUS_CYCLE[g.status] ?? "active" }), "סטטוס הקבוצה עודכן")}
-                          className={cn("grid h-8 w-8 place-items-center rounded-lg transition disabled:opacity-50", "bg-brand-soft text-brand-strong hover:brightness-95")}>
-                          <Icon name="RefreshCw" size={14} />
+                        <button type="button" disabled={busy}
+                          title={g.status === "active" ? "מפורסם — לחץ כדי להסיר מהפרסום" : "לא מפורסם — לחץ כדי לסמן לפרסום"}
+                          onClick={() => runAction(() => updateGroupStatusAction({ id: g.id, status: g.status === "active" ? "inactive" : "active" }), g.status === "active" ? "הקבוצה הוסרה מהפרסום" : "הקבוצה סומנה לפרסום")}
+                          className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition disabled:opacity-50",
+                            g.status === "active" ? "bg-success-soft text-success" : "bg-line/70 text-muted hover:brightness-95")}>
+                          <Icon name={g.status === "active" ? "Check" : "Minus"} size={13} /> {g.status === "active" ? "מפורסם" : "לא מפורסם"}
                         </button>
                         <button type="button" disabled={busy} title="מחק קבוצה"
                           onClick={() => runAction(() => deleteGroupAction({ id: g.id }), "הקבוצה נמחקה")}
