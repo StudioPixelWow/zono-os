@@ -9,43 +9,60 @@
     h1 { font-size: 15px; margin: 0 0 10px; }
     .card { border: 1px solid #e5e5ea; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
     .muted { color: #6b6b76; font-size: 12px; }
+    .ok { color: #15803d; font-weight: 700; font-size: 13px; margin: 0; }
+    .warn { color: #b45309; font-weight: 600; font-size: 12px; }
     input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d0d0d8; border-radius: 8px; }
     button { padding: 8px 12px; border: 0; border-radius: 8px; background: #6d28d9; color: #fff; font-weight: 700; cursor: pointer; }
     button.secondary { background: #efeef5; color: #1b1b1f; }
+    button.link { background: transparent; color: #6b6b76; font-weight: 600; padding: 4px; text-decoration: underline; }
     pre { white-space: pre-wrap; font-size: 12px; background: #f6f5fb; padding: 8px; border-radius: 8px; }
-    .row { display: flex; gap: 8px; margin-top: 8px; }
+    img#thumb { max-width: 100%; border-radius: 8px; margin-top: 8px; display: none; }
+    .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
   <h1>ZONO — עוזר פרסום לקבוצות</h1>
 
-  <div class="card" id="baseCard">
+  <!-- CONNECTED banner — shown ONLY when a paired instance exists. This is the core
+       fix: a paired extension always renders as connected, never as onboarding. -->
+  <div class="card" id="connCard" style="display:none">
+    <p class="ok" id="connLabel">מחובר ל-ZONO ✓</p>
+    <p class="muted" id="connFb"></p>
+    <div class="row"><button id="resetBtn" class="link">נתק תוסף</button></div>
+  </div>
+
+  <!-- ZONO base URL — only relevant before pairing / on a custom domain. -->
+  <div class="card" id="baseCard" style="display:none">
     <p class="muted">כתובת ZONO (ברירת מחדל: הסביבה הרשמית). שנה רק אם אתה על דומיין אחר.</p>
     <input id="base" placeholder="https://zono-os-ro2s.vercel.app" />
     <div class="row"><button id="baseBtn" class="secondary">שמור כתובת</button></div>
   </div>
 
-  <div class="card" id="groupsCard">
-    <p class="muted">ייבוא הקבוצות שאתה חבר בהן ל-ZONO (נפתחת רשימת הקבוצות שלך ונסרקת).</p>
-    <div class="row"><button id="scanBtn">ייבא את הקבוצות שלי</button></div>
-    <p class="muted" id="scanMsg"></p>
-  </div>
-
-  <div class="card" id="pairCard">
+  <!-- Pairing — shown ONLY when genuinely unpaired. -->
+  <div class="card" id="pairCard" style="display:none">
     <p class="muted">הדבק את קוד החיבור מ-ZONO (הגדרות → חיבורי הפצה).</p>
     <input id="code" placeholder="ZONO-XXXX-XXXX" />
     <div class="row"><button id="pairBtn">חבר</button></div>
     <p class="muted" id="pairMsg"></p>
   </div>
 
+  <!-- Group import — shown when connected. Management lives in ZONO. -->
+  <div class="card" id="groupsCard" style="display:none">
+    <p class="muted">ייבוא הקבוצות שאתה חבר בהן ל-ZONO (הרשימה נסרקת ומנוהלת ב-ZONO).</p>
+    <div class="row"><button id="scanBtn" class="secondary">ייבא את הקבוצות שלי</button></div>
+    <p class="muted" id="scanMsg"></p>
+  </div>
+
+  <!-- Prepared post — shown when a post exists. -->
   <div class="card" id="postCard" style="display:none">
     <p class="muted">הפוסט הבא לפרסום ידני (אתה מפרסם, ZONO לא):</p>
     <p id="dest" style="font-weight:700"></p>
     <pre id="text"></pre>
+    <img id="thumb" alt="תצוגת תמונה" />
     <div class="row">
       <button id="copyBtn" class="secondary">העתק טקסט</button>
       <button id="openBtn" class="secondary">פתח קבוצה</button>
-      <button id="openImgBtn" class="secondary">פתח תמונה</button>
+      <button id="openImgBtn" class="secondary" style="display:none">פתח/הורד תמונה</button>
     </div>
     <div class="row">
       <button id="publishedBtn">פרסמתי ✓</button>
@@ -55,8 +72,12 @@
     <p class="muted" id="postMsg"></p>
   </div>
 
+  <!-- Non-post status: "no post" / retryable error. Keeps CONNECTED intact. -->
+  <p class="muted" id="statusMsg"></p>
+
   <div class="row"><button id="refreshBtn" class="secondary">רענן פוסט הבא</button></div>
 
+  <script src="popup-logic.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

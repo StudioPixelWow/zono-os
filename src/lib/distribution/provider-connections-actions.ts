@@ -17,7 +17,8 @@ import { metaPublishService, type PublishResult } from "./meta-publish";
 import {
   startPairing, revokeAllInstances,
   addGroupDestination, listGroupDestinations, createGroupPublishTasks, listGroupTaskStatuses,
-  type GroupDestination, type GroupTaskStatus,
+  listApprovedCreativesForOrg,
+  type GroupDestination, type GroupTaskStatus, type GroupCreativeOption,
 } from "./extension-service";
 import { getSessionContext } from "@/lib/auth/session";
 
@@ -143,13 +144,18 @@ export async function addFacebookGroupAction(input: {
   return row ? { ok: true, data: row, message: "הקבוצה נוספה." } : { ok: false, message: "הוספת הקבוצה נכשלה." };
 }
 
-/** Create one prepared publish task per selected group (assigned to the extension). No server publish. */
+/** Create one prepared publish task per selected group (assigned to the extension). No server publish.
+ *  When `outputId` is given, the extension is handed the APPROVED facebook_groups
+ *  derivative of that creative (secure signed URL) — never a raw/master URL. */
 export async function sendGroupPublishTasksAction(input: {
-  destinationIds: string[]; text: string; imageUrl?: string | null;
-}): Promise<ConnActionResult<{ created: number }>> {
+  destinationIds: string[]; text: string; imageUrl?: string | null; outputId?: string | null; creativeVersion?: number | null;
+}): Promise<ConnActionResult<{ created: number; blocked?: string }>> {
   if (!input.destinationIds?.length) return { ok: false, message: "בחר לפחות קבוצה אחת." };
   if (!input.text?.trim()) return { ok: false, message: "כתוב טקסט לפוסט." };
   const res = await createGroupPublishTasks(input);
+  // Honest block: an unapproved/absent creative derivative must not silently drop
+  // the image — surface it so the user can approve the creative or post text-only.
+  if (res.created === 0 && res.blocked) return { ok: false, message: `התמונה לא מוכנה לפרסום (${res.blocked}). אפשר לאשר את הקריאייטיב או לשלוח טקסט בלבד.` };
   revalidate();
   return res.created > 0
     ? { ok: true, data: res, message: `נשלחו ${res.created} משימות פרסום לתוסף.` }
@@ -158,6 +164,11 @@ export async function sendGroupPublishTasksAction(input: {
 
 export async function listGroupTaskStatusesAction(): Promise<GroupTaskStatus[]> {
   return listGroupTaskStatuses();
+}
+
+/** Approved creatives the group composer can attach as an image (P9.7B image hand-off). */
+export async function listGroupCreativesAction(): Promise<GroupCreativeOption[]> {
+  return listApprovedCreativesForOrg();
 }
 
 /**

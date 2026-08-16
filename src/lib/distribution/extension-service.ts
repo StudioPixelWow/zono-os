@@ -23,7 +23,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
 import { promoteForChannel, resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
-import { claimNextPost, transitionPost, buildContentHash, buildIdempotencyKey, type PublishState } from "./publishing-state-machine";
+import { claimNextPost, transitionPost, buildContentHash, buildIdempotencyKey, type PublishState, type ClaimedPost } from "./publishing-state-machine";
 
 type UserDb = Awaited<ReturnType<typeof createClient>>;
 
@@ -172,15 +172,34 @@ const GROUP_COMPLIANCE = [
   "הפרסום מתבצע ידנית על ידך בדפדפן שלך — ZONO לא מפרסם עבורך.",
 ];
 
+/** A post THIS instance already claimed (dispatching, locked_by = inst.id) but has
+ *  not yet resolved — used to resume after a popup close/reopen without re-claiming
+ *  or double-posting. Returns the ClaimedPost shape so it flows through the same
+ *  payload builder as a fresh claim. */
+async function findOwnClaimedPost(db: ReturnType<typeof createServiceRoleClient>, inst: AuthedInstance): Promise<ClaimedPost | null> {
+  const { data } = await db.from(DIST.posts as never)
+    .select("id,org_id,campaign_id,group_id,property_id,post_text,hashtags,image_url,external_destination_url,creative_output_id,creative_version,metadata,publish_state")
+    .eq("org_id", inst.orgId).eq("locked_by", inst.id).eq("publish_state", "dispatching")
+    .order("dispatched_at", { ascending: true }).limit(1).maybeSingle();
+  return (data as unknown as ClaimedPost | null) ?? null;
+}
+
 /**
  * The next prepared GROUP/MARKETPLACE post for this instance (no tokens, no PII).
  * Uses the DB-level ATOMIC CLAIM (claim_next_distribution_post): org-scoped, agent
  * (user) isolated, emergency-stop aware, FOR UPDATE SKIP LOCKED — so two instances /
- * a double GET / concurrent workers can NEVER receive the same post.
+ * a double GET / concurrent workers can NEVER receive the same post. Resumes an
+ * already-claimed post owned by this instance first (P9.7B popup-reopen safety).
  */
 export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload | null> {
   const db = createServiceRoleClient();
-  const pick = await claimNextPost(db as never, { orgId: inst.orgId, userId: inst.userId, instanceId: inst.id });
+  // RESUME FIRST (P9.7B): if this instance already holds a claimed (dispatching)
+  // post — e.g. the popup was closed/reopened after claiming — re-hand THAT SAME
+  // post instead of claiming a new one, so a popup reopen never strands the claim.
+  // Only the owning instance (locked_by = inst.id) can resume it, so the atomic
+  // no-double-post guarantee is preserved (a different instance still cannot get it).
+  const resumed = await findOwnClaimedPost(db, inst);
+  const pick: ClaimedPost | null = resumed ?? (await claimNextPost(db as never, { orgId: inst.orgId, userId: inst.userId, instanceId: inst.id }));
   if (!pick) return null;
 
   // Destination name/url: prefer metadata (Phase 21 manual group destinations),
@@ -362,6 +381,22 @@ export async function listGroupDestinations(): Promise<GroupDestination[]> {
     .order("name", { ascending: true });
   return ((data ?? []) as unknown as Array<{ id: string; name: string | null; destination_url: string | null; destination_type: string; status: string; metadata: Record<string, unknown> | null; last_used_at: string | null }>)
     .map((r) => ({ id: r.id, name: r.name ?? "", url: r.destination_url, destinationType: r.destination_type, notes: (r.metadata?.notes as string) ?? null, status: r.status, lastUsedAt: r.last_used_at }));
+}
+
+// ── Approved creatives available to attach as a Facebook-group image (P9.7B) ──
+export interface GroupCreativeOption { outputId: string; label: string; propertyId: string | null; creativeVersion: number | null }
+
+/** List the org's APPROVED Creative Studio outputs so the group composer can attach
+ *  one as the post image. Only approved outputs are eligible (the secure derivative
+ *  is minted from an approved master); nothing here exposes a private/master URL. */
+export async function listApprovedCreativesForOrg(): Promise<GroupCreativeOption[]> {
+  const s = await userScope(); if (!s) return [];
+  const { data } = await s.db.from("zono_quick_creative_outputs" as never)
+    .select("id,variant_name,title,property_id,creative_version")
+    .eq("org_id", s.orgId).eq("is_approved", true)
+    .order("created_at", { ascending: false }).limit(50);
+  return ((data ?? []) as unknown as Array<{ id: string; variant_name: string | null; title: string | null; property_id: string | null; creative_version: number | null }>)
+    .map((r) => ({ outputId: r.id, label: r.title || r.variant_name || "קריאייטיב", propertyId: r.property_id, creativeVersion: r.creative_version }));
 }
 
 // ── Create prepared publish TASKS for selected groups (Part B) ────────────────

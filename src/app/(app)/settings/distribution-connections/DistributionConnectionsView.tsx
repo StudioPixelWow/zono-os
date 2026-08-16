@@ -6,7 +6,7 @@
 // connection is marked "בקרוב" pending Meta approval. Nothing here publishes,
 // scrapes, or fakes a "connected" state. Every control calls a real server action.
 // ============================================================================
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Icon } from "@/components/dashboard/Icon";
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import type { ConnectionProvider, ConnectionStatus, ProviderConnectionView } from "@/lib/distribution/provider-connections";
 import type { FacebookPathView, FacebookPathStatus } from "@/lib/distribution/facebook-connection-paths";
 import type { MetaIntegrationView, MetaDestinationView } from "@/lib/distribution/meta-pages";
-import type { GroupDestination, GroupTaskStatus } from "@/lib/distribution/extension-service";
+import type { GroupDestination, GroupTaskStatus, GroupCreativeOption } from "@/lib/distribution/extension-service";
 import {
   getDistributionConnectionsAction,
   initializeManualFacebookConnectionAction,
@@ -30,6 +30,7 @@ import {
   addFacebookGroupAction,
   sendGroupPublishTasksAction,
   listGroupTaskStatusesAction,
+  listGroupCreativesAction,
 } from "@/lib/distribution/provider-connections-actions";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -52,8 +53,11 @@ const GROUP_ICON: Record<string, string> = { facebook: "Globe", instagram: "Spar
 const PATH_STATUS_LABEL: Record<FacebookPathStatus, string> = {
   // Meta OAuth
   not_connected: "לא מחובר", connected: "מחובר", expired: "פג תוקף", error: "שגיאה",
-  // Chrome extension
-  not_installed: "לא מותקן", installed: "מותקן", facebook_session_detected: "זוהה חיבור Facebook", ready: "מוכן",
+  // Chrome extension. "not_installed" really means "no paired instance yet" — ZONO
+  // cannot see whether the extension is installed (its content script runs on
+  // facebook.com only, never on the ZONO page), so label it by CONNECTION state, not
+  // installation, to avoid telling a user who already installed it "not installed".
+  not_installed: "לא מחובר", installed: "מותקן — ממתין ל-Facebook", facebook_session_detected: "זוהה חיבור Facebook", ready: "מוכן",
 };
 const PATH_STATUS_TONE: Record<FacebookPathStatus, string> = {
   not_connected: "bg-surface text-muted border-line",
@@ -161,6 +165,10 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [groupText, setGroupText] = useState("");
   const toggleGroup = (id: string) => setSelected((s) => ({ ...s, [id]: !s[id] }));
+  // P9.7B image hand-off: approved creatives the composer can attach (secure derivative only).
+  const [creatives, setCreatives] = useState<GroupCreativeOption[]>([]);
+  const [creativeId, setCreativeId] = useState("");
+  useEffect(() => { listGroupCreativesAction().then(setCreatives).catch(() => {}); }, []);
 
   const onAddGroup = () => runner.run(async () => {
     const r = await addFacebookGroupAction({ destinationType: "facebook_group", name: gName, url: gUrl, notes: gNotes || undefined });
@@ -171,7 +179,8 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
   const selectedCount = Object.values(selected).filter(Boolean).length;
   const onSendGroupTasks = () => runner.run(async () => {
     const ids = Object.keys(selected).filter((id) => selected[id]);
-    const r = await sendGroupPublishTasksAction({ destinationIds: ids, text: groupText });
+    const chosen = creatives.find((c) => c.outputId === creativeId);
+    const r = await sendGroupPublishTasksAction({ destinationIds: ids, text: groupText, outputId: creativeId || undefined, creativeVersion: chosen?.creativeVersion ?? undefined });
     if (r.ok) { setTasks(await listGroupTaskStatusesAction()); setSelected({}); return { ok: true, message: r.message }; }
     return { ok: false, message: r.message ?? "שליחה נכשלה." };
   }, { id: "send-group-tasks", pendingMessage: "שולח לתוסף…", success: (r) => r.message ?? null });
@@ -251,16 +260,22 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
               <Icon name="Download" size={18} className="text-brand" />
               <p className="text-ink font-black">תוסף Chrome — פרסום לקבוצות</p>
             </div>
-            <div className="flex gap-2">
-              {extStatus === "not_installed" ? (
-                <Button size="sm" onClick={onInstallExtension}>
+            <div className="flex flex-wrap gap-2">
+              {/* Install (store) is a secondary affordance. ZONO cannot detect an
+                  installed-but-unpaired extension (the content script runs on
+                  facebook.com only, never on the ZONO page), so pairing must ALWAYS
+                  be reachable — otherwise a user who installed the extension is stuck
+                  on "not connected" with no way to generate a code. */}
+              {extStatus === "not_installed" && (
+                <Button size="sm" variant="ghost" onClick={onInstallExtension}>
                   <Icon name="Download" size={14} className="ms-1" /> התקן תוסף Chrome
                 </Button>
-              ) : extStatus !== "ready" ? (
+              )}
+              {extStatus !== "ready" && (
                 <Button size="sm" onClick={onStartPairing} loading={runner.busyId === "pair-start"}>
-                  <Icon name="Download" size={14} className="ms-1" /> התחל חיבור תוסף
+                  <Icon name="Download" size={14} className="ms-1" /> {extStatus === "not_installed" ? "כבר התקנתי — חבר תוסף" : "התחל חיבור תוסף"}
                 </Button>
-              ) : null}
+              )}
               <Button size="sm" variant="ghost" onClick={onCheckExtension} loading={runner.busyId === "check-extension"}>
                 בדוק אם מותקן
               </Button>
@@ -365,6 +380,17 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
                 ))}
               </div>
               <textarea className="border-line bg-surface text-ink mt-2 w-full rounded-lg border px-3 py-2 text-sm" rows={3} placeholder="טקסט הפוסט לקבוצות…" value={groupText} onChange={(e) => setGroupText(e.target.value)} />
+              {/* P9.7B image hand-off: attach an APPROVED creative. Only approved outputs
+                  appear; the extension receives the secure derivative, never a master URL.
+                  Text-only remains the graceful fallback (leave on "בלי תמונה"). */}
+              <div className="mt-2">
+                <label className="text-muted text-xs font-bold">תמונת קריאייטיב (לא חובה)</label>
+                <select className="border-line bg-surface text-ink mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={creativeId} onChange={(e) => setCreativeId(e.target.value)}>
+                  <option value="">בלי תמונה — טקסט בלבד</option>
+                  {creatives.map((c) => <option key={c.outputId} value={c.outputId}>{c.label}</option>)}
+                </select>
+                {creatives.length === 0 && <p className="text-muted mt-1 text-xs">אין קריאייטיבים מאושרים עדיין — אשר קריאייטיב בסטודיו כדי לצרף תמונה.</p>}
+              </div>
               <div className="mt-2 flex items-center gap-3">
                 <Button size="sm" onClick={onSendGroupTasks} loading={runner.busyId === "send-group-tasks"} disabled={!extReady || selectedCount === 0}>
                   <Icon name="Send" size={14} className="ms-1" /> שלח לתוסף ({selectedCount})

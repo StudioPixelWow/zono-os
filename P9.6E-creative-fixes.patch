@@ -1,0 +1,85 @@
+diff --git a/src/lib/creative-studio/dynamic-ad-prompt.ts b/src/lib/creative-studio/dynamic-ad-prompt.ts
+index ee6fa52..447aabd 100644
+--- a/src/lib/creative-studio/dynamic-ad-prompt.ts
++++ b/src/lib/creative-studio/dynamic-ad-prompt.ts
+@@ -11,7 +11,7 @@
+ // Never throws — falls back to the proven static buildAdPrompt on any failure.
+ // ============================================================================
+ import "server-only";
+-import { buildAdPrompt, resolveSaleLabel, normalizeIlsPrice, type AdSpec, type AdGenAssets } from "./openai-ad-pipeline";
++import { buildAdPrompt, resolveSaleLabel, normalizeIlsPrice, formatPhoneForAd, type AdSpec, type AdGenAssets } from "./openai-ad-pipeline";
+ 
+ /** Deterministic hard locks appended after the AI-written creative brief. These
+  *  guarantee the correctness floor no matter what the LLM invents. */
+@@ -37,7 +37,7 @@ function buildLocks(spec: AdSpec, assets: AdGenAssets, correction: string): stri
+     price ? `• price = "${price}"  (Israeli format EXACTLY: ₪ then digits with comma thousands, no space after ₪; strongest emphasis after the headline)` : "",
+     spec.kind === "sold" ? "SOLD-AD PRICE RULE — this is a 'נמכר' (SOLD) ad: NEVER display any price, sum, number+₪ or 'מחיר' figure anywhere in the design; a price on a sold ad is a critical failure." : "",
+     spec.agentName ? `• agent name = "${spec.agentName}"` : "",
+-    spec.agentPhone ? `• agent phone = "${spec.agentPhone}"  (Latin digits, LTR)` : "",
++    spec.agentPhone ? `• agent phone = "${formatPhoneForAd(spec.agentPhone)}"  (Latin digits, LTR; render ALL digits EXACTLY including the LEADING 0 — an Israeli number always begins with 0; NEVER drop, hide, trim or omit the leading zero)` : "",
+     spec.logoText ? `• office name = "${spec.logoText}"` : "",
+     spec.cta ? `• optional short CTA = "${spec.cta}" — include ONLY if it does not harm Hebrew spelling.` : "",
+     spec.features?.length ? `• feature chips — render EXACTLY these ${spec.features.length} chips, letter-for-letter and digit-for-digit, and NO other feature chips: ${spec.features.map((f) => `"${f}"`).join(", ")}` : "",
+@@ -45,6 +45,9 @@ function buildLocks(spec: AdSpec, assets: AdGenAssets, correction: string): stri
+     "NUMERIC-LOCK — the rooms count, size in מ״ר, floor (קומה), price and phone are FACTS. Never invent, change, round, swap or drop a single digit; render each number EXACTLY as written in the copy/feature chips above. Do NOT show any room count, square-meterage or floor that is not listed above (a wrong number is a critical failure).",
+     `BRAND-COLOR LOCK — use ONLY the supplied brand palette (${colors}). Do NOT introduce random gold/cyan/orange/gradients that are not in the palette. Headline uses the brand's light-on-dark text; price uses the ACCENT; the logo, badges and dividers stay locked to the palette. Brand consistency outranks any color idea above.`,
+     refs.length ? `SUPPLIED ASSETS — ${refs.join("; ")}. Use ALL supplied assets exactly; never invent or substitute logos, faces, colors or the property.` : "",
++    assets.propertyImages.length
++      ? "PROPERTY-IMAGE HARD LOCK (absolute, overrides every creative idea above): the SUPPLIED property reference photo IS the property and MUST be the visible hero of the ad, rendered as the real building/interior it shows (relight/crop/compose around it only). NEVER replace, omit, hide or substitute it with any other subject or invented scene. STRICTLY FORBIDDEN as the hero or background: vehicles, trucks, vans, delivery/logistics/moving imagery, boxes or packages, giant number/‘money’/coins/cash scenes, any other company's brand or logo, stock lifestyle scenes, a different or AI-invented building or interior, or any subject that is not the supplied property. If the concept mentions price, urgency, value or ‘conversion’, express it with TYPOGRAPHY and layout ONLY — never by inventing a scene. A hero image that is anything other than the supplied property photo is a CRITICAL FAILURE."
++      : "",
+     "TECHNICAL LOCK: do NOT alter the logo or the agent's face; phone/price digits must be exact; render nothing beyond the locked copy. Vertical 4:5.",
+     correction ? `CORRECTION (previous attempt failed QA — fix ONLY these, keep the same visual direction):\n${correction}` : "",
+     "════ END LOCKS ════",
+@@ -59,7 +62,9 @@ const SYS = `You are the lead designer for TOP Israeli real-estate brokers' soci
+ - A clean feature bar: only 3-4 refined line ICONS + ULTRA-SHORT, perfectly legible Hebrew labels (e.g. rooms, size, floor, parking) — minimal and breathing, never crowded or tiny.
+ - A LARGE, unmissable phone number with a WhatsApp icon on a clean chip.
+ - A bold headline (project/street name) + supporting subtitle, with elegant brand-color accents (underline, dividers, name tag) from the brand palette.
+-Overall feel: bright, clean, high-end, warm and trustworthy — but ELEVATED to award-winning polish: impeccable visual hierarchy (headline → price → property → agent/contact), generous breathing room and whitespace, refined premium editorial typography with clear scale contrast, crisp alignment to a grid, and subtle depth (soft shadows, delicate dividers). Restrained and EXPENSIVE-looking; never cluttered, crowded or visually overloaded. Aim for a genuine 'WOW' — a top-1% broker campaign that looks like a leading agency made it. NOT dark/editorial, NOT a Canva template, NOT a plain photo with text. Vary the exact composition per property while keeping this signature language. Output ONLY the brief prose in English (6-12 sentences), no preamble, no bullet headers — do NOT restate exact copy or hex values (those are locked separately).`;
++Overall feel: bright, clean, high-end, warm and trustworthy — but ELEVATED to award-winning polish: impeccable visual hierarchy (headline → price → property → agent/contact), generous breathing room and whitespace, refined premium editorial typography with clear scale contrast, crisp alignment to a grid, and subtle depth (soft shadows, delicate dividers). Restrained and EXPENSIVE-looking; never cluttered, crowded or visually overloaded. Aim for a genuine 'WOW' — a top-1% broker campaign that looks like a leading agency made it. NOT dark/editorial, NOT a Canva template, NOT a plain photo with text. Vary the exact composition per property while keeping this signature language.
++NON-NEGOTIABLE — the hero image is ALWAYS the SUPPLIED real property photo. NEVER propose, imply or describe a hero or background that is anything other than that property: no vehicles/trucks/moving or delivery imagery, no boxes, no giant-number or money/cash scenes, no other brand, no stock lifestyle scene, no invented building or interior. If you want to convey price, urgency or 'conversion', do it through TYPOGRAPHY and layout only — never by describing a different scene. Any brief that swaps the property for another subject is invalid.
++Output ONLY the brief prose in English (6-12 sentences), no preamble, no bullet headers — do NOT restate exact copy or hex values (those are locked separately).`;
+ 
+ /**
+  * Build a fresh, AI-written art-direction prompt for the full ad, then append the
+diff --git a/src/lib/creative-studio/openai-ad-pipeline.ts b/src/lib/creative-studio/openai-ad-pipeline.ts
+index 08b2f81..2675a55 100644
+--- a/src/lib/creative-studio/openai-ad-pipeline.ts
++++ b/src/lib/creative-studio/openai-ad-pipeline.ts
+@@ -59,6 +59,20 @@ export function normalizeIlsPrice(price: string | null | undefined): string | nu
+   return `₪${Number(digits).toLocaleString("en-US")}`;
+ }
+ 
++/** Israeli phone → human display that ALWAYS keeps the leading 0, dash-grouped
++ *  (05X-XXX-XXXX) so the image model cannot drop the leading digit. Accepts
++ *  0-prefixed, +972 and bare 9-digit inputs. Returns the input unchanged when it
++ *  cannot be parsed. Pure. */
++export function formatPhoneForAd(phone: string | null | undefined): string | null {
++  if (!phone) return null;
++  let d = phone.replace(/\D/g, "");
++  if (d.startsWith("972")) d = `0${d.slice(3)}`;   // +972 5X… → 05X…
++  else if (!d.startsWith("0")) d = `0${d}`;         // bare 5X… → 05X… (never lose the leading 0)
++  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;   // mobile 05X-XXX-XXXX
++  if (d.length === 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;    // landline 0X-XXX-XXXX
++  return d || phone;
++}
++
+ /** Source-Data Lock: the manifest is the ONLY text the ad may contain. */
+ export function buildSourceManifest(spec: AdSpec): SourceManifest {
+   return {
+@@ -131,6 +145,7 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
+     "OBJECTIVE — premium CREATIVE-FIRST, not accuracy-first. The goal is VISUAL EXCELLENCE: generate a full luxury advertising campaign comparable to the world's best real-estate campaigns. Take creative risks, use complex layouts and rich composition. Priority order: (1) VISUAL EXCELLENCE — the stunning, art-directed luxury campaign is the primary KPI; (2) DATA INTEGRITY — preserve the supplied text and never FABRICATE a phone, price, address or name (a non-negotiable floor, but it must NEVER flatten or simplify the design); (3) BRAND CONSISTENCY. Do not prioritize speed. Do not simplify the layout, reduce creativity, or collapse into a safe template/card to satisfy a checklist — that is a FAILURE even if every word is correct.",
+ 
+     "PROPERTY HERO RULE: the real property photography is the hero and the emotional anchor (~65–80% of the frame), integrated into a DESIGNED composition — not a full-bleed photo with a caption. Use art-director techniques: cinematic crop, depth, negative space, an elegant type system, refined dividers and brand accents. Treat it like a luxury architectural-magazine COVER, not a property card.",
++    "PROPERTY-IMAGE HARD LOCK (absolute, overrides every creative idea): the SUPPLIED property reference photo IS the property — it MUST be the visible hero of the ad, rendered as the real building/interior it shows. You may only relight, color-grade, crop and compose AROUND it. You must NEVER replace, omit, hide or substitute it with any other subject or invented scene. STRICTLY FORBIDDEN as the hero or background: vehicles, trucks, vans, delivery/logistics/moving imagery, boxes or packages, giant number/‘money’/coins/cash scenes, any other company's brand or logo, stock lifestyle scenes, a different or AI-invented building or interior, or any subject that is not the supplied property. If the concept/brief mentions price, urgency, value or ‘conversion’, express that with TYPOGRAPHY and premium layout ONLY — never by inventing a scene. An ad whose hero image is anything other than the supplied property photo is a CRITICAL FAILURE and must be rejected.",
+     "VISUAL STORYTELLING: respect architecture, composition, interior design, lighting and depth. Do not cover important rooms or block architectural features. Let the property breathe and create desire through atmosphere.",
+ 
+     // ── TEXT-LOCK (spec §3) — EXACT strings, never altered ─────────────────────
+@@ -144,7 +159,7 @@ export function buildAdPrompt(spec: AdSpec, assets: AdGenAssets, correction: str
+     address ? `• {{property_address}} = "${address}"  ← HIGHLY VISIBLE and prominent. NOT tiny footer text, NOT legal copy. This is mandatory, large and easy to read.` : "",
+     priceLine ? `• {{price}} = "${priceLine}"  ← Israeli real-estate format EXACTLY as written (₪ then digits with comma thousands, NO space after ₪). Render it LARGER than the other supporting text with the STRONGEST visual emphasis — it is the primary commercial element, second only to the headline. Confident and premium, never shouty.` : "",
+     spec.agentName ? `• {{agent_name}} = "${spec.agentName}"` : "",
+-    spec.agentPhone ? `• {{agent_phone}} = "${spec.agentPhone}"  (Latin digits, keep LTR, impossible to miss yet never promotional)` : "",
++    spec.agentPhone ? `• {{agent_phone}} = "${formatPhoneForAd(spec.agentPhone)}"  (Latin digits, keep LTR, impossible to miss yet never promotional; render ALL digits EXACTLY including the LEADING 0 — an Israeli number always begins with 0; NEVER drop, hide, trim or omit the leading zero)` : "",
+     spec.logoText ? `• {{office_name}} = "${spec.logoText}"` : "",
+     spec.cta ? `• Optional short CTA = "${spec.cta}" — include ONLY if it does not harm Hebrew spelling accuracy; otherwise omit it.` : "",
+     "════ END TEXT-LOCK ════",

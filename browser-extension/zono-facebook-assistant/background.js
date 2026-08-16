@@ -47,6 +47,9 @@ async function completePairing(code) {
 
 // ── Heartbeat (returns scanRequested so we know when to import groups) ────────
 async function heartbeat(facebookSessionDetected, facebookProfileName) {
+  // Cache the last known Facebook-session flag (non-secret boolean) so the popup
+  // can render "Facebook זוהה" on open without a network round-trip.
+  await chrome.storage.local.set({ lastFbSession: facebookSessionDetected === true });
   const creds = await getCreds();
   if (!creds) return { ok: false };
   const base = await getBase();
@@ -112,13 +115,30 @@ async function getWatchedPosts() {
 }
 
 // ── Prepared-post delivery + human-confirmed result (P0) ─────────────────────
+// Returns a STRUCTURED result so the popup can tell apart:
+//   • unpaired            → { ok:false, paired:false }
+//   • paired, a post      → { ok:true,  paired:true, post }
+//   • paired, no post     → { ok:true,  paired:true, post:null }
+//   • paired, auth error  → { ok:false, paired:true, error:"auth" }   (creds KEPT)
+//   • paired, net/5xx     → { ok:false, paired:true, error:"network" }(creds KEPT)
+// CRITICAL: a failed fetch NEVER clears credentials. Only an explicit RESET does.
 async function fetchNextPost() {
   const creds = await getCreds();
-  if (!creds) return null;
+  if (!creds) return { ok: false, paired: false, post: null };
   const base = await getBase();
-  const res = await fetch(`${base}/api/extension/facebook/next-post`, { headers: authHeaders(creds) }).catch(() => null);
-  const json = res ? await res.json().catch(() => ({})) : {};
-  return json && json.ok ? json.post : null;
+  let res;
+  try {
+    res = await fetch(`${base}/api/extension/facebook/next-post`, { headers: authHeaders(creds) });
+  } catch {
+    return { ok: false, paired: true, post: null, error: "network" };
+  }
+  // A single 401/403 is treated as retryable (transient deploy / cold start / clock
+  // skew) — we do NOT wipe the pairing here. Terminal revocation is surfaced by ZONO
+  // and handled by the explicit reconnect flow, never by auto-clearing local creds.
+  if (res.status === 401 || res.status === 403) return { ok: false, paired: true, post: null, error: "auth" };
+  if (!res.ok) return { ok: false, paired: true, post: null, error: `http_${res.status}` };
+  const json = await res.json().catch(() => ({}));
+  return { ok: true, paired: true, post: json && json.ok ? json.post : null };
 }
 async function reportResult(payload) {
   const creds = await getCreds();
@@ -159,9 +179,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "GROUPS_SCANNED": sendResponse(await submitGroups(msg.groups)); break;
       case "COMMENTS_SCANNED": sendResponse(await submitComments(msg.comments)); break;
       case "GET_WATCHED": sendResponse({ watched: await getWatchedPosts() }); break;
-      case "NEXT_POST": sendResponse({ post: await fetchNextPost() }); break;
+      case "NEXT_POST": sendResponse(await fetchNextPost()); break;
       case "EVENT": sendResponse({ ok: await reportEvent(msg.postId, msg.event) }); break;
       case "REPORT": sendResponse({ ok: await reportResult(msg.payload) }); break;
+      // Popup hydration: report the persisted connection state (non-secret). Lets the
+      // popup render CONNECTED immediately on open without a pairing round-trip.
+      case "STATE": {
+        const creds = await getCreds();
+        const base = await getBase();
+        const { lastFbSession, lastImport } = await chrome.storage.local.get(["lastFbSession", "lastImport"]);
+        sendResponse({ paired: !!creds, zonoBase: base, fbSessionDetected: lastFbSession === true, lastImport: lastImport ?? null });
+        break;
+      }
+      // EXPLICIT disconnect ONLY. This is the single place local credentials are
+      // cleared. Refresh-next-post and error handling never reach this path.
+      case "RESET": await chrome.storage.local.remove(["instanceId", "secret", "lastFbSession"]); sendResponse({ ok: true }); break;
       default: sendResponse({ ok: false, error: "unknown" });
     }
   })();

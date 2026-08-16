@@ -1,0 +1,646 @@
+diff --git a/browser-extension/zono-facebook-assistant/background.js b/browser-extension/zono-facebook-assistant/background.js
+index 93fb3f7..862e986 100644
+--- a/browser-extension/zono-facebook-assistant/background.js
++++ b/browser-extension/zono-facebook-assistant/background.js
+@@ -47,6 +47,9 @@ async function completePairing(code) {
+ 
+ // ── Heartbeat (returns scanRequested so we know when to import groups) ────────
+ async function heartbeat(facebookSessionDetected, facebookProfileName) {
++  // Cache the last known Facebook-session flag (non-secret boolean) so the popup
++  // can render "Facebook זוהה" on open without a network round-trip.
++  await chrome.storage.local.set({ lastFbSession: facebookSessionDetected === true });
+   const creds = await getCreds();
+   if (!creds) return { ok: false };
+   const base = await getBase();
+@@ -112,13 +115,30 @@ async function getWatchedPosts() {
+ }
+ 
+ // ── Prepared-post delivery + human-confirmed result (P0) ─────────────────────
++// Returns a STRUCTURED result so the popup can tell apart:
++//   • unpaired            → { ok:false, paired:false }
++//   • paired, a post      → { ok:true,  paired:true, post }
++//   • paired, no post     → { ok:true,  paired:true, post:null }
++//   • paired, auth error  → { ok:false, paired:true, error:"auth" }   (creds KEPT)
++//   • paired, net/5xx     → { ok:false, paired:true, error:"network" }(creds KEPT)
++// CRITICAL: a failed fetch NEVER clears credentials. Only an explicit RESET does.
+ async function fetchNextPost() {
+   const creds = await getCreds();
+-  if (!creds) return null;
++  if (!creds) return { ok: false, paired: false, post: null };
+   const base = await getBase();
+-  const res = await fetch(`${base}/api/extension/facebook/next-post`, { headers: authHeaders(creds) }).catch(() => null);
+-  const json = res ? await res.json().catch(() => ({})) : {};
+-  return json && json.ok ? json.post : null;
++  let res;
++  try {
++    res = await fetch(`${base}/api/extension/facebook/next-post`, { headers: authHeaders(creds) });
++  } catch {
++    return { ok: false, paired: true, post: null, error: "network" };
++  }
++  // A single 401/403 is treated as retryable (transient deploy / cold start / clock
++  // skew) — we do NOT wipe the pairing here. Terminal revocation is surfaced by ZONO
++  // and handled by the explicit reconnect flow, never by auto-clearing local creds.
++  if (res.status === 401 || res.status === 403) return { ok: false, paired: true, post: null, error: "auth" };
++  if (!res.ok) return { ok: false, paired: true, post: null, error: `http_${res.status}` };
++  const json = await res.json().catch(() => ({}));
++  return { ok: true, paired: true, post: json && json.ok ? json.post : null };
+ }
+ async function reportResult(payload) {
+   const creds = await getCreds();
+@@ -159,9 +179,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+       case "GROUPS_SCANNED": sendResponse(await submitGroups(msg.groups)); break;
+       case "COMMENTS_SCANNED": sendResponse(await submitComments(msg.comments)); break;
+       case "GET_WATCHED": sendResponse({ watched: await getWatchedPosts() }); break;
+-      case "NEXT_POST": sendResponse({ post: await fetchNextPost() }); break;
++      case "NEXT_POST": sendResponse(await fetchNextPost()); break;
+       case "EVENT": sendResponse({ ok: await reportEvent(msg.postId, msg.event) }); break;
+       case "REPORT": sendResponse({ ok: await reportResult(msg.payload) }); break;
++      // Popup hydration: report the persisted connection state (non-secret). Lets the
++      // popup render CONNECTED immediately on open without a pairing round-trip.
++      case "STATE": {
++        const creds = await getCreds();
++        const base = await getBase();
++        const { lastFbSession, lastImport } = await chrome.storage.local.get(["lastFbSession", "lastImport"]);
++        sendResponse({ paired: !!creds, zonoBase: base, fbSessionDetected: lastFbSession === true, lastImport: lastImport ?? null });
++        break;
++      }
++      // EXPLICIT disconnect ONLY. This is the single place local credentials are
++      // cleared. Refresh-next-post and error handling never reach this path.
++      case "RESET": await chrome.storage.local.remove(["instanceId", "secret", "lastFbSession"]); sendResponse({ ok: true }); break;
+       default: sendResponse({ ok: false, error: "unknown" });
+     }
+   })();
+diff --git a/browser-extension/zono-facebook-assistant/manifest.json b/browser-extension/zono-facebook-assistant/manifest.json
+index 37841c4..cd8aef4 100644
+--- a/browser-extension/zono-facebook-assistant/manifest.json
++++ b/browser-extension/zono-facebook-assistant/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 3,
+   "name": "ZONO Facebook Assistant",
+-  "version": "0.2.0",
++  "version": "0.3.0",
+   "description": "Browser-assisted publishing helper for ZONO. Imports the groups you are a member of, shows prepared posts for Facebook Groups, captures comments on your ZONO posts. You publish manually and confirm. No auto-posting, no credential access.",
+   "permissions": ["storage", "alarms", "tabs"],
+   "host_permissions": [
+diff --git a/browser-extension/zono-facebook-assistant/popup-logic.js b/browser-extension/zono-facebook-assistant/popup-logic.js
+new file mode 100644
+index 0000000..2a0ab6d
+--- /dev/null
++++ b/browser-extension/zono-facebook-assistant/popup-logic.js
+@@ -0,0 +1,23 @@
++// ============================================================================
++// ZONO Facebook Assistant — PURE popup view-decision logic (v0.3).
++// No DOM, no chrome.* — unit-tested by scripts/p9-7b-extension-harness.mts.
++// Maps a (paired, post, error) result from the background NEXT_POST/STATE call
++// to the popup view. The whole point: UNPAIRED is returned ONLY when genuinely
++// not paired — a fetch error or an empty result keeps the user CONNECTED.
++// ============================================================================
++function decideView(state) {
++  const { paired, post, error } = state || {};
++  if (!paired) return { view: "UNPAIRED", msg: "" };
++  if (post) return { view: "POST_READY", msg: "" };
++  if (error === "auth") return { view: "REPAIR_HINT", msg: "החיבור דורש רענון — פתח שוב, ואם הבעיה נמשכת צור קוד חדש ב-ZONO." };
++  if (error === "network") return { view: "RETRYABLE_ERROR", msg: "אין חיבור לרגע. נסה שוב." };
++  if (error) return { view: "RETRYABLE_ERROR", msg: "שגיאה זמנית. נסה שוב." };
++  return { view: "NO_POST", msg: "אין כרגע פוסט מוכן." };
++}
++
++// A view is "connected" (paired) for every state except UNPAIRED — so REPAIR_HINT,
++// RETRYABLE_ERROR, NO_POST and POST_READY all keep the connected chrome visible.
++function isConnectedView(view) { return view !== "UNPAIRED"; }
++
++if (typeof module !== "undefined" && module.exports) module.exports = { decideView, isConnectedView };
++if (typeof self !== "undefined") { self.decideView = decideView; self.isConnectedView = isConnectedView; }
+diff --git a/browser-extension/zono-facebook-assistant/popup.html b/browser-extension/zono-facebook-assistant/popup.html
+index 200d14b..96b5f15 100644
+--- a/browser-extension/zono-facebook-assistant/popup.html
++++ b/browser-extension/zono-facebook-assistant/popup.html
+@@ -9,43 +9,60 @@
+     h1 { font-size: 15px; margin: 0 0 10px; }
+     .card { border: 1px solid #e5e5ea; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+     .muted { color: #6b6b76; font-size: 12px; }
++    .ok { color: #15803d; font-weight: 700; font-size: 13px; margin: 0; }
++    .warn { color: #b45309; font-weight: 600; font-size: 12px; }
+     input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d0d0d8; border-radius: 8px; }
+     button { padding: 8px 12px; border: 0; border-radius: 8px; background: #6d28d9; color: #fff; font-weight: 700; cursor: pointer; }
+     button.secondary { background: #efeef5; color: #1b1b1f; }
++    button.link { background: transparent; color: #6b6b76; font-weight: 600; padding: 4px; text-decoration: underline; }
+     pre { white-space: pre-wrap; font-size: 12px; background: #f6f5fb; padding: 8px; border-radius: 8px; }
+-    .row { display: flex; gap: 8px; margin-top: 8px; }
++    img#thumb { max-width: 100%; border-radius: 8px; margin-top: 8px; display: none; }
++    .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+   </style>
+ </head>
+ <body>
+   <h1>ZONO — עוזר פרסום לקבוצות</h1>
+ 
+-  <div class="card" id="baseCard">
++  <!-- CONNECTED banner — shown ONLY when a paired instance exists. This is the core
++       fix: a paired extension always renders as connected, never as onboarding. -->
++  <div class="card" id="connCard" style="display:none">
++    <p class="ok" id="connLabel">מחובר ל-ZONO ✓</p>
++    <p class="muted" id="connFb"></p>
++    <div class="row"><button id="resetBtn" class="link">נתק תוסף</button></div>
++  </div>
++
++  <!-- ZONO base URL — only relevant before pairing / on a custom domain. -->
++  <div class="card" id="baseCard" style="display:none">
+     <p class="muted">כתובת ZONO (ברירת מחדל: הסביבה הרשמית). שנה רק אם אתה על דומיין אחר.</p>
+     <input id="base" placeholder="https://zono-os-ro2s.vercel.app" />
+     <div class="row"><button id="baseBtn" class="secondary">שמור כתובת</button></div>
+   </div>
+ 
+-  <div class="card" id="groupsCard">
+-    <p class="muted">ייבוא הקבוצות שאתה חבר בהן ל-ZONO (נפתחת רשימת הקבוצות שלך ונסרקת).</p>
+-    <div class="row"><button id="scanBtn">ייבא את הקבוצות שלי</button></div>
+-    <p class="muted" id="scanMsg"></p>
+-  </div>
+-
+-  <div class="card" id="pairCard">
++  <!-- Pairing — shown ONLY when genuinely unpaired. -->
++  <div class="card" id="pairCard" style="display:none">
+     <p class="muted">הדבק את קוד החיבור מ-ZONO (הגדרות → חיבורי הפצה).</p>
+     <input id="code" placeholder="ZONO-XXXX-XXXX" />
+     <div class="row"><button id="pairBtn">חבר</button></div>
+     <p class="muted" id="pairMsg"></p>
+   </div>
+ 
++  <!-- Group import — shown when connected. Management lives in ZONO. -->
++  <div class="card" id="groupsCard" style="display:none">
++    <p class="muted">ייבוא הקבוצות שאתה חבר בהן ל-ZONO (הרשימה נסרקת ומנוהלת ב-ZONO).</p>
++    <div class="row"><button id="scanBtn" class="secondary">ייבא את הקבוצות שלי</button></div>
++    <p class="muted" id="scanMsg"></p>
++  </div>
++
++  <!-- Prepared post — shown when a post exists. -->
+   <div class="card" id="postCard" style="display:none">
+     <p class="muted">הפוסט הבא לפרסום ידני (אתה מפרסם, ZONO לא):</p>
+     <p id="dest" style="font-weight:700"></p>
+     <pre id="text"></pre>
++    <img id="thumb" alt="תצוגת תמונה" />
+     <div class="row">
+       <button id="copyBtn" class="secondary">העתק טקסט</button>
+       <button id="openBtn" class="secondary">פתח קבוצה</button>
+-      <button id="openImgBtn" class="secondary">פתח תמונה</button>
++      <button id="openImgBtn" class="secondary" style="display:none">פתח/הורד תמונה</button>
+     </div>
+     <div class="row">
+       <button id="publishedBtn">פרסמתי ✓</button>
+@@ -55,8 +72,12 @@
+     <p class="muted" id="postMsg"></p>
+   </div>
+ 
++  <!-- Non-post status: "no post" / retryable error. Keeps CONNECTED intact. -->
++  <p class="muted" id="statusMsg"></p>
++
+   <div class="row"><button id="refreshBtn" class="secondary">רענן פוסט הבא</button></div>
+ 
++  <script src="popup-logic.js"></script>
+   <script src="popup.js"></script>
+ </body>
+ </html>
+diff --git a/browser-extension/zono-facebook-assistant/popup.js b/browser-extension/zono-facebook-assistant/popup.js
+index 7fe1e24..24f8873 100644
+--- a/browser-extension/zono-facebook-assistant/popup.js
++++ b/browser-extension/zono-facebook-assistant/popup.js
+@@ -1,8 +1,10 @@
+ // ============================================================================
+-// ZONO Facebook Assistant — popup logic (skeleton).
+-// Pairing screen + next-post viewer + manual result reporting. The user copies
+-// text, opens the destination, publishes BY HAND on Facebook, then confirms.
+-// There is NO DOM auto-click publishing here — every publish is human-driven.
++// ZONO Facebook Assistant — popup logic (v0.3).
++// PERSISTENT CONNECTED STATE: a paired extension always renders connected. A
++// failed or empty "רענן פוסט הבא" NEVER reverts to the onboarding/pairing screen
++// and NEVER clears credentials — only the explicit "נתק תוסף" does. Every publish
++// is human-driven; there is no DOM auto-click here. Uses global decideView /
++// isConnectedView from popup-logic.js.
+ // ============================================================================
+ const $ = (id) => document.getElementById(id);
+ let currentPost = null;
+@@ -11,50 +13,77 @@ function send(type, extra) {
+   return new Promise((resolve) => chrome.runtime.sendMessage({ type, ...extra }, resolve));
+ }
+ 
+-async function showNextPost() {
+-  const { post } = await send("NEXT_POST", {});
++// Apply a decided view to the cards. Connected chrome stays visible for every
++// paired view; the pairing/onboarding cards appear ONLY when unpaired.
++function applyView(decided, fb) {
++  const connected = isConnectedView(decided.view);
++  $("connCard").style.display = connected ? "block" : "none";
++  $("groupsCard").style.display = connected ? "block" : "none";
++  $("pairCard").style.display = connected ? "none" : "block";
++  $("baseCard").style.display = connected ? "none" : "block";
++  $("postCard").style.display = decided.view === "POST_READY" ? "block" : "none";
++  $("statusMsg").textContent = decided.msg || "";
++  if (connected && typeof fb === "boolean") {
++    $("connFb").textContent = fb ? "Facebook זוהה ✓" : "Facebook לא זוהה — פתח פייסבוק מחובר בדפדפן.";
++  }
++}
++
++function renderPost(post) {
+   currentPost = post;
+-  if (!post) { $("postCard").style.display = "none"; return; }
+-  $("pairCard").style.display = "none";
+-  $("postCard").style.display = "block";
++  if (!post) return;
+   $("dest").textContent = post.destinationName || "יעד פרסום";
+   $("text").textContent = [post.text, (post.hashtags || []).join(" ")].filter(Boolean).join("\n\n");
++  const img = post.imageUrls && post.imageUrls[0];
++  const thumb = $("thumb"); const openImg = $("openImgBtn");
++  if (img) { thumb.src = img; thumb.style.display = "block"; openImg.style.display = "inline-block"; }
++  else { thumb.removeAttribute("src"); thumb.style.display = "none"; openImg.style.display = "none"; }
+ }
+ 
+-// Load + save the ZONO base URL.
+-chrome.storage.local.get(["zonoBase", "lastImport"], (s) => {
+-  if (s.zonoBase) $("base").value = s.zonoBase;
+-  if (s.lastImport) $("scanMsg").textContent = `יובאו ${s.lastImport.imported ?? 0} · עודכנו ${s.lastImport.updated ?? 0}`;
+-});
+-$("baseBtn").addEventListener("click", async () => {
+-  const base = $("base").value.trim();
+-  await send("SET_BASE", { base });
+-  $("scanMsg").textContent = "הכתובת נשמרה";
+-});
+-$("scanBtn").addEventListener("click", async () => {
+-  await send("SCAN_NOW", {});
+-  $("scanMsg").textContent = "פותח את רשימת הקבוצות שלך וסורק… הקבוצות יופיעו ב-ZONO בסיום.";
+-});
++// Non-destructive: request the next post, decide the view, keep the user CONNECTED
++// on empty/error. Credentials are never touched here.
++async function refresh() {
++  const r = (await send("NEXT_POST", {})) || { paired: false };
++  const decided = decideView(r);
++  applyView(decided);
++  if (decided.view === "POST_READY") renderPost(r.post);
++  else currentPost = null;
++}
++
++// Bootstrap: hydrate persisted pairing state, render connected immediately, then
++// fetch the next post. Reopening the popup never requires pairing again.
++async function init() {
++  const st = (await send("STATE", {})) || {};
++  if (st.zonoBase) $("base").value = st.zonoBase;
++  if (st.lastImport) $("scanMsg").textContent = `יובאו ${st.lastImport.imported ?? 0} · עודכנו ${st.lastImport.updated ?? 0}`;
++  applyView({ view: st.paired ? "NO_POST" : "UNPAIRED", msg: "" }, st.fbSessionDetected);
++  if (st.paired) await refresh();
++}
++
++$("baseBtn").addEventListener("click", async () => { await send("SET_BASE", { base: $("base").value.trim() }); $("pairMsg").textContent = "הכתובת נשמרה"; });
++$("scanBtn").addEventListener("click", async () => { await send("SCAN_NOW", {}); $("scanMsg").textContent = "פותח את רשימת הקבוצות שלך וסורק… הקבוצות יופיעו ב-ZONO בסיום."; });
+ 
+ $("pairBtn").addEventListener("click", async () => {
+-  const code = $("code").value.trim();
+-  if (!code) return;
++  const code = $("code").value.trim(); if (!code) return;
+   const res = await send("PAIR", { code });
+   $("pairMsg").textContent = res.ok ? "חובר בהצלחה ✓" : `שגיאה: ${res.error || "קוד לא תקין"}`;
+-  if (res.ok) await showNextPost();
++  if (res.ok) { applyView({ view: "NO_POST", msg: "" }); await refresh(); }
++});
++
++// EXPLICIT disconnect ONLY — the sole path that clears local credentials.
++$("resetBtn").addEventListener("click", async () => {
++  await send("RESET", {});
++  currentPost = null;
++  applyView({ view: "UNPAIRED", msg: "התוסף נותק. הזן קוד חיבור חדש כדי להתחבר מחדש." });
+ });
+ 
+ $("copyBtn").addEventListener("click", async () => {
+   if (!currentPost) return;
+   await navigator.clipboard.writeText(currentPost.text || "");
+   $("postMsg").textContent = "הטקסט הועתק";
+-  send("EVENT", { postId: currentPost.postId, event: "copied" }); // assisted, not a publish
++  send("EVENT", { postId: currentPost.postId, event: "copied" });
+ });
+ $("openBtn").addEventListener("click", () => {
+-  if (currentPost && currentPost.destinationUrl) {
+-    chrome.tabs.create({ url: currentPost.destinationUrl });
+-    send("EVENT", { postId: currentPost.postId, event: "opened" });
+-  }
++  if (currentPost && currentPost.destinationUrl) { chrome.tabs.create({ url: currentPost.destinationUrl }); send("EVENT", { postId: currentPost.postId, event: "opened" }); }
+ });
+ $("openImgBtn").addEventListener("click", () => {
+   const url = currentPost && currentPost.imageUrls && currentPost.imageUrls[0];
+@@ -62,24 +91,22 @@ $("openImgBtn").addEventListener("click", () => {
+ });
+ $("publishedBtn").addEventListener("click", async () => {
+   if (!currentPost) return;
+-  // Optional: capture the published post URL.
+   const url = prompt("הדבק קישור לפוסט שפורסם (לא חובה):") || null;
+   const r = await send("REPORT", { payload: { postId: currentPost.postId, result: "user_confirmed_published", externalPostUrl: url } });
+   $("postMsg").textContent = r.ok ? "דווח כפורסם ✓" : "הדיווח נכשל";
+-  if (r.ok) await showNextPost();
++  if (r.ok) await refresh();
+ });
+ $("failedBtn").addEventListener("click", async () => {
+   if (!currentPost) return;
+   const reason = prompt("מה הסיבה לכשל? (לא חובה)") || null;
+   await send("REPORT", { payload: { postId: currentPost.postId, result: "failed", errorMessage: reason } });
+-  await showNextPost();
++  await refresh();
+ });
+ $("skipBtn").addEventListener("click", async () => {
+   if (!currentPost) return;
+   await send("REPORT", { payload: { postId: currentPost.postId, result: "user_skipped" } });
+-  await showNextPost();
++  await refresh();
+ });
+-$("refreshBtn").addEventListener("click", showNextPost);
++$("refreshBtn").addEventListener("click", refresh);
+ 
+-// On open: if already paired, jump to the next post.
+-showNextPost();
++init();
+diff --git a/scripts/p9-7b-extension-harness.mts b/scripts/p9-7b-extension-harness.mts
+new file mode 100644
+index 0000000..2880299
+--- /dev/null
++++ b/scripts/p9-7b-extension-harness.mts
+@@ -0,0 +1,51 @@
++// ============================================================================
++// P9.7B — ZONO Facebook Assistant extension: pairing-persistence regression tests.
++// Pure view logic (popup-logic.js) + structural invariants on background.js that
++// guarantee "Refresh Next Post" and auth/network errors NEVER clear pairing.
++// Run: npx tsx scripts/p9-7b-extension-harness.mts
++// ============================================================================
++import { createRequire } from "node:module";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { dirname, join } from "node:path";
++
++const require = createRequire(import.meta.url);
++const here = dirname(fileURLToPath(import.meta.url));
++const extDir = join(here, "..", "browser-extension", "zono-facebook-assistant");
++const { decideView, isConnectedView } = require(join(extDir, "popup-logic.js"));
++const background = readFileSync(join(extDir, "background.js"), "utf8");
++const manifest = JSON.parse(readFileSync(join(extDir, "manifest.json"), "utf8"));
++
++let pass = 0, fail = 0;
++const ok = (name: string, cond: boolean) => { if (cond) { pass++; } else { fail++; console.log(`FAIL: ${name}`); } };
++
++// ── Pure view decision (the core fix) ────────────────────────────────────────
++ok("unpaired → UNPAIRED", decideView({ paired: false }).view === "UNPAIRED");
++ok("paired + post → POST_READY", decideView({ paired: true, post: { postId: "x" } }).view === "POST_READY");
++ok("paired + no post stays connected (NO_POST)", isConnectedView(decideView({ paired: true, post: null }).view));
++ok("paired + no post is NOT unpaired", decideView({ paired: true, post: null }).view !== "UNPAIRED");
++ok("paired + auth error stays connected", isConnectedView(decideView({ paired: true, post: null, error: "auth" }).view));
++ok("paired + auth error is NOT unpaired (no wipe)", decideView({ paired: true, error: "auth" }).view !== "UNPAIRED");
++ok("paired + network error stays connected", isConnectedView(decideView({ paired: true, post: null, error: "network" }).view));
++ok("paired + http_500 stays connected", isConnectedView(decideView({ paired: true, post: null, error: "http_500" }).view));
++ok("paired + no post shows a message", !!decideView({ paired: true, post: null }).msg);
++ok("undefined state → UNPAIRED (safe default)", decideView(undefined).view === "UNPAIRED");
++
++// ── Structural invariants on background.js ───────────────────────────────────
++// Credentials are cleared ONLY in the explicit RESET handler — never in fetchNextPost,
++// heartbeat, or on a 401/403.
++const removeCalls = [...background.matchAll(/storage\.local\.remove\(/g)].length;
++ok("exactly one storage.remove call site (RESET only)", removeCalls === 1);
++ok("RESET handler owns the remove", /case "RESET":[^]*storage\.local\.remove/.test(background));
++ok("fetchNextPost never calls storage.remove", !/fetchNextPost[^]*?storage\.local\.remove[^]*?\n}/.test(background.split("async function fetchNextPost")[1]?.split("\n}")[0] ?? ""));
++ok("401/403 returns error:auth (not a clear)", /40[13][^]*?error: "auth"/.test(background));
++ok("fetchNextPost returns a paired flag", /paired: true/.test(background) && /paired: false/.test(background));
++ok("STATE handler exists for hydration", /case "STATE"/.test(background));
++ok("heartbeat caches lastFbSession (non-secret)", /lastFbSession/.test(background));
++
++// ── Version bump ─────────────────────────────────────────────────────────────
++ok("manifest version bumped to 0.3.0", manifest.version === "0.3.0");
++ok("no facebook host creds in permissions", !JSON.stringify(manifest).includes("cookies"));
++
++console.log(`\n${pass}/${pass + fail} passed`);
++if (fail > 0) process.exit(1);
+diff --git a/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx b/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx
+index c601607..893e9d6 100644
+--- a/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx
++++ b/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx
+@@ -6,7 +6,7 @@
+ // connection is marked "בקרוב" pending Meta approval. Nothing here publishes,
+ // scrapes, or fakes a "connected" state. Every control calls a real server action.
+ // ============================================================================
+-import { useState } from "react";
++import { useState, useEffect } from "react";
+ import Link from "next/link";
+ import { motion } from "framer-motion";
+ import { Icon } from "@/components/dashboard/Icon";
+@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
+ import type { ConnectionProvider, ConnectionStatus, ProviderConnectionView } from "@/lib/distribution/provider-connections";
+ import type { FacebookPathView, FacebookPathStatus } from "@/lib/distribution/facebook-connection-paths";
+ import type { MetaIntegrationView, MetaDestinationView } from "@/lib/distribution/meta-pages";
+-import type { GroupDestination, GroupTaskStatus } from "@/lib/distribution/extension-service";
++import type { GroupDestination, GroupTaskStatus, GroupCreativeOption } from "@/lib/distribution/extension-service";
+ import {
+   getDistributionConnectionsAction,
+   initializeManualFacebookConnectionAction,
+@@ -30,6 +30,7 @@ import {
+   addFacebookGroupAction,
+   sendGroupPublishTasksAction,
+   listGroupTaskStatusesAction,
++  listGroupCreativesAction,
+ } from "@/lib/distribution/provider-connections-actions";
+ 
+ const STATUS_LABEL: Record<ConnectionStatus, string> = {
+@@ -52,8 +53,11 @@ const GROUP_ICON: Record<string, string> = { facebook: "Globe", instagram: "Spar
+ const PATH_STATUS_LABEL: Record<FacebookPathStatus, string> = {
+   // Meta OAuth
+   not_connected: "לא מחובר", connected: "מחובר", expired: "פג תוקף", error: "שגיאה",
+-  // Chrome extension
+-  not_installed: "לא מותקן", installed: "מותקן", facebook_session_detected: "זוהה חיבור Facebook", ready: "מוכן",
++  // Chrome extension. "not_installed" really means "no paired instance yet" — ZONO
++  // cannot see whether the extension is installed (its content script runs on
++  // facebook.com only, never on the ZONO page), so label it by CONNECTION state, not
++  // installation, to avoid telling a user who already installed it "not installed".
++  not_installed: "לא מחובר", installed: "מותקן — ממתין ל-Facebook", facebook_session_detected: "זוהה חיבור Facebook", ready: "מוכן",
+ };
+ const PATH_STATUS_TONE: Record<FacebookPathStatus, string> = {
+   not_connected: "bg-surface text-muted border-line",
+@@ -161,6 +165,10 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
+   const [selected, setSelected] = useState<Record<string, boolean>>({});
+   const [groupText, setGroupText] = useState("");
+   const toggleGroup = (id: string) => setSelected((s) => ({ ...s, [id]: !s[id] }));
++  // P9.7B image hand-off: approved creatives the composer can attach (secure derivative only).
++  const [creatives, setCreatives] = useState<GroupCreativeOption[]>([]);
++  const [creativeId, setCreativeId] = useState("");
++  useEffect(() => { listGroupCreativesAction().then(setCreatives).catch(() => {}); }, []);
+ 
+   const onAddGroup = () => runner.run(async () => {
+     const r = await addFacebookGroupAction({ destinationType: "facebook_group", name: gName, url: gUrl, notes: gNotes || undefined });
+@@ -171,7 +179,8 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
+   const selectedCount = Object.values(selected).filter(Boolean).length;
+   const onSendGroupTasks = () => runner.run(async () => {
+     const ids = Object.keys(selected).filter((id) => selected[id]);
+-    const r = await sendGroupPublishTasksAction({ destinationIds: ids, text: groupText });
++    const chosen = creatives.find((c) => c.outputId === creativeId);
++    const r = await sendGroupPublishTasksAction({ destinationIds: ids, text: groupText, outputId: creativeId || undefined, creativeVersion: chosen?.creativeVersion ?? undefined });
+     if (r.ok) { setTasks(await listGroupTaskStatusesAction()); setSelected({}); return { ok: true, message: r.message }; }
+     return { ok: false, message: r.message ?? "שליחה נכשלה." };
+   }, { id: "send-group-tasks", pendingMessage: "שולח לתוסף…", success: (r) => r.message ?? null });
+@@ -251,16 +260,22 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
+               <Icon name="Download" size={18} className="text-brand" />
+               <p className="text-ink font-black">תוסף Chrome — פרסום לקבוצות</p>
+             </div>
+-            <div className="flex gap-2">
+-              {extStatus === "not_installed" ? (
+-                <Button size="sm" onClick={onInstallExtension}>
++            <div className="flex flex-wrap gap-2">
++              {/* Install (store) is a secondary affordance. ZONO cannot detect an
++                  installed-but-unpaired extension (the content script runs on
++                  facebook.com only, never on the ZONO page), so pairing must ALWAYS
++                  be reachable — otherwise a user who installed the extension is stuck
++                  on "not connected" with no way to generate a code. */}
++              {extStatus === "not_installed" && (
++                <Button size="sm" variant="ghost" onClick={onInstallExtension}>
+                   <Icon name="Download" size={14} className="ms-1" /> התקן תוסף Chrome
+                 </Button>
+-              ) : extStatus !== "ready" ? (
++              )}
++              {extStatus !== "ready" && (
+                 <Button size="sm" onClick={onStartPairing} loading={runner.busyId === "pair-start"}>
+-                  <Icon name="Download" size={14} className="ms-1" /> התחל חיבור תוסף
++                  <Icon name="Download" size={14} className="ms-1" /> {extStatus === "not_installed" ? "כבר התקנתי — חבר תוסף" : "התחל חיבור תוסף"}
+                 </Button>
+-              ) : null}
++              )}
+               <Button size="sm" variant="ghost" onClick={onCheckExtension} loading={runner.busyId === "check-extension"}>
+                 בדוק אם מותקן
+               </Button>
+@@ -365,6 +380,17 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
+                 ))}
+               </div>
+               <textarea className="border-line bg-surface text-ink mt-2 w-full rounded-lg border px-3 py-2 text-sm" rows={3} placeholder="טקסט הפוסט לקבוצות…" value={groupText} onChange={(e) => setGroupText(e.target.value)} />
++              {/* P9.7B image hand-off: attach an APPROVED creative. Only approved outputs
++                  appear; the extension receives the secure derivative, never a master URL.
++                  Text-only remains the graceful fallback (leave on "בלי תמונה"). */}
++              <div className="mt-2">
++                <label className="text-muted text-xs font-bold">תמונת קריאייטיב (לא חובה)</label>
++                <select className="border-line bg-surface text-ink mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={creativeId} onChange={(e) => setCreativeId(e.target.value)}>
++                  <option value="">בלי תמונה — טקסט בלבד</option>
++                  {creatives.map((c) => <option key={c.outputId} value={c.outputId}>{c.label}</option>)}
++                </select>
++                {creatives.length === 0 && <p className="text-muted mt-1 text-xs">אין קריאייטיבים מאושרים עדיין — אשר קריאייטיב בסטודיו כדי לצרף תמונה.</p>}
++              </div>
+               <div className="mt-2 flex items-center gap-3">
+                 <Button size="sm" onClick={onSendGroupTasks} loading={runner.busyId === "send-group-tasks"} disabled={!extReady || selectedCount === 0}>
+                   <Icon name="Send" size={14} className="ms-1" /> שלח לתוסף ({selectedCount})
+diff --git a/src/lib/distribution/extension-service.ts b/src/lib/distribution/extension-service.ts
+index 0eb4909..2d26b3a 100644
+--- a/src/lib/distribution/extension-service.ts
++++ b/src/lib/distribution/extension-service.ts
+@@ -23,7 +23,7 @@ import { getSessionContext } from "@/lib/auth/session";
+ import type { ExtensionPathStatus } from "./facebook-connection-paths";
+ import { DIST } from "./db-types";
+ import { promoteForChannel, resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
+-import { claimNextPost, transitionPost, buildContentHash, buildIdempotencyKey, type PublishState } from "./publishing-state-machine";
++import { claimNextPost, transitionPost, buildContentHash, buildIdempotencyKey, type PublishState, type ClaimedPost } from "./publishing-state-machine";
+ 
+ type UserDb = Awaited<ReturnType<typeof createClient>>;
+ 
+@@ -172,15 +172,34 @@ const GROUP_COMPLIANCE = [
+   "הפרסום מתבצע ידנית על ידך בדפדפן שלך — ZONO לא מפרסם עבורך.",
+ ];
+ 
++/** A post THIS instance already claimed (dispatching, locked_by = inst.id) but has
++ *  not yet resolved — used to resume after a popup close/reopen without re-claiming
++ *  or double-posting. Returns the ClaimedPost shape so it flows through the same
++ *  payload builder as a fresh claim. */
++async function findOwnClaimedPost(db: ReturnType<typeof createServiceRoleClient>, inst: AuthedInstance): Promise<ClaimedPost | null> {
++  const { data } = await db.from(DIST.posts as never)
++    .select("id,org_id,campaign_id,group_id,property_id,post_text,hashtags,image_url,external_destination_url,creative_output_id,creative_version,metadata,publish_state")
++    .eq("org_id", inst.orgId).eq("locked_by", inst.id).eq("publish_state", "dispatching")
++    .order("dispatched_at", { ascending: true }).limit(1).maybeSingle();
++  return (data as unknown as ClaimedPost | null) ?? null;
++}
++
+ /**
+  * The next prepared GROUP/MARKETPLACE post for this instance (no tokens, no PII).
+  * Uses the DB-level ATOMIC CLAIM (claim_next_distribution_post): org-scoped, agent
+  * (user) isolated, emergency-stop aware, FOR UPDATE SKIP LOCKED — so two instances /
+- * a double GET / concurrent workers can NEVER receive the same post.
++ * a double GET / concurrent workers can NEVER receive the same post. Resumes an
++ * already-claimed post owned by this instance first (P9.7B popup-reopen safety).
+  */
+ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload | null> {
+   const db = createServiceRoleClient();
+-  const pick = await claimNextPost(db as never, { orgId: inst.orgId, userId: inst.userId, instanceId: inst.id });
++  // RESUME FIRST (P9.7B): if this instance already holds a claimed (dispatching)
++  // post — e.g. the popup was closed/reopened after claiming — re-hand THAT SAME
++  // post instead of claiming a new one, so a popup reopen never strands the claim.
++  // Only the owning instance (locked_by = inst.id) can resume it, so the atomic
++  // no-double-post guarantee is preserved (a different instance still cannot get it).
++  const resumed = await findOwnClaimedPost(db, inst);
++  const pick: ClaimedPost | null = resumed ?? (await claimNextPost(db as never, { orgId: inst.orgId, userId: inst.userId, instanceId: inst.id }));
+   if (!pick) return null;
+ 
+   // Destination name/url: prefer metadata (Phase 21 manual group destinations),
+@@ -364,6 +383,22 @@ export async function listGroupDestinations(): Promise<GroupDestination[]> {
+     .map((r) => ({ id: r.id, name: r.name ?? "", url: r.destination_url, destinationType: r.destination_type, notes: (r.metadata?.notes as string) ?? null, status: r.status, lastUsedAt: r.last_used_at }));
+ }
+ 
++// ── Approved creatives available to attach as a Facebook-group image (P9.7B) ──
++export interface GroupCreativeOption { outputId: string; label: string; propertyId: string | null; creativeVersion: number | null }
++
++/** List the org's APPROVED Creative Studio outputs so the group composer can attach
++ *  one as the post image. Only approved outputs are eligible (the secure derivative
++ *  is minted from an approved master); nothing here exposes a private/master URL. */
++export async function listApprovedCreativesForOrg(): Promise<GroupCreativeOption[]> {
++  const s = await userScope(); if (!s) return [];
++  const { data } = await s.db.from("zono_quick_creative_outputs" as never)
++    .select("id,variant_name,title,property_id,creative_version")
++    .eq("org_id", s.orgId).eq("is_approved", true)
++    .order("created_at", { ascending: false }).limit(50);
++  return ((data ?? []) as unknown as Array<{ id: string; variant_name: string | null; title: string | null; property_id: string | null; creative_version: number | null }>)
++    .map((r) => ({ outputId: r.id, label: r.title || r.variant_name || "קריאייטיב", propertyId: r.property_id, creativeVersion: r.creative_version }));
++}
++
+ // ── Create prepared publish TASKS for selected groups (Part B) ────────────────
+ export interface GroupTaskInput { destinationIds: string[]; text: string; imageUrl?: string | null; hashtags?: string[];
+   /** When set, the extension is handed the APPROVED facebook_groups derivative of
+diff --git a/src/lib/distribution/provider-connections-actions.ts b/src/lib/distribution/provider-connections-actions.ts
+index c0023f7..4b49a56 100644
+--- a/src/lib/distribution/provider-connections-actions.ts
++++ b/src/lib/distribution/provider-connections-actions.ts
+@@ -17,7 +17,8 @@ import { metaPublishService, type PublishResult } from "./meta-publish";
+ import {
+   startPairing, revokeAllInstances,
+   addGroupDestination, listGroupDestinations, createGroupPublishTasks, listGroupTaskStatuses,
+-  type GroupDestination, type GroupTaskStatus,
++  listApprovedCreativesForOrg,
++  type GroupDestination, type GroupTaskStatus, type GroupCreativeOption,
+ } from "./extension-service";
+ import { getSessionContext } from "@/lib/auth/session";
+ 
+@@ -143,13 +144,18 @@ export async function addFacebookGroupAction(input: {
+   return row ? { ok: true, data: row, message: "הקבוצה נוספה." } : { ok: false, message: "הוספת הקבוצה נכשלה." };
+ }
+ 
+-/** Create one prepared publish task per selected group (assigned to the extension). No server publish. */
++/** Create one prepared publish task per selected group (assigned to the extension). No server publish.
++ *  When `outputId` is given, the extension is handed the APPROVED facebook_groups
++ *  derivative of that creative (secure signed URL) — never a raw/master URL. */
+ export async function sendGroupPublishTasksAction(input: {
+-  destinationIds: string[]; text: string; imageUrl?: string | null;
+-}): Promise<ConnActionResult<{ created: number }>> {
++  destinationIds: string[]; text: string; imageUrl?: string | null; outputId?: string | null; creativeVersion?: number | null;
++}): Promise<ConnActionResult<{ created: number; blocked?: string }>> {
+   if (!input.destinationIds?.length) return { ok: false, message: "בחר לפחות קבוצה אחת." };
+   if (!input.text?.trim()) return { ok: false, message: "כתוב טקסט לפוסט." };
+   const res = await createGroupPublishTasks(input);
++  // Honest block: an unapproved/absent creative derivative must not silently drop
++  // the image — surface it so the user can approve the creative or post text-only.
++  if (res.created === 0 && res.blocked) return { ok: false, message: `התמונה לא מוכנה לפרסום (${res.blocked}). אפשר לאשר את הקריאייטיב או לשלוח טקסט בלבד.` };
+   revalidate();
+   return res.created > 0
+     ? { ok: true, data: res, message: `נשלחו ${res.created} משימות פרסום לתוסף.` }
+@@ -160,6 +166,11 @@ export async function listGroupTaskStatusesAction(): Promise<GroupTaskStatus[]>
+   return listGroupTaskStatuses();
+ }
+ 
++/** Approved creatives the group composer can attach as an image (P9.7B image hand-off). */
++export async function listGroupCreativesAction(): Promise<GroupCreativeOption[]> {
++  return listApprovedCreativesForOrg();
++}
++
+ /**
+  * Publish a prepared post to a connected Facebook PAGE (official Graph API).
+  * Pages only — never groups. Publishes ONLY on confirmed API success.
