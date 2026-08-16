@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { scoreCandidate, isCandidate, type CandidateEvidence, type EvidenceVerdict } from "./claim-evidence-core";
 import { classifyPhone, phoneClassToMatch, phoneClassLabel, type PhoneClass, type PhoneKnowledge } from "./claim-phone-core";
+import { countMatchingApprovals } from "./claim-write-core";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -93,14 +94,11 @@ function toEvidence(anchor: ClaimAnchor, link: any, listing: any, know: PhoneKno
 async function getPriorConfirmedCount(db: any, anchor: ClaimAnchor): Promise<number> {
   if (!anchor.agentIds.length) return 0;
   try {
+    // Pull approved AND rejected here so the PURE predicate does the filtering —
+    // guarantees rejected/name-only reviews never strengthen the anchor.
     const { data } = await db.from("broker_match_reviews")
-      .select("evidence,status").eq("org_id", anchor.orgId).eq("status", "approved").limit(500);
-    let n = 0;
-    for (const r of (data ?? [])) {
-      const ids = (r?.evidence?.anchorAgentIds ?? []) as string[];
-      if (Array.isArray(ids) && ids.some((id) => anchor.agentIds.includes(id))) n++;
-    }
-    return n;
+      .select("evidence,status").eq("org_id", anchor.orgId).limit(500);
+    return countMatchingApprovals((data ?? []) as any[], anchor.agentIds);
   } catch { return 0; }
 }
 
@@ -168,6 +166,19 @@ export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnc
   // HIGH → MEDIUM → LOW ordering.
   const rank = { high: 0, medium: 1, low: 2 } as const;
   out.sort((a, b) => rank[a.verdict.confidence ?? "low"] - rank[b.verdict.confidence ?? "low"]);
+
+  // P10C §7 — internal notification (batched, deduped to ≤1/24h, best-effort,
+  // NON-blocking). Detection is on-read; this surfaces it in the notification
+  // center + header badge without any external delivery or hourly spam.
+  try {
+    const { user } = await getSessionContext();
+    if (user?.id && out.length > 0) {
+      const high = out.filter((c) => c.verdict.confidence === "high").length;
+      const { notifyClaimCandidates } = await import("./claim-notifications");
+      await notifyClaimCandidates(anchor.orgId, user.id, { high, total: out.length });
+    }
+  } catch { /* never block the read on a notification */ }
+
   return { anchor, candidates: out };
 }
 

@@ -27,6 +27,7 @@ import { scoreTone, type ScoreTone } from "@/lib/intelligence/scoring";
 import { JourneyPanel } from "./JourneyPanel";
 import { TasksPanel } from "./TasksPanel";
 import { CommandCenter } from "./CommandCenter";
+import { PropertyProvenance } from "@/components/property/PropertyProvenance";
 import type { CommandCenter as CommandCenterData } from "@/lib/intelligence/service";
 import { EntityTimeline } from "@/components/activity/EntityTimeline";
 import { ActivitySummaryCard } from "@/components/activity/ActivitySummaryCard";
@@ -178,6 +179,9 @@ export function PropertyDetailView({
       <Link href="/properties" className="text-muted hover:text-ink inline-flex items-center gap-1 text-sm font-semibold">
         <Icon name="ChevronRight" size={16} /> חזרה לנכסים
       </Link>
+
+      {/* P10C — agent-private provenance for ZONO-found / claimed properties. */}
+      <PropertyProvenance property={p as unknown as Parameters<typeof PropertyProvenance>[0]["property"]} />
 
       {/* ── Cinematic asset cockpit hero ────────────────────────────────────── */}
       <div className="bg-card border-line overflow-hidden rounded-[24px] border shadow-[var(--shadow-card)]">

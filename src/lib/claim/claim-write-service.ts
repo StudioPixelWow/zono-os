@@ -104,6 +104,11 @@ export async function claimExternalListing(
 
   const gate = assertClaimAllowed(candidate.verdict, opts);
   if (!gate.allowed) {
+    // CLAIM_FAILED_SAFE — safe refusal, nothing written (best-effort, non-blocking).
+    try {
+      const { notifyClaimFailedSafe } = await import("./claim-notifications");
+      await notifyClaimFailedSafe(orgId, user.id, "הראיות חלשות — נדרש אישור מפורש. לא בוצע שינוי.");
+    } catch { /* ignore */ }
     return { ok: false, status: "refused", requiresConfirmation: gate.requiresConfirmation, reason: gate.reason };
   }
 
@@ -137,6 +142,11 @@ export async function claimExternalListing(
     const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
     await emitBusinessEvent({ type: DOMAIN_EVENTS.propertyCreated, entityType: "property", entityId: propertyId, payload: { origin: "claimed_external", source: candidate.source, listingId } });
   } catch (e) { console.error("[claim] emit failed:", e); }
+  // CLAIM_SUCCEEDED — internal notification (best-effort, non-blocking).
+  try {
+    const { notifyClaimSucceeded } = await import("./claim-notifications");
+    await notifyClaimSucceeded(orgId, user.id, { propertyId, title: candidate.title });
+  } catch { /* ignore */ }
 
   return { ok: true, status: "claimed", propertyId, created, mediaImported, reason: gate.reason };
 }

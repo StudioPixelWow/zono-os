@@ -10,6 +10,27 @@
 // ============================================================================
 import type { EvidenceVerdict } from "./claim-evidence-core";
 
+// ── Identity learning (P10C §10) — PURE consumption predicate ────────────────
+// Count the caller's PRIOR APPROVED claim reviews that are tied to the SAME
+// source identity (an anchor agent id appears in the review's evidence). Only
+// APPROVED reviews strengthen the anchor — rejected / pending / name-only guesses
+// (no anchorAgentIds overlap) must NOT. The evidence engine promotes ≥3 such
+// confirmations toward HIGH. Deterministic + unit-tested.
+export interface PriorReviewLike {
+  status?: string | null;
+  evidence?: { anchorAgentIds?: unknown } | null;
+}
+export function countMatchingApprovals(reviews: PriorReviewLike[], anchorAgentIds: string[]): number {
+  if (!anchorAgentIds.length) return 0;
+  let n = 0;
+  for (const r of reviews) {
+    if (r?.status !== "approved") continue;                       // only confirmed claims
+    const ids = r?.evidence?.anchorAgentIds;
+    if (Array.isArray(ids) && ids.some((id) => typeof id === "string" && anchorAgentIds.includes(id))) n++;
+  }
+  return n;
+}
+
 // ── §9: what may be written, and when a human must confirm ───────────────────
 export interface ClaimGate {
   allowed: boolean;
