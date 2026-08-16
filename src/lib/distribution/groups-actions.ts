@@ -9,6 +9,10 @@ import {
   type GroupRow, type AddGroupInput, type PropertyGroupReco, type GroupsAnalytics,
   type RecordPostInput, type RecordLeadInput,
 } from "./groups-service";
+import {
+  setGroupNetworkStatus, getGroupNetworkCounts,
+  type GroupNetworkStatus, type GroupNetworkCounts,
+} from "./group-network-service";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 const fail = (e: unknown): { ok: false; error: string } => ({ ok: false, error: e instanceof Error ? e.message : "אירעה שגיאה." });
@@ -33,4 +37,17 @@ export async function recordGroupPostAction(input: RecordPostInput): Promise<Res
 }
 export async function recordGroupLeadAction(input: RecordLeadInput): Promise<Result<{ id: string }>> {
   try { const d = await recordGroupLead(input); revalidatePath("/distribution/groups"); return { ok: true, data: d }; } catch (e) { return fail(e); }
+}
+
+// ── P9.8 group-network state (activate / ignore / restore / discover) ─────────
+export async function setGroupNetworkStatusAction(groupIds: string[], status: GroupNetworkStatus): Promise<Result<{ updated: number }>> {
+  try {
+    const r = await setGroupNetworkStatus(groupIds, status);
+    if (!r.ok) return { ok: false, error: r.error ?? "עדכון נכשל." };
+    revalidatePath("/distribution/groups");
+    return { ok: true, data: { updated: r.updated } };
+  } catch (e) { return fail(e); }
+}
+export async function getGroupNetworkCountsAction(): Promise<Result<GroupNetworkCounts>> {
+  try { return { ok: true, data: await getGroupNetworkCounts() }; } catch (e) { return fail(e); }
 }

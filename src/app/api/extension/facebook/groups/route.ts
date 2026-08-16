@@ -15,12 +15,14 @@ export async function POST(req: NextRequest) {
   const inst = await authInstance(req.headers.get("x-zono-instance-id"), req.headers.get("x-zono-extension-secret"));
   if (!inst) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
-  let body: { groups?: ScannedGroup[] };
+  let body: { groups?: ScannedGroup[]; fullScan?: boolean };
   try { body = await req.json(); } catch { body = {}; }
   if (!Array.isArray(body.groups)) {
     return NextResponse.json({ ok: false, error: "groups[] required" }, { status: 400 });
   }
 
-  const result = await importScannedGroups(inst, body.groups);
+  // fullScan=true marks the batch as the COMPLETE joined-groups list, enabling
+  // reconciliation (mark vanished groups unavailable). Absent/false = partial.
+  const result = await importScannedGroups(inst, body.groups, { fullScan: body.fullScan === true });
   return NextResponse.json(result, { status: result.ok ? 200 : 500 });
 }

@@ -17,6 +17,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
 import { classifyGroup } from "./groups-engine";
+import { reconcileScannedGroups } from "./group-network-service";
 import type { AuthedInstance } from "./extension-service";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -43,6 +44,7 @@ export interface ImportResult {
   updated: number;    // existing groups refreshed
   skipped: number;    // invalid rows ignored
   total: number;      // valid rows received
+  markedUnavailable?: number; // scan-groups no longer seen (full-scan reconciliation)
   error?: string;
 }
 
@@ -69,7 +71,7 @@ async function audit(db: any, e: {
  * external_group_id). Attributes each to the org + importing user, classifies it,
  * and writes an append-only audit event. Re-scans update stats, never duplicate.
  */
-export async function importScannedGroups(inst: AuthedInstance, groups: ScannedGroup[]): Promise<ImportResult> {
+export async function importScannedGroups(inst: AuthedInstance, groups: ScannedGroup[], opts?: { fullScan?: boolean }): Promise<ImportResult> {
   if (!isServiceRoleConfigured()) return { ok: false, imported: 0, updated: 0, skipped: 0, total: 0, error: "service unavailable" };
   const db: any = createServiceRoleClient();
   const now = new Date().toISOString();
@@ -113,7 +115,9 @@ export async function importScannedGroups(inst: AuthedInstance, groups: ScannedG
       external_group_id: g.externalGroupId, group_url: normUrl(g.url),
       members_count: g.membersCount ?? 0, privacy_level: g.privacyLevel ?? "public",
       category: cls.category, region: cls.region, property_types: cls.propertyTypes, language: "he",
-      status: "active", classification_source: "auto",
+      // P9.8 §B4: a newly DISCOVERED group is NOT auto-eligible for publishing — the
+      // agent must explicitly activate it. (Manual adds set their own status.)
+      status: "discovered", classification_source: "auto",
       source: "scan", is_member: g.isMember ?? true, member_role: g.memberRole ?? null,
       imported_by: inst.userId, imported_at: now, last_synced_at: now, created_by: inst.userId,
     }).select("id").maybeSingle();
@@ -137,7 +141,16 @@ export async function importScannedGroups(inst: AuthedInstance, groups: ScannedG
     capabilities: { group_read: true },
   }).eq("id", inst.id);
 
-  return { ok: true, imported, updated, skipped, total: valid.length };
+  // P9.8 §A/§B6: on a COMPLETE scan, reconcile groups no longer seen → unavailable
+  // (never delete, preserve active/ignored/manual). A partial scan skips this so it
+  // can't wrongly hide groups the batch didn't cover.
+  let markedUnavailable = 0;
+  if (opts?.fullScan) {
+    const rec = await reconcileScannedGroups(inst.orgId, inst.userId, valid.map((g) => g.externalGroupId));
+    markedUnavailable = rec.markedUnavailable;
+  }
+
+  return { ok: true, imported, updated, skipped, total: valid.length, markedUnavailable };
 }
 
 // ── Pull-model scan request (ZONO UI asks → extension reads on heartbeat) ─────

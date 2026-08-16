@@ -9,9 +9,17 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import { useActionRunner } from "@/components/ui/useActionRunner";
-import { addGroupAction, recomputeGroupScoresAction, recordGroupLeadAction } from "@/lib/distribution/groups-actions";
+import { addGroupAction, recomputeGroupScoresAction, recordGroupLeadAction, setGroupNetworkStatusAction } from "@/lib/distribution/groups-actions";
 import { REGION_LABEL, GROUP_CATEGORY_LABEL } from "@/lib/distribution/groups-engine";
+import { GROUP_STATUS_LABEL, type GroupNetworkStatus } from "@/lib/distribution/group-network-core";
 import type { GroupRow, GroupsAnalytics } from "@/lib/distribution/groups-service";
+
+const STATUS_TONE: Record<string, string> = {
+  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  discovered: "bg-sky-50 text-sky-700 border-sky-200",
+  ignored: "bg-surface text-muted border-line",
+  unavailable: "bg-amber-50 text-amber-700 border-amber-200",
+};
 
 const PROP_TYPE_HE: Record<string, string> = {
   apartment: "דירה", garden_apartment: "דירת גן", penthouse: "פנטהאוז", duplex: "דופלקס",
@@ -41,6 +49,13 @@ export function GroupsView({ groups, analytics }: { groups: GroupRow[]; analytic
     const r = await recomputeGroupScoresAction();
     return { ok: r.ok, message: r.ok ? `חושבו ציונים ל-${r.data.groups} קבוצות` : r.error };
   }, { id: "recompute", pendingMessage: "מחשב ביצועים מנתוני אמת…", success: (r) => r.message });
+
+  // P9.8 group-network state: activate / ignore / restore. Persists to distribution_groups.
+  const setStatus = (g: GroupRow, status: GroupNetworkStatus) => runner.run(async () => {
+    const r = await setGroupNetworkStatusAction([g.id], status);
+    return { ok: r.ok, message: r.ok ? `${g.name} — ${GROUP_STATUS_LABEL[status]}` : r.error };
+  }, { id: `st-${g.id}`, pendingMessage: "מעדכן…", success: (r) => r.message });
+  const counts = groups.reduce((a, g) => { const s = (g.status || "discovered"); a[s] = (a[s] ?? 0) + 1; return a; }, {} as Record<string, number>);
 
   return (
     <main dir="rtl" className="mx-auto w-full max-w-6xl px-4 py-8">
@@ -115,6 +130,19 @@ export function GroupsView({ groups, analytics }: { groups: GroupRow[]; analytic
             </Section>
           )}
 
+          {/* P9.8 — group network state overview */}
+          <Section title="רשת הקבוצות שלי" icon="Users">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {(["active", "discovered", "ignored", "unavailable"] as GroupNetworkStatus[]).map((s) => (
+                <div key={s} className={cn("rounded-card border p-4 shadow-card", STATUS_TONE[s])}>
+                  <p className="text-xs font-bold opacity-80">{GROUP_STATUS_LABEL[s]}</p>
+                  <p className="mt-1 text-2xl font-black">{counts[s] ?? 0}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-muted mt-2 text-[11px]">קבוצה חדשה נמצאת כ״נמצאה״ ואינה מפרסמת עד שתסמן אותה כ״פעילה״. הרשימה מתעדכנת אוטומטית בסריקה — קבוצה שכבר לא נמצאת מסומנת ״לא זמינה״ ולא נמחקת.</p>
+          </Section>
+
           {/* Registry */}
           <Section title="רישום הקבוצות" icon="ListChecks">
             <div className="border-line bg-card overflow-hidden rounded-card border shadow-card">
@@ -134,7 +162,15 @@ export function GroupsView({ groups, analytics }: { groups: GroupRow[]; analytic
                   <span className={cn("font-black", scoreColor(g.performanceScore))}>{g.performanceScore}</span>
                   <span className={cn("font-black", scoreColor(g.leadScore))}>{g.totalLeads}</span>
                   <span className="text-muted">{g.totalPosts}</span>
-                  <button onClick={() => setLeadFor(g)} className="text-brand justify-self-end text-xs font-bold">+ ליד</button>
+                  <span className="col-span-2 flex items-center justify-end gap-2 sm:col-span-1">
+                    <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold", STATUS_TONE[g.status] ?? STATUS_TONE.discovered)}>{GROUP_STATUS_LABEL[(g.status as GroupNetworkStatus)] ?? g.status}</span>
+                    {g.status === "active"
+                      ? <button onClick={() => setStatus(g, "ignored")} disabled={runner.busyId === `st-${g.id}`} className="text-muted text-xs font-bold disabled:opacity-50">הסתר</button>
+                      : g.status === "unavailable"
+                        ? <button onClick={() => setStatus(g, "discovered")} disabled={runner.busyId === `st-${g.id}`} className="text-brand text-xs font-bold disabled:opacity-50">שחזר</button>
+                        : <button onClick={() => setStatus(g, "active")} disabled={runner.busyId === `st-${g.id}`} className="text-emerald-600 text-xs font-bold disabled:opacity-50">הפעל</button>}
+                    <button onClick={() => setLeadFor(g)} className="text-brand text-xs font-bold">+ ליד</button>
+                  </span>
                 </div>
               ))}
             </div>

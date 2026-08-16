@@ -14,7 +14,7 @@
 // No new queue, no publishing model here — the server owns the canonical state.
 // ============================================================================
 const DEFAULT_BASE = "https://zono-os-ro2s.vercel.app";
-const VERSION = "0.2.0";
+const VERSION = "0.4.0";
 
 async function getBase() {
   const { zonoBase } = await chrome.storage.local.get(["zonoBase"]);
@@ -75,6 +75,18 @@ async function triggerGroupScan() {
   } else {
     await chrome.tabs.create({ url, active: true });
   }
+}
+
+// P9.8: after all group chunks are submitted, report the COMPLETE id set so the
+// server reconciles vanished groups → unavailable (never deletes, preserves choice).
+async function submitScanComplete(seenIds) {
+  const creds = await getCreds();
+  if (!creds || !Array.isArray(seenIds)) return { ok: false };
+  const base = await getBase();
+  const res = await fetch(`${base}/api/extension/facebook/groups/reconcile`, {
+    method: "POST", headers: authHeaders(creds), body: JSON.stringify({ seenExternalIds: seenIds }),
+  }).catch(() => null);
+  return res ? await res.json().catch(() => ({ ok: false })) : { ok: false };
 }
 
 async function submitGroups(groups) {
@@ -177,6 +189,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "HEARTBEAT": sendResponse(await heartbeat(msg.facebookSessionDetected, msg.facebookProfileName)); break;
       case "SCAN_NOW": await triggerGroupScan(); sendResponse({ ok: true }); break;
       case "GROUPS_SCANNED": sendResponse(await submitGroups(msg.groups)); break;
+      case "GROUPS_SCAN_COMPLETE": sendResponse(await submitScanComplete(msg.seenIds)); break;
       case "COMMENTS_SCANNED": sendResponse(await submitComments(msg.comments)); break;
       case "GET_WATCHED": sendResponse({ watched: await getWatchedPosts() }); break;
       case "NEXT_POST": sendResponse(await fetchNextPost()); break;

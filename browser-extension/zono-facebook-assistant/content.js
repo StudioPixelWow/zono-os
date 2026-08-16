@@ -122,6 +122,10 @@
       let res = await sendMessage({ type: "GROUPS_SCANNED", groups: chunk });
       if (!res || !res.ok) { await sleep(1500); res = await sendMessage({ type: "GROUPS_SCANNED", groups: chunk }); }
     }
+    // P9.8: completion signal with the COMPLETE joined-groups id set so the server can
+    // reconcile groups no longer present → UNAVAILABLE (never deletes, preserves choice).
+    const seenIds = groups.map((g) => g.externalGroupId).filter(Boolean);
+    await sendMessage({ type: "GROUPS_SCAN_COMPLETE", seenIds });
   }
 
   // ── 3) Comment ingest (P5) — only for OUR posts ─────────────────────────────
