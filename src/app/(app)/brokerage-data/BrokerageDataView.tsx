@@ -171,7 +171,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
           </div>
           {owner && (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => run(resolveBrokerageNowAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>זהה עכשיו</Button>
+              <Button size="sm" onClick={() => run(resolveBrokerageNowAction)} disabled={pending} leadingIcon={<Icon name="Network" size={15} />}>זהה עכשיו</Button>
               <Button size="sm" variant="ghost" onClick={() => startScan({ runType: "full_country" })} disabled={pending}>בקש רענון לאומי</Button>
             </div>
           )}
@@ -190,7 +190,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
           </p>
           <p className="text-muted mt-1.5 text-xs">⏱ משך משוער: 1–3 דקות · מתעדכן אוטומטית ברקע</p>
           <div className="mt-5 flex flex-col items-center gap-2">
-            <Button className="!min-w-[320px]" onClick={() => startScan({ runType: "full_country" })} disabled={pending} leadingIcon={<Icon name="Sparkles" size={18} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
+            <Button className="!min-w-[320px]" onClick={() => startScan({ runType: "full_country" })} disabled={pending} leadingIcon={<Icon name="Network" size={18} />}>🚀 התחל סריקת מודיעין ראשונית</Button>
             <Button variant="ghost" onClick={() => run(resolveBrokerageNowAction)} disabled={pending}>⚙ זהה מתוך נתונים קיימים</Button>
           </div>
           <div className="mx-auto mt-6 max-w-md rounded-2xl border border-line bg-surface p-4 text-right">

@@ -44,7 +44,7 @@ export function RevenueView({ board }: { board: RevenueBoard }) {
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין הכנסות</h1>
           <p className="text-muted mt-1 text-sm">כמה הכנסה צפויה, כמה בסיכון, כמה חסר ליעד, ואיזו פעולה תגדיל הכנסה מהר ביותר.</p>
         </div>
-        <Button onClick={() => run(recomputeRevenueAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב הכנסות"}</Button>
+        <Button onClick={() => run(recomputeRevenueAction)} disabled={pending} leadingIcon={<Icon name="Calculator" size={16} />}>{pending ? "מחשב…" : "חשב הכנסות"}</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}

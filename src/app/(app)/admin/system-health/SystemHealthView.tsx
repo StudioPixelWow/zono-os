@@ -55,7 +55,7 @@ export function SystemHealthView({ health, integrations = [] }: { health: System
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />דשבורד</Link>
-          <Button onClick={runAll} loading={busyId === "all"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב הכל</Button>
+          <Button onClick={runAll} loading={busyId === "all"} disabled={pending} leadingIcon={<Icon name="Activity" size={16} />}>חשב הכל</Button>
         </div>
       </div>
 

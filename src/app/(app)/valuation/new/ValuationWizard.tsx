@@ -204,7 +204,7 @@ export function ValuationWizard({ initialInput, propertyId }: { initialInput?: V
             </button>
           ) : (
             <button onClick={runScan} disabled={pending} className="btn-zono-primary zono-focus-ring inline-flex h-11 items-center gap-2 rounded-xl px-6 text-sm font-bold disabled:opacity-60">
-              <Icon name="Sparkles" size={16} /> חשב שווי
+              <Icon name="Calculator" size={16} /> חשב שווי
             </button>
           )}
         </div>

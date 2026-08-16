@@ -33,7 +33,7 @@ export function GraphView({ board }: { board: GraphBoard }) {
           <h1 className="text-ink mt-1 text-2xl font-black">קשרי לקוחות ונכסים</h1>
           <p className="text-muted mt-1 text-sm">כל הקשרים בין קונים, מוכרים, נכסים, סוכנים, מתווכים ואזורים — והזדמנויות נסתרות שנובעות מהם.</p>
         </div>
-        <Button onClick={gen} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב קשרים"}</Button>
+        <Button onClick={gen} disabled={pending} leadingIcon={<Icon name="Network" size={16} />}>{pending ? "מחשב…" : "חשב קשרים"}</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
@@ -42,7 +42,7 @@ export function GraphView({ board }: { board: GraphBoard }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="ישויות" value={cc.nodes} icon="Building2" />
         <Stat label="קשרים" value={cc.edges} icon="Route" tone="text-brand-strong" />
-        <Stat label="סיגנלים" value={cc.signals} icon="Sparkles" tone="text-success" />
+        <Stat label="סיגנלים" value={cc.signals} icon="Activity" tone="text-success" />
         <Stat label="אשכולות קונים" value={cc.buyerClusters} icon="Users" />
         <Stat label="אשכולות מוכרים" value={cc.sellerClusters} icon="UserCheck" />
         <Stat label="אזורים" value={cc.localities} icon="MapPin" />

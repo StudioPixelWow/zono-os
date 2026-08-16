@@ -57,7 +57,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
             <h2 className="text-ink text-lg font-black">לוח ניהול גיוס מלא</h2>
             <p className="text-muted text-xs">ניהול מלא של הזדמנויות הגיוס — סינון, שלבי פייפליין ופעולות.</p>
           </div>
-          <Button size="sm" variant="secondary" onClick={() => run(recomputeAcquisitionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={14} />}>{pending ? "מחשב…" : "חשב מחדש"}</Button>
+          <Button size="sm" variant="secondary" onClick={() => run(recomputeAcquisitionAction)} disabled={pending} leadingIcon={<Icon name="Target" size={14} />}>{pending ? "מחשב…" : "חשב מחדש"}</Button>
         </div>
       ) : (
         <div className="bg-brand-soft flex flex-wrap items-center justify-between gap-3 rounded-[22px] p-5">
@@ -66,7 +66,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
             <h1 className="text-ink mt-1 text-2xl font-black">מודיעין גיוס נכסים</h1>
             <p className="text-muted mt-1 text-sm">הפיכת מודעות חיצוניות להזדמנויות גיוס — בעלים פרטיים, ביקוש קונים, ועסקאות דו״צ.</p>
           </div>
-          <Button onClick={() => run(recomputeAcquisitionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב הזדמנויות גיוס"}</Button>
+          <Button onClick={() => run(recomputeAcquisitionAction)} disabled={pending} leadingIcon={<Icon name="Target" size={16} />}>{pending ? "מחשב…" : "חשב הזדמנויות גיוס"}</Button>
         </div>
       )}
 
@@ -79,7 +79,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
         <Stat label="עדיפות גבוהה" value={cc.highPriority} icon="Flame" tone="text-danger" />
         <Stat label="בעלים פרטיים" value={cc.privateSellers} icon="UserCheck" tone="text-success" />
         <Stat label="ביקוש קונים" value={cc.buyerDemand} icon="Users" tone="text-brand-strong" />
-        <Stat label="פוטנציאל דו״צ" value={cc.doubleSide} icon="Sparkles" tone="text-success" />
+        <Stat label="פוטנציאל דו״צ" value={cc.doubleSide} icon="TrendingUp" tone="text-success" />
         <Stat label="נוצר קשר / פולואפ" value={cc.contacted} icon="Clock" />
       </div>
 

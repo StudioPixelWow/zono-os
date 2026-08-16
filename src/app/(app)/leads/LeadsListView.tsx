@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { IconSurface } from "@/components/ui/action-surfaces";
 import { ContextualZeroState } from "@/components/common/ContextualZeroState";
 import { bulkLeadAction, type BulkLeadOp, type BulkLeadResult } from "@/lib/leads/actions";
 import type { LeadListRow } from "@/lib/leads/service";
@@ -68,7 +69,7 @@ export function LeadsListView({ leads, failed }: { leads: LeadListRow[]; failed:
     <main dir="rtl" className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6">
       <header className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span className="bg-brand-soft text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="UserPlus" size={18} /></span>
+          <IconSurface name="UserPlus" tier="s" accent="info" variant="soft" />
           <h1 className="text-ink text-2xl font-black">לידים</h1>
           <span className="text-muted text-sm">{filtered.length}</span>
         </div>

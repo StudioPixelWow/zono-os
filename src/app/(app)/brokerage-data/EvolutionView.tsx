@@ -95,7 +95,7 @@ export function EvolutionView() {
             <h2 className="text-xl font-black text-ink sm:text-2xl">מנוע אבולוציה — מודיעין היסטורי לאורך זמן</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted">איך משרדים, סוכנים, שכונות והשוק מתפתחים לאורך זמן: מכונת זמן, מובילי צמיחה, שליטה שכונתית, DNA שוק ותחזיות מבוססות מגמה. כל תחזית מלווה בביטחון והסבר — הערכה בלבד, לא ודאות. מידע ציבורי/עסקי בלבד.</p>
           </div>
-          {owner && <Button size="sm" onClick={recompute} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>חשב אבולוציה מחדש</Button>}
+          {owner && <Button size="sm" onClick={recompute} disabled={pending} leadingIcon={<Icon name="Activity" size={15} />}>חשב אבולוציה מחדש</Button>}
         </div>
         {(msg || err) && <p className={`relative mt-3 text-sm font-bold ${err ? "text-rose-700" : "text-emerald-700"}`}>{err ?? msg}</p>}
       </div>

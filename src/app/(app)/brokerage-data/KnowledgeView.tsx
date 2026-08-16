@@ -80,7 +80,7 @@ export function KnowledgeView() {
             <h2 className="text-xl font-black text-ink sm:text-2xl">שכבת הידע — גרף וניהול איכות דאטה</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted">שכבת המודיעין הקבועה של ZONO: גרף ידע, שלמות נתונים, אשכולות כפילויות, נתח שוק, כיסוי וגילויי קשרים — מקור אמת יחיד לכל מנוע AI עתידי. הסבר לכל החלטה, ללא קופסה שחורה.</p>
           </div>
-          {owner && <Button size="sm" onClick={() => run(recomputeKnowledgeAction, true)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>חשב ידע מחדש</Button>}
+          {owner && <Button size="sm" onClick={() => run(recomputeKnowledgeAction, true)} disabled={pending} leadingIcon={<Icon name="Database" size={15} />}>חשב ידע מחדש</Button>}
         </div>
         {(msg || err) && <p className={`relative mt-3 text-sm font-bold ${err ? "text-rose-700" : "text-emerald-700"}`}>{err ?? msg}</p>}
       </div>

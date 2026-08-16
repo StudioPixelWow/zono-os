@@ -81,7 +81,7 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
         {runner.error && <p className="mt-3 text-sm font-semibold text-red-600">{runner.error}</p>}
         <button onClick={() => runner.run(() => runValuationAction(record.id), { pendingMessage: "מחשב…", success: () => "ההערכה חושבה." })}
           disabled={runner.pending} className="btn-zono-primary zono-focus-ring mx-auto mt-5 inline-flex h-11 items-center gap-2 rounded-xl px-6 text-sm font-bold disabled:opacity-60">
-          <Icon name="Sparkles" size={16} /> חשב שווי עכשיו
+          <Icon name="Calculator" size={16} /> חשב שווי עכשיו
         </button>
       </main>
     );

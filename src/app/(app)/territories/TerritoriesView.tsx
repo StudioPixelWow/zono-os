@@ -46,7 +46,7 @@ export function TerritoriesView({ cc }: { cc: TerritoryCommandCenter }) {
           <p className="text-muted mt-1 text-sm">איפה לעבוד, איפה לגייס, איפה להתרחב — מבוסס עסקאות, מלאי, ביקוש ומתחרים. דטרמיניסטי ומוסבר.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {cc.total > 0 && <span className="bg-card border-line text-muted inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold"><Icon name="Sparkles" size={13} className="text-brand" />{cc.graphNodes} בגרף</span>}
+          {cc.total > 0 && <span className="bg-card border-line text-muted inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold"><Icon name="Network" size={13} className="text-brand" />{cc.graphNodes} בגרף</span>}
           {pending && <Spinner size={15} />}
           <Button onClick={generate} disabled={pending} leadingIcon={<Icon name="Map" size={16} />}>חשב טריטוריות</Button>
         </div>

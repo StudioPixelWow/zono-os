@@ -170,7 +170,7 @@ function Hero({ pending, onRecompute }: { pending: boolean; onRecompute: () => v
           <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מודיעין גיוס נכסים</h1>
           <p className="text-muted mt-1.5 max-w-lg text-sm">מערכת AI מתקדמת לזיהוי בעלי נכסים פוטנציאליים וגיוס בלעדיות</p>
           <div className="mt-4 flex justify-center sm:justify-start">
-            <Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב הזדמנויות גיוס</Button>
+            <Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Target" size={16} />}>חשב הזדמנויות גיוס</Button>
           </div>
         </div>
         <div className="zono-gradient grid h-24 w-24 shrink-0 place-items-center rounded-[28px] text-white shadow-[var(--shadow-lift)] sm:h-28 sm:w-28" aria-hidden>
