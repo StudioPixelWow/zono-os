@@ -17,9 +17,12 @@ export default async function MarketPage() {
   // Honest page-level signals — only surfaced when they actually have a value.
   const sum = (fn: (c: MarketHeatmapCell) => number | null | undefined) =>
     cells.reduce((acc, c) => acc + (fn(c) ?? 0), 0);
+  // Honest KPI semantics (P-MARKET §17): heatmap cells are city-level, so
+  // `cells.length` is the count of OPERATING CITIES — not "market areas". Naming
+  // it "אזורי פעילות" overstated geographic segmentation; label it truthfully.
   const chips = [
-    { label: "אזורי פעילות", value: cells.length },
-    { label: "מודעות חיצוניות", value: sum((c) => c.externalListings) },
+    { label: "ערי פעילות", value: cells.length },
+    { label: "מודעות חיצוניות פעילות", value: sum((c) => c.externalListings) },
     { label: "נכסים פנימיים", value: sum((c) => c.internalProperties) },
     { label: "הזדמנויות חמות", value: cells.filter((c) => c.opportunity >= 70).length },
   ].filter((c) => c.value > 0);

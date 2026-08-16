@@ -70,7 +70,7 @@ export interface ClaimCandidate {
 /** Map a listing + its link row to the pure evidence input. Phone handling uses
  *  the §13 classifier: a DIFFERENT phone is neutral (UNKNOWN/masked), never an
  *  automatic contradiction — only a phone proven to belong to another broker is. */
-function toEvidence(anchor: ClaimAnchor, link: any, listing: any, know: PhoneKnowledge): { ev: CandidateEvidence; phoneClass: PhoneClass } {
+function toEvidence(anchor: ClaimAnchor, link: any, listing: any, know: PhoneKnowledge, priorConfirmed = 0): { ev: CandidateEvidence; phoneClass: PhoneClass } {
   const linkOrg = link?.organization_id ?? listing?.org_id ?? null;
   const sameOrg = linkOrg === anchor.orgId;
   const stableAgentIdMatch = Boolean(link?.agent_id && anchor.agentIds.includes(link.agent_id)) &&
@@ -83,7 +83,25 @@ function toEvidence(anchor: ClaimAnchor, link: any, listing: any, know: PhoneKno
   const phoneMatch = phoneClassToMatch(phoneClass);
   const officeMatch = Boolean(link?.office_id && anchor.officeIds.includes(link.office_id));
   const cityMatch = norm(listing?.city) === "rehovot" || Boolean(listing?.city);
-  return { ev: { sameOrg, stableAgentIdMatch, nameMatch, phoneMatch, officeMatch, cityMatch, priorConfirmedSameIdentity: 0 }, phoneClass };
+  return { ev: { sameOrg, stableAgentIdMatch, nameMatch, phoneMatch, officeMatch, cityMatch, priorConfirmedSameIdentity: priorConfirmed }, phoneClass };
+}
+
+/** Identity learning (P10B §19): count the caller's PRIOR APPROVED claims tied to
+ *  the same source identity (anchor agent ids). The evidence engine promotes an
+ *  established identity (≥3 prior confirmations) toward HIGH — so approved claims
+ *  actually strengthen future candidates. Read-only; org-scoped. */
+async function getPriorConfirmedCount(db: any, anchor: ClaimAnchor): Promise<number> {
+  if (!anchor.agentIds.length) return 0;
+  try {
+    const { data } = await db.from("broker_match_reviews")
+      .select("evidence,status").eq("org_id", anchor.orgId).eq("status", "approved").limit(500);
+    let n = 0;
+    for (const r of (data ?? [])) {
+      const ids = (r?.evidence?.anchorAgentIds ?? []) as string[];
+      if (Array.isArray(ids) && ids.some((id) => anchor.agentIds.includes(id))) n++;
+    }
+    return n;
+  } catch { return 0; }
 }
 
 /** Build phone knowledge for the anchor: the caller's own numbers are personal;
@@ -126,13 +144,14 @@ export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnc
     .in("id", listingIds).neq("status", "removed").limit(200);
   const byId = new Map<string, any>((listings ?? []).map((r: any) => [r.id, r]));
   const know = await buildPhoneKnowledge(db, anchor);
+  const priorConfirmed = await getPriorConfirmedCount(db, anchor);
 
   const out: ClaimCandidate[] = [];
   const seenListing = new Set<string>();
   for (const link of linkRows) {
     const listing: any = byId.get(link.external_listing_id);
     if (!listing || seenListing.has(listing.id)) continue;
-    const { ev, phoneClass } = toEvidence(anchor, link, listing, know);
+    const { ev, phoneClass } = toEvidence(anchor, link, listing, know, priorConfirmed);
     const verdict = scoreCandidate(ev);
     if (!isCandidate(verdict)) continue;
     seenListing.add(listing.id);
@@ -167,7 +186,8 @@ export async function getClaimCandidateById(listingId: string): Promise<{ anchor
     .select("external_listing_id,organization_id,agent_id,office_id,matched_name,matched_phone,match_reasons,confidence_score")
     .eq("external_listing_id", listingId).eq("organization_id", anchor.orgId).maybeSingle();
   const know = await buildPhoneKnowledge(db, anchor);
-  const { ev, phoneClass } = toEvidence(anchor, link ?? {}, listing, know);
+  const priorConfirmed = await getPriorConfirmedCount(db, anchor);
+  const { ev, phoneClass } = toEvidence(anchor, link ?? {}, listing, know, priorConfirmed);
   const verdict = scoreCandidate(ev);
   if (!isCandidate(verdict)) return null; // cross-org / not this caller's listing
   const candidate: ClaimCandidate = {

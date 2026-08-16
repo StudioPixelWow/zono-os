@@ -76,7 +76,10 @@ async function buildSnapshots(db: DB, orgId: string): Promise<MarketSnapshotSumm
   }
 
   const [extRes, propRes, buyersRes, intelRes, matchRes, relRes, histRes, dupRes] = await Promise.all([
-    db.from("external_listings").select("id,city,price,sqm,rooms,has_agent,first_seen_at").eq("status", "active").is("promoted_property_id", null).limit(2000),
+    // Canonical active external inventory (all operating cities). Ordered fresh-first
+    // and lifted well above real volume so a growing city is never silently truncated
+    // by an arbitrary cap (P-MARKET §6/§10 — represent reality, not a quota).
+    db.from("external_listings").select("id,city,price,sqm,rooms,has_agent,first_seen_at").eq("status", "active").is("promoted_property_id", null).order("first_seen_at", { ascending: false }).limit(10000),
     db.from("properties").select("id,city,status,is_exclusive,exclusivity_scope").neq("status", "archived").limit(2000),
     db.from("buyers").select("id,preferred_areas,readiness,has_preapproval").limit(2000),
     db.from("buyer_intelligence_profiles").select("buyer_id,buyer_readiness_score,buyer_engagement_score").limit(2000),
@@ -239,6 +242,19 @@ export interface MarketHeatmapCell {
 /** Latest snapshot per locality for the session org. */
 export async function getCurrentMarketHeatmap(): Promise<MarketHeatmapCell[]> {
   const supabase = await createClient();
+  // ── Self-healing freshness (P-MARKET) ──────────────────────────────────────
+  // The heatmap must reflect the org's CANONICAL live inventory, not a stale
+  // snapshot from days ago. If no snapshot exists for TODAY, rebuild once from
+  // current CRM + external inventory before reading. Bounded: the upsert is keyed
+  // on (org,locality,date), so this runs at most once/day/org on first load; the
+  // hourly market-watch also refreshes it in the background. Never blocks on error.
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const { data: freshToday } = await supabase.from("market_area_snapshots").select("date").eq("date", today).limit(1);
+    if (!freshToday || freshToday.length === 0) {
+      await generateMarketSnapshotsForOrganization();
+    }
+  } catch (e) { console.error("[market] snapshot self-heal skipped:", e); }
   const { data } = await supabase
     .from("market_area_snapshots").select("*")
     .order("date", { ascending: false }).order("opportunity_score", { ascending: false }).limit(500);

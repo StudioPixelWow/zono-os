@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { organizationsWithActiveLocalities, syncExternalListingsForOrganization, type SyncMode, type SyncSummary } from "@/lib/external-listings/service";
+import { generateMarketSnapshotsForOrg } from "@/lib/market/service";
 import { orgBudgetDecision } from "@/lib/external-listings/budget";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -168,6 +169,13 @@ export async function GET(req: NextRequest) {
         const status = summary.deferred ? "partial" : summary.success ? "success" : "partial";
         await finishRun(db, runId, runStart, status, summary, summary.errors[0] ?? null);
         results.push(summary);
+        // P-MARKET: keep Market Intelligence fresh in the background. After the
+        // hourly ingest, rebuild this org's market snapshots from the accumulated
+        // CANONICAL inventory (not the batch) so the /market counts never collapse
+        // to a stale/last-run value. Best-effort + NON-BLOCKING: a failure here must
+        // never fail the market-watch or block the next org.
+        try { await generateMarketSnapshotsForOrg(orgId); }
+        catch (e) { console.error("[market-watch] snapshot refresh skipped for", orgId, e); }
       } catch (e) {
         failed++;
         const msg = e instanceof Error ? e.message : "sync failed";
