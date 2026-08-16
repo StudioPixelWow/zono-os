@@ -97,7 +97,7 @@ export function CompetitorsDashboard({ board }: { board: Board }) {
           <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Users" size={26} /></span>
           <p className="text-ink text-lg font-extrabold">אין עדיין נתוני מתחרים</p>
           <p className="text-muted max-w-sm text-sm">ודא שזוהו מתווכים (מודיעין מתווכים) ולחץ ״חשב מודיעין מתחרים״.</p>
-          <Button onClick={recalc} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב מודיעין מתחרים</Button>
+          <Button onClick={recalc} loading={pending} leadingIcon={<Icon name="Radar" size={16} />}>חשב מודיעין מתחרים</Button>
         </div>
       ) : (
         <>
@@ -131,7 +131,7 @@ function Hero({ pending, onRecompute }: { pending: boolean; onRecompute: () => v
           <p className="text-brand text-xs font-bold tracking-wide">ZONO · מודיעין מתחרים</p>
           <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מודיעין מתחרים</h1>
           <p className="text-muted mt-1.5 max-w-xl text-sm">מערכת מתקדמת למעקב בזמן אמת אחר פעילות המתחרים וההזדמנויות בשוק</p>
-          <div className="mt-4 flex justify-center sm:justify-start"><Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב מודיעין מתחרים</Button></div>
+          <div className="mt-4 flex justify-center sm:justify-start"><Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Radar" size={16} />}>חשב מודיעין מתחרים</Button></div>
         </div>
         <div className="zono-gradient grid h-24 w-24 shrink-0 place-items-center rounded-[28px] text-white shadow-[var(--shadow-lift)] sm:h-28 sm:w-28" aria-hidden>
           <Icon name="Target" size={52} />

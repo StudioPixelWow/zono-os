@@ -72,7 +72,7 @@ export function CoverageView({ board }: { board: CoverageBoard }) {
           <Link href="/transactions" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="ArrowLeft" size={15} />עסקאות</Link>
           <Button size="sm" variant="secondary" onClick={retry} loading={busyId === "retry"} disabled={pending} leadingIcon={<Icon name="Clock" size={15} />}>נסה כשלונות שוב</Button>
           <Button size="sm" variant="secondary" onClick={ensure} loading={busyId === "ensure"} disabled={pending} leadingIcon={<Icon name="Plus" size={15} />}>צור אזורי כיסוי</Button>
-          <Button onClick={discover} loading={busyId === "discover"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{busyId === "discover" ? "מגלה…" : "גלה שכונות אוטומטית"}</Button>
+          <Button onClick={discover} loading={busyId === "discover"} disabled={pending} leadingIcon={<Icon name="Radar" size={16} />}>{busyId === "discover" ? "מגלה…" : "גלה שכונות אוטומטית"}</Button>
         </div>
       </div>
       {!apifyConfigured && <p className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-sm font-semibold">⚠ APIFY_TOKEN לא מוגדר — סנכרון יחזיר נתוני הדגמה בסביבת פיתוח בלבד.</p>}

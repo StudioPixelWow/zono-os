@@ -39,7 +39,7 @@ const STEPS = [
   { id: 2, label: "מיקום", icon: "MapPin" },
   { id: 3, label: "מאפיינים", icon: "Building2" },
   { id: 4, label: "מדיה", icon: "Maximize2" },
-  { id: 5, label: "תיאור ושיווק", icon: "Sparkles" },
+  { id: 5, label: "תיאור ושיווק", icon: "FileText" },
   { id: 6, label: "בעלים / מוכרים", icon: "Users" },
   { id: 7, label: "פרסום", icon: "Send" },
 ];

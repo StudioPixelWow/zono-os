@@ -6,7 +6,7 @@
 // ============================================================================
 import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
-import { Workflow, RefreshCw, Play, Pause, Plus, Activity, Clock, ShieldCheck, Sparkles, Layers } from "lucide-react";
+import { Workflow, RefreshCw, Play, Pause, Plus, Activity, Clock, ShieldCheck, Zap, Layers } from "lucide-react";
 import {
   getJourneyDashboardAction, setJourneyStatusAction, seedDefaultJourneysAction,
   runJourneyQueueAction, cancelExecutionAction,
@@ -53,7 +53,7 @@ export function JourneyAutomationView({ initial, workflows }: { initial: Automat
     { icon: <Clock size={14} />, label: "מושהים", value: c.delayed + c.waiting },
     { icon: <RefreshCw size={14} />, label: "הושלמו", value: c.completed },
     { icon: <ShieldCheck size={14} />, label: "עמידת SLA", value: `${data.slaCompliancePct}%` },
-    { icon: <Sparkles size={14} />, label: "הצלחת אוטומציה", value: `${data.automationSuccessPct}%` },
+    { icon: <Zap size={14} />, label: "הצלחת אוטומציה", value: `${data.automationSuccessPct}%` },
     { icon: <Clock size={14} />, label: "משך ממוצע", value: `${Math.round(data.avgDurationMs)}ms` },
   ];
 

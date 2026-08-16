@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { TerminalSection, Metric, MetricGrid, Pill, TerminalEmpty, val, type StatusTone } from "@/components/intelligence/terminal";
 import { MissionDraftsMini } from "./MissionDraftsMini";
+import { IconSurface } from "@/components/ui/action-surfaces";
 import { NeighborhoodLink } from "@/components/intelligence/EntityLinks";
 import { bucketRecommendations, type ActionCenterDTO, type RecBucket } from "@/lib/intelligence-explorer/action-center-shared";
 import type { RecommendationView } from "@/lib/recommendations/service";
@@ -58,7 +59,7 @@ export function ActionCenterView({ data }: { data: ActionCenterDTO }) {
   return (
     <div dir="rtl" className="mx-auto flex max-w-none flex-col gap-4 p-4 sm:p-6">
       <header className="flex items-start gap-3">
-        <span className="bg-brand-soft text-brand-strong grid h-12 w-12 place-items-center rounded-2xl text-2xl">⚡</span>
+        <IconSurface name="Zap" tier="l" accent="brand" />
         <div>
           <p className="text-brand text-[11px] font-black tracking-wide">INTELLIGENCE ACTION CENTER™</p>
           <h1 className="text-ink text-2xl font-black sm:text-3xl">מרכז הפעולות</h1>

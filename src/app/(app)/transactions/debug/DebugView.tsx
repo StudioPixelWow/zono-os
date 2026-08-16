@@ -50,7 +50,7 @@ export function DebugView({ env, madlan }: { env: EnvStatus; madlan: MadlanEnv }
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-sm"><span className="text-muted text-[11px] font-bold">עיר</span><input value={city} onChange={(e) => setCity(e.target.value)} className="border-line rounded-xl border px-3 py-2" /></label>
           <label className="flex flex-col gap-1 text-sm"><span className="text-muted text-[11px] font-bold">שכונה (אופציונלי)</span><input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className="border-line rounded-xl border px-3 py-2" /></label>
-          <Button onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>{pending ? "מריץ…" : "בדוק מדלן"}</Button>
+          <Button onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Radar" size={15} />}>{pending ? "מריץ…" : "בדוק מדלן"}</Button>
           <Button variant="secondary" onClick={runDebug} disabled={pending} leadingIcon={<Icon name="Landmark" size={15} />}>בדוק GovMap</Button>
         </div>
         {!env.apifyToken && <p className="text-warning mt-2 text-[11px]">APIFY_TOKEN לא מוגדר — הבדיקה תחזיר NO_TOKEN. הגדר טוקן כדי לבחון את מבנה הדאטה האמיתי.</p>}

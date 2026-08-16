@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
+import { IconSurface } from "@/components/ui/action-surfaces";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export default function SettingsHubPage() {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {g.items.map((it) => (
               <Link key={it.href} href={it.href} className="bg-card border-line hover:border-brand/30 flex items-center gap-3 rounded-[16px] border p-3 transition-colors">
-                <span className="bg-brand-soft text-brand grid h-10 w-10 shrink-0 place-items-center rounded-xl"><Icon name={it.icon} size={20} /></span>
+                <IconSurface name={it.icon} tier="s" accent="brand" className="shrink-0" />
                 <span className="min-w-0 flex-1">
                   <span className="text-ink block truncate text-sm font-bold">{it.label}</span>
                   <span className="text-muted block truncate text-[11px]">{it.desc}</span>

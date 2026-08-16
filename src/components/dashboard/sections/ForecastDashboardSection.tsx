@@ -32,7 +32,7 @@ export async function ForecastDashboardSection() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat icon="TrendingUp" label="הכנסה משוקללת" value={formatShekels(kpis.pwr)} tone="text-success" />
         <Stat icon="BarChart3" label="עמלה צפויה" value={formatShekels(kpis.commission)} tone="text-brand-strong" />
-        <Stat icon="Sparkles" label="צפויות להיסגר (30י׳)" value={String(kpis.closes30)} tone="text-success" />
+        <Stat icon="TrendingUp" label="צפויות להיסגר (30י׳)" value={String(kpis.closes30)} tone="text-success" />
         <Stat icon="AlertTriangle" label="הכנסה בסיכון" value={formatShekels(kpis.atRiskRevenue)} tone="text-danger" />
       </div>
       <div className="bg-card border-line rounded-[20px] border p-4">

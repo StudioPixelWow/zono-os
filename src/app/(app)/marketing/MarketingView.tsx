@@ -65,7 +65,7 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
 
       {/* Action bar */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין שיווק"}</Button>
+        <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין שיווק"}</Button>
         <Link href="/distribution/daily"><Button size="sm" variant="secondary" leadingIcon={<Icon name="Megaphone" size={15} />}>שולחן הפצה יומי</Button></Link>
         <Link href="/distribution"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Send" size={15} />}>קהילות והפצה</Button></Link>
         <Link href="/marketing-core"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Sparkles" size={15} />}>מרכז קמפיינים AI</Button></Link>
@@ -93,7 +93,7 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
           <span className="bg-brand-soft text-brand grid h-16 w-16 place-items-center rounded-3xl"><Icon name="Megaphone" size={28} /></span>
           <p className="text-ink text-lg font-extrabold">אין עדיין מודיעין שיווק</p>
           <p className="text-muted max-w-sm text-sm">הוסיפו קהילות ולחצו ״חשב מודיעין שיווק״ כדי לבנות DNA שיווקי לכל נכס, דירוג ערוצים והזדמנויות קידום.</p>
-          <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />} className="mt-1">חשב מודיעין שיווק</Button>
+          <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={16} />} className="mt-1">חשב מודיעין שיווק</Button>
         </div>
       ) : (
         <>

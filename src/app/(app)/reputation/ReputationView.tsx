@@ -21,7 +21,7 @@ export function ReputationView({ cc }: { cc: ReputationCommandCenter }) {
     { id: "referrers", label: "מפנים מובילים", icon: "Send" },
     { id: "geo", label: "מוניטין אזורי", icon: "Map" },
     { id: "agents", label: "דירוג סוכנים", icon: "Users" },
-    { id: "opportunities", label: "הזדמנויות", icon: "Sparkles" },
+    { id: "opportunities", label: "הזדמנויות", icon: "Target" },
   ];
 
   return (
@@ -43,7 +43,7 @@ export function ReputationView({ cc }: { cc: ReputationCommandCenter }) {
       </header>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="ביקורות" value={`${cc.reviewCount}`} sub={cc.avgRating ? `דירוג ${cc.avgRating}★` : ""} icon="Sparkles" tone="text-success" />
+        <Stat label="ביקורות" value={`${cc.reviewCount}`} sub={cc.avgRating ? `דירוג ${cc.avgRating}★` : ""} icon="Star" tone="text-success" />
         <Stat label="הפניות" value={`${cc.referralCount}`} sub={`${cc.convertedReferrals} הומרו`} icon="Send" tone="text-brand-strong" />
         <Stat label="שגרירים" value={`${cc.ambassadors}`} sub="לקוחות מובילים" icon="Handshake" tone="text-success" />
         <Stat label="הכנסה מהפניות" value={ils(cc.referralRevenue)} sub="" icon="TrendingUp" tone="text-brand-strong" />
@@ -103,7 +103,7 @@ function Overview({ cc }: { cc: ReputationCommandCenter }) {
         </div>
       </Section>
       {cc.topAdvocates.length > 0 && <Section title="תומכים מובילים" icon="Handshake"><AdvocateList list={cc.topAdvocates.slice(0, 5)} /></Section>}
-      {cc.opportunities.length > 0 && <Section title="הזדמנויות מובילות" icon="Sparkles"><OppList list={cc.opportunities.slice(0, 5)} /></Section>}
+      {cc.opportunities.length > 0 && <Section title="הזדמנויות מובילות" icon="Target"><OppList list={cc.opportunities.slice(0, 5)} /></Section>}
     </div>
   );
 }

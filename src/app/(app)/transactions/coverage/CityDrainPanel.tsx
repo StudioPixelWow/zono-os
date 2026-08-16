@@ -73,7 +73,7 @@ export function CityDrainPanel() {
         </div>
         {draining
           ? <button onClick={stop} className="border-line bg-card text-danger inline-flex h-10 items-center gap-1.5 rounded-xl border px-4 text-sm font-bold hover:shadow"><Icon name="X" size={15} /> עצור</button>
-          : <button onClick={drain} disabled={progress ? !progress.apifyConfigured : false} title={progress && !progress.apifyConfigured ? "נדרש להגדיר APIFY_TOKEN בשרת" : undefined} className="btn-zono-primary zono-focus-ring inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold disabled:opacity-50"><Icon name="Sparkles" size={16} /> משוך הכל אוטומטית</button>}
+          : <button onClick={drain} disabled={progress ? !progress.apifyConfigured : false} title={progress && !progress.apifyConfigured ? "נדרש להגדיר APIFY_TOKEN בשרת" : undefined} className="btn-zono-primary zono-focus-ring inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold disabled:opacity-50"><Icon name="Download" size={16} /> משוך הכל אוטומטית</button>}
       </div>
 
       {progress && (

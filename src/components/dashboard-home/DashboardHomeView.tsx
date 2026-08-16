@@ -42,7 +42,7 @@ const QUICK_LINKS: { label: string; icon: string; href: string }[] = [
   { label: "מודיעין סוכנים", icon: "Users", href: "/broker-intelligence/dashboard" },
   { label: "מודיעין משרדים", icon: "Building2", href: "/office-intelligence/dashboard" },
   { label: "מרכז הפעולות", icon: "Flame", href: "/action-center" },
-  { label: "Mission Control", icon: "Sparkles", href: "/mission-control" },
+  { label: "Mission Control", icon: "Radar", href: "/mission-control" },
 ];
 
 const FAB_ACTIONS: { l: string; i: string; h: string }[] = [

@@ -115,6 +115,7 @@ import {
   Radar,
   Workflow,
   Info,
+  Camera,
   type LucideIcon,
 } from "lucide-react";
 
@@ -123,6 +124,7 @@ const registry: Record<string, LucideIcon> = {
   Radar,
   Workflow,
   Info,
+  Camera,
   KeyRound,
   GitCompareArrows,
   CalendarClock,
@@ -246,6 +248,6 @@ export interface IconProps {
 
 /** Renders a lucide icon by name. Thin strokes by default for a premium feel. */
 export function Icon({ name, className, size = 20, strokeWidth = 1.75 }: IconProps) {
-  const Cmp = registry[name] ?? Sparkles;
+  const Cmp = registry[name] ?? Circle;
   return <Cmp className={className} size={size} strokeWidth={strokeWidth} />;
 }

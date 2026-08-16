@@ -170,7 +170,7 @@ function AIActionsBar() {
           </Link>
         ))}
         <span className="bg-brand text-white ms-auto grid h-9 w-9 place-items-center rounded-full">
-          <Icon name="Sparkles" size={16} />
+          <Icon name="Zap" size={16} />
         </span>
       </div>
     </div>

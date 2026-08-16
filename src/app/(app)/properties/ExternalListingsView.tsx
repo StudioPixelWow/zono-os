@@ -340,7 +340,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
   }, [listings, marketStats, dayAgo]);
 
   const marketCards: { label: string; value: number; icon: string; tone: string }[] = [
-    { label: "חדשות היום", value: market.newToday, icon: "Sparkles", tone: "text-brand-strong" },
+    { label: "חדשות היום", value: market.newToday, icon: "Inbox", tone: "text-brand-strong" },
     { label: "ירידות מחיר", value: market.priceDrops, icon: "TrendingDown", tone: "text-warning" },
     { label: "מתחת לממוצע", value: market.belowAvg, icon: "Tag", tone: "text-success" },
     { label: "בעלים פרטי", value: market.privateOwner, icon: "UserCheck", tone: "text-brand" },
@@ -375,7 +375,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
               <option value="full">סנכרון מלא (500/עיר)</option>
               <option value="backfill">סנכרון מתקדם (1000/עיר)</option>
             </select>
-            <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Sparkles" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
+            <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Radar" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
             <Button size="sm" variant="ghost" onClick={geocodeNow} disabled={pending} leadingIcon={<Icon name="MapPin" size={15} />}>גאוקד עכשיו</Button>
             <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>ניתוח AI</Button>
             <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>

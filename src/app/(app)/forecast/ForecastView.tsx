@@ -33,7 +33,7 @@ export function ForecastView({ board }: { board: ForecastBoard }) {
           <h1 className="text-ink mt-1 text-2xl font-black">תחזית עסקאות</h1>
           <p className="text-muted mt-1 text-sm">מה צפוי להיסגר, כמה הכנסה צפויה, מה בסיכון ואיזו פעולה תגדיל את סיכויי הסגירה.</p>
         </div>
-        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב תחזית"}</Button>
+        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="TrendingUp" size={16} />}>{pending ? "מחשב…" : "חשב תחזית"}</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}

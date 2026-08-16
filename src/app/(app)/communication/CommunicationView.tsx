@@ -88,7 +88,7 @@ function Empty({ text }: { text: string }) { return <div className="bg-surface t
 function TimelineRow({ e }: { e: TimelineItem }) {
   return (
     <div className="bg-card border-line flex items-start gap-3 rounded-2xl border p-3 shadow-sm">
-      <span className="bg-surface text-muted grid h-8 w-8 shrink-0 place-items-center rounded-xl"><Icon name={SOURCE_ICONS[e.source] ?? "Sparkles"} size={15} /></span>
+      <span className="bg-surface text-muted grid h-8 w-8 shrink-0 place-items-center rounded-xl"><Icon name={SOURCE_ICONS[e.source] ?? "Circle"} size={15} /></span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-ink text-sm font-bold">{e.title ?? e.sourceLabel}</span>

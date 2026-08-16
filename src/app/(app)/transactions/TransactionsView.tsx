@@ -94,7 +94,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/transactions/coverage" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="Map" size={15} />כיסוי דאטה</Link>
-          <Button size="sm" variant="secondary" onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>מדלן (ניסיוני)</Button>
+          <Button size="sm" variant="secondary" onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Radar" size={15} />}>מדלן (ניסיוני)</Button>
           <Button onClick={runGovmap} disabled={pending} leadingIcon={<Icon name="Landmark" size={16} />}>{pending ? "מסנכרן…" : "סנכרן עסקאות"}</Button>
         </div>
       </div>

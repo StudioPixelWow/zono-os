@@ -361,7 +361,7 @@ function AiInsightsCard({ insights }: { insights: { id: string; title: string; s
         <ul className="flex flex-col gap-2">
           {insights.map((it, i) => (
             <li key={it.id} className="bg-surface flex items-start gap-2 rounded-xl p-3">
-              <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", TONES[i % TONES.length])}><Icon name="Sparkles" size={15} /></span>
+              <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", TONES[i % TONES.length])}><Icon name="Target" size={15} /></span>
               <div className="min-w-0"><p className="text-ink text-sm font-bold leading-snug">{it.title}</p><p className="text-muted text-[11px]">{it.sub}</p></div>
             </li>
           ))}
@@ -484,7 +484,7 @@ function RecommendationsGrid({ areas }: { areas: { city: string; pct: number; n:
           {[
             { t: "חזק/י קשר עם בעלים פרטיים", i: "Users" },
             { t: "פנה/י לנכסים שלא עודכנו 30+ יום", i: "Clock" },
-            { t: "קדם/י הזדמנויות דו-צדדיות ל-CRM", i: "Sparkles" },
+            { t: "קדם/י הזדמנויות דו-צדדיות ל-CRM", i: "Target" },
           ].map((r) => (
             <li key={r.t} className="bg-surface flex items-center gap-2 rounded-xl p-3">
               <span className="bg-success-soft text-success grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name={r.i} size={15} /></span>
@@ -507,7 +507,7 @@ function EmptyState({ onRecompute, pending }: { onRecompute: () => void; pending
       <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Magnet" size={26} /></span>
       <p className="text-ink text-lg font-extrabold">אין עדיין הזדמנויות גיוס</p>
       <p className="text-muted max-w-sm text-sm">הרץ/י חישוב כדי ש-ZONO יזהה בעלי נכסים פוטנציאליים מתוך המודעות החיצוניות.</p>
-      <Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב הזדמנויות גיוס</Button>
+      <Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Target" size={16} />}>חשב הזדמנויות גיוס</Button>
     </div>
   );
 }

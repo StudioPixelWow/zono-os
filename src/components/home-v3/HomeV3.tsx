@@ -80,7 +80,7 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
     "meeting.completed": { icon: "Calendar", tone: "text-brand-light" },
     "lead.created": { icon: "Flame", tone: "text-brand-light" },
     "whatsapp.message_received": { icon: "MessageCircle", tone: "text-brand-light" },
-    "automation.run_completed": { icon: "Sparkles", tone: "text-brand-light" },
+    "automation.run_completed": { icon: "Zap", tone: "text-brand-light" },
   };
   const digest = useMemo(() => {
     const facts = daily?.sinceYouWereAway ?? [];
@@ -211,7 +211,7 @@ export function HomeV3({ dict, data, daily }: { dict: DashboardDict; data: Dashb
       {/* ── S3 · QUICK ACTIONS — the morning launchpad ── */}
       <Reveal>
         <section>
-          <SectionTitle icon="Sparkles" title="פעולות מהירות" />
+          <SectionTitle icon="LayoutGrid" title="פעולות מהירות" />
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-6">
             {QUICK_ACTIONS.map((q) => (
               <Link key={q.h + q.l} href={q.h} className="bg-card border-line hover:border-brand-light group flex flex-col items-center gap-2 rounded-2xl border p-4 text-center transition">
@@ -528,7 +528,7 @@ function ExecutiveSnapshot({ daily }: { daily: DailyOS }) {
   const score = daily.briefing.dailyScore;
   return (
     <section className="from-brand-soft/50 border-line rounded-[22px] border bg-gradient-to-br to-transparent p-5">
-      <div className="mb-3 flex items-center justify-between"><SectionTitle icon="Sparkles" title="מצב העסק" inline /><Link href="/executive" className="text-brand-strong text-[12px] font-bold">מוח ניהולי →</Link></div>
+      <div className="mb-3 flex items-center justify-between"><SectionTitle icon="Activity" title="מצב העסק" inline /><Link href="/executive" className="text-brand-strong text-[12px] font-bold">מוח ניהולי →</Link></div>
       <div className="flex items-center gap-4">
         <div className={cn("grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-xl font-black", score >= 70 ? "bg-success-soft text-success" : score >= 45 ? "bg-warning-soft text-warning" : "bg-danger-soft text-danger")}><CountUp value={score} /></div>
         <div className="text-[12px]">

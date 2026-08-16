@@ -27,7 +27,7 @@ export interface ContextualZeroStateProps {
 }
 
 export function ContextualZeroState({
-  icon = "Sparkles", title, value, cta, href, onCta, secondaryLabel, secondaryHref, className,
+  icon = "Inbox", title, value, cta, href, onCta, secondaryLabel, secondaryHref, className,
 }: ContextualZeroStateProps) {
   const primary = (
     <span className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold"

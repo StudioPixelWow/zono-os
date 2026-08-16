@@ -279,7 +279,7 @@ export function OpportunityMapSection({ t, data }: { t: Translate; data: Dashboa
 /* ─────────────────────────────────────────────────────────────────────────
    SECTION 5 — ACTIVITY TIMELINE  +  AI OPPORTUNITY RADAR
    ──────────────────────────────────────────────────────────────────────── */
-const RADAR_ICON: Record<string, string> = { hot_buyers: "Users", potential_sellers: "Home", likely_listings: "Sparkles", deals_at_risk: "AlertTriangle" };
+const RADAR_ICON: Record<string, string> = { hot_buyers: "Users", potential_sellers: "Home", likely_listings: "Home", deals_at_risk: "AlertTriangle" };
 
 export function ActivityRadarSection({ t, data }: { t: Translate; data: DashboardHomeData }) {
   return (
@@ -411,7 +411,7 @@ export function AIDealForecastSection({ t, data }: { t: Translate; data: Dashboa
   const pulse = [
     { l: "ביקוש בשוק", v: `${cn0.demandTrendPct > 0 ? "+" : ""}${cn0.demandTrendPct}%`, up: cn0.demandTrendPct >= 0, icon: "TrendingUp" },
     { l: "ירידות מחיר", v: String(cn0.priceDrops), up: false, icon: "TrendingDown" },
-    { l: "נכסים חדשים", v: String(cn0.newListings), up: true, icon: "Sparkles" },
+    { l: "נכסים חדשים", v: String(cn0.newListings), up: true, icon: "Inbox" },
     ...(cn0.hotNeighborhood ? [{ l: "שכונה מובילה", v: cn0.hotNeighborhood, up: true, icon: "Flame" }] : []),
   ];
 

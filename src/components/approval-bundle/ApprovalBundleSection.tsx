@@ -11,7 +11,7 @@ import { getEntityBundlesAction, approveBundleAction, rejectBundleAction, askBun
 import type { ApprovalBundle, BundleAction, BundleEntityType, ActionType } from "@/lib/approval-bundle/types";
 
 const ACTION_ICON: Record<ActionType, string> = {
-  mission: "Sparkles", workflow: "GitBranch", whatsapp_draft: "MessageCircle", email_draft: "Mail",
+  mission: "Flag", workflow: "GitBranch", whatsapp_draft: "MessageCircle", email_draft: "Mail",
   calendar_booking: "Calendar", facebook_action: "Megaphone", marketing_action: "Megaphone",
   landing_suggestion: "Globe", notification: "Bell",
 };
@@ -83,7 +83,7 @@ export function ApprovalBundleSection({ entityType, entityId }: { entityType: Bu
 function ActionRow({ a, disabled, onApprove }: { a: BundleAction; disabled: boolean; onApprove: () => void }) {
   return (
     <div className="bg-surface flex items-center gap-2 rounded-xl p-2">
-      <span className="bg-card text-brand-strong grid h-7 w-7 shrink-0 place-items-center rounded-lg"><Icon name={ACTION_ICON[a.type] ?? "Sparkles"} size={13} /></span>
+      <span className="bg-card text-brand-strong grid h-7 w-7 shrink-0 place-items-center rounded-lg"><Icon name={ACTION_ICON[a.type] ?? "Circle"} size={13} /></span>
       <div className="min-w-0 flex-1"><p className="text-ink truncate text-[12px] font-bold">{a.label}</p><p className="text-muted truncate text-[10px]">{a.reason}</p></div>
       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_TONE[a.status]}`}>{STATUS_HE[a.status]}</span>
       {a.status === "proposed" && <button onClick={onApprove} disabled={disabled} className="bg-brand-soft text-brand-strong shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold disabled:opacity-50">אשר</button>}

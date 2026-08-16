@@ -71,7 +71,7 @@ const ilsC = (n: number) =>
 const ACT_ICON: Record<string, { icon: string; tone: HomeActivityItem["tone"] }> = {
   lead: { icon: "Users", tone: "success" }, contact: { icon: "Users", tone: "success" },
   task: { icon: "ListChecks", tone: "brand" }, deal: { icon: "Handshake", tone: "success" },
-  property: { icon: "Building", tone: "brand" }, match: { icon: "Sparkles", tone: "brand" },
+  property: { icon: "Building", tone: "brand" }, match: { icon: "GitCompareArrows", tone: "brand" },
   message: { icon: "MessageCircle", tone: "brand" }, whatsapp: { icon: "MessageCircle", tone: "brand" },
   meeting: { icon: "Calendar", tone: "warning" }, viewing: { icon: "Calendar", tone: "warning" },
   offer: { icon: "Send", tone: "warning" }, document: { icon: "FileText", tone: "neutral" },
@@ -93,7 +93,7 @@ function buildZonoWork(rows: ActivityEventRow[]): HomeZonoWork {
   const DAY = 86_400_000;
   const recent = rows.filter((r) => Date.now() - new Date(r.occurred_at).getTime() <= DAY);
   const buckets: Record<string, { icon: string; label: string; tone: "brand" | "success" | "warning"; n: number }> = {
-    match: { icon: "Sparkles", label: "התאמות חדשות נמצאו", tone: "brand", n: 0 },
+    match: { icon: "GitCompareArrows", label: "התאמות חדשות נמצאו", tone: "brand", n: 0 },
     lead: { icon: "Users", label: "לידים ולקוחות עודכנו", tone: "success", n: 0 },
     property: { icon: "Building", label: "נכסים חדשים זוהו באזור שלך", tone: "brand", n: 0 },
     task: { icon: "ListChecks", label: "מעקבים ומשימות תוזמנו", tone: "warning", n: 0 },

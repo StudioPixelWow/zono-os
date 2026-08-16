@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
+import { IconSurface } from "@/components/ui/action-surfaces";
 import { Button } from "@/components/ui/Button";
 import { recalcMarketHeatmapAction } from "@/lib/market/actions";
 import type { MarketHeatmapCell } from "@/lib/market/service";
@@ -46,7 +47,7 @@ export function MarketHeatmapView({ cells }: { cells: MarketHeatmapCell[] }) {
 
       {cells.length === 0 ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
-          <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Map" size={26} /></span>
+          <IconSurface name="Map" tier="l" accent="brand" />
           <p className="text-ink text-lg font-extrabold">אין עדיין נתוני ביקוש</p>
           <p className="text-muted max-w-sm text-sm">לחץ ״חשב מדדי ביקוש מחדש״ כדי לבנות תמונת שוק עדכנית לכל אזורי הפעילות.</p>
         </div>

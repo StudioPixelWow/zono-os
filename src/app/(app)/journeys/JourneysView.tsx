@@ -65,7 +65,7 @@ export function JourneysView({ data, error }: { data: JourneyCenter | null; erro
     { label: "מסעות פעילים", value: k.active, icon: "Route", tone: "text-brand-strong" },
     { label: "בסיכון", value: k.atRisk, icon: "AlertTriangle", tone: "text-danger", f: "at_risk" },
     { label: "ממתין לפעולה", value: k.waiting, icon: "Clock", tone: "text-warning", f: "waiting" },
-    { label: "מתקדם היום", value: k.advancing, icon: "Sparkles", tone: "text-success", f: "advancing" },
+    { label: "מתקדם היום", value: k.advancing, icon: "TrendingUp", tone: "text-success", f: "advancing" },
     { label: "ללא פעילות", value: k.noActivity, icon: "Clock", tone: "text-muted", f: "no_activity" },
     { label: "פגישות קרובות", value: k.upcomingMeetings, icon: "Calendar", tone: "text-brand" },
     // Batch 5.4 — canonical coverage is a first-class number, not a footnote.

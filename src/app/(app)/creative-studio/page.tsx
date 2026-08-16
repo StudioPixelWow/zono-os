@@ -33,7 +33,7 @@ export default async function CreativeStudioLauncherPage() {
             {entities.map((e) => (
               <Link key={`${e.entityType}:${e.entityId}`} href={`/creative-studio/${e.entityType}/${e.entityId}`} className="bg-card border-line flex items-center justify-between gap-2 rounded-2xl border p-4 shadow-sm hover:border-brand">
                 <div className="flex items-center gap-2">
-                  <span className="bg-surface text-muted grid h-8 w-8 place-items-center rounded-xl"><Icon name={ENTITY_ICONS[e.entityType] ?? "Sparkles"} size={15} /></span>
+                  <span className="bg-surface text-muted grid h-8 w-8 place-items-center rounded-xl"><Icon name={ENTITY_ICONS[e.entityType] ?? "Circle"} size={15} /></span>
                   <div>
                     <p className="text-ink text-sm font-bold">{e.entityName}</p>
                     <p className="text-muted text-[11px]">{ENTITY_LABELS[e.entityType] ?? e.entityType}</p>

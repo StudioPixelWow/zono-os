@@ -5,6 +5,7 @@
 // Nothing is computed here — every number comes straight from the engine. RTL.
 // ============================================================================
 import Link from "next/link";
+import { IconSurface } from "@/components/ui/action-surfaces";
 import {
   TerminalSection, Metric, MetricGrid, BarMeter, StatusBadge, Pill, TerminalEmpty, SourceLine, val, pct01, type StatusTone,
 } from "@/components/intelligence/terminal";
@@ -40,7 +41,7 @@ export function OfficeIntelligenceProfileView({ dto }: { dto: AgencyIntelligence
       <header className="border-line bg-card rounded-2xl border p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <span className="bg-brand-soft text-brand-strong grid h-14 w-14 place-items-center rounded-2xl text-2xl font-black">🏢</span>
+            <IconSurface name="Building2" tier="l" accent="brand" />
             <div>
               <p className="text-brand text-[11px] font-black tracking-wide">OFFICE INTELLIGENCE™</p>
               <h1 className="text-ink text-2xl font-black sm:text-3xl">{card.displayName ?? card.name}</h1>

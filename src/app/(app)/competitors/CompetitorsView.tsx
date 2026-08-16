@@ -41,7 +41,7 @@ export function CompetitorsView({ board, embedded = false }: { board: Board; emb
             <h1 className="text-ink mt-1 text-2xl font-black">מודיעין מתחרים</h1>
             <p className="text-muted mt-1 text-sm">מי שולט בכל אזור, מי מתחזק, מי נחלש, ואיפה כדאי למקד מאמצי גיוס.</p>
           </div>
-          <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין מתחרים"}</Button>
+          <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Radar" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין מתחרים"}</Button>
         </div>
       )}
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}

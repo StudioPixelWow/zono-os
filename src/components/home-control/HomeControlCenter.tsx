@@ -36,7 +36,7 @@ const URGENCY_DOT: Record<HomeRec["urgency"], string> = {
 };
 const URGENCY_HE: Record<HomeRec["urgency"], string> = { critical: "קריטי", high: "דחוף", medium: "חשוב", low: "רגיל" };
 const AREA_ICON: Record<string, string> = {
-  acquisition: "Target", buyer: "Users", seller: "Home", deal: "Handshake", journey: "Route", daily: "Sparkles", office: "Building2",
+  acquisition: "Target", buyer: "Users", seller: "Home", deal: "Handshake", journey: "Route", daily: "Sunrise", office: "Building2",
 };
 const ACTIVITY_TONE: Record<HomeActivityItem["tone"], string> = {
   brand: "bg-brand-soft text-brand-strong", success: "bg-success-soft text-success",
@@ -177,7 +177,7 @@ function AiCoach({ recs }: { recs: HomeRec[] }) {
           {recs.map((r) => (
             <div key={r.id} className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
               <div className="flex items-center justify-between gap-2">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-violet-100"><Icon name={AREA_ICON[r.area] ?? "Sparkles"} size={15} /></span>
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-violet-100"><Icon name={AREA_ICON[r.area] ?? "Layers"} size={15} /></span>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold text-white/85">
                   <span className={cn("h-2 w-2 rounded-full", URGENCY_DOT[r.urgency])} /> {URGENCY_HE[r.urgency]}
                 </span>
@@ -284,7 +284,7 @@ function ClientMatches({ recs }: { recs: HomeRec[] }) {
       <Head title="התאמות שנוצרו עבורך" subtitle="לקוחות ונכסים שכדאי לחבר עכשיו" action={<Link href="/matches" className="text-brand-strong hover:text-brand text-xs font-bold">לכל ההתאמות</Link>} />
       {recs.length === 0 ? (
         <div className="bg-card border-line text-muted flex flex-col items-center justify-center gap-1 rounded-[22px] border p-8 text-center shadow-[var(--shadow-card)]">
-          <Icon name="Sparkles" size={24} className="text-muted/70" />
+          <Icon name="GitCompareArrows" size={24} className="text-muted/70" />
           <p className="text-ink text-sm font-bold">לא נמצאו כרגע התאמות חדשות</p>
           <p className="text-xs">ZONO תמשיך לעקוב עבורך ותציף התאמות חמות כשייווצרו</p>
         </div>
@@ -322,7 +322,7 @@ function NextDealCard({ deal }: { deal: HomeNextDeal }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="bg-brand-soft text-brand-strong inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black">
-                <Icon name="Sparkles" size={12} /> {deal.probability}% סבירות לסגירה
+                <Icon name="TrendingUp" size={12} /> {deal.probability}% סבירות לסגירה
               </span>
               <span className="text-muted text-[11px] font-bold">{deal.stageLabel}</span>
             </div>

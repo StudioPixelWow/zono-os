@@ -131,7 +131,7 @@ export function LocalityAutocomplete({ value, onChange }: Props) {
                     v.isPrimary ? "text-warning" : "text-muted hover:text-warning"
                   }
                 >
-                  <Icon name={v.isPrimary ? "Sparkles" : "Sparkles"} size={16} />
+                  <Icon name="MapPin" size={16} />
                 </button>
                 <span className="text-ink text-sm font-semibold">{v.nameHe}</span>
                 {v.isPrimary && (

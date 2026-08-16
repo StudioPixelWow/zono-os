@@ -26,7 +26,7 @@ export function RoutingView({ board }: { board: RoutingBoard }) {
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין הקצאת לידים</h1>
           <p className="text-muted mt-1 text-sm">מי הכי סביר לסגור כל ליד — לפי טריטוריה, מומחיות, המרה ועומס. תאומי מודיעין לכל סוכן.</p>
         </div>
-        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב תאומי סוכנים ונתב"}</Button>
+        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Map" size={16} />}>{pending ? "מחשב…" : "חשב תאומי סוכנים ונתב"}</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}

@@ -216,7 +216,7 @@ export function ExecutiveCommandCenter({ data, focus }: { data: ExecCC; focus: F
         </SectionCard>
 
         {/* 4) Opportunities */}
-        <SectionCard title="הזדמנויות" icon="Sparkles">
+        <SectionCard title="הזדמנויות" icon="Target">
           {data.opportunities.length === 0 ? <p className="text-muted text-sm">אין הזדמנויות פתוחות</p> : (
             <ul className="flex flex-col gap-2">
               {data.opportunities.slice(0, 8).map((o) => (

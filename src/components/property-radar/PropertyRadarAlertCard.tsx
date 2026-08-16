@@ -4,7 +4,7 @@
 // center feel. Resilient to missing image / price / reasons.
 // ============================================================================
 import { useState } from "react";
-import { Building2, MapPin, Sparkles, BedDouble, Ruler, Layers, Clock, Users } from "lucide-react";
+import { Building2, MapPin, Radar as RadarSig, BedDouble, Ruler, Layers, Clock, Users } from "lucide-react";
 import type { PropertyRadarAlertDTO } from "@/lib/property-radar/alerts/types";
 import { BuyerMatchPanel } from "./BuyerMatchPanel";
 
@@ -50,7 +50,7 @@ export function PropertyRadarAlertCard({ alert }: { alert: PropertyRadarAlertDTO
         <div className="absolute -left-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
         <div className="relative flex items-center gap-2">
           <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold">
-            <Sparkles size={13} /> ZONO Property Radar
+            <RadarSig size={13} /> ZONO Property Radar
           </span>
           {providerLabel && (
             <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold">{providerLabel}</span>

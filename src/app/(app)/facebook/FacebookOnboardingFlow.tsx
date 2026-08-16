@@ -162,7 +162,7 @@ export function FacebookOnboardingFlow({
           </p>
           {flowErr && <p className="text-danger mt-2 text-[12px] font-bold">{flowErr}</p>}
           <button onClick={scan} disabled={pending} className="btn-zono-primary zono-focus-ring mx-auto mt-5 inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-black text-white shadow-[var(--shadow-lift)] disabled:opacity-60">
-            <Icon name="Sparkles" size={18} /> {apiConnected ? "התחל סנכרון ראשון" : "התחל סריקה ראשונה"}
+            <Icon name="Radar" size={18} /> {apiConnected ? "התחל סנכרון ראשון" : "התחל סריקה ראשונה"}
           </button>
           <div className="mt-4 flex items-center justify-center gap-4">
             <button onClick={reset} disabled={pending} className="text-muted text-[12px] font-bold underline-offset-2 hover:underline">{apiConnected ? "התחל מחדש" : "התנתק"}</button>

@@ -86,7 +86,7 @@ export function MatchingSection({ matches = buyerMatches, note = matchingNote }:
       </div>
 
       <div className="text-muted mt-4 flex items-center gap-2 text-xs font-medium">
-        <Icon name="Sparkles" size={14} className="text-brand" />
+        <Icon name="GitCompareArrows" size={14} className="text-brand" />
         {note}
       </div>
     </SectionShell>

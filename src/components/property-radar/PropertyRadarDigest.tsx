@@ -9,7 +9,7 @@
 //   • Primary  → "צפו בהזדמנויות" (open the Radar center + drain the batch to seen)
 //   • Secondary→ "מאוחר יותר"     (postpone: drain to seen, browse later in Radar)
 // ============================================================================
-import { Sparkles, X } from "lucide-react";
+import { Radar, X } from "lucide-react";
 import { digestCountLabel } from "./digest-logic";
 
 export function PropertyRadarDigest({
@@ -37,7 +37,7 @@ export function PropertyRadarDigest({
     >
       <div className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-white/15 bg-[var(--brand,#5b21b6)] bg-gradient-to-l from-brand-strong to-brand px-4 py-3 text-white shadow-[var(--shadow-lift)]">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15">
-          <Sparkles size={18} />
+          <Radar size={18} />
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-black leading-tight">

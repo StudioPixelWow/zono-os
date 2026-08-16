@@ -37,7 +37,7 @@ export function TeamView({ board }: { board: TeamBoard }) {
           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין צוות</h1>
           <p className="text-muted mt-1 text-sm">מי מנצח, מי מתקשה, היכן ההכנסה נוצרת ודולפת, ומי זקוק לליווי — מערכת ההפעלה של מנהל המשרד.</p>
         </div>
-        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין צוות"}</Button>
+        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Users" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין צוות"}</Button>
       </div>
       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
@@ -100,7 +100,7 @@ export function TeamView({ board }: { board: TeamBoard }) {
           </Panel>
 
           {/* 5) Coaching Center */}
-          <Panel title="מרכז ליווי" icon="Sparkles">
+          <Panel title="מרכז ליווי" icon="Users">
             {coaching.length === 0 ? <p className="text-muted text-sm">אין סיגנלי ליווי פתוחים ✓</p> : (
               <ul className="flex flex-col gap-2">{coaching.slice(0, 8).map((s) => (
                 <li key={s.id} className="border-line rounded-xl border p-2">

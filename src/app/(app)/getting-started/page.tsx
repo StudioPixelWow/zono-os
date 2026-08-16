@@ -20,7 +20,7 @@ export default async function GettingStartedRoute() {
     <div dir="rtl" className="mx-auto flex max-w-2xl flex-col gap-5 p-4 sm:p-6">
       <div className="bg-card border-line rounded-[20px] border p-5">
         <div className="mb-3 flex items-center gap-3">
-          <span className="bg-surface text-brand-strong grid h-11 w-11 place-items-center rounded-2xl"><Icon name="Sparkles" size={22} /></span>
+          <span className="bg-surface text-brand-strong grid h-11 w-11 place-items-center rounded-2xl"><Icon name="Flag" size={22} /></span>
           <div>
             <h1 className="text-ink text-lg font-black">תחילת עבודה</h1>
             <p className="text-muted text-xs">{s.completedCount}/{s.total} שלבים הושלמו · {s.percent}%</p>

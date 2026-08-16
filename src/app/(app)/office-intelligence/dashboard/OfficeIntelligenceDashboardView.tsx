@@ -5,6 +5,7 @@
 // growth / momentum / threat). No recompute, no fabricated values (— for null).
 // ============================================================================
 import Link from "next/link";
+import { IconSurface } from "@/components/ui/action-surfaces";
 import { TerminalSection, Metric, MetricGrid, TerminalEmpty, val } from "@/components/intelligence/terminal";
 import { WorkspaceLinks, type WorkspaceLink } from "@/components/workspace/WorkspaceHeader";
 import { EmptyGuidance } from "@/components/intelligence/EmptyGuidance";
@@ -42,7 +43,7 @@ export function OfficeIntelligenceDashboardView({ offices }: { offices: Explorer
   return (
     <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-4 p-4 sm:p-6">
       <header className="flex items-start gap-3">
-        <span className="bg-brand-soft text-brand-strong grid h-12 w-12 place-items-center rounded-2xl text-2xl">🏢</span>
+        <IconSurface name="Building2" tier="l" accent="brand" />
         <div>
           <p className="text-brand text-[11px] font-black tracking-wide">OFFICE INTELLIGENCE™</p>
           <h1 className="text-ink text-2xl font-black sm:text-3xl">דשבורד מודיעין משרדים</h1>

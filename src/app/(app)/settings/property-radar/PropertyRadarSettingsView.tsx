@@ -7,7 +7,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  Radar, Save, PlayCircle, MapPin, Coins, Bell, MessageSquare, Activity, Sparkles, CheckCircle2, AlertTriangle,
+  Radar, Save, PlayCircle, MapPin, Coins, Bell, MessageSquare, Activity, CheckCircle2, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
@@ -283,7 +283,7 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
             onClick={manualSync}
             loading={runner.pending}
             disabled={!form.sync_enabled || noAreas || (provider !== "mock" && !(selectedHealth?.configured && selectedHealth?.enabled))}
-            leadingIcon={<Sparkles size={16} />}
+            leadingIcon={<Radar size={16} />}
             variant="secondary"
           >
             הפעל סריקה עכשיו

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
+import { IconSurface } from "@/components/ui/action-surfaces";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { completeMeetingAction, cancelMeetingAction, markNoShowAction } from "@/lib/calendar-os/meeting-lifecycle-actions";
@@ -25,7 +26,7 @@ export function ViewingsView({ board }: { board: ViewingsBoard }) {
     <main dir="rtl" className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6">
       <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="bg-brand-soft text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="Calendar" size={18} /></span>
+          <IconSurface name="Calendar" tier="s" accent="brand" />
           <div>
             <h1 className="text-ink text-2xl font-black">צפיות</h1>
             <p className="text-muted text-sm">כל הצפיות והבתים הפתוחים לפי סטטוס — אישור, השלמה עם משוב, ביטול ואי-הגעה.</p>

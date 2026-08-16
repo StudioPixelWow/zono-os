@@ -188,7 +188,7 @@ export function LeadDetailView({
 
               {/* Intent + tags */}
               <div className="bg-card border-line rounded-[20px] border p-5">
-                <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Target" size={16} /></span><h3 className="text-ink text-sm font-extrabold">כוונה ואיכות</h3></div>
+                <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">כוונה ואיכות</h3></div>
                 <div className="flex flex-wrap gap-2">
                   <span className="bg-brand-soft text-brand rounded-full px-3 py-1 text-[12px] font-bold">{p.buyerSellerFit} · {p.intentConfidence}%</span>
                   {(twin?.classification ?? []).map((c, i) => <span key={i} className="bg-surface text-ink rounded-full px-3 py-1 text-[12px] font-bold">{c}</span>)}
@@ -197,7 +197,7 @@ export function LeadDetailView({
 
               {/* Missing info */}
               <div className="bg-card border-line rounded-[20px] border p-5">
-                <div className="mb-3 flex items-center gap-2"><span className="bg-warning-soft text-warning grid h-8 w-8 place-items-center rounded-xl"><Icon name="AlertTriangle" size={16} /></span><h3 className="text-ink text-sm font-extrabold">מידע חסר להסמכה</h3></div>
+                <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">מידע חסר להסמכה</h3></div>
                 {missingInfo.length === 0 ? <p className="text-muted text-sm">הליד מוסמך — אין מידע חסר קריטי ✓</p> : (
                   <ul className="flex flex-col gap-1.5">{missingInfo.map((m, i) => <li key={i} className="text-ink flex items-center gap-2 text-sm"><span className="bg-warning h-1.5 w-1.5 rounded-full" />{m}</li>)}</ul>
                 )}
@@ -206,7 +206,7 @@ export function LeadDetailView({
               {/* Evidence / WHY */}
               {learnings.length > 0 && (
                 <div className="bg-card border-line rounded-[20px] border p-5">
-                  <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Sparkles" size={16} /></span><h3 className="text-ink text-sm font-extrabold">ראיות ומדוע</h3></div>
+                  <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">ראיות ומדוע</h3></div>
                   <ul className="flex flex-col gap-2.5">
                     {learnings.map((l) => (
                       <li key={l.id} className="border-line rounded-2xl border p-3">
@@ -241,7 +241,7 @@ export function LeadDetailView({
         {tab === "matching" && (
           <div className="flex flex-col gap-5">
             <div className="bg-card border-line rounded-[20px] border p-5">
-              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Building2" size={16} /></span><h3 className="text-ink text-sm font-extrabold">נכס וקשר</h3></div>
+              <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">נכס וקשר</h3></div>
               {lead.propertyId ? (
                 <Link href={`/properties/${lead.propertyId}`}><Button variant="secondary" size="sm" leadingIcon={<Icon name="ArrowUpRight" size={14} />}>פתח מרכז שליטה לנכס המקושר</Button></Link>
               ) : <p className="text-muted text-sm">אין נכס מקושר עדיין.</p>}
@@ -258,7 +258,7 @@ export function LeadDetailView({
             </div>
 
             <div className="bg-card border-line rounded-[20px] border p-5">
-              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Route" size={16} /></span><h3 className="text-ink text-sm font-extrabold">מסע מומלץ ותהליך הבא</h3></div>
+              <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">מסע מומלץ ותהליך הבא</h3></div>
               {missions.length === 0 ? <p className="text-muted text-sm">אין מסע מומלץ כרגע.</p> : (
                 <ul className="flex flex-col gap-2.5">
                   {missions.map((m) => (
@@ -285,7 +285,7 @@ export function LeadDetailView({
             {journeySlot}
 
             <div className="bg-card border-line rounded-[20px] border p-5">
-              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Sparkles" size={16} /></span><h3 className="text-ink text-sm font-extrabold">אינטליגנציית ליד</h3></div>
+              <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">אינטליגנציית ליד</h3></div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                 <span className="text-muted font-semibold">שלב במקור (leads.stage): <span className="text-ink font-bold">{STAGE_HE[lead.stage] ?? lead.stage}</span></span>
                 {nextAction && <span className="text-ink font-bold">הצעד הבא: <span className="text-brand-strong">{nextAction}</span></span>}

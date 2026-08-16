@@ -38,7 +38,7 @@ export async function CommunicationDashboardSection() {
         <Stat icon="Shield" label="התחייבויות באיחור" value={s.overdueCommitments.length} tone="text-danger" />
         <Stat icon="MessageCircle" label="ממתינים לתגובה" value={s.noResponse.length} tone="text-warning" />
         <Stat icon="AlertTriangle" label="סנטימנט שלילי" value={s.negativeSentiment.length} tone="text-danger" />
-        <Stat icon="Sparkles" label="פעולות חמות" value={s.followupsDueToday.length + s.overdueCommitments.length} tone="text-success" />
+        <Stat icon="Flame" label="פעולות חמות" value={s.followupsDueToday.length + s.overdueCommitments.length} tone="text-success" />
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">

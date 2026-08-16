@@ -138,7 +138,7 @@ export function WhatsappConnectionGate({ connection }: { connection: WhatsappCon
       <section className="bg-card border-line rounded-[22px] border p-5 sm:p-6">
         <button onClick={() => setShowQr((v) => !v)} className="flex w-full items-center justify-between gap-2 text-right">
           <span className="text-ink inline-flex items-center gap-2 text-sm font-black"><Icon name="Lock" size={16} /> מדוע אין סריקת QR של WhatsApp אישי?</span>
-          <Icon name={showQr ? "Check" : "Sparkles"} size={15} className="text-muted" />
+          <Icon name={showQr ? "Check" : "MessageCircle"} size={15} className="text-muted" />
         </button>
         {showQr && (
           <p className="text-muted mt-3 text-[13px] leading-relaxed">

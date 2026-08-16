@@ -47,7 +47,7 @@ const STATUS_TONE: Record<ConnectionStatus, string> = {
   disconnected: "bg-surface text-muted border-line",
 };
 
-const GROUP_ICON: Record<string, string> = { facebook: "Globe", instagram: "Sparkles", whatsapp: "MessageCircle" };
+const GROUP_ICON: Record<string, string> = { facebook: "Globe", instagram: "Camera", whatsapp: "MessageCircle" };
 
 // ── Phase 17: connection-PATH status labels/tones (two distinct state machines) ──
 const PATH_STATUS_LABEL: Record<FacebookPathStatus, string> = {
@@ -481,7 +481,7 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
 
           {/* Instagram Business accounts (discovery + readiness) */}
           <div className="border-line bg-card rounded-2xl border p-5">
-            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Sparkles" size={18} className="text-brand" /> Instagram</p>
+            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Camera" size={18} className="text-brand" /> Instagram</p>
             {instagram.length > 0 ? (
               <div className="mt-3 grid gap-2">
                 {instagram.map((ig) => (
@@ -517,7 +517,7 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
 
           {/* Analytics readiness — no fake metrics */}
           <div className="border-line bg-card rounded-2xl border p-5">
-            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Sparkles" size={18} className="text-brand" /> אנליטיקה</p>
+            <p className="text-ink flex items-center gap-2 font-black"><Icon name="BarChart3" size={18} className="text-brand" /> אנליטיקה</p>
             <p className="text-muted mt-2 text-sm">
               {readiness.analyticsReady ? "read_insights פעיל — נתוני ביצועים יוצגו בשלב הבא." : "אנליטיקה תופעל לאחר אישור read_insights"}
             </p>
@@ -543,7 +543,7 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
       {/* Manual-mode explainer */}
       <div className="border-line bg-card mb-6 rounded-2xl border p-4">
         <div className="flex items-start gap-3">
-          <Icon name="Sparkles" size={20} className="text-brand mt-0.5 shrink-0" />
+          <Icon name="Info" size={20} className="text-brand mt-0.5 shrink-0" />
           <div className="text-sm">
             <p className="text-ink font-bold">איך זה עובד כרגע</p>
             <p className="text-muted mt-1 leading-relaxed">

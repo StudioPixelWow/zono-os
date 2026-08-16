@@ -46,7 +46,7 @@ export function ActivityWidgets({ board }: { board: ActivityBoard }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {/* Recent activity */}
       <div className={cardCls}>
-        <Header icon="Sparkles" title="פעילות אחרונה" tone="bg-brand-soft text-brand" />
+        <Header icon="Activity" title="פעילות אחרונה" tone="bg-brand-soft text-brand" />
         {board.recent.length === 0 ? (
           <p className="text-muted py-3 text-center text-xs">אין פעילות עדיין</p>
         ) : (

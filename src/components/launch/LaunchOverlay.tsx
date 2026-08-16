@@ -44,7 +44,7 @@ export function LaunchOverlay() {
     <div dir="rtl">
       {beta && (
         <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500/90 to-orange-500/90 px-3 py-1.5 text-center text-[12px] font-bold text-white shadow">
-          <Icon name="Sparkles" size={14} /> מצב Beta — תכונות חדשות בבדיקה. נשמח למשוב שלך.
+          <Icon name="Info" size={14} /> מצב Beta — תכונות חדשות בבדיקה. נשמח למשוב שלך.
         </div>
       )}
 

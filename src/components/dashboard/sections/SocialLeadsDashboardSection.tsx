@@ -34,7 +34,7 @@ export async function SocialLeadsDashboardSection() {
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat icon="Flame" label="לידים חדשים" value={String(board.counts.new)} t="text-brand-strong" />
-        <Stat icon="Sparkles" label="כוונה גבוהה" value={String(highIntent)} t="text-success" />
+        <Stat icon="TrendingUp" label="כוונה גבוהה" value={String(highIntent)} t="text-success" />
         <Stat icon="Filter" label="לבדיקה" value={String(board.counts.reviewed)} t="text-warning" />
         <Stat icon="ArrowUpRight" label="הומרו" value={String(board.counts.converted)} t="text-success" />
       </div>

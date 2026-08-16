@@ -34,7 +34,7 @@ export async function AutomationDashboardSection() {
       )}
       {topOpp && (
         <div className="bg-brand-soft/40 text-brand-strong flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold">
-          <Icon name="Sparkles" size={15} />הזדמנות חדשה מאוטומציה: {topOpp.workflow_name}
+          <Icon name="Zap" size={15} />הזדמנות חדשה מאוטומציה: {topOpp.workflow_name}
         </div>
       )}
     </section>

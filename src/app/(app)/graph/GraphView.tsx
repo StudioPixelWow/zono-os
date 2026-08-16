@@ -13,7 +13,7 @@ const SIGNAL_LABEL: Record<string, string> = {
   agent_specialization: "התמחות סוכן", locality_opportunity: "הזדמנות אזורית", deal_acceleration: "האצת עסקה",
   referral_opportunity: "הזדמנות הפניה", cross_sell_opportunity: "מכירה צולבת",
 };
-const SIGNAL_ICON: Record<string, string> = { hidden_buyer_cluster: "Users", hidden_seller_cluster: "UserCheck", broker_dominance: "Shield", agent_specialization: "Sparkles", locality_opportunity: "MapPin", deal_acceleration: "TrendingUp" };
+const SIGNAL_ICON: Record<string, string> = { hidden_buyer_cluster: "Users", hidden_seller_cluster: "UserCheck", broker_dominance: "Shield", agent_specialization: "Award", locality_opportunity: "MapPin", deal_acceleration: "TrendingUp" };
 
 export function GraphView({ board }: { board: GraphBoard }) {
   const router = useRouter();
@@ -67,7 +67,7 @@ export function GraphView({ board }: { board: GraphBoard }) {
               <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {signals.slice(0, 16).map((s) => (
                   <li key={s.id} className="border-line flex items-start gap-2 rounded-xl border p-2.5">
-                    <span className="bg-brand-soft text-brand grid h-7 w-7 shrink-0 place-items-center rounded-lg"><Icon name={SIGNAL_ICON[s.signal_type] ?? "Sparkles"} size={14} /></span>
+                    <span className="bg-brand-soft text-brand grid h-7 w-7 shrink-0 place-items-center rounded-lg"><Icon name={SIGNAL_ICON[s.signal_type] ?? "Radar"} size={14} /></span>
                     <div className="min-w-0">
                       <p className="text-ink text-sm font-bold">{s.title}</p>
                       <p className="text-muted text-[11px]">{SIGNAL_LABEL[s.signal_type] ?? s.signal_type} · {s.description}</p>

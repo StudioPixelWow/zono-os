@@ -215,7 +215,7 @@ export function SellerDetailView({
                 {/* Pricing resistance / main objection (from seller memory) */}
                 {(s.price_sensitivity_score >= 60 || s.main_objection) && (
                   <div className="bg-card border-line rounded-[20px] border p-5">
-                    <div className="mb-3 flex items-center gap-2"><span className="bg-warning-soft text-warning grid h-8 w-8 place-items-center rounded-xl"><Icon name="TrendingUp" size={16} /></span><h3 className="text-ink text-sm font-extrabold">התנגדות מחיר / מו״מ</h3></div>
+                    <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">התנגדות מחיר / מו״מ</h3></div>
                     {s.price_sensitivity_score >= 60 && <p className="text-muted text-sm">רגישות מחיר גבוהה ({s.price_sensitivity_score}/100) — צפו להתנגדות בתמחור. שקלו הצגת נתוני שוק תומכים.</p>}
                     {s.main_objection && <p className="text-ink mt-1 text-sm"><span className="text-muted">התנגדות עיקרית: </span>{s.main_objection}</p>}
                   </div>
@@ -223,7 +223,7 @@ export function SellerDetailView({
 
                 {/* Open risks (evidence + why) */}
                 <div className="bg-card border-line rounded-[20px] border p-5">
-                  <div className="mb-3 flex items-center gap-2"><span className="bg-danger-soft text-danger grid h-8 w-8 place-items-center rounded-xl"><Icon name="AlertTriangle" size={16} /></span><h3 className="text-ink text-sm font-extrabold">סיכונים פעילים</h3></div>
+                  <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">סיכונים פעילים</h3></div>
                   {openRisks.length === 0 ? (
                     <p className="text-muted text-sm">אין סיכונים פעילים ✓</p>
                   ) : (
@@ -240,7 +240,7 @@ export function SellerDetailView({
 
                 {/* Overdue / broken commitments */}
                 <div className="bg-card border-line rounded-[20px] border p-5">
-                  <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Shield" size={16} /></span><h3 className="text-ink text-sm font-extrabold">התחייבויות שדורשות מעקב</h3></div>
+                  <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">התחייבויות שדורשות מעקב</h3></div>
                   {overdueCommitments.length === 0 ? (
                     <p className="text-muted text-sm">אין התחייבויות באיחור ✓</p>
                   ) : (
