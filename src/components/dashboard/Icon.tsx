@@ -111,10 +111,18 @@ import {
   Network,
   SlidersHorizontal,
   Inbox,
+  Zap,
+  Radar,
+  Workflow,
+  Info,
   type LucideIcon,
 } from "lucide-react";
 
 const registry: Record<string, LucideIcon> = {
+  Zap,
+  Radar,
+  Workflow,
+  Info,
   KeyRound,
   GitCompareArrows,
   CalendarClock,

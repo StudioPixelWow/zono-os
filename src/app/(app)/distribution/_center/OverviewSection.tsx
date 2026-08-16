@@ -139,7 +139,7 @@ export function OverviewSection({
         <Glass className="flex flex-col gap-3 p-5">
           <SectionHeading title="הזדמנויות AI" subtitle="איתותים חיים ממנוע ההפצה" icon="Sparkles" />
           {board.opportunities.length === 0 ? (
-            <EmptyState icon="Sparkles" title="אין כרגע איתותים" body="ZONO יציף כאן הזדמנויות הפצה ברגע שהמודיעין יזהה קהילות ROI גבוה, פערים גיאוגרפיים או נכסים חמים." />
+            <EmptyState icon="Radar" title="אין כרגע איתותים" body="ZONO יציף כאן הזדמנויות הפצה ברגע שהמודיעין יזהה קהילות ROI גבוה, פערים גיאוגרפיים או נכסים חמים." />
           ) : (
             <div className="flex flex-col gap-2">
               {board.opportunities.slice(0, 6).map((o) => (

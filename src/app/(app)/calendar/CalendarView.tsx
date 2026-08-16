@@ -44,7 +44,7 @@ const minsSinceStart = (d: Date) => (d.getHours() - START_HOUR) * 60 + d.getMinu
 const MEETING_TYPES = new Set(["meeting", "property_visit", "buyer_visit", "seller_meeting", "open_house"]);
 const TYPE_ICON: Record<string, string> = {
   meeting: "Calendar", property_visit: "MapPin", buyer_visit: "MapPin", seller_meeting: "Users",
-  task: "Check", mission: "Sparkles", phone_call: "Phone", whatsapp_followup: "MessageCircle",
+  task: "Check", mission: "Flag", phone_call: "Phone", whatsapp_followup: "MessageCircle",
   photo_day: "Camera", open_house: "Home", facebook_publish: "Megaphone", marketing_campaign: "Megaphone",
   document_deadline: "FileText", signature: "FileText", reminder: "Clock",
 };
@@ -211,7 +211,7 @@ function Hero({ plan, nextMeeting, intel }: { plan: DayPlan; nextMeeting: Calend
       </div>
       {nba && (
         <div className="relative mt-3 flex items-center gap-2.5 rounded-2xl bg-white/[0.06] px-3.5 py-2.5 ring-1 ring-white/10">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/30"><Icon name="Sparkles" size={15} /></span>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/30"><Icon name="CalendarClock" size={15} /></span>
           <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-black">{nba.title}</p><p className="truncate text-[11px] text-white/60">{nba.why}</p></div>
           {nba.href && <Link href={nba.href} className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">פתח</Link>}
         </div>

@@ -39,7 +39,7 @@ export function DistributionView({ board }: { board: DistributionBoard }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => setShowNew((v) => !v)} leadingIcon={<Icon name="Plus" size={15} />}>קהילה חדשה</Button>
-          <Button size="sm" variant="secondary" onClick={() => run(recomputeDistributionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>חשב מודיעין הפצה</Button>
+          <Button size="sm" variant="secondary" onClick={() => run(recomputeDistributionAction)} disabled={pending} leadingIcon={<Icon name="Share2" size={15} />}>חשב מודיעין הפצה</Button>
           <Button size="sm" onClick={() => run(generateDailyBatchAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={15} />}>הכן שולחן יומי</Button>
         </div>
       </div>

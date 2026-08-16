@@ -26,7 +26,7 @@ const REC_TONE: Record<Recommendation["type"], { wrap: string; icon: string; bar
   win: { wrap: "bg-success-soft text-success", icon: "BadgeCheck", bar: "border-success/40" },
   warn: { wrap: "bg-warning-soft text-warning", icon: "AlertTriangle", bar: "border-warning/40" },
   action: { wrap: "bg-brand-soft text-brand-strong", icon: "Target", bar: "border-brand/40" },
-  info: { wrap: "bg-line/60 text-muted", icon: "Sparkles", bar: "border-line" },
+  info: { wrap: "bg-line/60 text-muted", icon: "Info", bar: "border-line" },
 };
 
 function Caption({ text }: { text: string }) {
@@ -215,7 +215,7 @@ export function AnalyticsSection({
       </Panel>
 
       {/* 5 — Variation performance */}
-      <Panel title="ביצועי וריאציות" subtitle="עד 10 הוריאציות המובילות" icon="Sparkles">
+      <Panel title="ביצועי וריאציות" subtitle="עד 10 הוריאציות המובילות" icon="BarChart3">
         {!enough && <Caption text={NEEDS_DATA} />}
         {topVariations.length === 0 ? (
           <EmptyState icon="Sparkles" title="אין עדיין וריאציות מדורגות" body="לאחר שווריאציות AI ישמשו בפוסטים ויאספו תגובות — הן יופיעו כאן מדורגות." />

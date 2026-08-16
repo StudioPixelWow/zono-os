@@ -71,7 +71,7 @@ export function LeadCollectionSection({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="סך לידים" value={String(leads.length)} hint="מצטבר" icon="UserPlus" tone="brand" />
-        <StatTile label="חדשים" value={String(counts.new ?? 0)} hint="ממתינים לטיפול" icon="Sparkles" tone="warning" />
+        <StatTile label="חדשים" value={String(counts.new ?? 0)} hint="ממתינים לטיפול" icon="Inbox" tone="warning" />
         <StatTile label="מוסמכים" value={String(counts.qualified ?? 0)} hint="כוונת רכישה" icon="Target" tone="accent" />
         <StatTile label="הומרו" value={String(counts.converted ?? 0)} hint="עסקאות שנסגרו" icon="Handshake" tone="success" />
       </div>

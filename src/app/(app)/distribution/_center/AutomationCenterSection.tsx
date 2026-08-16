@@ -38,7 +38,7 @@ const PRIORITY_META: Record<string, { label: string; cls: string }> = {
 };
 
 function typeMeta(type: AutomationType) {
-  return TYPE_META[type] ?? { label: type, icon: "Sparkles" };
+  return TYPE_META[type] ?? { label: type, icon: "Zap" };
 }
 
 // ── Generated signal card ────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ export function AutomationCenterSection({
       <SectionHeading
         title="מרכז אוטומציה"
         subtitle="מנוע הכללים של ההפצה — התראות, תזכורות, משימות והמלצות מתוך הנתונים האמיתיים"
-        icon="Sparkles"
+        icon="Zap"
         action={
           <button
             type="button"
@@ -176,7 +176,7 @@ export function AutomationCenterSection({
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile label="אוטומציות פעילות" value={String(board.counts.active)} icon="Sparkles" tone="brand" />
+        <StatTile label="אוטומציות פעילות" value={String(board.counts.active)} icon="Zap" tone="brand" />
         <StatTile label="התראות" value={String(board.counts.alerts)} icon="AlertTriangle" tone="danger" />
         <StatTile label="משימות מעקב" value={String(board.counts.tasks)} icon="ListChecks" tone="warning" />
         <StatTile label="פרסום חוזר" value={String(board.counts.reposts)} icon="RefreshCw" tone="accent" />
@@ -186,7 +186,7 @@ export function AutomationCenterSection({
 
       {!board.enough && !hasAnything ? (
         <EmptyState
-          icon="Sparkles"
+          icon="Zap"
           title="עדיין אין מספיק נתונים להפעלת אוטומציות חכמות"
           body="פרסם פוסטים וייבא תגובות תחילה — לאחר מכן הפעל את בדיקת האוטומציות כדי לקבל התראות, תזכורות והמלצות מבוססות נתונים אמיתיים."
         />
@@ -194,9 +194,9 @@ export function AutomationCenterSection({
         <>
           {/* Active user automations */}
           <Glass className="flex flex-col gap-4 p-5">
-            <SectionHeading title="אוטומציות פעילות" subtitle="כללי אוטומציה שהפעלת" icon="Sparkles" />
+            <SectionHeading title="אוטומציות פעילות" subtitle="כללי אוטומציה שהפעלת" icon="Zap" />
             {board.activeAutomations.length === 0 ? (
-              <EmptyState icon="Sparkles" title="אין אוטומציות פעילות" body="הפעל אוטומציה מהרשימה המוצעת למטה כדי להתחיל." />
+              <EmptyState icon="Zap" title="אין אוטומציות פעילות" body="הפעל אוטומציה מהרשימה המוצעת למטה כדי להתחיל." />
             ) : (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {board.activeAutomations.map((a) => {
