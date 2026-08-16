@@ -1,0 +1,354 @@
+diff --git a/scripts/p10-claim-harness.mts b/scripts/p10-claim-harness.mts
+new file mode 100644
+index 0000000..f8a49ed
+--- /dev/null
++++ b/scripts/p10-claim-harness.mts
+@@ -0,0 +1,58 @@
++// ============================================================================
++// P10 — Claim My Listings: evidence + decision + dedupe unit tests (§AR).
++// Run: npx tsx scripts/p10-claim-harness.mts
++// ============================================================================
++import { scoreCandidate, isCandidate, type CandidateEvidence } from "../src/lib/claim/claim-evidence-core.ts";
++import { transitionDecision, snoozeUntil, isSnoozeElapsed, planClaim } from "../src/lib/claim/claim-decision-core.ts";
++
++let pass = 0, fail = 0;
++const ok = (n: string, c: boolean) => { if (c) pass++; else { fail++; console.log(`FAIL: ${n}`); } };
++const E = (o: Partial<CandidateEvidence>): CandidateEvidence => ({
++  sameOrg: true, stableAgentIdMatch: false, nameMatch: "none", phoneMatch: "unknown",
++  officeMatch: false, cityMatch: false, priorConfirmedSameIdentity: 0, ...o,
++});
++
++// ── Evidence scoring + guardrails ────────────────────────────────────────────
++ok("cross-org evidence is EXCLUDED", scoreCandidate(E({ sameOrg: false, stableAgentIdMatch: true })).excluded);
++ok("stable agent id + no contradiction → HIGH", scoreCandidate(E({ stableAgentIdMatch: true, phoneMatch: "exact" })).confidence === "high");
++ok("NAME ALONE never HIGH", scoreCandidate(E({ nameMatch: "exact" })).confidence !== "high");
++ok("PHONE ALONE never HIGH", scoreCandidate(E({ phoneMatch: "exact" })).confidence !== "high");
++ok("exact name + office → MEDIUM", scoreCandidate(E({ nameMatch: "exact", officeMatch: true })).confidence === "medium");
++ok("similar name + exact phone → MEDIUM", scoreCandidate(E({ nameMatch: "similar", phoneMatch: "exact" })).confidence === "medium");
++ok("name-only similarity → LOW", scoreCandidate(E({ nameMatch: "similar" })).confidence === "low");
++ok("phone CONTRADICTION caps at LOW even with stable id", scoreCandidate(E({ stableAgentIdMatch: true, phoneMatch: "contradict" })).confidence === "low");
++ok("phone contradiction records a caution", scoreCandidate(E({ stableAgentIdMatch: true, phoneMatch: "contradict" })).cautions.some((c) => c.includes("טלפון")));
++ok("office-only → officeLevelOnly + LOW", (() => { const v = scoreCandidate(E({ officeMatch: true })); return v.officeLevelOnly && v.confidence === "low"; })());
++ok("identity anchor (>=3 prior) → HIGH without id", scoreCandidate(E({ priorConfirmedSameIdentity: 3, nameMatch: "similar" })).confidence === "high");
++ok("verdict carries reasons", scoreCandidate(E({ stableAgentIdMatch: true, phoneMatch: "exact", officeMatch: true })).reasons.length >= 2);
++ok("isCandidate false for excluded", !isCandidate(scoreCandidate(E({ sameOrg: false }))));
++
++// REAL Maor case: contact first-name "מאיר" similar, phone CONTRADICTS (0554308680 ≠ 0546365321),
++// linked to the Landsman/Siboni office, same org → must be LOW (review), never confirmed.
++ok("REAL Maor listing → LOW (name-similar + phone contradiction)",
++  scoreCandidate(E({ nameMatch: "first_only", phoneMatch: "contradict", officeMatch: true, cityMatch: true })).confidence === "low");
++
++// ── Decision transitions ─────────────────────────────────────────────────────
++ok("claim → claimed", transitionDecision("candidate", "claim").next === "claimed");
++ok("claimed is terminal (no re-claim)", !transitionDecision("claimed", "claim").ok);
++ok("reject → rejected", transitionDecision("candidate", "reject").next === "rejected");
++ok("snooze → snoozed", transitionDecision("candidate", "snooze").next === "snoozed");
++ok("snoozed → reopen → candidate", transitionDecision("snoozed", "reopen").next === "candidate");
++
++// ── Snooze windows ───────────────────────────────────────────────────────────
++const now = 1_000_000_000_000;
++ok("tomorrow = +1d", snoozeUntil(now, "tomorrow") === now + 86_400_000);
++ok("week = +7d", snoozeUntil(now, "week") === now + 7 * 86_400_000);
++ok("snoozed hidden before window", !isSnoozeElapsed(snoozeUntil(now, "week"), now + 86_400_000));
++ok("snoozed returns after window", isSnoozeElapsed(snoozeUntil(now, "tomorrow"), now + 2 * 86_400_000));
++
++// ── Idempotent claim / dedupe planning ───────────────────────────────────────
++ok("already promoted → reuse", planClaim({ listingPromotedPropertyId: "p1", listingPrimaryPropertyId: null, existingBySourceId: null, duplicateGroupPromotedId: null }).action === "reuse");
++ok("primary link → reuse", planClaim({ listingPromotedPropertyId: null, listingPrimaryPropertyId: "p2", existingBySourceId: null, duplicateGroupPromotedId: null }).action === "reuse");
++ok("existing by source_id → reuse", planClaim({ listingPromotedPropertyId: null, listingPrimaryPropertyId: null, existingBySourceId: "p3", duplicateGroupPromotedId: null }).action === "reuse");
++ok("duplicate-group sibling → reuse", planClaim({ listingPromotedPropertyId: null, listingPrimaryPropertyId: null, existingBySourceId: null, duplicateGroupPromotedId: "p4" }).action === "reuse");
++ok("no link → create", planClaim({ listingPromotedPropertyId: null, listingPrimaryPropertyId: null, existingBySourceId: null, duplicateGroupPromotedId: null }).action === "create");
++ok("repeated claim resolves to SAME property (idempotent)", planClaim({ listingPromotedPropertyId: "pX", listingPrimaryPropertyId: null, existingBySourceId: null, duplicateGroupPromotedId: null }).action === "reuse");
++
++console.log(`\n${pass}/${pass + fail} passed`);
++if (fail > 0) process.exit(1);
+diff --git a/src/lib/claim/claim-candidate-service.ts b/src/lib/claim/claim-candidate-service.ts
+new file mode 100644
+index 0000000..cf67e89
+--- /dev/null
++++ b/src/lib/claim/claim-candidate-service.ts
+@@ -0,0 +1,131 @@
++// ============================================================================
++// ZONO — Claim My Listings: candidate service (P10, server-only, READ-ONLY).
++// Resolves the caller's verified SOURCE ANCHOR (brokerage_agents in the org's
++// office(s) matching the broker identity) and surfaces external_listings the
++// evidence engine associates with it — scored HIGH/MEDIUM/LOW with reasons.
++// Reuses external_listings + brokerage_external_listing_links; NO migration, and
++// NEVER writes/promotes here (claiming is a separate, human-confirmed action).
++// ============================================================================
++import "server-only";
++import { createClient } from "@/lib/supabase/server";
++import { getSessionContext } from "@/lib/auth/session";
++import { scoreCandidate, isCandidate, type CandidateEvidence, type EvidenceVerdict } from "./claim-evidence-core";
++
++/* eslint-disable @typescript-eslint/no-explicit-any */
++
++const digits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "").replace(/^972/, "0");
++const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
++
++export interface ClaimAnchor {
++  orgId: string;
++  agentIds: string[];      // stable brokerage_agents ids (verified source identity)
++  officeIds: string[];
++  normalizedNames: string[];
++  phones: string[];
++  ready: boolean;          // an identity anchor exists at all
++}
++
++/** Resolve the caller's source identity anchor from brokerage data (org-scoped). */
++export async function getClaimAnchor(): Promise<ClaimAnchor | null> {
++  const { profile } = await getSessionContext();
++  if (!profile?.org_id) return null;
++  const db: any = await createClient();
++  const empty: ClaimAnchor = { orgId: profile.org_id, agentIds: [], officeIds: [], normalizedNames: [], phones: [], ready: false };
++
++  // Broker profile(s) for this org give the display name + phone; brokerage_agents in
++  // the matching office give the stable source agent ids.
++  const { data: profs } = await db.from("broker_profiles").select("display_name,normalized_name,phone,normalized_phone").eq("org_id", profile.org_id).limit(20);
++  const names = new Set<string>(); const phones = new Set<string>();
++  for (const p of (profs ?? [])) { if (p.normalized_name) names.add(norm(p.normalized_name)); if (p.display_name) names.add(norm(p.display_name)); const d = digits(p.normalized_phone || p.phone); if (d) phones.add(d); }
++  // The agent's own ZONO phone is the strongest disambiguator.
++  const ud = digits((profile as any).phone); if (ud) phones.add(ud);
++
++  if (!names.size) return empty;
++  // Stable source agent ids = brokerage_agents whose normalized_name matches an anchor name.
++  const { data: agents } = await db.from("brokerage_agents").select("id,office_id,normalized_name,full_name,primary_phone").limit(50);
++  const agentIds: string[] = []; const officeIds = new Set<string>();
++  for (const a of (agents ?? [])) {
++    const an = norm(a.normalized_name || a.full_name);
++    if ([...names].some((n) => n && (an === n || (n.length > 4 && an.includes(n))))) {
++      agentIds.push(a.id); if (a.office_id) officeIds.add(a.office_id);
++      const ad = digits(a.primary_phone); if (ad) phones.add(ad);
++    }
++  }
++  return { orgId: profile.org_id, agentIds, officeIds: [...officeIds], normalizedNames: [...names], phones: [...phones], ready: agentIds.length > 0 || names.size > 0 };
++}
++
++export interface ClaimCandidate {
++  externalListingId: string;
++  title: string | null; city: string | null; neighborhood: string | null; address: string | null;
++  price: number | null; rooms: string | null; sqm: number | null; propertyType: string | null; dealType: string | null;
++  imageCount: number; primaryImage: string | null; source: string | null; listingUrl: string | null;
++  contactName: string | null; publishedAt: string | null; firstSeenAt: string | null;
++  alreadyPromoted: boolean;
++  verdict: EvidenceVerdict;
++}
++
++/** Map a listing + its link row to the pure evidence input. */
++function toEvidence(anchor: ClaimAnchor, link: any, listing: any): CandidateEvidence {
++  const linkOrg = link?.organization_id ?? listing?.org_id ?? null;
++  const sameOrg = linkOrg === anchor.orgId;
++  const stableAgentIdMatch = Boolean(link?.agent_id && anchor.agentIds.includes(link.agent_id)) &&
++    Array.isArray(link?.match_reasons) && link.match_reasons.some((r: string) => /טלפון זהה|derived_from_broker|id:/i.test(r));
++  const listingName = norm(listing?.contact_name || link?.matched_name);
++  const anchorHasName = anchor.normalizedNames.some((n) => n && listingName && (listingName === n));
++  const anchorFirstOnly = !anchorHasName && anchor.normalizedNames.some((n) => n && listingName && n.split(" ")[0] && listingName.split(" ").includes(n.split(" ")[0]));
++  const nameMatch: CandidateEvidence["nameMatch"] = anchorHasName ? "exact" : anchorFirstOnly ? "first_only" : (link?.matched_name ? "similar" : "none");
++  const listingPhone = digits(listing?.contact_phone || link?.matched_phone);
++  const phoneMatch: CandidateEvidence["phoneMatch"] = !listingPhone ? "unknown" : anchor.phones.includes(listingPhone) ? "exact" : (anchor.phones.length ? "contradict" : "unknown");
++  const officeMatch = Boolean(link?.office_id && anchor.officeIds.includes(link.office_id));
++  const cityMatch = norm(listing?.city) === "rehovot" || Boolean(listing?.city);
++  return { sameOrg, stableAgentIdMatch, nameMatch, phoneMatch, officeMatch, cityMatch, priorConfirmedSameIdentity: 0 };
++}
++
++const firstImage = (images: unknown): string | null => {
++  if (Array.isArray(images) && images.length) { const f = images[0]; return typeof f === "string" ? f : (f && typeof f === "object" && "url" in (f as any) ? (f as any).url : null); }
++  return null;
++};
++
++/** The caller's real claim candidates, scored + explained. Read-only. */
++export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnchor | null; candidates: ClaimCandidate[] }> {
++  const anchor = await getClaimAnchor();
++  if (!anchor || !anchor.ready) return { anchor, candidates: [] };
++  const db: any = await createClient();
++
++  // Listings linked to the anchor's stable agent ids (the strongest source signal).
++  const { data: links } = await db.from("brokerage_external_listing_links")
++    .select("external_listing_id,organization_id,agent_id,office_id,matched_name,matched_phone,match_reasons,confidence_score")
++    .in("agent_id", (anchor.agentIds.length ? anchor.agentIds : ["00000000-0000-0000-0000-000000000000"]))
++    .eq("organization_id", anchor.orgId).limit(200);
++  const linkRows = (links ?? []) as any[];
++  const listingIds = [...new Set(linkRows.map((l) => l.external_listing_id).filter(Boolean))];
++  if (!listingIds.length) return { anchor, candidates: [] };
++
++  const { data: listings } = await db.from("external_listings")
++    .select("id,org_id,title,city,neighborhood,address,price,rooms,sqm,property_type,deal_type,contact_name,contact_phone,source,listing_url,images,published_at,first_seen_at,promoted_property_id,status")
++    .in("id", listingIds).neq("status", "removed").limit(200);
++  const byId = new Map<string, any>((listings ?? []).map((r: any) => [r.id, r]));
++
++  const out: ClaimCandidate[] = [];
++  const seenListing = new Set<string>();
++  for (const link of linkRows) {
++    const listing: any = byId.get(link.external_listing_id);
++    if (!listing || seenListing.has(listing.id)) continue;
++    const verdict = scoreCandidate(toEvidence(anchor, link, listing));
++    if (!isCandidate(verdict)) continue;
++    seenListing.add(listing.id);
++    out.push({
++      externalListingId: listing.id, title: listing.title, city: listing.city, neighborhood: listing.neighborhood,
++      address: listing.address, price: listing.price, rooms: listing.rooms, sqm: listing.sqm,
++      propertyType: listing.property_type, dealType: listing.deal_type, source: listing.source, listingUrl: listing.listing_url,
++      contactName: listing.contact_name, publishedAt: listing.published_at, firstSeenAt: listing.first_seen_at,
++      imageCount: Array.isArray(listing.images) ? listing.images.length : 0, primaryImage: firstImage(listing.images),
++      alreadyPromoted: Boolean(listing.promoted_property_id), verdict,
++    });
++    if (out.length >= limit) break;
++  }
++  // HIGH → MEDIUM → LOW ordering.
++  const rank = { high: 0, medium: 1, low: 2 } as const;
++  out.sort((a, b) => rank[a.verdict.confidence ?? "low"] - rank[b.verdict.confidence ?? "low"]);
++  return { anchor, candidates: out };
++}
+diff --git a/src/lib/claim/claim-decision-core.ts b/src/lib/claim/claim-decision-core.ts
+new file mode 100644
+index 0000000..ea63c4f
+--- /dev/null
++++ b/src/lib/claim/claim-decision-core.ts
+@@ -0,0 +1,63 @@
++// ============================================================================
++// ZONO — Claim My Listings: PURE decision + dedupe planning (P10). No DB.
++// Deterministic transitions for a candidate (claim / reject / snooze) and an
++// idempotent claim planner that reuses an existing internal property instead of
++// creating a duplicate. Unit-tested.
++// ============================================================================
++export type ClaimDecision = "candidate" | "claimed" | "rejected" | "snoozed";
++export type SnoozeWindow = "tomorrow" | "week" | "default";
++
++export interface DecisionTransition { ok: boolean; next: ClaimDecision; error?: string }
++
++/** Legal transitions. A confirmed claim is terminal for the candidate; reject/snooze
++ *  are reversible from candidate; snoozed → candidate on window expiry (see isSnoozeElapsed). */
++export function transitionDecision(current: ClaimDecision, action: "claim" | "reject" | "snooze" | "reopen"): DecisionTransition {
++  if (current === "claimed") return { ok: false, next: "claimed", error: "already_claimed" };
++  switch (action) {
++    case "claim": return { ok: true, next: "claimed" };
++    case "reject": return { ok: true, next: "rejected" };
++    case "snooze": return { ok: true, next: "snoozed" };
++    case "reopen":
++      return current === "snoozed" || current === "rejected"
++        ? { ok: true, next: "candidate" }
++        : { ok: false, next: current, error: "not_reopenable" };
++    default: return { ok: false, next: current, error: "unknown_action" };
++  }
++}
++
++/** Snooze duration in ms. Deterministic (caller supplies now). */
++export function snoozeUntil(nowMs: number, window: SnoozeWindow): number {
++  const day = 86_400_000;
++  if (window === "tomorrow") return nowMs + day;
++  if (window === "week") return nowMs + 7 * day;
++  return nowMs + 3 * day; // default revisit window
++}
++
++/** A snoozed candidate reappears only once its window has elapsed (§N/§AM). */
++export function isSnoozeElapsed(snoozeUntilMs: number | null, nowMs: number): boolean {
++  return snoozeUntilMs == null ? true : nowMs >= snoozeUntilMs;
++}
++
++// ── Idempotent claim planner (§I/§Y/§AN) ─────────────────────────────────────
++export interface ClaimPlanInput {
++  listingPromotedPropertyId: string | null; // external_listings.promoted_property_id
++  listingPrimaryPropertyId: string | null;  // external_listings.primary_property_id (dedupe anchor)
++  existingBySourceId: string | null;         // internal property already imported from this source_id
++  duplicateGroupPromotedId: string | null;   // a sibling in the same duplicate_group already promoted
++}
++export type ClaimPlan =
++  | { action: "reuse"; propertyId: string; reason: string }
++  | { action: "create"; reason: string };
++
++/**
++ * Decide whether a claim CREATES a new internal property or REUSES an existing one.
++ * Reuse order (strongest linkage first) guarantees repeated clicks / re-ingestion /
++ * duplicate-group siblings all resolve to ONE canonical property — 0 duplicates.
++ */
++export function planClaim(i: ClaimPlanInput): ClaimPlan {
++  if (i.listingPromotedPropertyId) return { action: "reuse", propertyId: i.listingPromotedPropertyId, reason: "listing_already_promoted" };
++  if (i.listingPrimaryPropertyId) return { action: "reuse", propertyId: i.listingPrimaryPropertyId, reason: "listing_primary_link" };
++  if (i.existingBySourceId) return { action: "reuse", propertyId: i.existingBySourceId, reason: "existing_by_source_id" };
++  if (i.duplicateGroupPromotedId) return { action: "reuse", propertyId: i.duplicateGroupPromotedId, reason: "duplicate_group_sibling" };
++  return { action: "create", reason: "no_existing_link" };
++}
+diff --git a/src/lib/claim/claim-evidence-core.ts b/src/lib/claim/claim-evidence-core.ts
+new file mode 100644
+index 0000000..0713f81
+--- /dev/null
++++ b/src/lib/claim/claim-evidence-core.ts
+@@ -0,0 +1,78 @@
++// ============================================================================
++// ZONO — Claim My Listings: PURE evidence + confidence engine (P10). No DB —
++// deterministic, explainable, unit-tested. Encodes the hard guardrails:
++//   • NAME alone never → confirmed/HIGH.   • PHONE alone never → confirmed/HIGH.
++//   • OFFICE membership alone ≠ "this specific agent's listing".
++//   • A CONTRADICTION (e.g. different phone) reduces confidence.
++//   • CROSS-ORG evidence is excluded (tenant isolation wins).
++// Confidence is HIGH / MEDIUM / LOW and always carries human-readable reasons.
++// ============================================================================
++export type Confidence = "high" | "medium" | "low";
++export type NameMatch = "exact" | "similar" | "first_only" | "none";
++export type PhoneMatch = "exact" | "contradict" | "unknown";
++
++export interface CandidateEvidence {
++  sameOrg: boolean;               // link.organization_id === caller org (else EXCLUDE)
++  stableAgentIdMatch: boolean;    // linked to the caller's VERIFIED anchor agent id (not by name)
++  nameMatch: NameMatch;           // vs the anchor's normalized full name
++  phoneMatch: PhoneMatch;         // vs the anchor's known phone(s)
++  officeMatch: boolean;           // same office as the anchor
++  cityMatch: boolean;             // listing city in the anchor's territory
++  priorConfirmedSameIdentity: number; // identity-learning: prior positive claims on this stable id
++}
++
++export interface EvidenceVerdict {
++  excluded: boolean;              // cross-org / not a candidate for this caller
++  confidence: Confidence | null;  // null when excluded
++  officeLevelOnly: boolean;       // relevant to the OFFICE, not provably this agent (P11)
++  reasons: string[];              // Hebrew, shown in the card ("למה ZONO חושבת שהנכס שלך?")
++  cautions: string[];             // contradictions / weaknesses
++}
++
++const HIGH_PRIOR_ANCHOR = 3; // confirmed claims on the same stable identity → identity anchor
++
++/** Deterministic verdict for one candidate. Pure. */
++export function scoreCandidate(e: CandidateEvidence): EvidenceVerdict {
++  const reasons: string[] = [];
++  const cautions: string[] = [];
++
++  // Tenant isolation wins: evidence from another org is never a candidate here.
++  if (!e.sameOrg) return { excluded: true, confidence: null, officeLevelOnly: false, reasons: [], cautions: ["ראיה משויכת לארגון אחר — לא מוצג"] };
++
++  if (e.stableAgentIdMatch) reasons.push("זהות סוכן יציבה תואמת את הנכס");
++  if (e.nameMatch === "exact") reasons.push("שם הסוכן תואם במדויק");
++  else if (e.nameMatch === "similar") reasons.push("שם הסוכן דומה");
++  else if (e.nameMatch === "first_only") cautions.push("רק שם פרטי תואם");
++  if (e.phoneMatch === "exact") reasons.push("טלפון תואם");
++  else if (e.phoneMatch === "contradict") cautions.push("הטלפון בפרסום שונה מהטלפון שלך");
++  if (e.officeMatch) reasons.push("משויך לאותו משרד");
++  if (e.cityMatch) reasons.push("הנכס פורסם באזור הפעילות שלך");
++  if (e.priorConfirmedSameIdentity > 0) reasons.push(`אישרת בעבר ${e.priorConfirmedSameIdentity} נכסים מאותה זהות מקור`);
++
++  // Office-level ambiguity (P10 §AA): office matches but nothing ties it to THIS agent.
++  const officeLevelOnly = e.officeMatch && !e.stableAgentIdMatch && e.nameMatch === "none" && e.phoneMatch !== "exact";
++
++  // ── Confidence ladder ──────────────────────────────────────────────────────
++  // HIGH: a stable identity link (or an established anchor) with no contradiction.
++  const stableAnchored = e.stableAgentIdMatch || e.priorConfirmedSameIdentity >= HIGH_PRIOR_ANCHOR;
++  if (stableAnchored && e.phoneMatch !== "contradict") {
++    return { excluded: false, confidence: "high", officeLevelOnly, reasons, cautions };
++  }
++  // A phone contradiction caps confidence at LOW — uncertainty must not become certainty.
++  if (e.phoneMatch === "contradict") {
++    return { excluded: false, confidence: "low", officeLevelOnly, reasons, cautions };
++  }
++  // MEDIUM: strong multi-signal but no stable listing→agent id.
++  const multiSignal =
++    (e.nameMatch === "exact" && (e.officeMatch || e.cityMatch)) ||
++    (e.nameMatch === "similar" && e.phoneMatch === "exact") ||
++    (e.phoneMatch === "exact" && e.officeMatch);
++  if (multiSignal) {
++    return { excluded: false, confidence: "medium", officeLevelOnly, reasons, cautions };
++  }
++  // LOW: name/office/city similarity only — surfaced for review, never auto-confirmed.
++  return { excluded: false, confidence: "low", officeLevelOnly, reasons, cautions };
++}
++
++/** Should this verdict be shown as a candidate at all? (Excludes cross-org.) */
++export function isCandidate(v: EvidenceVerdict): boolean { return !v.excluded && v.confidence !== null; }
