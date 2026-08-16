@@ -18,6 +18,8 @@ import {
 } from "./knowledge-repository";
 import { syncZIKnowledgeBase, type KnowledgeSyncResult } from "./knowledge-sync";
 import { runZIDiagnostics } from "./diagnostics";
+import { classifySupportIntentDeterministic, shouldEscalate } from "./support-intent";
+import { openSupportTicketFromZi } from "./support-bridge";
 import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
 import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
 import type { FeedbackRating, KnowledgeArticle, KnowledgeSourceRef } from "./knowledge-types";
@@ -106,6 +108,38 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
     const sources: KnowledgeSourceRef[] = ragSources(hits);
     const followups = ragFollowups(hits);
 
+    // ── ZI-CS (P1 + P6): classify the support intent, and auto-open a ticket with
+    // the full transcript + context attached when escalation is warranted. Wrapped
+    // so support classification/escalation can NEVER break the answer. ──
+    let support: ZiAskResult["support"] | undefined;
+    try {
+      const classification = classifySupportIntentDeterministic(question, { route: ctx.route, moduleId: ctx.moduleId });
+      let ticketId: string | null = null;
+      let escalated = false;
+      if (shouldEscalate(classification, { knowledgeFound: hits.length > 0 })) {
+        const transcript = [
+          ...history.map((h) => ({ role: h.role, content: h.content })),
+          { role: "user" as const, content: question },
+          { role: "assistant" as const, content: answer.content },
+        ];
+        const res = await openSupportTicketFromZi({
+          conversationId, classification, question, transcript, summary: null,
+          context: { route: ctx.route, moduleLabel: ctx.moduleLabel, roleLabel: ctx.roleLabel, plan: ctx.plan },
+        });
+        if (res.ok && res.ticketId) {
+          ticketId = res.ticketId;
+          escalated = true;
+          if (!res.existing) {
+            answer.content += "\n\n---\nלא הצלחתי לפתור את זה בוודאות, אז פתחתי עבורך פנייה לצוות ZONO וצירפתי את כל פרטי התקלה והשיחה שלנו. אין צורך להסביר הכול מחדש — הצוות יחזור אליך כאן.";
+          }
+        }
+      }
+      support = {
+        lane: classification.lane, category: classification.category, severity: classification.severity,
+        requiresHuman: classification.requiresHuman, escalated, ticketId,
+      };
+    } catch { /* best-effort; the answer stands regardless of classification/escalation */ }
+
     // Persist the assistant's answer.
     const assistantMsg = await appendMessageRow({
       conversationId, role: "assistant", content: answer.content, source: answer.source, route: ctx.route, moduleId: ctx.moduleId,
@@ -117,7 +151,7 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
       ok: true,
       data: {
         conversationId, conversationTitle, question: userMsg, answer: assistantMsg,
-        source: answer.source, model: answer.model, sources, followups,
+        source: answer.source, model: answer.model, sources, followups, support,
       },
     };
   } catch (e) {

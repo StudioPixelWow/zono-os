@@ -91,7 +91,10 @@ export function classifySupportIntentDeterministic(
   const signals: string[] = [];
 
   // Score every category by matched-signal count (specificity-weighted).
-  let best: SupportCategory = "OTHER";
+  // Declared via assertion (not a bare "OTHER") so TS keeps the WIDE union type —
+  // otherwise it narrows `best` to the literal "OTHER" (it ignores the assignment
+  // inside the forEach closure) and every `best === "…"` becomes a no-overlap error.
+  let best = "OTHER" as SupportCategory;
   let bestScore = 0;
   (Object.keys(CATEGORY_SIGNALS) as SupportCategory[]).forEach((cat) => {
     const table = CATEGORY_SIGNALS[cat];
@@ -111,18 +114,23 @@ export function classifySupportIntentDeterministic(
   const humanReq = hits(text, HUMAN_SIGNALS).length > 0;
   const actionReq = hits(text, ACTION_SIGNALS).length > 0;
 
+  // The winning category as the WIDE union type. `best` is narrowed by TS to the
+  // "OTHER" literal (it can't see the assignment inside the forEach closure), so
+  // comparing it to other members would be a "no overlap" type error — re-widen.
+  const winner: SupportCategory = best;
+
   // Lane: an explicit human request or a "something is broken" phrasing is
   // SUPPORT; a recommendation/analysis ask is PRODUCT; otherwise infer from the
   // winning category (entity/how-to on a real screen leans SUPPORT).
   let lane: ZiLane = "SUPPORT";
   if (productLane && !actionReq && !humanReq) lane = "PRODUCT";
-  if (best === "AI_FEATURE" && !actionReq) lane = "PRODUCT";
+  if (winner === "AI_FEATURE" && !actionReq) lane = "PRODUCT";
 
   // Severity.
   let severity: SupportSeverity = "NORMAL";
-  if (best === "SECURITY") severity = "CRITICAL";
-  else if (best === "BILLING" || best === "AUTHENTICATION") severity = "HIGH";
-  else if (actionReq && (best === "TECHNICAL_ERROR" || best === "BUG" || best === "SYNC" || best === "INTEGRATION")) severity = "HIGH";
+  if (winner === "SECURITY") severity = "CRITICAL";
+  else if (winner === "BILLING" || winner === "AUTHENTICATION") severity = "HIGH";
+  else if (actionReq && (winner === "TECHNICAL_ERROR" || winner === "BUG" || winner === "SYNC" || winner === "INTEGRATION")) severity = "HIGH";
   else if (!actionReq && lane === "PRODUCT") severity = "LOW";
 
   // Confidence: from how decisively a category won (margin proxy).
@@ -130,7 +138,7 @@ export function classifySupportIntentDeterministic(
 
   return {
     lane,
-    category: bestScore === 0 ? "OTHER" : best,
+    category: bestScore === 0 ? "OTHER" : winner,
     severity,
     confidence: Number(confidence.toFixed(2)),
     requiresHuman: humanReq || severity === "CRITICAL",

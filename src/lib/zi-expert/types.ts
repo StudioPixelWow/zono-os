@@ -95,6 +95,15 @@ export interface ZiAskResult {
   sources?: { id: string; slug: string; title: string; category: string; route: string | null }[];
   /** Page-aware suggested follow-up questions. */
   followups?: string[];
+  /** ZI-CS: support classification of this turn + escalation outcome (P1/P6). */
+  support?: {
+    lane: "SUPPORT" | "PRODUCT";
+    category: string;
+    severity: "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
+    requiresHuman: boolean;
+    escalated: boolean;         // a support ticket was opened for this conversation
+    ticketId?: string | null;
+  };
 }
 
 // ── Page-aware starter suggestions ───────────────────────────────────────────
