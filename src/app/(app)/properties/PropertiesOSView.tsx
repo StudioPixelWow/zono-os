@@ -13,6 +13,7 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
+import { IconSurface, type Accent } from "@/components/ui/action-surfaces";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Reveal, RevealGroup, RevealItem } from "@/components/dashboard/motion";
 import {
@@ -111,22 +112,31 @@ function PropertiesHero({ agentName }: { agentName: string }) {
 
 interface Kpi { label: string; value: string; icon: string; tone: string; delta?: string; deltaUp?: boolean; highlight?: boolean }
 
+const PKPI_ACCENT: Record<string, Accent> = {
+  Building: "brand", Building2: "brand", Home: "brand", Layers: "brand",
+  Banknote: "success", Coins: "success", TrendingUp: "success", Handshake: "success",
+  Users: "info", UserPlus: "info", Eye: "info", Clock: "warn", Flame: "warn", AlertTriangle: "danger",
+};
+function pKpiAccent(icon: string): Accent { return PKPI_ACCENT[icon] ?? "brand"; }
+
+// Number-first premium KPI cards: the value leads at 3xl; the icon earns a real
+// IconSurface (or a bold on-gradient chip for the highlight card) — no tiny box.
 function PropertyKpiCards({ kpis }: { kpis: Kpi[] }) {
   return (
     <RevealGroup className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {kpis.map((k) => (
         <RevealItem key={k.label}>
           <div className={cn(
-            "flex h-full flex-col gap-2 rounded-[22px] border p-4 shadow-[var(--shadow-card)]",
+            "relative flex h-full flex-col gap-1.5 rounded-[22px] border p-4 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-lg",
             k.highlight ? "zono-gradient-glow border-transparent text-white" : "bg-card border-line",
           )}>
-            <div className="flex items-center justify-between">
-              <span className={cn("text-xs font-bold", k.highlight ? "text-white/80" : "text-muted")}>{k.label}</span>
-              <span className={cn("grid h-8 w-8 place-items-center rounded-xl", k.highlight ? "bg-white/15 text-white" : k.tone)}>
-                <Icon name={k.icon} size={16} />
-              </span>
-            </div>
-            <span className={cn("text-2xl font-black sm:text-[28px]", k.highlight ? "text-white" : "text-ink")}>{k.value}</span>
+            <span className="absolute left-4 top-4">
+              {k.highlight
+                ? <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/15 text-white"><Icon name={k.icon} size={24} strokeWidth={2.1} /></span>
+                : <IconSurface name={k.icon} tier="m" accent={pKpiAccent(k.icon)} variant="soft" />}
+            </span>
+            <span className={cn("text-3xl font-black leading-none tracking-tight sm:text-[34px]", k.highlight ? "text-white" : "text-ink")}>{k.value}</span>
+            <span className={cn("text-xs font-bold", k.highlight ? "text-white/80" : "text-muted")}>{k.label}</span>
             {k.delta && (
               <span className={cn("inline-flex items-center gap-1 text-xs font-bold", k.highlight ? "text-white/85" : k.deltaUp ? "text-success" : "text-danger")}>
                 <Icon name={k.deltaUp ? "TrendingUp" : "TrendingDown"} size={13} />{k.delta}

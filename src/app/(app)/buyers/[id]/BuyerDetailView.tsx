@@ -416,7 +416,7 @@ function BuyerMatchesTab({ matches }: { matches: BuyerPropertyMatch[] }) {
               {m.reason && <p className="text-muted mt-2 text-xs"><span className="text-ink font-semibold">סיבת ההתאמה: </span>{m.reason}</p>}
               {m.blocker && <p className="text-danger mt-1 text-xs"><span className="font-semibold">חסם עיקרי: </span>{m.blocker}</p>}
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Link href={`/matches/${m.matchId}`}><Button variant="secondary" size="sm" leadingIcon={<Icon name="Sparkles" size={14} />}>פתח התאמה מלאה</Button></Link>
+                <Link href={`/matches/${m.matchId}`}><Button variant="secondary" size="sm" leadingIcon={<Icon name="GitCompareArrows" size={14} />}>פתח התאמה מלאה</Button></Link>
                 <Link href={`/properties/${m.propertyId}`}><Button variant="ghost" size="sm" leadingIcon={<Icon name="Building2" size={14} />}>פתח נכס</Button></Link>
               </div>
             </li>

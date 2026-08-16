@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/dashboard/Icon";
+import { IconSurface, type Accent } from "@/components/ui/action-surfaces";
 import { buyerBudgetLine, type BuyerRow } from "@/lib/buyers/labels";
 import type { BuyerBoard } from "@/lib/buyers/repository";
 
 type Tone = "brand" | "danger" | "warning" | "success";
+const TONE_ACCENT: Record<Tone, Accent> = { brand: "brand", danger: "danger", warning: "warn", success: "success" };
 
 const TONE: Record<Tone, { icon: string; ring: string; count: string }> = {
   brand: { icon: "bg-brand-soft text-brand", ring: "border-brand-light", count: "text-brand-strong" },
@@ -38,9 +39,7 @@ function Widget({
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={cn("grid h-9 w-9 place-items-center rounded-xl", t.icon)}>
-            <Icon name={icon} size={18} />
-          </span>
+          <IconSurface name={icon} tier="s" accent={TONE_ACCENT[tone]} variant="soft" />
           <p className="text-ink text-sm font-extrabold">{title}</p>
         </div>
         <span className={cn("text-2xl font-black", t.count)}>{items.length}</span>
@@ -77,7 +76,7 @@ export function BuyerBoardWidgets({ board }: { board: BuyerBoard }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Widget
         tone="brand"
-        icon="Sparkles"
+        icon="UserPlus"
         title="קונים חדשים"
         empty="אין קונים חדשים השבוע"
         items={board.newBuyers}

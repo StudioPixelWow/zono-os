@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
+import { IconSurface } from "@/components/ui/action-surfaces";
 import { Button } from "@/components/ui/Button";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { useActionRunner } from "@/components/ui/useActionRunner";
@@ -54,7 +55,7 @@ export function DealsView({ board }: { board: DealsBoard }) {
           {/* P9.0C: "בנה עסקאות" recomputes Deal-Twins from active matches — it
               no-ops for a fresh office (no matches yet). Show it only when deals
               already exist; a fresh office gets a real create CTA in the empty state. */}
-          {!empty && <Button onClick={build} loading={runner.busyId === "build"} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{runner.busyId === "build" ? "בונה…" : "בנה עסקאות"}</Button>}
+          {!empty && <Button onClick={build} loading={runner.busyId === "build"} disabled={pending} leadingIcon={<Icon name="Handshake" size={16} />}>{runner.busyId === "build" ? "בונה…" : "בנה עסקאות"}</Button>}
         </div>
         {!empty && (
           <div className="grid grid-cols-1 gap-px bg-[color:var(--line)] sm:grid-cols-3">
@@ -299,7 +300,7 @@ function DealCard({ d, pending, run }: { d: DealRow; pending: boolean; run: (fn:
 function Panel({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
   return (
     <div className="bg-card border-line rounded-[20px] border p-4 sm:p-5">
-      <div className="mb-3 flex items-center gap-2">{icon && <span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-lg"><Icon name={icon} size={15} /></span>}<p className="text-ink text-sm font-extrabold">{title}</p></div>
+      <div className="mb-3 flex items-center gap-2">{icon && <IconSurface name={icon} tier="s" accent="success" variant="soft" />}<p className="text-ink text-sm font-extrabold">{title}</p></div>
       {children}
     </div>
   );

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/dashboard/Icon";
+import { IconSurface, type Accent } from "@/components/ui/action-surfaces";
 import type { SellerBoard, SellerBoardItem } from "@/lib/seller-intelligence/service";
 
 type Tone = "danger" | "warning" | "brand" | "success";
+const TONE_ACCENT: Record<Tone, Accent> = { danger: "danger", warning: "warn", brand: "brand", success: "success" };
 const TONE: Record<Tone, { icon: string; ring: string; count: string }> = {
   danger: { icon: "bg-danger-soft text-danger", ring: "border-danger/30", count: "text-danger" },
   warning: { icon: "bg-warning-soft text-warning", ring: "border-warning/30", count: "text-warning" },
@@ -19,7 +20,7 @@ function Widget({ tone, icon, title, empty, items }: { tone: Tone; icon: string;
     <div className={cn("bg-card flex flex-col gap-3 rounded-[22px] border p-4 shadow-[var(--shadow-card)]", t.ring)}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={cn("grid h-9 w-9 place-items-center rounded-xl", t.icon)}><Icon name={icon} size={18} /></span>
+          <IconSurface name={icon} tier="s" accent={TONE_ACCENT[tone]} variant="soft" />
           <p className="text-ink text-sm font-extrabold">{title}</p>
         </div>
         <span className={cn("text-2xl font-black", t.count)}>{items.length}</span>

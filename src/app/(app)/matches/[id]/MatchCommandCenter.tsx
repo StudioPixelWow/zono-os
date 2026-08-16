@@ -174,7 +174,7 @@ export function MatchCommandCenter({ data }: { data: MatchCC }) {
         </SectionCard>
 
         {/* 12+13) Opportunity + deal value */}
-        <SectionCard title="הזדמנות וערך עסקה" icon="Sparkles">
+        <SectionCard title="הזדמנות וערך עסקה" icon="TrendingUp">
           <div className="grid grid-cols-2 gap-3">
             <ScoreTile label="ציון הזדמנות" value={p.opportunity_score} tone={scoreTone(p.opportunity_score)} />
             <ScoreTile label="דחיפות" value={p.urgency_score} tone={scoreTone(p.urgency_score)} />
