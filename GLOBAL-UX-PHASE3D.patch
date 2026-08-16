@@ -1,0 +1,158 @@
+diff --git a/src/app/(app)/calendar/CalendarView.tsx b/src/app/(app)/calendar/CalendarView.tsx
+index 1c1d50e..7329a53 100644
+--- a/src/app/(app)/calendar/CalendarView.tsx
++++ b/src/app/(app)/calendar/CalendarView.tsx
+@@ -44,7 +44,7 @@ const minsSinceStart = (d: Date) => (d.getHours() - START_HOUR) * 60 + d.getMinu
+ const MEETING_TYPES = new Set(["meeting", "property_visit", "buyer_visit", "seller_meeting", "open_house"]);
+ const TYPE_ICON: Record<string, string> = {
+   meeting: "Calendar", property_visit: "MapPin", buyer_visit: "MapPin", seller_meeting: "Users",
+-  task: "Check", mission: "Sparkles", phone_call: "Phone", whatsapp_followup: "MessageCircle",
++  task: "Check", mission: "Flag", phone_call: "Phone", whatsapp_followup: "MessageCircle",
+   photo_day: "Camera", open_house: "Home", facebook_publish: "Megaphone", marketing_campaign: "Megaphone",
+   document_deadline: "FileText", signature: "FileText", reminder: "Clock",
+ };
+@@ -211,7 +211,7 @@ function Hero({ plan, nextMeeting, intel }: { plan: DayPlan; nextMeeting: Calend
+       </div>
+       {nba && (
+         <div className="relative mt-3 flex items-center gap-2.5 rounded-2xl bg-white/[0.06] px-3.5 py-2.5 ring-1 ring-white/10">
+-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/30"><Icon name="Sparkles" size={15} /></span>
++          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/30"><Icon name="CalendarClock" size={15} /></span>
+           <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-black">{nba.title}</p><p className="truncate text-[11px] text-white/60">{nba.why}</p></div>
+           {nba.href && <Link href={nba.href} className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">פתח</Link>}
+         </div>
+diff --git a/src/app/(app)/distribution/DistributionView.tsx b/src/app/(app)/distribution/DistributionView.tsx
+index 8ad0c78..3f2b064 100644
+--- a/src/app/(app)/distribution/DistributionView.tsx
++++ b/src/app/(app)/distribution/DistributionView.tsx
+@@ -39,7 +39,7 @@ export function DistributionView({ board }: { board: DistributionBoard }) {
+         </div>
+         <div className="flex flex-wrap gap-2">
+           <Button size="sm" variant="secondary" onClick={() => setShowNew((v) => !v)} leadingIcon={<Icon name="Plus" size={15} />}>קהילה חדשה</Button>
+-          <Button size="sm" variant="secondary" onClick={() => run(recomputeDistributionAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={15} />}>חשב מודיעין הפצה</Button>
++          <Button size="sm" variant="secondary" onClick={() => run(recomputeDistributionAction)} disabled={pending} leadingIcon={<Icon name="Share2" size={15} />}>חשב מודיעין הפצה</Button>
+           <Button size="sm" onClick={() => run(generateDailyBatchAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={15} />}>הכן שולחן יומי</Button>
+         </div>
+       </div>
+diff --git a/src/app/(app)/distribution/_center/AnalyticsSection.tsx b/src/app/(app)/distribution/_center/AnalyticsSection.tsx
+index bb34a7c..f035343 100644
+--- a/src/app/(app)/distribution/_center/AnalyticsSection.tsx
++++ b/src/app/(app)/distribution/_center/AnalyticsSection.tsx
+@@ -26,7 +26,7 @@ const REC_TONE: Record<Recommendation["type"], { wrap: string; icon: string; bar
+   win: { wrap: "bg-success-soft text-success", icon: "BadgeCheck", bar: "border-success/40" },
+   warn: { wrap: "bg-warning-soft text-warning", icon: "AlertTriangle", bar: "border-warning/40" },
+   action: { wrap: "bg-brand-soft text-brand-strong", icon: "Target", bar: "border-brand/40" },
+-  info: { wrap: "bg-line/60 text-muted", icon: "Sparkles", bar: "border-line" },
++  info: { wrap: "bg-line/60 text-muted", icon: "Info", bar: "border-line" },
+ };
+ 
+ function Caption({ text }: { text: string }) {
+@@ -215,7 +215,7 @@ export function AnalyticsSection({
+       </Panel>
+ 
+       {/* 5 — Variation performance */}
+-      <Panel title="ביצועי וריאציות" subtitle="עד 10 הוריאציות המובילות" icon="Sparkles">
++      <Panel title="ביצועי וריאציות" subtitle="עד 10 הוריאציות המובילות" icon="BarChart3">
+         {!enough && <Caption text={NEEDS_DATA} />}
+         {topVariations.length === 0 ? (
+           <EmptyState icon="Sparkles" title="אין עדיין וריאציות מדורגות" body="לאחר שווריאציות AI ישמשו בפוסטים ויאספו תגובות — הן יופיעו כאן מדורגות." />
+diff --git a/src/app/(app)/distribution/_center/AutomationCenterSection.tsx b/src/app/(app)/distribution/_center/AutomationCenterSection.tsx
+index 36a2ccc..23126bf 100644
+--- a/src/app/(app)/distribution/_center/AutomationCenterSection.tsx
++++ b/src/app/(app)/distribution/_center/AutomationCenterSection.tsx
+@@ -38,7 +38,7 @@ const PRIORITY_META: Record<string, { label: string; cls: string }> = {
+ };
+ 
+ function typeMeta(type: AutomationType) {
+-  return TYPE_META[type] ?? { label: type, icon: "Sparkles" };
++  return TYPE_META[type] ?? { label: type, icon: "Zap" };
+ }
+ 
+ // ── Generated signal card ────────────────────────────────────────────────────
+@@ -152,7 +152,7 @@ export function AutomationCenterSection({
+       <SectionHeading
+         title="מרכז אוטומציה"
+         subtitle="מנוע הכללים של ההפצה — התראות, תזכורות, משימות והמלצות מתוך הנתונים האמיתיים"
+-        icon="Sparkles"
++        icon="Zap"
+         action={
+           <button
+             type="button"
+@@ -176,7 +176,7 @@ export function AutomationCenterSection({
+ 
+       {/* KPI tiles */}
+       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+-        <StatTile label="אוטומציות פעילות" value={String(board.counts.active)} icon="Sparkles" tone="brand" />
++        <StatTile label="אוטומציות פעילות" value={String(board.counts.active)} icon="Zap" tone="brand" />
+         <StatTile label="התראות" value={String(board.counts.alerts)} icon="AlertTriangle" tone="danger" />
+         <StatTile label="משימות מעקב" value={String(board.counts.tasks)} icon="ListChecks" tone="warning" />
+         <StatTile label="פרסום חוזר" value={String(board.counts.reposts)} icon="RefreshCw" tone="accent" />
+@@ -186,7 +186,7 @@ export function AutomationCenterSection({
+ 
+       {!board.enough && !hasAnything ? (
+         <EmptyState
+-          icon="Sparkles"
++          icon="Zap"
+           title="עדיין אין מספיק נתונים להפעלת אוטומציות חכמות"
+           body="פרסם פוסטים וייבא תגובות תחילה — לאחר מכן הפעל את בדיקת האוטומציות כדי לקבל התראות, תזכורות והמלצות מבוססות נתונים אמיתיים."
+         />
+@@ -194,9 +194,9 @@ export function AutomationCenterSection({
+         <>
+           {/* Active user automations */}
+           <Glass className="flex flex-col gap-4 p-5">
+-            <SectionHeading title="אוטומציות פעילות" subtitle="כללי אוטומציה שהפעלת" icon="Sparkles" />
++            <SectionHeading title="אוטומציות פעילות" subtitle="כללי אוטומציה שהפעלת" icon="Zap" />
+             {board.activeAutomations.length === 0 ? (
+-              <EmptyState icon="Sparkles" title="אין אוטומציות פעילות" body="הפעל אוטומציה מהרשימה המוצעת למטה כדי להתחיל." />
++              <EmptyState icon="Zap" title="אין אוטומציות פעילות" body="הפעל אוטומציה מהרשימה המוצעת למטה כדי להתחיל." />
+             ) : (
+               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                 {board.activeAutomations.map((a) => {
+diff --git a/src/app/(app)/distribution/_center/LeadCollectionSection.tsx b/src/app/(app)/distribution/_center/LeadCollectionSection.tsx
+index 576ac3b..dcb26f8 100644
+--- a/src/app/(app)/distribution/_center/LeadCollectionSection.tsx
++++ b/src/app/(app)/distribution/_center/LeadCollectionSection.tsx
+@@ -71,7 +71,7 @@ export function LeadCollectionSection({
+ 
+       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+         <StatTile label="סך לידים" value={String(leads.length)} hint="מצטבר" icon="UserPlus" tone="brand" />
+-        <StatTile label="חדשים" value={String(counts.new ?? 0)} hint="ממתינים לטיפול" icon="Sparkles" tone="warning" />
++        <StatTile label="חדשים" value={String(counts.new ?? 0)} hint="ממתינים לטיפול" icon="Inbox" tone="warning" />
+         <StatTile label="מוסמכים" value={String(counts.qualified ?? 0)} hint="כוונת רכישה" icon="Target" tone="accent" />
+         <StatTile label="הומרו" value={String(counts.converted ?? 0)} hint="עסקאות שנסגרו" icon="Handshake" tone="success" />
+       </div>
+diff --git a/src/app/(app)/distribution/_center/OverviewSection.tsx b/src/app/(app)/distribution/_center/OverviewSection.tsx
+index f031310..f41eb07 100644
+--- a/src/app/(app)/distribution/_center/OverviewSection.tsx
++++ b/src/app/(app)/distribution/_center/OverviewSection.tsx
+@@ -139,7 +139,7 @@ export function OverviewSection({
+         <Glass className="flex flex-col gap-3 p-5">
+           <SectionHeading title="הזדמנויות AI" subtitle="איתותים חיים ממנוע ההפצה" icon="Sparkles" />
+           {board.opportunities.length === 0 ? (
+-            <EmptyState icon="Sparkles" title="אין כרגע איתותים" body="ZONO יציף כאן הזדמנויות הפצה ברגע שהמודיעין יזהה קהילות ROI גבוה, פערים גיאוגרפיים או נכסים חמים." />
++            <EmptyState icon="Radar" title="אין כרגע איתותים" body="ZONO יציף כאן הזדמנויות הפצה ברגע שהמודיעין יזהה קהילות ROI גבוה, פערים גיאוגרפיים או נכסים חמים." />
+           ) : (
+             <div className="flex flex-col gap-2">
+               {board.opportunities.slice(0, 6).map((o) => (
+diff --git a/src/components/dashboard/Icon.tsx b/src/components/dashboard/Icon.tsx
+index c11cc20..6b79e0c 100644
+--- a/src/components/dashboard/Icon.tsx
++++ b/src/components/dashboard/Icon.tsx
+@@ -111,10 +111,18 @@ import {
+   Network,
+   SlidersHorizontal,
+   Inbox,
++  Zap,
++  Radar,
++  Workflow,
++  Info,
+   type LucideIcon,
+ } from "lucide-react";
+ 
+ const registry: Record<string, LucideIcon> = {
++  Zap,
++  Radar,
++  Workflow,
++  Info,
+   KeyRound,
+   GitCompareArrows,
+   CalendarClock,

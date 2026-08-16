@@ -1,0 +1,334 @@
+diff --git a/src/app/(app)/acquisition/AcquisitionDashboard.tsx b/src/app/(app)/acquisition/AcquisitionDashboard.tsx
+index 4686418..d11f6f8 100644
+--- a/src/app/(app)/acquisition/AcquisitionDashboard.tsx
++++ b/src/app/(app)/acquisition/AcquisitionDashboard.tsx
+@@ -361,7 +361,7 @@ function AiInsightsCard({ insights }: { insights: { id: string; title: string; s
+         <ul className="flex flex-col gap-2">
+           {insights.map((it, i) => (
+             <li key={it.id} className="bg-surface flex items-start gap-2 rounded-xl p-3">
+-              <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", TONES[i % TONES.length])}><Icon name="Sparkles" size={15} /></span>
++              <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", TONES[i % TONES.length])}><Icon name="Target" size={15} /></span>
+               <div className="min-w-0"><p className="text-ink text-sm font-bold leading-snug">{it.title}</p><p className="text-muted text-[11px]">{it.sub}</p></div>
+             </li>
+           ))}
+@@ -484,7 +484,7 @@ function RecommendationsGrid({ areas }: { areas: { city: string; pct: number; n:
+           {[
+             { t: "חזק/י קשר עם בעלים פרטיים", i: "Users" },
+             { t: "פנה/י לנכסים שלא עודכנו 30+ יום", i: "Clock" },
+-            { t: "קדם/י הזדמנויות דו-צדדיות ל-CRM", i: "Sparkles" },
++            { t: "קדם/י הזדמנויות דו-צדדיות ל-CRM", i: "Target" },
+           ].map((r) => (
+             <li key={r.t} className="bg-surface flex items-center gap-2 rounded-xl p-3">
+               <span className="bg-success-soft text-success grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name={r.i} size={15} /></span>
+@@ -507,7 +507,7 @@ function EmptyState({ onRecompute, pending }: { onRecompute: () => void; pending
+       <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Magnet" size={26} /></span>
+       <p className="text-ink text-lg font-extrabold">אין עדיין הזדמנויות גיוס</p>
+       <p className="text-muted max-w-sm text-sm">הרץ/י חישוב כדי ש-ZONO יזהה בעלי נכסים פוטנציאליים מתוך המודעות החיצוניות.</p>
+-      <Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב הזדמנויות גיוס</Button>
++      <Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Target" size={16} />}>חשב הזדמנויות גיוס</Button>
+     </div>
+   );
+ }
+diff --git a/src/app/(app)/competitors/CompetitorsDashboard.tsx b/src/app/(app)/competitors/CompetitorsDashboard.tsx
+index be3db4c..1275ea6 100644
+--- a/src/app/(app)/competitors/CompetitorsDashboard.tsx
++++ b/src/app/(app)/competitors/CompetitorsDashboard.tsx
+@@ -97,7 +97,7 @@ export function CompetitorsDashboard({ board }: { board: Board }) {
+           <span className="bg-brand-soft text-brand grid h-14 w-14 place-items-center rounded-2xl"><Icon name="Users" size={26} /></span>
+           <p className="text-ink text-lg font-extrabold">אין עדיין נתוני מתחרים</p>
+           <p className="text-muted max-w-sm text-sm">ודא שזוהו מתווכים (מודיעין מתווכים) ולחץ ״חשב מודיעין מתחרים״.</p>
+-          <Button onClick={recalc} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב מודיעין מתחרים</Button>
++          <Button onClick={recalc} loading={pending} leadingIcon={<Icon name="Radar" size={16} />}>חשב מודיעין מתחרים</Button>
+         </div>
+       ) : (
+         <>
+@@ -131,7 +131,7 @@ function Hero({ pending, onRecompute }: { pending: boolean; onRecompute: () => v
+           <p className="text-brand text-xs font-bold tracking-wide">ZONO · מודיעין מתחרים</p>
+           <h1 className="text-ink mt-1 text-2xl font-black sm:text-3xl">מודיעין מתחרים</h1>
+           <p className="text-muted mt-1.5 max-w-xl text-sm">מערכת מתקדמת למעקב בזמן אמת אחר פעילות המתחרים וההזדמנויות בשוק</p>
+-          <div className="mt-4 flex justify-center sm:justify-start"><Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>חשב מודיעין מתחרים</Button></div>
++          <div className="mt-4 flex justify-center sm:justify-start"><Button onClick={onRecompute} loading={pending} leadingIcon={<Icon name="Radar" size={16} />}>חשב מודיעין מתחרים</Button></div>
+         </div>
+         <div className="zono-gradient grid h-24 w-24 shrink-0 place-items-center rounded-[28px] text-white shadow-[var(--shadow-lift)] sm:h-28 sm:w-28" aria-hidden>
+           <Icon name="Target" size={52} />
+diff --git a/src/app/(app)/graph/GraphView.tsx b/src/app/(app)/graph/GraphView.tsx
+index e57ab48..ff5ac86 100644
+--- a/src/app/(app)/graph/GraphView.tsx
++++ b/src/app/(app)/graph/GraphView.tsx
+@@ -13,7 +13,7 @@ const SIGNAL_LABEL: Record<string, string> = {
+   agent_specialization: "התמחות סוכן", locality_opportunity: "הזדמנות אזורית", deal_acceleration: "האצת עסקה",
+   referral_opportunity: "הזדמנות הפניה", cross_sell_opportunity: "מכירה צולבת",
+ };
+-const SIGNAL_ICON: Record<string, string> = { hidden_buyer_cluster: "Users", hidden_seller_cluster: "UserCheck", broker_dominance: "Shield", agent_specialization: "Sparkles", locality_opportunity: "MapPin", deal_acceleration: "TrendingUp" };
++const SIGNAL_ICON: Record<string, string> = { hidden_buyer_cluster: "Users", hidden_seller_cluster: "UserCheck", broker_dominance: "Shield", agent_specialization: "Award", locality_opportunity: "MapPin", deal_acceleration: "TrendingUp" };
+ 
+ export function GraphView({ board }: { board: GraphBoard }) {
+   const router = useRouter();
+@@ -67,7 +67,7 @@ export function GraphView({ board }: { board: GraphBoard }) {
+               <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                 {signals.slice(0, 16).map((s) => (
+                   <li key={s.id} className="border-line flex items-start gap-2 rounded-xl border p-2.5">
+-                    <span className="bg-brand-soft text-brand grid h-7 w-7 shrink-0 place-items-center rounded-lg"><Icon name={SIGNAL_ICON[s.signal_type] ?? "Sparkles"} size={14} /></span>
++                    <span className="bg-brand-soft text-brand grid h-7 w-7 shrink-0 place-items-center rounded-lg"><Icon name={SIGNAL_ICON[s.signal_type] ?? "Radar"} size={14} /></span>
+                     <div className="min-w-0">
+                       <p className="text-ink text-sm font-bold">{s.title}</p>
+                       <p className="text-muted text-[11px]">{SIGNAL_LABEL[s.signal_type] ?? s.signal_type} · {s.description}</p>
+diff --git a/src/app/(app)/leads/[id]/LeadDetailView.tsx b/src/app/(app)/leads/[id]/LeadDetailView.tsx
+index 36e0521..59aa8d7 100644
+--- a/src/app/(app)/leads/[id]/LeadDetailView.tsx
++++ b/src/app/(app)/leads/[id]/LeadDetailView.tsx
+@@ -188,7 +188,7 @@ export function LeadDetailView({
+ 
+               {/* Intent + tags */}
+               <div className="bg-card border-line rounded-[20px] border p-5">
+-                <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Target" size={16} /></span><h3 className="text-ink text-sm font-extrabold">כוונה ואיכות</h3></div>
++                <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">כוונה ואיכות</h3></div>
+                 <div className="flex flex-wrap gap-2">
+                   <span className="bg-brand-soft text-brand rounded-full px-3 py-1 text-[12px] font-bold">{p.buyerSellerFit} · {p.intentConfidence}%</span>
+                   {(twin?.classification ?? []).map((c, i) => <span key={i} className="bg-surface text-ink rounded-full px-3 py-1 text-[12px] font-bold">{c}</span>)}
+@@ -197,7 +197,7 @@ export function LeadDetailView({
+ 
+               {/* Missing info */}
+               <div className="bg-card border-line rounded-[20px] border p-5">
+-                <div className="mb-3 flex items-center gap-2"><span className="bg-warning-soft text-warning grid h-8 w-8 place-items-center rounded-xl"><Icon name="AlertTriangle" size={16} /></span><h3 className="text-ink text-sm font-extrabold">מידע חסר להסמכה</h3></div>
++                <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">מידע חסר להסמכה</h3></div>
+                 {missingInfo.length === 0 ? <p className="text-muted text-sm">הליד מוסמך — אין מידע חסר קריטי ✓</p> : (
+                   <ul className="flex flex-col gap-1.5">{missingInfo.map((m, i) => <li key={i} className="text-ink flex items-center gap-2 text-sm"><span className="bg-warning h-1.5 w-1.5 rounded-full" />{m}</li>)}</ul>
+                 )}
+@@ -206,7 +206,7 @@ export function LeadDetailView({
+               {/* Evidence / WHY */}
+               {learnings.length > 0 && (
+                 <div className="bg-card border-line rounded-[20px] border p-5">
+-                  <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Sparkles" size={16} /></span><h3 className="text-ink text-sm font-extrabold">ראיות ומדוע</h3></div>
++                  <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">ראיות ומדוע</h3></div>
+                   <ul className="flex flex-col gap-2.5">
+                     {learnings.map((l) => (
+                       <li key={l.id} className="border-line rounded-2xl border p-3">
+@@ -241,7 +241,7 @@ export function LeadDetailView({
+         {tab === "matching" && (
+           <div className="flex flex-col gap-5">
+             <div className="bg-card border-line rounded-[20px] border p-5">
+-              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Building2" size={16} /></span><h3 className="text-ink text-sm font-extrabold">נכס וקשר</h3></div>
++              <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">נכס וקשר</h3></div>
+               {lead.propertyId ? (
+                 <Link href={`/properties/${lead.propertyId}`}><Button variant="secondary" size="sm" leadingIcon={<Icon name="ArrowUpRight" size={14} />}>פתח מרכז שליטה לנכס המקושר</Button></Link>
+               ) : <p className="text-muted text-sm">אין נכס מקושר עדיין.</p>}
+@@ -258,7 +258,7 @@ export function LeadDetailView({
+             </div>
+ 
+             <div className="bg-card border-line rounded-[20px] border p-5">
+-              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Route" size={16} /></span><h3 className="text-ink text-sm font-extrabold">מסע מומלץ ותהליך הבא</h3></div>
++              <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">מסע מומלץ ותהליך הבא</h3></div>
+               {missions.length === 0 ? <p className="text-muted text-sm">אין מסע מומלץ כרגע.</p> : (
+                 <ul className="flex flex-col gap-2.5">
+                   {missions.map((m) => (
+@@ -285,7 +285,7 @@ export function LeadDetailView({
+             {journeySlot}
+ 
+             <div className="bg-card border-line rounded-[20px] border p-5">
+-              <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Sparkles" size={16} /></span><h3 className="text-ink text-sm font-extrabold">אינטליגנציית ליד</h3></div>
++              <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">אינטליגנציית ליד</h3></div>
+               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                 <span className="text-muted font-semibold">שלב במקור (leads.stage): <span className="text-ink font-bold">{STAGE_HE[lead.stage] ?? lead.stage}</span></span>
+                 {nextAction && <span className="text-ink font-bold">הצעד הבא: <span className="text-brand-strong">{nextAction}</span></span>}
+diff --git a/src/app/(app)/marketing/MarketingView.tsx b/src/app/(app)/marketing/MarketingView.tsx
+index 183ae9d..cf7cc14 100644
+--- a/src/app/(app)/marketing/MarketingView.tsx
++++ b/src/app/(app)/marketing/MarketingView.tsx
+@@ -65,7 +65,7 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
+ 
+       {/* Action bar */}
+       <div className="flex flex-wrap items-center gap-2">
+-        <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין שיווק"}</Button>
++        <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין שיווק"}</Button>
+         <Link href="/distribution/daily"><Button size="sm" variant="secondary" leadingIcon={<Icon name="Megaphone" size={15} />}>שולחן הפצה יומי</Button></Link>
+         <Link href="/distribution"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Send" size={15} />}>קהילות והפצה</Button></Link>
+         <Link href="/marketing-core"><Button size="sm" variant="ghost" leadingIcon={<Icon name="Sparkles" size={15} />}>מרכז קמפיינים AI</Button></Link>
+@@ -93,7 +93,7 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
+           <span className="bg-brand-soft text-brand grid h-16 w-16 place-items-center rounded-3xl"><Icon name="Megaphone" size={28} /></span>
+           <p className="text-ink text-lg font-extrabold">אין עדיין מודיעין שיווק</p>
+           <p className="text-muted max-w-sm text-sm">הוסיפו קהילות ולחצו ״חשב מודיעין שיווק״ כדי לבנות DNA שיווקי לכל נכס, דירוג ערוצים והזדמנויות קידום.</p>
+-          <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />} className="mt-1">חשב מודיעין שיווק</Button>
++          <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={16} />} className="mt-1">חשב מודיעין שיווק</Button>
+         </div>
+       ) : (
+         <>
+diff --git a/src/app/(app)/properties/ExternalListingsView.tsx b/src/app/(app)/properties/ExternalListingsView.tsx
+index 5d4fcde..1d746d9 100644
+--- a/src/app/(app)/properties/ExternalListingsView.tsx
++++ b/src/app/(app)/properties/ExternalListingsView.tsx
+@@ -340,7 +340,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
+   }, [listings, marketStats, dayAgo]);
+ 
+   const marketCards: { label: string; value: number; icon: string; tone: string }[] = [
+-    { label: "חדשות היום", value: market.newToday, icon: "Sparkles", tone: "text-brand-strong" },
++    { label: "חדשות היום", value: market.newToday, icon: "Inbox", tone: "text-brand-strong" },
+     { label: "ירידות מחיר", value: market.priceDrops, icon: "TrendingDown", tone: "text-warning" },
+     { label: "מתחת לממוצע", value: market.belowAvg, icon: "Tag", tone: "text-success" },
+     { label: "בעלים פרטי", value: market.privateOwner, icon: "UserCheck", tone: "text-brand" },
+@@ -375,7 +375,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
+               <option value="full">סנכרון מלא (500/עיר)</option>
+               <option value="backfill">סנכרון מתקדם (1000/עיר)</option>
+             </select>
+-            <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Sparkles" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
++            <Button size="sm" onClick={startSync} disabled={pending || syncing} loading={syncing} leadingIcon={syncing ? undefined : <Icon name="Radar" size={15} />}>{syncing ? "מסנכרן…" : "סנכרן עכשיו"}</Button>
+             <Button size="sm" variant="ghost" onClick={geocodeNow} disabled={pending} leadingIcon={<Icon name="MapPin" size={15} />}>גאוקד עכשיו</Button>
+             <Button size="sm" variant="ghost" onClick={analyze} disabled={pending}>ניתוח AI</Button>
+             <Button size="sm" variant="ghost" onClick={() => bk(runBrokerDetectionAction)} disabled={pending}>זהה מתווכים</Button>
+diff --git a/src/app/(app)/sellers/[id]/SellerDetailView.tsx b/src/app/(app)/sellers/[id]/SellerDetailView.tsx
+index 718c809..8d3c5ac 100644
+--- a/src/app/(app)/sellers/[id]/SellerDetailView.tsx
++++ b/src/app/(app)/sellers/[id]/SellerDetailView.tsx
+@@ -215,7 +215,7 @@ export function SellerDetailView({
+                 {/* Pricing resistance / main objection (from seller memory) */}
+                 {(s.price_sensitivity_score >= 60 || s.main_objection) && (
+                   <div className="bg-card border-line rounded-[20px] border p-5">
+-                    <div className="mb-3 flex items-center gap-2"><span className="bg-warning-soft text-warning grid h-8 w-8 place-items-center rounded-xl"><Icon name="TrendingUp" size={16} /></span><h3 className="text-ink text-sm font-extrabold">התנגדות מחיר / מו״מ</h3></div>
++                    <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">התנגדות מחיר / מו״מ</h3></div>
+                     {s.price_sensitivity_score >= 60 && <p className="text-muted text-sm">רגישות מחיר גבוהה ({s.price_sensitivity_score}/100) — צפו להתנגדות בתמחור. שקלו הצגת נתוני שוק תומכים.</p>}
+                     {s.main_objection && <p className="text-ink mt-1 text-sm"><span className="text-muted">התנגדות עיקרית: </span>{s.main_objection}</p>}
+                   </div>
+@@ -223,7 +223,7 @@ export function SellerDetailView({
+ 
+                 {/* Open risks (evidence + why) */}
+                 <div className="bg-card border-line rounded-[20px] border p-5">
+-                  <div className="mb-3 flex items-center gap-2"><span className="bg-danger-soft text-danger grid h-8 w-8 place-items-center rounded-xl"><Icon name="AlertTriangle" size={16} /></span><h3 className="text-ink text-sm font-extrabold">סיכונים פעילים</h3></div>
++                  <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">סיכונים פעילים</h3></div>
+                   {openRisks.length === 0 ? (
+                     <p className="text-muted text-sm">אין סיכונים פעילים ✓</p>
+                   ) : (
+@@ -240,7 +240,7 @@ export function SellerDetailView({
+ 
+                 {/* Overdue / broken commitments */}
+                 <div className="bg-card border-line rounded-[20px] border p-5">
+-                  <div className="mb-3 flex items-center gap-2"><span className="bg-brand-soft text-brand grid h-8 w-8 place-items-center rounded-xl"><Icon name="Shield" size={16} /></span><h3 className="text-ink text-sm font-extrabold">התחייבויות שדורשות מעקב</h3></div>
++                  <div className="mb-3 flex items-center gap-2"><h3 className="text-ink text-sm font-extrabold">התחייבויות שדורשות מעקב</h3></div>
+                   {overdueCommitments.length === 0 ? (
+                     <p className="text-muted text-sm">אין התחייבויות באיחור ✓</p>
+                   ) : (
+diff --git a/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx b/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx
+index 893e9d6..dfe6743 100644
+--- a/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx
++++ b/src/app/(app)/settings/distribution-connections/DistributionConnectionsView.tsx
+@@ -47,7 +47,7 @@ const STATUS_TONE: Record<ConnectionStatus, string> = {
+   disconnected: "bg-surface text-muted border-line",
+ };
+ 
+-const GROUP_ICON: Record<string, string> = { facebook: "Globe", instagram: "Sparkles", whatsapp: "MessageCircle" };
++const GROUP_ICON: Record<string, string> = { facebook: "Globe", instagram: "Camera", whatsapp: "MessageCircle" };
+ 
+ // ── Phase 17: connection-PATH status labels/tones (two distinct state machines) ──
+ const PATH_STATUS_LABEL: Record<FacebookPathStatus, string> = {
+@@ -481,7 +481,7 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
+ 
+           {/* Instagram Business accounts (discovery + readiness) */}
+           <div className="border-line bg-card rounded-2xl border p-5">
+-            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Sparkles" size={18} className="text-brand" /> Instagram</p>
++            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Camera" size={18} className="text-brand" /> Instagram</p>
+             {instagram.length > 0 ? (
+               <div className="mt-3 grid gap-2">
+                 {instagram.map((ig) => (
+@@ -517,7 +517,7 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
+ 
+           {/* Analytics readiness — no fake metrics */}
+           <div className="border-line bg-card rounded-2xl border p-5">
+-            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Sparkles" size={18} className="text-brand" /> אנליטיקה</p>
++            <p className="text-ink flex items-center gap-2 font-black"><Icon name="BarChart3" size={18} className="text-brand" /> אנליטיקה</p>
+             <p className="text-muted mt-2 text-sm">
+               {readiness.analyticsReady ? "read_insights פעיל — נתוני ביצועים יוצגו בשלב הבא." : "אנליטיקה תופעל לאחר אישור read_insights"}
+             </p>
+@@ -543,7 +543,7 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
+       {/* Manual-mode explainer */}
+       <div className="border-line bg-card mb-6 rounded-2xl border p-4">
+         <div className="flex items-start gap-3">
+-          <Icon name="Sparkles" size={20} className="text-brand mt-0.5 shrink-0" />
++          <Icon name="Info" size={20} className="text-brand mt-0.5 shrink-0" />
+           <div className="text-sm">
+             <p className="text-ink font-bold">איך זה עובד כרגע</p>
+             <p className="text-muted mt-1 leading-relaxed">
+diff --git a/src/app/(app)/team/TeamView.tsx b/src/app/(app)/team/TeamView.tsx
+index 8d46738..035ebd1 100644
+--- a/src/app/(app)/team/TeamView.tsx
++++ b/src/app/(app)/team/TeamView.tsx
+@@ -37,7 +37,7 @@ export function TeamView({ board }: { board: TeamBoard }) {
+           <h1 className="text-ink mt-1 text-2xl font-black">מודיעין צוות</h1>
+           <p className="text-muted mt-1 text-sm">מי מנצח, מי מתקשה, היכן ההכנסה נוצרת ודולפת, ומי זקוק לליווי — מערכת ההפעלה של מנהל המשרד.</p>
+         </div>
+-        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Sparkles" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין צוות"}</Button>
++        <Button onClick={recalc} disabled={pending} leadingIcon={<Icon name="Users" size={16} />}>{pending ? "מחשב…" : "חשב מודיעין צוות"}</Button>
+       </div>
+       {error && <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>}
+       {msg && <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{msg}</p>}
+@@ -100,7 +100,7 @@ export function TeamView({ board }: { board: TeamBoard }) {
+           </Panel>
+ 
+           {/* 5) Coaching Center */}
+-          <Panel title="מרכז ליווי" icon="Sparkles">
++          <Panel title="מרכז ליווי" icon="Users">
+             {coaching.length === 0 ? <p className="text-muted text-sm">אין סיגנלי ליווי פתוחים ✓</p> : (
+               <ul className="flex flex-col gap-2">{coaching.slice(0, 8).map((s) => (
+                 <li key={s.id} className="border-line rounded-xl border p-2">
+diff --git a/src/components/dashboard-home/DashboardHomeView.tsx b/src/components/dashboard-home/DashboardHomeView.tsx
+index b627498..7a06909 100644
+--- a/src/components/dashboard-home/DashboardHomeView.tsx
++++ b/src/components/dashboard-home/DashboardHomeView.tsx
+@@ -42,7 +42,7 @@ const QUICK_LINKS: { label: string; icon: string; href: string }[] = [
+   { label: "מודיעין סוכנים", icon: "Users", href: "/broker-intelligence/dashboard" },
+   { label: "מודיעין משרדים", icon: "Building2", href: "/office-intelligence/dashboard" },
+   { label: "מרכז הפעולות", icon: "Flame", href: "/action-center" },
+-  { label: "Mission Control", icon: "Sparkles", href: "/mission-control" },
++  { label: "Mission Control", icon: "Radar", href: "/mission-control" },
+ ];
+ 
+ const FAB_ACTIONS: { l: string; i: string; h: string }[] = [
+diff --git a/src/components/dashboard/Icon.tsx b/src/components/dashboard/Icon.tsx
+index 6b79e0c..bb59374 100644
+--- a/src/components/dashboard/Icon.tsx
++++ b/src/components/dashboard/Icon.tsx
+@@ -115,6 +115,7 @@ import {
+   Radar,
+   Workflow,
+   Info,
++  Camera,
+   type LucideIcon,
+ } from "lucide-react";
+ 
+@@ -123,6 +124,7 @@ const registry: Record<string, LucideIcon> = {
+   Radar,
+   Workflow,
+   Info,
++  Camera,
+   KeyRound,
+   GitCompareArrows,
+   CalendarClock,
+diff --git a/src/components/home-control/HomeControlCenter.tsx b/src/components/home-control/HomeControlCenter.tsx
+index 167bcff..b7a5376 100644
+--- a/src/components/home-control/HomeControlCenter.tsx
++++ b/src/components/home-control/HomeControlCenter.tsx
+@@ -36,7 +36,7 @@ const URGENCY_DOT: Record<HomeRec["urgency"], string> = {
+ };
+ const URGENCY_HE: Record<HomeRec["urgency"], string> = { critical: "קריטי", high: "דחוף", medium: "חשוב", low: "רגיל" };
+ const AREA_ICON: Record<string, string> = {
+-  acquisition: "Target", buyer: "Users", seller: "Home", deal: "Handshake", journey: "Route", daily: "Sparkles", office: "Building2",
++  acquisition: "Target", buyer: "Users", seller: "Home", deal: "Handshake", journey: "Route", daily: "Sunrise", office: "Building2",
+ };
+ const ACTIVITY_TONE: Record<HomeActivityItem["tone"], string> = {
+   brand: "bg-brand-soft text-brand-strong", success: "bg-success-soft text-success",
+@@ -177,7 +177,7 @@ function AiCoach({ recs }: { recs: HomeRec[] }) {
+           {recs.map((r) => (
+             <div key={r.id} className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+               <div className="flex items-center justify-between gap-2">
+-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-violet-100"><Icon name={AREA_ICON[r.area] ?? "Sparkles"} size={15} /></span>
++                <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-violet-100"><Icon name={AREA_ICON[r.area] ?? "Layers"} size={15} /></span>
+                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold text-white/85">
+                   <span className={cn("h-2 w-2 rounded-full", URGENCY_DOT[r.urgency])} /> {URGENCY_HE[r.urgency]}
+                 </span>
+@@ -322,7 +322,7 @@ function NextDealCard({ deal }: { deal: HomeNextDeal }) {
+           <div className="min-w-0">
+             <div className="flex items-center gap-2">
+               <span className="bg-brand-soft text-brand-strong inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black">
+-                <Icon name="Sparkles" size={12} /> {deal.probability}% סבירות לסגירה
++                <Icon name="TrendingUp" size={12} /> {deal.probability}% סבירות לסגירה
+               </span>
+               <span className="text-muted text-[11px] font-bold">{deal.stageLabel}</span>
+             </div>
