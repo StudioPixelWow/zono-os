@@ -37,3 +37,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "debug failed" }, { status: 500 });
   }
 }
+
+/**
+ * Browser-friendly GET variant so a manager can MEASURE actor coverage in the URL
+ * bar (no tooling): /api/external-listings/debug-provider?provider=yad2&city=Rehovot&limit=500
+ * Same manager auth (via session cookie). Never saves. `datasetItems` in the
+ * response is how many the actor actually returned — the answer to "is the actor
+ * or our cap the bottleneck?".
+ */
+export async function GET(req: NextRequest) {
+  const { profile } = await getSessionContext();
+  if (!profile) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const supabase = await createClient();
+  const { data: isManager } = await supabase.rpc("has_min_role", { p_min: "manager" });
+  if (!isManager) return NextResponse.json({ error: "forbidden — manager role required" }, { status: 403 });
+
+  const sp = req.nextUrl.searchParams;
+  const provider = sp.get("provider") === "madlan" ? "madlan" : "yad2";
+  const city = (sp.get("city") ?? "").trim();
+  const limit = Math.max(1, Math.min(Number(sp.get("limit") ?? 50) || 50, 500));
+  if (!city) return NextResponse.json({ error: "city query param is required" }, { status: 400 });
+
+  try {
+    const report = await debugProvider(provider, city, limit, false);
+    return NextResponse.json({ measured: { city, provider, requestedLimit: limit }, hint: "datasetItems = how many the actor returned", ...report });
+  } catch (e) {
+    return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "debug failed" }, { status: 500 });
+  }
+}

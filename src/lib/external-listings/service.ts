@@ -777,7 +777,10 @@ export async function debugProvider(
   const { profile } = await getSessionContext();
   if (!profile) throw new Error("not authenticated");
   const provider = getProvider(source);
-  const safeLimit = Math.max(1, Math.min(limit, 5)); // debug cap: never more than 5
+  // Debug cap raised to 500 so a manager can MEASURE the actor's true coverage
+  // for a city (e.g. "does the Yad2 actor return 127 or 1000 for Rehovot?") —
+  // manager-gated + never-saved, so the cost is bounded and controlled.
+  const safeLimit = Math.max(1, Math.min(limit, 500));
   const r = await provider.debugRun(city, safeLimit);
   const normalizedSample = r.rawSample ? provider.normalizeListing(r.rawSample) : null;
   const missing = normalizedSample ? missingFields(normalizedSample) : [];
