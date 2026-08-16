@@ -237,17 +237,19 @@ export function GroupLibrarySection({
                       </div>
                     </td>
                     <td className="text-muted px-4 py-3">{[g.area, g.city].filter(Boolean).join(", ") || "—"}</td>
-                    <td className="text-ink px-4 py-3 font-bold tabular-nums">{compact(g.membersCount)}</td>
+                    <td className="text-ink px-4 py-3 font-bold tabular-nums">{g.membersCount > 0 ? compact(g.membersCount) : "—"}</td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${STATUS_TONE[g.status] ?? "bg-line/70 text-muted"}`}>{STATUS_LABEL[g.status] ?? g.status}</span></td>
                     <td className="px-4 py-3"><ScoreBar value={g.performanceScore} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <button type="button" disabled={busy}
-                          title={g.status === "active" ? "מפורסם — לחץ כדי להסיר מהפרסום" : "לא מפורסם — לחץ כדי לסמן לפרסום"}
+                        <button type="button" role="switch" aria-checked={g.status === "active"} disabled={busy}
+                          title={g.status === "active" ? "מפורסם בקבוצה זו — לחץ לכיבוי" : "לא מפורסם — לחץ להפעלה"}
                           onClick={() => runAction(() => updateGroupStatusAction({ id: g.id, status: g.status === "active" ? "inactive" : "active" }), g.status === "active" ? "הקבוצה הוסרה מהפרסום" : "הקבוצה סומנה לפרסום")}
-                          className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition disabled:opacity-50",
-                            g.status === "active" ? "bg-success-soft text-success" : "bg-line/70 text-muted hover:brightness-95")}>
-                          <Icon name={g.status === "active" ? "Check" : "Minus"} size={13} /> {g.status === "active" ? "מפורסם" : "לא מפורסם"}
+                          className="inline-flex items-center gap-2 disabled:opacity-50">
+                          <span className={cn("relative h-6 w-11 shrink-0 rounded-full transition", g.status === "active" ? "bg-success" : "bg-line")}>
+                            <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all", g.status === "active" ? "start-0.5" : "start-[22px]")} />
+                          </span>
+                          <span className={cn("w-16 text-right text-xs font-bold", g.status === "active" ? "text-success" : "text-muted")}>{g.status === "active" ? "מפורסם" : "לא מפורסם"}</span>
                         </button>
                         <button type="button" disabled={busy} title="מחק קבוצה"
                           onClick={() => runAction(() => deleteGroupAction({ id: g.id }), "הקבוצה נמחקה")}
