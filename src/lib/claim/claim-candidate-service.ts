@@ -10,6 +10,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { scoreCandidate, isCandidate, type CandidateEvidence, type EvidenceVerdict } from "./claim-evidence-core";
+import { classifyPhone, phoneClassToMatch, phoneClassLabel, type PhoneClass, type PhoneKnowledge } from "./claim-phone-core";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -62,10 +63,14 @@ export interface ClaimCandidate {
   contactName: string | null; publishedAt: string | null; firstSeenAt: string | null;
   alreadyPromoted: boolean;
   verdict: EvidenceVerdict;
+  phoneClass: PhoneClass;
+  phoneNote: string;
 }
 
-/** Map a listing + its link row to the pure evidence input. */
-function toEvidence(anchor: ClaimAnchor, link: any, listing: any): CandidateEvidence {
+/** Map a listing + its link row to the pure evidence input. Phone handling uses
+ *  the §13 classifier: a DIFFERENT phone is neutral (UNKNOWN/masked), never an
+ *  automatic contradiction — only a phone proven to belong to another broker is. */
+function toEvidence(anchor: ClaimAnchor, link: any, listing: any, know: PhoneKnowledge): { ev: CandidateEvidence; phoneClass: PhoneClass } {
   const linkOrg = link?.organization_id ?? listing?.org_id ?? null;
   const sameOrg = linkOrg === anchor.orgId;
   const stableAgentIdMatch = Boolean(link?.agent_id && anchor.agentIds.includes(link.agent_id)) &&
@@ -74,11 +79,26 @@ function toEvidence(anchor: ClaimAnchor, link: any, listing: any): CandidateEvid
   const anchorHasName = anchor.normalizedNames.some((n) => n && listingName && (listingName === n));
   const anchorFirstOnly = !anchorHasName && anchor.normalizedNames.some((n) => n && listingName && n.split(" ")[0] && listingName.split(" ").includes(n.split(" ")[0]));
   const nameMatch: CandidateEvidence["nameMatch"] = anchorHasName ? "exact" : anchorFirstOnly ? "first_only" : (link?.matched_name ? "similar" : "none");
-  const listingPhone = digits(listing?.contact_phone || link?.matched_phone);
-  const phoneMatch: CandidateEvidence["phoneMatch"] = !listingPhone ? "unknown" : anchor.phones.includes(listingPhone) ? "exact" : (anchor.phones.length ? "contradict" : "unknown");
+  const phoneClass = classifyPhone(listing?.contact_phone || link?.matched_phone, know);
+  const phoneMatch = phoneClassToMatch(phoneClass);
   const officeMatch = Boolean(link?.office_id && anchor.officeIds.includes(link.office_id));
   const cityMatch = norm(listing?.city) === "rehovot" || Boolean(listing?.city);
-  return { sameOrg, stableAgentIdMatch, nameMatch, phoneMatch, officeMatch, cityMatch, priorConfirmedSameIdentity: 0 };
+  return { ev: { sameOrg, stableAgentIdMatch, nameMatch, phoneMatch, officeMatch, cityMatch, priorConfirmedSameIdentity: 0 }, phoneClass };
+}
+
+/** Build phone knowledge for the anchor: the caller's own numbers are personal;
+ *  verified phones of OTHER agents in the org are the only "other broker" set. */
+async function buildPhoneKnowledge(db: any, anchor: ClaimAnchor): Promise<PhoneKnowledge> {
+  const otherBrokerPhones: string[] = [];
+  try {
+    const { data: others } = await db.from("brokerage_agents").select("id,primary_phone").limit(200);
+    for (const a of (others ?? [])) {
+      if (anchor.agentIds.includes(a.id)) continue;
+      const d = digits(a.primary_phone);
+      if (d && !anchor.phones.includes(d)) otherBrokerPhones.push(d);
+    }
+  } catch { /* directory optional — absence just means no negative phone signal */ }
+  return { personalPhones: anchor.phones, officePhones: [], sourcePhones: [], otherBrokerPhones, relayHint: null };
 }
 
 const firstImage = (images: unknown): string | null => {
@@ -105,13 +125,15 @@ export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnc
     .select("id,org_id,title,city,neighborhood,address,price,rooms,sqm,property_type,deal_type,contact_name,contact_phone,source,listing_url,images,published_at,first_seen_at,promoted_property_id,status")
     .in("id", listingIds).neq("status", "removed").limit(200);
   const byId = new Map<string, any>((listings ?? []).map((r: any) => [r.id, r]));
+  const know = await buildPhoneKnowledge(db, anchor);
 
   const out: ClaimCandidate[] = [];
   const seenListing = new Set<string>();
   for (const link of linkRows) {
     const listing: any = byId.get(link.external_listing_id);
     if (!listing || seenListing.has(listing.id)) continue;
-    const verdict = scoreCandidate(toEvidence(anchor, link, listing));
+    const { ev, phoneClass } = toEvidence(anchor, link, listing, know);
+    const verdict = scoreCandidate(ev);
     if (!isCandidate(verdict)) continue;
     seenListing.add(listing.id);
     out.push({
@@ -120,7 +142,7 @@ export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnc
       propertyType: listing.property_type, dealType: listing.deal_type, source: listing.source, listingUrl: listing.listing_url,
       contactName: listing.contact_name, publishedAt: listing.published_at, firstSeenAt: listing.first_seen_at,
       imageCount: Array.isArray(listing.images) ? listing.images.length : 0, primaryImage: firstImage(listing.images),
-      alreadyPromoted: Boolean(listing.promoted_property_id), verdict,
+      alreadyPromoted: Boolean(listing.promoted_property_id), verdict, phoneClass, phoneNote: phoneClassLabel(phoneClass),
     });
     if (out.length >= limit) break;
   }
@@ -128,4 +150,33 @@ export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnc
   const rank = { high: 0, medium: 1, low: 2 } as const;
   out.sort((a, b) => rank[a.verdict.confidence ?? "low"] - rank[b.verdict.confidence ?? "low"]);
   return { anchor, candidates: out };
+}
+
+/** Re-score ONE listing for the caller's anchor (server-authoritative recheck at
+ *  claim time). Returns null if the caller has no anchor or the listing isn't a
+ *  candidate for them (cross-org / unrelated) — the write path must then refuse. */
+export async function getClaimCandidateById(listingId: string): Promise<{ anchor: ClaimAnchor; candidate: ClaimCandidate } | null> {
+  const anchor = await getClaimAnchor();
+  if (!anchor || !anchor.ready) return null;
+  const db: any = await createClient();
+  const { data: listing } = await db.from("external_listings")
+    .select("id,org_id,title,city,neighborhood,address,price,rooms,sqm,property_type,deal_type,contact_name,contact_phone,source,source_id,listing_url,images,published_at,first_seen_at,promoted_property_id,primary_property_id,duplicate_group_id,status")
+    .eq("id", listingId).maybeSingle();
+  if (!listing) return null;
+  const { data: link } = await db.from("brokerage_external_listing_links")
+    .select("external_listing_id,organization_id,agent_id,office_id,matched_name,matched_phone,match_reasons,confidence_score")
+    .eq("external_listing_id", listingId).eq("organization_id", anchor.orgId).maybeSingle();
+  const know = await buildPhoneKnowledge(db, anchor);
+  const { ev, phoneClass } = toEvidence(anchor, link ?? {}, listing, know);
+  const verdict = scoreCandidate(ev);
+  if (!isCandidate(verdict)) return null; // cross-org / not this caller's listing
+  const candidate: ClaimCandidate = {
+    externalListingId: listing.id, title: listing.title, city: listing.city, neighborhood: listing.neighborhood,
+    address: listing.address, price: listing.price, rooms: listing.rooms, sqm: listing.sqm,
+    propertyType: listing.property_type, dealType: listing.deal_type, source: listing.source, listingUrl: listing.listing_url,
+    contactName: listing.contact_name, publishedAt: listing.published_at, firstSeenAt: listing.first_seen_at,
+    imageCount: Array.isArray(listing.images) ? listing.images.length : 0, primaryImage: firstImage(listing.images),
+    alreadyPromoted: Boolean(listing.promoted_property_id), verdict, phoneClass, phoneNote: phoneClassLabel(phoneClass),
+  };
+  return { anchor, candidate };
 }

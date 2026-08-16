@@ -9,6 +9,7 @@ import { DailyOS } from "@/components/daily-os/DailyOS";
 import { BrokerIntelligenceQueuePanel } from "@/components/broker-intelligence/BrokerIntelligenceQueuePanel";
 import { BrokerTodayAgenda } from "@/components/broker-intelligence/BrokerTodayAgenda";
 import { AgentWorkQueue } from "@/components/today/AgentWorkQueue";
+import { ClaimTodayCard } from "@/components/claim/ClaimTodayCard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,9 @@ export default async function TodayPage() {
   const data = await getDailyOS();
   return (
     <div dir="rtl" className="flex flex-col gap-6">
+      {/* P10A — "נכסים שלי": external listings that look like the broker's, waiting
+          for a one-click claim. Renders only when there is something to review. */}
+      <ClaimTodayCard />
       {/* Epic 3 hardening — the explicit prioritized work-queue: overdue tasks,
           meetings, offers/documents/commissions/collections awaiting action. */}
       <AgentWorkQueue />

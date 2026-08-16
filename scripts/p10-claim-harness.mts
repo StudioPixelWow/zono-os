@@ -1,9 +1,13 @@
 // ============================================================================
 // P10 — Claim My Listings: evidence + decision + dedupe unit tests (§AR).
-// Run: npx tsx scripts/p10-claim-harness.mts
+// Run: npx esbuild scripts/p10-claim-harness.mts --bundle --platform=node --format=cjs | node -
 // ============================================================================
-import { scoreCandidate, isCandidate, type CandidateEvidence } from "../src/lib/claim/claim-evidence-core.ts";
-import { transitionDecision, snoozeUntil, isSnoozeElapsed, planClaim } from "../src/lib/claim/claim-decision-core.ts";
+// NOTE: namespace imports — tsx in this env mis-resolves named `.ts` imports.
+import * as EC from "../src/lib/claim/claim-evidence-core.ts";
+import * as DC from "../src/lib/claim/claim-decision-core.ts";
+const { scoreCandidate, isCandidate } = EC;
+type CandidateEvidence = EC.CandidateEvidence;
+const { transitionDecision, snoozeUntil, isSnoozeElapsed, planClaim } = DC;
 
 let pass = 0, fail = 0;
 const ok = (n: string, c: boolean) => { if (c) pass++; else { fail++; console.log(`FAIL: ${n}`); } };
@@ -27,9 +31,11 @@ ok("identity anchor (>=3 prior) → HIGH without id", scoreCandidate(E({ priorCo
 ok("verdict carries reasons", scoreCandidate(E({ stableAgentIdMatch: true, phoneMatch: "exact", officeMatch: true })).reasons.length >= 2);
 ok("isCandidate false for excluded", !isCandidate(scoreCandidate(E({ sameOrg: false }))));
 
-// REAL Maor case: contact first-name "מאיר" similar, phone CONTRADICTS (0554308680 ≠ 0546365321),
-// linked to the Landsman/Siboni office, same org → must be LOW (review), never confirmed.
-ok("REAL Maor listing → LOW (name-similar + phone contradiction)",
+// Pure scorer: a VERIFIED phone contradiction caps at LOW even with office/city.
+// (Per P10A §13 the real Maor listing's different phone is NOT auto-treated as a
+//  contradiction — see the §13 classifier tests in p10a-claim-write-harness.mts.
+//  The real case is LOW on name-only grounds; this asserts the scorer's cap.)
+ok("verified phone contradiction → LOW (scorer cap)",
   scoreCandidate(E({ nameMatch: "first_only", phoneMatch: "contradict", officeMatch: true, cityMatch: true })).confidence === "low");
 
 // ── Decision transitions ─────────────────────────────────────────────────────
