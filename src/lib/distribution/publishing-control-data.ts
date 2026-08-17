@@ -71,6 +71,7 @@ export interface PublishingControlData {
   deadLetter: ControlPost[];      // dead_letter (manual revival)
   paused: ControlPost[];          // paused
   queued: ControlPost[];          // queued / scheduled / draft (waiting to be served)
+  publishedToday: ControlPost[];  // published TODAY (Asia/Jerusalem) — today's real activity
   events: ControlEvent[];         // most recent transition audit
   controls: ControlStop[];        // active emergency stops
   groupStats: GroupPublishStat[]; // canonical per-group publishing success rate + history
@@ -84,7 +85,7 @@ export function emptyControlData(ready = false): PublishingControlData {
     ready,
     stateCounts: EMPTY_STATE_COUNTS(),
     totals: { active: 0, publishedAllTime: 0, failedActive: 0, inFlight: 0, needsHuman: 0 },
-    inFlight: [], reconciliation: [], failed: [], deadLetter: [], paused: [], queued: [],
+    inFlight: [], reconciliation: [], failed: [], deadLetter: [], paused: [], queued: [], publishedToday: [],
     events: [], controls: [], groupStats: [],
   };
 }
@@ -168,6 +169,20 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
 
   const rows: any[] = Array.isArray(activeRows) ? activeRows : [];
 
+  // ── Published TODAY (Asia/Jerusalem). Terminal ⇒ not in `rows`; queried separately
+  //    so the Home summary reflects today's real publishing activity, not just planned.
+  const israelDay = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" }) : null);
+  const todayIsrael = israelDay(new Date().toISOString());
+  const { data: pubTodayRaw } = await db
+    .from("distribution_posts")
+    .select("id,status,publish_state,post_title,post_text,group_id,campaign_id,property_id,scheduled_at,updated_at,published_at,external_post_url,terminal")
+    .eq("org_id", orgId)
+    .eq("publish_state", "published")
+    .gte("published_at", new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString())
+    .order("published_at", { ascending: false })
+    .limit(100);
+  const pubTodayRows: any[] = (Array.isArray(pubTodayRaw) ? pubTodayRaw : []).filter((r) => israelDay(r.published_at) === todayIsrael);
+
   // ── Recent transition events (append-only audit feed) ──────────────────────
   const { data: eventRows } = await db
     .from("distribution_publish_events")
@@ -191,6 +206,7 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
   const campaignIds = new Set<string>();
   const userIds = new Set<string>();
   for (const r of rows) { if (r.group_id) groupIds.add(r.group_id); if (r.campaign_id) campaignIds.add(r.campaign_id); }
+  for (const r of pubTodayRows) { if (r.group_id) groupIds.add(r.group_id); if (r.campaign_id) campaignIds.add(r.campaign_id); }
   for (const c of controlsRaw) { if (c.scope_id && c.scope === "group") groupIds.add(c.scope_id); if (c.created_by) userIds.add(c.created_by); }
   for (const e of events) { if (e.actor_id) userIds.add(e.actor_id); }
   // Events reference posts we may not have loaded (terminal ones) — resolve their groups too.
@@ -234,6 +250,9 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
       default: break; // terminal states shouldn't appear among active rows
     }
   }
+
+  const publishedToday: ControlPost[] = pubTodayRows.map((r) =>
+    mapPost(r, r.group_id ? groupName.get(r.group_id) ?? null : null, r.campaign_id ? campaignName.get(r.campaign_id) ?? null : null));
 
   // ── All-time published count (small, honest headline metric) ───────────────
   const { count: publishedAllTime } = await db
@@ -280,7 +299,7 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
       inFlight: inFlight.length,
       needsHuman,
     },
-    inFlight, reconciliation, failed, deadLetter, paused, queued,
+    inFlight, reconciliation, failed, deadLetter, paused, queued, publishedToday,
     events: controlEvents,
     controls,
     groupStats,

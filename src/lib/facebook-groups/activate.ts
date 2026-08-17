@@ -13,7 +13,7 @@
 // ============================================================================
 import { getSessionContext } from "@/lib/auth/session";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { createCampaignAction, selectGroupsAction, deleteCampaignAction } from "@/lib/distribution/center-actions";
+import { createCampaignAction, selectGroupsAction, deleteCampaignAction, updateCampaignStatusAction } from "@/lib/distribution/center-actions";
 import { generateCampaignVariationsAction } from "@/lib/distribution/variation-actions";
 import { createPostingQueueAction, previewPostingQueueAction } from "@/lib/distribution/distribution-actions";
 import type { ScheduleConfig } from "@/lib/distribution/scheduler-planner";
@@ -107,6 +107,14 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
     const built = await createPostingQueueAction(config);
     if (built.error) throw new Error(built.error);
     if (!built.created || built.created <= 0) throw new Error("לא נוצרו פרסומים מתוזמנים. בדוק את בחירת הקבוצות והתאריכים.");
+
+    // Promote the campaign to ACTIVE now that a live posting schedule exists.
+    // The /distribution Home lists campaigns whose status ∈ {active,running,scheduled};
+    // without this the campaign stays 'draft' from createCampaign and never appears as
+    // active (the data-consistency bug). Best-effort: a status-label write failure must
+    // NOT discard an already-built real schedule.
+    const activated = await updateCampaignStatusAction({ id: campaignId, status: "active" });
+    if (activated.error) console.error(`[fb-activate] campaign ${campaignId} status→active failed: ${activated.error}`);
 
     return {
       ok: true, campaignId, created: built.created, groupCount: input.groupIds.length,

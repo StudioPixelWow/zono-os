@@ -39,6 +39,12 @@ export function DistributionHome({ today, center }: { today: PublishingControlDa
     if (!isToday(p.scheduledAt) && !(due && st.key !== "published")) continue;
     rows.push({ post: p, st });
   }
+  // Published TODAY (already filtered to Israel-today by the canonical selector) is real
+  // activity for today's summary — without it a completed publish shows "אין פרסומים".
+  for (const p of today.publishedToday) {
+    if (seen.has(p.id)) continue; seen.add(p.id);
+    rows.push({ post: p, st: toTodayStatus(p.state, { dueNow: false }) });
+  }
   rows.sort((a, b) => (a.post.scheduledAt ?? "").localeCompare(b.post.scheduledAt ?? ""));
   const total = rows.length;
   const done = rows.filter((r) => r.st.key === "published").length;
