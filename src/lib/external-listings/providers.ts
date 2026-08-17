@@ -58,7 +58,7 @@ export interface PropertyProvider {
   searchListings(locality: string, limit?: number): Promise<RawListing[]>;
   normalizeListing(raw: RawListing): NormalizedExternalListing;
   /** Diagnostic run — never throws, never persists; surfaces status + error. */
-  debugRun(city: string, limit: number): Promise<ProviderDebugResult>;
+  debugRun(city: string, limit: number, deal?: "buy" | "rent"): Promise<ProviderDebugResult>;
 }
 
 /** Result of a non-destructive actor test run (admin debug tool). */
@@ -187,7 +187,7 @@ class ApifyProvider implements PropertyProvider {
   }
 
   /** Non-destructive test run: returns status + first item + error, never throws. */
-  async debugRun(city: string, limit: number): Promise<ProviderDebugResult> {
+  async debugRun(city: string, limit: number, deal: "buy" | "rent" = "buy"): Promise<ProviderDebugResult> {
     const actorId = this.actorId;
     if (!process.env.APIFY_TOKEN) {
       if (isDev) {
@@ -197,7 +197,7 @@ class ApifyProvider implements PropertyProvider {
       return { actorId, runStatus: "NO_TOKEN", datasetItems: 0, rawSample: null, error: "APIFY_TOKEN missing" };
     }
     try {
-      const run = await client().actor(actorId).call(this.buildInput(city, limit), { timeout: 90, waitSecs: 80, memory: 512 });
+      const run = await client().actor(actorId).call(this.buildInput(city, limit, deal), { timeout: 90, waitSecs: 80, memory: 512 });
       const datasetId = run.defaultDatasetId;
       let items: RawListing[] = [];
       if (datasetId) {

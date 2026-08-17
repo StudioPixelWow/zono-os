@@ -135,7 +135,15 @@ export async function GET(req: NextRequest) {
 
   const startedAt = Date.now();
   const isNightly = new Date().getUTCHours() === NIGHTLY_HOUR_UTC;
-  const mode: SyncMode = isNightly ? "standard" : "quick";
+  // The Apify actors return as many as we request (verified: 500/city on Yad2),
+  // so per-city depth is OUR cap, not the source. Nightly uses "full" (500/city)
+  // for real coverage; the wall-clock budget + stalest-first ordering defer any
+  // remaining cities to the next run, so no single run is starved. A secret-authed
+  // caller may override the mode (?mode=full) to force a deep sync on demand — e.g.
+  // to verify coverage without waiting for the 2:00 UTC nightly.
+  const modeParam = req.nextUrl.searchParams.get("mode");
+  const isSyncMode = (m: string | null): m is SyncMode => m === "quick" || m === "standard" || m === "full" || m === "backfill";
+  const mode: SyncMode = isSyncMode(modeParam) ? modeParam : (isNightly ? "full" : "quick");
   const window = isNightly ? "nightly-deep" : "hourly-incremental";
   const deadline = startedAt + APPLICATION_DEADLINE_MS;
   const db = createServiceRoleClient();

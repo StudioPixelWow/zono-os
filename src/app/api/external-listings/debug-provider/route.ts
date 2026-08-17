@@ -57,11 +57,12 @@ export async function GET(req: NextRequest) {
   const provider = sp.get("provider") === "madlan" ? "madlan" : "yad2";
   const city = (sp.get("city") ?? "").trim();
   const limit = Math.max(1, Math.min(Number(sp.get("limit") ?? 50) || 50, 500));
+  const deal: "buy" | "rent" = sp.get("deal") === "rent" ? "rent" : "buy";
   if (!city) return NextResponse.json({ error: "city query param is required" }, { status: 400 });
 
   try {
-    const report = await debugProvider(provider, city, limit, false);
-    return NextResponse.json({ measured: { city, provider, requestedLimit: limit }, hint: "datasetItems = how many the actor returned", ...report });
+    const report = await debugProvider(provider, city, limit, false, deal);
+    return NextResponse.json({ measured: { city, provider, requestedLimit: limit, deal }, hint: "datasetItems = how many the actor returned for this deal type", ...report });
   } catch (e) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "debug failed" }, { status: 500 });
   }

@@ -772,7 +772,7 @@ export function validateExternalEnv(): ReturnType<typeof externalEnvStatus> {
  * Never triggers the full sync. Persists the raw sample only when saveSample.
  */
 export async function debugProvider(
-  source: string, city: string, limit = 5, saveSample = false,
+  source: string, city: string, limit = 5, saveSample = false, deal: "buy" | "rent" = "buy",
 ): Promise<ProviderDebugReport> {
   const { profile } = await getSessionContext();
   if (!profile) throw new Error("not authenticated");
@@ -781,7 +781,7 @@ export async function debugProvider(
   // for a city (e.g. "does the Yad2 actor return 127 or 1000 for Rehovot?") —
   // manager-gated + never-saved, so the cost is bounded and controlled.
   const safeLimit = Math.max(1, Math.min(limit, 500));
-  const r = await provider.debugRun(city, safeLimit);
+  const r = await provider.debugRun(city, safeLimit, deal);
   const normalizedSample = r.rawSample ? provider.normalizeListing(r.rawSample) : null;
   const missing = normalizedSample ? missingFields(normalizedSample) : [];
 
