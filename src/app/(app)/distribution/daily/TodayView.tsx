@@ -53,7 +53,8 @@ export function TodayView({ data }: { data: PublishingControlData }) {
   const doneCount = rows.filter((r) => r.st.key === "published").length;
   const totalCount = rows.length;
   const pendingRows = rows.filter((r) => r.st.key !== "published" && r.st.key !== "cancelled");
-  const hero = pendingRows.find((r) => r.st.action) ?? pendingRows[0] ?? null;
+  // Prefer a ready "publish next" item as the hero; fall back to any action-required item.
+  const hero = pendingRows.find((r) => r.st.key === "ready") ?? pendingRows.find((r) => r.st.action) ?? pendingRows[0] ?? null;
 
   const run = (fn: () => Promise<{ error?: string }>) => {
     startObserving(); // sync Today quickly after any action
@@ -194,6 +195,7 @@ function RowAction({ row, pending, run, requested, onPublishNow }: { row: Row; p
     if (requested.has(post.id)) return <span className="text-brand text-[11px] font-bold">בתור לפרסום ✓</span>;
     return <button disabled={pending} onClick={() => onPublishNow(post.id)} className="bg-brand rounded-lg px-3 py-1 text-[11px] font-black text-white disabled:opacity-50">פרסום עכשיו</button>;
   }
+  if (st.key === "published") return post.externalPostUrl ? <a href={post.externalPostUrl} target="_blank" rel="noopener noreferrer" className="text-success text-[11px] font-bold">צפייה בפוסט ↗</a> : null;
   return null;
 }
 
@@ -213,11 +215,13 @@ function HeroAction({ row, pending, run, requested, onPublishNow }: { row: Row; 
 }
 
 function ReconcileButtons({ postId, pending, run, big }: { postId: string; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void; big?: boolean }) {
+  const [url, setUrl] = useState("");
   const base = big ? "rounded-xl px-4 py-2 text-sm font-black" : "rounded-lg px-2.5 py-1 text-[11px] font-bold";
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {big && <span className="text-warning w-full text-[12px]">לא הצלחנו לוודא אם הפרסום עלה לפייסבוק. כדי למנוע פרסום כפול, עדכן מה קרה:</span>}
-      <button disabled={pending} onClick={() => run(() => reconcilePostAction(postId, "published"))} className={cn(base, "bg-success-soft text-success disabled:opacity-50")}>פורסם</button>
+      <span className="text-warning w-full text-[11px]">לא הצלחנו לוודא אם הפרסום עלה לפייסבוק. בדוק בקבוצה: אם פרסמת — הדבק קישור לפוסט ולחץ ״פורסם״. אם לא — ״לא פורסם״. (כדי למנוע פרסום כפול, ZONO לא מנחש.)</span>
+      <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="קישור לפוסט (לא חובה)" dir="ltr" className="border-line bg-card text-ink w-44 rounded-lg border px-2 py-1 text-[11px]" />
+      <button disabled={pending} onClick={() => run(() => reconcilePostAction(postId, "published", url.trim() || undefined))} className={cn(base, "bg-success-soft text-success disabled:opacity-50")}>פורסם</button>
       <button disabled={pending} onClick={() => run(() => reconcilePostAction(postId, "not_published"))} className={cn(base, "bg-surface text-ink disabled:opacity-50")}>לא פורסם</button>
       <button disabled={pending} onClick={() => run(() => reconcilePostAction(postId, "cancel"))} className={cn(base, "text-muted disabled:opacity-50")}>ביטול</button>
     </div>
