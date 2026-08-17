@@ -196,3 +196,47 @@ The **three** publishing surfaces (`DailyDistributionView` copy-paste, `Publishi
 7. Minimal in-context onboarding.
 
 *(Steps 1 done in this pass as safe copy fixes; 2–7 require staged UI work + retest, kept out of this pass to avoid untested changes to the publishing surfaces.)*
+
+---
+
+# IMPLEMENTATION UPDATE — Campaign UX P0 (activation)
+*(The diagnosis above is preserved as product history. This section records what was implemented.)*
+
+## What was implemented
+The **P0 dead-end is fixed**: the Campaign Wizard now activates a real campaign end-to-end instead of handing off to another admin surface.
+
+- **New server action** `src/lib/facebook-groups/activate.ts` → `activateFacebookCampaignAction`. Server-trusted; reuses the EXISTING distribution engine — no second scheduler, no new tables:
+  `createCampaignAction` (campaign identity) → `selectGroupsAction` (group links) → `generateCampaignVariationsAction` (persisted post content) → `previewPostingQueueAction` + `createPostingQueueAction` (real `distribution_posts` schedule via `distributionSchedulerService.buildQueue`).
+  - **Server-derived**: schedule window (09:00–20:00), cadence→horizon/maxPerDay, start/end dates. Browser sends only property, groups, cadence, start day.
+  - **Validation**: auth + org; property re-checked to belong to the org (never trust the browser id); ≥1 group; valid cadence.
+  - **Partial-failure cleanup**: if variations or queue-build fail, the just-created campaign is deleted → no empty/orphan campaign.
+  - **Idempotency**: client single-flight (ref guard + disabled button, no navigation until the server confirms); `buildQueue` also de-dups slots.
+- **Rewritten builder** `src/components/facebook-groups/CampaignWizard.tsx`:
+  - **6 steps** (was 7): נכס · תוכן · חיבור פייסבוק · קבוצות · תזמון · **סקירה ואישור**. Removed the post-publish "תגובות" step from the builder (moved to the success note).
+  - **Review** = a human summary (נכס · מחיר · קבוצות · תדירות · מתחיל · ~פרסומים) + the assisted-publishing truth line. **The Gantt / V1·V2 matrix was removed entirely.**
+  - **One dominant CTA**: **הפעלת הקמפיין** (loading: "מפעילים את הקמפיין…", disabled unless a property + groups + Facebook connected).
+  - **Success state** (not a generic dashboard): "הקמפיין פעיל ✅" with real persisted values (groups, total posts, end date, next publish) + primary **"לפרסומים של היום ←"** (`/distribution/daily`) and secondary "לצפייה בקמפיין".
+  - Group step shows the running **selected-count**; activation is impossible with 0 groups or no property.
+- **Copy** (prior pass, retained): truthful frequency label, "סקירה ואישור", no Gantt jargon.
+
+## Before → After (campaign creation → active → today)
+| Metric | Before | After |
+|---|---|---|
+| Builder steps | 7 | **6** |
+| Dead-end handoff to another admin screen | 1 ("סיום — למרכז ההפצה") | **0** |
+| "What do I do now?" after finishing the builder | yes | **no** (success state + 1 CTA) |
+| Screens from *activate* to *know what to publish today* | ≥3 (distribution center → daily → self-assemble) | **2** (success → Today) |
+| Engineering artifacts in the builder (Gantt V1/V2) | present | **removed** |
+| Real schedule persisted on finish | no (planned client-side only) | **yes (distribution_posts)** |
+
+## Campaign context
+Scheduled posts are associated to one campaign via the existing `distribution_campaigns` row (created at activation) + `distribution_campaign_groups` links + `distribution_posts.campaign_id`. No schema change.
+
+## Daily view integration
+Activated posts are ordinary `distribution_posts` created by the shared scheduler, so they already surface in the existing daily/publishing surfaces and are claimed by the existing assisted-extension flow — unchanged.
+
+## Remaining (P1/P2 — not in this pass)
+- P1: move FB connection to a pre-builder gate (still a step here); group selection search/filter/saved-sets at 400-scale; expose times/day + days-of-week + human day-by-day preview (currently sensible server defaults 09:00–20:00).
+- P1: unify the two publishing surfaces (daily copy-paste + publishing-control) under one status language.
+- P2: analytics funnel events; group recommendations; move comments/leads into a campaign detail page.
+- Entry-point consolidation (7 sidebar doors → 1 hub) — not touched this pass.

@@ -1,28 +1,33 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- external CDN property photos; next/image would require remotePatterns config */
 // ============================================================================
-// 📘 ZONO — Facebook Groups Campaign Wizard. 33.2.
-// Guided 7-step flow that STITCHES existing systems: property inventory, the
-// distribution group library (folders), the Facebook connection state, post
-// content variations, frequency, and a Gantt. It PLANS only — nothing publishes
-// or auto-comments; scheduling/publishing hands off to the existing Distribution
-// flow, and only after Facebook is connected + the plan is approved.
-// Imports ONLY the pure planner/content submodules (never the server barrel).
+// 📘 ZONO — Facebook Groups Campaign Wizard. Campaign UX P0.
+// A guided property→content→groups→schedule→REVIEW flow that ends in a REAL
+// ACTIVATION (activateFacebookCampaignAction): it persists the campaign + group
+// links + content variations + the real distribution_posts schedule through the
+// EXISTING distribution engine — nothing is mocked, nothing dead-ends to another
+// admin screen. After activation the user lands on a success state → today's
+// publishing. Publishing itself remains the existing assisted-extension flow.
 // ============================================================================
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
-import { buildPlan, FREQUENCY_HE, SLOT_STATUS_HE, type Frequency, type WizardGroup, type GroupFolder } from "@/lib/facebook-groups/planner";
-import { generatePostVariations, autoReplyTemplates, type PropertyFacts } from "@/lib/facebook-groups/content";
+import { buildPlan, FREQUENCY_HE, type Frequency, type WizardGroup, type GroupFolder } from "@/lib/facebook-groups/planner";
+import { generatePostVariations, type PropertyFacts } from "@/lib/facebook-groups/content";
+import { activateFacebookCampaignAction } from "@/lib/facebook-groups/activate";
 
 interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
 interface Props { properties: WProperty[]; folders: GroupFolder[]; connection: Connection; notes: string[] }
 
-const STEPS = ["נכס", "תוכן פוסט", "חיבור פייסבוק", "קבוצות", "תדירות", "סקירה ואישור", "תגובות"];
+const STEPS = ["נכס", "תוכן", "חיבור פייסבוק", "קבוצות", "תזמון", "סקירה ואישור"];
 const fmt = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
 const FREQS: Frequency[] = ["one_time", "three_weekly", "daily", "full_month"];
+const dateHe = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "long" }) : "—");
+const dateTimeHe = (iso: string | null) => (iso ? new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
+
+interface Activated { campaignId: string; created: number; groupCount: number; firstPublishAt: string | null; endDate: string }
 
 export function CampaignWizard({ properties, folders, connection, notes }: Props) {
   const [step, setStep] = useState(0);
@@ -30,6 +35,10 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [frequency, setFrequency] = useState<Frequency>("three_weekly");
   const [startDate] = useState(() => new Date(Date.now() + 3 * 86400_000).toISOString().slice(0, 10));
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
+  const [done, setDone] = useState<Activated | null>(null);
+  const activatingRef = useRef(false);
 
   const property = properties.find((p) => p.id === propId) ?? null;
   const allGroups = useMemo(() => folders.flatMap((f) => f.groups), [folders]);
@@ -37,16 +46,62 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
   const variations = useMemo(() => (property ? generatePostVariations(property, 4) : []), [property]);
   const plan = useMemo(() => (chosen.length ? buildPlan(chosen, frequency, startDate, { variations: variations.length || 4 }) : null), [chosen, frequency, startDate, variations.length]);
 
-  const canNext = [!!property, true, true, chosen.length > 0, true, true, true][step];
+  const canNext = [!!property, true, true, chosen.length > 0, true, true][step];
   const toggleGroup = (id: string) => setSelectedGroups((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleFolder = (f: GroupFolder) => setSelectedGroups((s) => { const n = new Set(s); const all = f.groups.every((g) => n.has(g.id)); f.groups.forEach((g) => (all ? n.delete(g.id) : n.add(g.id))); return n; });
+
+  async function activate() {
+    if (activatingRef.current || !property || chosen.length === 0) return; // single-flight
+    activatingRef.current = true;
+    setActivating(true);
+    setActivateError(null);
+    try {
+      const res = await activateFacebookCampaignAction({
+        propertyId: property.id, propertyTitle: property.title,
+        groupIds: chosen.map((g) => g.id), frequency, startDate,
+      });
+      if (res.ok) setDone({ campaignId: res.campaignId, created: res.created, groupCount: res.groupCount, firstPublishAt: res.firstPublishAt, endDate: res.endDate });
+      else setActivateError(res.error);
+    } catch {
+      setActivateError("הפעלת הקמפיין נכשלה. נסה שוב.");
+    } finally {
+      activatingRef.current = false;
+      setActivating(false);
+    }
+  }
+
+  // ── SUCCESS STATE — the builder does not dead-end; it lands here ─────────────
+  if (done) {
+    return (
+      <div dir="rtl" className="mx-auto flex max-w-xl flex-col items-center gap-4 py-8 text-center">
+        <div className="bg-success-soft grid h-16 w-16 place-items-center rounded-full text-3xl">✅</div>
+        <h1 className="text-ink text-2xl font-black">הקמפיין פעיל</h1>
+        <div className="bg-card border-line w-full rounded-[22px] border p-5">
+          <div className="grid grid-cols-2 gap-3 text-right">
+            <Cell label="נכס" value={property?.title ?? "—"} />
+            <Cell label="קבוצות" value={`${done.groupCount}`} />
+            <Cell label="פרסומים מתוכננים" value={`${done.created}`} />
+            <Cell label="עד" value={dateHe(done.endDate)} />
+            <Cell label="הפרסום הבא" value={dateTimeHe(done.firstPublishAt)} full />
+          </div>
+        </div>
+        <p className="text-muted max-w-md text-[12px]">התוסף ילווה אותך בפרסום כל פריט בזמנו — הפרסום מאושר על ידך. תגובות שיתקבלו על הפוסטים ניתנות לקידום ללידים במרכז התגובות.</p>
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+          <Link href="/distribution/daily" className="bg-brand rounded-xl px-6 py-2.5 text-sm font-black text-white">לפרסומים של היום ←</Link>
+          <Link href="/distribution" className="border-line text-ink rounded-xl border px-6 py-2.5 text-sm font-bold">לצפייה בקמפיין</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const onReview = step === STEPS.length - 1;
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
       <div className="bg-brand-soft flex items-center justify-between gap-3 rounded-[22px] p-5">
         <div>
           <p className="text-brand text-xs font-bold">ZONO · קבוצות פייסבוק</p>
-          <h1 className="text-ink mt-1 flex items-center gap-2 text-2xl font-black"><Icon name="Megaphone" size={22} /> אשף קמפיין לקבוצות</h1>
+          <h1 className="text-ink mt-1 flex items-center gap-2 text-2xl font-black"><Icon name="Megaphone" size={22} /> קמפיין שיווק בקבוצות</h1>
           <p className="text-muted mt-1 text-sm">בונה קמפיין שיווק לנכס בקבוצות פייסבוק. שום דבר לא מתפרסם ללא חיבור ואישור.</p>
         </div>
         <span className={cn("rounded-full px-3 py-1 text-[11px] font-bold", connection.connected ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>{connection.connected ? "פייסבוק מחובר" : "פייסבוק לא מחובר"}</span>
@@ -89,10 +144,6 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
                 <div className="mt-1 flex flex-wrap gap-1">{v.hashtags.map((h) => <span key={h} className="bg-brand-soft text-brand rounded px-2 py-0.5 text-[10px]">{h}</span>)}</div>
               </div>
             ))}
-            <div className="rounded-2xl bg-surface p-3">
-              <div className="text-ink text-[13px] font-bold">תגובות אוטומטיות מוצעות (מאושרות ידנית בלבד)</div>
-              <ul className="mt-1 space-y-1">{autoReplyTemplates().map((r) => <li key={r.intent} className="text-[12px]"><b className="text-ink">{r.intent}:</b> <span className="text-muted">{r.reply}</span></li>)}</ul>
-            </div>
           </div>
         )}
 
@@ -109,9 +160,9 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
 
         {/* STEP 4 — groups */}
         {step === 3 && (
-          folders.length === 0 ? <Empty title="אין קבוצות בספרייה" body="הוסיפו קבוצות במסך הקבוצות (Distribution) כדי לשייך לתיקיות." cta={{ href: "/distribution/groups", label: "ניהול קבוצות" }} /> : (
+          folders.length === 0 ? <Empty title="אין קבוצות בספרייה" body="הוסיפו קבוצות במסך הקבוצות כדי לשייך לתיקיות." cta={{ href: "/distribution/groups", label: "ניהול קבוצות" }} /> : (
             <div className="space-y-4">
-              <p className="text-muted text-[12px]">{selectedGroups.size} קבוצות נבחרו. בחרו תיקייה שלמה או קבוצות בודדות.</p>
+              <p className="text-muted text-[12px]"><b className="text-ink">{selectedGroups.size}</b> קבוצות נבחרו. בחרו תיקייה שלמה או קבוצות בודדות.</p>
               {folders.map((f) => (
                 <div key={f.name}>
                   <div className="flex items-center justify-between">
@@ -132,57 +183,59 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
           )
         )}
 
-        {/* STEP 5 — frequency */}
+        {/* STEP 5 — schedule (cadence) */}
         {step === 4 && (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {FREQS.map((f) => (
-              <button key={f} onClick={() => setFrequency(f)} className={cn("rounded-2xl border p-4 text-center", frequency === f ? "border-brand bg-brand-soft" : "border-line bg-surface")}>
-                <Icon name="Calendar" size={18} className="text-brand mx-auto" />
-                <div className="text-ink mt-1 text-[13px] font-black">{FREQUENCY_HE[f]}</div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* STEP 6 — gantt + approval */}
-        {step === 5 && plan && (
           <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">{plan.risks.map((r, i) => <span key={i} className={cn("rounded-lg px-2.5 py-1 text-[11px] font-semibold", r.level === "danger" ? "bg-danger-soft text-danger" : r.level === "warning" ? "bg-warning-soft text-warning" : "bg-surface text-muted")}>{r.level === "danger" ? "⛔" : r.level === "warning" ? "⚠️" : "ℹ️"} {r.message}</span>)}</div>
-            <div className="text-muted text-[12px]">{plan.totalPosts} פוסטים · {chosen.length} קבוצות · {plan.gantt.dates.length} תאריכים. כל תא = וריאציה + סטטוס. שום דבר לא מתפרסם ללא אישור.</div>
-            <div className="overflow-x-auto">
-              <table className="text-[11px]">
-                <thead><tr><th className="bg-surface text-muted sticky right-0 p-2 text-right">קבוצה</th>{plan.gantt.dates.map((d) => <th key={d} className="text-muted p-1 font-normal">{d.slice(5)}</th>)}</tr></thead>
-                <tbody>{plan.gantt.rows.map((row) => (
-                  <tr key={row.groupId}><td className="bg-surface text-ink sticky right-0 p-2 font-bold">{row.groupName}</td>
-                    {row.cells.map((c, i) => <td key={i} className="p-1 text-center">{c.slot ? <span className="bg-brand-soft text-brand inline-block rounded px-1.5 py-0.5 font-bold" title={SLOT_STATUS_HE[c.slot.status]}>V{c.slot.variationIndex + 1}</span> : <span className="text-slate-300">·</span>}</td>)}
-                  </tr>
-                ))}</tbody>
-              </table>
+            <p className="text-muted text-[12px]">באיזו תדירות לפרסם לאורך הקמפיין?</p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {FREQS.map((f) => (
+                <button key={f} onClick={() => setFrequency(f)} className={cn("rounded-2xl border p-4 text-center", frequency === f ? "border-brand bg-brand-soft" : "border-line bg-surface")}>
+                  <Icon name="Calendar" size={18} className="text-brand mx-auto" />
+                  <div className="text-ink mt-1 text-[13px] font-black">{FREQUENCY_HE[f]}</div>
+                </button>
+              ))}
             </div>
-            <div className="bg-warning-soft text-warning rounded-xl p-3 text-[12px]">{connection.connected ? "מוכן לאישור. לאחר אישור, התזמון/פרסום ממשיכים במסך ה-Distribution (Publish Assistant) — עדיין באישור ידני לכל פוסט." : "לא ניתן לתזמן/לפרסם עד לחיבור פייסבוק. ניתן לשמור את התוכנית."}</div>
+            {plan && <p className="text-muted text-[12px]">מ־{dateHe(startDate)} · בין 09:00 ל־20:00 · כ־{plan.totalPosts} פרסומים מתוכננים.</p>}
           </div>
         )}
 
-        {/* STEP 7 — comments */}
-        {step === 6 && (
-          <div className="text-center">
-            <div className="text-4xl">💬</div>
-            <h3 className="text-ink mt-2 text-lg font-black">ניהול תגובות ולידים</h3>
-            <p className="text-muted mx-auto mt-1 max-w-md text-[13px]">לאחר פרסום, תגובות מסווגות אוטומטית (מעוניין / מבקש פרטים / שאלת מחיר / מיקום / בקשת צפייה / מתווך / ספאם) עם ציון כוונה. הצעות ליד נוצרות רק לאחר אישורכם — שום ליד לא נוצר אוטומטית.</p>
-            <Link href="/social-leads" className="bg-brand mt-4 inline-block rounded-xl px-5 py-2.5 text-sm font-bold text-white">מרכז תגובות ולידים</Link>
-          </div>
+        {/* STEP 6 — REVIEW + ACTIVATE */}
+        {onReview && (
+          !property || chosen.length === 0 ? (
+            <Empty title="חסרים פרטים" body="חזרו ובחרו נכס וקבוצות לפני הפעלת הקמפיין." />
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Cell label="נכס" value={property.title ?? "—"} />
+                <Cell label="מחיר" value={fmt(property.price)} />
+                <Cell label="קבוצות" value={`${chosen.length} נבחרו`} />
+                <Cell label="תדירות" value={FREQUENCY_HE[frequency]} />
+                <Cell label="מתחיל" value={dateHe(startDate)} />
+                <Cell label="פרסומים מתוכננים" value={plan ? `~${plan.totalPosts}` : "—"} />
+              </div>
+              <div className="bg-surface text-muted rounded-xl p-3 text-[12px]">
+                ZONO יכין ויתזמן כל פרסום. בזמן הפרסום, <b className="text-ink">התוסף ילווה אותך</b> בפרסום בקבוצה בפייסבוק — הפרסום מאושר על ידך. אין פרסום אוטומטי.
+              </div>
+              {!connection.connected && <div className="bg-warning-soft text-warning rounded-xl p-3 text-[12px]">יש לחבר פייסבוק לפני הפעלת הקמפיין. ניתן לחזור לשלב ״חיבור פייסבוק״.</div>}
+              {activateError && <div className="bg-danger-soft text-danger rounded-xl p-3 text-[12px]">{activateError}</div>}
+            </div>
+          )
         )}
       </div>
 
       {/* Nav */}
       <div className="flex items-center justify-between">
-        <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0} className="text-muted rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40">← הקודם</button>
-        {step < STEPS.length - 1
+        <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0 || activating} className="text-muted rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40">← הקודם</button>
+        {!onReview
           ? <button onClick={() => canNext && setStep((s) => s + 1)} disabled={!canNext} className="bg-brand rounded-xl px-5 py-2 text-sm font-bold text-white disabled:opacity-50">הבא →</button>
-          : <Link href="/distribution" className="bg-brand rounded-xl px-5 py-2 text-sm font-bold text-white">המשך לתזמון ופרסום ←</Link>}
+          : <button onClick={activate} disabled={activating || !property || chosen.length === 0 || !connection.connected} className="bg-brand rounded-xl px-6 py-2 text-sm font-black text-white disabled:opacity-50">{activating ? "מפעילים את הקמפיין…" : "הפעלת הקמפיין"}</button>}
       </div>
     </div>
   );
+}
+
+function Cell({ label, value, full }: { label: string; value: string; full?: boolean }) {
+  return <div className={cn("bg-surface rounded-xl p-3 text-right", full && "col-span-2")}><div className="text-muted text-[11px]">{label}</div><div className="text-ink mt-0.5 text-[14px] font-black">{value}</div></div>;
 }
 
 function Empty({ title, body, cta }: { title: string; body: string; cta?: { href: string; label: string } }) {
