@@ -20,8 +20,11 @@ export type ExtensionReadinessState =
 
 /** Heartbeat cadence is 5 min; 12 min tolerates ~2 missed beats before "offline". */
 export const EXTENSION_FRESH_WINDOW_MS = 12 * 60 * 1000;
-/** Minimum extension version that carries the heartbeat-fallback fix. */
-export const MIN_SUPPORTED_EXTENSION_VERSION = "1.0.3";
+/** Minimum FUNCTIONALLY-CAPABLE publishing version. 1.0.2 publishes correctly;
+ *  1.0.3 only adds heartbeat-readiness stability. "needs_update" is reserved for
+ *  genuinely unsupported builds (< this), NOT merely "not the latest" — otherwise a
+ *  connected, FB-logged-in office is falsely shown as unable to publish. */
+export const MIN_SUPPORTED_EXTENSION_VERSION = "1.0.2";
 
 export interface ExtensionReadinessInput {
   status: string | null | undefined;          // raw ExtensionPathStatus
@@ -102,6 +105,29 @@ export function computeExtensionReadiness(input: ExtensionReadinessInput): Exten
   return input.facebookSessionDetected ? view("ready") : view("needs_facebook_login");
 }
 
+/**
+ * Office readiness across ALL of an org's extension instances. A stale/installed
+ * instance must NEVER make the office appear offline when another instance is ready.
+ * Rank the per-instance readiness and pick the strongest; tie-break by freshest beat.
+ */
+const READINESS_RANK: Record<ExtensionReadinessState, number> = {
+  ready: 6, needs_facebook_login: 5, needs_update: 4, installed_idle: 3, offline: 2, error: 1, not_installed: 0,
+};
+export function pickBestReadiness(inputs: ExtensionReadinessInput[]): ExtensionReadinessView {
+  if (!inputs.length) return computeExtensionReadiness({ status: "not_installed", lastCheckedAt: null });
+  let best = computeExtensionReadiness(inputs[0]);
+  let bestFresh = inputs[0].lastCheckedAt ? Date.parse(inputs[0].lastCheckedAt) : 0;
+  for (let i = 1; i < inputs.length; i++) {
+    const v = computeExtensionReadiness(inputs[i]);
+    const fresh = inputs[i].lastCheckedAt ? Date.parse(inputs[i].lastCheckedAt) : 0;
+    if (READINESS_RANK[v.state] > READINESS_RANK[best.state] ||
+        (READINESS_RANK[v.state] === READINESS_RANK[best.state] && fresh > bestFresh)) {
+      best = v; bestFresh = fresh;
+    }
+  }
+  return best;
+}
+
 // ── Pure self-check (offline; not wired into runtime) ────────────────────────
 export function __extReadinessSelfCheck(): boolean {
   const now = Date.parse("2026-01-01T12:00:00.000Z");
@@ -114,7 +140,14 @@ export function __extReadinessSelfCheck(): boolean {
     [{ status: "installed", lastCheckedAt: stale, nowMs: now }, "offline"],
     [{ status: "installed", lastCheckedAt: fresh, facebookSessionDetected: false, version: "1.0.3", nowMs: now }, "needs_facebook_login"],
     [{ status: "ready", lastCheckedAt: fresh, facebookSessionDetected: true, version: "1.0.3", nowMs: now }, "ready"],
-    [{ status: "ready", lastCheckedAt: fresh, facebookSessionDetected: true, version: "1.0.2", nowMs: now }, "needs_update"],
+    [{ status: "ready", lastCheckedAt: fresh, facebookSessionDetected: true, version: "1.0.2", nowMs: now }, "ready"],
+    [{ status: "ready", lastCheckedAt: fresh, facebookSessionDetected: true, version: "1.0.1", nowMs: now }, "needs_update"],
   ];
-  return cases.every(([inp, exp]) => computeExtensionReadiness(inp).state === exp);
+  const perInstance = cases.every(([inp, exp]) => computeExtensionReadiness(inp).state === exp);
+  // A ready instance B must beat a stale installed instance A.
+  const office = pickBestReadiness([
+    { status: "installed", lastCheckedAt: new Date(now - 26 * 60_000).toISOString(), nowMs: now },
+    { status: "ready", lastCheckedAt: fresh, facebookSessionDetected: true, version: "1.0.2", nowMs: now },
+  ]).state === "ready";
+  return perInstance && office;
 }

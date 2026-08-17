@@ -6,8 +6,8 @@
 // Falls back to an empty Today on load error (never crashes the morning workflow).
 // ============================================================================
 import { getPublishingControlData, emptyControlData } from "@/lib/distribution/publishing-control-data";
-import { getFacebookConnectionPathsAction } from "@/lib/distribution/provider-connections-actions";
 import { computeExtensionReadiness } from "@/lib/distribution/extension-readiness";
+import { getOrgExtensionReadiness } from "@/lib/distribution/extension-service";
 import { TodayView } from "./TodayView";
 
 export const dynamic = "force-dynamic";
@@ -19,21 +19,14 @@ export default async function DailyDistributionPage() {
   } catch (e) {
     console.error("[distribution] today load failed:", e);
   }
-  // Publish-time readiness (freshness-aware). Campaign creation never depends on
-  // this — it is only a publishing-time gate. The customer sees ONE state, not the
-  // internal status name. facebook_session_detected is not persisted to the path
-  // metadata (the "session" key is stripped defensively), so we derive it from the
-  // status the heartbeat set (ready/facebook_session_detected == session present).
+  // Publish-time readiness (freshness-aware, MULTI-INSTANCE). Campaign creation never
+  // depends on this — it is only a publishing-time gate. Computed from ALL of the org's
+  // instances (getOrgExtensionReadiness picks the STRONGEST), so a stale/installed
+  // instance can never make a genuinely-ready office look offline. The customer sees
+  // ONE state, never an internal status name.
   let readiness = computeExtensionReadiness({ status: "not_installed", lastCheckedAt: null });
   try {
-    const paths = await getFacebookConnectionPathsAction();
-    const ext = paths.extension;
-    readiness = computeExtensionReadiness({
-      status: ext?.status ?? "not_installed",
-      lastCheckedAt: ext?.lastCheckedAt ?? null,
-      facebookSessionDetected: ext?.status === "ready" || ext?.status === "facebook_session_detected",
-      version: (ext?.metadata?.version as string | undefined) ?? null,
-    });
+    readiness = await getOrgExtensionReadiness();
   } catch (e) {
     console.error("[distribution] ext readiness load failed:", e);
   }

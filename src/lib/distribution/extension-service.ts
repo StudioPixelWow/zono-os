@@ -24,6 +24,7 @@ import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
 import { promoteForChannel, resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
 import { claimNextPost, transitionPost, buildContentHash, buildIdempotencyKey, type PublishState, type ClaimedPost } from "./publishing-state-machine";
+import { computeExtensionReadiness, pickBestReadiness, type ExtensionReadinessView } from "./extension-readiness";
 
 type UserDb = Awaited<ReturnType<typeof createClient>>;
 
@@ -133,6 +134,30 @@ export async function recordHeartbeat(inst: AuthedInstance, input: HeartbeatInpu
   } as never).eq("id", inst.id);
   await setExtensionPath(inst.orgId, inst.userId, status, meta);
   return status;
+}
+
+/**
+ * Office extension readiness across ALL of the org's instances (Phase 4 selector).
+ * Reads the instance table directly (facebook_session_detected is retained there,
+ * unlike the path metadata) and returns the STRONGEST instance's readiness, so a
+ * stale/installed instance can never make a genuinely-ready office look offline.
+ * Read-only; never mutates state or fabricates "ready".
+ */
+export async function getOrgExtensionReadiness(): Promise<ExtensionReadinessView> {
+  const s = await userScope();
+  if (!s) return computeExtensionReadiness({ status: "not_installed", lastCheckedAt: null });
+  const db = createServiceRoleClient();
+  const { data } = await db.from(INSTANCES as never)
+    .select("status,version,last_seen_at,metadata")
+    .eq("org_id", s.orgId).neq("status", "revoked");
+  const rows = (data ?? []) as unknown as Array<{ status: string; version: string | null; last_seen_at: string | null; metadata: Record<string, unknown> | null }>;
+  if (!rows.length) return computeExtensionReadiness({ status: "not_installed", lastCheckedAt: null });
+  return pickBestReadiness(rows.map((r) => ({
+    status: r.status,
+    lastCheckedAt: r.last_seen_at,
+    facebookSessionDetected: r.metadata?.facebook_session_detected === true,
+    version: r.version,
+  })));
 }
 
 /** Revoke an instance (called from ZONO UI). */

@@ -108,6 +108,14 @@ export function TodayView({ data, readiness }: { data: PublishingControlData; re
     return next;
   }, [requested, rows]);
 
+  const nextFuture = useMemo(() => {
+    const fut = data.queued
+      .filter((p) => p.scheduledAt && new Date(p.scheduledAt).getTime() > nowMs)
+      .sort((a, b) => (a.scheduledAt ?? "").localeCompare(b.scheduledAt ?? ""));
+    return fut[0] ?? null;
+  }, [data, nowMs]);
+  const dateHe = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" }) : "");
+
   return (
     <div dir="rtl" className="flex flex-col gap-4">
       {/* Header + progress */}
@@ -116,6 +124,13 @@ export function TodayView({ data, readiness }: { data: PublishingControlData; re
         <p className="text-muted mt-1 text-sm">
           {totalCount === 0 ? "אין פרסומים מתוכננים להיום." : `${totalCount} פרסומים · ${doneCount} פורסמו · ${pendingRows.length} ממתינים`}
         </p>
+        {readiness && (
+          <div className="mt-2 inline-flex items-center gap-1.5 text-[12px]">
+            <span className={cn("inline-block h-2 w-2 rounded-full", readiness.isPublishable ? "bg-success" : readiness.state === "error" || readiness.state === "not_installed" ? "bg-danger" : "bg-warning")} />
+            <span className="text-muted">תוסף ZONO</span>
+            <span className={cn("font-bold", readiness.isPublishable ? "text-success" : "text-warning")}>{readiness.label}</span>
+          </div>
+        )}
       </div>
 
       {error && <div className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-[12px]">{error}</div>}
@@ -135,7 +150,16 @@ export function TodayView({ data, readiness }: { data: PublishingControlData; re
         <div className="bg-card border-line rounded-[22px] border p-8 text-center">
           <div className="text-3xl">🗓️</div>
           <p className="text-ink mt-2 text-lg font-black">אין פרסומים מתוכננים להיום</p>
-          <p className="text-muted mt-1 text-sm">כשתפעיל קמפיין, הפרסומים של היום יופיעו כאן.</p>
+          {nextFuture ? (
+            <div className="bg-brand-soft mx-auto mt-3 max-w-sm rounded-2xl p-4 text-right">
+              <p className="text-brand text-xs font-bold">הפרסום הבא</p>
+              <div className="text-ink mt-1 text-sm font-black">{dateHe(nextFuture.scheduledAt)} · {timeHe(nextFuture.scheduledAt)}</div>
+              <div className="text-muted text-[12px]">{[nextFuture.groupName, nextFuture.campaignName].filter(Boolean).join(" · ") || "קמפיין פייסבוק"}</div>
+              <Link href="/distribution" className="text-brand mt-2 inline-block text-[12px] font-bold">צפייה בקמפיין ←</Link>
+            </div>
+          ) : (
+            <p className="text-muted mt-1 text-sm">כשתפעיל קמפיין, הפרסומים של היום יופיעו כאן.</p>
+          )}
           <div className="mt-4 flex justify-center gap-2">
             <Link href="/distribution/campaign-wizard" className="bg-brand rounded-xl px-5 py-2 text-sm font-black text-white">יצירת קמפיין</Link>
             <Link href="/distribution" className="border-line text-ink rounded-xl border px-5 py-2 text-sm font-bold">ליומן</Link>
