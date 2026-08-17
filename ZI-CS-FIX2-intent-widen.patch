@@ -1,0 +1,16 @@
+diff --git a/src/lib/zi-expert/support-intent.ts b/src/lib/zi-expert/support-intent.ts
+index 445e9d2..1ce9a0b 100644
+--- a/src/lib/zi-expert/support-intent.ts
++++ b/src/lib/zi-expert/support-intent.ts
+@@ -91,7 +91,10 @@ export function classifySupportIntentDeterministic(
+   const signals: string[] = [];
+ 
+   // Score every category by matched-signal count (specificity-weighted).
+-  let best: SupportCategory = "OTHER";
++  // Declared via assertion (not a bare "OTHER") so TS keeps the WIDE union type —
++  // otherwise it narrows `best` to the literal "OTHER" (it ignores the assignment
++  // inside the forEach closure) and every `best === "…"` becomes a no-overlap error.
++  let best = "OTHER" as SupportCategory;
+   let bestScore = 0;
+   (Object.keys(CATEGORY_SIGNALS) as SupportCategory[]).forEach((cat) => {
+     const table = CATEGORY_SIGNALS[cat];

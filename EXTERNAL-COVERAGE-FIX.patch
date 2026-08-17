@@ -1,0 +1,33 @@
+diff --git a/src/app/api/cron/external-listings-sync/route.ts b/src/app/api/cron/external-listings-sync/route.ts
+index aa39ab6..a3f34a2 100644
+--- a/src/app/api/cron/external-listings-sync/route.ts
++++ b/src/app/api/cron/external-listings-sync/route.ts
+@@ -135,7 +135,11 @@ export async function GET(req: NextRequest) {
+ 
+   const startedAt = Date.now();
+   const isNightly = new Date().getUTCHours() === NIGHTLY_HOUR_UTC;
+-  const mode: SyncMode = isNightly ? "standard" : "quick";
++  // The Apify actors return as many as we request (verified: 500/city on Yad2),
++  // so per-city depth is OUR cap, not the source. Nightly uses "full" (500/city)
++  // for real coverage; the wall-clock budget + stalest-first ordering defer any
++  // remaining cities to the next run, so no single run is starved.
++  const mode: SyncMode = isNightly ? "full" : "quick";
+   const window = isNightly ? "nightly-deep" : "hourly-incremental";
+   const deadline = startedAt + APPLICATION_DEADLINE_MS;
+   const db = createServiceRoleClient();
+diff --git a/src/lib/external-listings/providers.ts b/src/lib/external-listings/providers.ts
+index cf54c76..55cdc1b 100644
+--- a/src/lib/external-listings/providers.ts
++++ b/src/lib/external-listings/providers.ts
+@@ -240,7 +240,10 @@ class ApifyProvider implements PropertyProvider {
+       sourceId: String(pick(raw, ["id", "listingId", "adNumber", "token", "orderId"]) ?? cryptoId()),
+       externalId: str(pick(raw, ["id", "listingId", "adNumber", "token", "orderId"])),
+       title,
+-      city: str(pick(raw, ["city", "cityName", "locality", "area", "settlement"])),
++      // Prefer the Hebrew city (the actor returns BOTH cityHebrew="רחובות" and
++      // city="Rehovot") so external listings match ZONO's Hebrew internal data
++      // (properties store "רחובות") — otherwise city-based matching silently fails.
++      city: str(pick(raw, ["cityHebrew", "city", "cityName", "locality", "area", "settlement"])),
+       neighborhood: str(pick(raw, ["neighborhood", "neighbourhood", "neighborhoodName", "hood", "areaName", "quarter"])),
+       street: str(pick(raw, ["street", "streetName", "addressStreet"])),
+       streetNumber: str(pick(raw, ["streetNumber", "houseNumber", "number", "addressNumber"])),

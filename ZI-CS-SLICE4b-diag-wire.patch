@@ -1,0 +1,55 @@
+diff --git a/src/lib/zi-expert/actions.ts b/src/lib/zi-expert/actions.ts
+index 3561802..7ba0b0a 100644
+--- a/src/lib/zi-expert/actions.ts
++++ b/src/lib/zi-expert/actions.ts
+@@ -19,6 +19,7 @@ import {
+ import { syncZIKnowledgeBase, type KnowledgeSyncResult } from "./knowledge-sync";
+ import { runZIDiagnostics } from "./diagnostics";
+ import { classifySupportIntentDeterministic, shouldEscalate } from "./support-intent";
++import { shouldRunDiagnostics, diagnosticPlan } from "./support-diagnostics-routing";
+ import { openSupportTicketFromZi } from "./support-bridge";
+ import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
+ import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
+@@ -114,9 +115,33 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
+     let support: ZiAskResult["support"] | undefined;
+     try {
+       const classification = classifySupportIntentDeterministic(question, { route: ctx.route, moduleId: ctx.moduleId });
++
++      // ── ZI-CS (P4): for an actionable support turn, run a LIVE diagnostic FIRST and
++      // surface the finding + fix steps — troubleshoot, don't just explain. Findings
++      // ride along to the ticket if we still escalate. Best-effort, never blocks. ──
++      let diagnostics: string[] | undefined;
++      if (shouldRunDiagnostics(classification)) {
++        try {
++          const issue = diagnosticPlan(classification);
++          const dx0 = await collectDiagnosticSignals();
++          const dx = runZIDiagnostics(
++            { currentRoute: ctx.route, module: ctx.moduleId, issueType: (issue ?? undefined) as IssueType | undefined },
++            dx0.signals, { orgId: dx0.orgId, userId: dx0.userId, role: dx0.role },
++          );
++          diagnostics = [dx.summary, ...dx.userNextSteps].filter(Boolean);
++          if (dx.summary) {
++            const steps = dx.userNextSteps.length ? "\n" + dx.userNextSteps.map((s) => `- ${s}`).join("\n") : "";
++            answer.content = `**${dx.summary}**${steps}\n\n---\n${answer.content}`;
++          }
++        } catch { /* diagnostics best-effort — never block the answer */ }
++      }
++
+       let ticketId: string | null = null;
+       let escalated = false;
+-      if (shouldEscalate(classification, { knowledgeFound: hits.length > 0 })) {
++      // Diagnostics that produced fix steps count as "we helped" → don't auto-escalate
++      // on the no-knowledge rule; still escalate for human/critical/security/billing.
++      const helped = hits.length > 0 || (diagnostics != null && diagnostics.length > 0);
++      if (shouldEscalate(classification, { knowledgeFound: helped })) {
+         const transcript = [
+           ...history.map((h) => ({ role: h.role, content: h.content })),
+           { role: "user" as const, content: question },
+@@ -125,6 +150,7 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
+         const res = await openSupportTicketFromZi({
+           conversationId, classification, question, transcript, summary: null,
+           context: { route: ctx.route, moduleLabel: ctx.moduleLabel, roleLabel: ctx.roleLabel, plan: ctx.plan },
++          diagnostics: diagnostics ?? null,
+         });
+         if (res.ok && res.ticketId) {
+           ticketId = res.ticketId;

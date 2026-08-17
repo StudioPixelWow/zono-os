@@ -1,0 +1,41 @@
+diff --git a/src/lib/zi-expert/support-intent.ts b/src/lib/zi-expert/support-intent.ts
+index 6bae9e1..445e9d2 100644
+--- a/src/lib/zi-expert/support-intent.ts
++++ b/src/lib/zi-expert/support-intent.ts
+@@ -111,18 +111,23 @@ export function classifySupportIntentDeterministic(
+   const humanReq = hits(text, HUMAN_SIGNALS).length > 0;
+   const actionReq = hits(text, ACTION_SIGNALS).length > 0;
+ 
++  // The winning category as the WIDE union type. `best` is narrowed by TS to the
++  // "OTHER" literal (it can't see the assignment inside the forEach closure), so
++  // comparing it to other members would be a "no overlap" type error — re-widen.
++  const winner: SupportCategory = best;
++
+   // Lane: an explicit human request or a "something is broken" phrasing is
+   // SUPPORT; a recommendation/analysis ask is PRODUCT; otherwise infer from the
+   // winning category (entity/how-to on a real screen leans SUPPORT).
+   let lane: ZiLane = "SUPPORT";
+   if (productLane && !actionReq && !humanReq) lane = "PRODUCT";
+-  if (best === "AI_FEATURE" && !actionReq) lane = "PRODUCT";
++  if (winner === "AI_FEATURE" && !actionReq) lane = "PRODUCT";
+ 
+   // Severity.
+   let severity: SupportSeverity = "NORMAL";
+-  if (best === "SECURITY") severity = "CRITICAL";
+-  else if (best === "BILLING" || best === "AUTHENTICATION") severity = "HIGH";
+-  else if (actionReq && (best === "TECHNICAL_ERROR" || best === "BUG" || best === "SYNC" || best === "INTEGRATION")) severity = "HIGH";
++  if (winner === "SECURITY") severity = "CRITICAL";
++  else if (winner === "BILLING" || winner === "AUTHENTICATION") severity = "HIGH";
++  else if (actionReq && (winner === "TECHNICAL_ERROR" || winner === "BUG" || winner === "SYNC" || winner === "INTEGRATION")) severity = "HIGH";
+   else if (!actionReq && lane === "PRODUCT") severity = "LOW";
+ 
+   // Confidence: from how decisively a category won (margin proxy).
+@@ -130,7 +135,7 @@ export function classifySupportIntentDeterministic(
+ 
+   return {
+     lane,
+-    category: bestScore === 0 ? "OTHER" : best,
++    category: bestScore === 0 ? "OTHER" : winner,
+     severity,
+     confidence: Number(confidence.toFixed(2)),
+     requiresHuman: humanReq || severity === "CRITICAL",

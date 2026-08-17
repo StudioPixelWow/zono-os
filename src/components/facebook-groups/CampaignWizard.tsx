@@ -21,7 +21,7 @@ interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
 interface Props { properties: WProperty[]; folders: GroupFolder[]; connection: Connection; notes: string[] }
 
-const STEPS = ["נכס", "תוכן", "חיבור פייסבוק", "קבוצות", "תזמון", "סקירה ואישור"];
+const STEPS = ["נכס", "תוכן", "קבוצות", "תזמון", "סקירה ואישור"];
 const fmt = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
 const FREQS: Frequency[] = ["one_time", "three_weekly", "daily", "full_month"];
 const dateHe = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "long" }) : "—");
@@ -29,7 +29,7 @@ const dateTimeHe = (iso: string | null) => (iso ? new Date(iso).toLocaleString("
 
 interface Activated { campaignId: string; created: number; groupCount: number; firstPublishAt: string | null; endDate: string }
 
-export function CampaignWizard({ properties, folders, connection, notes }: Props) {
+export function CampaignWizard({ properties, folders, notes }: Props) {
   const [step, setStep] = useState(0);
   const [propId, setPropId] = useState<string | null>(null);
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
@@ -46,7 +46,7 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
   const variations = useMemo(() => (property ? generatePostVariations(property, 4) : []), [property]);
   const plan = useMemo(() => (chosen.length ? buildPlan(chosen, frequency, startDate, { variations: variations.length || 4 }) : null), [chosen, frequency, startDate, variations.length]);
 
-  const canNext = [!!property, true, true, chosen.length > 0, true, true][step];
+  const canNext = [!!property, true, chosen.length > 0, true, true][step];
   const toggleGroup = (id: string) => setSelectedGroups((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleFolder = (f: GroupFolder) => setSelectedGroups((s) => { const n = new Set(s); const all = f.groups.every((g) => n.has(g.id)); f.groups.forEach((g) => (all ? n.delete(g.id) : n.add(g.id))); return n; });
 
@@ -104,7 +104,7 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
           <h1 className="text-ink mt-1 flex items-center gap-2 text-2xl font-black"><Icon name="Megaphone" size={22} /> קמפיין שיווק בקבוצות</h1>
           <p className="text-muted mt-1 text-sm">בונה קמפיין שיווק לנכס בקבוצות פייסבוק. שום דבר לא מתפרסם ללא חיבור ואישור.</p>
         </div>
-        <span className={cn("rounded-full px-3 py-1 text-[11px] font-bold", connection.connected ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>{connection.connected ? "פייסבוק מחובר" : "פייסבוק לא מחובר"}</span>
+        <span className="bg-brand-soft text-brand rounded-full px-3 py-1 text-[11px] font-bold">פרסום דרך תוסף ZONO</span>
       </div>
 
       {/* Stepper */}
@@ -147,19 +147,9 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
           </div>
         )}
 
-        {/* STEP 3 — connection */}
-        {step === 2 && (
-          <div className="text-center">
-            <div className="text-4xl">{connection.connected ? "✅" : "🔗"}</div>
-            <h3 className="text-ink mt-2 text-lg font-black">{connection.connected ? "פייסבוק מחובר" : "חיבור פייסבוק"}</h3>
-            <p className="text-muted mt-1 text-[13px]">{connection.message}</p>
-            <p className="text-muted mx-auto mt-2 max-w-md text-[12px]">ZONO יכול להכין ולתזמן פוסטים. פרסום לקבוצות מתבצע בכפוף למדיניות פייסבוק — קבוצות רבות מחייבות פרסום ידני/הרשאות. אין גישה לקבוצות פרטיות ואין עקיפת מגבלות.</p>
-            <Link href="/settings/distribution-connections" className="bg-brand mt-4 inline-block rounded-xl px-5 py-2.5 text-sm font-bold text-white">{connection.connected ? "ניהול חיבור" : "חברו פייסבוק"}</Link>
-          </div>
-        )}
 
-        {/* STEP 4 — groups */}
-        {step === 3 && (
+        {/* STEP 3 — groups */}
+        {step === 2 && (
           folders.length === 0 ? <Empty title="אין קבוצות בספרייה" body="הוסיפו קבוצות במסך הקבוצות כדי לשייך לתיקיות." cta={{ href: "/distribution/groups", label: "ניהול קבוצות" }} /> : (
             <div className="space-y-4">
               <p className="text-muted text-[12px]"><b className="text-ink">{selectedGroups.size}</b> קבוצות נבחרו. בחרו תיקייה שלמה או קבוצות בודדות.</p>
@@ -183,8 +173,8 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
           )
         )}
 
-        {/* STEP 5 — schedule (cadence) */}
-        {step === 4 && (
+        {/* STEP 4 — schedule (cadence) */}
+        {step === 3 && (
           <div className="space-y-3">
             <p className="text-muted text-[12px]">באיזו תדירות לפרסם לאורך הקמפיין?</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -199,7 +189,7 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
           </div>
         )}
 
-        {/* STEP 6 — REVIEW + ACTIVATE */}
+        {/* STEP 5 — REVIEW + ACTIVATE */}
         {onReview && (
           !property || chosen.length === 0 ? (
             <Empty title="חסרים פרטים" body="חזרו ובחרו נכס וקבוצות לפני הפעלת הקמפיין." />
@@ -216,7 +206,6 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
               <div className="bg-surface text-muted rounded-xl p-3 text-[12px]">
                 ZONO יכין ויתזמן כל פרסום. בזמן הפרסום, <b className="text-ink">התוסף ילווה אותך</b> בפרסום בקבוצה בפייסבוק — הפרסום מאושר על ידך. אין פרסום אוטומטי.
               </div>
-              {!connection.connected && <div className="bg-warning-soft text-warning rounded-xl p-3 text-[12px]">יש לחבר פייסבוק לפני הפעלת הקמפיין. ניתן לחזור לשלב ״חיבור פייסבוק״.</div>}
               {activateError && <div className="bg-danger-soft text-danger rounded-xl p-3 text-[12px]">{activateError}</div>}
             </div>
           )
@@ -228,7 +217,7 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
         <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0 || activating} className="text-muted rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40">← הקודם</button>
         {!onReview
           ? <button onClick={() => canNext && setStep((s) => s + 1)} disabled={!canNext} className="bg-brand rounded-xl px-5 py-2 text-sm font-bold text-white disabled:opacity-50">הבא →</button>
-          : <button onClick={activate} disabled={activating || !property || chosen.length === 0 || !connection.connected} className="bg-brand rounded-xl px-6 py-2 text-sm font-black text-white disabled:opacity-50">{activating ? "מפעילים את הקמפיין…" : "הפעלת הקמפיין"}</button>}
+          : <button onClick={activate} disabled={activating || !property || chosen.length === 0} className="bg-brand rounded-xl px-6 py-2 text-sm font-black text-white disabled:opacity-50">{activating ? "מפעילים את הקמפיין…" : "הפעלת הקמפיין"}</button>}
       </div>
     </div>
   );

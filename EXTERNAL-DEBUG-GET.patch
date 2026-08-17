@@ -1,0 +1,53 @@
+diff --git a/src/app/api/external-listings/debug-provider/route.ts b/src/app/api/external-listings/debug-provider/route.ts
+index 8cc7693..d3c5535 100644
+--- a/src/app/api/external-listings/debug-provider/route.ts
++++ b/src/app/api/external-listings/debug-provider/route.ts
+@@ -37,3 +37,32 @@ export async function POST(req: NextRequest) {
+     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "debug failed" }, { status: 500 });
+   }
+ }
++
++/**
++ * Browser-friendly GET variant so a manager can MEASURE actor coverage in the URL
++ * bar (no tooling): /api/external-listings/debug-provider?provider=yad2&city=Rehovot&limit=500
++ * Same manager auth (via session cookie). Never saves. `datasetItems` in the
++ * response is how many the actor actually returned — the answer to "is the actor
++ * or our cap the bottleneck?".
++ */
++export async function GET(req: NextRequest) {
++  const { profile } = await getSessionContext();
++  if (!profile) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
++
++  const supabase = await createClient();
++  const { data: isManager } = await supabase.rpc("has_min_role", { p_min: "manager" });
++  if (!isManager) return NextResponse.json({ error: "forbidden — manager role required" }, { status: 403 });
++
++  const sp = req.nextUrl.searchParams;
++  const provider = sp.get("provider") === "madlan" ? "madlan" : "yad2";
++  const city = (sp.get("city") ?? "").trim();
++  const limit = Math.max(1, Math.min(Number(sp.get("limit") ?? 50) || 50, 500));
++  if (!city) return NextResponse.json({ error: "city query param is required" }, { status: 400 });
++
++  try {
++    const report = await debugProvider(provider, city, limit, false);
++    return NextResponse.json({ measured: { city, provider, requestedLimit: limit }, hint: "datasetItems = how many the actor returned", ...report });
++  } catch (e) {
++    return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "debug failed" }, { status: 500 });
++  }
++}
+diff --git a/src/lib/external-listings/service.ts b/src/lib/external-listings/service.ts
+index 2f5c63b..83ff47f 100644
+--- a/src/lib/external-listings/service.ts
++++ b/src/lib/external-listings/service.ts
+@@ -777,7 +777,10 @@ export async function debugProvider(
+   const { profile } = await getSessionContext();
+   if (!profile) throw new Error("not authenticated");
+   const provider = getProvider(source);
+-  const safeLimit = Math.max(1, Math.min(limit, 5)); // debug cap: never more than 5
++  // Debug cap raised to 500 so a manager can MEASURE the actor's true coverage
++  // for a city (e.g. "does the Yad2 actor return 127 or 1000 for Rehovot?") —
++  // manager-gated + never-saved, so the cost is bounded and controlled.
++  const safeLimit = Math.max(1, Math.min(limit, 500));
+   const r = await provider.debugRun(city, safeLimit);
+   const normalizedSample = r.rawSample ? provider.normalizeListing(r.rawSample) : null;
+   const missing = normalizedSample ? missingFields(normalizedSample) : [];

@@ -1,0 +1,41 @@
+diff --git a/src/lib/distribution/center-actions.ts b/src/lib/distribution/center-actions.ts
+index 2b5b61f..c1a451c 100644
+--- a/src/lib/distribution/center-actions.ts
++++ b/src/lib/distribution/center-actions.ts
+@@ -7,6 +7,8 @@
+ // ============================================================================
+ import { revalidatePath } from "next/cache";
+ import { distributionRepo } from "./repository";
++import { getSessionContext } from "@/lib/auth/session";
++import { createServiceRoleClient } from "@/lib/supabase/server";
+ import type { DistGroupStatus, DistCampaignStatus, DistLeadStatus } from "./db-types";
+ 
+ const PATH = "/distribution";
+@@ -20,8 +22,25 @@ export async function createGroupAction(input: { name: string; url?: string; cit
+   return row ? ok() : fail("יצירת הקבוצה נכשלה");
+ }
+ export async function updateGroupStatusAction(input: { id: string; status: DistGroupStatus }): Promise<{ error?: string }> {
+-  const done = await distributionRepo.updateGroup(input.id, { status: input.status });
+-  return done ? ok() : fail("עדכון הקבוצה נכשל");
++  // Service-role, org-scoped write. The user-client repository path is subject to
++  // an RLS UPDATE policy (org_id = current_org_id()) that SILENTLY no-ops — 0 rows,
++  // no error — when the session's org claim doesn't resolve to the row's org. That
++  // made the publish toggle "succeed" without persisting. Enforce tenancy in code:
++  // a user may only update a group inside their OWN org (profile.org_id), and we
++  // verify a row was actually affected before reporting success.
++  const { profile } = await getSessionContext();
++  if (!profile?.org_id) return fail("אין הרשאה");
++  const db = createServiceRoleClient();
++  const { data, error } = await db.from("distribution_groups" as never)
++    .update({ status: input.status, updated_at: new Date().toISOString() } as never)
++    .eq("id" as never, input.id as never)
++    .eq("org_id" as never, profile.org_id as never)
++    .select("id" as never);
++  if (error) return fail("עדכון הקבוצה נכשל");
++  if (!data || (data as unknown[]).length === 0) return fail("הקבוצה לא נמצאה בארגון שלך");
++  revalidatePath(PATH);
++  revalidatePath("/distribution/groups");
++  return {};
+ }
+ export async function deleteGroupAction(input: { id: string }): Promise<{ error?: string }> {
+   const done = await distributionRepo.deleteGroup(input.id);

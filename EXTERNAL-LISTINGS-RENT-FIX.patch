@@ -1,0 +1,56 @@
+diff --git a/src/lib/external-listings/providers.ts b/src/lib/external-listings/providers.ts
+index 5dfd323..cf54c76 100644
+--- a/src/lib/external-listings/providers.ts
++++ b/src/lib/external-listings/providers.ts
+@@ -134,7 +134,7 @@ class ApifyProvider implements PropertyProvider {
+    * aliases. If an actor rejects city/dealType/maxListingsPerCity, edit here
+    * (or override in the subclass) to match its actual required fields.
+    */
+-  buildInput(city: string, limit: number): Record<string, unknown> {
++  buildInput(city: string, limit: number, dealType: "buy" | "rent" = "buy"): Record<string, unknown> {
+     return {
+       // Send the city under EVERY common key these scrapers use, so whichever
+       // field the actor reads picks it up (the actors tolerate extra keys).
+@@ -151,9 +151,9 @@ class ApifyProvider implements PropertyProvider {
+       text: city,
+       keywords: city,
+       // The swerve Yad2/Madlan actors require dealType ∈ {"buy","rent","commercial"}.
+-      // "for sale" maps to "buy".
+-      dealType: "buy",
+-      dealTypes: ["buy"],
++      // "for sale" maps to "buy". searchListings runs BOTH buy + rent.
++      dealType,
++      dealTypes: [dealType],
+       // Ask for NEWEST-first so each run (and the nightly cron) surfaces freshly
+       // posted listings — that's how the inventory keeps discovering new ones
+       // instead of re-fetching the same top set every time.
+@@ -173,7 +173,17 @@ class ApifyProvider implements PropertyProvider {
+       if (isDev) return mockRaws(this.source, locality);
+       throw new Error("APIFY_TOKEN missing — external import unavailable in production");
+     }
+-    return runActor(this.actorId, this.buildInput(locality, limit), limit);
++    // Fetch BOTH sale ("buy") and rent so the live map isn't sale-only (previously
++    // dealType was hard-coded to "buy" → zero rentals ever imported). Each pass tags
++    // its rows with __zonoDeal so normalizeListing records the correct deal_type. The
++    // passes run concurrently (same wall-clock); a failing pass degrades to the other,
++    // never both. NOTE: two actor runs per city ⇒ ~2× Apify usage per sync.
++    const passFor = async (dt: "buy" | "rent", tag: "sale" | "rent"): Promise<RawListing[]> => {
++      const rows = await runActor(this.actorId, this.buildInput(locality, limit, dt), limit).catch(() => [] as RawListing[]);
++      return rows.map((r) => ({ ...r, __zonoDeal: tag }));
++    };
++    const [sale, rent] = await Promise.all([passFor("buy", "sale"), passFor("rent", "rent")]);
++    return [...sale, ...rent];
+   }
+ 
+   /** Non-destructive test run: returns status + first item + error, never throws. */
+@@ -236,7 +246,9 @@ class ApifyProvider implements PropertyProvider {
+       streetNumber: str(pick(raw, ["streetNumber", "houseNumber", "number", "addressNumber"])),
+       address,
+       propertyType: str(pick(raw, ["type", "propertyType", "category", "assetType"])),
+-      dealType: "sale",
++      // Deal type comes from the search pass that produced this row (__zonoDeal),
++      // falling back to any actor-provided field, then "sale". No longer hard-coded.
++      dealType: (str(pick(raw, ["__zonoDeal", "dealType", "adType", "transactionType"])) === "rent" ? "rent" : "sale"),
+       price: num(pick(raw, ["price", "askingPrice", "priceValue", "priceNis"])),
+       rooms: num(pick(raw, ["rooms", "roomsCount", "numberOfRooms", "roomsNumber"])),
+       bathrooms: num(pick(raw, ["bathrooms", "bathroomsCount"])),

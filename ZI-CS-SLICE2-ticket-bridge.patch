@@ -1,0 +1,240 @@
+diff --git a/scripts/zi-support-bridge-dev-check.ts b/scripts/zi-support-bridge-dev-check.ts
+new file mode 100644
+index 0000000..740723f
+--- /dev/null
++++ b/scripts/zi-support-bridge-dev-check.ts
+@@ -0,0 +1,40 @@
++// ZI Support Bridge core — dev-check (pure). Verifies severity→priority mapping
++// and the ticket draft (subject/category/priority/transcript/zero-repetition).
++//   npx esbuild scripts/zi-support-bridge-dev-check.ts --bundle --platform=node --format=cjs | node -
++import { severityToPriority, buildZiTicketDraft } from "../src/lib/zi-expert/support-bridge-core";
++import { classifySupportIntentDeterministic as classify } from "../src/lib/zi-expert/support-intent";
++
++let pass = 0, fail = 0;
++const ok = (n: string, c: boolean, got?: unknown) => { if (c) { pass++; console.log(`  PASS  ${n}`); } else { fail++; console.log(`  FAIL  ${n}  → ${JSON.stringify(got)}`); } };
++
++ok("sev CRITICAL→urgent", severityToPriority("CRITICAL") === "urgent");
++ok("sev HIGH→high", severityToPriority("HIGH") === "high");
++ok("sev NORMAL→normal", severityToPriority("NORMAL") === "normal");
++ok("sev LOW→low", severityToPriority("LOW") === "low");
++
++const cls = classify("הפייסבוק לא עובד לי");
++const draft = buildZiTicketDraft({
++  classification: cls,
++  question: "הפייסבוק לא עובד לי",
++  summary: "החיבור לפייסבוק פג תוקף",
++  transcript: [
++    { role: "user", content: "הפייסבוק לא עובד לי" },
++    { role: "assistant", content: "בדקתי — החיבור פג תוקף" },
++    { role: "user", content: "חיברתי מחדש וזה עדיין לא עובד" },
++  ],
++  context: { route: "/settings/distribution-connections", moduleLabel: "חיבורי הפצה", roleLabel: "בעלים", plan: "pro" },
++});
++ok("draft category lowercased", draft.category === "facebook", draft.category);
++ok("draft priority from severity", draft.priority === severityToPriority(cls.severity), draft.priority);
++ok("draft subject has category label", draft.subject.includes("[פייסבוק]"), draft.subject);
++ok("draft subject uses summary", draft.subject.includes("פג תוקף"), draft.subject);
++ok("draft includes transcript", draft.description.includes("תמליל השיחה") && draft.description.includes("לקוח:") && draft.description.includes("ZI:"), null);
++ok("draft includes context", draft.description.includes("חיבורי הפצה") && draft.description.includes("בעלים"), null);
++ok("draft zero-repetition note", draft.description.includes("נפתח אוטומטית על ידי ZI"), null);
++
++const critical = classify("מישהו נכנס לי לחשבון, חשד לפריצה");
++const cdraft = buildZiTicketDraft({ classification: critical, question: "חשד לפריצה" });
++ok("security → urgent priority", cdraft.priority === "urgent", cdraft.priority);
++
++console.log(`\n${fail === 0 ? "✅ ALL PASS" : "❌ FAILURES"} — ${pass} passed, ${fail} failed`);
++if (fail > 0) process.exit(1);
+diff --git a/src/lib/zi-expert/support-bridge-core.ts b/src/lib/zi-expert/support-bridge-core.ts
+new file mode 100644
+index 0000000..f1bb1e2
+--- /dev/null
++++ b/src/lib/zi-expert/support-bridge-core.ts
+@@ -0,0 +1,98 @@
++// ============================================================================
++// ZI Expert™ — SUPPORT TICKET BRIDGE, pure core (Phase ZI-CS P6, dep-light).
++// Turns a ZI support classification + conversation into a ready-to-insert
++// support_tickets draft: subject, description (AI summary + transcript + context),
++// category and priority — all mapped onto the EXISTING support_tickets vocabulary
++// (verified against the DB CHECK constraints). No I/O here → unit-runnable.
++//   priority ∈ low|normal|high|urgent   source ∈ …|customer_report|…
++// ============================================================================
++import type { SupportClassification, SupportSeverity, SupportCategory } from "./support-intent";
++
++export type TicketPriority = "low" | "normal" | "high" | "urgent";
++
++/** Map ZI severity → the support_tickets priority enum (DB-constrained). */
++export function severityToPriority(sev: SupportSeverity): TicketPriority {
++  switch (sev) {
++    case "CRITICAL": return "urgent";
++    case "HIGH": return "high";
++    case "LOW": return "low";
++    default: return "normal";
++  }
++}
++
++// Hebrew labels for the ticket subject (customer-facing).
++const CATEGORY_HE: Partial<Record<SupportCategory, string>> = {
++  FACEBOOK: "פייסבוק", WHATSAPP: "וואטסאפ", GOOGLE: "גוגל", INTEGRATION: "אינטגרציה",
++  BILLING: "חיוב", SUBSCRIPTION: "מנוי", AUTHENTICATION: "התחברות", PERMISSIONS: "הרשאות",
++  PROPERTY: "נכסים", BUYER: "קונים", SELLER: "מוכרים", LEAD: "לידים", TRANSACTION: "עסקאות",
++  SYNC: "סנכרון", PERFORMANCE: "ביצועים", TECHNICAL_ERROR: "תקלה טכנית", BUG: "באג",
++  DATA: "נתונים", SECURITY: "אבטחה", ACCOUNT: "חשבון", ONBOARDING: "התחלה",
++  AI_FEATURE: "יכולת AI", FEATURE_REQUEST: "בקשת פיצ׳ר", PRODUCT_USAGE: "שימוש במוצר", OTHER: "כללי",
++};
++
++export interface ZiTicketDraft {
++  subject: string;
++  description: string;
++  category: string;     // lowercased ZI category (support_tickets.category has no CHECK)
++  priority: TicketPriority;
++}
++
++export interface ZiTranscriptTurn { role: "user" | "assistant"; content: string }
++
++const oneLine = (s: string): string => (s || "").replace(/\s+/g, " ").trim();
++const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
++
++/**
++ * Build a support-ticket draft from a ZI support turn. Pure + deterministic.
++ * `summary` is the ZI-generated one-line issue summary (directive §17); when
++ * absent, the user's question stands in. Transcript is trimmed to the last turns.
++ */
++export function buildZiTicketDraft(input: {
++  classification: SupportClassification;
++  question: string;
++  transcript?: ZiTranscriptTurn[];
++  summary?: string | null;
++  context?: { route?: string | null; moduleLabel?: string | null; roleLabel?: string | null; plan?: string | null };
++  diagnostics?: string[] | null;
++}): ZiTicketDraft {
++  const { classification: c } = input;
++  const catHe = CATEGORY_HE[c.category] ?? "כללי";
++  const subject = clip(`[${catHe}] ${oneLine(input.summary || input.question) || "פנייה חדשה"}`, 90);
++
++  const lines: string[] = [];
++  lines.push(`סיכום התקלה: ${oneLine(input.summary || input.question)}`);
++  lines.push("");
++  lines.push(`קטגוריה: ${catHe} · חומרה: ${c.severity} · ביטחון סיווג: ${Math.round(c.confidence * 100)}%`);
++  if (input.context) {
++    const ctx = [
++      input.context.moduleLabel && `מסך: ${input.context.moduleLabel}`,
++      input.context.route && `נתיב: ${input.context.route}`,
++      input.context.roleLabel && `תפקיד: ${input.context.roleLabel}`,
++      input.context.plan && `חבילה: ${input.context.plan}`,
++    ].filter(Boolean).join(" · ");
++    if (ctx) lines.push(ctx);
++  }
++  if (input.diagnostics && input.diagnostics.length) {
++    lines.push("");
++    lines.push("תוצאות אבחון:");
++    for (const d of input.diagnostics.slice(0, 8)) lines.push(`- ${oneLine(d)}`);
++  }
++  const turns = (input.transcript ?? []).slice(-12);
++  if (turns.length) {
++    lines.push("");
++    lines.push("תמליל השיחה:");
++    for (const t of turns) lines.push(`${t.role === "assistant" ? "ZI" : "לקוח"}: ${clip(oneLine(t.content), 500)}`);
++  }
++  lines.push("");
++  lines.push("— נפתח אוטומטית על ידי ZI. הלקוח אינו צריך להסביר שוב את הבעיה.");
++
++  return {
++    subject,
++    description: lines.join("\n"),
++    category: c.category.toLowerCase(),
++    priority: severityToPriority(c.severity),
++  };
++}
++
++/** Stable link key so a ZI conversation maps to at most one open ticket. */
++export const ziConversationLinkRef = (conversationId: string): string => `zi:${conversationId}`;
+diff --git a/src/lib/zi-expert/support-bridge.ts b/src/lib/zi-expert/support-bridge.ts
+new file mode 100644
+index 0000000..a38eddf
+--- /dev/null
++++ b/src/lib/zi-expert/support-bridge.ts
+@@ -0,0 +1,84 @@
++// ============================================================================
++// ZI Expert™ — SUPPORT TICKET BRIDGE, server (Phase ZI-CS P6). Customer-facing
++// ticket creation: unlike the platform-operator DAL (support.ts, which requires
++// platform.support.manage), THIS opens a ticket ON BEHALF OF the signed-in user,
++// strictly scoped to their own org. Zero-repetition escalation (directive §17):
++// the ZI transcript + AI summary + context + diagnostics are attached, so the
++// human agent sees who/what/where/what-failed without the customer re-explaining.
++//   source = "customer_report" (valid enum) · linked_ref = zi:<conversationId>
++// Idempotent: one active ticket per ZI conversation.
++// ============================================================================
++import "server-only";
++import { getSessionContext } from "@/lib/auth/session";
++import { createServiceRoleClient } from "@/lib/supabase/server";
++import type { SupportClassification } from "./support-intent";
++import { buildZiTicketDraft, ziConversationLinkRef, type ZiTranscriptTurn } from "./support-bridge-core";
++
++export interface ZiTicketResult { ok: boolean; ticketId?: string; existing?: boolean; error?: string }
++
++export interface OpenTicketInput {
++  conversationId: string;
++  classification: SupportClassification;
++  question: string;
++  transcript?: ZiTranscriptTurn[];
++  summary?: string | null;
++  context?: { route?: string | null; moduleLabel?: string | null; roleLabel?: string | null; plan?: string | null };
++  diagnostics?: string[] | null;
++}
++
++const ACTIVE_STATUSES = ["open", "in_progress", "waiting_customer"] as const;
++
++/**
++ * Open (or reuse) a support ticket for the current user's org from a ZI support
++ * conversation. Org-scoped and fail-closed: no session/org → no ticket. Reuses an
++ * existing ACTIVE ticket linked to the same conversation instead of duplicating.
++ */
++export async function openSupportTicketFromZi(input: OpenTicketInput): Promise<ZiTicketResult> {
++  const { profile, user } = await getSessionContext();
++  const orgId = profile?.org_id ?? null;
++  if (!orgId) return { ok: false, error: "unauthorized" };
++
++  const db = createServiceRoleClient();
++  const linkRef = ziConversationLinkRef(input.conversationId);
++
++  // Idempotency: an active ticket already exists for this conversation → reuse it.
++  try {
++    const { data: existing } = await db.from("support_tickets" as never)
++      .select("id" as never)
++      .eq("org_id" as never, orgId as never)
++      .eq("linked_ref" as never, linkRef as never)
++      .in("status" as never, ACTIVE_STATUSES as never)
++      .order("created_at" as never, { ascending: false } as never)
++      .limit(1)
++      .maybeSingle();
++    const ex = existing as { id: string } | null;
++    if (ex?.id) return { ok: true, ticketId: ex.id, existing: true };
++  } catch {
++    // fall through to create — a lookup failure must not block escalation
++  }
++
++  const draft = buildZiTicketDraft(input);
++  try {
++    const { data, error } = await db.from("support_tickets" as never).insert({
++      org_id: orgId,
++      user_id: profile?.id ?? user?.id ?? null,
++      subject: draft.subject,
++      description: draft.description,
++      status: "open",
++      priority: draft.priority,
++      category: draft.category,
++      source: "customer_report",
++      linked_ref: linkRef,
++      created_by: profile?.id ?? null,
++    } as never).select("id" as never).maybeSingle();
++    if (error || !data) return { ok: false, error: "create_failed" };
++    return { ok: true, ticketId: (data as { id: string }).id };
++  } catch {
++    return { ok: false, error: "create_failed" };
++  }
++}
++
++/** Classification → whether ZI should tell the user a ticket was opened. Pure
++ *  re-export convenience so callers don't import two modules. */
++export { shouldEscalate } from "./support-intent";
++export type { SupportClassification } from "./support-intent";

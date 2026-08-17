@@ -64,6 +64,5 @@ export async function getWizardBootstrap(): Promise<WizardBootstrap> {
 
   const notes: string[] = [];
   if (!folders.length) notes.push("אין עדיין קבוצות בספרייה — הוסיפו קבוצות במסך ״קבוצות״ (Distribution) כדי לשייך לתיקיות.");
-  if (!connection.connected) notes.push("ניתן להכין ולשמור קמפיין גם ללא חיבור פייסבוק — אך לא ניתן לתזמן/לפרסם עד לחיבור.");
   return { properties, folders, connection, notes };
 }
