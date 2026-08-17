@@ -240,3 +240,46 @@ Activated posts are ordinary `distribution_posts` created by the shared schedule
 - P1: unify the two publishing surfaces (daily copy-paste + publishing-control) under one status language.
 - P2: analytics funnel events; group recommendations; move comments/leads into a campaign detail page.
 - Entry-point consolidation (7 sidebar doors → 1 hub) — not touched this pass.
+
+---
+
+# Daily Publishing Unification Implementation (P1)
+
+## The critical finding (why it felt like "multiple products")
+Facebook posting was split across **three disconnected data pipelines**:
+1. `/distribution/daily` (`DailyDistributionView`) read `daily_distribution_batches` / `daily_distribution_items` — the old **community-recommendation batch** (manual copy-paste: העתק→פתח קהילה→סמן).
+2. **Campaign activation** (the P0) writes **`distribution_posts`** — which surfaced **only** in `/publishing-control` (the extension claim/reconcile engine).
+3. The community-matching engine (`distribution_plan_items`) fed #1.
+
+**Consequence:** after activating a campaign, the success CTA sent the user to `/distribution/daily`, which showed pipeline #1 — so **the campaign's own posts did not appear there**. That seam is the root cause of "feels like multiple products."
+
+## What was implemented
+- **One customer status vocabulary** — `src/lib/distribution/today-status.ts` (pure + self-check). Maps engine states → `מתוזמן · מוכן לפרסום · מפרסם · דורש הכרעה · דורש טיפול · מושהה · פורסם · בוטל`, plus the single dominant action per state. No engine state is ever shown raw.
+- **One canonical Today** — `/distribution/daily` re-sourced to `getPublishingControlData()` (the **same** `distribution_posts` a campaign creates + the extension publishes). New `TodayView` renders: header + progress ("N פרסומים · X פורסמו · Y ממתינים"), a single **next-action hero**, a chronological **timeline** with normalized status pills and **one action per item**, **inline reconciliation** ("לא הצלחנו לוודא… פורסם / לא פורסם / ביטול" — no "lost-ack" jargon), plus **completion** ("סיימת את הפרסומים להיום ✓") and **empty** ("אין פרסומים… יצירת קמפיין") states. Overdue items are marked "באיחור". Reuses the existing `reconcilePostAction` / `retryPostAction` / `resumePostAction` — no new publishing mechanics. Advanced surfaces moved under "אפשרויות נוספות".
+- **Navigation consolidation** — the marketing sidebar now leads with the real flow: **פרסומים להיום · קמפיינים · קבוצות פייסבוק**, then Facebook/מרכז שיווק/סטודיו, with **בקרת פרסום (מתקדם)** + מודיעין קבוצות demoted. The duplicate admin door "פרסום בקבוצות → /distribution" was dropped from primary nav (still reachable via "אפשרויות נוספות"). No route/capability removed.
+
+## Status mapping (documented)
+| engine `publish_state` / status | customer label | dominant action |
+|---|---|---|
+| queued / scheduled / draft (not due) | מתוזמן | — |
+| queued / scheduled (due now) | מוכן לפרסום | (extension publishes; manual "פתח קבוצה" fallback) |
+| dispatching / awaiting_confirmation | מפרסם | — |
+| awaiting_reconciliation / needs_review | דורש הכרעה | בדיקה והכרעה (פורסם/לא פורסם/ביטול) |
+| failed / dead_letter | דורש טיפול | נסה שוב |
+| paused | מושהה | חידוש |
+| published | פורסם | — |
+| cancelled / skipped | בוטל | — |
+
+## Before → After
+| Metric | Before | After |
+|---|---|---|
+| User-facing publishing surfaces | 2–3 (daily batch · publishing-control · admin) | **1** (Today) |
+| Status vocabularies exposed | 3 | **1** |
+| Campaign posts visible in Today | **no** (wrong pipeline) | **yes** |
+| Primary marketing entry points | 7 competing | **3 clear** (Today · Campaigns · Groups) + advanced demoted |
+| Actions per item | 3–5 equal buttons | **1 dominant** |
+
+## Remaining P2 (not launch-blocking)
+- A UI-triggered "publish now" + "mark published" for campaign `distribution_posts` (today it relies on the extension's autonomous claim; the manual copy-paste path exists only for the legacy batch pipeline). Consider a per-post manual-publish action on the ready card.
+- Retire/merge the legacy `daily_distribution_items` community-batch pipeline (or reframe it as a suggestion engine feeding campaigns) so there is truly one source.
+- Group-selection search/filter/saved-sets at 400-scale inside the builder; times/day + day-by-day preview; FB connection pre-gate; analytics funnel events.

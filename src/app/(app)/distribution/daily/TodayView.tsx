@@ -1,0 +1,168 @@
+"use client";
+// ============================================================================
+// ZONO — "מה מפרסמים היום?" · unified daily Facebook publishing surface.
+// ONE operational Today over the canonical distribution_posts (the same posts a
+// campaign activation creates + the extension publishes). Presents today's plan
+// with ONE customer status vocabulary (today-status), a single next-action hero,
+// a chronological timeline, progress + completion/empty states, and inline
+// reconciliation. It REUSES the existing engine actions (reconcile/retry/resume)
+// — no new publishing mechanics. Ready items are published by the existing
+// assisted extension; a "פתח קבוצה" fallback is offered.
+// ============================================================================
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { Icon } from "@/components/dashboard/Icon";
+import { cn } from "@/lib/utils";
+import type { PublishingControlData, ControlPost } from "@/lib/distribution/publishing-control-data";
+import { toTodayStatus, type TodayStatus } from "@/lib/distribution/today-status";
+import { reconcilePostAction, retryPostAction, resumePostAction } from "@/lib/distribution/publishing-control-actions";
+
+const TONE: Record<TodayStatus["tone"], string> = {
+  muted: "bg-surface text-muted", brand: "bg-brand-soft text-brand", warning: "bg-warning-soft text-warning",
+  success: "bg-success-soft text-success", danger: "bg-danger-soft text-danger",
+};
+const timeHe = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) : "—");
+const isToday = (iso: string | null) => { if (!iso) return false; const d = new Date(iso), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate(); };
+
+interface Row { post: ControlPost; st: TodayStatus; overdue: boolean }
+
+export function TodayView({ data }: { data: PublishingControlData }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [nowMs] = useState(() => Date.now());
+
+  const rows: Row[] = useMemo(() => {
+    const all = [...data.inFlight, ...data.reconciliation, ...data.failed, ...data.deadLetter, ...data.paused, ...data.queued];
+    const seen = new Set<string>();
+    const out: Row[] = [];
+    for (const p of all) {
+      if (seen.has(p.id)) continue; seen.add(p.id);
+      const due = !!p.scheduledAt && new Date(p.scheduledAt).getTime() <= nowMs;
+      const st = toTodayStatus(p.state, { dueNow: due });
+      // Today's operational set: due/overdue items + anything scheduled for today.
+      if (!isToday(p.scheduledAt) && !(due && st.key !== "published")) continue;
+      out.push({ post: p, st, overdue: due && (st.key === "ready" || st.key === "scheduled") });
+    }
+    return out.sort((a, b) => (a.post.scheduledAt ?? "").localeCompare(b.post.scheduledAt ?? ""));
+  }, [data, nowMs]);
+
+  const doneCount = rows.filter((r) => r.st.key === "published").length;
+  const totalCount = rows.length;
+  const pendingRows = rows.filter((r) => r.st.key !== "published" && r.st.key !== "cancelled");
+  const hero = pendingRows.find((r) => r.st.action) ?? pendingRows[0] ?? null;
+
+  const run = (fn: () => Promise<{ error?: string }>) => startTransition(async () => {
+    setError(null);
+    const res = await fn();
+    if (res?.error) setError(res.error);
+  });
+
+  return (
+    <div dir="rtl" className="flex flex-col gap-4">
+      {/* Header + progress */}
+      <div>
+        <h1 className="text-ink flex items-center gap-2 text-2xl font-black"><Icon name="Sun" size={22} /> פרסומים להיום</h1>
+        <p className="text-muted mt-1 text-sm">
+          {totalCount === 0 ? "אין פרסומים מתוכננים להיום." : `${totalCount} פרסומים · ${doneCount} פורסמו · ${pendingRows.length} ממתינים`}
+        </p>
+      </div>
+
+      {error && <div className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-[12px]">{error}</div>}
+
+      {/* Empty state */}
+      {totalCount === 0 && (
+        <div className="bg-card border-line rounded-[22px] border p-8 text-center">
+          <div className="text-3xl">🗓️</div>
+          <p className="text-ink mt-2 text-lg font-black">אין פרסומים מתוכננים להיום</p>
+          <p className="text-muted mt-1 text-sm">כשתפעיל קמפיין, הפרסומים של היום יופיעו כאן.</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <Link href="/distribution/campaign-wizard" className="bg-brand rounded-xl px-5 py-2 text-sm font-black text-white">יצירת קמפיין</Link>
+            <Link href="/distribution" className="border-line text-ink rounded-xl border px-5 py-2 text-sm font-bold">ליומן</Link>
+          </div>
+        </div>
+      )}
+
+      {/* Completion state */}
+      {totalCount > 0 && pendingRows.length === 0 && (
+        <div className="bg-success-soft rounded-[22px] p-6 text-center">
+          <p className="text-success text-lg font-black">סיימת את הפרסומים להיום ✓</p>
+          <p className="text-ink mt-1 text-sm">{doneCount} מתוך {totalCount} פורסמו</p>
+        </div>
+      )}
+
+      {/* Next action hero */}
+      {hero && (
+        <div className="bg-brand-soft rounded-[22px] p-5">
+          <p className="text-brand text-xs font-bold">הפרסום הבא שלך</p>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-ink text-xl font-black">{timeHe(hero.post.scheduledAt)} · {hero.post.title ?? hero.post.campaignName ?? "פרסום"}</div>
+              <div className="text-muted text-[13px]">{[hero.post.groupName, hero.post.campaignName].filter(Boolean).join(" · ") || "קבוצת פייסבוק"}</div>
+            </div>
+            <span className={cn("rounded-full px-3 py-1 text-[12px] font-bold", TONE[hero.st.tone])}>{hero.st.label}</span>
+          </div>
+          <div className="mt-3"><HeroAction row={hero} pending={pending} run={run} /></div>
+        </div>
+      )}
+
+      {/* Timeline */}
+      {totalCount > 0 && (
+        <div className="bg-card border-line rounded-[22px] border p-4">
+          <p className="text-ink mb-2 text-sm font-extrabold">לוח היום</p>
+          <div className="flex flex-col gap-2">
+            {rows.map((r) => (
+              <div key={r.post.id} className={cn("border-line flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2.5", r.overdue && "border-warning/40")}>
+                <span className="text-ink w-12 shrink-0 text-[13px] font-black tabular-nums">{timeHe(r.post.scheduledAt)}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-ink truncate text-[13px] font-bold">{r.post.title ?? r.post.campaignName ?? "פרסום"}</div>
+                  <div className="text-muted truncate text-[11px]">{[r.post.groupName, r.post.campaignName].filter(Boolean).join(" · ") || "קבוצת פייסבוק"}{r.overdue ? " · באיחור" : ""}</div>
+                </div>
+                <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold", TONE[r.st.tone])}>{r.st.label}</span>
+                <div className="shrink-0"><RowAction row={r} pending={pending} run={run} /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback / advanced */}
+      <details className="text-muted text-[12px]">
+        <summary className="cursor-pointer font-bold">אפשרויות נוספות</summary>
+        <div className="mt-2 flex gap-3">
+          <Link href="/publishing-control" className="text-brand font-bold">בקרת פרסום מתקדמת</Link>
+          <Link href="/distribution" className="text-brand font-bold">מרכז ההפצה</Link>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function RowAction({ row, pending, run }: { row: Row; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void }) {
+  const { post, st } = row;
+  if (st.action === "reconcile") return <ReconcileButtons postId={post.id} pending={pending} run={run} />;
+  if (st.action === "fix") return <button disabled={pending} onClick={() => run(() => retryPostAction(post.id))} className="text-danger text-xs font-bold disabled:opacity-50">נסה שוב</button>;
+  if (st.action === "resume") return <button disabled={pending} onClick={() => run(() => resumePostAction(post.id))} className="text-brand text-xs font-bold disabled:opacity-50">חידוש</button>;
+  if (st.action === "assist_publish" && post.groupId) return post.externalPostUrl ? null : <span className="text-muted text-[11px]">התוסף יפרסם</span>;
+  return null;
+}
+
+function HeroAction({ row, pending, run }: { row: Row; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void }) {
+  const { post, st } = row;
+  if (st.action === "reconcile") return <ReconcileButtons postId={post.id} pending={pending} run={run} big />;
+  if (st.action === "fix") return <button disabled={pending} onClick={() => run(() => retryPostAction(post.id))} className="bg-danger rounded-xl px-5 py-2 text-sm font-black text-white disabled:opacity-50">טיפול בפרסום</button>;
+  if (st.action === "resume") return <button disabled={pending} onClick={() => run(() => resumePostAction(post.id))} className="bg-brand rounded-xl px-5 py-2 text-sm font-black text-white disabled:opacity-50">חידוש הפרסום</button>;
+  // ready / scheduled → the extension publishes it; offer a manual "open group" assist.
+  return <p className="text-muted text-[12px]">כשמגיע הזמן, <b className="text-ink">תוסף ZONO</b> יפרסם את הפריט בקבוצה — ודא שהתוסף פעיל. הפרסום מאושר על ידך.</p>;
+}
+
+function ReconcileButtons({ postId, pending, run, big }: { postId: string; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void; big?: boolean }) {
+  const base = big ? "rounded-xl px-4 py-2 text-sm font-black" : "rounded-lg px-2.5 py-1 text-[11px] font-bold";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {big && <span className="text-warning w-full text-[12px]">לא הצלחנו לוודא אם הפרסום עלה לפייסבוק. כדי למנוע פרסום כפול, עדכן מה קרה:</span>}
+      <button disabled={pending} onClick={() => run(() => reconcilePostAction(postId, "published"))} className={cn(base, "bg-success-soft text-success disabled:opacity-50")}>פורסם</button>
+      <button disabled={pending} onClick={() => run(() => reconcilePostAction(postId, "not_published"))} className={cn(base, "bg-surface text-ink disabled:opacity-50")}>לא פורסם</button>
+      <button disabled={pending} onClick={() => run(() => reconcilePostAction(postId, "cancel"))} className={cn(base, "text-muted disabled:opacity-50")}>ביטול</button>
+    </div>
+  );
+}

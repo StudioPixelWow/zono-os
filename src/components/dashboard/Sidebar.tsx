@@ -57,13 +57,14 @@ const GROUPS: NavGroup[] = [
   ]},
   { key: "marketing", title: "תקשורת ושיווק", desc: "WhatsApp • Facebook • קמפיינים", icon: "Megaphone", accent: "green", items: [
     { label: "WhatsApp", href: "/whatsapp", icon: "MessageCircle" },
-    { label: "Facebook", href: "/facebook", icon: "Send" },
-    { label: "פרסום בקבוצות", href: "/distribution", icon: "Megaphone" },
-    { label: "מודיעין קבוצות", href: "/distribution/groups/intelligence", icon: "BarChart3" },
-    { label: "מרכז בקרת פרסום", href: "/publishing-control", icon: "Shield" },
+    { label: "פרסומים להיום", href: "/distribution/daily", icon: "Sun" },
     { label: "קמפיינים", href: "/distribution/campaign-wizard", icon: "Target" },
+    { label: "קבוצות פייסבוק", href: "/distribution/groups", icon: "Users" },
+    { label: "Facebook", href: "/facebook", icon: "Send" },
     { label: "מרכז שיווק", href: "/marketing", icon: "BarChart3" },
     { label: "סטודיו יצירה", href: "/creative-studio", icon: "Presentation" },
+    { label: "בקרת פרסום (מתקדם)", href: "/publishing-control", icon: "Shield" },
+    { label: "מודיעין קבוצות", href: "/distribution/groups/intelligence", icon: "BarChart3" },
   ]},
   { key: "intelligence", title: "מודיעין עסקי", desc: "מנהלים • מתווכים • טריטוריה", icon: "BarChart3", accent: "amber", items: [
     { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3" },
