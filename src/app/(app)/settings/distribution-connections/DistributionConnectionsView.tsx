@@ -500,7 +500,8 @@ export function DistributionConnectionsView({ initial, compliance, paths, metaCo
 
           {/* Facebook Lead Ads forms (discovery only) */}
           <div className="border-line bg-card rounded-2xl border p-5">
-            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Target" size={18} className="text-brand" /> טפסי Lead Ads זמינים</p>
+            <p className="text-ink flex items-center gap-2 font-black"><Icon name="Target" size={18} className="text-brand" /> טפסי Lead Ads שזוהו בחשבון</p>
+            <p className="text-muted mt-1 text-[11px]">זיהוי בלבד. קליטה אוטומטית של לידים מ‑Lead Ads אינה פעילה כרגע — לידים מפייסבוק ב‑ZONO מגיעים מתגובות בקבוצות.</p>
             {leadForms.length > 0 ? (
               <div className="mt-3 grid gap-2">
                 {leadForms.map((f) => (

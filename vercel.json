@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/meta-recover",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/distribution-reconcile",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
