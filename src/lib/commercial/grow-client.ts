@@ -32,7 +32,10 @@ export function growCreds(): GrowCreds {
     recurringPageCode: process.env.GROW_RECURRING_PAGE_CODE || null,
     apiKey: process.env.GROW_API_KEY || null,
     env: (process.env.GROW_ENV || "sandbox").toLowerCase(),
-    configured: !!userId && !!pageCode,
+    // ZONO is recurring-only and GROW issues a single direct-debit page code, so a
+    // deployment that sets only GROW_RECURRING_PAGE_CODE must still count as
+    // configured (either page-code var suffices alongside the user id).
+    configured: !!userId && (!!pageCode || !!(process.env.GROW_RECURRING_PAGE_CODE || "")),
   };
 }
 
@@ -119,7 +122,9 @@ export interface TransactionInfoData {
 export async function growGetTransactionInfo(transactionId: string, transactionToken: string): Promise<GrowResponse<TransactionInfoData>> {
   const creds = growCreds();
   return growPost<TransactionInfoData>("getTransactionInfo", {
-    pageCode: creds.pageCode, transactionId, transactionToken,
+    // Recurring processes are created under recurringPageCode; verify under the
+    // same page (fall back so a recurring-only deployment still verifies).
+    pageCode: creds.pageCode || creds.recurringPageCode || "", transactionId, transactionToken,
   });
 }
 

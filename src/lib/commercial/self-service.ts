@@ -12,7 +12,7 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { createLaunchRepository } from "@/lib/launch/server/repository";
 import { defaultLimits } from "@/lib/launch/plans";
 import { upsertSubscription } from "./store";
-import { canTransition } from "./subscriptions";
+import { cancelGrowRecurring } from "./recurring";
 import type { PlanTier, Subscription } from "./types";
 
 async function ownerContext(): Promise<{ orgId: string; userId: string } | null> {
@@ -43,23 +43,55 @@ export async function changePlanAction(tier: PlanTier): Promise<{ ok: boolean; e
   return { ok: true };
 }
 
-/** Cancel at period end — keeps access until the period closes. */
+/** Cancel renewal — PROVIDER-FIRST. Stops the GROW recurring direct debit
+ *  (updateDirectDebit changeStatus=2) BEFORE recording the local intent, so a
+ *  cancelled subscription can never keep being charged. A real provider error is
+ *  surfaced (never a fake success). When there is no live recurring instruction
+ *  (trial/simulated/unconfigured), the local cancel-at-period-end is recorded. */
 export async function cancelRenewalAction(): Promise<{ ok: boolean; error?: string }> {
   const ctx = await ownerContext();
   if (!ctx) return { ok: false, error: "אין הרשאה." };
   const sub = await readSub(ctx.orgId);
   if (!sub) return { ok: false, error: "אין מנוי." };
-  await upsertSubscription({ orgId: ctx.orgId, planTier: sub.planTier, status: sub.status, cancelAtPeriodEnd: true, growSubscriptionId: sub.growSubscriptionId });
-  return { ok: true };
+
+  // Provider-first: cancel at GROW. cancelGrowRecurring itself marks
+  // cancel_at_period_end ONLY after the provider acknowledges the cancellation.
+  const res = await cancelGrowRecurring(ctx.orgId);
+  if (res.ok) return { ok: true };
+
+  // No live provider instruction to stop (trial, simulated, or GROW unconfigured)
+  // → safe to record the local cancel-at-period-end intent.
+  if (res.reason === "NO_RECURRING_SUBSCRIPTION" || res.reason === "PENDING_SANDBOX_CREDENTIALS") {
+    await upsertSubscription({ orgId: ctx.orgId, planTier: sub.planTier, status: sub.status, cancelAtPeriodEnd: true, growSubscriptionId: sub.growSubscriptionId });
+    return { ok: true };
+  }
+  // A genuine provider error must NOT pretend the subscription was cancelled.
+  return { ok: false, error: "ביטול מול ספק התשלומים נכשל. נסה שוב או פנה לתמיכה." };
 }
 
-/** Reactivate a cancelled/expired subscription (a fresh payment would re-verify). */
-export async function reactivateAction(): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Reactivate after cancellation. A GROW recurring direct debit that was cancelled
+ * (changeStatus=2) CANNOT be un-cancelled — the provider requires a NEW direct-debit
+ * process. So we must NEVER locally flip a cancelled/expired subscription back to
+ * active (that would grant paid access with no live provider instruction = access
+ * without billing). Two safe cases:
+ *   • cancel_at_period_end still pending (not yet ended) → UNDO the pending cancel.
+ *   • genuinely cancelled/expired → require a fresh checkout (needsCheckout).
+ */
+export async function reactivateAction(): Promise<{ ok: boolean; error?: string; needsCheckout?: boolean }> {
   const ctx = await ownerContext();
   if (!ctx) return { ok: false, error: "אין הרשאה." };
   const sub = await readSub(ctx.orgId);
   if (!sub) return { ok: false, error: "אין מנוי." };
-  if (!canTransition(sub.status, "active")) return { ok: false, error: "לא ניתן להפעיל מחדש מהמצב הנוכחי." };
-  await upsertSubscription({ orgId: ctx.orgId, planTier: sub.planTier, status: "active", cancelAtPeriodEnd: false, growSubscriptionId: sub.growSubscriptionId });
-  return { ok: true };
+
+  // Undo a not-yet-effective cancellation (subscription still active this period).
+  if (sub.status === "active" && sub.cancelAtPeriodEnd) {
+    await upsertSubscription({ orgId: ctx.orgId, planTier: sub.planTier, status: "active", cancelAtPeriodEnd: false, growSubscriptionId: sub.growSubscriptionId });
+    return { ok: true };
+  }
+
+  // Genuinely cancelled/expired: the provider debit is gone. A new checkout must
+  // create a fresh recurring instruction; activation happens ONLY via the verified
+  // webhook. Never grant active locally here.
+  return { ok: false, needsCheckout: true, error: "להפעלה מחדש יש להשלים תשלום חדש שיצור הרשאת חיוב חוזרת." };
 }
