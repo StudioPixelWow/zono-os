@@ -14,7 +14,9 @@
 // No new queue, no publishing model here — the server owns the canonical state.
 // ============================================================================
 const DEFAULT_BASE = "https://zono-os-ro2s.vercel.app";
-const VERSION = "0.4.0";
+// Version SOURCE OF TRUTH = manifest.json. Never hardcode a second copy (it drifted
+// to 0.4.0 while the manifest/installed builds were 1.0.2). Read it at load.
+const VERSION = chrome.runtime.getManifest().version;
 
 async function getBase() {
   const { zonoBase } = await chrome.storage.local.get(["zonoBase"]);
@@ -49,7 +51,7 @@ async function completePairing(code) {
 async function heartbeat(facebookSessionDetected, facebookProfileName) {
   // Cache the last known Facebook-session flag (non-secret boolean) so the popup
   // can render "Facebook זוהה" on open without a network round-trip.
-  await chrome.storage.local.set({ lastFbSession: facebookSessionDetected === true });
+  await chrome.storage.local.set({ lastFbSession: facebookSessionDetected === true, lastFbName: facebookProfileName ?? null });
   const creds = await getCreds();
   if (!creds) return { ok: false };
   const base = await getBase();
@@ -179,7 +181,16 @@ async function reportEvent(postId, event) {
 
 // Periodic heartbeat fallback (content script supplies the real session flag).
 chrome.alarms.create("heartbeat", { periodInMinutes: 5 });
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === "heartbeat") heartbeat(false, null); });
+// Fallback heartbeat: content.js supplies the authoritative session flag from an
+// open facebook.com tab. When no FB tab is open, DON'T clobber a previously-detected
+// session back to false (that flapped ready→installed every 5 min); re-send the
+// last-known cached flag instead. An open FB tab's content-script beat (every 2 min)
+// still overrides this with live truth, and an explicit logout flips the cache false.
+async function heartbeatFromCache() {
+  const { lastFbSession, lastFbName } = await chrome.storage.local.get(["lastFbSession", "lastFbName"]);
+  return heartbeat(lastFbSession === true, lastFbName ?? null);
+}
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === "heartbeat") heartbeatFromCache(); });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
