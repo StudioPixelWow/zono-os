@@ -43,7 +43,7 @@ export async function getWizardBootstrap(): Promise<WizardBootstrap> {
   const orgId = organization?.id ?? "";
   const [props, groupsRaw, conn] = await Promise.all([
     listProperties({}).catch(() => []),
-    distributionRepo.listGroups({ limit: 500 }).catch(() => []),
+    distributionRepo.listGroups({ status: "active", limit: 500 }).catch(() => []),  // ONLY approved-for-publishing groups
     orgId ? manualPublishService.providerStatus(orgId, "facebook_group").catch(() => null) : Promise.resolve(null),
   ]);
 
@@ -63,6 +63,6 @@ export async function getWizardBootstrap(): Promise<WizardBootstrap> {
     : { provider: "facebook", label: "Facebook", status: "not_connected", connected: false, message: "פייסבוק לא מחובר עדיין", requiresMembership: true };
 
   const notes: string[] = [];
-  if (!folders.length) notes.push("אין עדיין קבוצות בספרייה — הוסיפו קבוצות במסך ״קבוצות״ (Distribution) כדי לשייך לתיקיות.");
+  if (!folders.length) notes.push("אין עדיין קבוצות מאושרות לפרסום — בחרו והפעילו קבוצות במסך ״קבוצות פייסבוק״ לפני יצירת הקמפיין.");
   return { properties, folders, connection, notes };
 }

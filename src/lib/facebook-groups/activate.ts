@@ -59,6 +59,17 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
   const property = prop as { id: string; title: string | null } | null;
   if (!property) return { ok: false, error: "הנכס לא נמצא או שאינו שייך למשרד." };
 
+  // Only ACTIVE (office-approved) groups of THIS org may be targeted. A tampered
+  // browser payload with a `discovered`/disabled/other-org group id is rejected
+  // server-side — a campaign can never be scheduled to unapproved destinations.
+  const { data: activeRows } = await db.from("distribution_groups" as never)
+    .select("id").eq("org_id", orgId).eq("status", "active").in("id", input.groupIds);
+  const activeIds = new Set(((activeRows as { id: string }[] | null) ?? []).map((r) => r.id));
+  const invalid = input.groupIds.filter((id) => !activeIds.has(id));
+  if (invalid.length > 0) {
+    return { ok: false, error: "חלק מהקבוצות שנבחרו אינן מאושרות לפרסום. ניתן לפרסם רק לקבוצות פעילות של המשרד." };
+  }
+
   // Dates (server-derived). Start no earlier than tomorrow; end = start + horizon.
   const startMs = Math.max(new Date(`${input.startDate}T09:00:00`).getTime(), Date.now() + DAY);
   if (!Number.isFinite(startMs)) return { ok: false, error: "תאריך התחלה לא תקין." };

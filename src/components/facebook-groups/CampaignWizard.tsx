@@ -150,7 +150,7 @@ export function CampaignWizard({ properties, folders, notes }: Props) {
 
         {/* STEP 3 — groups */}
         {step === 2 && (
-          folders.length === 0 ? <Empty title="אין קבוצות בספרייה" body="הוסיפו קבוצות במסך הקבוצות כדי לשייך לתיקיות." cta={{ href: "/distribution/groups", label: "ניהול קבוצות" }} /> : (
+          folders.length === 0 ? <Empty title="אין קבוצות מאושרות לפרסום" body="כדי ליצור קמפיין יש לבחור ולהפעיל קבוצות במסך הקבוצות." cta={{ href: "/distribution/groups", label: "בחירת קבוצות" }} /> : (
             <div className="space-y-4">
               <p className="text-muted text-[12px]"><b className="text-ink">{selectedGroups.size}</b> קבוצות נבחרו. בחרו תיקייה שלמה או קבוצות בודדות.</p>
               {folders.map((f) => (
