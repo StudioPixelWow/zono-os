@@ -27,7 +27,9 @@ const isToday = (iso: string | null) => { if (!iso) return false; const d = new 
 
 interface Row { post: ControlPost; st: TodayStatus; overdue: boolean }
 
-export function TodayView({ data }: { data: PublishingControlData }) {
+const EXT_STATUS_HE: Record<string, string> = { not_installed: "לא מותקן", installed: "מותקן, לא פעיל", facebook_session_detected: "מזוהה — כמעט מוכן", ready: "פעיל", error: "תקלה" };
+
+export function TodayView({ data, extensionStatus = "ready" }: { data: PublishingControlData; extensionStatus?: string }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const [observing, setObserving] = useState(false);
@@ -117,6 +119,15 @@ export function TodayView({ data }: { data: PublishingControlData }) {
       </div>
 
       {error && <div className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-[12px]">{error}</div>}
+
+      {extensionStatus !== "ready" && (
+        <div className="bg-warning-soft text-warning rounded-[18px] px-4 py-3 text-[13px]">
+          <b>תוסף ZONO אינו פעיל כרגע — לכן הפרסום לא יוצא לפועל.</b>{" "}
+          ״פרסום עכשיו״ מסמן את הפריט לפרסום, אבל <b>הפרסום בפועל מתבצע דרך תוסף ZONO בדפדפן</b>: פתח את התוסף וודא שאתה מחובר לפייסבוק — ואז הפריט יפורסם בקבוצה ותאשר את התוצאה.{" "}
+          <span className="opacity-80">מצב נוכחי: {EXT_STATUS_HE[extensionStatus] ?? extensionStatus}.</span>{" "}
+          <Link href="/settings/distribution-connections" className="font-bold underline">הגדרת התוסף</Link>
+        </div>
+      )}
 
       {/* Empty state */}
       {totalCount === 0 && (

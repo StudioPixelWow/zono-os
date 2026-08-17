@@ -6,6 +6,7 @@
 // Falls back to an empty Today on load error (never crashes the morning workflow).
 // ============================================================================
 import { getPublishingControlData, emptyControlData } from "@/lib/distribution/publishing-control-data";
+import { getFacebookConnectionPathsAction } from "@/lib/distribution/provider-connections-actions";
 import { TodayView } from "./TodayView";
 
 export const dynamic = "force-dynamic";
@@ -17,5 +18,12 @@ export default async function DailyDistributionPage() {
   } catch (e) {
     console.error("[distribution] today load failed:", e);
   }
-  return <TodayView data={data} />;
+  let extensionStatus = "not_installed";
+  try {
+    const paths = await getFacebookConnectionPathsAction();
+    extensionStatus = paths.extension?.status ?? "not_installed";
+  } catch (e) {
+    console.error("[distribution] ext status load failed:", e);
+  }
+  return <TodayView data={data} extensionStatus={extensionStatus} />;
 }
