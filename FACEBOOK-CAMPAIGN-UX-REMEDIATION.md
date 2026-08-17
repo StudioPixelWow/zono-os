@@ -328,3 +328,41 @@ The old `daily_distribution_items` community-batch is **not** customer-facing To
 - Auto-refresh Today after the extension confirms (currently on navigation/revalidate).
 - Analytics funnel events (`facebook_today_publish_clicked/…`).
 - Retire the legacy `daily_distribution_items` pipeline.
+
+---
+
+# Automatic Today Synchronization (final closure)
+
+## Strategy & why
+`router.refresh()` (Next server-component refetch) — the app's established pattern (86 call sites) vs Supabase Realtime (3). It re-runs the `/distribution/daily` server page and passes fresh `getPublishingControlData()` into `TodayView` **without a full reload, skeleton, or scroll reset** — React reconciles in place. No new endpoint, no realtime subscription lifecycle to leak. **Server state is the only source of truth** — nothing is ever marked פורסם optimistically.
+
+## Active observation lifecycle
+- **Idle:** poll every **12s** while the tab is visible.
+- **Observing (after any action — פרסום עכשיו / reconcile / retry / resume):** poll every **3s**, auto-expiring after **120s** back to idle.
+- **Immediate refresh** after each action completes, and on **focus / visibilitychange** (return-from-Facebook shows the result instantly, not on the next interval).
+- **Paused while `document.hidden`**; resumes + refreshes immediately on return.
+- All timers + `visibilitychange` + `focus` listeners are cleaned up on unmount (no duplicate loops after remount).
+
+## Success advancement (no manual reload, no auto-publish)
+When the requested post becomes `published`, the next refresh drops it from the pending set → timeline shows **פורסם ✓**, progress ("X מתוך Y") recomputes from authoritative data, and the **hero recomputes to the next ready item** exposing **פרסום עכשיו**. The next post is **never** published automatically — the user clicks פרסום עכשיו again.
+
+## Failure / offline / reconciliation handling
+- **failed / dead_letter** → **דורש טיפול** + נסה שוב (auto-surfaced on refresh; never a stuck "מכינים…").
+- **extension hasn't claimed** → the item stays **בתור לפרסום ✓** with "תוסף ZONO יפרסם — ודא שהתוסף פעיל" (a clear queued state, not a forever-spinner); the post remains safely requested.
+- **awaiting_reconciliation** → **דורש הכרעה** with inline פורסם / לא פורסם / ביטול; those actions refresh Today immediately.
+- **dispatching / awaiting_confirmation** → shown as **מפרסם** (normalized; no engine jargon).
+
+## Progress & hero are always derived
+Progress and hero are computed from the current authoritative `rows` every render — no `localPublishedCount++`, no client-only published state. Two tabs converge to the same server state. The optimistic "בתור לפרסום" note is a **derived** overlay (useMemo) that disappears the moment authoritative data advances the post.
+
+## Network behavior / cost
+A failed refresh keeps the last known Today (no full-page error). Load: idle 1 request / 12s per open tab, 1 / 3s only during a ≤120s active window, **zero while hidden**. No permanent high-frequency polling.
+
+## Final loop (closed)
+```
+פרסום עכשיו → תוסף → פייסבוק → אישור → Today מתעדכן לבד → progress + hero הבא → פרסום עכשיו
+```
+— no browser refresh, no leaving Today.
+
+## Files (closure)
+- `src/app/(app)/distribution/daily/TodayView.tsx` — visibility-aware `router.refresh()` sync, active observation window, focus/return refresh, derived requested overlay, derived progress/hero, cleanup.

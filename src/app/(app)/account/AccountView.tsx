@@ -22,6 +22,15 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string) =>
     start(async () => { const r = await fn(); setMsg(r.ok ? ok : (r.error ?? "שגיאה")); });
+  // Reactivate: undo a pending cancellation, OR redirect to a fresh GROW checkout
+  // when the subscription was genuinely cancelled (a cancelled direct debit cannot
+  // be un-cancelled). Activation still happens only via the verified webhook.
+  const reactivate = () =>
+    start(async () => {
+      const r = await reactivateAction();
+      if (r.url) { window.location.href = r.url; return; }
+      setMsg(r.ok ? "המנוי הופעל מחדש." : (r.error ?? "שגיאה"));
+    });
 
   const { subscription, license, planTier, subscriptionStatus, payments, checklist } = overview;
 
@@ -41,13 +50,13 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
             <span className="text-ink text-[13px] font-bold">{CARDS.find((c) => c.tier === planTier)?.label ?? planTier}</span>
             <span className="text-brand text-[12px] font-black">{STATUS_HE[subscriptionStatus] ?? subscriptionStatus}</span>
           </div>
-          {subscription?.cancelAtPeriodEnd ? <p className="text-warning text-[11px]">החידוש בוטל — הגישה תישאר עד סוף התקופה.</p> : null}
+          {subscription?.cancelAtPeriodEnd ? <div className="flex flex-wrap items-center gap-2"><p className="text-warning text-[11px]">החידוש בוטל — הגישה תישאר עד סוף התקופה.</p><button type="button" disabled={pending} onClick={reactivate} className="text-brand text-[11px] font-bold disabled:opacity-50">חידוש המנוי</button></div> : null}
           <div className="flex flex-wrap gap-2">
             <select disabled={pending} defaultValue={planTier} onChange={(e) => run(() => changePlanAction(e.target.value as PlanTier), "התוכנית עודכנה.")} className="border-line rounded-full border px-3 py-1.5 text-[12px] font-bold">
               {CARDS.map((c) => <option key={c.tier} value={c.tier}>{c.label}</option>)}
             </select>
             {subscription && !subscription.cancelAtPeriodEnd ? <button type="button" disabled={pending} onClick={() => run(cancelRenewalAction, "החידוש בוטל.")} className="text-muted rounded-full border border-[var(--line)] px-3 py-1.5 text-[12px] font-bold">בטל חידוש</button> : null}
-            {subscription && ["cancelled", "expired", "suspended"].includes(subscription.status) ? <button type="button" disabled={pending} onClick={() => run(reactivateAction, "המנוי הופעל מחדש.")} className="bg-brand rounded-full px-3 py-1.5 text-[12px] font-black text-white">הפעל מחדש</button> : null}
+            {subscription && ["cancelled", "expired", "suspended"].includes(subscription.status) ? <button type="button" disabled={pending} onClick={reactivate} className="bg-brand rounded-full px-3 py-1.5 text-[12px] font-black text-white">הפעלת מנוי מחדש</button> : null}
           </div>
         </section>
 

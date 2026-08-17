@@ -41,6 +41,37 @@ async function currentState(db: any, orgId: string, postId: string): Promise<Pub
 
 function done(res: Result): Result { revalidatePath("/publishing-control"); return res; }
 
+/** "פרסום עכשיו" — promote a READY post to be the NEXT item the user's extension
+ *  publishes. Sets a one-shot priority signal (publish_requested_at) that the
+ *  atomic claim consumes; it NEVER marks the post published and never bypasses the
+ *  human-confirm + reconciliation flow. Only pre-dispatch states are eligible. */
+const PUBLISH_NOW_STATES = new Set(["queued", "scheduled", "draft"]);
+export async function requestPublishNowAction(postId: string): Promise<Result> {
+  const c = await ctx(); if (!c) return { ok: false, error: "unauthorized" };
+  if (!postId) return { ok: false, error: "not found" };
+  const db: any = createServiceRoleClient();
+  const { data } = await db.from("distribution_posts")
+    .select("publish_state,status,terminal,paused_at").eq("id", postId).eq("org_id", c.orgId).maybeSingle();
+  const row = data as { publish_state?: string; status?: string; terminal?: boolean; paused_at?: string | null } | null;
+  if (!row) return { ok: false, error: "not found" };
+  const state = row.publish_state ?? row.status ?? "queued";
+  if (row.terminal === true || row.paused_at || !PUBLISH_NOW_STATES.has(state)) {
+    return { ok: false, error: "לא ניתן לפרסם עכשיו מהמצב הנוכחי." };
+  }
+  const now = new Date().toISOString();
+  const { error } = await db.from("distribution_posts")
+    .update({ publish_requested_at: now, updated_at: now })
+    .eq("id", postId).eq("org_id", c.orgId).in("publish_state", ["queued", "scheduled", "draft"]);
+  if (error) return { ok: false, error: error.message };
+  // Best-effort audit of the explicit intent (never blocks the action).
+  await db.from("distribution_publish_events").insert({
+    org_id: c.orgId, target_id: postId, from_state: state, to_state: state,
+    kind: "publish_now_requested", actor_id: c.userId, reason: "user requested publish now",
+  }).then(() => undefined, () => undefined);
+  revalidatePath("/distribution/daily"); revalidatePath("/publishing-control");
+  return { ok: true };
+}
+
 /** Retry a failed / dead-lettered target — re-queues it for a fresh, safe attempt. */
 export async function retryPostAction(postId: string): Promise<Result> {
   const c = await ctx(); if (!c) return { ok: false, error: "unauthorized" };

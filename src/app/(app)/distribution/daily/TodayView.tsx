@@ -9,7 +9,8 @@
 // — no new publishing mechanics. Ready items are published by the existing
 // assisted extension; a "פתח קבוצה" fallback is offered.
 // ============================================================================
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,9 @@ interface Row { post: ControlPost; st: TodayStatus; overdue: boolean }
 
 export function TodayView({ data }: { data: PublishingControlData }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const [observing, setObserving] = useState(false);
+  const startObserving = () => setObserving(true);
   const [error, setError] = useState<string | null>(null);
   const [nowMs] = useState(() => Date.now());
 
@@ -51,17 +55,55 @@ export function TodayView({ data }: { data: PublishingControlData }) {
   const pendingRows = rows.filter((r) => r.st.key !== "published" && r.st.key !== "cancelled");
   const hero = pendingRows.find((r) => r.st.action) ?? pendingRows[0] ?? null;
 
-  const run = (fn: () => Promise<{ error?: string }>) => startTransition(async () => {
-    setError(null);
-    const res = await fn();
-    if (res?.error) setError(res.error);
-  });
+  const run = (fn: () => Promise<{ error?: string }>) => {
+    startObserving(); // sync Today quickly after any action
+    startTransition(async () => {
+      setError(null);
+      const res = await fn();
+      if (res?.error) setError(res.error);
+      router.refresh(); // pull authoritative state immediately after the action
+    });
+  };
 
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const publishNow = (id: string) => {
     setRequested((r) => new Set(r).add(id)); // optimistic: mark queued-to-extension
     run(() => requestPublishNowAction(id));
   };
+
+  // Active observation window (fast poll) auto-expires after ~2 minutes.
+  useEffect(() => {
+    if (!observing) return;
+    const t = setTimeout(() => setObserving(false), 120_000);
+    return () => clearTimeout(t);
+  }, [observing]);
+
+  // AUTHORITATIVE auto-sync: router.refresh() re-runs the server page (no full
+  // reload, no scroll reset). Fast (3s) while observing an in-flight publish,
+  // idle (12s) otherwise; paused while the tab is hidden; immediate on
+  // return-from-Facebook (focus / visibility). All listeners cleaned up.
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const tick = () => { if (typeof document !== "undefined" && !document.hidden) router.refresh(); };
+    const start = () => { if (timer) clearInterval(timer); timer = setInterval(tick, observing ? 3000 : 12000); };
+    const onVis = () => { if (!document.hidden) { router.refresh(); start(); } };
+    const onFocus = () => router.refresh();
+    start();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+    return () => { if (timer) clearInterval(timer); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onFocus); };
+  }, [observing, router]);
+
+  // DERIVED (not an effect): the optimistic "בתור לפרסום" note applies only while a
+  // requested post is still a pre-dispatch ready/scheduled item. Once authoritative
+  // data advances it (claimed / published / …), it drops out and the REAL status shows.
+  const requestedActive = useMemo(() => {
+    if (requested.size === 0) return requested;
+    const byId = new Map(rows.map((r) => [r.post.id, r]));
+    const next = new Set<string>();
+    for (const id of requested) { const r = byId.get(id); if (r && (r.st.key === "ready" || r.st.key === "scheduled")) next.add(id); }
+    return next;
+  }, [requested, rows]);
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
@@ -107,7 +149,7 @@ export function TodayView({ data }: { data: PublishingControlData }) {
             </div>
             <span className={cn("rounded-full px-3 py-1 text-[12px] font-bold", TONE[hero.st.tone])}>{hero.st.label}</span>
           </div>
-          <div className="mt-3"><HeroAction row={hero} pending={pending} run={run} requested={requested} onPublishNow={publishNow} /></div>
+          <div className="mt-3"><HeroAction row={hero} pending={pending} run={run} requested={requestedActive} onPublishNow={publishNow} /></div>
         </div>
       )}
 
@@ -124,7 +166,7 @@ export function TodayView({ data }: { data: PublishingControlData }) {
                   <div className="text-muted truncate text-[11px]">{[r.post.groupName, r.post.campaignName].filter(Boolean).join(" · ") || "קבוצת פייסבוק"}{r.overdue ? " · באיחור" : ""}</div>
                 </div>
                 <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold", TONE[r.st.tone])}>{r.st.label}</span>
-                <div className="shrink-0"><RowAction row={r} pending={pending} run={run} requested={requested} onPublishNow={publishNow} /></div>
+                <div className="shrink-0"><RowAction row={r} pending={pending} run={run} requested={requestedActive} onPublishNow={publishNow} /></div>
               </div>
             ))}
           </div>

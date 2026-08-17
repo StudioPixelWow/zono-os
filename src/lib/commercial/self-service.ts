@@ -13,6 +13,7 @@ import { createLaunchRepository } from "@/lib/launch/server/repository";
 import { defaultLimits } from "@/lib/launch/plans";
 import { upsertSubscription } from "./store";
 import { cancelGrowRecurring } from "./recurring";
+import { createGrowCheckout } from "./checkout";
 import type { PlanTier, Subscription } from "./types";
 
 async function ownerContext(): Promise<{ orgId: string; userId: string } | null> {
@@ -78,7 +79,7 @@ export async function cancelRenewalAction(): Promise<{ ok: boolean; error?: stri
  *   • cancel_at_period_end still pending (not yet ended) → UNDO the pending cancel.
  *   • genuinely cancelled/expired → require a fresh checkout (needsCheckout).
  */
-export async function reactivateAction(): Promise<{ ok: boolean; error?: string; needsCheckout?: boolean }> {
+export async function reactivateAction(): Promise<{ ok: boolean; error?: string; needsCheckout?: boolean; url?: string }> {
   const ctx = await ownerContext();
   if (!ctx) return { ok: false, error: "אין הרשאה." };
   const sub = await readSub(ctx.orgId);
@@ -90,8 +91,10 @@ export async function reactivateAction(): Promise<{ ok: boolean; error?: string;
     return { ok: true };
   }
 
-  // Genuinely cancelled/expired: the provider debit is gone. A new checkout must
-  // create a fresh recurring instruction; activation happens ONLY via the verified
-  // webhook. Never grant active locally here.
-  return { ok: false, needsCheckout: true, error: "להפעלה מחדש יש להשלים תשלום חדש שיצור הרשאת חיוב חוזרת." };
+  // Genuinely cancelled/expired: a cancelled GROW direct debit CANNOT be un-cancelled.
+  // Start a FRESH checkout — activation happens ONLY via the verified webhook, never
+  // locally. Return the hosted checkout URL for the UI to redirect to.
+  const co = await createGrowCheckout(ctx.orgId);
+  if (co.ok) return { ok: false, needsCheckout: true, url: co.url };
+  return { ok: false, needsCheckout: true, error: co.reason === "NOT_CONFIGURED" ? "טרם הוגדר ספק תשלומים. פנה לתמיכה." : "לא ניתן להפעיל מחדש כרגע. נסה שוב או פנה לתמיכה." };
 }
