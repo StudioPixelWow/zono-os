@@ -20,7 +20,7 @@ interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
 interface Props { properties: WProperty[]; folders: GroupFolder[]; connection: Connection; notes: string[] }
 
-const STEPS = ["נכס", "תוכן פוסט", "חיבור פייסבוק", "קבוצות", "תדירות", "גאנט ואישור", "תגובות"];
+const STEPS = ["נכס", "תוכן פוסט", "חיבור פייסבוק", "קבוצות", "תדירות", "סקירה ואישור", "תגובות"];
 const fmt = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
 const FREQS: Frequency[] = ["one_time", "three_weekly", "daily", "full_month"];
 
@@ -179,7 +179,7 @@ export function CampaignWizard({ properties, folders, connection, notes }: Props
         <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0} className="text-muted rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40">← הקודם</button>
         {step < STEPS.length - 1
           ? <button onClick={() => canNext && setStep((s) => s + 1)} disabled={!canNext} className="bg-brand rounded-xl px-5 py-2 text-sm font-bold text-white disabled:opacity-50">הבא →</button>
-          : <Link href="/distribution" className="bg-brand rounded-xl px-5 py-2 text-sm font-bold text-white">סיום — למרכז ההפצה</Link>}
+          : <Link href="/distribution" className="bg-brand rounded-xl px-5 py-2 text-sm font-bold text-white">המשך לתזמון ופרסום ←</Link>}
       </div>
     </div>
   );

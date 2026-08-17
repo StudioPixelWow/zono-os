@@ -9,7 +9,7 @@
 
 export type Frequency = "one_time" | "three_weekly" | "daily" | "full_month" | "custom";
 export const FREQUENCY_HE: Record<Frequency, string> = {
-  one_time: "פעם אחת", three_weekly: "3 פעמים בשבוע", daily: "כל יום", full_month: "קמפיין חודשי מלא", custom: "מותאם אישית",
+  one_time: "פעם אחת", three_weekly: "3 פעמים בשבוע", daily: "כל יום", full_month: "לאורך החודש · כל 3 ימים", custom: "מותאם אישית",
 };
 
 export type SlotStatus = "draft" | "waiting_approval" | "approved" | "scheduled" | "published" | "failed" | "needs_review" | "cancelled";
