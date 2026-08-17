@@ -15,7 +15,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import type { PublishingControlData, ControlPost } from "@/lib/distribution/publishing-control-data";
 import { toTodayStatus, type TodayStatus } from "@/lib/distribution/today-status";
-import { reconcilePostAction, retryPostAction, resumePostAction } from "@/lib/distribution/publishing-control-actions";
+import { reconcilePostAction, retryPostAction, resumePostAction, requestPublishNowAction } from "@/lib/distribution/publishing-control-actions";
 
 const TONE: Record<TodayStatus["tone"], string> = {
   muted: "bg-surface text-muted", brand: "bg-brand-soft text-brand", warning: "bg-warning-soft text-warning",
@@ -56,6 +56,12 @@ export function TodayView({ data }: { data: PublishingControlData }) {
     const res = await fn();
     if (res?.error) setError(res.error);
   });
+
+  const [requested, setRequested] = useState<Set<string>>(new Set());
+  const publishNow = (id: string) => {
+    setRequested((r) => new Set(r).add(id)); // optimistic: mark queued-to-extension
+    run(() => requestPublishNowAction(id));
+  };
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
@@ -101,7 +107,7 @@ export function TodayView({ data }: { data: PublishingControlData }) {
             </div>
             <span className={cn("rounded-full px-3 py-1 text-[12px] font-bold", TONE[hero.st.tone])}>{hero.st.label}</span>
           </div>
-          <div className="mt-3"><HeroAction row={hero} pending={pending} run={run} /></div>
+          <div className="mt-3"><HeroAction row={hero} pending={pending} run={run} requested={requested} onPublishNow={publishNow} /></div>
         </div>
       )}
 
@@ -118,7 +124,7 @@ export function TodayView({ data }: { data: PublishingControlData }) {
                   <div className="text-muted truncate text-[11px]">{[r.post.groupName, r.post.campaignName].filter(Boolean).join(" · ") || "קבוצת פייסבוק"}{r.overdue ? " · באיחור" : ""}</div>
                 </div>
                 <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold", TONE[r.st.tone])}>{r.st.label}</span>
-                <div className="shrink-0"><RowAction row={r} pending={pending} run={run} /></div>
+                <div className="shrink-0"><RowAction row={r} pending={pending} run={run} requested={requested} onPublishNow={publishNow} /></div>
               </div>
             ))}
           </div>
@@ -137,22 +143,31 @@ export function TodayView({ data }: { data: PublishingControlData }) {
   );
 }
 
-function RowAction({ row, pending, run }: { row: Row; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void }) {
+function RowAction({ row, pending, run, requested, onPublishNow }: { row: Row; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void; requested: Set<string>; onPublishNow: (id: string) => void }) {
   const { post, st } = row;
   if (st.action === "reconcile") return <ReconcileButtons postId={post.id} pending={pending} run={run} />;
   if (st.action === "fix") return <button disabled={pending} onClick={() => run(() => retryPostAction(post.id))} className="text-danger text-xs font-bold disabled:opacity-50">נסה שוב</button>;
   if (st.action === "resume") return <button disabled={pending} onClick={() => run(() => resumePostAction(post.id))} className="text-brand text-xs font-bold disabled:opacity-50">חידוש</button>;
-  if (st.action === "assist_publish" && post.groupId) return post.externalPostUrl ? null : <span className="text-muted text-[11px]">התוסף יפרסם</span>;
+  if (st.action === "assist_publish") {
+    if (requested.has(post.id)) return <span className="text-brand text-[11px] font-bold">בתור לפרסום ✓</span>;
+    return <button disabled={pending} onClick={() => onPublishNow(post.id)} className="bg-brand rounded-lg px-3 py-1 text-[11px] font-black text-white disabled:opacity-50">פרסום עכשיו</button>;
+  }
   return null;
 }
 
-function HeroAction({ row, pending, run }: { row: Row; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void }) {
+function HeroAction({ row, pending, run, requested, onPublishNow }: { row: Row; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void; requested: Set<string>; onPublishNow: (id: string) => void }) {
   const { post, st } = row;
   if (st.action === "reconcile") return <ReconcileButtons postId={post.id} pending={pending} run={run} big />;
   if (st.action === "fix") return <button disabled={pending} onClick={() => run(() => retryPostAction(post.id))} className="bg-danger rounded-xl px-5 py-2 text-sm font-black text-white disabled:opacity-50">טיפול בפרסום</button>;
   if (st.action === "resume") return <button disabled={pending} onClick={() => run(() => resumePostAction(post.id))} className="bg-brand rounded-xl px-5 py-2 text-sm font-black text-white disabled:opacity-50">חידוש הפרסום</button>;
-  // ready / scheduled → the extension publishes it; offer a manual "open group" assist.
-  return <p className="text-muted text-[12px]">כשמגיע הזמן, <b className="text-ink">תוסף ZONO</b> יפרסם את הפריט בקבוצה — ודא שהתוסף פעיל. הפרסום מאושר על ידך.</p>;
+  // ready → explicit "publish now": prioritize this post for the extension session.
+  if (requested.has(post.id)) return <p className="text-brand text-[13px] font-bold">בתור לפרסום ✓ · תוסף ZONO יפרסם את הפריט בקבוצה — ודא שהתוסף פעיל. הפרסום מאושר על ידך.</p>;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button disabled={pending} onClick={() => onPublishNow(post.id)} className="bg-brand rounded-xl px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{pending ? "מכינים את הפרסום…" : "פרסום עכשיו"}</button>
+      <span className="text-muted text-[11px]">הפרסום בקבוצה מתבצע דרך התוסף ומאושר על ידך.</span>
+    </div>
+  );
 }
 
 function ReconcileButtons({ postId, pending, run, big }: { postId: string; pending: boolean; run: (fn: () => Promise<{ error?: string }>) => void; big?: boolean }) {

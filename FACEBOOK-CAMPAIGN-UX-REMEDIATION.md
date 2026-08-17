@@ -283,3 +283,48 @@ Facebook posting was split across **three disconnected data pipelines**:
 - A UI-triggered "publish now" + "mark published" for campaign `distribution_posts` (today it relies on the extension's autonomous claim; the manual copy-paste path exists only for the legacy batch pipeline). Consider a per-post manual-publish action on the ready card.
 - Retire/merge the legacy `daily_distribution_items` community-batch pipeline (or reframe it as a suggestion engine feeding campaigns) so there is truly one source.
 - Group-selection search/filter/saved-sets at 400-scale inside the builder; times/day + day-by-day preview; FB connection pre-gate; analytics funnel events.
+
+---
+
+# Explicit Publish-Now Loop (P2)
+
+## Previous gap
+Today showed "מוכן לפרסום" but the extension claimed work autonomously by poll order — the user could not explicitly say "publish THIS one now." The hero read "התוסף יפרסם" with no action.
+
+## Final interaction
+```
+מוכן לפרסום → [פרסום עכשיו] → "מכינים את הפרסום…" → בתור לפרסום ✓
+  → תוסף ZONO claims THIS post next → human publishes in the group → confirm
+  → Today updates (פורסם) → next ready item becomes the hero
+```
+The hero and each ready timeline item now expose one dominant **פרסום עכשיו**. After a click the item shows **בתור לפרסום ✓** with a reminder that the extension publishes it and the user confirms.
+
+## Safety model (no new engine, no fake success)
+"פרסום עכשיו" **does not** mark the post published. It sets a one-shot priority signal `publish_requested_at` (migration `20271260120000_p9_3_publish_now_priority.sql`). The SAME atomic `claim_next_distribution_post` then serves that post **next** to the user's extension, and the SAME lease + human-confirm + reconciliation flow runs. The signal is **consumed (cleared) on claim**, so it can never loop.
+- **Eligibility**: a requested post is claimable even before its scheduled time (the user explicitly asked to publish now).
+- **Precedence (poll vs explicit)**: `ORDER BY (publish_requested_at IS NULL), publish_requested_at, scheduled_at, created_at` → requested posts win (oldest request first), then schedule order. **Proven** by SQL: for `[requested-late, due-no-request, requested-early, future-no-request]` the claim order was `requested-early → requested-late → due → future`.
+- **Authorization**: server-side — auth, org, post belongs to org, state ∈ {queued,scheduled,draft}, not terminal/paused/dispatching. The browser post id is never trusted.
+- **Idempotency / double-click**: setting `publish_requested_at` is idempotent; the atomic `FOR UPDATE SKIP LOCKED` claim guarantees a single claim; nothing here publishes, so **no duplicate external post** can result.
+- **Lost ack**: unchanged — if the claimed post's ack is lost, the existing P9.1 sweep moves it to `awaiting_reconciliation` → "דורש הכרעה". No auto-republish.
+- **Extension missing**: the post simply stays requested/queued (no fake publishing state); the user is told the extension must be active.
+
+## Before → After (clicks to process one post from Today)
+| | Before | After |
+|---|---|---|
+| Trigger a specific post | not possible from Today (wait for poll) | **1 click** (פרסום עכשיו) |
+| Leave Today to publish | sometimes (publishing-control) | **no** |
+| Confirm/next | reconcile-only | hero advances to next ready item |
+
+## Legacy daily pipeline status
+The old `daily_distribution_items` community-batch is **not** customer-facing Today and does not compete in navigation. It remains as technical debt (retire or reframe as a suggestion engine) — unchanged this task.
+
+## Files (P2)
+- `supabase/migrations/20271260120000_p9_3_publish_now_priority.sql` — `publish_requested_at` column + claim priority (applied + SQL-verified).
+- `src/lib/distribution/publishing-control-actions.ts` — `requestPublishNowAction` (guarded, one-shot, org-scoped, audited).
+- `src/app/(app)/distribution/daily/TodayView.tsx` — פרסום עכשיו in hero + timeline.
+
+## Remaining P2 (non-blocking)
+- Live content/media preview drawer before publishing (context is shown compactly today).
+- Auto-refresh Today after the extension confirms (currently on navigation/revalidate).
+- Analytics funnel events (`facebook_today_publish_clicked/…`).
+- Retire the legacy `daily_distribution_items` pipeline.
