@@ -7,6 +7,7 @@
 // CRM state via the feedback route. No client JS — plain form posts.
 // ============================================================================
 import { verifyRecoToken } from "@/lib/customer-comm/recommend-tokens";
+import { unsubUrl } from "@/lib/customer-comm/unsubscribe";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -83,6 +84,7 @@ export default async function RecommendationView(
         );
       })}
       <p style={{ textAlign: "center", margin: "10px 0 0", color: "#94a3b8", fontSize: 12 }}>ההמלצות מותאמות עבורך על ידי {officeName}</p>
+      {(() => { const u = unsubUrl({ o: p.o, t: p.t, c: p.c, ch: "all" }); return u ? <p style={{ textAlign: "center", margin: "8px 0 0", color: "#cbd5e1", fontSize: 12 }}><a href={u} style={{ color: "#cbd5e1" }}>להפסקת קבלת הודעות</a></p> : null; })()}
     </Shell>
   );
 }

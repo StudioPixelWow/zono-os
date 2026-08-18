@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const started = Date.now();
   try {
     const r = await runAllOrgsBuyerMatchBundles({ orgLimit: 100, perOrgLimit: 200 });
-    return NextResponse.json({ ok: true, orgs: r.orgs, bundlesSent: r.bundlesSent, skipped: r.skipped, durationMs: Date.now() - started });
+    return NextResponse.json({ ok: true, orgs: r.orgs, bundlesSent: r.bundlesSent, viaWhatsapp: r.viaWhatsapp, viaEmail: r.viaEmail, deferred: r.deferred, skipped: r.skipped, durationMs: Date.now() - started });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "buyer_match_bundles_failed" }, { status: 500 });
   }

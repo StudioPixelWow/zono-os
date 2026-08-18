@@ -18,10 +18,29 @@ import { sendCustomerEmail } from "./send";
 import { checkChannelEligibility } from "./consent";
 import { recoUrl } from "./recommend-tokens";
 import { unsubUrl } from "./unsubscribe";
+import { dispatchExternal } from "@/lib/communication/dispatch";
+import { providerFor } from "@/lib/notify/providers";
+import { isQuietHours, morningSendTime } from "@/lib/communication/quiet-hours";
 
 /** Deterministic launch threshold — only high-confidence matches are sent. */
 export const MATCH_THRESHOLD = 70;
 const MAX_PER_BUNDLE = 5;
+
+// The approved Meta template name for buyer match bundles. Template approval is a
+// Meta-side state we cannot fabricate: WhatsApp is only attempted when this is
+// configured (an approved template exists) — otherwise the channel is skipped
+// honestly and email is the fallback. Variables: {{1}} name {{2}} count {{3}} area {{4}} url.
+const WA_MATCH_TEMPLATE = () => process.env.ZONO_WHATSAPP_MATCH_TEMPLATE || null;
+
+/** Normalize an Israeli phone to international digits (no +), or null if invalid. */
+function normalizePhone(raw: string | null | undefined): string | null {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (d.length < 9) return null;
+  if (d.startsWith("972")) return d;
+  if (d.startsWith("0")) return "972" + d.slice(1);
+  if (d.length === 9) return "972" + d;
+  return null;
+}
 
 const ils = (n: number | null | undefined) =>
   n == null ? "" : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : `₪${Math.round(n).toLocaleString("he-IL")}`;
@@ -74,7 +93,7 @@ function renderBundleEmail(args: {
   return { subject, text, html };
 }
 
-export interface BundleResult { org: string; buyers: number; bundlesSent: number; skipped: number }
+export interface BundleResult { org: string; buyers: number; bundlesSent: number; skipped: number; viaWhatsapp: number; viaEmail: number; deferred: number }
 
 /** Send buyer match bundles for one org. Bounded, idempotent-per-day, dedup-safe. */
 export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?: number }): Promise<BundleResult> {
@@ -88,7 +107,7 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
     .eq("org_id", orgId).eq("match_status", "active").gte("compatibility_score", MATCH_THRESHOLD)
     .order("compatibility_score", { ascending: false }).limit(2000);
   const matches = (matchRows ?? []) as Array<{ buyer_id: string; property_id: string; compatibility_score: number }>;
-  if (!matches.length) return { org: orgId, buyers: 0, bundlesSent: 0, skipped: 0 };
+  if (!matches.length) return { org: orgId, buyers: 0, bundlesSent: 0, skipped: 0, viaWhatsapp: 0, viaEmail: 0, deferred: 0 };
 
   const byBuyer = new Map<string, Array<{ propertyId: string; score: number }>>();
   for (const m of matches) {
@@ -108,31 +127,29 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
     if (r.recommended_at && r.recommended_at >= todayStart) sentToday.add(r.contact_id);
   }
 
-  // 3) Buyer contacts (need email).
-  const { data: buyerRows } = await db.from("buyers").select("id,full_name,email").in("id", buyerIds);
-  const buyers = new Map<string, { full_name: string | null; email: string | null }>();
-  for (const b of (buyerRows ?? []) as any[]) buyers.set(b.id, { full_name: b.full_name, email: b.email });
+  // 3) Buyer contacts (email and/or phone).
+  const { data: buyerRows } = await db.from("buyers").select("id,full_name,email,phone").in("id", buyerIds);
+  const buyers = new Map<string, { full_name: string | null; email: string | null; phone: string | null }>();
+  for (const b of (buyerRows ?? []) as any[]) buyers.set(b.id, { full_name: b.full_name, email: b.email, phone: b.phone });
 
   const { data: orgRow } = await db.from("organizations").select("name").eq("id", orgId).maybeSingle();
   const officeName = (orgRow?.name as string) || "צוות ZONO";
+  const waTemplate = WA_MATCH_TEMPLATE();
+  const waConnected = waTemplate ? await providerFor("whatsapp").isConfigured(orgId) : false;   // org-level, resolved once
 
-  let processed = 0, bundlesSent = 0, skipped = 0;
+  let processed = 0, bundlesSent = 0, skipped = 0, viaWhatsapp = 0, viaEmail = 0, deferred = 0;
   const limit = opts?.limit ?? 200;
 
   for (const buyerId of buyerIds) {
     if (processed >= limit) break;
     processed++;
     const buyer = buyers.get(buyerId);
-    if (!buyer?.email) { skipped++; continue; }
-    if (sentToday.has(buyerId)) { skipped++; continue; }         // frequency cap: 1/day
+    if (!buyer) { skipped++; continue; }
+    if (sentToday.has(buyerId)) { skipped++; continue; }         // frequency cap: 1/day, ACROSS channels
 
     // net-new matches only (never resend a property already recommended)
     const fresh = (byBuyer.get(buyerId) ?? []).filter((m) => !alreadyRecommended.has(`${buyerId}|${m.propertyId}`));
     if (!fresh.length) { skipped++; continue; }
-
-    // marketing consent (email) — explicit opt-in required; fail-closed
-    const gate = await checkChannelEligibility({ orgId, contactType: "buyer", contactId: buyerId, channel: "email", purpose: "marketing" }, db);
-    if (!gate.eligible) { skipped++; continue; }
 
     // resolve available property details (exclude sold/rented/withdrawn/archived)
     const freshIds = fresh.slice(0, 40).map((m) => m.propertyId);
@@ -148,21 +165,58 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
 
     const bundleId = randomUUID();
     const viewUrl = recoUrl({ o: orgId, t: "buyer", c: buyerId, b: bundleId });
-    const unsub = unsubUrl({ o: orgId, t: "buyer", c: buyerId, ch: "email" });
-    const msg = renderBundleEmail({ officeName, buyerName: buyer.full_name ?? "", props, viewUrl, unsubscribeUrl: unsub });
+    const dedupKey = `buyer-match:${buyerId}:${bundleId}`;   // ONE business communication across channels
 
-    const res = await sendCustomerEmail({
-      orgId, contact: { type: "buyer", id: buyerId, name: buyer.full_name, email: buyer.email },
-      purpose: "marketing",
-      subject: msg.subject, text: msg.text, html: msg.html,
-      dedupKey: `match_bundle:${buyerId}:${bundleId}`,
-    }, db);
-    if (!res.sent) { skipped++; continue; }
+    // ── Deterministic channel strategy — WhatsApp preferred, email fallback.
+    //    Consent is evaluated INDEPENDENTLY per channel (email opt-in never implies
+    //    WhatsApp opt-in). Fail-closed: unknown/opted-out → that channel is out. ──
+    const phone = normalizePhone(buyer.phone);
+    const waGate = phone && waTemplate && waConnected
+      ? await checkChannelEligibility({ orgId, contactType: "buyer", contactId: buyerId, channel: "whatsapp", purpose: "marketing" }, db)
+      : { eligible: false, status: null, reason: "wa_not_available" };
+    const emailGate = buyer.email
+      ? await checkChannelEligibility({ orgId, contactType: "buyer", contactId: buyerId, channel: "email", purpose: "marketing" }, db)
+      : { eligible: false, status: null, reason: "no_email" };
+
+    const chosen: "whatsapp" | "email" | null = waGate.eligible ? "whatsapp" : emailGate.eligible ? "email" : null;
+    if (!chosen) { skipped++; continue; }   // no consented + deliverable channel
+
+    let channelUsed: "whatsapp" | "email";
+    if (chosen === "whatsapp") {
+      const nowIso = new Date().toISOString();
+      const firstName = (buyer.full_name ?? "").trim().split(/\s+/)[0] || "לקוח";
+      const area = props.find((p) => p.city)?.city ?? "האזור שלך";
+      const waText = `היי ${firstName}, מצאנו ${props.length} נכסים שמתאימים למה שחיפשת ב${area}. לצפייה: ${viewUrl ?? ""}`;
+      const template = { name: waTemplate as string, language: "he", variables: [firstName, String(props.length), area, viewUrl ?? ""] };
+      const wreq = { orgId, userId: null as string | null, channel: "whatsapp" as const, to: phone as string, title: null, body: waText, template, dedupKey };
+      if (isQuietHours(nowIso)) {
+        // No night spam — defer; the communication-dispatch cron sends it in the morning.
+        await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: morningSendTime(nowIso) });
+        deferred++;
+      } else {
+        const r = await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: null });
+        // Do NOT fall back to email on a runtime send failure (the dedup key is already
+        // claimed → fallback could duplicate). A fresh bundle retries on the next run.
+        if (!r.sent && !r.skipped) { skipped++; continue; }
+        viaWhatsapp++;
+      }
+      channelUsed = "whatsapp";
+    } else {
+      const unsub = unsubUrl({ o: orgId, t: "buyer", c: buyerId, ch: "email" });
+      const msg = renderBundleEmail({ officeName, buyerName: buyer.full_name ?? "", props, viewUrl, unsubscribeUrl: unsub });
+      const res = await sendCustomerEmail({
+        orgId, contact: { type: "buyer", id: buyerId, name: buyer.full_name, email: buyer.email },
+        purpose: "marketing", subject: msg.subject, text: msg.text, html: msg.html, dedupKey,
+      }, db);
+      if (!res.sent) { skipped++; continue; }
+      channelUsed = "email";
+      viaEmail++;
+    }
 
     // record each recommendation (dedup ledger + price-drop-ready + agent visibility)
     const rows = props.map((p) => ({
       org_id: orgId, contact_type: "buyer", contact_id: buyerId, property_id: p.id,
-      bundle_id: bundleId, channel: "email", status: "recommended",
+      bundle_id: bundleId, channel: channelUsed, status: "recommended",
       match_score: p.score, price_at_send: p.price ?? null, recommended_at: new Date().toISOString(),
     }));
     try { await db.from("customer_property_recommendations").upsert(rows, { onConflict: "org_id,contact_type,contact_id,property_id", ignoreDuplicates: true }); } catch { /* ledger best-effort */ }
@@ -172,23 +226,24 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
     await emitBusinessEvent({
       type: DOMAIN_EVENTS.buyerMatchesReady, entityType: "buyer", entityId: buyerId, orgId,
       idempotencyKey: `buyer.matches_ready:${bundleId}`,
-      metadata: { count: props.length, bundleId, channel: "email" },
+      metadata: { count: props.length, bundleId, channel: channelUsed },
     });
     bundlesSent++;
   }
-  return { org: orgId, buyers: buyerIds.length, bundlesSent, skipped };
+  return { org: orgId, buyers: buyerIds.length, bundlesSent, skipped, viaWhatsapp, viaEmail, deferred };
 }
 
 /** Weekly/daily cron entry point — bounded across orgs. */
-export async function runAllOrgsBuyerMatchBundles(opts?: { orgLimit?: number; perOrgLimit?: number }): Promise<{ orgs: number; bundlesSent: number; skipped: number; results: BundleResult[] }> {
+export async function runAllOrgsBuyerMatchBundles(opts?: { orgLimit?: number; perOrgLimit?: number }): Promise<{ orgs: number; bundlesSent: number; skipped: number; viaWhatsapp: number; viaEmail: number; deferred: number; results: BundleResult[] }> {
   const db: any = createServiceRoleClient();
   const { data } = await db.from("organizations").select("id").limit(opts?.orgLimit ?? 100);
   const orgIds = ((data ?? []) as any[]).map((o) => o.id).filter(Boolean);
   const results: BundleResult[] = [];
-  let bundlesSent = 0, skipped = 0;
+  let bundlesSent = 0, skipped = 0, viaWhatsapp = 0, viaEmail = 0, deferred = 0;
   for (const id of orgIds) {
     const r = await runBuyerMatchBundlesForOrg(id, { limit: opts?.perOrgLimit ?? 200 });
     results.push(r); bundlesSent += r.bundlesSent; skipped += r.skipped;
+    viaWhatsapp += r.viaWhatsapp; viaEmail += r.viaEmail; deferred += r.deferred;
   }
-  return { orgs: orgIds.length, bundlesSent, skipped, results };
+  return { orgs: orgIds.length, bundlesSent, skipped, viaWhatsapp, viaEmail, deferred, results };
 }
