@@ -27,9 +27,9 @@ const CAMP_STATUS_HE: Record<string, string> = { active: "פעיל", running: "�
 const dateHe = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" }) : "");
 const COV_LABEL: Record<CoverageStatus, string> = { marketing_now: "משווק כעת", scheduled: "מתוזמן", no_future: "אין פרסום נוסף", attention: "דורש טיפול", never_published: "לא פורסם עדיין" };
 const COV_TONE: Record<CoverageStatus, string> = { marketing_now: "bg-success-soft text-success", scheduled: "bg-brand-soft text-brand", no_future: "bg-warning-soft text-warning", attention: "bg-danger-soft text-danger", never_published: "bg-surface text-muted" };
-function covCta(status: CoverageStatus): { label: string; href: string } {
+function covCta(status: CoverageStatus, propertyId: string): { label: string; href: string } {
   if (status === "attention") return { label: "טיפול בפרסום", href: "/distribution/daily" };
-  if (status === "never_published" || status === "no_future") return { label: "יצירת קמפיין", href: "/distribution/campaign-wizard" };
+  if (status === "never_published" || status === "no_future") return { label: "יצירת קמפיין", href: `/distribution/campaign-wizard?property=${propertyId}` };
   return { label: "צפייה בקמפיין", href: "/distribution" };
 }
 
@@ -157,7 +157,7 @@ export function DistributionHome({ today, center, coverage, readiness }: { today
             <p className="text-muted mt-1 text-[13px]">{cov.marketable} נכסים · {cov.covered} מכוסים · {cov.neverPublished} לא פורסמו{cov.attention > 0 ? ` · ${cov.attention} דורשים טיפול` : ""}</p>
             <div className="mt-3 flex flex-col gap-2">
               {coverage.properties.slice(0, 10).map((pr) => {
-                const cta = covCta(pr.status);
+                const cta = covCta(pr.status, pr.propertyId);
                 return (
                   <div key={pr.propertyId} className="border-line flex items-center gap-3 rounded-xl border p-3">
                     <div className="bg-surface h-14 w-14 shrink-0 rounded-lg bg-cover bg-center" style={pr.thumbnailUrl ? { backgroundImage: `url(${pr.thumbnailUrl})` } : undefined}>{!pr.thumbnailUrl && <div className="grid h-full place-items-center text-lg">🏠</div>}</div>

@@ -50,7 +50,9 @@ export interface PropertyMarketingCoverage {
   properties: PropertyCoverage[];   // sorted attention-first (operational)
 }
 
-const MARKETABLE_EXCLUDE = ["draft", "sold", "rented", "withdrawn", "archived"];
+// Marketable = live listings. Equivalent to excluding draft/sold/rented/withdrawn/archived,
+// but an explicit include-list is a more robust PostgREST filter than a not-in string.
+const MARKETABLE_INCLUDE = ["active", "published", "under_offer", "in_contract", "ready"];
 const EMPTY: PropertyMarketingCoverage = {
   summary: { marketable: 0, covered: 0, marketingNow: 0, scheduled: 0, neverPublished: 0, noFuture: 0, attention: 0 },
   properties: [],
@@ -72,7 +74,7 @@ export async function getPropertyMarketingCoverage(): Promise<PropertyMarketingC
     .from("properties")
     .select("id,title,city,primary_image_url,status")
     .eq("org_id", orgId)
-    .not("status", "in", `(${MARKETABLE_EXCLUDE.join(",")})`)
+    .in("status", MARKETABLE_INCLUDE)
     .limit(1000);
   const props = (propRows ?? []) as Array<{ id: string; title: string | null; city: string | null; primary_image_url: string | null; status: string }>;
   if (props.length === 0) return EMPTY;

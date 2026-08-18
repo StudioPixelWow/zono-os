@@ -21,7 +21,7 @@ import type { CampaignMediaItem, MediaRef } from "@/lib/facebook-groups/campaign
 
 interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
-interface Props { properties: WProperty[]; folders: GroupFolder[]; connection: Connection; notes: string[] }
+interface Props { properties: WProperty[]; folders: GroupFolder[]; connection: Connection; notes: string[]; initialPropertyId?: string | null }
 
 const STEPS = ["נכס", "תוכן", "קבוצות", "תזמון", "סקירה ואישור"];
 const fmt = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
@@ -31,9 +31,10 @@ const dateTimeHe = (iso: string | null) => (iso ? new Date(iso).toLocaleString("
 
 interface Activated { campaignId: string; created: number; groupCount: number; firstPublishAt: string | null; endDate: string }
 
-export function CampaignWizard({ properties, folders, notes }: Props) {
-  const [step, setStep] = useState(0);
-  const [propId, setPropId] = useState<string | null>(null);
+export function CampaignWizard({ properties, folders, notes, initialPropertyId }: Props) {
+  const preId = initialPropertyId && properties.some((p) => p.id === initialPropertyId) ? initialPropertyId : null;
+  const [step, setStep] = useState(preId ? 1 : 0);
+  const [propId, setPropId] = useState<string | null>(preId);
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [frequency, setFrequency] = useState<Frequency>("three_weekly");
   const [startDate] = useState(() => new Date(Date.now() + 3 * 86400_000).toISOString().slice(0, 10));

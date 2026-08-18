@@ -131,6 +131,7 @@ export function TodayView({ data, readiness }: { data: PublishingControlData; re
             <span className={cn("font-bold", readiness.isPublishable ? "text-success" : "text-warning")}>{readiness.label}</span>
           </div>
         )}
+        <div className="mt-1"><Link href="/distribution" className="text-brand text-[12px] font-bold">לכל הנכסים והכיסוי השיווקי ←</Link></div>
       </div>
 
       {error && <div className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-[12px]">{error}</div>}
