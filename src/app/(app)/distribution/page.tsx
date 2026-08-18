@@ -8,6 +8,9 @@
 // ============================================================================
 import { getPublishingControlData, emptyControlData } from "@/lib/distribution/publishing-control-data";
 import { getDistributionCenter, type DistributionCenterData } from "@/lib/distribution/center-data";
+import { getPropertyMarketingCoverage, type PropertyMarketingCoverage } from "@/lib/distribution/property-coverage";
+import { getOrgExtensionReadiness } from "@/lib/distribution/extension-service";
+import { computeExtensionReadiness } from "@/lib/distribution/extension-readiness";
 import { DistributionHome } from "./_home/DistributionHome";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +20,16 @@ const EMPTY_CENTER: DistributionCenterData = {
   groups: [], campaigns: [], posts: [], leads: [], analytics: [], automations: [],
 };
 
+const EMPTY_COVERAGE: PropertyMarketingCoverage = { summary: { marketable: 0, covered: 0, marketingNow: 0, scheduled: 0, neverPublished: 0, noFuture: 0, attention: 0 }, properties: [] };
+
 export default async function DistributionPage() {
   let today = emptyControlData(false);
   let center: DistributionCenterData = EMPTY_CENTER;
+  let coverage: PropertyMarketingCoverage = EMPTY_COVERAGE;
+  let readiness = computeExtensionReadiness({ status: "not_installed", lastCheckedAt: null });
   try { today = await getPublishingControlData(); } catch (e) { console.error("[distribution] today load failed:", e); }
   try { center = await getDistributionCenter(); } catch (e) { console.error("[distribution] center load failed:", e); }
-  return <DistributionHome today={today} center={center} />;
+  try { coverage = await getPropertyMarketingCoverage(); } catch (e) { console.error("[distribution] coverage load failed:", e); }
+  try { readiness = await getOrgExtensionReadiness(); } catch (e) { console.error("[distribution] readiness load failed:", e); }
+  return <DistributionHome today={today} center={center} coverage={coverage} readiness={readiness} />;
 }

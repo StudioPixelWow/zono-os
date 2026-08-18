@@ -12,6 +12,8 @@ import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import type { PublishingControlData, ControlPost } from "@/lib/distribution/publishing-control-data";
 import type { DistributionCenterData } from "@/lib/distribution/center-data";
+import type { PropertyMarketingCoverage, CoverageStatus } from "@/lib/distribution/property-coverage";
+import type { ExtensionReadinessView } from "@/lib/distribution/extension-readiness";
 import { toTodayStatus, type TodayStatus } from "@/lib/distribution/today-status";
 import { PublishNowButton } from "./PublishNowButton";
 
@@ -22,10 +24,18 @@ const TONE: Record<TodayStatus["tone"], string> = {
 const timeHe = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) : "—");
 const isToday = (iso: string | null) => { if (!iso) return false; const d = new Date(iso), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate(); };
 const CAMP_STATUS_HE: Record<string, string> = { active: "פעיל", running: "פעיל", scheduled: "מתוזמן", draft: "טיוטה", paused: "מושהה", completed: "הושלם", ended: "הסתיים" };
+const dateHe = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" }) : "");
+const COV_LABEL: Record<CoverageStatus, string> = { marketing_now: "משווק כעת", scheduled: "מתוזמן", no_future: "אין פרסום נוסף", attention: "דורש טיפול", never_published: "לא פורסם עדיין" };
+const COV_TONE: Record<CoverageStatus, string> = { marketing_now: "bg-success-soft text-success", scheduled: "bg-brand-soft text-brand", no_future: "bg-warning-soft text-warning", attention: "bg-danger-soft text-danger", never_published: "bg-surface text-muted" };
+function covCta(status: CoverageStatus): { label: string; href: string } {
+  if (status === "attention") return { label: "טיפול בפרסום", href: "/distribution/daily" };
+  if (status === "never_published" || status === "no_future") return { label: "יצירת קמפיין", href: "/distribution/campaign-wizard" };
+  return { label: "צפייה בקמפיין", href: "/distribution" };
+}
 
 interface Row { post: ControlPost; st: TodayStatus }
 
-export function DistributionHome({ today, center }: { today: PublishingControlData; center: DistributionCenterData }) {
+export function DistributionHome({ today, center, coverage, readiness }: { today: PublishingControlData; center: DistributionCenterData; coverage: PropertyMarketingCoverage; readiness?: ExtensionReadinessView }) {
   // Server component (no client render) — reading the clock here is correct.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
@@ -52,7 +62,12 @@ export function DistributionHome({ today, center }: { today: PublishingControlDa
   const pending = rows.filter((r) => r.st.key !== "published" && r.st.key !== "cancelled");
   const hero = pending.find((r) => r.st.action) ?? pending[0] ?? null;
 
+  const nextFuture = today.queued
+    .filter((p) => p.scheduledAt && new Date(p.scheduledAt).getTime() > now)
+    .sort((a, b) => (a.scheduledAt ?? "").localeCompare(b.scheduledAt ?? ""))[0] ?? null;
+
   const activeCampaigns = center.campaigns.filter((c) => ["active", "running", "scheduled"].includes((c.status ?? "").toLowerCase()));
+  const cov = coverage.summary;
 
   return (
     <div dir="rtl" className="mx-auto flex max-w-3xl flex-col gap-5">
@@ -64,6 +79,15 @@ export function DistributionHome({ today, center }: { today: PublishingControlDa
         </div>
         <Link href="/distribution/campaign-wizard" className="bg-brand inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-black text-white"><Icon name="Plus" size={16} /> קמפיין חדש</Link>
       </header>
+
+      {/* Extension status — independent of the schedule (Phase 22) */}
+      {readiness && (
+        <div className="inline-flex items-center gap-1.5 text-[12px]">
+          <span className={cn("inline-block h-2 w-2 rounded-full", readiness.isPublishable ? "bg-success" : readiness.state === "error" || readiness.state === "not_installed" ? "bg-danger" : "bg-warning")} />
+          <span className="text-muted">תוסף ZONO</span>
+          <span className={cn("font-bold", readiness.isPublishable ? "text-success" : "text-warning")}>{readiness.label}</span>
+        </div>
+      )}
 
       {/* Today */}
       <section className="bg-card border-line rounded-[22px] border p-5">
@@ -91,6 +115,14 @@ export function DistributionHome({ today, center }: { today: PublishingControlDa
           </div>
         ) : total > 0 ? (
           <div className="bg-success-soft mt-3 rounded-2xl p-4 text-center"><p className="text-success text-sm font-black">סיימת את הפרסומים להיום ✓ · {done} מתוך {total}</p></div>
+        ) : nextFuture ? (
+          <div className="bg-brand-soft mt-3 rounded-2xl p-4">
+            <p className="text-success text-[12px] font-bold">אין פרסומים להיום ✓</p>
+            <p className="text-brand mt-2 text-xs font-bold">הפרסום הבא</p>
+            <div className="text-ink text-lg font-black">{dateHe(nextFuture.scheduledAt)} · {timeHe(nextFuture.scheduledAt)}</div>
+            <div className="text-muted text-[12px]">{[nextFuture.groupName, nextFuture.campaignName].filter(Boolean).join(" · ") || "קמפיין פייסבוק"}</div>
+            <Link href="/distribution/daily" className="text-brand mt-2 inline-block text-[12px] font-bold">צפייה בקמפיין ←</Link>
+          </div>
         ) : (
           <div className="mt-3"><Link href="/distribution/campaign-wizard" className="text-brand text-[13px] font-bold">אין מה לפרסם היום — צור קמפיין ←</Link></div>
         )}
@@ -111,6 +143,47 @@ export function DistributionHome({ today, center }: { today: PublishingControlDa
           <Link href="/distribution/daily" className="text-brand mt-2 inline-block text-[12px] font-bold">לטיפול בפרסומים ←</Link>
         </section>
       )}
+
+      {/* Property marketing coverage — "האם פרסמתי את כל הנכסים שלי?" */}
+      <section className="bg-card border-line rounded-[22px] border p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-ink flex items-center gap-2 text-sm font-black"><Icon name="Home" size={16} /> נכסים בפרסום</h2>
+          {cov.marketable > 0 && <span className="text-muted text-[12px]">כיסוי שיווקי: <b className="text-ink">{cov.covered}</b> מתוך {cov.marketable}</span>}
+        </div>
+        {cov.marketable === 0 ? (
+          <p className="text-muted mt-2 text-[13px]">אין נכסים פעילים לשיווק כרגע.</p>
+        ) : (
+          <>
+            <p className="text-muted mt-1 text-[13px]">{cov.marketable} נכסים · {cov.covered} מכוסים · {cov.neverPublished} לא פורסמו{cov.attention > 0 ? ` · ${cov.attention} דורשים טיפול` : ""}</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {coverage.properties.slice(0, 10).map((pr) => {
+                const cta = covCta(pr.status);
+                return (
+                  <div key={pr.propertyId} className="border-line flex items-center gap-3 rounded-xl border p-3">
+                    <div className="bg-surface h-14 w-14 shrink-0 rounded-lg bg-cover bg-center" style={pr.thumbnailUrl ? { backgroundImage: `url(${pr.thumbnailUrl})` } : undefined}>{!pr.thumbnailUrl && <div className="grid h-full place-items-center text-lg">🏠</div>}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-ink truncate text-[13px] font-bold">{pr.title}</div>
+                        <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold", COV_TONE[pr.status])}>{COV_LABEL[pr.status]}</span>
+                      </div>
+                      <div className="text-muted mt-0.5 text-[11px]">
+                        {pr.lastPublishedAt ? `פורסם לאחרונה: ${dateHe(pr.lastPublishedAt)} · ${timeHe(pr.lastPublishedAt)}` : "טרם פורסם"}
+                        {pr.nextScheduledAt ? (pr.nextOverdue ? ` · ממתין לפרסום מאז ${timeHe(pr.nextScheduledAt)}` : ` · הפרסום הבא: ${dateHe(pr.nextScheduledAt)} · ${timeHe(pr.nextScheduledAt)}`) : (pr.lastPublishedAt ? " · אין פרסום נוסף מתוזמן" : "")}
+                        {pr.nextGroupName ? ` · ${pr.nextGroupName}` : ""}
+                      </div>
+                      <div className="mt-1 flex items-center gap-3">
+                        <Link href={cta.href} className="text-brand text-[12px] font-bold">{cta.label} ←</Link>
+                        {pr.lastPublishedUrl && <a href={pr.lastPublishedUrl} target="_blank" rel="noopener noreferrer" className="text-muted text-[11px] font-bold">צפייה בפוסט ↗</a>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {coverage.properties.length > 10 && <p className="text-muted mt-2 text-[12px]">מוצגים 10 מתוך {coverage.properties.length} נכסים</p>}
+          </>
+        )}
+      </section>
 
       {/* Active campaigns */}
       <section className="bg-card border-line rounded-[22px] border p-5">
