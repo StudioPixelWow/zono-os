@@ -20,7 +20,7 @@ import { syncZIKnowledgeBase, type KnowledgeSyncResult } from "./knowledge-sync"
 import { runZIDiagnostics } from "./diagnostics";
 import { classifySupportIntentDeterministic, shouldEscalate } from "./support-intent";
 import { shouldRunDiagnostics, diagnosticPlan } from "./support-diagnostics-routing";
-import { openSupportTicketFromZi } from "./support-bridge";
+import { openSupportTicketFromZi, getMyTicketByNumber, listMyOpenTickets } from "./support-bridge";
 import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
 import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
 import type { FeedbackRating, KnowledgeArticle, KnowledgeSourceRef } from "./knowledge-types";
@@ -66,6 +66,18 @@ export async function getZiContextAction(client: ZiAskRequest["client"]): Promis
   }
 }
 
+/** Detect a ticket status/list query so ZI answers from the user's OWN tickets
+ *  (org-scoped) instead of the knowledge base. A ZONO-#### reference is exact;
+ *  status/list phrasing lists the user's open tickets. Kept narrow to avoid firing
+ *  on ordinary product questions (directive §3/§16/§17). */
+function detectTicketQuery(q: string): { kind: "number"; number: string } | { kind: "list" } | null {
+  const m = q.match(/zono[-\s]?(\d{3,})/i);
+  if (m) return { kind: "number", number: `ZONO-${m[1]}` };
+  const t = q.toLowerCase();
+  const phrases = ["סטטוס של הפנייה", "מה קורה עם הפנייה", "מה עם הפנייה", "האם חזרו אלי", "האם חזרו אליי", "עדכון על הפנייה", "הפניות שלי", "הפניות הפתוחות", "פניות פתוחות", "איזה פניות", "status of my ticket", "ticket status", "my tickets", "my open tickets", "open tickets"];
+  return phrases.some((p) => t.includes(p)) ? { kind: "list" } : null;
+}
+
 /** Ask ZI a question. Creates a conversation if needed, persists both turns. */
 export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResult>> {
   try {
@@ -91,6 +103,27 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
     const userMsg = await appendMessageRow({
       conversationId, role: "user", content: question, source: null, route: ctx.route, moduleId: ctx.moduleId,
     });
+
+    // ── ZI-CS status/list: answer questions about the user's OWN tickets from the
+    // org-scoped store (never another tenant's), before the knowledge base. ──
+    const ticketQ = detectTicketQuery(question);
+    if (ticketQ) {
+      let content: string;
+      if (ticketQ.kind === "number") {
+        const t = await getMyTicketByNumber(ticketQ.number);
+        content = t
+          ? `פרטי הפנייה ${t.ticketNumber}:\nנושא: ${t.subject}\nסטטוס: ${t.statusHe}${t.updatedAt ? `\nעדכון אחרון: ${new Date(t.updatedAt).toLocaleDateString("he-IL")}` : ""}`
+          : "לא מצאתי פנייה עם המספר הזה במסגרת המשרד שלך. אפשר לבדוק את המספר ולנסות שוב.";
+      } else {
+        const list = await listMyOpenTickets();
+        content = list.length
+          ? "הפניות הפתוחות שלך:\n" + list.map((t) => `• ${t.ticketNumber} — ${t.subject} (${t.statusHe})`).join("\n")
+          : "אין לך פניות פתוחות כרגע. אם משהו לא עובד, אמור/י \"דבר עם נציג\" ואפתח עבורך פנייה.";
+      }
+      const statusMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+      await touchConversation(conversationId, 2);
+      return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: statusMsg, source: "fallback", model: null, sources: [], followups: [] } };
+    }
 
     // ── RAG: retrieve permission-filtered, page-aware knowledge, then answer
     // ONLY from it (with the deterministic, knowledge-grounded fallback). ──
@@ -137,6 +170,7 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
       }
 
       let ticketId: string | null = null;
+      let ticketNumber: string | null = null;
       let escalated = false;
       // Diagnostics that produced fix steps count as "we helped" → don't auto-escalate
       // on the no-knowledge rule; still escalate for human/critical/security/billing.
@@ -154,15 +188,21 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
         });
         if (res.ok && res.ticketId) {
           ticketId = res.ticketId;
+          ticketNumber = res.ticketNumber ?? null;
           escalated = true;
-          if (!res.existing) {
-            answer.content += "\n\n---\nלא הצלחתי לפתור את זה בוודאות, אז פתחתי עבורך פנייה לצוות ZONO וצירפתי את כל פרטי התקלה והשיחה שלנו. אין צורך להסביר הכול מחדש — הצוות יחזור אליך כאן.";
+          const ref = ticketNumber ? ` · מספר פנייה: ${ticketNumber}` : "";
+          if (res.existing) {
+            answer.content += `\n\n---\nהפנייה שלך לצוות התמיכה כבר פתוחה${ref}. הוספתי את ההודעה הזו לפנייה הקיימת — הצוות יחזור אליך כאן.`;
+          } else if (classification.requiresHuman) {
+            answer.content = `פתחתי עבורך פנייה לצוות התמיכה ✅\nמספר הפנייה שלך: ${ticketNumber ?? "—"}\nצירפתי את פרטי השיחה, והצוות יחזור אליך כאן בהקדם.`;
+          } else {
+            answer.content += `\n\n---\nלא הצלחתי לפתור את זה בוודאות, אז פתחתי עבורך פנייה לצוות ZONO${ref} וצירפתי את כל פרטי התקלה והשיחה שלנו. אין צורך להסביר הכול מחדש — הצוות יחזור אליך כאן.`;
           }
         }
       }
       support = {
         lane: classification.lane, category: classification.category, severity: classification.severity,
-        requiresHuman: classification.requiresHuman, escalated, ticketId,
+        requiresHuman: classification.requiresHuman, escalated, ticketId, ticketNumber,
       };
     } catch { /* best-effort; the answer stands regardless of classification/escalation */ }
 

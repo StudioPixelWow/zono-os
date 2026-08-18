@@ -103,6 +103,7 @@ export interface ZiAskResult {
     requiresHuman: boolean;
     escalated: boolean;         // a support ticket was opened for this conversation
     ticketId?: string | null;
+    ticketNumber?: string | null; // human-readable reference (ZONO-#####)
   };
 }
 

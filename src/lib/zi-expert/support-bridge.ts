@@ -14,7 +14,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import type { SupportClassification } from "./support-intent";
 import { buildZiTicketDraft, ziConversationLinkRef, type ZiTranscriptTurn } from "./support-bridge-core";
 
-export interface ZiTicketResult { ok: boolean; ticketId?: string; existing?: boolean; error?: string }
+export interface ZiTicketResult { ok: boolean; ticketId?: string; ticketNumber?: string; existing?: boolean; error?: string }
 
 export interface OpenTicketInput {
   conversationId: string;
@@ -44,15 +44,15 @@ export async function openSupportTicketFromZi(input: OpenTicketInput): Promise<Z
   // Idempotency: an active ticket already exists for this conversation → reuse it.
   try {
     const { data: existing } = await db.from("support_tickets" as never)
-      .select("id" as never)
+      .select("id,ticket_number" as never)
       .eq("org_id" as never, orgId as never)
       .eq("linked_ref" as never, linkRef as never)
       .in("status" as never, ACTIVE_STATUSES as never)
       .order("created_at" as never, { ascending: false } as never)
       .limit(1)
       .maybeSingle();
-    const ex = existing as { id: string } | null;
-    if (ex?.id) return { ok: true, ticketId: ex.id, existing: true };
+    const ex = existing as { id: string; ticket_number?: string } | null;
+    if (ex?.id) return { ok: true, ticketId: ex.id, ticketNumber: ex.ticket_number, existing: true };
   } catch {
     // fall through to create — a lookup failure must not block escalation
   }
@@ -70,12 +70,55 @@ export async function openSupportTicketFromZi(input: OpenTicketInput): Promise<Z
       source: "customer_report",
       linked_ref: linkRef,
       created_by: profile?.id ?? null,
-    } as never).select("id" as never).maybeSingle();
+    } as never).select("id,ticket_number" as never).maybeSingle();
     if (error || !data) return { ok: false, error: "create_failed" };
-    return { ok: true, ticketId: (data as { id: string }).id };
+    const row = data as { id: string; ticket_number?: string };
+    return { ok: true, ticketId: row.id, ticketNumber: row.ticket_number };
   } catch {
     return { ok: false, error: "create_failed" };
   }
+}
+
+
+// ── Customer-facing status labels (directive §14) ────────────────────────────
+const STATUS_HE: Record<string, string> = { open: "פתוח", in_progress: "בטיפול", waiting_customer: "ממתין ללקוח", resolved: "נפתר", closed: "נסגר" };
+export function ticketStatusHe(status: string): string { return STATUS_HE[status] ?? status; }
+
+export interface MyTicket { ticketNumber: string | null; subject: string; status: string; statusHe: string; category: string | null; updatedAt: string | null }
+
+/** Look up ONE ticket by its human-readable number — strictly within the caller's
+ *  org (a number from another tenant simply returns null → "not found"). §16/§21. */
+export async function getMyTicketByNumber(ticketNumber: string): Promise<MyTicket | null> {
+  const { profile } = await getSessionContext();
+  const orgId = profile?.org_id ?? null;
+  if (!orgId || !ticketNumber) return null;
+  const db = createServiceRoleClient();
+  const { data } = await db.from("support_tickets" as never)
+    .select("ticket_number,subject,status,category,updated_at" as never)
+    .eq("org_id" as never, orgId as never)
+    .eq("ticket_number" as never, ticketNumber as never)
+    .maybeSingle();
+  const r = data as { ticket_number: string; subject: string; status: string; category: string | null; updated_at: string | null } | null;
+  if (!r) return null;
+  return { ticketNumber: r.ticket_number, subject: r.subject, status: r.status, statusHe: ticketStatusHe(r.status), category: r.category, updatedAt: r.updated_at };
+}
+
+/** The current user's OWN open tickets (org + user scoped). §17. */
+export async function listMyOpenTickets(limit = 6): Promise<MyTicket[]> {
+  const { profile } = await getSessionContext();
+  const orgId = profile?.org_id ?? null;
+  const uid = profile?.id ?? null;
+  if (!orgId || !uid) return [];
+  const db = createServiceRoleClient();
+  const { data } = await db.from("support_tickets" as never)
+    .select("ticket_number,subject,status,category,updated_at" as never)
+    .eq("org_id" as never, orgId as never)
+    .or(`user_id.eq.${uid},created_by.eq.${uid}` as never)
+    .in("status" as never, ACTIVE_STATUSES as never)
+    .order("updated_at" as never, { ascending: false } as never)
+    .limit(limit);
+  return ((data ?? []) as Array<{ ticket_number: string; subject: string; status: string; category: string | null; updated_at: string | null }>)
+    .map((r) => ({ ticketNumber: r.ticket_number, subject: r.subject, status: r.status, statusHe: ticketStatusHe(r.status), category: r.category, updatedAt: r.updated_at }));
 }
 
 /** Classification → whether ZI should tell the user a ticket was opened. Pure
