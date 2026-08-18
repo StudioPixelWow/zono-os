@@ -20,9 +20,16 @@ export const dynamic = "force-dynamic";
 // before the function is killed.)
 export const maxDuration = 300;
 
-export default async function CreativeStudioEntityPage({ params }: { params: Promise<{ entityType: string; entityId: string }> }) {
+export default async function CreativeStudioEntityPage(
+  { params, searchParams }: { params: Promise<{ entityType: string; entityId: string }>; searchParams: Promise<{ source?: string; returnTo?: string }> },
+) {
   const { entityType, entityId: rawEntityId } = await params;
   const entityId = decodeURIComponent(rawEntityId);
+  // Campaign round-trip context (Facebook wizard → Studio → back). returnTo is
+  // restricted to a same-origin relative path (open-redirect guard).
+  const sp = await searchParams;
+  const campaignReturn = sp?.source === "facebook_campaign" && typeof sp?.returnTo === "string" && sp.returnTo.startsWith("/") && !sp.returnTo.startsWith("//")
+    ? sp.returnTo : null;
 
   // Guard: never run uuid queries with a human-readable name/slug (#P2-8).
   if (!isUuid(entityId)) {
@@ -105,5 +112,15 @@ export default async function CreativeStudioEntityPage({ params }: { params: Pro
   } catch (e) {
     console.error("[creative-studio] aiProviderStatus failed:", e);
   }
-  return <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} quickPrefill={quickPrefill} aiProvider={aiProvider} />;
+  const view = <CreativeStudioView studio={studio} concepts={concepts} campaigns={campaigns} campaignAssets={campaignAssets} creativeAssets={creativeAssets} copyAssets={copyAssets} creativeOutputs={creativeOutputs} visuals={visuals} quickOutputs={quickOutputs} isManager={isManager} orgId={orgId} userId={userId} quickPrefill={quickPrefill} aiProvider={aiProvider} />;
+  if (!campaignReturn) return view;
+  return (
+    <>
+      <div dir="rtl" className="bg-brand-soft sticky top-0 z-30 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-b-2xl px-4 py-2.5">
+        <span className="text-ink text-[13px] font-bold">✨ יצירת קריאייטיב לקמפיין הפייסבוק — אחרי היצירה והאישור חזרו לקמפיין והוא יופיע לבחירה.</span>
+        <Link href={campaignReturn} className="bg-brand shrink-0 rounded-xl px-4 py-1.5 text-[12px] font-bold text-white">← חזרה לקמפיין</Link>
+      </div>
+      {view}
+    </>
+  );
 }

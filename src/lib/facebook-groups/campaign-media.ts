@@ -76,15 +76,25 @@ export async function listPropertyCampaignMedia(propertyId: string): Promise<Cam
     push({ id: String(m.id), source: "property_gallery", url, thumbnailUrl: url, label: LABEL_PROPERTY, isPrimary: m.is_primary === true && !cover, publishable: true, ref: { kind: "property_media", id: String(m.id), url } });
   }
 
-  // 3) Creative Studio assets linked to this property (newest first).
+  // 3) Creative Studio assets linked to this property (newest first). Studio uses
+  //    a PRIVATE-master architecture: image_url is usually null and the real image
+  //    lives at private_master_path (bucket creative-private), served via a short-
+  //    lived signed URL. We resolve that here so approved creatives actually appear
+  //    in the picker (previously they were all dropped). Only failed/no-image
+  //    outputs are excluded; publishable ⇒ is_approved.
   const { data: studio } = await db.from("zono_quick_creative_outputs")
-    .select("id,image_url,thumbnail_url,is_approved,image_status,created_at")
-    .eq("org_id", orgId).eq("property_id", propertyId)
+    .select("id,image_url,thumbnail_url,private_master_path,is_approved,image_status,created_at,status")
+    .eq("org_id", orgId).eq("property_id", propertyId).neq("status", "deleted")
     .order("created_at", { ascending: false }).limit(40);
   for (const c of (studio ?? []) as any[]) {
-    const url = c.image_url as string | null;
+    const st = c.image_status ? String(c.image_status) : null;
+    if (st === "failed" || st === "no_provider") continue;     // no usable image
+    let url = (c.image_url as string | null) ?? null;
+    if (!url && c.private_master_path) {
+      const { data: signed } = await db.storage.from("creative-private").createSignedUrl(String(c.private_master_path), 3600);
+      url = (signed?.signedUrl as string | null) ?? null;
+    }
     if (!url) continue;
-    if (c.image_status && String(c.image_status) !== "ready" && String(c.image_status) !== "completed" && String(c.image_status) !== "approved") continue;
     push({ id: String(c.id), source: "studio", url, thumbnailUrl: (c.thumbnail_url as string | null) ?? url, label: LABEL_STUDIO, isPrimary: false, publishable: c.is_approved === true, ref: { kind: "creative_output", id: String(c.id), url } });
   }
 

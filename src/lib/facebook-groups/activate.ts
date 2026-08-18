@@ -27,6 +27,7 @@ export interface ActivateInput {
   frequency: Frequency;
   startDate: string;      // yyyy-mm-dd (first eligible day)
   media?: MediaRef | null; // selected image (validated server-side); null = text-only
+  postText?: string | null; // the caption the user WROTE + previewed (parity: this IS what publishes)
 }
 
 export type ActivateResult =
@@ -117,6 +118,17 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
     const built = await createPostingQueueAction(config);
     if (built.error) throw new Error(built.error);
     if (!built.created || built.created <= 0) throw new Error("לא נוצרו פרסומים מתוזמנים. בדוק את בחירת הקבוצות והתאריכים.");
+
+    // ── 4b) PREVIEW/PUBLISH PARITY (P0): persist the EXACT caption the user wrote
+    //    and previewed onto every scheduled post's `post_text` — the same column
+    //    the extension reads. Without this the wizard would preview one text while
+    //    the extension published a differently-generated one. Best-effort: a caption
+    //    write must not discard an already-built real schedule.
+    const caption = input.postText?.trim();
+    if (caption) {
+      try { await db.from("distribution_posts" as never).update({ post_text: caption } as never).eq("org_id", orgId).eq("campaign_id", campaignId); }
+      catch (e) { console.error(`[fb-activate] caption persist failed for ${campaignId}:`, e); }
+    }
 
     // Promote the campaign to ACTIVE now that a live posting schedule exists.
     // The /distribution Home lists campaigns whose status ∈ {active,running,scheduled};
