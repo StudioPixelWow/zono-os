@@ -34,7 +34,7 @@ export function PropertySearch({ slug, areas, types, basePath = "/agent" }: { sl
     <form onSubmit={submit} className="mx-auto -mt-8 w-full max-w-7xl px-5 sm:px-8">
       <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-3 shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)]">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-          <button type="submit" className="order-3 flex items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-6 py-3 text-[14px] font-bold text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)] lg:order-1 lg:w-auto">
+          <button type="submit" className="order-3 flex items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-6 py-3 text-[14px] font-bold text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)] lg:order-3 lg:w-auto">
             <SearchIcon /> חיפוש נכסים
           </button>
           <div className="order-1 hidden flex-1 items-center gap-2 lg:order-2 lg:flex">
@@ -57,7 +57,7 @@ export function PropertySearch({ slug, areas, types, basePath = "/agent" }: { sl
           </div>
           <input
             aria-label="חיפוש חופשי"
-            className={`${sel} order-2 flex-1 lg:order-3 lg:max-w-xs`}
+            className={`${sel} order-2 flex-1 lg:order-1 lg:max-w-xs`}
             placeholder="חיפוש לפי כתובת, שכונה או מפתח…"
             value={f.q}
             onChange={(e) => setF({ ...f, q: e.target.value })}

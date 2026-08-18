@@ -417,8 +417,10 @@ export default async function Home() {
   return (
     <>
     <OnboardingNextStep />
-    <MorningBrief />
+    {/* "על הבוקר" is passed as a slot INTO the dashboard (rendered in place of
+        the old Now/Today row) — the page keeps a single opener/greeting. */}
     <HomeControlCenter
+      morningBriefSlot={<MorningBrief />}
       dict={dict}
       agentName={agentName}
       hero={hero}

@@ -724,6 +724,8 @@ export interface HomeControlCenterProps {
   territory: HomeTerritory;
   perf: HomePerf;
   summary: { recTotal: number; toursThisWeek: number; newLeads: number };
+  /** "על הבוקר" server component, rendered in place of the Now/Today row. */
+  morningBriefSlot?: React.ReactNode;
 }
 
 export function HomeControlCenter(p: HomeControlCenterProps) {
@@ -742,11 +744,16 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
       {/* 3b. What ZONO did for you behind the scenes (hidden when nothing recent) */}
       <ZonoWork work={p.zonoWork} />
 
-      {/* 4. NOW + Today's tasks */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <NowSection items={p.now} />
-        <TodayTasksCard tasks={p.tasks} />
-      </div>
+      {/* 4. "על הבוקר" — the morning action center (replaces the old NOW +
+             Today's-tasks row). Server component passed in as a slot so it can
+             fetch getDailyCommandCenter() while this stays a client component.
+             Falls back to the legacy Now/Today row if no slot is provided. */}
+      {p.morningBriefSlot ?? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <NowSection items={p.now} />
+          <TodayTasksCard tasks={p.tasks} />
+        </div>
+      )}
 
       {/* 4b. WhatsApp — the conversations waiting for you */}
       <WhatsappWaiting wa={p.whatsapp} />
