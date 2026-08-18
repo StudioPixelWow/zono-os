@@ -10,7 +10,7 @@ import { getUnreadCountAction } from "@/lib/notifications/actions";
 
 /** Opens the ⌘K command palette — the mobile menu surface (same event the
  *  bottom-nav "עוד" button fires). */
-const openMobileMenu = () => { try { window.dispatchEvent(new CustomEvent("zono:open-search")); } catch { /* ignore */ } };
+const openMobileMenu = () => { try { window.dispatchEvent(new CustomEvent("zono:open-menu")); } catch { /* ignore */ } };
 
 /** Top bar: mobile brand + menu, search, notifications, profile. */
 export function Header() {
@@ -42,7 +42,7 @@ export function Header() {
             aria-label="תפריט"
             className="bg-card border-line text-muted hover:text-brand hover:border-brand-light grid h-11 w-11 shrink-0 place-items-center rounded-2xl border transition"
           >
-            <Icon name="Menu" size={22} />
+            <Icon name="Menu" size={24} />
           </button>
           <Link href="/" aria-label="ZONO" className="shrink-0" title="ZONO">
             <ZonoLogo width={92} height={30} className="h-[30px] w-auto object-contain" priority />

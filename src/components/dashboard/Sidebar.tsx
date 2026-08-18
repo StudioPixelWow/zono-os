@@ -13,93 +13,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
-import { ZonoCommandButton } from "@/components/navigation/zono-command-center";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
 
-type Accent = "purple" | "blue" | "green" | "amber" | "slate";
-interface NavItem { label: string; href: string; icon: string }
-interface NavGroup { key: string; title: string; desc: string; icon: string; accent: Accent; items: NavItem[] }
-
-/** Subtle per-group accents — used only for icon tile + active states. */
-const ACCENTS: Record<Accent, { iconBg: string; ring: string; activeItem: string }> = {
-  purple: { iconBg: "bg-brand-soft text-brand-strong", ring: "border-brand-light", activeItem: "bg-brand-soft text-brand-strong" },
-  blue:   { iconBg: "bg-sky-50 text-sky-600",          ring: "border-sky-200",     activeItem: "bg-sky-50 text-sky-700" },
-  green:  { iconBg: "bg-emerald-50 text-emerald-600",  ring: "border-emerald-200", activeItem: "bg-emerald-50 text-emerald-700" },
-  amber:  { iconBg: "bg-amber-50 text-amber-600",      ring: "border-amber-200",   activeItem: "bg-amber-50 text-amber-700" },
-  slate:  { iconBg: "bg-slate-100 text-slate-600",     ring: "border-slate-300",   activeItem: "bg-slate-100 text-slate-700" },
-};
-
-/** The ZONO information architecture — 7 OS launcher groups. Every href below is
- *  an EXISTING route (verified against the app router). One href per item, no
- *  duplicates, no dead links. Surfaces without a dedicated page (e.g. approvals,
- *  missions) live inside their hub and are reachable via the ⌘K palette. */
-const GROUPS: NavGroup[] = [
-  { key: "command", title: "מרכז הבקרה", desc: "בית • מרכז יומי • מוח הברוקר", icon: "Flame", accent: "purple", items: [
-    { label: "דף הבית", href: "/", icon: "Home" },
-    { label: "היום · מרכז יומי", href: "/today", icon: "Sun" },
-    { label: "מוח הברוקר", href: "/brain", icon: "Sparkles" },
-    { label: "מרכז בקרה", href: "/mission-control", icon: "Target" },
-    { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
-  ]},
-  { key: "office", title: "המשרד שלי", desc: "אנשים • נכסים • הצעות • עסקאות", icon: "Building2", accent: "blue", items: [
-    { label: "אנשים", href: "/people", icon: "Users" },
-    { label: "נכסים", href: "/properties", icon: "Building" },
-    { label: "קונים", href: "/buyers", icon: "Users" },
-    { label: "מוכרים", href: "/sellers", icon: "UserCheck" },
-    { label: "לידים", href: "/leads", icon: "UserPlus" },
-    { label: "הצעות", href: "/offers", icon: "Send" },
-    { label: "עסקאות", href: "/deals", icon: "Handshake" },
-    { label: "עמלות וגבייה", href: "/commissions", icon: "TrendingDown" },
-    { label: "מסמכים", href: "/documents", icon: "FileText" },
-    { label: "הערות", href: "/notes", icon: "FilePlus2" },
-    { label: "צפיות", href: "/viewings", icon: "Calendar" },
-    { label: "פגישות", href: "/calendar", icon: "Calendar" },
-  ]},
-  { key: "marketing", title: "תקשורת ושיווק", desc: "WhatsApp • Facebook • קמפיינים", icon: "Megaphone", accent: "green", items: [
-    { label: "WhatsApp", href: "/whatsapp", icon: "MessageCircle" },
-    { label: "פרסומים להיום", href: "/distribution/daily", icon: "Sun" },
-    { label: "קמפיינים", href: "/distribution/campaign-wizard", icon: "Target" },
-    { label: "קבוצות פייסבוק", href: "/distribution/groups", icon: "Users" },
-    { label: "Facebook", href: "/facebook", icon: "Send" },
-    { label: "מרכז שיווק", href: "/marketing", icon: "BarChart3" },
-    { label: "סטודיו יצירה", href: "/creative-studio", icon: "Presentation" },
-    { label: "בקרת פרסום (מתקדם)", href: "/publishing-control", icon: "Shield" },
-    { label: "מודיעין קבוצות", href: "/distribution/groups/intelligence", icon: "BarChart3" },
-  ]},
-  { key: "intelligence", title: "מודיעין עסקי", desc: "מנהלים • מתווכים • טריטוריה", icon: "BarChart3", accent: "amber", items: [
-    { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3" },
-    { label: "מודיעין מתווכים", href: "/broker-intelligence", icon: "Users" },
-    { label: "מודיעין משרדים", href: "/brokerage-data/offices", icon: "Building2" },
-    { label: "מודיעין שוק", href: "/market-intelligence/listings", icon: "Globe" },
-    { label: "ניהול טריטוריה", href: "/territory", icon: "Map" },
-    { label: "תחזיות", href: "/predictions", icon: "TrendingUp" },
-    { label: "גרף ידע", href: "/graph", icon: "Layers" },
-    { label: "מודיעין זירה", href: "/marketplace", icon: "Globe" },
-    { label: "מפת חום שוק", href: "/market-intelligence/map", icon: "MapPin" },
-  ]},
-  { key: "sites", title: "אתרים ופורטלים", desc: "אתרי משרד/סוכן • דפי נחיתה • פורטלים", icon: "Globe", accent: "blue", items: [
-    { label: "אתר משרד", href: "/office-website", icon: "Building2" },
-    { label: "אתר סוכן", href: "/agent-website", icon: "UserCheck" },
-    { label: "אתרי נכסים", href: "/property-sites", icon: "Home" },
-    { label: "אתרים ודפי נחיתה", href: "/website", icon: "LayoutGrid" },
-    { label: "פורטלים (קונה/מוכר)", href: "/portals", icon: "Users" },
-  ]},
-  { key: "ops", title: "אוטומציה ותפעול", desc: "אוטומציה • תהליכים • עוזר קולי", icon: "Route", accent: "green", items: [
-    { label: "מרכז אוטומציה", href: "/automation", icon: "Route" },
-    { label: "תהליכי עבודה", href: "/workflow-builder", icon: "ListChecks" },
-    { label: "מסעות לקוח", href: "/journeys", icon: "Activity" },
-    { label: "עוזר קולי", href: "/voice", icon: "Mic" },
-    { label: "למידה עצמית", href: "/learning", icon: "Sparkles" },
-  ]},
-  { key: "system", title: "ניהול מערכת", desc: "האזור האישי • צוות • חיבורים • הגדרות", icon: "Settings", accent: "slate", items: [
-    { label: "האזור האישי", href: "/my-profile", icon: "UserCircle" },
-    { label: "צוות וסוכנים", href: "/team", icon: "UserCheck" },
-    { label: "חיבורים", href: "/settings/distribution-connections", icon: "Send" },
-    { label: "מסמכים", href: "/documents", icon: "FileText" },
-    { label: "דאטה משרדי תיווך", href: "/brokerage-data", icon: "Database" },
-    { label: "הגדרות", href: "/settings", icon: "Settings" },
-  ]},
-];
+import { NAV_GROUPS, ACCENTS } from "./nav-groups";
 
 const COLLAPSE_KEY = "zono-sidebar-collapsed";
 
@@ -117,12 +33,12 @@ export function Sidebar() {
     return pathname === base || pathname.startsWith(`${base}/`);
   };
   // Exactly ONE active item — the longest matching base wins.
-  const activeHref = GROUPS
+  const activeHref = NAV_GROUPS
     .flatMap((g) => g.items.map((it) => it.href))
     .filter((h) => !h.includes("#") && matches(h))
     .sort((a, b) => b.length - a.length)[0] ?? null;
   const itemActive = (href: string) => !href.includes("#") && href === activeHref;
-  const activeGroupKey = GROUPS.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
+  const activeGroupKey = NAV_GROUPS.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
   // Derived (no effect): active group opens by default, fallback מרכז הבקרה.
   const openGroupKey = openOverride === undefined ? (activeGroupKey ?? "command") : openOverride;
 
@@ -142,20 +58,28 @@ export function Sidebar() {
         collapsed ? "w-[78px] items-center" : "w-72",
       )}
     >
-      {/* Logo */}
-      <Link href="/" aria-label="ZONO" className={cn("mb-3 grid h-11 w-11 place-items-center rounded-2xl", collapsed ? "" : "ms-4")}>
-        <ZonoLogo width={44} height={44} className="!h-11 !w-11 object-contain" />
+      {/* Logo — prominent, aspect-preserved, with breathing room */}
+      <Link href="/" aria-label="ZONO" className={cn("mb-5 flex items-center", collapsed ? "justify-center" : "px-5")}>
+        <ZonoLogo width={collapsed ? 40 : 112} height={collapsed ? 40 : 38} className={cn("object-contain", collapsed ? "h-10 w-10" : "h-auto w-[112px]")} priority />
       </Link>
 
-      {/* ⌘K launcher — kept once */}
-      <div className={cn("mb-3 flex flex-col items-center", collapsed ? "" : "px-4")}>
-        <ZonoCommandButton />
-        <span className="text-muted mt-0.5 text-[8px] font-extrabold tracking-wide">⌘K</span>
+      {/* Compact search / command — demoted from the prominent button so branding
+          + navigation lead. Same palette event; functionality preserved. */}
+      <div className={cn("mb-4", collapsed ? "flex justify-center" : "px-3")}>
+        {collapsed ? (
+          <button type="button" onClick={() => window.dispatchEvent(new Event("zono:command-open"))} title="חיפוש · ⌘K" aria-label="חיפוש" className="text-muted hover:text-ink hover:bg-surface border-line grid h-11 w-11 place-items-center rounded-2xl border transition">
+            <Icon name="Search" size={20} />
+          </button>
+        ) : (
+          <button type="button" onClick={() => window.dispatchEvent(new Event("zono:command-open"))} className="border-line text-muted hover:text-ink hover:border-brand-light bg-card flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-semibold transition">
+            <Icon name="Search" size={16} /> <span className="flex-1 text-right">חיפוש מהיר</span> <span className="text-[10px] font-black opacity-60">⌘K</span>
+          </button>
+        )}
       </div>
 
       {/* Launcher groups (only this area scrolls) */}
       <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {GROUPS.map((g) => {
+        {NAV_GROUPS.map((g) => {
           const a = ACCENTS[g.accent];
           const groupActive = g.key === activeGroupKey;
 

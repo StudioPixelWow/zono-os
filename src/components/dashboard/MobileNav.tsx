@@ -14,7 +14,7 @@ const ITEMS: { id: string; label: string; icon: string; href: string }[] = [
   { id: "whatsapp", label: "וואטסאפ", icon: "MessageCircle", href: "/whatsapp" },
 ];
 
-const openSearch = () => { try { window.dispatchEvent(new CustomEvent("zono:open-search")); } catch { /* ignore */ } };
+const openMenu = () => { try { window.dispatchEvent(new CustomEvent("zono:open-menu")); } catch { /* ignore */ } };
 
 /** Bottom navigation shown on mobile in place of the sidebar. */
 export function MobileNav() {
@@ -35,7 +35,7 @@ export function MobileNav() {
           </Link>
         );
       })}
-      <button type="button" onClick={openSearch} className={cls(false)} aria-label="חיפוש ותפריט">
+      <button type="button" onClick={openMenu} className={cls(false)} aria-label="תפריט וניווט">
         <Icon name="Menu" size={22} strokeWidth={1.75} />
         <span className="text-[10px] font-semibold">עוד</span>
       </button>
