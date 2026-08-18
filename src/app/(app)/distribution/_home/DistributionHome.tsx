@@ -29,7 +29,8 @@ const COV_LABEL: Record<CoverageStatus, string> = { marketing_now: "משווק �
 const COV_TONE: Record<CoverageStatus, string> = { marketing_now: "bg-success-soft text-success", scheduled: "bg-brand-soft text-brand", no_future: "bg-warning-soft text-warning", attention: "bg-danger-soft text-danger", never_published: "bg-surface text-muted" };
 function covCta(status: CoverageStatus, propertyId: string): { label: string; href: string } {
   if (status === "attention") return { label: "טיפול בפרסום", href: "/distribution/daily" };
-  if (status === "never_published" || status === "no_future") return { label: "יצירת קמפיין", href: `/distribution/campaign-wizard?property=${propertyId}` };
+  if (status === "never_published") return { label: "התחל קמפיין", href: `/distribution/campaign-wizard?property=${propertyId}` };
+  if (status === "no_future") return { label: "צור פרסום נוסף", href: `/distribution/campaign-wizard?property=${propertyId}` };
   return { label: "צפייה בקמפיין", href: "/distribution" };
 }
 
@@ -70,7 +71,7 @@ export function DistributionHome({ today, center, coverage, readiness }: { today
   const cov = coverage.summary;
 
   return (
-    <div dir="rtl" className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-5">
       {/* Header + primary CTA */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -155,7 +156,7 @@ export function DistributionHome({ today, center, coverage, readiness }: { today
         ) : (
           <>
             <p className="text-muted mt-1 text-[13px]">{cov.marketable} נכסים · {cov.covered} מכוסים · {cov.neverPublished} לא פורסמו{cov.attention > 0 ? ` · ${cov.attention} דורשים טיפול` : ""}</p>
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="mt-3 grid gap-2.5 lg:grid-cols-2">
               {coverage.properties.slice(0, 10).map((pr) => {
                 const cta = covCta(pr.status, pr.propertyId);
                 return (
@@ -171,9 +172,9 @@ export function DistributionHome({ today, center, coverage, readiness }: { today
                         {pr.nextScheduledAt ? (pr.nextOverdue ? ` · ממתין לפרסום מאז ${timeHe(pr.nextScheduledAt)}` : ` · הפרסום הבא: ${dateHe(pr.nextScheduledAt)} · ${timeHe(pr.nextScheduledAt)}`) : (pr.lastPublishedAt ? " · אין פרסום נוסף מתוזמן" : "")}
                         {pr.nextGroupName ? ` · ${pr.nextGroupName}` : ""}
                       </div>
-                      <div className="mt-1 flex items-center gap-3">
-                        <Link href={cta.href} className="text-brand text-[12px] font-bold">{cta.label} ←</Link>
-                        {pr.lastPublishedUrl && <a href={pr.lastPublishedUrl} target="_blank" rel="noopener noreferrer" className="text-muted text-[11px] font-bold">צפייה בפוסט ↗</a>}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Link href={cta.href} className={cn("inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-black transition", pr.status === "never_published" || pr.status === "attention" || pr.status === "no_future" ? "bg-brand text-white hover:brightness-110" : "bg-surface text-brand hover:bg-brand-soft")}>{cta.label} ←</Link>
+                        {pr.lastPublishedUrl && <a href={pr.lastPublishedUrl} target="_blank" rel="noopener noreferrer" className="border-line text-muted hover:text-ink inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-[11px] font-bold">צפייה בפוסט ↗</a>}
                       </div>
                     </div>
                   </div>
@@ -194,7 +195,7 @@ export function DistributionHome({ today, center, coverage, readiness }: { today
         {activeCampaigns.length === 0 ? (
           <p className="text-muted mt-2 text-[13px]">אין קמפיינים פעילים. צור קמפיין כדי להתחיל לשווק נכס בקבוצות.</p>
         ) : (
-          <div className="mt-2 flex flex-col gap-2">
+          <div className="mt-2 grid gap-2 lg:grid-cols-2">
             {activeCampaigns.slice(0, 6).map((c) => (
               <div key={c.id} className="border-line flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5">
                 <div className="min-w-0"><div className="text-ink truncate text-[13px] font-bold">{c.name}</div><div className="text-muted truncate text-[11px]">{[c.targetCity, `${c.totalPosts} פרסומים`].filter(Boolean).join(" · ")}</div></div>

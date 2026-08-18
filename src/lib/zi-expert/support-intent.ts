@@ -69,7 +69,7 @@ const CATEGORY_SIGNALS: Record<SupportCategory, Sig[]> = {
 };
 
 // Human-escalation signals (directive §16 — explicit human request).
-const HUMAN_SIGNALS = ["נציג", "בן אדם", "אנושי", "לדבר עם מישהו", "לדבר עם נציג", "human", "real person", "speak to someone", "agent please", "support team", "צוות תמיכה"];
+const HUMAN_SIGNALS = ["נציג", "בן אדם", "אנושי", "לדבר עם מישהו", "לדבר עם נציג", "שירות לקוחות", "מוקד תמיכה", "human", "real person", "speak to someone", "agent please", "support team", "צוות תמיכה", "representative", "human agent", "live agent", "talk to a human", "speak to a human"];
 // Business-AI (PRODUCT lane) signals — recommendations / analysis, not support.
 const PRODUCT_LANE_SIGNALS = ["על מה כדאי", "מה כדאי לי", "המלץ", "תמליץ", "נתח", "ניתוח", "הכן לי", "בנה תוכנית", "מה לעשות היום", "התאמות", "what should i", "recommend", "analyze", "prepare for", "focus on today"];
 // Action/diagnostic-worthy signals (something is wrong → needs inspection).
