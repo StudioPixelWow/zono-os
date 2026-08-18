@@ -14,7 +14,17 @@ import { defaultLimits } from "@/lib/launch/plans";
 import { upsertSubscription } from "./store";
 import { cancelGrowRecurring } from "./recurring";
 import { createGrowCheckout } from "./checkout";
+import { emitBusinessEvent } from "@/lib/kernel/emit";
+import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 import type { PlanTier, Subscription } from "./types";
+
+/** Downstream billing communication for a confirmed cancel-at-period-end (best-effort). */
+async function emitCancelled(orgId: string): Promise<void> {
+  await emitBusinessEvent({
+    type: DOMAIN_EVENTS.billingSubscriptionCancelled, entityType: "billing", entityId: orgId, orgId,
+    payload: { status: "cancelled" }, idempotencyKey: `billing.cancelled:${orgId}:${new Date().toISOString().slice(0, 10)}`,
+  });
+}
 
 async function ownerContext(): Promise<{ orgId: string; userId: string } | null> {
   const sc = await getSessionContext();
@@ -58,12 +68,13 @@ export async function cancelRenewalAction(): Promise<{ ok: boolean; error?: stri
   // Provider-first: cancel at GROW. cancelGrowRecurring itself marks
   // cancel_at_period_end ONLY after the provider acknowledges the cancellation.
   const res = await cancelGrowRecurring(ctx.orgId);
-  if (res.ok) return { ok: true };
+  if (res.ok) { await emitCancelled(ctx.orgId); return { ok: true }; }
 
   // No live provider instruction to stop (trial, simulated, or GROW unconfigured)
   // → safe to record the local cancel-at-period-end intent.
   if (res.reason === "NO_RECURRING_SUBSCRIPTION" || res.reason === "PENDING_SANDBOX_CREDENTIALS") {
     await upsertSubscription({ orgId: ctx.orgId, planTier: sub.planTier, status: sub.status, cancelAtPeriodEnd: true, growSubscriptionId: sub.growSubscriptionId });
+    await emitCancelled(ctx.orgId);
     return { ok: true };
   }
   // A genuine provider error must NOT pretend the subscription was cancelled.

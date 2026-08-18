@@ -14,6 +14,8 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { emitBusinessEvent } from "@/lib/kernel/emit";
+import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 import { assertPlatformCapability } from "./auth";
 import { writePlatformAudit } from "./audit";
 import {
@@ -219,6 +221,24 @@ export async function changeStatus(ticketId: string, to: string, reason?: string
   if (isReopen(from, to)) patch.closed_at = null;
   const { error } = await db.from("support_tickets" as never).update(patch as never).eq("id" as never, ticketId as never);
   if (error) throw new SupportError("שינוי הסטטוס נכשל");
+  // Customer-facing communication for meaningful transitions (best-effort; the
+  // recipient is the ticket's own customer, resolved server-side from the row).
+  try {
+    const { data: tk } = await db.from("support_tickets" as never)
+      .select("org_id,user_id,created_by,ticket_number,subject" as never)
+      .eq("id" as never, ticketId as never).maybeSingle();
+    const info = tk as { org_id: string; user_id: string | null; created_by: string | null; ticket_number: string | null; subject: string | null } | null;
+    const evtType = to === "resolved" ? DOMAIN_EVENTS.supportTicketResolved
+      : to === "waiting_customer" ? DOMAIN_EVENTS.supportTicketCustomerActionRequired
+      : to === "in_progress" ? DOMAIN_EVENTS.supportTicketUpdated : null;
+    if (info && evtType) {
+      await emitBusinessEvent({
+        type: evtType, entityType: "support", entityId: ticketId, orgId: info.org_id,
+        actorUserId: info.user_id ?? info.created_by ?? null,
+        payload: { ticketId, ticketNumber: info.ticket_number, subject: info.subject, status: to, actionRequired: to === "waiting_customer" },
+      });
+    }
+  } catch { /* comms best-effort — never blocks the status change */ }
   const action = isReopen(from, to) ? "support.ticket.reopen" : isClosing(to) ? "support.ticket.close" : "support.ticket.status.change";
   await writePlatformAudit({ operator, capability: "platform.support.manage", action, resourceType: "support_ticket", resourceId: ticketId, targetOrgId: t.org_id, reason: reason ?? null, metadata: { before: from, after: to } });
 }

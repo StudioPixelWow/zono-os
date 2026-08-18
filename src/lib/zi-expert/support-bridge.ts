@@ -11,6 +11,8 @@
 import "server-only";
 import { getSessionContext } from "@/lib/auth/session";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { emitBusinessEvent } from "@/lib/kernel/emit";
+import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 import type { SupportClassification } from "./support-intent";
 import { buildZiTicketDraft, ziConversationLinkRef, type ZiTranscriptTurn } from "./support-bridge-core";
 
@@ -73,6 +75,13 @@ export async function openSupportTicketFromZi(input: OpenTicketInput): Promise<Z
     } as never).select("id,ticket_number" as never).maybeSingle();
     if (error || !data) return { ok: false, error: "create_failed" };
     const row = data as { id: string; ticket_number?: string };
+    // Downstream communication (email + in-app) — best-effort, never blocks the ticket.
+    await emitBusinessEvent({
+      type: DOMAIN_EVENTS.supportTicketCreated, entityType: "support", entityId: row.id,
+      orgId, actorUserId: profile?.id ?? user?.id ?? null,
+      payload: { ticketId: row.id, ticketNumber: row.ticket_number ?? null, subject: draft.subject, status: "open", actionRequired: false },
+      idempotencyKey: `support.created:${row.id}`,
+    });
     return { ok: true, ticketId: row.id, ticketNumber: row.ticket_number };
   } catch {
     return { ok: false, error: "create_failed" };

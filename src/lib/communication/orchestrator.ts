@@ -67,8 +67,10 @@ const CATEGORY: Record<string, string> = {
   "lead.followup_due": "followup_due", "lead.followup_overdue": "followup_due", "lead.hot_without_next_action": "followup_due",
   "lead.sla_breached": "followup_due", "lead.unassigned": "new_lead", "publish.failed": "system",
   "support.ticket_created": "system", "support.ticket_updated": "system",
-  "billing.payment_failed": "system", "billing.payment_succeeded": "system",
+  "support.ticket_customer_action_required": "system", "support.ticket_resolved": "system",
+  "billing.payment_failed": "system", "billing.payment_succeeded": "system", "billing.payment_verified": "system",
   "billing.subscription_activated": "system", "billing.subscription_cancelled": "system",
+  "meeting.reminder": "meeting_reminder",
 };
 const LEVEL: Record<CommPriority, "info" | "success" | "warning" | "critical"> = { critical: "critical", important: "warning", digest: "info", silent: "info" };
 
@@ -82,6 +84,7 @@ function factsFrom(evt: CommEvent, firstName: string | null): TemplateFacts {
     count: (p.count as number) ?? null,
     amount: (p.amount as string) ?? null,
     title: (p.title as string) ?? null,
+    when: (p.when as string) ?? null,
   };
 }
 
@@ -107,6 +110,8 @@ export async function processCommunicationEvent(evt: CommEvent): Promise<{ ok: b
   const db: any = createServiceRoleClient();
   const r = await resolveRecipient(db, evt, rule.recipient);
   if (!r) return { ok: true, skipped: true };
+  // Meeting reminders are fully optional — a disabled preference suppresses them.
+  if (evt.eventType === "meeting.reminder" && !r.prefs.meetingReminders) return { ok: true, skipped: true };
 
   const occurredIso = evt.occurredAt ?? new Date().toISOString();
   const nowIso = new Date().toISOString();

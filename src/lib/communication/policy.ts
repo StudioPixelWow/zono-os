@@ -80,11 +80,27 @@ export const COMM_EVENT_MATRIX: Record<string, CommRule> = {
     priority: "important", recipient: "actor", channels: { inApp: true, email: true, whatsapp: false },
     dedupWindowMin: 60, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: (id) => `/support/${id}`,
   },
+  "support.ticket_customer_action_required": {
+    priority: "important", recipient: "actor", channels: { inApp: true, email: true, whatsapp: false },
+    dedupWindowMin: 60, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: (id) => `/support/${id}`,
+  },
+  "support.ticket_resolved": {
+    priority: "important", recipient: "actor", channels: { inApp: true, email: true, whatsapp: false },
+    dedupWindowMin: 0, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: (id) => `/support/${id}`,
+  },
 
   // ── Billing ───────────────────────────────────────────────────────────────
   "billing.payment_failed": {
     priority: "critical", recipient: "owner", channels: { inApp: true, email: true, whatsapp: true },
     dedupWindowMin: 1440, delayMin: 0, template: "PAYMENT_FAILED", deepLink: () => `/account`,
+  },
+  "billing.payment_verified": {
+    priority: "important", recipient: "owner", channels: { inApp: true, email: true, whatsapp: false },
+    dedupWindowMin: 1440, delayMin: 0, template: "BILLING_UPDATE", deepLink: () => `/account`,
+  },
+  "meeting.reminder": {
+    priority: "important", recipient: "actor", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 0, delayMin: 0, template: "MEETING_REMINDER", deepLink: () => `/calendar`,
   },
   "billing.payment_succeeded": {
     priority: "important", recipient: "owner", channels: { inApp: true, email: true, whatsapp: false },

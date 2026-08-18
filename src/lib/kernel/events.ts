@@ -39,6 +39,18 @@ export const DOMAIN_EVENTS = {
   leadUnassigned: "lead.unassigned",
   leadHotWithoutNextAction: "lead.hot_without_next_action",
   leadSlaBreached: "lead.sla_breached",
+  // Support (customer-facing ticket lifecycle → communication layer)
+  supportTicketCreated: "support.ticket_created",
+  supportTicketUpdated: "support.ticket_updated",
+  supportTicketCustomerActionRequired: "support.ticket_customer_action_required",
+  supportTicketResolved: "support.ticket_resolved",
+  // Billing (provider-verified server state only)
+  billingPaymentFailed: "billing.payment_failed",
+  billingPaymentVerified: "billing.payment_verified",
+  billingSubscriptionActivated: "billing.subscription_activated",
+  billingSubscriptionCancelled: "billing.subscription_cancelled",
+  // Meetings (dispatcher-scheduled reminder)
+  meetingReminder: "meeting.reminder",
   // Property
   propertyCreated: "property.created",
   propertyUpdated: "property.updated",
@@ -137,6 +149,7 @@ export type DomainEventType = (typeof DOMAIN_EVENTS)[keyof typeof DOMAIN_EVENTS]
 export type DomainEntityType =
   | "organization" | "agent" | "buyer" | "seller" | "lead" | "property"
   | "external_listing" | "deal" | "task" | "meeting" | "journey" | "document"
+  | "support" | "billing"
   | "facebook" | "whatsapp" | "communication" | "automation"
   // P6.0 telemetry taxonomy entities
   | "matching" | "recommendation" | "campaign" | "publish" | "integration" | "ai" | "session";

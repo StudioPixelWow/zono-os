@@ -12,6 +12,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { COMM_EVENT_MATRIX } from "@/lib/communication/policy";
 import { processCommunicationEvent } from "@/lib/communication/orchestrator";
 import { processDueQueue } from "@/lib/communication/dispatch";
+import { scanMeetingReminders } from "@/lib/communication/meeting-reminders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ export async function GET(req: NextRequest) {
   const started = Date.now();
   try {
     const db: any = createServiceRoleClient();
+    // Schedule meeting reminders first, so their just-emitted events fall inside
+    // the consumption window below and route through the same orchestrator path.
+    const mr = await scanMeetingReminders();
     // Overlapping window (cron every 5 min) — dedup makes the overlap a no-op.
     const sinceIso = new Date(Date.now() - 12 * 60_000).toISOString();
     const types = Object.keys(COMM_EVENT_MATRIX);
@@ -44,7 +48,7 @@ export async function GET(req: NextRequest) {
       processed++;
     }
     const q = await processDueQueue(200);
-    return NextResponse.json({ ok: true, processed, ...q, durationMs: Date.now() - started });
+    return NextResponse.json({ ok: true, meetingReminders: mr.emitted, processed, ...q, durationMs: Date.now() - started });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "comm_dispatch_failed" }, { status: 500 });
   }

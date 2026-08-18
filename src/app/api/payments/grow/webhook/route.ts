@@ -21,6 +21,8 @@ import { growGetTransactionInfo, growApproveTransaction, growCreds } from "@/lib
 import { growOutcomeFromStatusCode, growPaymentStatus, clientIpFromForwardedFor, isGrowSourceIp, safeStringEqual } from "@/lib/commercial/grow-mapping";
 import { getPayment, markPaymentVerified, setPaymentStatus } from "@/lib/commercial/store";
 import { activateOrgSubscriptionFromVerifiedPayment } from "@/lib/commercial/activate";
+import { emitBusinessEvent } from "@/lib/kernel/emit";
+import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,7 +97,15 @@ export async function POST(req: NextRequest) {
       // Not a confirmed paid transaction → record failure only if the callback
       // itself claimed a terminal non-paid; otherwise leave pending. No revenue.
       const claimed = growOutcomeFromStatusCode(d.statusCode);
-      if (claimed === "not_paid") await setPaymentStatus(paymentId, growPaymentStatus("not_paid"));
+      if (claimed === "not_paid") {
+        await setPaymentStatus(paymentId, growPaymentStatus("not_paid"));
+        if (payment.orgId) {
+          await emitBusinessEvent({
+            type: DOMAIN_EVENTS.billingPaymentFailed, entityType: "billing", entityId: payment.orgId, orgId: payment.orgId,
+            payload: { status: "failed", reference: paymentId }, idempotencyKey: `billing.failed:${paymentId}`,
+          });
+        }
+      }
       return NextResponse.json({ ok: false, reason: "not_verified_paid" }, { status: 200 });
     }
 
@@ -118,6 +128,13 @@ export async function POST(req: NextRequest) {
         orgId: payment.orgId, recurringDebitId: recurringId, quantity: q.billableAgents,
         transactionId, transactionToken, asmachta: d.asmachta ?? null,
         environment: growCreds().env === "production" ? "production" : "sandbox",
+      });
+      // Downstream billing communication (email + in-app to the owner) — best-effort,
+      // strictly AFTER the verified activation. Never blocks payment verification.
+      await emitBusinessEvent({
+        type: DOMAIN_EVENTS.billingPaymentVerified, entityType: "billing", entityId: payment.orgId, orgId: payment.orgId,
+        payload: { status: "paid", amount: typeof d.sum === "number" ? `₪${d.sum}` : (d.sum ?? null) },
+        idempotencyKey: `billing.verified:${transactionId}`,
       });
     }
 
