@@ -12,6 +12,7 @@
 // ============================================================================
 import type { PropertyAI } from "@/lib/brokerage-site/types";
 import { Glass, PropertyCard } from "./ui";
+import { PublicIcon } from "@/components/public-site/PublicIcon";
 import AskWidget from "./AskWidget";
 import { OfficeBrandMark } from "../site-ui/OfficeBrandMark";
 
@@ -97,7 +98,7 @@ export function PropertyMicrosite({
             </div>
             <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
               <h1 className="max-w-3xl text-2xl font-black leading-tight drop-shadow-sm sm:text-5xl">{p.title}</h1>
-              {loc && <p className="mt-1.5 text-[14px] font-semibold text-white/85 sm:text-base">📍 {loc}</p>}
+              {loc && <p className="mt-1.5 text-[14px] font-semibold text-white/85 sm:text-base"><PublicIcon name="pin" size={15} className="inline align-[-2px]" /> {loc}</p>}
               <div className="mt-3 inline-flex items-baseline gap-2 rounded-2xl bg-white/95 px-4 py-2 shadow-lg">
                 {fmt(p.price) ? <span className="text-2xl font-black sm:text-3xl" style={{ color: ACCENT }}>{fmt(p.price)}</span> : <span className="text-lg font-black text-slate-500">מחיר לפי פנייה</span>}
               </div>
@@ -149,7 +150,7 @@ export function PropertyMicrosite({
             </div>
           ) : (
             <Glass className="p-8 text-center">
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl text-white shadow-[var(--shadow-soft)]" style={{ background: GRADIENT }}>📷</div>
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl text-white shadow-[var(--shadow-soft)]" style={{ background: GRADIENT }}><PublicIcon name="home" size={28} /></div>
               <p className="text-ink mt-3 font-black">הגלריה המלאה בדרך</p>
               <p className="text-muted mt-1 text-sm">רוצים לראות תמונות נוספות של הנכס? צרו קשר ונשמח לשלוח.</p>
             </Glass>

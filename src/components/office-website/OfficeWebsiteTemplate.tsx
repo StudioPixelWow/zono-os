@@ -13,11 +13,12 @@ import { ExpertiseMap } from "@/components/agent-website/ExpertiseMap";
 import { MobileStickyCta } from "@/components/agent-website/MobileStickyCta";
 import { SectionShell, TextLink, StatStrip, AreaChips, money } from "@/components/agent-website/ui";
 import { OfficePropertyCard, TeamCard, OfficeTestimonialCard } from "./ui";
+import { PublicIcon, type PublicIconName } from "@/components/public-site/PublicIcon";
 import { SiteLeadForm } from "@/app/site/[slug]/SiteLeadForm";
 
-const ADVANTAGES: { icon: string; title: string; text: string }[] = [
+const ADVANTAGES: { icon: PublicIconName; title: string; text: string }[] = [
   { icon: "map", title: "היכרות עמוקה עם האזור", text: "ידע מקומי מדויק שמביא לעסקה הנכונה." },
-  { icon: "team", title: "צוות מקצועי", text: "סוכנים מנוסים שמלווים אתכם אישית." },
+  { icon: "users", title: "צוות מקצועי", text: "סוכנים מנוסים שמלווים אתכם אישית." },
   { icon: "megaphone", title: "שיווק מתקדם", text: "חשיפה מקסימלית לנכס מול הקהל הנכון." },
   { icon: "scale", title: "משא ומתן מקצועי", text: "מיצוי מלא של תנאי העסקה עבורכם." },
 ];
@@ -84,11 +85,11 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
 
       {/* WHY THIS OFFICE */}
       {on("why_us") && (
-        <SectionShell eyebrow="למה אנחנו" title="למה לעבוד איתנו?" subtitle="ליווי מקצועי, היכרות עמוקה עם השוק המקומי ותוצאות מוכחות.">
+        <SectionShell eyebrow="למה אנחנו" title="למה לעבוד איתנו?" subtitle="ליווי מקצועי, היכרות עמוקה עם השוק המקומי ותוצאות מוכחות." tone="soft">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {ADVANTAGES.map((a) => (
               <div key={a.title} className="group rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 transition duration-200 hover:-translate-y-0.5 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
-                <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)] ring-1 ring-[color:var(--brand-primary)]/15 transition group-hover:scale-105"><AdvIcon name={a.icon} /></div>
+                <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)] ring-1 ring-[var(--brand-border)] transition group-hover:scale-105"><PublicIcon name={a.icon} size="feature" /></div>
                 <h3 className="text-[16px] font-black text-[var(--brand-text)]">{a.title}</h3>
                 <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--brand-muted)]">{a.text}</p>
               </div>
@@ -183,7 +184,7 @@ function FeaturedProperty({ property }: { property: OfficeProperty }) {
         {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
         {property.image
           ? <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
-          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><HouseGlyphLg /></div>}
+          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={60} /></div>}
       </div>
       <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">
         <h3 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{property.title}</h3>
@@ -196,7 +197,6 @@ function FeaturedProperty({ property }: { property: OfficeProperty }) {
   );
 }
 
-function HouseGlyphLg() { return <svg viewBox="0 0 24 24" width={56} height={56} fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden><path d="M3 11l9-7 9 7M5 10v9h5v-5h4v5h5v-9" strokeLinejoin="round" strokeLinecap="round" /></svg>; }
 
 function Hero({ data }: { data: OfficeSitePayload }) {
   const { office, brand } = data;
@@ -328,12 +328,4 @@ function FooterCol({ title, children }: { title: string; children: React.ReactNo
   return <div><h4 className="mb-3 text-[14px] font-black text-[var(--brand-text)]">{title}</h4><div className="space-y-2">{children}</div></div>;
 }
 
-function AdvIcon({ name }: { name: string }) {
-  const p: Record<string, string> = {
-    map: "M9 3l6 2 6-2v16l-6 2-6-2-6 2V5l6-2zm0 0v16m6-14v16",
-    team: "M17 20v-2a4 4 0 00-3-3.87M9 20v-2a4 4 0 013-3.87M12 7a3 3 0 100-6 3 3 0 000 6zm7 13a3 3 0 00-2-2.8M5 20a3 3 0 012-2.8",
-    megaphone: "M3 11v2a1 1 0 001 1h3l4 4V6L7 10H4a1 1 0 00-1 1zm13-3a5 5 0 010 8",
-    scale: "M12 3v18M5 7h14M7 7l-3 6a3 3 0 006 0L7 7zm10 0l-3 6a3 3 0 006 0l-3-6z",
-  };
-  return <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden><path d={p[name] ?? p.map} strokeLinecap="round" strokeLinejoin="round" /></svg>;
-}
+// (icons now come from the shared PublicIcon primitive)

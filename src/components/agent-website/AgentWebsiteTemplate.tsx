@@ -14,8 +14,10 @@ import { Testimonials } from "./Testimonials";
 import { MobileStickyCta } from "./MobileStickyCta";
 import { AgentPropertyCard, SectionShell, TextLink, StatStrip, ProofPoints, money } from "./ui";
 import { AgentLeadForm } from "@/app/agent/[slug]/AgentLeadForm";
+import { PublicIcon, type PublicIconName } from "@/components/public-site/PublicIcon";
+import { PublicFeatureCard } from "@/components/public-site/PublicFeatureCard";
 
-const ADVANTAGES: { icon: string; title: string; text: string }[] = [
+const ADVANTAGES: { icon: PublicIconName; title: string; text: string }[] = [
   { icon: "map", title: "היכרות עמוקה עם האזור", text: "ידע מקומי מדויק שמביא לעסקה הנכונה." },
   { icon: "megaphone", title: "שיווק מתקדם", text: "חשיפה מקסימלית לנכס מול הקהל הנכון." },
   { icon: "handshake", title: "ליווי אישי", text: "זמינות ויחס אישי מהשלב הראשון ועד המסירה." },
@@ -69,15 +71,9 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
 
       {/* ── WHY WORK WITH ME ─────────────────────────────────────────────── */}
       {on("why_me") && (
-        <SectionShell title="למה לעבוד איתי?">
-          <div className="grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
-            {ADVANTAGES.map((a) => (
-              <div key={a.title}>
-                <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><AdvIcon name={a.icon} /></div>
-                <h3 className="text-[16px] font-black text-[var(--brand-text)]">{a.title}</h3>
-                <p className="mt-1 text-[14px] leading-relaxed text-[var(--brand-muted)]">{a.text}</p>
-              </div>
-            ))}
+        <SectionShell title="למה לעבוד איתי?" tone="soft">
+          <div className="grid grid-cols-1 gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+            {ADVANTAGES.map((a) => <PublicFeatureCard key={a.title} icon={a.icon} title={a.title} text={a.text} />)}
           </div>
         </SectionShell>
       )}
@@ -101,7 +97,7 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
 
       {/* ── SECOND PROPERTY DISCOVERY ────────────────────────────────────── */}
       {data.recommended.length > 0 && (
-        <SectionShell title="עוד נכסים שעשויים להתאים לכם" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
+        <SectionShell title="עוד נכסים שעשויים להתאים לכם" tone="surface" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {data.recommended.map((p) => <AgentPropertyCard key={p.id} property={p} />)}
           </div>
@@ -149,7 +145,7 @@ function FeaturedProperty({ property }: { property: SiteProperty }) {
         {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
         {property.image
           ? <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
-          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><svg viewBox="0 0 24 24" width={56} height={56} fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden><path d="M3 11l9-7 9 7M5 10v9h5v-5h4v5h5v-9" strokeLinejoin="round" strokeLinecap="round" /></svg></div>}
+          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={64} /></div>}
       </div>
       <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">
         <h3 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{property.title}</h3>
@@ -169,27 +165,37 @@ function Hero({ data }: { data: AgentSitePayload }) {
   const title = agent.valueProp || agent.headline || "הבית הבא שלכם מתחיל כאן";
 
   return (
-    <section className="relative overflow-hidden border-b border-[var(--brand-border)] bg-gradient-to-b from-[var(--brand-soft)] via-[var(--brand-surface)] to-[var(--brand-background)]">
-      <div className={`mx-auto grid w-full max-w-7xl items-center gap-10 px-5 pb-16 pt-10 sm:px-8 lg:pb-24 lg:pt-14 ${hasPhoto ? "lg:grid-cols-2" : ""}`}>
-        {/* Text (start / right) */}
+    <section className="relative overflow-hidden bg-[var(--brand-soft)] text-[var(--brand-text)]">
+      {/* Layered architectural background — brand-driven depth, not a generic gradient blob */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-b from-[var(--brand-soft)] via-[var(--brand-background)] to-[var(--brand-background)]" />
+        <div className="absolute inset-0 opacity-60" style={{ backgroundImage: "linear-gradient(var(--brand-border) 1px, transparent 1px), linear-gradient(90deg, var(--brand-border) 1px, transparent 1px)", backgroundSize: "58px 58px", WebkitMaskImage: "radial-gradient(120% 85% at 82% 0%, #000 28%, transparent 74%)", maskImage: "radial-gradient(120% 85% at 82% 0%, #000 28%, transparent 74%)" }} />
+        <div className="absolute -top-32 start-[-8rem] h-[36rem] w-[36rem] rounded-full bg-[var(--brand-primary)] opacity-10 blur-3xl" />
+        <svg aria-hidden viewBox="0 0 200 200" fill="none" stroke="currentColor" strokeWidth="1.4" className="absolute -bottom-2 end-2 h-64 w-64 text-[color:var(--brand-primary)] opacity-15"><path d="M6 194h64v-64M6 194V78M70 130h64V66M134 130V6h60" strokeLinecap="round" /></svg>
+      </div>
+
+      <div className={`relative mx-auto grid w-full max-w-7xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 lg:pb-24 lg:pt-20 ${hasPhoto ? "lg:grid-cols-[1.1fr_0.9fr]" : ""}`}>
         <div className={hasPhoto ? "" : "mx-auto max-w-3xl text-center"}>
-          <div className="text-[15px] font-black text-[color:var(--brand-link)]">{agent.name}</div>
-          <h1 className="mt-2 text-4xl font-black leading-[1.1] text-[var(--brand-text)] sm:text-5xl">{title}</h1>
-          {(agent.bio || agent.title) && <p className={`mt-4 text-[16px] leading-relaxed text-[var(--brand-muted)] ${hasPhoto ? "max-w-md" : "mx-auto max-w-xl"}`}>{agent.bio || agent.title}</p>}
+          <div className={`inline-flex items-center gap-2 rounded-full border border-[var(--brand-border)] bg-[var(--brand-background)] px-3.5 py-1.5 text-[13px] font-black text-[color:var(--brand-link)] ${hasPhoto ? "" : "mx-auto"}`}>
+            <PublicIcon name="pin" size={15} /> {agent.name}{agent.title ? ` · ${agent.title}` : ""}
+          </div>
+          <h1 className="mt-4 text-[40px] font-black leading-[1.03] tracking-tight text-[var(--brand-text)] sm:text-[56px]">{title}</h1>
+          {(agent.bio || agent.title) && <p className={`mt-5 text-[17px] leading-relaxed text-[var(--brand-muted)] ${hasPhoto ? "max-w-lg" : "mx-auto max-w-xl"}`}>{agent.bio || agent.title}</p>}
 
-          {data.proofPoints.length > 0 && <div className={`mt-6 ${hasPhoto ? "" : "flex justify-center"}`}><ProofPoints points={data.proofPoints} /></div>}
+          {data.proofPoints.length > 0 && <div className={`mt-7 ${hasPhoto ? "" : "flex justify-center"}`}><ProofPoints points={data.proofPoints} /></div>}
 
-          <div className={`mt-8 flex flex-wrap gap-3 ${hasPhoto ? "" : "justify-center"}`}>
-            <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] px-6 py-3.5 text-[15px] font-bold text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)]">קבעו פגישת ייעוץ</a>
-            {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-6 py-3.5 text-[15px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
+          <div className={`mt-9 flex flex-wrap gap-3 ${hasPhoto ? "" : "justify-center"}`}>
+            <a href="#contact" className="inline-flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-7 py-4 text-[15px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5">קבעו פגישת ייעוץ <PublicIcon name="arrow" size={18} /></a>
+            {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-7 py-4 text-[15px] font-black text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]"><PublicIcon name="whatsapp" size={18} /> שלחו הודעת WhatsApp</a>}
           </div>
         </div>
 
-        {/* Photo + office card (end / left) */}
         {hasPhoto && (
           <div className="relative">
-            <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-3xl bg-[var(--brand-soft)]">
+            <div className="absolute -inset-3 -z-0 rounded-[34px] bg-[var(--brand-primary)] opacity-10 blur-2xl" />
+            <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-[28px] bg-[var(--brand-soft)] shadow-[0_44px_90px_-46px_rgba(15,23,42,0.55)] ring-1 ring-[var(--brand-border)]">
               <img src={brand.profileImage as string} alt={agent.name} className="h-full w-full object-cover object-top" />
+              <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent" />
             </div>
             <OfficeCard data={data} />
           </div>
@@ -207,9 +213,9 @@ function OfficeCard({ data }: { data: AgentSitePayload }) {
         {brand.logo ? <img src={brand.logo} alt={agent.officeName ?? ""} className="h-9 w-auto max-w-[120px] object-contain" /> : <div className="text-[15px] font-black text-[var(--brand-text)]">{agent.officeName ?? agent.name}</div>}
       </div>
       <div className="mt-3 space-y-2 text-[13px] text-[var(--brand-muted)]">
-        {agent.officeAddress && <div className="flex items-center gap-2"><PinIcon /> {agent.officeAddress}</div>}
-        {agent.phone && <a href={agent.tel ?? undefined} className="flex items-center gap-2 hover:text-[color:var(--brand-link)]"><PhoneGlyph /> {agent.phone}</a>}
-        {agent.email && <a href={`mailto:${agent.email}`} className="flex items-center gap-2 hover:text-[color:var(--brand-link)]"><MailIcon /> {agent.email}</a>}
+        {agent.officeAddress && <div className="flex items-center gap-2"><PublicIcon name="pin" size="inline" className="shrink-0" /> {agent.officeAddress}</div>}
+        {agent.phone && <a href={agent.tel ?? undefined} className="flex items-center gap-2 hover:text-[color:var(--brand-link)]"><PublicIcon name="phone" size="inline" className="shrink-0" /> {agent.phone}</a>}
+        {agent.email && <a href={`mailto:${agent.email}`} className="flex items-center gap-2 hover:text-[color:var(--brand-link)]"><PublicIcon name="mail" size="inline" className="shrink-0" /> {agent.email}</a>}
       </div>
       <div className="mt-4 flex flex-col gap-2">
         <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] py-2.5 text-center text-[13px] font-bold text-[var(--brand-on-primary)]">קביעת פגישה</a>
@@ -311,16 +317,4 @@ function FooterCol({ title, children }: { title: string; children: React.ReactNo
   return <div><h4 className="mb-3 text-[14px] font-black text-[var(--brand-text)]">{title}</h4><div className="space-y-2">{children}</div></div>;
 }
 
-// ── Icons ────────────────────────────────────────────────────────────────────
-function AdvIcon({ name }: { name: string }) {
-  const p: Record<string, string> = {
-    map: "M9 3l6 2 6-2v16l-6 2-6-2-6 2V5l6-2zm0 0v16m6-14v16",
-    megaphone: "M3 11v2a1 1 0 001 1h3l4 4V6L7 10H4a1 1 0 00-1 1zm13-3a5 5 0 010 8",
-    handshake: "M8 12l3 3 5-5m-9 2l-3-3 4-4 3 2 3-2 4 4-3 3",
-    scale: "M12 3v18M5 7h14M7 7l-3 6a3 3 0 006 0L7 7zm10 0l-3 6a3 3 0 006 0l-3-6z",
-  };
-  return <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden><path d={p[name] ?? p.map} strokeLinecap="round" strokeLinejoin="round" /></svg>;
-}
-function PinIcon() { return <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden><path d="M12 21s7-6 7-11a7 7 0 10-14 0c0 5 7 11 7 11z" /><circle cx={12} cy={10} r={2.5} /></svg>; }
-function PhoneGlyph() { return <svg viewBox="0 0 24 24" width={14} height={14} fill="currentColor" aria-hidden><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011-.24 11 11 0 003.4.55 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.55 3.4 1 1 0 01-.25 1z" /></svg>; }
-function MailIcon() { return <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden><rect x={3} y={5} width={18} height={14} rx={2} /><path d="M3 7l9 6 9-6" /></svg>; }
+// (icons now come from the shared PublicIcon primitive)

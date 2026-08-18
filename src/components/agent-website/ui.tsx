@@ -16,10 +16,10 @@ export const money = (n: number | null | undefined): string | null =>
 /** Section wrapper — consistent max width, spacing and heading rhythm. */
 export function SectionShell({ id, eyebrow, title, subtitle, action, children, tone = "base", className = "" }: {
   id?: string; eyebrow?: string; title?: string; subtitle?: string;
-  action?: ReactNode; children: ReactNode; tone?: "base" | "surface"; className?: string;
+  action?: ReactNode; children: ReactNode; tone?: "base" | "surface" | "soft"; className?: string;
 }) {
   return (
-    <section id={id} className={`${tone === "surface" ? "bg-[var(--brand-surface)]" : ""} ${className}`}>
+    <section id={id} className={`${tone === "surface" ? "bg-[var(--brand-surface)]" : tone === "soft" ? "bg-[var(--brand-soft)]" : ""} ${className}`}>
       <div className="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8 lg:py-20">
         {(title || action) && (
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
