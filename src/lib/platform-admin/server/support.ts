@@ -30,7 +30,7 @@ export class SupportError extends Error {
 
 // ── DTOs ────────────────────────────────────────────────────────────────────
 export interface TicketRow {
-  id: string; orgId: string; orgName: string | null; userId: string | null;
+  id: string; ticketNumber: string | null; orgId: string; orgName: string | null; userId: string | null;
   subject: string; status: TicketStatus; priority: TicketPriority; category: string; source: TicketSource;
   assignedOperatorId: string | null; assignedOperatorName: string | null;
   createdAt: string; updatedAt: string; closedAt: string | null;
@@ -45,12 +45,12 @@ export interface SupportInbox {
 export interface OperatorOption { userId: string; name: string | null; role: string }
 
 interface RawTicket {
-  id: string; org_id: string; user_id: string | null; subject: string; description: string | null;
+  id: string; ticket_number: string | null; org_id: string; user_id: string | null; subject: string; description: string | null;
   status: string; priority: string; category: string; source: string;
   assigned_operator_id: string | null; linked_ref: string | null; created_by: string | null;
   created_at: string; updated_at: string; closed_at: string | null;
 }
-const TICKET_COLS = "id,org_id,user_id,subject,description,status,priority,category,source,assigned_operator_id,linked_ref,created_by,created_at,updated_at,closed_at";
+const TICKET_COLS = "id,ticket_number,org_id,user_id,subject,description,status,priority,category,source,assigned_operator_id,linked_ref,created_by,created_at,updated_at,closed_at";
 
 // ── Name resolution helpers (batched — no N+1) ──────────────────────────────
 async function orgNames(db: ReturnType<typeof createServiceRoleClient>, ids: string[]): Promise<Map<string, string | null>> {
@@ -69,7 +69,7 @@ async function operatorNames(db: ReturnType<typeof createServiceRoleClient>, ids
 
 function toRow(r: RawTicket, orgName: string | null, opName: string | null): TicketRow {
   return {
-    id: r.id, orgId: r.org_id, orgName, userId: r.user_id, subject: r.subject,
+    id: r.id, ticketNumber: r.ticket_number, orgId: r.org_id, orgName, userId: r.user_id, subject: r.subject,
     status: r.status as TicketStatus, priority: r.priority as TicketPriority, category: r.category, source: r.source as TicketSource,
     assignedOperatorId: r.assigned_operator_id, assignedOperatorName: opName,
     createdAt: r.created_at, updatedAt: r.updated_at, closedAt: r.closed_at,

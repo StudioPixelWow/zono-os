@@ -28,7 +28,7 @@ export default async function Page({ params }: { params: Promise<{ ticketId: str
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="תמיכה" title={t.subject} description={`${t.orgName ?? t.orgId} · נפתחה ${formatPlatformDateTime(t.createdAt)}`} icon="Handshake" />
+      <PageHeader eyebrow={t.ticketNumber ? `תמיכה · ${t.ticketNumber}` : "תמיכה"} title={t.subject} description={`${t.orgName ?? t.orgId} · נפתחה ${formatPlatformDateTime(t.createdAt)}`} icon="Handshake" />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.6fr_1fr]">
         {/* Main column */}

@@ -38,7 +38,7 @@ export function ageOf(iso: string): string {
 }
 
 export interface UITicket {
-  id: string; orgId: string; orgName: string | null; subject: string;
+  id: string; ticketNumber?: string | null; orgId: string; orgName: string | null; subject: string;
   status: TicketStatus; priority: TicketPriority; category: string;
   assignedOperatorName: string | null; createdAt: string; updatedAt: string;
 }
@@ -54,7 +54,7 @@ export function TicketTable({ tickets }: { tickets: UITicket[] }) {
         <tbody>
           {tickets.map((t) => (
             <tr key={t.id} className="border-line border-b last:border-0">
-              <td className="px-3 py-2.5"><Link href={`/platform/support/${t.id}`} className="text-ink hover:text-brand font-semibold">{t.subject}</Link></td>
+              <td className="px-3 py-2.5"><Link href={`/platform/support/${t.id}`} className="text-ink hover:text-brand font-semibold">{t.subject}</Link>{t.ticketNumber && <span className="text-muted block text-[11px] font-bold">{t.ticketNumber}</span>}</td>
               <td className="text-muted px-3 py-2.5">{t.orgName ?? t.orgId.slice(0, 8)}</td>
               <td className="text-muted px-3 py-2.5 text-[12px]">{CATEGORY_LABEL[t.category as keyof typeof CATEGORY_LABEL] ?? t.category}</td>
               <td className="px-3 py-2.5"><PriorityChip priority={t.priority} /></td>
