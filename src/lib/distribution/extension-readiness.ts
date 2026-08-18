@@ -115,11 +115,13 @@ const READINESS_RANK: Record<ExtensionReadinessState, number> = {
 };
 export function pickBestReadiness(inputs: ExtensionReadinessInput[]): ExtensionReadinessView {
   if (!inputs.length) return computeExtensionReadiness({ status: "not_installed", lastCheckedAt: null });
-  let best = computeExtensionReadiness(inputs[0]);
-  let bestFresh = inputs[0].lastCheckedAt ? Date.parse(inputs[0].lastCheckedAt) : 0;
+  const first = inputs[0];
+  let best = computeExtensionReadiness(first);
+  let bestFresh = first.lastCheckedAt ? Date.parse(first.lastCheckedAt) : 0;
   for (let i = 1; i < inputs.length; i++) {
-    const v = computeExtensionReadiness(inputs[i]);
-    const fresh = inputs[i].lastCheckedAt ? Date.parse(inputs[i].lastCheckedAt) : 0;
+    const inp = inputs[i];
+    const v = computeExtensionReadiness(inp);
+    const fresh = inp.lastCheckedAt ? Date.parse(inp.lastCheckedAt) : 0;
     if (READINESS_RANK[v.state] > READINESS_RANK[best.state] ||
         (READINESS_RANK[v.state] === READINESS_RANK[best.state] && fresh > bestFresh)) {
       best = v; bestFresh = fresh;

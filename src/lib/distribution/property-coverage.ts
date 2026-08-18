@@ -11,6 +11,7 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export type CoverageStatus =
   | "marketing_now"       // משווק כעת   — has a future post AND published history
@@ -64,7 +65,7 @@ export async function getPropertyMarketingCoverage(): Promise<PropertyMarketingC
   const { profile } = await getSessionContext();
   if (!profile?.org_id) return EMPTY;
   const orgId = profile.org_id;
-  const db = createServiceRoleClient();
+  const db: any = createServiceRoleClient();
 
   // 1) Marketable inventory (bounded).
   const { data: propRows } = await db
