@@ -24,6 +24,7 @@ export interface QueuePostInput {
   campaignId: string; groupId: string; variationId: string; scheduledAt: string;
   status?: PostingStatus; postTitle?: string | null; postText?: string | null;
   hashtags?: string[]; cta?: string | null; imageUrl?: string | null; propertyId?: string | null;
+  creativeOutputId?: string | null; creativeVersion?: number | null;
 }
 export interface QueueFilters {
   campaignId?: string; groupId?: string; status?: PostingStatus; from?: string; to?: string; limit?: number;
@@ -58,7 +59,9 @@ export const distributionPostsRepository = {
         org_id: s.orgId, campaign_id: r.campaignId, group_id: r.groupId, variation_id: r.variationId,
         property_id: r.propertyId ?? null, platform: "facebook", status: r.status ?? "scheduled", publish_state: "queued",
         post_title: r.postTitle ?? null, post_text: r.postText ?? null, hashtags: r.hashtags ?? [],
-        cta: r.cta ?? null, image_url: r.imageUrl ?? null, scheduled_at: r.scheduledAt, created_by: s.userId,
+        cta: r.cta ?? null, image_url: r.imageUrl ?? null,
+        creative_output_id: r.creativeOutputId ?? null, creative_version: r.creativeOutputId ? (r.creativeVersion ?? 1) : null,
+        scheduled_at: r.scheduledAt, created_by: s.userId,
         assigned_user_id: s.userId, content_hash: contentHash, idempotency_key: idempotencyKey,
       } as never).select("*").maybeSingle();
       if (error) {

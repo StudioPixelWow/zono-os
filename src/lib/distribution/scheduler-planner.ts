@@ -28,6 +28,12 @@ export interface ScheduleConfig {
   groupIds: string[];
   variationIds: string[];
   endDate?: string | null;  // campaign range cap (no slot after this)
+  // Selected media (validated server-side) persisted onto every post; propertyId
+  // also stamps the post so property-level coverage resolves directly.
+  imageUrl?: string | null;
+  creativeOutputId?: string | null;
+  creativeVersion?: number | null;
+  propertyId?: string | null;
   // Optional real attributes → enable INTELLIGENCE-DRIVEN per-group assignment
   // (best-fit variation per group). When absent, plain rotation is used.
   groupAttrs?: GroupAttr[];

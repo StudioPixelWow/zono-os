@@ -9,13 +9,15 @@
 // admin screen. After activation the user lands on a success state → today's
 // publishing. Publishing itself remains the existing assisted-extension flow.
 // ============================================================================
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import { buildPlan, FREQUENCY_HE, type Frequency, type WizardGroup, type GroupFolder } from "@/lib/facebook-groups/planner";
 import { generatePostVariations, type PropertyFacts } from "@/lib/facebook-groups/content";
 import { activateFacebookCampaignAction } from "@/lib/facebook-groups/activate";
+import { listPropertyCampaignMediaAction } from "@/lib/facebook-groups/media-actions";
+import type { CampaignMediaItem, MediaRef } from "@/lib/facebook-groups/campaign-media";
 
 interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
@@ -38,9 +40,24 @@ export function CampaignWizard({ properties, folders, notes }: Props) {
   const [activating, setActivating] = useState(false);
   const [activateError, setActivateError] = useState<string | null>(null);
   const [done, setDone] = useState<Activated | null>(null);
+  const [mediaItems, setMediaItems] = useState<CampaignMediaItem[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<MediaRef | null>(null);
   const activatingRef = useRef(false);
 
   const property = properties.find((p) => p.id === propId) ?? null;
+  useEffect(() => {
+    let alive = true;
+    listPropertyCampaignMediaAction(propId ?? "")
+      .then((items) => {
+        if (!alive) return;
+        setMediaItems(items);
+        const def = items.find((m) => m.isPrimary) ?? items.find((m) => m.publishable) ?? items[0] ?? null;
+        setSelectedMedia(def ? def.ref : null);
+      })
+      .catch(() => { if (alive) { setMediaItems([]); setSelectedMedia(null); } });
+    return () => { alive = false; };
+  }, [propId]);
+  const isSel = (m: CampaignMediaItem) => !!selectedMedia && selectedMedia.kind === m.ref.kind && selectedMedia.id === m.ref.id;
   const allGroups = useMemo(() => folders.flatMap((f) => f.groups), [folders]);
   const chosen: WizardGroup[] = allGroups.filter((g) => selectedGroups.has(g.id));
   const variations = useMemo(() => (property ? generatePostVariations(property, 4) : []), [property]);
@@ -59,6 +76,7 @@ export function CampaignWizard({ properties, folders, notes }: Props) {
       const res = await activateFacebookCampaignAction({
         propertyId: property.id, propertyTitle: property.title,
         groupIds: chosen.map((g) => g.id), frequency, startDate,
+        media: selectedMedia,
       });
       if (res.ok) setDone({ campaignId: res.campaignId, created: res.created, groupCount: res.groupCount, firstPublishAt: res.firstPublishAt, endDate: res.endDate });
       else setActivateError(res.error);
@@ -136,6 +154,36 @@ export function CampaignWizard({ properties, folders, notes }: Props) {
         {/* STEP 2 — content */}
         {step === 1 && property && (
           <div className="space-y-3">
+            <div className="space-y-2">
+              <div className="text-ink text-[13px] font-black">תמונת הפרסום</div>
+              {mediaItems.length === 0 ? (
+                <div className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-[12px]">אין עדיין תמונות לנכס. אפשר להמשיך ללא תמונה, או להוסיף תמונות לנכס.</div>
+              ) : (
+                <>
+                  {mediaItems.some((m) => m.source !== "studio") && <div className="text-muted text-[11px]">תמונות הנכס</div>}
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {mediaItems.filter((m) => m.source !== "studio").map((m) => (
+                      <button type="button" key={m.id} onClick={() => setSelectedMedia(m.ref)} className={cn("relative aspect-square overflow-hidden rounded-xl border-2", isSel(m) ? "border-brand" : "border-transparent")}>
+                        <img src={m.thumbnailUrl ?? m.url} alt="" className="h-full w-full object-cover" />
+                        {isSel(m) && <span className="bg-brand absolute bottom-1 start-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white">נבחרה</span>}
+                      </button>
+                    ))}
+                  </div>
+                  {mediaItems.some((m) => m.source === "studio") && <div className="text-muted mt-1 text-[11px]">נוצר בסטודיו</div>}
+                  {mediaItems.some((m) => m.source === "studio") && (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {mediaItems.filter((m) => m.source === "studio").map((m) => (
+                        <button type="button" key={m.id} onClick={() => setSelectedMedia(m.ref)} className={cn("relative aspect-square overflow-hidden rounded-xl border-2", isSel(m) ? "border-brand" : "border-transparent")}>
+                          <img src={m.thumbnailUrl ?? m.url} alt="" className="h-full w-full object-cover" />
+                          {!m.publishable && <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[8px] text-white">דרוש אישור</span>}
+                          {isSel(m) && <span className="bg-brand absolute bottom-1 start-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white">נבחרה</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             <p className="text-muted text-[12px]">נוצרו {variations.length} וריאציות טקסט מנתוני הנכס בלבד. ערכו ואשרו לפני המשך.</p>
             {variations.map((v, i) => (
               <div key={i} className="rounded-2xl bg-surface p-3">
@@ -203,6 +251,14 @@ export function CampaignWizard({ properties, folders, notes }: Props) {
                 <Cell label="מתחיל" value={dateHe(startDate)} />
                 <Cell label="פרסומים מתוכננים" value={plan ? `~${plan.totalPosts}` : "—"} />
               </div>
+              {selectedMedia ? (
+                <div className="bg-surface flex items-center gap-3 rounded-xl p-3">
+                  <img src={selectedMedia.url} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                  <div className="text-muted text-[12px]">התמונה שתפורסם בקבוצות</div>
+                </div>
+              ) : (
+                <div className="bg-surface text-muted rounded-xl p-3 text-[12px]">פרסום ללא תמונה. ניתן לחזור לשלב התוכן ולבחור תמונה.</div>
+              )}
               <div className="bg-surface text-muted rounded-xl p-3 text-[12px]">
                 ZONO יכין ויתזמן כל פרסום. בזמן הפרסום, <b className="text-ink">התוסף ילווה אותך</b> בפרסום בקבוצה בפייסבוק — הפרסום מאושר על ידך. אין פרסום אוטומטי.
               </div>

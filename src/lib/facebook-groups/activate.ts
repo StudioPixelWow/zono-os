@@ -18,6 +18,7 @@ import { generateCampaignVariationsAction } from "@/lib/distribution/variation-a
 import { createPostingQueueAction, previewPostingQueueAction } from "@/lib/distribution/distribution-actions";
 import type { ScheduleConfig } from "@/lib/distribution/scheduler-planner";
 import type { Frequency } from "./planner";
+import { assertCampaignMediaAllowed, type MediaRef } from "./campaign-media";
 
 export interface ActivateInput {
   propertyId: string;
@@ -25,6 +26,7 @@ export interface ActivateInput {
   groupIds: string[];
   frequency: Frequency;
   startDate: string;      // yyyy-mm-dd (first eligible day)
+  media?: MediaRef | null; // selected image (validated server-side); null = text-only
 }
 
 export type ActivateResult =
@@ -58,6 +60,12 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
     .select("id,title").eq("id", input.propertyId).eq("org_id", orgId).maybeSingle();
   const property = prop as { id: string; title: string | null } | null;
   if (!property) return { ok: false, error: "הנכס לא נמצא או שאינו שייך למשרד." };
+
+  // Validate selected media SERVER-SIDE (P0): it must belong to THIS org AND this
+  // property. A tampered payload (Property A + media from Property B/another org) is
+  // rejected before any post is scheduled. No media = allowed (deliberate text-only).
+  const mediaCheck = await assertCampaignMediaAllowed(input.propertyId, input.media ?? null);
+  if (!mediaCheck.ok) return { ok: false, error: "התמונה שנבחרה לפרסום אינה זמינה או אינה שייכת לנכס זה. בחר תמונה אחרת." };
 
   // Only ACTIVE (office-approved) groups of THIS org may be targeted. A tampered
   // browser payload with a `discovered`/disabled/other-org group id is rejected
@@ -98,6 +106,8 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
       windowStartHour: 9, windowEndHour: 20, delayMinutes: 90,
       maxPostsPerDay: maxPerDay(input.frequency),
       groupIds: input.groupIds, variationIds,
+      imageUrl: mediaCheck.imageUrl, creativeOutputId: mediaCheck.creativeOutputId,
+      creativeVersion: mediaCheck.creativeOutputId ? 1 : null, propertyId: input.propertyId,
     };
     // Preview first (first-slot + planned count for the success screen), then persist.
     const preview = await previewPostingQueueAction(config);
