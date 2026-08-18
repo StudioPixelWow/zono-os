@@ -25,6 +25,8 @@ const SCHEMA: Record<string, string[]> = {
   user_operating_localities: ["id", "user_id", "organization_id"],
   org_invitations: ["id", "org_id"],
   properties: ["id", "org_id", "uploaded_by_user_id"],
+  property_media: ["id", "org_id", "property_id"],
+  distribution_campaigns: ["id", "org_id", "property_id"],
   leads: ["id", "org_id"],
   buyers: ["id", "org_id", "portal_user_id"],
   sellers: ["id", "org_id", "portal_user_id"],
@@ -63,7 +65,7 @@ ok(withProperty.phase === "activating", "one real property → 'activating'");
 ok(withProperty.hasOperationalData === true, "one real property → hasOperationalData true");
 const teamOnly = computeActivation({ ...EMPTY, teamSize: 3 });
 ok(teamOnly.phase === "new", "team invited but no business data → still 'new' (honest)");
-const active = computeActivation({ orgExists: true, ownerIdentity: true, cityDetected: true, brandConfigured: true, digitalPresence: true, teamSize: 4, counts: { operating_area: 1, team_invited: 2, first_property: 3, first_contact: 5, first_deal: 1, first_task_meeting: 4 } });
+const active = computeActivation({ orgExists: true, ownerIdentity: true, cityDetected: true, brandConfigured: true, digitalPresence: true, teamSize: 4, counts: { operating_area: 1, team_invited: 2, first_property: 3, first_media: 2, first_campaign: 1, first_contact: 5, first_deal: 1, first_task_meeting: 4 } });
 ok(active.phase === "active", "fully populated office → 'active'");
 ok(active.percent === 100, "fully populated → 100%");
 

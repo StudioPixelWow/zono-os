@@ -152,7 +152,10 @@ export function DistributionHome({ today, center, coverage, readiness }: { today
           {cov.marketable > 0 && <span className="text-muted text-[12px]">כיסוי שיווקי: <b className="text-ink">{cov.covered}</b> מתוך {cov.marketable}</span>}
         </div>
         {cov.marketable === 0 ? (
-          <p className="text-muted mt-2 text-[13px]">אין נכסים פעילים לשיווק כרגע.</p>
+          <div className="mt-2 flex flex-col items-start gap-2">
+            <p className="text-muted text-[13px]">עדיין אין נכסים לשיווק. השיווק בקבוצות פייסבוק מתחיל מנכס אחד — הוסיפו את הנכס הראשון ו-ZONO תבנה לו קמפיין.</p>
+            <Link href="/properties/new" className="bg-brand inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-black text-white"><Icon name="Plus" size={15} /> הוספת נכס ראשון</Link>
+          </div>
         ) : (
           <>
             <p className="text-muted mt-1 text-[13px]">{cov.marketable} נכסים · {cov.covered} מכוסים · {cov.neverPublished} לא פורסמו{cov.attention > 0 ? ` · ${cov.attention} דורשים טיפול` : ""}</p>

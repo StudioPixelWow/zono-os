@@ -35,6 +35,7 @@ import { getCityDiscovery } from "@/lib/activation/city-discovery-server";
 import { buildOfficeTheme, OFFICE_THEME_DEFAULTS } from "@/lib/brand-identity/office-theme";
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
 import { NewOfficeCommandCenter } from "@/components/home-control/NewOfficeCommandCenter";
+import { OnboardingNextStep } from "@/components/onboarding/OnboardingNextStep";
 import type {
   HomeActivityItem, HomeRec, HomeHero, HomeNowItem, HomePipeline,
   HomeFollowUpItem, HomeAcquisition, HomeNextDeal, HomePrivateListing,
@@ -413,6 +414,8 @@ export default async function Home() {
   }
 
   return (
+    <>
+    <OnboardingNextStep />
     <HomeControlCenter
       dict={dict}
       agentName={agentName}
@@ -438,5 +441,6 @@ export default async function Home() {
       perf={perf}
       summary={{ recTotal, toursThisWeek: kpiExtras.toursThisWeek, newLeads: newLeadsCount }}
     />
+    </>
   );
 }

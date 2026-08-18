@@ -21,6 +21,7 @@ import { runZIDiagnostics } from "./diagnostics";
 import { classifySupportIntentDeterministic, shouldEscalate } from "./support-intent";
 import { shouldRunDiagnostics, diagnosticPlan } from "./support-diagnostics-routing";
 import { openSupportTicketFromZi, getMyTicketByNumber, listMyOpenTickets } from "./support-bridge";
+import { getOnboardingProgress, summarizeOnboardingForZi } from "@/lib/onboarding/progress";
 import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
 import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
 import type { FeedbackRating, KnowledgeArticle, KnowledgeSourceRef } from "./knowledge-types";
@@ -78,6 +79,19 @@ function detectTicketQuery(q: string): { kind: "number"; number: string } | { ki
   return phrases.some((p) => t.includes(p)) ? { kind: "list" } : null;
 }
 
+/** Detect onboarding / setup-progress questions so ZI answers from REAL state. */
+function isOnboardingQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  const phrases = [
+    "מה נשאר לי להגדיר", "מה נשאר להגדיר", "מה עוד צריך להגדיר", "מה עוד נשאר",
+    "מה השלב הבא", "מה השלב הבא שלי", "מה לעשות עכשיו", "מה אני צריך לעשות",
+    "מה חסר לי", "איך מתחילים", "איך להתחיל", "הקמת המשרד", "השלמת ההגדרה",
+    "תחילת עבודה", "onboarding", "setup", "getting started", "what's next",
+    "what next", "what do i do", "how do i start", "how to start",
+  ];
+  return phrases.some((p) => t.includes(p));
+}
+
 /** Ask ZI a question. Creates a conversation if needed, persists both turns. */
 export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResult>> {
   try {
@@ -123,6 +137,28 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
       const statusMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
       await touchConversation(conversationId, 2);
       return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: statusMsg, source: "fallback", model: null, sources: [], followups: [] } };
+    }
+
+    // ── ZI onboarding awareness: answer setup / "what's next" questions from the
+    // REAL, org-scoped onboarding state — never a hallucinated setup status. ──
+    if (isOnboardingQuery(question)) {
+      try {
+        const op = await getOnboardingProgress();
+        let content: string;
+        if (!op.active) {
+          content = "עדיין לא הושלמה הקמת המשרד. נשלים את הפרטים הבסיסיים ונמשיך משם.";
+        } else if (op.complete) {
+          content = "המשרד שלך מוגדר ומוכן לעבודה ✅ אין שלבים פתוחים בהקמה. רוצה שאעזור עם נכס, ליד או קמפיין?";
+        } else {
+          const next = op.nextRecommendedAction;
+          content = summarizeOnboardingForZi(op)
+            + (next ? `\n\nלביצוע עכשיו: ${next.label} — ${next.href}` : "")
+            + "\n\nלרשימת כל השלבים: /getting-started";
+        }
+        const obMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+        await touchConversation(conversationId, 2);
+        return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: obMsg, source: "fallback", model: null, sources: [], followups: [] } };
+      } catch { /* fall through to normal RAG if state is unavailable */ }
     }
 
     // ── RAG: retrieve permission-filtered, page-aware knowledge, then answer
