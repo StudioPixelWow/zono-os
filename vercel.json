@@ -87,6 +87,10 @@
     {
       "path": "/api/cron/seller-weekly-report",
       "schedule": "0 6 * * 0"
+    },
+    {
+      "path": "/api/cron/buyer-match-bundles",
+      "schedule": "0 7 * * 0-4"
     }
   ]
 }

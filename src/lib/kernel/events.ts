@@ -121,6 +121,7 @@ export const DOMAIN_EVENTS = {
   propertyViewed: "property.viewed",
   // Matching / recommendations
   matchingExecuted: "matching.executed",
+  buyerMatchesReady: "buyer.matches_ready",
   recommendationGenerated: "recommendation.generated",
   recommendationOpened: "recommendation.opened",
   // Distribution / campaigns
