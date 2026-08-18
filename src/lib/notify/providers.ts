@@ -33,6 +33,40 @@ const whatsappProvider: DeliveryProvider = {
   },
 };
 
+// ── Email (real — Resend REST, gated on RESEND_API_KEY) ───────────────────────
+// No SDK dependency (plain fetch). Disabled honestly when the key is missing —
+// never fabricates a send. Classifies transient (429/5xx/network → retryable) vs
+// permanent (4xx → terminal) so the dispatcher can back off correctly.
+const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const emailProvider: DeliveryProvider = {
+  channel: "email",
+  async isConfigured(): Promise<boolean> {
+    return !!process.env.RESEND_API_KEY;
+  },
+  async deliver(req: DeliveryRequest): Promise<DeliveryResult> {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) return { ok: false, status: "skipped", error: "email_not_configured" };
+    if (!req.to || !req.to.includes("@")) return { ok: false, status: "skipped", error: "invalid_email" };
+    const from = process.env.RESEND_FROM || "ZONO <notifications@zono.co.il>";
+    try {
+      const res = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [req.to], subject: req.title || "ZONO", text: req.body }),
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { id?: string };
+        return { ok: true, status: "sent", providerMessageId: data?.id ?? null };
+      }
+      const body = await res.text().catch(() => "");
+      const transient = res.status === 429 || res.status >= 500;
+      return { ok: false, status: "failed", error: `resend_${res.status}_${transient ? "transient" : "permanent"}:${body.slice(0, 120)}` };
+    } catch (e) {
+      return { ok: false, status: "failed", error: `resend_network_transient:${e instanceof Error ? e.message : "error"}` };
+    }
+  },
+};
+
 // ── Future channels (declared, honestly not-configured) ──────────────────────
 function futureProvider(channel: NotificationChannel): DeliveryProvider {
   return {
@@ -44,7 +78,7 @@ function futureProvider(channel: NotificationChannel): DeliveryProvider {
 
 const PROVIDERS: Record<NotificationChannel, DeliveryProvider> = {
   whatsapp: whatsappProvider,
-  email: futureProvider("email"),
+  email: emailProvider,
   push: futureProvider("push"),
   sms: futureProvider("sms"),
 };

@@ -71,6 +71,18 @@
     {
       "path": "/api/cron/followup-reconcile",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/communication-dispatch",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/communication-morning",
+      "schedule": "0 5 * * 0-4"
+    },
+    {
+      "path": "/api/cron/communication-morning",
+      "schedule": "0 6 * * 0-4"
     }
   ]
 }
