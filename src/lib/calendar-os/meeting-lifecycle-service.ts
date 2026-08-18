@@ -128,6 +128,14 @@ export async function completeMeeting(
 
     await logMeetingLifecycle(EVENT_TYPES.meetingCompleted, meetingRef(m), `הפגישה הושלמה: ${meetingRef(m).title}`, input.outcome ?? null);
     await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingCompleted, entityType: "meeting", entityId: meetingId, payload: { outcome: input.outcome ?? null, followUpTaskId: followUpTaskId ?? null } });
+    // Event-driven follow-up: a completed meeting on a lead with no explicit
+    // follow-up gets a post-meeting task (idempotent). Best-effort.
+    if (m.lead_id && !followUpTaskId) {
+      try {
+        const { onMeetingCompletedEnsureFollowUp } = await import("@/lib/follow-up/automation");
+        await onMeetingCompletedEnsureFollowUp(orgId, m.lead_id as string, userId);
+      } catch { /* best-effort — reconcile cron backstops */ }
+    }
     return { ok: true, followUpTaskId };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "עדכון הפגישה נכשל." }; }
 }

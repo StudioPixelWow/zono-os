@@ -100,6 +100,12 @@ export async function assignLead(leadId: string, ownerId: string): Promise<LeadR
   const { error } = await db.from("leads").update({ owner_id: ownerId, last_activity_at: nowIso() } as never).eq("id", leadId).eq("org_id", orgId);
   if (error) return { ok: false, error: error.message };
   await logActivityEvent({ eventType: EVENT_TYPES.leadAssigned, entityType: "lead", entityId: leadId, title: "הליד שויך מחדש" });
+  // Event-driven follow-up: a (re)assigned lead instantly gets a first-response
+  // task (idempotent; the reconcile cron is the safety net). Best-effort.
+  try {
+    const { onLeadAssignedEnsureFollowUp } = await import("@/lib/follow-up/automation");
+    await onLeadAssignedEnsureFollowUp(orgId, leadId, ownerId);
+  } catch { /* best-effort — reconcile cron backstops */ }
   return { ok: true };
 }
 

@@ -108,6 +108,15 @@ function detectDailyQuery(q: string): DailyIntent | null {
   return null;
 }
 
+/** Detect follow-up-engine questions ZI answers from the canonical follow-up state. */
+function detectFollowUpQuery(q: string): "overdue" | "no_next_action" | null {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  if (has(["מי באיחור", "מי בפיגור", "פולואפ באיחור", "פולואפים באיחור", "who is overdue", "overdue follow"])) return "overdue";
+  if (has(["למי אין פעולה", "למי אין פולואפ", "אין פעולה הבאה", "no next action", "without next action", "who has no follow"])) return "no_next_action";
+  return null;
+}
+
 /** Deterministic Hebrew answer built from the real brief. ZI wording only; facts are server-computed. */
 function formatDailyAnswer(b: DailyCommandCenter, intent: DailyIntent): string {
   if (intent === "leads") {
@@ -208,6 +217,28 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
         await touchConversation(conversationId, 2);
         return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: obMsg, source: "fallback", model: null, sources: [], followups: [] } };
       } catch { /* fall through to normal RAG if state is unavailable */ }
+    }
+
+    // ── ZI Follow-up: "who is overdue / who has no next action" from the
+    // canonical follow-up state (role-scoped; deterministic). ──
+    const fuIntent = detectFollowUpQuery(question);
+    if (fuIntent) {
+      try {
+        const { getOfficeFollowUpStates } = await import("@/lib/follow-up/service");
+        const { states } = await getOfficeFollowUpStates({ limit: 300 });
+        const wanted = fuIntent === "overdue"
+          ? states.filter((s) => s.state === "followup_overdue")
+          : states.filter((s) => s.state === "needs_action" || s.state === "new_waiting");
+        let content: string;
+        if (!wanted.length) content = fuIntent === "overdue" ? "אין פולואפים באיחור כרגע ✓" : "לכל הלידים הפעילים יש פעולה הבאה ✓";
+        else {
+          const head = fuIntent === "overdue" ? "פולואפים באיחור:" : "לידים ללא פעולה הבאה:";
+          content = head + "\n" + wanted.slice(0, 12).map((s) => `• ${s.leadName ?? "ליד"} — ${s.reason}`).join("\n");
+        }
+        const fuMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+        await touchConversation(conversationId, 2);
+        return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: fuMsg, source: "fallback", model: null, sources: [], followups: [] } };
+      } catch { /* fall through to daily / RAG if unavailable */ }
     }
 
     // ── ZI Daily Command Center: answer "what's urgent / who to call / what's

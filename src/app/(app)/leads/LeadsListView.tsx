@@ -27,7 +27,9 @@ const BULK_OPS: { value: BulkLeadOp; label: string }[] = [
   { value: "stage:disqualified", label: "העבר ל: נפסל" },
 ];
 
-export function LeadsListView({ leads, failed }: { leads: LeadListRow[]; failed: boolean }) {
+export interface LeadFollowUpBadge { label: string; tone: "danger" | "warning" }
+
+export function LeadsListView({ leads, failed, followUp = {} }: { leads: LeadListRow[]; failed: boolean; followUp?: Record<string, LeadFollowUpBadge> }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [stage, setStage] = useState("all");
@@ -123,6 +125,7 @@ export function LeadsListView({ leads, failed }: { leads: LeadListRow[]; failed:
           {filtered.map((l) => {
             const sel = selected.has(l.id);
             const failedRow = result?.results.find((r) => r.id === l.id && !r.ok);
+            const fu = followUp[l.id];
             return (
               <div key={l.id} className={`bg-card flex items-center gap-3 rounded-2xl border p-4 shadow-sm transition ${sel ? "border-brand" : failedRow ? "border-danger/50" : "border-line"}`}>
                 <input type="checkbox" checked={sel} onChange={() => toggle(l.id)} />
@@ -132,6 +135,7 @@ export function LeadsListView({ leads, failed }: { leads: LeadListRow[]; failed:
                     <p className="text-muted text-[12px]">{l.phone ?? "—"}{l.email ? ` · ${l.email}` : ""}{l.source ? ` · מקור: ${l.source}` : ""}{failedRow?.error ? ` · ⚠ ${failedRow.error}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {fu && <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${fu.tone === "danger" ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning"}`}>{fu.label}</span>}
                     {l.score != null && <span className="text-muted text-[12px] font-bold">{l.score}</span>}
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${STAGE_TONE[l.stage] ?? "bg-surface text-muted"}`}>{STAGE_LABEL[l.stage] ?? l.stage}</span>
                   </div>

@@ -14,10 +14,12 @@ import { getPublishingControlData } from "@/lib/distribution/publishing-control-
 import { listTodayTasks } from "@/lib/home/home-service";
 import { activityEventRepository } from "@/lib/activity/repository";
 import {
-  buildHeroLine, humanizeAge, hoursSince, leadTemperature, rankDailyActions,
+  buildHeroLine, humanizeAge, hoursSince, rankDailyActions,
   type DailyAction, type DailyCommandCenter, type DailyLeadRow, type DailyPropertyRow,
   type DailyRole, type OvernightChange, type CompletedItem, type DailyCalendarItem,
 } from "./priority";
+import { getOfficeFollowUpStates } from "@/lib/follow-up/service";
+import type { FollowUpState } from "@/lib/follow-up/state";
 
 const OPEN_LEAD_STAGES = ["new", "contacted", "qualified", "nurturing"];
 const israelDay = (iso: string | null | undefined) =>
@@ -27,12 +29,6 @@ const COVERAGE_STATUS_LABEL: Record<string, string> = {
   marketing_now: "משווק כעת", scheduled: "מתוזמן", no_future: "אין פרסום נוסף",
   attention: "דורש טיפול", never_published: "לא פורסם עדיין",
 };
-
-interface LeadRow {
-  id: string; full_name: string | null; phone: string | null; stage: string;
-  score: number | null; source: string | null; created_at: string | null;
-  owner_id: string | null; last_activity_at: string | null;
-}
 
 /**
  * The authoritative morning brief for the current session. Returns null when
@@ -58,15 +54,6 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
   const role: DailyRole = isOwner ? "owner" : isManager ? "manager" : "agent";
 
   // ── Bounded, parallel, resilient fetch of every source ─────────────────────
-  const leadsQuery = (() => {
-    let q = supabase.from("leads")
-      .select("id,full_name,phone,stage,score,source,created_at,owner_id,last_activity_at")
-      .eq("org_id", orgId)
-      .in("stage", OPEN_LEAD_STAGES as never);
-    if (!isManager && userId) q = q.eq("owner_id", userId);
-    return q.order("last_activity_at", { ascending: true, nullsFirst: true }).limit(80);
-  })();
-
   const dealsQuery = (() => {
     let q = supabase.from("deals").select("id,stage,updated_at,created_at,owner_id").eq("org_id", orgId);
     if (!isManager && userId) q = q.eq("owner_id", userId);
@@ -74,7 +61,7 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
   })();
 
   const [leadsR, coverageR, publishingR, tasksR, eventsR, dealsR] = await Promise.allSettled([
-    leadsQuery,
+    getOfficeFollowUpStates({ limit: 200 }),
     getPropertyMarketingCoverage(),
     getPublishingControlData(),
     listTodayTasks(10),
@@ -82,7 +69,7 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     dealsQuery,
   ]);
 
-  const leadRows: LeadRow[] = leadsR.status === "fulfilled" ? ((leadsR.value.data ?? []) as unknown as LeadRow[]) : [];
+  const followUp = leadsR.status === "fulfilled" ? leadsR.value : { isManager, states: [] as FollowUpState[] };
   const coverage = coverageR.status === "fulfilled" ? coverageR.value : null;
   const publishing = publishingR.status === "fulfilled" ? publishingR.value : null;
   const tasks = tasksR.status === "fulfilled" ? tasksR.value : [];
@@ -91,35 +78,33 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
 
   const actions: DailyAction[] = [];
 
-  // ── LEADS → callbacks / follow-up safety net ───────────────────────────────
+  // ── LEADS → the CANONICAL follow-up state (no duplicate prioritization) ─────
+  // The morning "who must I call back" list IS the follow-up engine's output;
+  // command-center renders getOfficeFollowUpStates() and never re-derives urgency.
   const leadRowsOut: DailyLeadRow[] = [];
-  for (const l of leadRows) {
-    const waiting = l.last_activity_at ?? l.created_at;
-    const h = hoursSince(waiting, nowMs);
-    const temp = leadTemperature(l.score);
-    const unassigned = !l.owner_id;
-    const name = (l.full_name ?? "").trim() || "ליד";
-    const href = `/leads/${l.id}`;
-    let pushed = false, reason = "";
-    if (l.stage === "new" && !l.last_activity_at) {
-      if (h >= 3) { reason = `ליד חדש ממתין לחזרה ${humanizeAge(waiting, nowMs)}`; actions.push({ id: `lead:${l.id}`, kind: "lead_callback", priority: "P0", title: name, reason, href, cta: "חזרה לליד", icon: "PhoneCall", urgency: Math.min(100, 65 + h), entity: { type: "lead", id: l.id } }); pushed = true; }
-      else { reason = "ליד חדש — כדאי לחזור מהר"; actions.push({ id: `lead:${l.id}`, kind: "lead_callback", priority: "P1", title: name, reason, href, cta: "חזרה לליד", icon: "PhoneCall", urgency: 58, entity: { type: "lead", id: l.id } }); pushed = true; }
-    } else if (temp === "hot" && h >= 24) {
-      reason = `ליד חם ללא מעקב ${humanizeAge(waiting, nowMs)}`;
-      actions.push({ id: `lead:${l.id}`, kind: "lead_callback", priority: "P1", title: name, reason, href, cta: "חזרה לליד", icon: "Flame", urgency: Math.min(100, 45 + h / 6), entity: { type: "lead", id: l.id } });
-      pushed = true;
-    } else if (isManager && unassigned) {
-      reason = "ליד ללא שיוך";
-      actions.push({ id: `lead:${l.id}`, kind: "lead_unassigned", priority: "P1", title: name, reason, href, cta: "שיוך וטיפול", icon: "UserPlus", urgency: 50, entity: { type: "lead", id: l.id } });
-      pushed = true;
-    } else if (h >= 72) {
-      reason = `לא היה מגע ${humanizeAge(waiting, nowMs)}`;
-      actions.push({ id: `lead:${l.id}`, kind: "lead_callback", priority: "P2", title: name, reason, href, cta: "חזרה לליד", icon: "PhoneCall", urgency: Math.min(100, h / 24), entity: { type: "lead", id: l.id } });
-      pushed = true;
-    }
-    if (pushed) leadRowsOut.push({ id: l.id, name, source: l.source, stage: l.stage, temperature: temp, waitingSince: waiting, unassigned, phone: l.phone, href, reason });
+  const LEAD_ATTENTION = new Set(["new_waiting", "followup_overdue", "unassigned", "needs_action"]);
+  for (const st of followUp.states) {
+    if (!LEAD_ATTENTION.has(st.state)) continue;
+    const priority: DailyAction["priority"] = st.urgency >= 75 ? "P0" : st.urgency >= 45 ? "P1" : "P2";
+    const isUnassigned = st.state === "unassigned";
+    const icon = st.state === "followup_overdue" ? "AlertTriangle"
+      : isUnassigned ? "UserPlus"
+      : st.state === "new_waiting" ? "PhoneCall"
+      : st.hot ? "Flame" : "Flag";
+    const name = (st.leadName ?? "").trim() || "ליד";
+    const href = `/leads/${st.leadId}`;
+    actions.push({
+      id: `lead:${st.leadId}`, kind: isUnassigned ? "lead_unassigned" : "lead_callback",
+      priority, title: name, reason: st.reason, href,
+      cta: isUnassigned ? "שיוך וטיפול" : "חזרה לליד", icon, urgency: st.urgency,
+      entity: { type: "lead", id: st.leadId },
+    });
+    leadRowsOut.push({
+      id: st.leadId, name, source: st.source, stage: st.stage,
+      temperature: st.hot ? "hot" : "warm", waitingSince: st.lastMeaningfulContactAt,
+      unassigned: !st.assignedUserId, phone: null, href, reason: st.reason,
+    });
   }
-  leadRowsOut.sort((a, b) => hoursSince(b.waitingSince, nowMs) - hoursSince(a.waitingSince, nowMs));
 
   // ── PROPERTY marketing health ──────────────────────────────────────────────
   const propertyRowsOut: DailyPropertyRow[] = [];
