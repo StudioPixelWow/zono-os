@@ -55,7 +55,7 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
 
   // ── Bounded, parallel, resilient fetch of every source ─────────────────────
   const dealsQuery = (() => {
-    let q = supabase.from("deals").select("id,stage,updated_at,created_at,owner_id").eq("org_id", orgId);
+    let q = supabase.from("deals").select("id,title,stage,status,value,updated_at,created_at,owner_id").eq("org_id", orgId);
     if (!isManager && userId) q = q.eq("owner_id", userId);
     return q.limit(200);
   })();
@@ -74,7 +74,7 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
   const publishing = publishingR.status === "fulfilled" ? publishingR.value : null;
   const tasks = tasksR.status === "fulfilled" ? tasksR.value : [];
   const events = eventsR.status === "fulfilled" ? eventsR.value : [];
-  const deals = dealsR.status === "fulfilled" ? ((dealsR.value.data ?? []) as unknown as Array<{ id: string; stage: string; updated_at: string | null; created_at: string | null }>) : [];
+  const deals = dealsR.status === "fulfilled" ? ((dealsR.value.data ?? []) as unknown as Array<{ id: string; title: string | null; stage: string; status: string | null; value: number | null; updated_at: string | null; created_at: string | null }>) : [];
 
   const actions: DailyAction[] = [];
 
@@ -144,6 +144,29 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
   }
   calendar.sort((a, b) => (a.at ? new Date(a.at).getTime() : Infinity) - (b.at ? new Date(b.at).getTime() : Infinity));
 
+  // ── DEAL exceptions — every ACTIVE deal that needs attention. Reuses the same
+  //    role-scoped deals fetch (agent = own via owner_id filter, manager = office).
+  //    Stale = open, non-terminal, untouched ≥ 7 days. Surfaced as ranked actions
+  //    (NOT a new dashboard block); high-value stale deals escalate to P0. ──────
+  const DEAL_STALE_HOURS = 7 * 24;
+  const dealClosedRe = /clos|won|lost|cancel/i;
+  let staleDeals = 0;
+  for (const d of deals) {
+    if (d.status && d.status !== "open") continue;
+    if (dealClosedRe.test(d.stage ?? "")) continue;
+    const h = hoursSince(d.updated_at ?? d.created_at, nowMs);
+    if (!Number.isFinite(h) || h < DEAL_STALE_HOURS) continue;
+    staleDeals++;
+    const days = Math.floor(h / 24);
+    const highValue = (d.value ?? 0) >= 3_000_000;
+    actions.push({
+      id: `deal:${d.id}`, kind: "deal_stuck", priority: highValue ? "P0" : "P1",
+      title: d.title?.trim() || "עסקה", reason: `עסקה תקועה ${days} ימים ללא פעילות`,
+      href: `/deals/${d.id}`, cta: "טפל בעסקה", icon: "Briefcase",
+      urgency: highValue ? 80 : 58, entity: { type: "deal", id: d.id },
+    });
+  }
+
   // ── PIPELINE movement (manager/owner) ──────────────────────────────────────
   let pipeline: DailyCommandCenter["pipeline"] = null;
   if (isManager) {
@@ -171,6 +194,7 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     if (unassignedCount > 0) team.push({ id: "team:unassigned", label: `${unassignedCount} לידים ללא שיוך`, count: unassignedCount, href: "/leads" });
     const neverMarketed = coverage?.summary.neverPublished ?? 0;
     if (neverMarketed > 0) team.push({ id: "team:unmarketed", label: `${neverMarketed} נכסים ללא פרסום`, count: neverMarketed, href: "/distribution" });
+    if (staleDeals > 0) team.push({ id: "team:staledeals", label: `${staleDeals} עסקאות תקועות`, count: staleDeals, href: "/deals" });
   }
 
   // ── OVERNIGHT changes (last 24h, whitelist only — no audit noise) ──────────

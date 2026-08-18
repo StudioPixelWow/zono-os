@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import StartWorkflowButton from "@/components/workflow-builder/StartWorkflowButton";
+import { openDealFromLeadAction } from "@/lib/deals/create-actions";
 import type { LeadTwin } from "@/lib/digital-twin/leads/types";
 
 export interface LeadLite {
@@ -85,6 +87,15 @@ export function LeadDetailView({
   journeySlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("qualification");
+  const router = useRouter();
+  const [openingDeal, startOpenDeal] = useTransition();
+  // LEAD → DEAL: the explicit, user-triggered conversion point. Shown only for an
+  // eligible (qualified/nurturing) lead — never automatic. Idempotent server-side.
+  const canOpenDeal = lead.stage === "qualified" || lead.stage === "nurturing";
+  const openDeal = () => startOpenDeal(async () => {
+    const r = await openDealFromLeadAction(lead.id);
+    if (r.ok && r.id) router.push(`/deals/${r.id}`);
+  });
   const p = twin?.profile ?? null;
   const conversion = p?.conversionProbability ?? null;
   const t = temp(conversion ?? 0);
@@ -158,6 +169,11 @@ export function LeadDetailView({
           <div className="flex flex-wrap items-center gap-2">
             {wa && <a href={wa} target="_blank" rel="noopener noreferrer"><Button leadingIcon={<Icon name="MessageCircle" size={16} />}>וואטסאפ</Button></a>}
             {lead.phone && <a href={`tel:${lead.phone}`}><Button variant="secondary" leadingIcon={<Icon name="MessageCircle" size={16} />}>התקשר</Button></a>}
+            {canOpenDeal && (
+              <Button onClick={openDeal} disabled={openingDeal} leadingIcon={<Icon name="Briefcase" size={16} />}>
+                {openingDeal ? "פותח עסקה…" : "פתיחת עסקה"}
+              </Button>
+            )}
             <StartWorkflowButton entityType="lead" entityId={lead.id} entityName={lead.name} suggestedTemplate="lead_qualification" />
           </div>
         </div>

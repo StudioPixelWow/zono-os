@@ -249,6 +249,21 @@ export async function advanceDealStage(dealId: string, stage: DealStage, outcome
     entityId: canonicalDealId ?? dealId,
     payload: { stage, dealProfileId: dealId, canonicalDealId },
   });
+
+  // Stage 2: re-evaluate the deal's next action (reuses the follow-up primitive;
+  // NOT a second engine). Terminal → stop automation; otherwise refresh the open
+  // next-action task to the new stage's action. Best-effort, canonical-id only.
+  if (canonicalDealId) {
+    try {
+      if (stage === "closed" || stage === "lost") {
+        const { stopDealFollowUp } = await import("@/lib/follow-up/deal-automation");
+        await stopDealFollowUp(orgId, canonicalDealId);
+      } else {
+        const { ensureDealNextAction } = await import("@/lib/follow-up/deal-automation");
+        await ensureDealNextAction(orgId, canonicalDealId, userId, PROFILE_TO_DEAL_STAGE[stage] ?? "new", undefined, { refresh: true });
+      }
+    } catch (e) { console.error("[deals] next-action re-eval failed:", e); }
+  }
 }
 
 /** Upsert the canonical `deals` row for a closed/lost deal_profile (linked via

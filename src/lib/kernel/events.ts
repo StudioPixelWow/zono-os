@@ -78,6 +78,7 @@ export const DOMAIN_EVENTS = {
   dealWon: "deal.won",
   dealLost: "deal.lost",
   dealUpdated: "deal.updated",
+  dealStale: "deal.stale",
   // Task
   taskCreated: "task.created",
   taskAssigned: "task.assigned",

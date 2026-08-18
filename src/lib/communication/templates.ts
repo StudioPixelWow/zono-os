@@ -64,6 +64,10 @@ const RENDERERS: Record<CommTemplateId, (f: TemplateFacts) => RenderedMessage> =
     title: f.title ?? "עדכון חשבון",
     body: `${hi(f.firstName)}${f.reason ?? "חל עדכון בחשבון שלך."}`,
   }),
+  DEAL_STALE: (f) => ({
+    title: "עסקה דורשת טיפול",
+    body: `${hi(f.firstName)}${f.title ?? "אחת מהעסקאות הפעילות שלך"} תקועה ללא פעילות. כדאי לקדם אותה לשלב הבא.`,
+  }),
   GENERIC: (f) => ({
     title: f.title ?? "עדכון מ-ZONO",
     body: `${hi(f.firstName)}${f.reason ?? ""}`.trim(),

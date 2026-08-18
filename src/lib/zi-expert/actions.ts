@@ -117,6 +117,16 @@ function detectFollowUpQuery(q: string): "overdue" | "no_next_action" | null {
   return null;
 }
 
+/** Detect deal/pipeline questions ZI answers from the SAME authoritative brief. */
+function detectDealQuery(q: string): "stuck" | "status" | "awaiting_offer" | null {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  if (has(["מי מחכה להצעה", "מחכה להצעה", "awaiting offer", "waiting for an offer"])) return "awaiting_offer";
+  if (has(["עסקאות תקועות", "עסקה תקועה", "עסקאות שדורשות", "אילו עסקאות תקוע", "stuck deals", "deals stuck", "which deals are stuck"])) return "stuck";
+  if (has(["מצב העסקאות", "מה מצב העסק", "סטטוס עסקאות", "deals status", "status of deals"])) return "status";
+  return null;
+}
+
 /** Deterministic Hebrew answer built from the real brief. ZI wording only; facts are server-computed. */
 function formatDailyAnswer(b: DailyCommandCenter, intent: DailyIntent): string {
   if (intent === "leads") {
@@ -238,6 +248,32 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
         const fuMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
         await touchConversation(conversationId, 2);
         return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: fuMsg, source: "fallback", model: null, sources: [], followups: [] } };
+      } catch { /* fall through to daily / RAG if unavailable */ }
+    }
+
+    // ── ZI Deals: "which deals are stuck / deals status / who's awaiting an offer"
+    // from the SAME authoritative brief (deal exceptions are surfaced there as
+    // deal_stuck actions). Role-scoped; deterministic facts, never invented. ──
+    const dealIntent = detectDealQuery(question);
+    if (dealIntent) {
+      try {
+        const brief = await getDailyCommandCenter();
+        if (brief) {
+          const stuck = brief.priorityActions.filter((a) => a.kind === "deal_stuck");
+          let content: string;
+          if (!stuck.length) {
+            content = brief.pipeline && brief.pipeline.stuck > 0
+              ? `יש ${brief.pipeline.stuck} עסקאות תקועות במשרד. לצפייה מלאה: /deals`
+              : "אין עסקאות תקועות שדורשות טיפול כרגע ✓";
+          } else {
+            const head = dealIntent === "awaiting_offer" ? "עסקאות שדורשות טיפול (ייתכן שממתינות להצעה/תשובה):"
+              : dealIntent === "status" ? "מצב העסקאות שדורשות טיפול:" : "עסקאות תקועות:";
+            content = head + "\n" + stuck.slice(0, 12).map((a) => `• ${a.title} — ${a.reason}`).join("\n");
+          }
+          const zMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: zMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
       } catch { /* fall through to daily / RAG if unavailable */ }
     }
 

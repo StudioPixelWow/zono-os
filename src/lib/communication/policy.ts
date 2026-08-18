@@ -13,7 +13,7 @@ export type CommRecipientRole = "actor" | "assignee" | "manager" | "owner";
 export type CommTemplateId =
   | "NEW_LEAD_URGENT" | "FOLLOWUP_ESCALATION" | "MORNING_BRIEF" | "MEETING_REMINDER"
   | "PUBLICATION_ATTENTION" | "SUPPORT_CREATED" | "SUPPORT_UPDATED" | "PAYMENT_FAILED"
-  | "BILLING_UPDATE" | "GENERIC";
+  | "BILLING_UPDATE" | "DEAL_STALE" | "GENERIC";
 
 export interface CommChannelPlan { inApp: boolean; email: boolean; whatsapp: boolean }
 
@@ -113,6 +113,15 @@ export const COMM_EVENT_MATRIX: Record<string, CommRule> = {
   "billing.subscription_cancelled": {
     priority: "important", recipient: "owner", channels: { inApp: true, email: true, whatsapp: false },
     dedupWindowMin: 1440, delayMin: 0, template: "BILLING_UPDATE", deepLink: () => `/account`,
+  },
+
+  // ── Deals (CRM lifecycle) — RESTRAINED. Only the exception that needs a human
+  //    (a stale active deal) communicates, in-app only, once/day. deal.created /
+  //    deal.stage_changed / deal.won / deal.lost are intentionally ABSENT → SILENT
+  //    (timeline/record only) so the pipeline never becomes a notification firehose.
+  "deal.stale": {
+    priority: "important", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 1440, delayMin: 0, template: "DEAL_STALE", deepLink: (id) => `/deals/${id}`,
   },
 };
 
