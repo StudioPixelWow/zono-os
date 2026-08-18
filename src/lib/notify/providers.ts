@@ -52,7 +52,7 @@ const emailProvider: DeliveryProvider = {
       const res = await fetch(RESEND_ENDPOINT, {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: [req.to], subject: req.title || "ZONO", text: req.body }),
+        body: JSON.stringify({ from, to: [req.to], subject: req.title || "ZONO", text: req.body, ...(req.html ? { html: req.html } : {}) }),
       });
       if (res.ok) {
         const data = (await res.json().catch(() => ({}))) as { id?: string };

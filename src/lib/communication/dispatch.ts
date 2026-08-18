@@ -57,7 +57,7 @@ export async function dispatchExternal(
   const claimed = await claim(db, {
     org_id: req.orgId, user_id: req.userId ?? null, notification_id: req.notificationId ?? null,
     channel, provider, status: "queued", dedup_key: req.dedupKey, scheduled_at: opts.scheduledAt ?? null,
-    payload: { to: req.to, title: req.title ?? null, body: req.body, template: req.template ?? null },
+    payload: { to: req.to, title: req.title ?? null, body: req.body, html: req.html ?? null, template: req.template ?? null },
   });
   if (!claimed) return { sent: false, skipped: true };
   if (opts.scheduledAt) return { sent: false }; // deferred → dispatcher sends when due
@@ -83,7 +83,7 @@ export async function processDueQueue(limit = 200): Promise<{ sent: number; fail
   for (const r of rows) {
     const channel = r.channel as NotificationChannel;
     const p = r.payload ?? {};
-    const req: DeliveryRequest = { orgId: r.org_id, userId: r.user_id, channel, to: p.to, title: p.title, body: p.body, template: p.template ?? null, dedupKey: r.dedup_key };
+    const req: DeliveryRequest = { orgId: r.org_id, userId: r.user_id, channel, to: p.to, title: p.title, body: p.body, html: p.html ?? null, template: p.template ?? null, dedupKey: r.dedup_key };
     const result = await providerFor(channel).deliver(req);
     const attempts = (r.attempts ?? 0) + 1;
     if (result.ok) {

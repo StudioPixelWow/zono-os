@@ -24,6 +24,8 @@ export interface DeliveryRequest {
   to: string;                        // phone / email / device token (channel-specific)
   title?: string | null;
   body: string;
+  /** Optional HTML alternative for email (branded reports). Ignored by non-email channels. */
+  html?: string | null;
   /** Optional approved template + variables (required for business-initiated WhatsApp). */
   template?: { name: string; language?: string; variables?: string[] } | null;
   /** Idempotency key — one delivery per (notification, channel, target). */

@@ -83,6 +83,10 @@
     {
       "path": "/api/cron/communication-morning",
       "schedule": "0 6 * * 0-4"
+    },
+    {
+      "path": "/api/cron/seller-weekly-report",
+      "schedule": "0 6 * * 0"
     }
   ]
 }
