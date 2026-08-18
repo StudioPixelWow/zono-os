@@ -22,6 +22,8 @@ import { classifySupportIntentDeterministic, shouldEscalate } from "./support-in
 import { shouldRunDiagnostics, diagnosticPlan } from "./support-diagnostics-routing";
 import { openSupportTicketFromZi, getMyTicketByNumber, listMyOpenTickets } from "./support-bridge";
 import { getOnboardingProgress, summarizeOnboardingForZi } from "@/lib/onboarding/progress";
+import { getDailyCommandCenter } from "@/lib/daily/command-center";
+import type { DailyCommandCenter } from "@/lib/daily/priority";
 import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
 import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
 import type { FeedbackRating, KnowledgeArticle, KnowledgeSourceRef } from "./knowledge-types";
@@ -92,6 +94,53 @@ function isOnboardingQuery(q: string): boolean {
   return phrases.some((p) => t.includes(p));
 }
 
+type DailyIntent = "urgent" | "leads" | "property" | "overnight" | "marketing" | "problem";
+/** Detect Daily Command Center questions so ZI answers from the SAME authoritative brief. */
+function detectDailyQuery(q: string): DailyIntent | null {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  if (has(["על מי לחזור", "על מי אני צריך לחזור", "אילו לידים", "לידים לחזרה", "who to call", "which leads"])) return "leads";
+  if (has(["איזה נכס לא משווק", "נכסים לא משווקים", "אילו נכסים לא", "which property", "unmarketed"])) return "property";
+  if (has(["מה קרה מאז אתמול", "מה השתנה", "what changed", "since yesterday"])) return "overnight";
+  if (has(["הפרסום הבא", "מה מתפרסם", "פרסום הבא שלי", "next publish", "what is publishing", "whats publishing"])) return "marketing";
+  if (has(["איפה יש בעיה", "מה תקוע", "wheres the problem", "where is the problem"])) return "problem";
+  if (has(["הכי דחוף", "מה דחוף", "מה הכי חשוב", "במה להתחיל", "מה לעשות קודם", "most urgent", "what should i do first", "what first"])) return "urgent";
+  return null;
+}
+
+/** Deterministic Hebrew answer built from the real brief. ZI wording only; facts are server-computed. */
+function formatDailyAnswer(b: DailyCommandCenter, intent: DailyIntent): string {
+  if (intent === "leads") {
+    if (!b.leads.length) return "אין כרגע לידים שממתינים לחזרה.";
+    return "לידים לחזרה:\n" + b.leads.map((l) => `• ${l.name} — ${l.reason}`).join("\n");
+  }
+  if (intent === "property") {
+    if (!b.properties.length) return "כל הנכסים מכוסים שיווקית כרגע ✓";
+    return "נכסים שדורשים תשומת לב שיווקית:\n" + b.properties.map((p) => `• ${p.title} — ${p.statusLabel}`).join("\n");
+  }
+  if (intent === "overnight") {
+    if (!b.overnight.length) return "לא היו שינויים משמעותיים מאז אתמול.";
+    return "מה השתנה מאז אתמול:\n" + b.overnight.map((o) => `• ${o.label}`).join("\n");
+  }
+  if (intent === "marketing") {
+    const parts: string[] = [];
+    if (b.marketing.plannedToday > 0) parts.push(`${b.marketing.plannedToday} פרסומים מתוזמנים להיום`);
+    if (b.marketing.nextPublishAt) parts.push(`הפרסום הבא בשעה ${new Date(b.marketing.nextPublishAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" })}`);
+    if (b.marketing.attention > 0) parts.push(`${b.marketing.attention} פרסומים דורשים טיפול`);
+    return parts.length ? parts.join(" · ") : "אין פרסומים מתוזמנים כרגע — אפשר ליצור קמפיין חדש ב-/distribution.";
+  }
+  if (intent === "problem") {
+    const p0 = b.priorityActions.filter((a) => a.priority === "P0");
+    if (!p0.length) return "אין תקלות דחופות פתוחות כרגע ✓";
+    return "דורש טיפול דחוף:\n" + p0.map((a) => `• ${a.title} — ${a.reason}`).join("\n");
+  }
+  // urgent
+  if (!b.actionCount) return b.heroLine;
+  const top = b.priorityActions.slice(0, 4);
+  const rec = b.primaryAction ? `\n\nהייתי מתחיל מ: ${b.primaryAction.title} (${b.primaryAction.cta}).` : "";
+  return `${b.heroLine}\n\n` + top.map((a) => `• ${a.title} — ${a.reason}`).join("\n") + rec;
+}
+
 /** Ask ZI a question. Creates a conversation if needed, persists both turns. */
 export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResult>> {
   try {
@@ -159,6 +208,22 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
         await touchConversation(conversationId, 2);
         return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: obMsg, source: "fallback", model: null, sources: [], followups: [] } };
       } catch { /* fall through to normal RAG if state is unavailable */ }
+    }
+
+    // ── ZI Daily Command Center: answer "what's urgent / who to call / what's
+    // unmarketed / what changed" from the SAME authoritative brief — deterministic
+    // facts, never hallucinated counts. ──
+    const dailyIntent = detectDailyQuery(question);
+    if (dailyIntent) {
+      try {
+        const brief = await getDailyCommandCenter();
+        if (brief) {
+          const content = formatDailyAnswer(brief, dailyIntent);
+          const dMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: dMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through to RAG if the brief is unavailable */ }
     }
 
     // ── RAG: retrieve permission-filtered, page-aware knowledge, then answer

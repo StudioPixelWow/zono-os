@@ -36,6 +36,7 @@ import { buildOfficeTheme, OFFICE_THEME_DEFAULTS } from "@/lib/brand-identity/of
 import { HomeControlCenter } from "@/components/home-control/HomeControlCenter";
 import { NewOfficeCommandCenter } from "@/components/home-control/NewOfficeCommandCenter";
 import { OnboardingNextStep } from "@/components/onboarding/OnboardingNextStep";
+import { MorningBrief } from "@/components/daily/MorningBrief";
 import type {
   HomeActivityItem, HomeRec, HomeHero, HomeNowItem, HomePipeline,
   HomeFollowUpItem, HomeAcquisition, HomeNextDeal, HomePrivateListing,
@@ -416,6 +417,7 @@ export default async function Home() {
   return (
     <>
     <OnboardingNextStep />
+    <MorningBrief />
     <HomeControlCenter
       dict={dict}
       agentName={agentName}
