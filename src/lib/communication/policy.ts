@@ -74,19 +74,19 @@ export const COMM_EVENT_MATRIX: Record<string, CommRule> = {
   // ── Support (ZI ticket flow) ──────────────────────────────────────────────
   "support.ticket_created": {
     priority: "important", recipient: "actor", channels: { inApp: true, email: true, whatsapp: false },
-    dedupWindowMin: 0, delayMin: 0, template: "SUPPORT_CREATED", deepLink: (id) => `/support/${id}`,
+    dedupWindowMin: 0, delayMin: 0, template: "SUPPORT_CREATED", deepLink: () => `/help`,
   },
   "support.ticket_updated": {
     priority: "important", recipient: "actor", channels: { inApp: true, email: true, whatsapp: false },
-    dedupWindowMin: 60, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: (id) => `/support/${id}`,
+    dedupWindowMin: 60, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: () => `/help`,
   },
   "support.ticket_customer_action_required": {
     priority: "important", recipient: "actor", channels: { inApp: true, email: true, whatsapp: false },
-    dedupWindowMin: 60, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: (id) => `/support/${id}`,
+    dedupWindowMin: 60, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: () => `/help`,
   },
   "support.ticket_resolved": {
     priority: "important", recipient: "actor", channels: { inApp: true, email: true, whatsapp: false },
-    dedupWindowMin: 0, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: (id) => `/support/${id}`,
+    dedupWindowMin: 0, delayMin: 0, template: "SUPPORT_UPDATED", deepLink: () => `/help`,
   },
 
   // ── Billing ───────────────────────────────────────────────────────────────
