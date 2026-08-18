@@ -68,6 +68,17 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
   const mediaCheck = await assertCampaignMediaAllowed(input.propertyId, input.media ?? null);
   if (!mediaCheck.ok) return { ok: false, error: "התמונה שנבחרה לפרסום אינה זמינה או אינה שייכת לנכס זה. בחר תמונה אחרת." };
 
+  // PUBLISH-READINESS guard (P0): a selected Creative Studio asset must have an
+  // approved facebook_groups derivative before ANY post is scheduled — otherwise
+  // the user would reach Today with a creative that cannot publish. We reuse the
+  // existing promotion flow (auto-promotes when the caller is a manager); if it
+  // still can't be prepared, we block honestly. Property photos are unaffected.
+  if (mediaCheck.creativeOutputId) {
+    const { ensureCreativeFacebookReady } = await import("./creative-readiness");
+    const ready = await ensureCreativeFacebookReady(mediaCheck.creativeOutputId);
+    if (!ready.ready) return { ok: false, error: "הקריאייטיב עדיין לא מוכן לפרסום בפייסבוק. הכינו אותו לפרסום (או בחרו תמונת נכס) לפני הפעלת הקמפיין." };
+  }
+
   // Only ACTIVE (office-approved) groups of THIS org may be targeted. A tampered
   // browser payload with a `discovered`/disabled/other-org group id is rejected
   // server-side — a campaign can never be scheduled to unapproved destinations.
@@ -108,7 +119,7 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
       maxPostsPerDay: maxPerDay(input.frequency),
       groupIds: input.groupIds, variationIds,
       imageUrl: mediaCheck.imageUrl, creativeOutputId: mediaCheck.creativeOutputId,
-      creativeVersion: mediaCheck.creativeOutputId ? 1 : null, propertyId: input.propertyId,
+      creativeVersion: mediaCheck.creativeOutputId ? (mediaCheck.creativeVersion ?? 1) : null, propertyId: input.propertyId,
     };
     // Preview first (first-slot + planned count for the success screen), then persist.
     const preview = await previewPostingQueueAction(config);

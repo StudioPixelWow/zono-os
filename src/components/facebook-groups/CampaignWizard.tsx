@@ -16,8 +16,24 @@ import { cn } from "@/lib/utils";
 import { buildPlan, FREQUENCY_HE, type Frequency, type WizardGroup, type GroupFolder } from "@/lib/facebook-groups/planner";
 import { generatePostVariations, type PropertyFacts } from "@/lib/facebook-groups/content";
 import { activateFacebookCampaignAction } from "@/lib/facebook-groups/activate";
-import { listPropertyCampaignMediaAction } from "@/lib/facebook-groups/media-actions";
+import { listPropertyCampaignMediaAction, creativeFacebookReadinessAction, prepareCreativeForFacebookAction } from "@/lib/facebook-groups/media-actions";
 import type { CampaignMediaItem, MediaRef } from "@/lib/facebook-groups/campaign-media";
+import type { FbReadiness } from "@/lib/facebook-groups/creative-readiness";
+
+// Publish-readiness status for a selected Studio creative (Facebook groups).
+function FbReadinessChip({ readiness, preparing, onPrepare }: { readiness: FbReadiness; preparing: boolean; onPrepare: () => void }) {
+  if (readiness.status === "ready") {
+    return <div className="bg-success-soft text-success mt-2 inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold">מוכן לפרסום ✓</div>;
+  }
+  return (
+    <div className="bg-warning-soft mt-2 flex flex-wrap items-center gap-2 rounded-lg px-3 py-1.5">
+      <span className="text-warning text-[12px] font-bold">נדרשת הכנה לפרסום</span>
+      {readiness.canAutoPromote
+        ? <button type="button" onClick={onPrepare} disabled={preparing} className="bg-brand rounded-lg px-3 py-1 text-[11px] font-bold text-white disabled:opacity-50">{preparing ? "מכין…" : "הכן לפרסום בפייסבוק"}</button>
+        : <span className="text-muted text-[11px]">הקריאייטיב עדיין לא מוכן לפרסום בפייסבוק — פנו למנהל להכנתו.</span>}
+    </div>
+  );
+}
 
 interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
@@ -81,6 +97,8 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
   const [selectedMedia, setSelectedMedia] = useState<MediaRef | null>(null);
   const [postText, setPostText] = useState("");
   const [justCreated, setJustCreated] = useState<Set<string>>(new Set());
+  const [fbReadiness, setFbReadiness] = useState<(FbReadiness & { forId: string }) | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const activatingRef = useRef(false);
   const bootRef = useRef(false);
 
@@ -132,6 +150,30 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
   const chosen: WizardGroup[] = allGroups.filter((g) => selectedGroups.has(g.id));
   const plan = useMemo(() => (chosen.length ? buildPlan(chosen, frequency, startDate, { variations: 4 }) : null), [chosen, frequency, startDate]);
   const previewImg = selectedMedia?.url ?? null;
+  // Publish-readiness applies only to a selected STUDIO creative (property photos
+  // are always publishable). Shown only when it matches the current selection.
+  const readiness = selectedMedia?.kind === "creative_output" && fbReadiness?.forId === selectedMedia.id ? fbReadiness : null;
+
+  // Fetch readiness whenever a Studio creative is selected (async — never sets
+  // state synchronously in the effect body).
+  useEffect(() => {
+    if (selectedMedia?.kind !== "creative_output") return;
+    const id = selectedMedia.id;
+    let alive = true;
+    creativeFacebookReadinessAction(id).then((r) => { if (alive) setFbReadiness({ ...r, forId: id }); }).catch(() => { /* keep prior */ });
+    return () => { alive = false; };
+  }, [selectedMedia]);
+
+  async function prepareForFacebook() {
+    if (selectedMedia?.kind !== "creative_output") return;
+    const id = selectedMedia.id;
+    setPreparing(true);
+    try {
+      await prepareCreativeForFacebookAction(id);
+      const r = await creativeFacebookReadinessAction(id);
+      setFbReadiness({ ...r, forId: id });
+    } finally { setPreparing(false); }
+  }
 
   const canNext = [!!property, true, chosen.length > 0, true, true][step];
   const toggleGroup = (id: string) => setSelectedGroups((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -294,6 +336,7 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
                     )}
                   </div>
                 )}
+                {readiness && <FbReadinessChip readiness={readiness} preparing={preparing} onPrepare={prepareForFacebook} />}
               </section>
 
               {/* Creative Studio CTA */}
@@ -375,6 +418,7 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
                   <div className="text-ink whitespace-pre-wrap text-[12px] leading-relaxed">{postText.trim() || "— ללא טקסט —"}</div>
                 </div>
                 {!selectedMedia && <div className="bg-warning-soft text-warning rounded-xl p-3 text-[12px]">פרסום ללא תמונה. מומלץ לחזור לשלב התוכן ולבחור תמונה או ליצור קריאייטיב.</div>}
+                {readiness && <FbReadinessChip readiness={readiness} preparing={preparing} onPrepare={prepareForFacebook} />}
                 <div className="bg-surface text-muted rounded-xl p-3 text-[12px]">
                   ZONO יכין ויתזמן כל פרסום. בזמן הפרסום, <b className="text-ink">התוסף ילווה אותך</b> בפרסום בקבוצה בפייסבוק — הפרסום מאושר על ידך. אין פרסום אוטומטי.
                 </div>

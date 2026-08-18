@@ -110,9 +110,9 @@ export async function listPropertyCampaignMedia(propertyId: string): Promise<Cam
 export async function assertCampaignMediaAllowed(
   propertyId: string,
   ref: MediaRef | null | undefined,
-): Promise<{ ok: true; imageUrl: string | null; creativeOutputId: string | null } | { ok: false }> {
+): Promise<{ ok: true; imageUrl: string | null; creativeOutputId: string | null; creativeVersion: number | null } | { ok: false }> {
   // No media selected is allowed (text-only is a deliberate choice, guarded in UI).
-  if (!ref) return { ok: true, imageUrl: null, creativeOutputId: null };
+  if (!ref) return { ok: true, imageUrl: null, creativeOutputId: null, creativeVersion: null };
   const orgId = await orgScope();
   if (!orgId || !propertyId) return { ok: false };
   const db: any = createServiceRoleClient();
@@ -121,19 +121,20 @@ export async function assertCampaignMediaAllowed(
   if (ref.kind === "property_primary") {
     const { data } = await db.from("properties").select("primary_image_url").eq("id", propertyId).eq("org_id", orgId).maybeSingle();
     const url = (data?.primary_image_url as string | null) ?? null;
-    return url ? { ok: true, imageUrl: url, creativeOutputId: null } : { ok: false };
+    return url ? { ok: true, imageUrl: url, creativeOutputId: null, creativeVersion: null } : { ok: false };
   }
   if (ref.kind === "property_media") {
     const { data } = await db.from("property_media").select("id,url,external_url").eq("id", ref.id).eq("property_id", propertyId).eq("org_id", orgId).maybeSingle();
     if (!data) return { ok: false };
     const url = (data.url as string | null) ?? (data.external_url as string | null);
-    return url ? { ok: true, imageUrl: url, creativeOutputId: null } : { ok: false };
+    return url ? { ok: true, imageUrl: url, creativeOutputId: null, creativeVersion: null } : { ok: false };
   }
   if (ref.kind === "creative_output") {
-    const { data } = await db.from("zono_quick_creative_outputs").select("id,image_url").eq("id", ref.id).eq("property_id", propertyId).eq("org_id", orgId).maybeSingle();
+    const { data } = await db.from("zono_quick_creative_outputs").select("id,image_url,creative_version").eq("id", ref.id).eq("property_id", propertyId).eq("org_id", orgId).maybeSingle();
     if (!data) return { ok: false };
-    // Studio assets publish through the approved derivative; persist the output id.
-    return { ok: true, imageUrl: (data.image_url as string | null) ?? null, creativeOutputId: String(data.id) };
+    // Studio assets publish through the approved derivative; persist the output id +
+    // its REAL creative_version so the publish path resolves the exact derivative.
+    return { ok: true, imageUrl: (data.image_url as string | null) ?? null, creativeOutputId: String(data.id), creativeVersion: (data.creative_version as number | null) ?? 1 };
   }
   return { ok: false };
 }
