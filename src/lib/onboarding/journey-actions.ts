@@ -23,7 +23,7 @@ export async function skipOnboardingGroupAction(group: JourneyGroupKey): Promise
     .eq("org_id" as never, organization.id as never)
     .maybeSingle();
   const cur = Array.isArray((data as { skipped?: unknown } | null)?.skipped)
-    ? ((data as { skipped: string[] }).skipped)
+    ? ((data as unknown as { skipped: string[] }).skipped)
     : [];
   const next = Array.from(new Set([...cur, group]));
   await db.from("onboarding_progress" as never).upsert(
@@ -50,7 +50,7 @@ export async function unskipOnboardingGroupAction(group: JourneyGroupKey): Promi
     .eq("org_id" as never, organization.id as never)
     .maybeSingle();
   const cur = Array.isArray((data as { skipped?: unknown } | null)?.skipped)
-    ? ((data as { skipped: string[] }).skipped)
+    ? ((data as unknown as { skipped: string[] }).skipped)
     : [];
   const next = cur.filter((g) => g !== group);
   await db.from("onboarding_progress" as never).upsert(

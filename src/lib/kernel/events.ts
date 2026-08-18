@@ -33,6 +33,12 @@ export const DOMAIN_EVENTS = {
   leadAssigned: "lead.assigned",
   leadConvertedToBuyer: "lead.converted_to_buyer",
   leadConvertedToSeller: "lead.converted_to_seller",
+  // Follow-up engine — canonical events for the (future) communication layer.
+  leadFollowupDue: "lead.followup_due",
+  leadFollowupOverdue: "lead.followup_overdue",
+  leadUnassigned: "lead.unassigned",
+  leadHotWithoutNextAction: "lead.hot_without_next_action",
+  leadSlaBreached: "lead.sla_breached",
   // Property
   propertyCreated: "property.created",
   propertyUpdated: "property.updated",

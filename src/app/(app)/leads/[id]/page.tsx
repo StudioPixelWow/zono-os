@@ -18,6 +18,7 @@ import { RelationshipSection } from "@/components/graph/RelationshipSection";
 import { EntityTimelineSection } from "@/components/activity/EntityTimelineSection";
 import { EntityAIContextSection } from "@/components/ai-context/EntityAIContextSection";
 import { canonicalFactsFor } from "@/lib/ai-context";
+import { LeadNextActionBlock } from "@/components/follow-up/LeadNextActionBlock";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const journeySlot = <EntityJourneySection entityType="lead" entityId={id} />;
 
   return (
+    <>
+    <div className="mx-auto w-full max-w-6xl px-4 pt-4 sm:px-6">
+      <LeadNextActionBlock leadId={id} />
+    </div>
     <LeadDetailView
       journeySlot={journeySlot}
       lead={lead}
@@ -77,5 +82,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       graphSlot={graphSlot}
       timelineSlot={timelineSlot}
     />
+    </>
   );
 }

@@ -67,6 +67,10 @@
     {
       "path": "/api/cron/billing-boundary",
       "schedule": "20 2 * * *"
+    },
+    {
+      "path": "/api/cron/followup-reconcile",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
