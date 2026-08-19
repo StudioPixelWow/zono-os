@@ -20,7 +20,7 @@ function rawMeetingId(eventId: string): string {
 
 const TERMINAL = new Set(["completed", "cancelled", "no_show"]);
 const STATUS_HE: Record<string, string> = {
-  scheduled: "מתוכננת", confirmed: "מאושרת", completed: "הושלמה",
+  scheduled: "מתוזמנת", confirmed: "מאושרת", completed: "הושלמה",
   cancelled: "בוטלה", no_show: "לא הגיע", rescheduled: "נדחתה",
 };
 

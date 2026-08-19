@@ -11,7 +11,7 @@ import { completeMeetingAction, cancelMeetingAction, markNoShowAction } from "@/
 import type { ViewingsBoard, ViewingItem } from "@/lib/viewings/service";
 
 const STATUS_LABEL: Record<string, string> = {
-  scheduled: "מתוזמנת", confirmed: "אושרה", completed: "הושלמה", cancelled: "בוטלה", no_show: "לא הגיע", rescheduled: "נדחתה",
+  scheduled: "מתוזמנת", confirmed: "מאושרת", completed: "הושלמה", cancelled: "בוטלה", no_show: "לא הגיע", rescheduled: "נדחתה",
 };
 type Tab = "today" | "upcoming" | "awaitingConfirmation" | "completed" | "cancelled";
 const TABS: [Tab, string][] = [

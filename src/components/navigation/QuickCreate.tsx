@@ -37,7 +37,7 @@ const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(
 
 const SOURCE_HE: Record<string, string> = { website: "אתר / דף נחיתה", facebook: "Facebook", instagram: "Instagram", referral: "המלצה", open_house: "בית פתוח", sign_call: "שלט / טלפון", cold_outreach: "פנייה יזומה", portal: "פורטל (יד2/מדלן)", partner: "שותף", other: "אחר / ידני" };
 const INTENT_HE: Record<string, string> = { buyer: "קונה", seller: "מוכר", both: "קונה+מוכר", investor: "משקיע", renter: "שוכר", unknown: "לא ידוע" };
-const STAGE_HE: Record<string, string> = { new: "הזדמנות חדשה", qualified: "מוסמכת", negotiation: "משא ומתן", agreement: "הסכמה", contract: "חוזה", closing: "סגירה" };
+const STAGE_HE: Record<string, string> = { new: "חדשה", qualified: "מוסמכת", negotiation: "משא ומתן", agreement: "הסכמה", contract: "חוזה", closing: "סגירה" };
 const PRIO_HE: Record<string, string> = { low: "נמוכה", medium: "בינונית", high: "גבוהה", urgent: "דחופה" };
 const BOOKING_KINDS: { kind: BookingKind; label: string }[] = [
   { kind: "buyer_visit", label: "ביקור קונה" }, { kind: "seller_meeting", label: "פגישת מוכר" },

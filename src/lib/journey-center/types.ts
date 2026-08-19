@@ -149,7 +149,7 @@ export const STAGE_LABELS: Record<JourneyEntityType, Record<string, string>> = {
     marketing: "שיווק", negotiation: "משא ומתן", deal: "עסקה", churn_risk: "סיכון נטישה",
   },
   lead: {
-    new: "חדש", contacted: "נוצר קשר", qualified: "מוסמך", nurturing: "טיפוח",
+    new: "חדש", contacted: "נוצר קשר", qualified: "מוסמך", nurturing: "בטיפוח",
     converted: "הומר", lost: "אבוד", disqualified: "נפסל",
   },
   property: {

@@ -116,7 +116,7 @@ export interface PublicSite {
   testimonials: { name: string; text: string; rating: number }[];
 }
 
-const STATUS_TAG: Record<string, string> = { published: "חדש בשוק", active: "חדש בשוק", under_offer: "בלעדיות" };
+const STATUS_TAG: Record<string, string> = { published: "חדש בשוק", active: "חדש בשוק", under_offer: "בבלעדיות" };
 const propRow = (p: { id: string; title: string; price: number; city: string | null; neighborhood: string | null; rooms: number | null; size_sqm: number | null; type: string; status: string; primary_image_url?: string | null }): PublicProperty => ({
   id: p.id, title: p.title, price: p.price, city: p.city, neighborhood: p.neighborhood, rooms: p.rooms, area: p.size_sqm, type: p.type, status: p.status, image: p.primary_image_url ?? null, tag: STATUS_TAG[p.status] ?? null,
 });
