@@ -102,6 +102,12 @@ export async function processWebhook(payload: unknown): Promise<ProcessResult> {
         metadata: { wa_message_id: m.waMessageId, from: m.from, wa_type: m.type, media: media ?? undefined, raw: m as unknown as Row },
       } as never);
       if (convId) await db.from("whatsapp_conversations").update({ last_message: bodyOf(m), last_message_at: m.timestamp, unread: true, state: "requires_reply" } as never).eq("organization_id", orgId).eq("id", convId);
+      // Slice 2C — link this inbound reply to the correct CRM identity + context.
+      // Best-effort: linkage MUST NEVER break message ingestion.
+      try {
+        const { processInboundWhatsAppLinkage } = await import("@/lib/whatsapp/inbound-linkage");
+        await processInboundWhatsAppLinkage(db, { orgId, conversationId: convId, waMessageId: m.waMessageId, fromPhone: m.from, text: m.text ?? "", contactName: m.name });
+      } catch { /* best-effort */ }
       processed++;
     } catch { /* best-effort per message */ }
   }

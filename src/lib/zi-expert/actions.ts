@@ -24,6 +24,8 @@ import { openSupportTicketFromZi, getMyTicketByNumber, listMyOpenTickets } from 
 import { getOnboardingProgress, summarizeOnboardingForZi } from "@/lib/onboarding/progress";
 import { getDailyCommandCenter } from "@/lib/daily/command-center";
 import type { DailyCommandCenter } from "@/lib/daily/priority";
+import { createServiceRoleClient } from "@/lib/supabase/server";
+import { listRecentWhatsAppReplies } from "@/lib/whatsapp/inbound-linkage";
 import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
 import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
 import type { FeedbackRating, KnowledgeArticle, KnowledgeSourceRef } from "./knowledge-types";
@@ -125,6 +127,13 @@ function detectDealQuery(q: string): "stuck" | "status" | "awaiting_offer" | nul
   if (has(["עסקאות תקועות", "עסקה תקועה", "עסקאות שדורשות", "אילו עסקאות תקוע", "stuck deals", "deals stuck", "which deals are stuck"])) return "stuck";
   if (has(["מצב העסקאות", "מה מצב העסק", "סטטוס עסקאות", "deals status", "status of deals"])) return "status";
   return null;
+}
+
+/** Detect "who replied on WhatsApp" questions — answered from linked inbound replies. */
+function detectWhatsAppRepliesQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  return has(["מי ענה בוואטסאפ", "מי ענה לי בוואטסאפ", "מי חזר בוואטסאפ", "מי כתב בוואטסאפ", "תשובות וואטסאפ", "הודעות וואטסאפ", "who replied on whatsapp", "whatsapp replies"]);
 }
 
 /** Deterministic Hebrew answer built from the real brief. ZI wording only; facts are server-computed. */
@@ -275,6 +284,24 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: zMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG if unavailable */ }
+    }
+
+    // ── ZI WhatsApp: "who replied on WhatsApp" from the LINKED inbound replies
+    // (deterministic; only CRM-identified contacts). ──
+    if (detectWhatsAppRepliesQuery(question)) {
+      try {
+        const { profile } = await getSessionContext();
+        const orgId = profile?.org_id ?? null;
+        if (orgId) {
+          const replies = await listRecentWhatsAppReplies(createServiceRoleClient(), orgId, { limit: 12 });
+          const content = replies.length
+            ? "תשובות וואטסאפ אחרונות מלקוחות מזוהים:\n" + replies.map((r) => `• ${r.name ?? "לקוח"}${r.lastMessage ? ` — "${r.lastMessage.slice(0, 60)}"` : ""}`).join("\n")
+            : "לא זוהו תשובות וואטסאפ אחרונות מלקוחות מזוהים.";
+          const wMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: wMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through to daily / RAG */ }
     }
 
     // ── ZI Daily Command Center: answer "what's urgent / who to call / what's

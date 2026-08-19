@@ -10,7 +10,7 @@ export type DailyPriority = "P0" | "P1" | "P2";
 export type DailyActionKind =
   | "lead_callback" | "lead_unassigned" | "publish_failed" | "publish_today"
   | "property_unmarketed" | "property_attention" | "task_overdue" | "task_today"
-  | "deal_stuck" | "onboarding";
+  | "deal_stuck" | "customer_reply" | "onboarding";
 
 export interface DailyAction {
   id: string;

@@ -111,6 +111,9 @@ export const DOMAIN_EVENTS = {
   whatsappDisconnected: "whatsapp.disconnected",
   communicationReceived: "communication.received",
   communicationSent: "communication.sent",
+  // Inbound customer WhatsApp replies linked to a CRM identity (Slice 2C).
+  customerWhatsappReceived: "customer.whatsapp_received",
+  customerWhatsappActionRequired: "customer.whatsapp_action_required",
   // Automation
   automationActivated: "automation.activated",
   automationRunRequested: "automation.run_requested",

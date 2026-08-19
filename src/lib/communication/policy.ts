@@ -123,6 +123,19 @@ export const COMM_EVENT_MATRIX: Record<string, CommRule> = {
     priority: "important", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
     dedupWindowMin: 1440, delayMin: 0, template: "DEAL_STALE", deepLink: (id) => `/deals/${id}`,
   },
+
+  // ── Inbound customer WhatsApp replies (Slice 2C) — RESTRAINED, in-app only to
+  //    the responsible agent. NEVER WhatsApp the agent about every reply. A plain
+  //    received reply is a light in-app notice; an actionable one (interested /
+  //    viewing / callback) is important and surfaces in the brief.
+  "customer.whatsapp_received": {
+    priority: "digest", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 30, delayMin: 0, template: null, deepLink: (id) => `/leads/${id}`,
+  },
+  "customer.whatsapp_action_required": {
+    priority: "important", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 0, delayMin: 0, template: null, deepLink: (id) => `/leads/${id}`,
+  },
 };
 
 /** Synthetic (non-domain-event) comm kinds driven by the dispatcher, not the bus. */

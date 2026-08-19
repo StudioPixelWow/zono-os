@@ -60,6 +60,10 @@ async function resolveRecipient(db: any, evt: CommEvent, role: CommRecipientRole
       const { data } = await db.from("deals").select("owner_id").eq("id", evt.entityId).eq("org_id", evt.orgId).maybeSingle();
       return loadRecipient(db, (data?.owner_id ?? evt.actorUserId) ?? null);
     }
+    if (evt.entityType === "buyer" || evt.entityType === "seller") {
+      const { data } = await db.from(evt.entityType === "buyer" ? "buyers" : "sellers").select("owner_id").eq("id", evt.entityId).eq("org_id", evt.orgId).maybeSingle();
+      return loadRecipient(db, (data?.owner_id ?? evt.actorUserId) ?? null);
+    }
     return loadRecipient(db, evt.actorUserId ?? null);
   }
   // manager / owner → the office owner (avoids a role join; single, correct recipient)
@@ -76,6 +80,7 @@ const CATEGORY: Record<string, string> = {
   "billing.subscription_activated": "system", "billing.subscription_cancelled": "system",
   "meeting.reminder": "meeting_reminder",
   "deal.stale": "followup_due",
+  "customer.whatsapp_received": "system", "customer.whatsapp_action_required": "followup_due",
 };
 const LEVEL: Record<CommPriority, "info" | "success" | "warning" | "critical"> = { critical: "critical", important: "warning", digest: "info", silent: "info" };
 

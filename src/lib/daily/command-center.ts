@@ -167,6 +167,27 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     });
   }
 
+  // ── CUSTOMER WhatsApp replies needing attention (agent = own contacts, manager
+  //    = office). Reuses the linked inbound conversations; surfaced as ranked
+  //    actions, not a new brief block. ──
+  try {
+    let wq = supabase.from("whatsapp_conversations")
+      .select("id,contact_name,last_message,lead_id,buyer_id,assigned_agent_id")
+      .eq("organization_id", orgId).eq("unread", true).not("detected_role", "is", null)
+      .order("last_message_at", { ascending: false }).limit(20);
+    if (!isManager && userId) wq = wq.eq("assigned_agent_id", userId);
+    const { data: waRows } = await wq;
+    for (const c of (waRows ?? []) as Array<{ id: string; contact_name: string | null; last_message: string | null; lead_id: string | null; buyer_id: string | null }>) {
+      const entId = c.lead_id ?? c.buyer_id ?? c.id;
+      const href = c.lead_id ? `/leads/${c.lead_id}` : c.buyer_id ? `/buyers/${c.buyer_id}` : "/whatsapp";
+      actions.push({
+        id: `wareply:${c.id}`, kind: "customer_reply", priority: "P1",
+        title: c.contact_name ?? "לקוח", reason: c.last_message ? `ענה בוואטסאפ: "${c.last_message.slice(0, 50)}"` : "ענה בוואטסאפ — ממתין לתשובה",
+        href, cta: "השב", icon: "MessageCircle", urgency: 66, entity: { type: c.lead_id ? "lead" : "buyer", id: entId },
+      });
+    }
+  } catch { /* best-effort */ }
+
   // ── PIPELINE movement (manager/owner) ──────────────────────────────────────
   let pipeline: DailyCommandCenter["pipeline"] = null;
   if (isManager) {
