@@ -91,6 +91,10 @@
     {
       "path": "/api/cron/buyer-match-bundles",
       "schedule": "0 7 * * 0-4"
+    },
+    {
+      "path": "/api/cron/viewing-dispatch",
+      "schedule": "0 6-19 * * *"
     }
   ]
 }

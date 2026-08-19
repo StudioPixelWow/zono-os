@@ -202,7 +202,14 @@ export async function processInboundWhatsAppLinkage(db: any, input: InboundLinka
       actionable = true;
     }
     if (intent === "request_call") { await ensureWaTask(db, input.orgId, id, "callback", "בקשת חזרה טלפונית מלקוח (וואטסאפ)"); actionable = true; }
-    if (intent === "request_viewing" && !propertyId) { await ensureWaTask(db, input.orgId, id, "viewing", "בקשת ביקור מלקוח (וואטסאפ)"); actionable = true; }
+    if (intent === "request_viewing" && !propertyId) {
+      await ensureWaTask(db, input.orgId, id, "viewing", "בקשת ביקור מלקוח (וואטסאפ)");
+      // Canonical viewing.requested (property unresolved — a bare request the agent schedules).
+      if (contactType === "buyer" || contactType === "lead") {
+        try { await emitBusinessEvent({ type: DOMAIN_EVENTS.viewingRequested, entityType: contactType, entityId: id.primaryId, orgId: input.orgId, payload: { leadName: id.name, propertyId: null }, idempotencyKey: `viewing.requested:wa:${input.waMessageId}` }); } catch { /* best-effort */ }
+      }
+      actionable = true;
+    }
     if (intent === "interested" && !propertyId) { actionable = true; }
   }
 

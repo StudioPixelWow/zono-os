@@ -67,6 +67,15 @@ export async function applyRecommendationFeedback(
           intelligence_source: source, is_automatable: true,
         });
       }
+      // Canonical viewing.requested event (entity = the contact; no meeting yet).
+      try {
+        const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+        await emitBusinessEvent({
+          type: DOMAIN_EVENTS.viewingRequested, entityType: contactType, entityId: contactId, orgId,
+          payload: { leadName: (b as any)?.full_name ?? null, propertyId },
+          idempotencyKey: `viewing.requested:${contactId}:${propertyId}`,
+        });
+      } catch { /* best-effort */ }
     } catch { /* task is best-effort */ }
   }
   return { ok: true, reason: "ok" };

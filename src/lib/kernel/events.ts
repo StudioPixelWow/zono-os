@@ -90,6 +90,19 @@ export const DOMAIN_EVENTS = {
   meetingCompleted: "meeting.completed",
   meetingCancelled: "meeting.cancelled",
   meetingNoShow: "meeting.no_show",
+  // Viewing automation (Slice 3). The `meetings` table (type ∈ viewing/open_house)
+  // is the SINGLE viewing entity — no second table. These customer-lifecycle events
+  // carry the request/confirmation/feedback semantics the internal meeting.* events
+  // do not; entityType is "meeting" once a meeting exists, else the contact
+  // (buyer/lead) for a bare request. Reminders reuse `meeting.reminder`.
+  viewingRequested: "viewing.requested",
+  viewingScheduled: "viewing.scheduled",
+  viewingConfirmed: "viewing.confirmed",
+  viewingRescheduled: "viewing.rescheduled",
+  viewingCancelled: "viewing.cancelled",
+  viewingCompleted: "viewing.completed",
+  viewingFeedbackReceived: "viewing.feedback_received",
+  viewingFollowupRequired: "viewing.followup_required",
   // Journey
   journeyCreated: "journey.created",
   journeyStageChanged: "journey.stage_changed",

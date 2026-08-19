@@ -68,6 +68,22 @@ const RENDERERS: Record<CommTemplateId, (f: TemplateFacts) => RenderedMessage> =
     title: "עסקה דורשת טיפול",
     body: `${hi(f.firstName)}${f.title ?? "אחת מהעסקאות הפעילות שלך"} תקועה ללא פעילות. כדאי לקדם אותה לשלב הבא.`,
   }),
+  VIEWING_REQUESTED: (f) => ({
+    title: "בקשת ביקור חדשה",
+    body: `${hi(f.firstName)}${f.leadName ?? "לקוח"} ביקש/ה לתאם ביקור בנכס. כדאי לקבוע מועד.`,
+  }),
+  VIEWING_CONFIRMED: (f) => ({
+    title: "הלקוח אישר הגעה לביקור",
+    body: `${hi(f.firstName)}${f.leadName ?? "הלקוח"} אישר/ה הגעה לביקור${f.when ? ` (${f.when})` : ""}.`,
+  }),
+  VIEWING_FEEDBACK: (f) => ({
+    title: "משוב לאחר ביקור",
+    body: `${hi(f.firstName)}${f.leadName ?? "הלקוח"} השאיר/ה משוב לאחר הביקור${f.reason ? `: ${f.reason}` : ""}.`,
+  }),
+  VIEWING_FOLLOWUP: (f) => ({
+    title: "ביקור דורש טיפול",
+    body: `${hi(f.firstName)}${f.reason ?? "ביקור דורש את הטיפול שלך"}${f.leadName ? ` — ${f.leadName}` : ""}.`,
+  }),
   GENERIC: (f) => ({
     title: f.title ?? "עדכון מ-ZONO",
     body: `${hi(f.firstName)}${f.reason ?? ""}`.trim(),

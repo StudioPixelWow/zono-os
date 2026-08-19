@@ -13,7 +13,9 @@ export type CommRecipientRole = "actor" | "assignee" | "manager" | "owner";
 export type CommTemplateId =
   | "NEW_LEAD_URGENT" | "FOLLOWUP_ESCALATION" | "MORNING_BRIEF" | "MEETING_REMINDER"
   | "PUBLICATION_ATTENTION" | "SUPPORT_CREATED" | "SUPPORT_UPDATED" | "PAYMENT_FAILED"
-  | "BILLING_UPDATE" | "DEAL_STALE" | "GENERIC";
+  | "BILLING_UPDATE" | "DEAL_STALE"
+  | "VIEWING_REQUESTED" | "VIEWING_CONFIRMED" | "VIEWING_FEEDBACK" | "VIEWING_FOLLOWUP"
+  | "GENERIC";
 
 export interface CommChannelPlan { inApp: boolean; email: boolean; whatsapp: boolean }
 
@@ -135,6 +137,29 @@ export const COMM_EVENT_MATRIX: Record<string, CommRule> = {
   "customer.whatsapp_action_required": {
     priority: "important", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
     dedupWindowMin: 0, delayMin: 0, template: null, deepLink: (id) => `/leads/${id}`,
+  },
+
+  // ── Viewing automation (Slice 3) — AGENT-facing, in-app only, RESTRAINED. The
+  //    silent transitions (scheduled/rescheduled/cancelled/completed) the agent
+  //    performed are NOT here → SILENT. Only the customer-initiated / action-needed
+  //    ones notify. Reminders reuse meeting.reminder above. recipient "assignee":
+  //    for viewing.requested (entity = buyer/lead) → the contact owner; for the
+  //    meeting-bound events (entity = meeting) → the meeting organizer.
+  "viewing.requested": {
+    priority: "important", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 720, delayMin: 0, template: "VIEWING_REQUESTED", deepLink: () => `/viewings`,
+  },
+  "viewing.confirmed": {
+    priority: "digest", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 0, delayMin: 0, template: "VIEWING_CONFIRMED", deepLink: () => `/viewings`,
+  },
+  "viewing.feedback_received": {
+    priority: "important", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 0, delayMin: 0, template: "VIEWING_FEEDBACK", deepLink: () => `/viewings`,
+  },
+  "viewing.followup_required": {
+    priority: "important", recipient: "assignee", channels: { inApp: true, email: false, whatsapp: false },
+    dedupWindowMin: 60, delayMin: 0, template: "VIEWING_FOLLOWUP", deepLink: () => `/viewings`,
   },
 };
 

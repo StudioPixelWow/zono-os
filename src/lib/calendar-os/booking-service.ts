@@ -88,6 +88,13 @@ export async function confirmBooking(input: ConfirmBookingInput): Promise<Confir
         const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
         await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingCreated, entityType: "meeting", entityId: String(created.id), payload: { kind: input.kind, entity: input.entity ?? null } });
       } catch { /* best-effort */ }
+      // A scheduled VIEWING enters the viewing lifecycle: emit the canonical
+      // viewing.scheduled event. The customer confirmation link is sent by the
+      // viewing-dispatch cron (never from this write path).
+      try {
+        const { isViewingMeeting, onViewingScheduled } = await import("@/lib/viewings/lifecycle");
+        if (orgId && isViewingMeeting(created.type)) await onViewingScheduled(orgId, created, userId, { kind: input.kind });
+      } catch { /* best-effort */ }
     }
     return { ok: true, meetingId: s(created?.id) ?? undefined, event: event ?? undefined };
   } catch (err) { return { ok: false, error: err instanceof Error ? err.message : "קביעת הפגישה נכשלה." }; }

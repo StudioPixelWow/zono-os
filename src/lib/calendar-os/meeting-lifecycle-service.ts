@@ -13,6 +13,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { logMeetingLifecycle } from "@/lib/activity/service";
 import { EVENT_TYPES } from "@/lib/activity/types";
 import { emitBusinessEvent, DOMAIN_EVENTS } from "@/lib/kernel";
+import { isViewingMeeting, onViewingRescheduled, onViewingCancelled, onViewingNoShow, onViewingCompleted } from "@/lib/viewings/lifecycle";
 
 type Row = Record<string, unknown>;
 const MEETING_COLS = "id,org_id,title,status,start_at,end_at,type,buyer_id,seller_id,lead_id,property_id,deal_id";
@@ -42,7 +43,7 @@ function meetingRef(m: Row) {
 
 /** Move a scheduled meeting to a new time. Status stays schedulable; logs a reschedule. */
 export async function rescheduleMeeting(meetingId: string, startAt: string, endAt?: string | null): Promise<MeetingActionResult> {
-  const { orgId } = await ctx();
+  const { orgId, userId } = await ctx();
   if (!orgId) return { ok: false, error: "אין הרשאה." };
   if (!startAt) return { ok: false, error: "חסר מועד חדש." };
   try {
@@ -55,13 +56,16 @@ export async function rescheduleMeeting(meetingId: string, startAt: string, endA
     if (error) return { ok: false, error: error.message };
     await logMeetingLifecycle(EVENT_TYPES.meetingRescheduled, meetingRef(m), `הפגישה נדחתה: ${meetingRef(m).title}`);
     await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingRescheduled, entityType: "meeting", entityId: meetingId, payload: { startAt, endAt: endAt ?? null } });
+    // Viewing lifecycle (reuses this meeting) — the new start_at re-keys the
+    // meeting.reminder idempotency key, invalidating the old reminder.
+    if (isViewingMeeting(m.type)) { try { await onViewingRescheduled(orgId, { ...m, start_at: startAt }, userId); } catch { /* best-effort */ } }
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "הדחייה נכשלה." }; }
 }
 
 /** Cancel a meeting (records an optional reason). */
 export async function cancelMeeting(meetingId: string, reason?: string | null): Promise<MeetingActionResult> {
-  const { orgId } = await ctx();
+  const { orgId, userId } = await ctx();
   if (!orgId) return { ok: false, error: "אין הרשאה." };
   try {
     const db = await createClient();
@@ -73,13 +77,15 @@ export async function cancelMeeting(meetingId: string, reason?: string | null): 
     if (error) return { ok: false, error: error.message };
     await logMeetingLifecycle(EVENT_TYPES.meetingCancelled, meetingRef(m), `הפגישה בוטלה: ${meetingRef(m).title}`, reason ?? null);
     await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingCancelled, entityType: "meeting", entityId: meetingId, payload: { reason: reason ?? null } });
+    // Viewing lifecycle — the terminal 'cancelled' status also stops the reminder scanner.
+    if (isViewingMeeting(m.type)) { try { await onViewingCancelled(orgId, m, userId, reason ?? null); } catch { /* best-effort */ } }
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "הביטול נכשל." }; }
 }
 
 /** Mark a no-show. */
 export async function markNoShow(meetingId: string, note?: string | null): Promise<MeetingActionResult> {
-  const { orgId } = await ctx();
+  const { orgId, userId } = await ctx();
   if (!orgId) return { ok: false, error: "אין הרשאה." };
   try {
     const db = await createClient();
@@ -91,6 +97,8 @@ export async function markNoShow(meetingId: string, note?: string | null): Promi
     if (error) return { ok: false, error: error.message };
     await logMeetingLifecycle(EVENT_TYPES.meetingNoShow, meetingRef(m), `הלקוח לא הגיע: ${meetingRef(m).title}`, note ?? null);
     await emitBusinessEvent({ type: DOMAIN_EVENTS.meetingNoShow, entityType: "meeting", entityId: meetingId, payload: { note: note ?? null } });
+    // Viewing lifecycle — a no-show viewing needs a human follow-up (idempotent task + event).
+    if (isViewingMeeting(m.type)) { try { await onViewingNoShow(orgId, m, userId); } catch { /* best-effort */ } }
     return { ok: true };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "העדכון נכשל." }; }
 }
@@ -136,6 +144,10 @@ export async function completeMeeting(
         await onMeetingCompletedEnsureFollowUp(orgId, m.lead_id as string, userId);
       } catch { /* best-effort — reconcile cron backstops */ }
     }
+    // Viewing lifecycle — canonical completed event + a post-viewing follow-up for a
+    // buyer viewing (the lead path above already covers lead viewings). The customer
+    // feedback request is sent separately by the viewing-dispatch cron.
+    if (isViewingMeeting(m.type)) { try { await onViewingCompleted(orgId, m, userId); } catch { /* best-effort */ } }
     return { ok: true, followUpTaskId };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "עדכון הפגישה נכשל." }; }
 }

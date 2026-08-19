@@ -64,6 +64,12 @@ async function resolveRecipient(db: any, evt: CommEvent, role: CommRecipientRole
       const { data } = await db.from(evt.entityType === "buyer" ? "buyers" : "sellers").select("owner_id").eq("id", evt.entityId).eq("org_id", evt.orgId).maybeSingle();
       return loadRecipient(db, (data?.owner_id ?? evt.actorUserId) ?? null);
     }
+    if (evt.entityType === "meeting") {
+      // Viewing/meeting-bound events (e.g. viewing.confirmed/feedback_received) are
+      // often emitted from token routes with no actor → resolve the organizer.
+      const { data } = await db.from("meetings").select("organizer_id").eq("id", evt.entityId).eq("org_id", evt.orgId).maybeSingle();
+      return loadRecipient(db, (data?.organizer_id ?? evt.actorUserId) ?? null);
+    }
     return loadRecipient(db, evt.actorUserId ?? null);
   }
   // manager / owner → the office owner (avoids a role join; single, correct recipient)
@@ -81,6 +87,8 @@ const CATEGORY: Record<string, string> = {
   "meeting.reminder": "meeting_reminder",
   "deal.stale": "followup_due",
   "customer.whatsapp_received": "system", "customer.whatsapp_action_required": "followup_due",
+  "viewing.requested": "followup_due", "viewing.confirmed": "meeting_reminder",
+  "viewing.feedback_received": "followup_due", "viewing.followup_required": "followup_due",
 };
 const LEVEL: Record<CommPriority, "info" | "success" | "warning" | "critical"> = { critical: "critical", important: "warning", digest: "info", silent: "info" };
 
