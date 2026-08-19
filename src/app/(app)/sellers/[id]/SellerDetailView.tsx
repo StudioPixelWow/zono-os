@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { churnLevel, churnTone, scoreTone, type ScoreTone } from "@/lib/seller-intelligence/scoring";
 import { PROPERTY_STATUS_LABELS } from "@/lib/properties/labels";
+import { SEVERITY_HE } from "@/lib/i18n/labels";
 import { SellerCommandCenter } from "./SellerCommandCenter";
 import type { SellerCommandCenter as SellerCC } from "@/lib/seller-intelligence/service";
 import type { RecoItemView } from "@/components/activity/RecommendedMatches";
@@ -230,7 +231,7 @@ export function SellerDetailView({
                     <ul className="flex flex-col gap-2.5">
                       {openRisks.map((r) => (
                         <li key={r.id} className="border-line rounded-2xl border p-3">
-                          <div className="flex items-center justify-between gap-2"><p className="text-ink text-sm font-bold">{r.title}</p><Badge tone={r.severity === "critical" || r.severity === "high" ? "danger" : r.severity === "medium" ? "warning" : "neutral"} size="sm">{r.severity}</Badge></div>
+                          <div className="flex items-center justify-between gap-2"><p className="text-ink text-sm font-bold">{r.title}</p><Badge tone={r.severity === "critical" || r.severity === "high" ? "danger" : r.severity === "medium" ? "warning" : "neutral"} size="sm">{SEVERITY_HE[r.severity] ?? r.severity}</Badge></div>
                           {r.recommended_action && <p className="text-brand-strong mt-1 text-xs font-semibold">המלצה: {r.recommended_action}</p>}
                         </li>
                       ))}

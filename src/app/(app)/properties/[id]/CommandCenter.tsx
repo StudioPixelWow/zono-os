@@ -6,6 +6,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { riskTone, scoreTone, type ScoreTone } from "@/lib/intelligence/scoring";
+import { SEVERITY_HE, TASK_PRIORITY_HE } from "@/lib/i18n/labels";
 import {
   initializeIntelligenceAction,
   leverToTaskAction,
@@ -252,7 +253,7 @@ export function CommandCenter({
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-ink text-sm font-bold">{r.title}</p>
                   <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", SEVERITY_TONE[r.severity] ?? SEVERITY_TONE.low)}>
-                    {r.severity}
+                    {SEVERITY_HE[r.severity] ?? r.severity}
                   </span>
                 </div>
                 {r.description && <p className="text-muted mt-0.5 text-xs">{r.description}</p>}
@@ -296,7 +297,7 @@ export function CommandCenter({
             {openTasks.slice(0, 8).map((t) => (
               <div key={t.id} className="border-line flex items-center justify-between border-b py-2 last:border-0">
                 <span className="text-ink text-sm font-semibold">{t.title}</span>
-                <span className="text-muted text-[11px]">{t.priority} · {fmtDate(t.due_at)}</span>
+                <span className="text-muted text-[11px]">{TASK_PRIORITY_HE[t.priority] ?? t.priority} · {fmtDate(t.due_at)}</span>
               </div>
             ))}
           </div>

@@ -11,14 +11,12 @@ import { advanceDealStageAction } from "@/lib/deals/actions";
 import { createCommissionAction } from "@/lib/commissions/actions";
 import { createDocumentManualAction } from "@/lib/documents/actions";
 import { DEAL_STAGE_OPTIONS } from "@/lib/deals/options";
-import { OFFER_STATUS_HE, COMMISSION_STATUS_HE } from "@/lib/i18n/labels";
+import { OFFER_STATUS_HE, COMMISSION_STATUS_HE, DEAL_STAGE_HE, DEAL_STATUS_HE, DOC_SIGNATURE_STATUS_HE } from "@/lib/i18n/labels";
 import type { DealDetail } from "@/lib/deals/detail";
 import type { NoteDTO } from "@/lib/notes/service";
 import type { DealStage } from "@/lib/deals/engine";
 
-const STAGE_LABEL: Record<string, string> = {
-  new: "חדשה", qualified: "מוסמכת", negotiation: "משא ומתן", agreement: "הסכמה", contract: "חוזה", closing: "סגירה",
-};
+const STAGE_LABEL = DEAL_STAGE_HE;
 const ils = (n: number | null | undefined) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
 
 export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteDTO[] }) {
@@ -61,7 +59,7 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-ink text-2xl font-black">{deal.title}</h1>
           <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-bold">{STAGE_LABEL[deal.stage] ?? deal.stage}</span>
-          <span className="text-muted text-[12px]">{deal.status === "open" ? "פתוחה" : deal.status}</span>
+          <span className="text-muted text-[12px]">{DEAL_STATUS_HE[deal.status] ?? deal.status}</span>
         </div>
         <p className="text-ink text-[13px] font-bold">{ils(deal.value)}{deal.expected_close_date ? ` · צפי סגירה ${new Date(deal.expected_close_date).toLocaleDateString("he-IL")}` : ""}{deal.probability != null ? ` · ${deal.probability}%` : ""}</p>
         <p className="text-muted text-[12px]">
@@ -112,7 +110,7 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
           </div>
         )}
         {deal.documents.length === 0 ? <Empty text="אין מסמכים מקושרים" /> : deal.documents.map((d) => (
-          <Row key={d.id} main={d.title} sub={d.signature_status} />
+          <Row key={d.id} main={d.title} sub={DOC_SIGNATURE_STATUS_HE[d.signature_status] ?? d.signature_status} />
         ))}
       </Section>
 

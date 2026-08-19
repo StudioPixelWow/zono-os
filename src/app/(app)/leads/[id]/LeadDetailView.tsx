@@ -8,6 +8,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import StartWorkflowButton from "@/components/workflow-builder/StartWorkflowButton";
 import { openDealFromLeadAction } from "@/lib/deals/create-actions";
+import { LEAD_STAGE_HE, LEAD_SOURCE_HE } from "@/lib/i18n/labels";
 import type { LeadTwin } from "@/lib/digital-twin/leads/types";
 
 export interface LeadLite {
@@ -22,11 +23,10 @@ export interface LeadLite {
   propertyId: string | null;
 }
 
-const STAGE_HE: Record<string, string> = { new: "חדש", contacted: "נוצר קשר", qualified: "מוסמך", nurturing: "בטיפוח", converted: "הומר", lost: "אבוד", disqualified: "נפסל" };
-const SOURCE_HE: Record<string, string> = { facebook: "פייסבוק", facebook_group_comment: "תגובת קבוצת פייסבוק", facebook_comment: "תגובת פייסבוק", yad2: "יד2", madlan: "מדלן", website: "אתר", landing_page: "דף נחיתה", referral: "הפניה", whatsapp: "וואטסאפ", manual: "ידני", import: "ייבוא", property_page: "עמוד נכס" };
+const STAGE_HE = LEAD_STAGE_HE;
 const SOURCE_ICON: Record<string, string> = { facebook: "Users", facebook_group_comment: "Users", facebook_comment: "Users", whatsapp: "MessageCircle", website: "Globe", landing_page: "Target", property_page: "Building2", manual: "UserPlus", referral: "Handshake" };
 
-const sourceLabel = (s: string | null) => (s ? SOURCE_HE[s] ?? s : "לא ידוע");
+const sourceLabel = (s: string | null) => (s ? LEAD_SOURCE_HE[s] ?? s : "לא ידוע");
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("");
 const waLink = (phone: string | null) => { const d = (phone ?? "").replace(/\D/g, ""); return d ? `https://wa.me/${d}` : null; };
 const READINESS_HE: Record<string, string> = { ready: "מוכן", needs_info: "חסר מידע", wait: "המתן" };

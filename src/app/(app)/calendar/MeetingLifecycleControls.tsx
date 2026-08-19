@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/Button";
 import {
   completeMeetingAction, markNoShowAction, cancelMeetingAction,
 } from "@/lib/calendar-os/meeting-lifecycle-actions";
+import { MEETING_STATUS_HE } from "@/lib/i18n/labels";
 
 /** Strips the source-qualified id ("meeting:<uuid>") back to the raw meeting id. */
 function rawMeetingId(eventId: string): string {
@@ -19,10 +20,7 @@ function rawMeetingId(eventId: string): string {
 }
 
 const TERMINAL = new Set(["completed", "cancelled", "no_show"]);
-const STATUS_HE: Record<string, string> = {
-  scheduled: "מתוזמנת", confirmed: "מאושרת", completed: "הושלמה",
-  cancelled: "בוטלה", no_show: "לא הגיע", rescheduled: "נדחתה",
-};
+const STATUS_HE = MEETING_STATUS_HE;
 
 export function MeetingLifecycleControls({ eventId, status }: { eventId: string; status: string | null }) {
   const router = useRouter();

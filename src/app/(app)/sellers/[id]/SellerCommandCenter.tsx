@@ -14,6 +14,8 @@ import {
   type ScoreTone,
 } from "@/lib/seller-intelligence/scoring";
 import { TOUCHPOINT_LABELS } from "@/lib/seller-intelligence/playbook";
+import { SEVERITY_HE } from "@/lib/i18n/labels";
+import { PROPERTY_STATUS_LABELS } from "@/lib/properties/labels";
 import {
   createSellerCommitmentAction,
   initializeSellerIntelligenceAction,
@@ -196,7 +198,7 @@ export function SellerCommandCenter({ sellerId, sellerName, data, interestedBuye
               <div key={r.id} className="border-line rounded-2xl border p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-ink text-sm font-bold">{r.title}</p>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", SEVERITY_TONE[r.severity] ?? SEVERITY_TONE.low)}>{r.severity}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", SEVERITY_TONE[r.severity] ?? SEVERITY_TONE.low)}>{SEVERITY_HE[r.severity] ?? r.severity}</span>
                 </div>
                 {r.recommended_action && <p className="text-brand-strong mt-1 text-xs font-semibold">המלצה: {r.recommended_action}</p>}
                 <Button size="sm" variant="secondary" className="mt-2" onClick={() => run(() => resolveSellerRiskAction(sellerId, r.id))} disabled={pending}>טפל עכשיו</Button>
@@ -299,7 +301,7 @@ export function SellerCommandCenter({ sellerId, sellerName, data, interestedBuye
               {data.properties.map((pr) => (
                 <li key={pr.id} className="border-line flex items-center justify-between border-b py-1.5 last:border-0 text-sm">
                   <a href={`/properties/${pr.id}`} className="text-ink hover:text-brand font-semibold">{pr.title}</a>
-                  <span className="text-muted text-[11px]">{pr.status}</span>
+                  <span className="text-muted text-[11px]">{PROPERTY_STATUS_LABELS[pr.status as keyof typeof PROPERTY_STATUS_LABELS] ?? pr.status}</span>
                 </li>
               ))}
             </ul>

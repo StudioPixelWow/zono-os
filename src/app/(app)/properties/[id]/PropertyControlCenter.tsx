@@ -12,6 +12,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { getPropertyLifecycleControlCenter } from "@/lib/properties/control-center";
+import { DEAL_STAGE_HE } from "@/lib/i18n/labels";
 import { MarketingAutopilotBlock } from "./MarketingAutopilotBlock";
 
 const ils = (n: number | null) => (n == null ? "" : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : `₪${Math.round(n).toLocaleString("he-IL")}`);
@@ -226,7 +227,7 @@ export async function PropertyControlCenter({ propertyId }: { propertyId: string
           {cc.deal ? (
             <Card title="עסקה" cta={{ label: "פתח עסקה", href: `/deals/${cc.deal.id}` }}>
               <div className="flex flex-col">
-                <Row label="שלב" value={cc.deal.stage} />
+                <Row label="שלב" value={DEAL_STAGE_HE[cc.deal.stage] ?? cc.deal.stage} />
                 {cc.deal.buyerName && <Row label="קונה" value={cc.deal.buyerName} />}
                 {cc.deal.value != null && <Row label="שווי" value={ils(cc.deal.value)} />}
                 <Row label="ימים בשלב" value={cc.deal.daysInStage} />

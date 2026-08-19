@@ -8,11 +8,10 @@ import { IconSurface } from "@/components/ui/action-surfaces";
 import { Button } from "@/components/ui/Button";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { completeMeetingAction, cancelMeetingAction, markNoShowAction } from "@/lib/calendar-os/meeting-lifecycle-actions";
+import { MEETING_STATUS_HE } from "@/lib/i18n/labels";
 import type { ViewingsBoard, ViewingItem } from "@/lib/viewings/service";
 
-const STATUS_LABEL: Record<string, string> = {
-  scheduled: "מתוזמנת", confirmed: "מאושרת", completed: "הושלמה", cancelled: "בוטלה", no_show: "לא הגיע", rescheduled: "נדחתה",
-};
+const STATUS_LABEL = MEETING_STATUS_HE;
 type Tab = "today" | "upcoming" | "awaitingConfirmation" | "completed" | "cancelled";
 const TABS: [Tab, string][] = [
   ["today", "היום"], ["upcoming", "קרובות"], ["awaitingConfirmation", "ממתינות לאישור"], ["completed", "הושלמו"], ["cancelled", "בוטלו / לא הגיע"],

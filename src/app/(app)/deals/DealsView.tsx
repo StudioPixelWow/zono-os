@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { DEAL_STAGE_LABEL, DEAL_STAGE_ORDER, OBJECTION_LABEL, type DealStage } from "@/lib/deals/engine";
+import { TASK_PRIORITY_HE, SEVERITY_HE } from "@/lib/i18n/labels";
 import { advanceDealStageAction, recomputeDealsAction, resolveObjectionAction, setDealTaskStatusAction } from "@/lib/deals/actions";
 import type { DealsBoard, DealRow } from "@/lib/deals/service";
 import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumentButton";
@@ -139,7 +140,7 @@ export function DealsView({ board }: { board: DealsBoard }) {
               {tasks.length === 0 ? <p className="text-muted text-sm">אין משימות פתוחות</p> : (
                 <ul className="flex flex-col gap-2">{tasks.slice(0, 12).map((t) => (
                   <li key={t.id} className="border-line flex flex-wrap items-center gap-2 rounded-xl border p-2 text-sm">
-                    <span className="min-w-0 flex-1"><span className="text-ink font-semibold">{t.title}</span><span className="text-muted block text-[10px]">{t.dealTitle} · <span className={PRIORITY[t.priority]}>{t.priority}</span> · השפעה {t.impact_score}</span></span>
+                    <span className="min-w-0 flex-1"><span className="text-ink font-semibold">{t.title}</span><span className="text-muted block text-[10px]">{t.dealTitle} · <span className={PRIORITY[t.priority]}>{TASK_PRIORITY_HE[t.priority] ?? t.priority}</span> · השפעה {t.impact_score}</span></span>
                     <button className="text-success text-[11px] font-bold" disabled={pending} onClick={() => run(() => setDealTaskStatusAction(t.id, "done"))}>בוצע</button>
                     <button className="text-muted text-[11px] font-bold" disabled={pending} onClick={() => run(() => setDealTaskStatusAction(t.id, "dismissed"))}>בטל</button>
                   </li>
@@ -151,7 +152,7 @@ export function DealsView({ board }: { board: DealsBoard }) {
               {objections.length === 0 ? <p className="text-muted text-sm">אין התנגדויות פתוחות ✓</p> : (
                 <ul className="flex flex-col gap-2">{objections.slice(0, 10).map((o) => (
                   <li key={o.id} className="border-line flex flex-wrap items-center gap-2 rounded-xl border p-2 text-sm">
-                    <span className="text-ink min-w-0 flex-1 font-semibold">{o.dealTitle} <span className={cn("text-[10px]", SEVERITY[o.severity])}>· {OBJECTION_LABEL[o.objection_type] ?? o.objection_type} · {o.severity}</span></span>
+                    <span className="text-ink min-w-0 flex-1 font-semibold">{o.dealTitle} <span className={cn("text-[10px]", SEVERITY[o.severity])}>· {OBJECTION_LABEL[o.objection_type] ?? o.objection_type} · {SEVERITY_HE[o.severity] ?? o.severity}</span></span>
                     <button className="text-success text-[11px] font-bold" disabled={pending} onClick={() => run(() => resolveObjectionAction(o.id))}>פתור</button>
                   </li>
                 ))}</ul>

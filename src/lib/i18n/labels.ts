@@ -94,3 +94,44 @@ export const WORKFLOW_STATUS_HE: Record<string, string> = {
 export const INSIGHT_STATUS_HE: Record<string, string> = {
   pending: "ממתין", approved: "אושר", applied: "הוחל", dismissed: "נדחה", rejected: "נדחה", new: "חדש",
 };
+
+/** Risk / issue severity — cross-entity (risks, objections, alerts). Masculine
+ *  (modifies "סיכון"). Canonical: was leaking raw English across CRM/deal cards. */
+export const SEVERITY_HE: Record<string, string> = {
+  critical: "קריטי", high: "גבוה", medium: "בינוני", low: "נמוך", info: "מידע",
+};
+
+/** Deal stage — the `public.deals.stage` column vocabulary (DEAL_STAGE_OPTIONS).
+ *  Feminine (a deal, "עסקה", is feminine). Distinct from the engine's projection
+ *  stage vocabulary (DEAL_STAGE_LABEL in deals/engine.ts) — do not conflate. */
+export const DEAL_STAGE_HE: Record<string, string> = {
+  new: "חדשה", qualified: "מוסמכת", negotiation: "משא ומתן", agreement: "הסכמה", contract: "חוזה", closing: "סגירה",
+};
+
+/** Deal lifecycle status (`public.deals.status`). */
+export const DEAL_STATUS_HE: Record<string, string> = {
+  open: "פתוחה", won: "נסגרה בהצלחה", lost: "אבודה", cancelled: "בוטלה",
+};
+
+/** Document signature status (documents.signature_status). */
+export const DOC_SIGNATURE_STATUS_HE: Record<string, string> = {
+  draft: "טיוטה", missing: "חסר", pending: "ממתין לחתימה", pending_signature: "ממתין לחתימה",
+  sent: "נשלח", viewed: "נצפה", signed: "נחתם", completed: "הושלם",
+  rejected: "נדחה", cancelled: "בוטל", failed: "נכשל",
+};
+
+/** Lead stage (leads.stage) — shared by the leads list + lead detail. */
+export const LEAD_STAGE_HE: Record<string, string> = {
+  new: "חדש", contacted: "נוצר קשר", qualified: "מוסמך", nurturing: "בטיפוח",
+  converted: "הומר", lost: "אבוד", disqualified: "נפסל",
+};
+
+/** Lead source (leads.source) — shared by the leads list + lead detail. Superset
+ *  of the buyer SOURCE_LABELS (leads carry finer provenance like FB comments). */
+export const LEAD_SOURCE_HE: Record<string, string> = {
+  facebook: "פייסבוק", facebook_group_comment: "תגובת קבוצת פייסבוק", facebook_comment: "תגובת פייסבוק",
+  instagram: "אינסטגרם", yad2: "יד2", madlan: "מדלן", website: "אתר", landing_page: "דף נחיתה",
+  property_page: "עמוד נכס", referral: "המלצה", whatsapp: "וואטסאפ", sign_call: "שלט",
+  open_house: "בית פתוח", cold_outreach: "פנייה יזומה", portal: "פורטל", partner: "שותף",
+  manual: "ידני", import: "ייבוא", other: "אחר",
+};

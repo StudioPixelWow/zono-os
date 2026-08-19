@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { EntityTimeline } from "@/components/activity/EntityTimeline";
 import { RecommendedMatches, type RecoItemView } from "@/components/activity/RecommendedMatches";
 import { readinessLabel, scoreTone, type Tone } from "@/lib/buyer-intelligence/scoring";
+import { SEVERITY_HE } from "@/lib/i18n/labels";
 // Batch 5.5 (Part 7): BUYER_STAGES / STAGE_LABELS / nextStage / stageIndex are the
 // INTELLIGENCE playbook's own stage vocabulary. They no longer drive a journey widget
 // here — the lifecycle is the canonical spine — so only the label maps this panel still
@@ -172,7 +173,7 @@ export function BuyerCommandCenter({ buyerId, buyerName, data, recommendations =
             {openRisks.length === 0 && <p className="text-muted text-sm">אין סיכונים פעילים ✓</p>}
             {openRisks.map((r) => (
               <div key={r.id} className="border-line rounded-2xl border p-3">
-                <div className="flex items-center justify-between gap-2"><p className="text-ink text-sm font-bold">{r.title}</p><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", SEVERITY_TONE[r.severity] ?? SEVERITY_TONE.low)}>{r.severity}</span></div>
+                <div className="flex items-center justify-between gap-2"><p className="text-ink text-sm font-bold">{r.title}</p><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", SEVERITY_TONE[r.severity] ?? SEVERITY_TONE.low)}>{SEVERITY_HE[r.severity] ?? r.severity}</span></div>
                 {r.recommended_action && <p className="text-brand-strong mt-1 text-xs font-semibold">המלצה: {r.recommended_action}</p>}
                 <Button size="sm" variant="secondary" className="mt-2" onClick={() => run(() => resolveBuyerRiskAction(buyerId, r.id))} disabled={pending}>טפל עכשיו</Button>
               </div>

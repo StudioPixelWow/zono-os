@@ -9,11 +9,9 @@ import { IconSurface } from "@/components/ui/action-surfaces";
 import { ContextualZeroState } from "@/components/common/ContextualZeroState";
 import { bulkLeadAction, type BulkLeadOp, type BulkLeadResult } from "@/lib/leads/actions";
 import type { LeadListRow } from "@/lib/leads/service";
+import { LEAD_STAGE_HE, LEAD_SOURCE_HE } from "@/lib/i18n/labels";
 
-const STAGE_LABEL: Record<string, string> = {
-  new: "חדש", contacted: "נוצר קשר", qualified: "מוסמך", nurturing: "בטיפוח",
-  converted: "הומר", lost: "אבוד", disqualified: "נפסל",
-};
+const STAGE_LABEL = LEAD_STAGE_HE;
 const STAGE_TONE: Record<string, string> = {
   new: "bg-brand-soft text-brand-strong", contacted: "bg-warning-soft text-warning", qualified: "bg-success-soft text-success",
   nurturing: "bg-surface text-muted", converted: "bg-success-soft text-success", lost: "bg-danger-soft text-danger", disqualified: "bg-surface text-muted",
@@ -132,7 +130,7 @@ export function LeadsListView({ leads, failed, followUp = {} }: { leads: LeadLis
                 <Link href={`/leads/${l.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 hover:opacity-90">
                   <div className="min-w-0">
                     <p className="text-ink font-black">{l.full_name}</p>
-                    <p className="text-muted text-[12px]">{l.phone ?? "—"}{l.email ? ` · ${l.email}` : ""}{l.source ? ` · מקור: ${l.source}` : ""}{failedRow?.error ? ` · ⚠ ${failedRow.error}` : ""}</p>
+                    <p className="text-muted text-[12px]">{l.phone ?? "—"}{l.email ? ` · ${l.email}` : ""}{l.source ? ` · מקור: ${LEAD_SOURCE_HE[l.source] ?? l.source}` : ""}{failedRow?.error ? ` · ⚠ ${failedRow.error}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {fu && <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${fu.tone === "danger" ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning"}`}>{fu.label}</span>}
