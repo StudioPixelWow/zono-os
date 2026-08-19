@@ -12,6 +12,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { getPropertyLifecycleControlCenter } from "@/lib/properties/control-center";
+import { MarketingAutopilotBlock } from "./MarketingAutopilotBlock";
 
 const ils = (n: number | null) => (n == null ? "" : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : `₪${Math.round(n).toLocaleString("he-IL")}`);
 const dt = (iso: string | null) => { if (!iso) return ""; try { return new Date(iso).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }); } catch { return ""; } };
@@ -115,6 +116,9 @@ export async function PropertyControlCenter({ propertyId }: { propertyId: string
               <Link href={`/distribution/campaign-wizard?property=${id}`} className="bg-brand-soft text-brand mt-3 inline-block rounded-xl px-4 py-2 text-sm font-bold">הנכס עדיין לא משווק — צור קמפיין</Link>
             )}
           </Card>
+
+          {/* Marketing Autopilot — state + one recommended action + prepared plan */}
+          <MarketingAutopilotBlock propertyId={id} />
 
           {/* Matching */}
           <Card title={`קונים מתאימים · ${cc.matching.total}`} cta={{ label: "כל ההתאמות", href: `/properties/${id}` }}>

@@ -12,6 +12,7 @@ import { getPropertyMarketingCoverage, type PropertyMarketingCoverage } from "@/
 import { getOrgExtensionReadiness } from "@/lib/distribution/extension-service";
 import { computeExtensionReadiness } from "@/lib/distribution/extension-readiness";
 import { DistributionHome } from "./_home/DistributionHome";
+import { getPortfolioMarketingAutopilot, type PortfolioAutopilot } from "@/lib/marketing-autopilot/autopilot";
 
 export const dynamic = "force-dynamic";
 
@@ -31,5 +32,7 @@ export default async function DistributionPage() {
   try { center = await getDistributionCenter(); } catch (e) { console.error("[distribution] center load failed:", e); }
   try { coverage = await getPropertyMarketingCoverage(); } catch (e) { console.error("[distribution] coverage load failed:", e); }
   try { readiness = await getOrgExtensionReadiness(); } catch (e) { console.error("[distribution] readiness load failed:", e); }
-  return <DistributionHome today={today} center={center} coverage={coverage} readiness={readiness} />;
+  let marketingWeek: PortfolioAutopilot | null = null;
+  try { marketingWeek = await getPortfolioMarketingAutopilot({ limit: 200 }); } catch (e) { console.error("[distribution] autopilot load failed:", e); }
+  return <DistributionHome today={today} center={center} coverage={coverage} readiness={readiness} marketingWeek={marketingWeek} />;
 }

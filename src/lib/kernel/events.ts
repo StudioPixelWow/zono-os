@@ -151,6 +151,11 @@ export const DOMAIN_EVENTS = {
   publishRequested: "publish.requested",
   publishSucceeded: "publish.succeeded",
   publishFailed: "publish.failed",
+  // Marketing Autopilot (surfacing + audit only — NEVER an external send). Emitted
+  // once/day per property by the restrained weekly scan; plan_prepared marks a
+  // human-reviewed plan draft. entityType = "property".
+  marketingAttentionRequired: "marketing.attention_required",
+  marketingPlanPrepared: "marketing.plan_prepared",
   // WhatsApp operational (NEVER message content — operational metadata only)
   whatsappMessageSent: "whatsapp.message_sent",
   whatsappMessageFailed: "whatsapp.message_failed",

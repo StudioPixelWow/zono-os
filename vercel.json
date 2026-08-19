@@ -103,6 +103,10 @@
     {
       "path": "/api/cron/seller-lifecycle-dispatch",
       "schedule": "45 6-16 * * 0-4"
+    },
+    {
+      "path": "/api/cron/marketing-autopilot-scan",
+      "schedule": "0 5 * * 0"
     }
   ]
 }

@@ -26,6 +26,7 @@ import { getDailyCommandCenter } from "@/lib/daily/command-center";
 import { listPropertiesMissingWeeklyReport } from "@/lib/sellers/lifecycle";
 import { summarizePropertyForZi } from "@/lib/properties/control-center";
 import { summarizeBuyerPortalForZi } from "@/lib/customer-portal/buyer-portal";
+import { getPortfolioMarketingAutopilot, summarizeMarketingForZi } from "@/lib/marketing-autopilot/autopilot";
 import type { DailyCommandCenter } from "@/lib/daily/priority";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { listRecentWhatsAppReplies } from "@/lib/whatsapp/inbound-linkage";
@@ -145,6 +146,17 @@ function detectPriceDropQuery(q: string): "dropped" | "responses" | null {
   const has = (arr: string[]) => arr.some((p) => t.includes(p));
   if (has(["מי הגיב לעדכון", "מי הגיב לירידת", "מי הגיב על ירידת", "who responded to the price", "responses to the price"])) return "responses";
   if (has(["איזה נכסים ירדו", "אילו נכסים ירדו", "נכסים שירדו במחיר", "ירידת מחיר", "ירידות מחיר", "מי כדאי לשלוח", "למי כדאי לשלוח", "מי ביקר בנכס והמחיר ירד", "which properties dropped", "price drops", "dropped in price"])) return "dropped";
+  return null;
+}
+
+/** Detect marketing-autopilot questions. "plan"/"property" answer from the property
+ *  in context; "portfolio" answers across the org. */
+function detectMarketingQuery(q: string): "portfolio" | "property" | "plan" | null {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  if (has(["תכין לי תוכנית שיווק", "תוכנית שיווק לשבוע", "הכן תוכנית שיווק", "תכין תוכנית שיווק", "prepare a marketing plan", "marketing plan for the week"])) return "plan";
+  if (has(["מה אני צריך לשווק", "מה לשווק היום", "איזה נכסים לא משווקים", "נכסים לא משווקים", "איפה אין פרסום", "אילו נכסים דורשים שיווק", "what to market", "which properties are not marketed", "where is there no future marketing"])) return "portfolio";
+  if (has(["מה כדאי לעשות עם הנכס", "מה לשווק בנכס", "איזה קריאייטיב צריך להחליף", "לאילו לקוחות כדאי לשלוח את הנכס", "לאילו קבוצות עוד לא פרסמנו", "what should i do with this property"])) return "property";
   return null;
 }
 
@@ -344,6 +356,37 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           const wMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
           await touchConversation(conversationId, 2);
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: wMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI Marketing Autopilot: "what to market / which properties need work" (org
+    // portfolio) and "prepare a marketing plan / what to do with this property"
+    // (from the property in context). Deterministic; PREPARES a plan draft, never
+    // silently activates it. ──
+    const mktIntent = detectMarketingQuery(question);
+    if (mktIntent) {
+      try {
+        const { profile } = await getSessionContext();
+        const orgId = profile?.org_id ?? null;
+        if (mktIntent === "portfolio") {
+          const portfolio = await getPortfolioMarketingAutopilot({ limit: 200 });
+          const needy = portfolio.items.filter((i) => i.priority === "P0" || i.priority === "P1");
+          const content = needy.length
+            ? `זיהינו ${needy.length} נכסים שדורשים שיווק:\n` + needy.slice(0, 12).map((i) => `• ${i.title} — ${i.primaryReason}`).join("\n")
+            : "כל הנכסים הפעילים מתוזמנים או מפורסמים כראוי ✓";
+          const mMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: mMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+        if (orgId && ctx.selectedPropertyId) {
+          const summary = (await summarizeMarketingForZi(orgId, ctx.selectedPropertyId, false)) ?? "לא נמצאו נתוני שיווק לנכס הנוכחי.";
+          const content = mktIntent === "plan"
+            ? `${summary}\n\nהכנתי תוכנית. לעבור עליה ולאשר? /distribution/marketing-plan/${ctx.selectedPropertyId}`
+            : summary;
+          const mMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: mMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
     }

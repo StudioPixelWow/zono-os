@@ -11,7 +11,7 @@ export type DailyActionKind =
   | "lead_callback" | "lead_unassigned" | "publish_failed" | "publish_today"
   | "property_unmarketed" | "property_attention" | "task_overdue" | "task_today"
   | "deal_stuck" | "customer_reply" | "price_drop" | "price_drop_response"
-  | "seller_callback" | "seller_strategy" | "onboarding";
+  | "seller_callback" | "seller_strategy" | "marketing_attention" | "onboarding";
 
 export interface DailyAction {
   id: string;

@@ -8,6 +8,7 @@
 // /publishing-control. No new publishing engine, no Gantt, no admin tables.
 // ============================================================================
 import Link from "next/link";
+import Image from "next/image";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import type { PublishingControlData, ControlPost } from "@/lib/distribution/publishing-control-data";
@@ -36,7 +37,7 @@ function covCta(status: CoverageStatus, propertyId: string): { label: string; hr
 
 interface Row { post: ControlPost; st: TodayStatus }
 
-export function DistributionHome({ today, center, coverage, readiness }: { today: PublishingControlData; center: DistributionCenterData; coverage: PropertyMarketingCoverage; readiness?: ExtensionReadinessView }) {
+export function DistributionHome({ today, center, coverage, readiness, marketingWeek }: { today: PublishingControlData; center: DistributionCenterData; coverage: PropertyMarketingCoverage; readiness?: ExtensionReadinessView; marketingWeek?: import("@/lib/marketing-autopilot/autopilot").PortfolioAutopilot | null }) {
   // Server component (no client render) — reading the clock here is correct.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
@@ -80,6 +81,34 @@ export function DistributionHome({ today, center, coverage, readiness }: { today
         </div>
         <Link href="/distribution/campaign-wizard" className="bg-brand inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-black text-white"><Icon name="Plus" size={16} /> קמפיין חדש</Link>
       </header>
+
+      {/* Marketing Autopilot — portfolio "שיווק השבוע" (real, deterministic) */}
+      {marketingWeek && marketingWeek.total > 0 && (
+        <section className="bg-card border-line rounded-[22px] border p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-ink flex items-center gap-2 text-sm font-black"><Icon name="Sparkles" size={16} /> שיווק השבוע</h2>
+            <span className="text-muted text-[12px]">{marketingWeek.needAction > 0 ? `${marketingWeek.needAction} נכסים דורשים פעולה` : "הכול במסלול תקין ✓"}</span>
+          </div>
+          {marketingWeek.needAction > 0 ? (
+            <ul className="mt-3 flex flex-col gap-2">
+              {marketingWeek.items.filter((i) => i.priority === "P0" || i.priority === "P1").slice(0, 6).map((i) => (
+                <li key={i.propertyId} className="border-line flex items-center justify-between gap-3 rounded-2xl border p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {i.imageUrl ? <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl"><Image src={i.imageUrl} alt="" fill className="object-cover" sizes="44px" /></span> : <span className="bg-surface text-muted grid h-11 w-11 shrink-0 place-items-center rounded-xl"><Icon name="Home" size={18} /></span>}
+                    <div className="min-w-0">
+                      <p className="text-ink truncate text-sm font-bold">{i.title}</p>
+                      <p className="text-muted truncate text-xs">{i.primaryReason}</p>
+                    </div>
+                  </div>
+                  <Link href={i.href} className="bg-brand-soft text-brand shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold">{i.primaryTitle}</Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted mt-2 text-[13px]">כל הנכסים הפעילים מתוזמנים או מפורסמים כראוי.</p>
+          )}
+        </section>
+      )}
 
       {/* Extension status — independent of the schedule (Phase 22) */}
       {readiness && (

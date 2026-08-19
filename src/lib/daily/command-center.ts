@@ -274,6 +274,20 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     }
   } catch { /* best-effort */ }
 
+  // ── MARKETING AUTOPILOT — properties that need marketing attention this week.
+  //    Deterministic portfolio scan (same facts as Distribution Home). Bounded. ──
+  try {
+    const { getPortfolioMarketingAutopilot } = await import("@/lib/marketing-autopilot/autopilot");
+    const portfolio = await getPortfolioMarketingAutopilot({ limit: 200 });
+    for (const it of portfolio.items.filter((i) => i.priority === "P0" || i.priority === "P1").slice(0, 6)) {
+      actions.push({
+        id: `mkt:${it.propertyId}`, kind: "marketing_attention", priority: it.priority === "P0" ? "P0" : "P1",
+        title: it.title, reason: it.primaryReason, href: it.href, cta: it.primaryTitle, icon: "Megaphone",
+        urgency: it.urgency, entity: { type: "property", id: it.propertyId },
+      });
+    }
+  } catch { /* best-effort */ }
+
   // ── PIPELINE movement (manager/owner) ──────────────────────────────────────
   let pipeline: DailyCommandCenter["pipeline"] = null;
   if (isManager) {
