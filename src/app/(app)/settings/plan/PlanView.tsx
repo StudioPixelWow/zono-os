@@ -11,6 +11,11 @@ import { PLANS, PLAN_ORDER, ENTITLEMENTS } from "@/lib/launch";
 import { setPlanAction } from "@/lib/launch/server/actions";
 import type { OrgPlan, PlanTier } from "@/lib/launch";
 
+// Customer-facing Hebrew for the subscription status (never show the raw enum).
+const PLAN_STATUS_HE: Record<string, string> = {
+  active: "פעיל", trialing: "תקופת ניסיון", past_due: "בפיגור תשלום", canceled: "מבוטל", cancelled: "מבוטל",
+};
+
 const ENTITLEMENT_LABEL: Record<string, string> = {
   [ENTITLEMENTS.PROPERTY_RADAR]: "רדאר נכסים", [ENTITLEMENTS.BUYER_MATCHING]: "התאמת קונים",
   [ENTITLEMENTS.SELLER_INTELLIGENCE]: "מודיעין מוכרים", [ENTITLEMENTS.AI_COPILOT]: "AI Copilot",
@@ -34,7 +39,7 @@ export function PlanView({ current }: { current: OrgPlan }) {
     <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-5 p-4 sm:p-6">
       <div className="bg-card border-line rounded-[20px] border p-5">
         <h1 className="text-ink text-lg font-black">חבילה ורישוי</h1>
-        <p className="text-muted text-xs">החבילה הנוכחית: <span className="text-brand-strong font-bold">{PLANS[plan].label}</span> · סטטוס {current.status}</p>
+        <p className="text-muted text-xs">החבילה הנוכחית: <span className="text-brand-strong font-bold">{PLANS[plan].label}</span> · סטטוס {PLAN_STATUS_HE[current.status] ?? current.status}</p>
         {msg && <p className="text-muted mt-2 text-xs font-semibold">{msg}</p>}
       </div>
 
@@ -67,7 +72,7 @@ export function PlanView({ current }: { current: OrgPlan }) {
       </div>
 
       <p className="text-muted text-center text-[11px]">
-        חיוב (Stripe, חשבוניות, מנויים, מגבלות שימוש) מוכן לאינטגרציה — אין עדיין תהליך תשלום פעיל. שינוי חבילה זמין למנהלי מערכת.
+        חיוב, חשבוניות ומגבלות שימוש מנוהלים דרך מסך ״החשבון והמנוי״. שינוי חבילה זמין למנהלי מערכת בלבד.
       </p>
     </div>
   );

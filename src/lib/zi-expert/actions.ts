@@ -675,7 +675,7 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           escalated = true;
           const ref = ticketNumber ? ` · מספר פנייה: ${ticketNumber}` : "";
           if (res.existing) {
-            answer.content += `\n\n---\nהפנייה שלך לצוות התמיכה כבר פתוחה${ref}. הוספתי את ההודעה הזו לפנייה הקיימת — הצוות יחזור אליך כאן.`;
+            answer.content += `\n\n---\nהפנייה שלך לצוות התמיכה כבר פתוחה${ref}. אין צורך לפתוח פנייה חדשה — הצוות מטפל בה ויחזור אליך כאן.`;
           } else if (classification.requiresHuman) {
             answer.content = `פתחתי עבורך פנייה לצוות התמיכה ✅\nמספר הפנייה שלך: ${ticketNumber ?? "—"}\nצירפתי את פרטי השיחה, והצוות יחזור אליך כאן בהקדם.`;
           } else {

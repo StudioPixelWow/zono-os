@@ -11,15 +11,24 @@ import { saveNotificationPreferencesAction, sendTestNotificationAction } from "@
 
 type Prefs = { whatsapp: boolean; email: boolean; morningEmail: boolean; urgentWhatsapp: boolean; meetingReminders: boolean };
 
-function Toggle({ on, onClick, label, hint }: { on: boolean; onClick: () => void; label: string; hint?: string }) {
+function Toggle({ on, onClick, label, hint, disabled }: { on: boolean; onClick: () => void; label: string; hint?: string; disabled?: boolean }) {
   return (
-    <button onClick={onClick} className="flex w-full items-center justify-between gap-3 py-2.5 text-right">
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="focus-visible:ring-brand-strong flex w-full items-center justify-between gap-3 py-2.5 text-start focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+    >
       <span className="min-w-0">
         <span className="text-ink block text-sm font-bold">{label}</span>
         {hint && <span className="text-muted block text-xs">{hint}</span>}
       </span>
+      {/* Logical positioning (start/end) keeps the knob RTL-correct. */}
       <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${on ? "bg-brand-strong" : "bg-surface"}`}>
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${on ? "left-0.5" : "right-0.5"}`} />
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${on ? "start-0.5" : "end-0.5"}`} />
       </span>
     </button>
   );
@@ -60,7 +69,9 @@ export function NotificationSettings({ initial }: { initial: Prefs }) {
         <div className="mb-1 flex items-center gap-2"><Icon name="MessageCircle" size={16} className="text-brand-strong" /><h2 className="text-ink text-sm font-black">WhatsApp</h2></div>
         <p className="text-muted mb-2 text-xs">רק דברים דחופים באמת — לא הצפה.</p>
         <Toggle on={p.whatsapp} onClick={() => set("whatsapp")} label="קבלת עדכונים ב-WhatsApp" />
-        <Toggle on={p.urgentWhatsapp} onClick={() => set("urgentWhatsapp")} label="התראות דחופות בלבד" hint="ליד חדש מעבר ל-SLA, כשל פרסום, בעיית תשלום" />
+        {/* Urgent-only depends on the WhatsApp channel being on — the delivery brain
+            requires both, so we disable it rather than let it silently do nothing. */}
+        <Toggle on={p.whatsapp && p.urgentWhatsapp} disabled={!p.whatsapp} onClick={() => set("urgentWhatsapp")} label="התראות דחופות בלבד" hint={p.whatsapp ? "ליד חדש מעבר ל-SLA, כשל פרסום, בעיית תשלום" : "יש להפעיל תחילה קבלת עדכונים ב-WhatsApp"} />
       </section>
 
       <section className="bg-card border-line rounded-2xl border p-4">

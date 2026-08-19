@@ -16,6 +16,15 @@ export interface NotifItem {
 }
 export interface NotificationFeed { items: NotifItem[]; unread: number; counts: Record<string, number> }
 
+// Hebrew for transaction-radar opportunity types — used only as a fallback when a
+// row has no pre-computed reason_hebrew, so the feed never shows a raw enum title.
+const RADAR_OPP_HE: Record<string, string> = {
+  price_drop: "ירידת מחיר", price_increase: "עליית מחיר", new_listing: "מודעה חדשה",
+  back_on_market: "חזרה לשוק", sold: "עסקה שנסגרה", relisted: "פרסום מחדש", stale: "מודעה מתיישנת",
+};
+const radarTitleHe = (reasonHe: string | null, oppType: string | null): string =>
+  reasonHe ?? RADAR_OPP_HE[oppType ?? ""] ?? "הזדמנות בשוק";
+
 function entityHref(entityType: string | null, entityId: string | null, fallback: string): string {
   if (!entityId) return fallback;
   switch (entityType) {
@@ -60,7 +69,7 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
   for (const o of opps.data ?? []) add(`opp:${o.id}`, "opportunity", "הזדמנויות", o.title, null, entityHref(o.entity_type, o.entity_id, "/command"), o.opportunity_score, o.created_at);
   for (const f of fc.data ?? []) add(`fc:${f.id}`, f.signal_type?.includes("likely") || f.signal_type?.includes("pricing") ? "opportunity" : "warning", "תחזית", f.title, f.description, "/forecast", f.impact_score, f.created_at);
   for (const l of leak.data ?? []) add(`leak:${l.id}`, "warning", "הכנסות", l.title, l.reason, entityHref(l.entity_type, l.entity_id, "/revenue"), l.severity === "high" ? 80 : 60, l.created_at);
-  for (const r of radar.data ?? []) add(`radar:${r.id}`, "opportunity", "רדאר עסקאות", r.reason_hebrew ?? r.opportunity_type, r.city_name, r.property_listing_id ? `/properties/${r.property_listing_id}` : "/transactions/radar", r.opportunity_score, r.created_at);
+  for (const r of radar.data ?? []) add(`radar:${r.id}`, "opportunity", "רדאר עסקאות", radarTitleHe(r.reason_hebrew, r.opportunity_type), r.city_name, r.property_listing_id ? `/properties/${r.property_listing_id}` : "/transactions/radar", r.opportunity_score, r.created_at);
   for (const c of comp.data ?? []) add(`comp:${c.id}`, "warning", "מתחרים", c.title, c.description, "/competitors", c.confidence_score, c.created_at);
   for (const m of mkt.data ?? []) add(`mkt:${m.id}`, "opportunity", "שיווק", m.title, m.description, "/marketing", m.impact_score, m.created_at);
 

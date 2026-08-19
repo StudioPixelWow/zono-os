@@ -56,7 +56,7 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
               {CARDS.map((c) => <option key={c.tier} value={c.tier}>{c.label}</option>)}
             </select>
             {subscription && !subscription.cancelAtPeriodEnd ? <button type="button" disabled={pending} onClick={() => run(cancelRenewalAction, "החידוש בוטל.")} className="text-muted rounded-full border border-[var(--line)] px-3 py-1.5 text-[12px] font-bold">בטל חידוש</button> : null}
-            {subscription && ["cancelled", "expired", "suspended"].includes(subscription.status) ? <button type="button" disabled={pending} onClick={reactivate} className="bg-brand rounded-full px-3 py-1.5 text-[12px] font-black text-white">הפעלת מנוי מחדש</button> : null}
+            {subscription && ["cancelled", "canceled", "expired", "suspended"].includes(subscription.status) ? <button type="button" disabled={pending} onClick={reactivate} className="bg-brand rounded-full px-3 py-1.5 text-[12px] font-black text-white">הפעלת מנוי מחדש</button> : null}
           </div>
         </section>
 
@@ -79,7 +79,7 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
           <ul className="flex flex-col gap-1.5">
             {payments.map((p) => (
               <li key={p.id} className="flex items-center justify-between rounded-[10px] border border-[var(--line)] px-3 py-2 text-[12px]">
-                <span className="text-ink font-bold">₪{p.amountIls} · {p.planTier}</span>
+                <span className="text-ink font-bold">₪{p.amountIls} · {CARDS.find((c) => c.tier === p.planTier)?.label ?? p.planTier}</span>
                 <span className="text-muted">{STATUS_HE[p.status] ?? p.status}{p.verified ? " ✓" : ""} · {new Date(p.createdAt).toLocaleDateString("he-IL")}</span>
               </li>
             ))}

@@ -11,7 +11,7 @@
 export type TicketStatus = "open" | "in_progress" | "waiting_customer" | "resolved" | "closed";
 export const TICKET_STATUSES: TicketStatus[] = ["open", "in_progress", "waiting_customer", "resolved", "closed"];
 export const STATUS_LABEL: Record<TicketStatus, string> = {
-  open: "פתוח", in_progress: "בטיפול", waiting_customer: "ממתין ללקוח", resolved: "נפתר", closed: "סגור",
+  open: "פתוח", in_progress: "בטיפול", waiting_customer: "ממתין ללקוח", resolved: "נפתר", closed: "נסגר",
 };
 
 // Deterministic allowed transitions. Reopen = closed/resolved → open/in_progress.

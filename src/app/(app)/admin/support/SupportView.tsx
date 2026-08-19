@@ -12,6 +12,16 @@ import { startImpersonationAction, endImpersonationAction, listImpersonationActi
 
 interface UsageSummary { total: number; byName: { name: string; count: number }[]; byCategory: { name: string; count: number }[] }
 
+// Hebrew for the incoming-feedback enums (admin surface) — never show the raw value.
+const FEEDBACK_TYPE_HE: Record<string, string> = {
+  bug: "תקלה", idea: "רעיון", feature: "בקשת פיצ׳ר", praise: "מחמאה", question: "שאלה", complaint: "תלונה", other: "אחר",
+};
+const FEEDBACK_STATUS_HE: Record<string, string> = {
+  new: "חדש", open: "פתוח", in_progress: "בטיפול", reviewed: "נבדק", resolved: "נפתר", closed: "נסגר", dismissed: "נדחה",
+};
+const feedbackTypeHe = (v: unknown) => FEEDBACK_TYPE_HE[String(v)] ?? String(v ?? "—");
+const feedbackStatusHe = (v: unknown) => FEEDBACK_STATUS_HE[String(v)] ?? String(v ?? "");
+
 export function SupportView({ usage, feedback, impersonation: imp0 }: {
   usage: UsageSummary; feedback: Record<string, unknown>[]; impersonation: Record<string, unknown>[];
 }) {
@@ -72,8 +82,8 @@ export function SupportView({ usage, feedback, impersonation: imp0 }: {
               <div key={String(f.id)} className="border-line flex items-center justify-between gap-2 border-b py-1.5 last:border-0">
                 <span className="text-ink truncate text-sm">{String(f.title || f.body || "—")}</span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="bg-surface text-muted rounded-full px-2 py-0.5 text-[10px] font-bold">{String(f.feedback_type)}</span>
-                  <span className="text-muted text-[11px]">{String(f.status)}</span>
+                  <span className="bg-surface text-muted rounded-full px-2 py-0.5 text-[10px] font-bold">{feedbackTypeHe(f.feedback_type)}</span>
+                  <span className="text-muted text-[11px]">{feedbackStatusHe(f.status)}</span>
                 </span>
               </div>
             ))}
