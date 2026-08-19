@@ -25,6 +25,7 @@ import { getOnboardingProgress, summarizeOnboardingForZi } from "@/lib/onboardin
 import { getDailyCommandCenter } from "@/lib/daily/command-center";
 import { listPropertiesMissingWeeklyReport } from "@/lib/sellers/lifecycle";
 import { summarizePropertyForZi } from "@/lib/properties/control-center";
+import { summarizeBuyerPortalForZi } from "@/lib/customer-portal/buyer-portal";
 import type { DailyCommandCenter } from "@/lib/daily/priority";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { listRecentWhatsAppReplies } from "@/lib/whatsapp/inbound-linkage";
@@ -145,6 +146,17 @@ function detectPriceDropQuery(q: string): "dropped" | "responses" | null {
   if (has(["מי הגיב לעדכון", "מי הגיב לירידת", "מי הגיב על ירידת", "who responded to the price", "responses to the price"])) return "responses";
   if (has(["איזה נכסים ירדו", "אילו נכסים ירדו", "נכסים שירדו במחיר", "ירידת מחיר", "ירידות מחיר", "מי כדאי לשלוח", "למי כדאי לשלוח", "מי ביקר בנכס והמחיר ירד", "which properties dropped", "price drops", "dropped in price"])) return "dropped";
   return null;
+}
+
+/** Detect a "what does the customer see in their portal" question (answered from
+ *  the buyer-portal selector when a buyer is in context). */
+function detectBuyerPortalQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  return has([
+    "בפורטל", "מה הלקוח רואה", "מה רואה הלקוח", "איזה נכסים סימן", "מה סימן הלקוח", "מה הוא סימן",
+    "יש לו נכסים חדשים", "מתי הביקור הבא שלו", "the customer see", "customer portal", "in the portal",
+  ]);
 }
 
 /** Detect a "what's happening with THIS property" question (answered from the
@@ -332,6 +344,22 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           const wMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
           await touchConversation(conversationId, 2);
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: wMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI Buyer portal: "what does the customer see / which properties did they
+    // mark / when's their next viewing" — from the SAME portal selector when a buyer
+    // is in context (ctx.selectedBuyerId). Deterministic; customer-safe facts. ──
+    if (detectBuyerPortalQuery(question) && ctx.selectedBuyerId) {
+      try {
+        const { profile } = await getSessionContext();
+        const orgId = profile?.org_id ?? null;
+        if (orgId) {
+          const content = (await summarizeBuyerPortalForZi(orgId, ctx.selectedBuyerId)) ?? "לא נמצאו נתוני פורטל ללקוח הנוכחי.";
+          const bMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: bMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
     }

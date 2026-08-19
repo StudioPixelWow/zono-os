@@ -10,6 +10,7 @@ import {
 import { getBuyerCommandCenter } from "@/lib/buyer-intelligence/service";
 import { recommendedPropertiesForBuyer, getBuyerPropertyMatches } from "@/lib/matching-intelligence/service";
 import { BuyerDetailView } from "./BuyerDetailView";
+import { BuyerPortalLinkCard } from "./BuyerPortalLinkCard";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
 import { EntityCalendarSection } from "@/components/calendar/EntityCalendarSection";
 import { ApprovalBundleSection } from "@/components/approval-bundle/ApprovalBundleSection";
@@ -45,7 +46,12 @@ export default async function BuyerDetailsPage({
 
   // Server-rendered sections are passed as SLOTS into the buyer cockpit tabs
   // (instead of stacking endlessly below). Every module reused as-is; no logic change.
-  const communicationSlot = <CommunicationSection entityType="buyer" entityId={id} />;
+  const communicationSlot = (
+    <div className="flex flex-col gap-3">
+      <BuyerPortalLinkCard buyerId={id} />
+      <CommunicationSection entityType="buyer" entityId={id} />
+    </div>
+  );
   const calendarSlot = <EntityCalendarSection kind="buyer" id={id} name={buyer.full_name} />;
   const documentsSlot = (
     <div className="flex flex-col gap-3">
