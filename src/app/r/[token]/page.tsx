@@ -36,7 +36,7 @@ export default async function RecommendationView(
     .select("property_id,status,match_score")
     .eq("org_id", p.o).eq("contact_type", p.t).eq("contact_id", p.c).eq("bundle_id", p.b);
   const recRows = (recs ?? []) as Array<{ property_id: string; status: string; match_score: number | null }>;
-  if (!recRows.length) return <Shell><div style={{ background: "#fff", borderRadius: 20, padding: 32, textAlign: "center" }}><h1 style={{ color: "#0f172a", fontSize: 20 }}>אין המלצות להצגה</h1></div></Shell>;
+  if (!recRows.length) return <Shell><div style={{ background: "#fff", borderRadius: 20, padding: 32, textAlign: "center" }}><div style={{ fontSize: 34, marginBottom: 8 }}>🔎</div><h1 style={{ color: "#0f172a", fontSize: 20, margin: "0 0 6px" }}>החיפוש ממשיך</h1><p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>עדיין לא הוספנו כאן נכסים. נעדכן אתכם ברגע שנמצא התאמה מתאימה.</p></div></Shell>;
 
   // best-effort: mark the still-"recommended" rows as viewed (agent visibility)
   try { await db.from("customer_property_recommendations").update({ status: "viewed", responded_at: new Date().toISOString() }).eq("org_id", p.o).eq("bundle_id", p.b).eq("status", "recommended"); } catch { /* ignore */ }
@@ -67,7 +67,6 @@ export default async function RecommendationView(
             <div style={{ padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <h3 style={{ margin: 0, color: "#0f172a", fontSize: 17, fontWeight: 800 }}>{pr.title || "נכס"}</h3>
-                {r.match_score != null && <span style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 12, fontWeight: 800, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>התאמה {r.match_score}%</span>}
               </div>
               <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 14 }}>{[pr.city, pr.rooms ? `${pr.rooms} חד'` : "", ils(pr.price)].filter(Boolean).join(" · ")}</p>
               {unavailable ? (
@@ -78,7 +77,7 @@ export default async function RecommendationView(
                   <button name="action" value="interested" style={{ background: "#6d28d9", color: "#fff", border: 0, borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>מעניין אותי</button>
                   <button name="action" value="viewing_requested" style={{ background: "#0d9488", color: "#fff", border: 0, borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>רוצה ביקור</button>
                   <button name="action" value="talk_to_agent" style={{ background: "#fff", color: "#6d28d9", border: "1px solid #ddd6fe", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>לדבר עם הסוכן</button>
-                  <button name="action" value="rejected" style={{ background: "#fff", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>לא רלוונטי</button>
+                  <button name="action" value="rejected" style={{ background: "#fff", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>לא מתאים</button>
                 </form>
               )}
             </div>

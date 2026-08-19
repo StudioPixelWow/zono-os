@@ -17,7 +17,8 @@ const ALLOWED: ViewingFeedbackChoice[] = ["interested", "advance", "not_suitable
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   const p = verifyViewingToken(token);
-  if (!p || p.k !== "feedback") return NextResponse.json({ error: "invalid_token" }, { status: 400 });
+  // Token expired/invalid mid-flow → send back to the styled page, never raw JSON.
+  if (!p || p.k !== "feedback") return NextResponse.redirect(new URL(`/v/${token}`, req.url), { status: 303 });
 
   let action = "";
   try { action = String((await req.formData()).get("action") ?? ""); } catch { /* no body */ }

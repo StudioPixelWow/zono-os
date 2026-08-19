@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
 
 const INITIAL = 12;
 const ils = (n: number | null) => (n == null ? "" : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : `₪${Math.round(n).toLocaleString("he-IL")}`);
-const dtime = (iso: string | null) => { if (!iso) return ""; try { return new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
-const dday = (iso: string | null) => { if (!iso) return ""; try { return new Date(iso).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }); } catch { return ""; } };
+const dtime = (iso: string | null) => { if (!iso) return ""; try { return new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" }); } catch { return ""; } };
+const dday = (iso: string | null) => { if (!iso) return ""; try { return new Date(iso).toLocaleDateString("he-IL", { day: "numeric", month: "numeric", timeZone: "Asia/Jerusalem" }); } catch { return ""; } };
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -45,7 +45,7 @@ function Card({ token, c }: { token: string; c: PortalCard }) {
   return (
     <div id={`prop-${c.propertyId}`} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 18, overflow: "hidden", marginBottom: 14, opacity: c.available ? 1 : 0.72 }}>
       <div style={{ position: "relative" }}>
-        {c.imageUrl ? <img src={c.imageUrl} alt="" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} /> : <div style={{ height: 120, background: "#e2e8f0" }} />}
+        {c.imageUrl ? <img src={c.imageUrl} alt="" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} /> : <div style={{ height: 200, background: "#e2e8f0", display: "grid", placeItems: "center", fontSize: 34 }}>🏠</div>}
         <div style={{ position: "absolute", top: 10, insetInlineStart: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
           <Badge text={c.statusLabel} bg={st.bg} fg={st.fg} />
           {c.priceDrop && c.available && <Badge text={c.priceDrop.label} bg="#dcfce7" fg="#166534" />}

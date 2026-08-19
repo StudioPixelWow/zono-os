@@ -27,10 +27,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   if (!p) return page("קישור לא תקין", "הקישור להסרה אינו תקין או שפג תוקפו. אפשר לפנות למשרד להסרה ידנית.", false);
 
   const channels: CustomerChannel[] = p.ch === "all" ? ["email", "whatsapp"] : [p.ch];
+  const channelLabel = p.ch === "all" ? "אימייל ו-WhatsApp" : p.ch === "whatsapp" ? "WhatsApp" : "אימייל";
   try {
     for (const ch of channels) await setConsent(p.o, p.t, p.c, ch, "opted_out", "unsubscribe_link");
   } catch {
     return page("שגיאה זמנית", "לא הצלחנו לעדכן את ההעדפה כרגע. אפשר לנסות שוב מאוחר יותר או לפנות למשרד.", false);
   }
-  return page("הוסרת מרשימת התפוצה", "לא תקבל/י יותר הודעות מסוג זה. תודה — ותמיד אפשר לחזור דרך המשרד.", true);
+  // Honest scope: opting out stops ZONO's automatic messages on this channel entirely.
+  // The agent can still reach the customer directly; renewal is via the office.
+  return page("העדפת התקשורת עודכנה ✓", `הפסקנו לשלוח אליכם הודעות אוטומטיות בערוץ ${channelLabel}. הסוכן/ת שלכם עדיין יכול/ה ליצור קשר ישירות. לחידוש הקבלה — אפשר לפנות למשרד.`, true);
 }

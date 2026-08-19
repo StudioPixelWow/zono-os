@@ -75,6 +75,9 @@ export default async function SellerReportView({ params }: { params: Promise<{ t
                 {stat("ביקורים שנקבעו", m.viewingsScheduled)}
                 {stat("ביקורים שהתקיימו", m.viewingsCompleted)}
               </div>
+              {m.publications === 0 && m.interested === 0 && m.viewingsScheduled === 0 && m.viewingsCompleted === 0 && (
+                <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 13 }}>עדיין לא נרשמה פעילות על הנכס — נעדכן אתכם ברגע שתהיה.</p>
+              )}
             </>
           )}
           {life && life.attentionReasons.length > 0 && (
