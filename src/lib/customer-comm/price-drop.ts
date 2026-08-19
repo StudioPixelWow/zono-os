@@ -264,16 +264,20 @@ async function dispatchUpdate(db: any, prop: PropertyRow, kind: UpdateKind, vers
     const emailGate = c.email
       ? await checkChannelEligibility({ orgId, contactType: c.contactType, contactId: c.contactId, channel: "email", purpose: "marketing" }, db)
       : { eligible: false, status: null, reason: "no_email" };
-    const chosen: "whatsapp" | "email" | null = waGate.eligible ? "whatsapp" : emailGate.eligible ? "email" : null;
-    if (!chosen) { res.skipped++; continue; }
+    if (!waGate.eligible && !emailGate.eligible) { res.skipped++; continue; }
 
-    const bundleId = await ensureRecoRow(db, orgId, c, prop.id, chosen);
+    // BOTH channels are used when independently consented — WhatsApp AND email
+    // (not either/or). Each channel has its OWN dedup key so one never blocks the
+    // other, and each still honors its own marketing consent (fail-closed).
+    const primaryChannel: "whatsapp" | "email" = waGate.eligible ? "whatsapp" : "email";
+    const bundleId = await ensureRecoRow(db, orgId, c, prop.id, primaryChannel);
     const url = recoUrl({ o: orgId, t: c.contactType, c: c.contactId, b: bundleId });
-    const dedupKey = `propupd:${kind}:${c.contactId}:${prop.id}:${version}`;
+    const baseKey = `propupd:${kind}:${c.contactId}:${prop.id}:${version}`;
     const effDelta = delta ?? computePriceDelta(newPrice, newPrice)!; // back-on-market may lack a drop
     res.eligible++;
+    let anySent = false, anyDeferred = false;
 
-    if (chosen === "whatsapp") {
+    if (waGate.eligible) {
       const firstName = firstNameOf(c.name);
       const title = prop.title?.trim() || "נכס";
       const variables = kind === "backonmarket"
@@ -282,23 +286,29 @@ async function dispatchUpdate(db: any, prop: PropertyRow, kind: UpdateKind, vers
       const body = kind === "backonmarket"
         ? `היי ${firstName}, נכס שעניין אותך חזר לשוק: ${title} (${formatIls(newPrice)}). לצפייה: ${url ?? ""}`
         : `היי ${firstName}, המחיר של ${title} ירד ל-${formatIls(newPrice)}. לצפייה: ${url ?? ""}`;
-      const wreq = { orgId, userId: null as string | null, channel: "whatsapp" as const, to: phone as string, title: null, body, template: { name: waTemplate as string, language: "he", variables }, dedupKey };
+      const wreq = { orgId, userId: null as string | null, channel: "whatsapp" as const, to: phone as string, title: null, body, template: { name: waTemplate as string, language: "he", variables }, dedupKey: `${baseKey}:wa` };
       const nowIso = new Date().toISOString();
       if (isQuietHours(nowIso)) {
         await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: morningSendTime(nowIso) });
-        res.deferred++;
+        anyDeferred = true;
       } else {
         const r = await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: null });
-        if (!r.sent && !r.skipped) { res.skipped++; res.eligible--; continue; }
-        if (r.sent) res.sent++;
+        if (r.sent) anySent = true;
       }
-    } else {
+    }
+
+    // Email — ALWAYS in addition to WhatsApp when the customer consented to email
+    // marketing (own dedup key, own branded card, immediate).
+    if (emailGate.eligible && c.email) {
       const unsub = unsubUrl({ o: orgId, t: c.contactType, c: c.contactId, ch: "email" });
       const msg = priceDropEmail({ officeName, name: c.name, prop, delta: effDelta, url, unsub, kind });
-      const r = await sendCustomerEmail({ orgId, contact: { type: c.contactType, id: c.contactId, name: c.name, email: c.email }, purpose: "marketing", subject: msg.subject, text: msg.text, html: msg.html, dedupKey }, db);
-      if (!r.sent) { res.skipped++; res.eligible--; continue; }
-      res.sent++;
+      const r = await sendCustomerEmail({ orgId, contact: { type: c.contactType, id: c.contactId, name: c.name, email: c.email }, purpose: "marketing", subject: msg.subject, text: msg.text, html: msg.html, dedupKey: `${baseKey}:email` }, db);
+      if (r.sent) anySent = true;
     }
+
+    if (anySent) res.sent++;
+    else if (anyDeferred) res.deferred++;
+    else { res.skipped++; res.eligible--; }
   }
 
   // Canonical outcome event (idempotent per property+version) — surfacing + audit.

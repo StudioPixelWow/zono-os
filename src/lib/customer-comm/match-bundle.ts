@@ -178,40 +178,42 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
       ? await checkChannelEligibility({ orgId, contactType: "buyer", contactId: buyerId, channel: "email", purpose: "marketing" }, db)
       : { eligible: false, status: null, reason: "no_email" };
 
-    const chosen: "whatsapp" | "email" | null = waGate.eligible ? "whatsapp" : emailGate.eligible ? "email" : null;
-    if (!chosen) { skipped++; continue; }   // no consented + deliverable channel
+    if (!waGate.eligible && !emailGate.eligible) { skipped++; continue; }   // no consented + deliverable channel
 
-    let channelUsed: "whatsapp" | "email";
-    if (chosen === "whatsapp") {
-      const nowIso = new Date().toISOString();
+    // BOTH channels when independently consented — WhatsApp AND email (not
+    // either/or). Each channel has its own dedup key; each honors its own consent.
+    const channelUsed: "whatsapp" | "email" = waGate.eligible ? "whatsapp" : "email";
+    let anySent = false, anyDeferred = false;
+    const nowIso = new Date().toISOString();
+
+    if (waGate.eligible) {
       const firstName = (buyer.full_name ?? "").trim().split(/\s+/)[0] || "לקוח";
       const area = props.find((p) => p.city)?.city ?? "האזור שלך";
       const waText = `היי ${firstName}, מצאנו ${props.length} נכסים שמתאימים למה שחיפשת ב${area}. לצפייה: ${viewUrl ?? ""}`;
       const template = { name: waTemplate as string, language: "he", variables: [firstName, String(props.length), area, viewUrl ?? ""] };
-      const wreq = { orgId, userId: null as string | null, channel: "whatsapp" as const, to: phone as string, title: null, body: waText, template, dedupKey };
+      const wreq = { orgId, userId: null as string | null, channel: "whatsapp" as const, to: phone as string, title: null, body: waText, template, dedupKey: `${dedupKey}:wa` };
       if (isQuietHours(nowIso)) {
         // No night spam — defer; the communication-dispatch cron sends it in the morning.
         await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: morningSendTime(nowIso) });
-        deferred++;
+        deferred++; anyDeferred = true;
       } else {
         const r = await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: null });
-        // Do NOT fall back to email on a runtime send failure (the dedup key is already
-        // claimed → fallback could duplicate). A fresh bundle retries on the next run.
-        if (!r.sent && !r.skipped) { skipped++; continue; }
-        viaWhatsapp++;
+        if (r.sent) { viaWhatsapp++; anySent = true; }
       }
-      channelUsed = "whatsapp";
-    } else {
+    }
+
+    // Email — ALWAYS in addition to WhatsApp when the buyer consented to email marketing.
+    if (emailGate.eligible && buyer.email) {
       const unsub = unsubUrl({ o: orgId, t: "buyer", c: buyerId, ch: "email" });
       const msg = renderBundleEmail({ officeName, buyerName: buyer.full_name ?? "", props, viewUrl, unsubscribeUrl: unsub });
       const res = await sendCustomerEmail({
         orgId, contact: { type: "buyer", id: buyerId, name: buyer.full_name, email: buyer.email },
-        purpose: "marketing", subject: msg.subject, text: msg.text, html: msg.html, dedupKey,
+        purpose: "marketing", subject: msg.subject, text: msg.text, html: msg.html, dedupKey: `${dedupKey}:email`,
       }, db);
-      if (!res.sent) { skipped++; continue; }
-      channelUsed = "email";
-      viaEmail++;
+      if (res.sent) { viaEmail++; anySent = true; }
     }
+
+    if (!anySent && !anyDeferred) { skipped++; continue; }   // nothing delivered/queued
 
     // record each recommendation (dedup ledger + price-drop-ready + agent visibility)
     const rows = props.map((p) => ({
