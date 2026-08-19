@@ -67,6 +67,9 @@ export async function MorningBrief() {
         <div>
           <h2 className="text-ink text-lg font-black sm:text-xl">על הבוקר</h2>
           <p className="text-muted mt-0.5 text-sm">{summaryLine(b.actionCount)} · {DATE_FMT.format(new Date(b.generatedAt))}</p>
+          <Link href="/today/plan" className="text-brand-strong hover:text-brand mt-1 inline-flex items-center gap-1 text-sm font-black">
+            <Icon name="Sparkles" size={14} /> תכנן לי את היום ←
+          </Link>
         </div>
         {chips.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">

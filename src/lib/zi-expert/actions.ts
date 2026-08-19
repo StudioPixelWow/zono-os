@@ -100,6 +100,13 @@ function isOnboardingQuery(q: string): boolean {
   return phrases.some((p) => t.includes(p));
 }
 
+/** Detect the "plan my day" ask → the Agent Daily Autopilot summary. */
+function detectPlanMyDayQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  const phrases = ["תכנן לי את היום", "תכנן את היום", "בנה לי את היום", "סדר לי את היום", "מה התוכנית שלי להיום", "מה נשאר לי להיום", "מה נשאר לי היום", "plan my day", "plan my today", "what's left for me today", "whats left today"];
+  return phrases.some((p) => t.includes(p));
+}
+
 type DailyIntent = "urgent" | "leads" | "property" | "overnight" | "marketing" | "problem";
 /** Detect Daily Command Center questions so ZI answers from the SAME authoritative brief. */
 function detectDailyQuery(q: string): DailyIntent | null {
@@ -509,6 +516,19 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: sMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI "תכנן לי את היום" — the Agent Daily Autopilot. Returns a concise,
+    // ORDERED plan from the SAME daily-plan source (no separate reasoning), then
+    // routes to the full board. Never invents tasks. ──
+    if (detectPlanMyDayQuery(question)) {
+      try {
+        const { summarizeDailyPlanForZi } = await import("@/lib/daily/daily-plan");
+        const content = (await summarizeDailyPlanForZi()) ?? "אין עדיין נתונים לתכנון היום.";
+        const pMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+        await touchConversation(conversationId, 2);
+        return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: pMsg, source: "fallback", model: null, sources: [], followups: [] } };
+      } catch { /* fall through */ }
     }
 
     // ── ZI Daily Command Center: answer "what's urgent / who to call / what's
