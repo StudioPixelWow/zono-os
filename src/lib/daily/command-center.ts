@@ -188,6 +188,58 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     }
   } catch { /* best-effort */ }
 
+  // ── PRICE-DROP opportunities + responses (Slice 4). Sourced from the canonical
+  //    property.price_dropped outcome events (real eligible/sent counts) + recent
+  //    customer responses on dropped properties. Bounded; surfaced as ranked
+  //    actions, not a new analytics card. ──
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
+    const { data: dropEvts } = await sb.from("domain_events")
+      .select("entity_id,payload,occurred_at").eq("organization_id", orgId)
+      .eq("event_type", "property.price_dropped").gte("occurred_at", sinceIso)
+      .order("occurred_at", { ascending: false }).limit(20);
+    const seenProp = new Set<string>();
+    for (const e of (dropEvts ?? []) as Array<{ entity_id: string; payload: Record<string, unknown> | null }>) {
+      if (seenProp.has(e.entity_id)) continue;
+      seenProp.add(e.entity_id);
+      const p = e.payload ?? {};
+      const eligible = Number(p.eligible ?? 0);
+      if (eligible <= 0) continue;
+      actions.push({
+        id: `pricedrop:${e.entity_id}`, kind: "price_drop", priority: eligible >= 3 ? "P1" : "P2",
+        title: (p.title as string)?.trim() || "נכס", reason: `המחיר ירד — ${eligible} מתעניינים רלוונטיים${Number(p.sent ?? 0) > 0 ? `, ${Number(p.sent)} עודכנו` : ""}`,
+        href: `/properties/${e.entity_id}`, cta: "צפייה בנכס", icon: "TrendingDown",
+        urgency: eligible >= 3 ? 62 : 44, entity: { type: "property", id: e.entity_id },
+      });
+    }
+  } catch { /* best-effort */ }
+  // Customers who RESPONDED after a price drop (interested / viewing) — one ranked
+  // opportunity action when present.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
+    const { data: resp } = await sb.from("customer_property_recommendations")
+      .select("contact_id,property_id,price_at_send,status,responded_at").eq("org_id", orgId)
+      .in("status", ["interested", "viewing_requested"]).gte("responded_at", sinceIso)
+      .not("price_at_send", "is", null).limit(50);
+    const respRows = (resp ?? []) as Array<{ contact_id: string; property_id: string; price_at_send: number | null }>;
+    if (respRows.length) {
+      const pids = [...new Set(respRows.map((r) => r.property_id))];
+      const { data: pr } = await sb.from("properties").select("id,price").in("id", pids).eq("org_id", orgId);
+      const priceById = new Map(((pr ?? []) as Array<{ id: string; price: number | null }>).map((x) => [x.id, Number(x.price)]));
+      const afterDrop = respRows.filter((r) => { const cur = priceById.get(r.property_id); return cur != null && r.price_at_send != null && cur < r.price_at_send; });
+      const responders = new Set(afterDrop.map((r) => r.contact_id)).size;
+      if (responders > 0) {
+        actions.push({
+          id: "pricedrop:responses", kind: "price_drop_response", priority: "P1",
+          title: "תגובות לעדכון מחיר", reason: `${responders} לקוחות הגיבו לעדכון מחיר — כדאי לחזור אליהם`,
+          href: "/buyers", cta: "חזרה ללקוחות", icon: "MessageCircle", urgency: 70,
+        });
+      }
+    }
+  } catch { /* best-effort */ }
+
   // ── PIPELINE movement (manager/owner) ──────────────────────────────────────
   let pipeline: DailyCommandCenter["pipeline"] = null;
   if (isManager) {

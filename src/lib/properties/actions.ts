@@ -139,17 +139,32 @@ export async function setPropertyStatusAction(
       console.error("[properties] readiness check failed:", e);
     }
   }
+  // Read the OLD status before writing so the change carries a server-derived
+  // transition (needed for back-on-market detection). Best-effort.
+  let oldStatus: string | null = null;
+  try {
+    const { getPropertyById } = await import("./repository");
+    const prev = await getPropertyById(id).catch(() => null);
+    oldStatus = (prev?.status as string | null) ?? null;
+  } catch { /* old status is best-effort */ }
   try {
     await setPropertyStatus(id, status);
   } catch (e) {
     console.error("[properties] status change failed:", e);
     return { error: "שינוי הסטטוס נכשל." };
   }
-  // Stage 1: emit the property status change through the kernel.
+  // Stage 1: emit the property status change through the kernel (carrying oldStatus).
   try {
     const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
     const evt = status === "sold" || status === "rented" ? DOMAIN_EVENTS.propertySold : status === "published" ? DOMAIN_EVENTS.propertyPublished : DOMAIN_EVENTS.propertyStatusChanged;
-    await emitBusinessEvent({ type: evt, entityType: "property", entityId: id, payload: { status } });
+    await emitBusinessEvent({ type: evt, entityType: "property", entityId: id, payload: { status, oldStatus } });
+    // Back-on-market: an unavailable property returning to a marketable status is a
+    // distinct, dedup-able customer-marketing trigger (consumed by the price-update cron).
+    const { isBackOnMarketTransition } = await import("@/lib/customer-comm/price-change-policy");
+    if (isBackOnMarketTransition(oldStatus, status)) {
+      const dayBucket = new Date().toISOString().slice(0, 10);
+      await emitBusinessEvent({ type: DOMAIN_EVENTS.propertyBackOnMarket, entityType: "property", entityId: id, payload: { status, oldStatus }, idempotencyKey: `property.back_on_market:${id}:${dayBucket}` });
+    }
   } catch (e) { console.error("[properties] emit failed:", e); }
   // Stage 0.2: a manual sold/rented must reconcile the linked deal (no divergence).
   if (status === "sold" || status === "rented") {

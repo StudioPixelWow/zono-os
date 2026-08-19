@@ -49,7 +49,8 @@ export default async function RecommendationView(
 
   const doneMsg = done === "interested" ? "סימנת שהנכס מעניין אותך — ניצור קשר בקרוב 🙂"
     : done === "rejected" ? "תודה, לא נציג לך את הנכס הזה שוב."
-    : done === "viewing_requested" ? "בקשת הביקור נשלחה — נחזור אליך לתיאום 🗝️" : null;
+    : done === "viewing_requested" ? "בקשת הביקור נשלחה — נחזור אליך לתיאום 🗝️"
+    : done === "talk_to_agent" ? "קיבלנו — הסוכן/ת ייצור/תיצור איתך קשר בהקדם 📞" : null;
 
   return (
     <Shell>
@@ -76,7 +77,8 @@ export default async function RecommendationView(
                   <input type="hidden" name="propertyId" value={r.property_id} />
                   <button name="action" value="interested" style={{ background: "#6d28d9", color: "#fff", border: 0, borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>מעניין אותי</button>
                   <button name="action" value="viewing_requested" style={{ background: "#0d9488", color: "#fff", border: 0, borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>רוצה ביקור</button>
-                  <button name="action" value="rejected" style={{ background: "#fff", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>לא מתאים</button>
+                  <button name="action" value="talk_to_agent" style={{ background: "#fff", color: "#6d28d9", border: "1px solid #ddd6fe", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>לדבר עם הסוכן</button>
+                  <button name="action" value="rejected" style={{ background: "#fff", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>לא רלוונטי</button>
                 </form>
               )}
             </div>

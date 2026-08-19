@@ -12,7 +12,7 @@ import { applyRecommendationFeedback, type FeedbackAction } from "@/lib/customer
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ALLOWED: FeedbackAction[] = ["interested", "rejected", "viewing_requested"];
+const ALLOWED: FeedbackAction[] = ["interested", "rejected", "viewing_requested", "talk_to_agent"];
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;

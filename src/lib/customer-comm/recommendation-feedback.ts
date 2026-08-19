@@ -11,9 +11,14 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import type { ContactType } from "./consent";
 
-export type FeedbackAction = "viewed" | "interested" | "rejected" | "viewing_requested";
+export type FeedbackAction = "viewed" | "interested" | "rejected" | "viewing_requested" | "talk_to_agent";
 
-const REL_FOR: Record<Exclude<FeedbackAction, "viewed">, string> = {
+// Property-preference statuses valid for the recommendation ledger (matches the DB
+// check constraint). "talk_to_agent" is a callback request — NOT a preference — so
+// it never writes a status; it creates an idempotent callback task instead.
+const STATUS_VALID = new Set(["viewed", "interested", "rejected", "viewing_requested"]);
+
+const REL_FOR: Record<"interested" | "viewing_requested" | "rejected", string> = {
   interested: "buyer_interested_in_property",
   viewing_requested: "buyer_interested_in_property",
   rejected: "buyer_rejected_property",
@@ -34,16 +39,21 @@ export async function applyRecommendationFeedback(
     .limit(1).maybeSingle();
   if (!rec?.id) return { ok: false, reason: "not_recommended" };
 
-  // 2) Update the recommendation status (viewed never downgrades a stronger state).
+  // 2) Update the recommendation status (viewed never downgrades a stronger state;
+  //    talk_to_agent is not a preference status → never written here).
   const strong = new Set(["interested", "rejected", "viewing_requested"]);
-  if (!(action === "viewed" && strong.has((rec as any).status))) {
+  if (STATUS_VALID.has(action) && !(action === "viewed" && strong.has((rec as any).status))) {
     await db.from("customer_property_recommendations")
       .update({ status: action, responded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("id", (rec as any).id);
+  } else if (action === "talk_to_agent") {
+    // Record the response timestamp without changing the preference status.
+    await db.from("customer_property_recommendations").update({ responded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", (rec as any).id);
   }
 
-  // 3) Canonical property-interest edge (only for buyers — the edge vocabulary is buyer-scoped).
-  if (contactType === "buyer" && action !== "viewed") {
+  // 3) Canonical property-interest edge (only for buyers — the edge vocabulary is
+  //    buyer-scoped). talk_to_agent creates no preference edge (it's a callback).
+  if (contactType === "buyer" && (action === "interested" || action === "viewing_requested" || action === "rejected")) {
     try {
       await db.from("entity_relationships").insert({
         org_id: orgId, source_entity_type: "buyer", source_entity_id: contactId,
@@ -51,6 +61,27 @@ export async function applyRecommendationFeedback(
         relationship_type: REL_FOR[action], strength_score: action === "rejected" ? 10 : 80, status: "active",
       });
     } catch { /* edge is best-effort (may already exist) */ }
+  }
+
+  // 3b) Talk-to-agent → an idempotent high-priority callback task for the owner.
+  if (action === "talk_to_agent") {
+    try {
+      const owner = contactType === "buyer"
+        ? (await db.from("buyers").select("owner_id,full_name").eq("id", contactId).maybeSingle()).data
+        : (await db.from("leads").select("owner_id,full_name").eq("id", contactId).maybeSingle()).data;
+      const source = `reco:callback:${contactType}:${contactId}:${propertyId}`;
+      const { data: existing } = await db.from("tasks").select("id")
+        .eq("org_id", orgId).eq("intelligence_source", source).in("status", ["todo", "in_progress", "blocked"]).limit(1).maybeSingle();
+      if (!existing?.id) {
+        const row: any = {
+          org_id: orgId, property_id: propertyId, assignee_id: (owner as any)?.owner_id ?? null,
+          title: `בקשת שיחה מ${(owner as any)?.full_name ?? "לקוח"} על הנכס`, status: "todo", priority: "high",
+          intelligence_source: source, is_automatable: true,
+        };
+        if (contactType === "buyer") row.buyer_id = contactId; else row.lead_id = contactId;
+        await db.from("tasks").insert(row);
+      }
+    } catch { /* task is best-effort */ }
   }
 
   // 4) Viewing request → an idempotent agent task on the buyer's owner.

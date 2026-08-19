@@ -136,6 +136,15 @@ function detectWhatsAppRepliesQuery(q: string): boolean {
   return has(["מי ענה בוואטסאפ", "מי ענה לי בוואטסאפ", "מי חזר בוואטסאפ", "מי כתב בוואטסאפ", "תשובות וואטסאפ", "הודעות וואטסאפ", "who replied on whatsapp", "whatsapp replies"]);
 }
 
+/** Detect price-drop / property-update questions — answered from the SAME brief. */
+function detectPriceDropQuery(q: string): "dropped" | "responses" | null {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  if (has(["מי הגיב לעדכון", "מי הגיב לירידת", "מי הגיב על ירידת", "who responded to the price", "responses to the price"])) return "responses";
+  if (has(["איזה נכסים ירדו", "אילו נכסים ירדו", "נכסים שירדו במחיר", "ירידת מחיר", "ירידות מחיר", "מי כדאי לשלוח", "למי כדאי לשלוח", "מי ביקר בנכס והמחיר ירד", "which properties dropped", "price drops", "dropped in price"])) return "dropped";
+  return null;
+}
+
 /** Deterministic Hebrew answer built from the real brief. ZI wording only; facts are server-computed. */
 function formatDailyAnswer(b: DailyCommandCenter, intent: DailyIntent): string {
   if (intent === "leads") {
@@ -300,6 +309,31 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           const wMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
           await touchConversation(conversationId, 2);
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: wMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI Price-drop: "which properties dropped in price / who responded to the
+    // price update" from the SAME authoritative brief (price_drop + price_drop_
+    // response actions). Deterministic; never invents recipients. ──
+    const priceIntent = detectPriceDropQuery(question);
+    if (priceIntent) {
+      try {
+        const brief = await getDailyCommandCenter();
+        if (brief) {
+          let content: string;
+          if (priceIntent === "responses") {
+            const r = brief.priorityActions.filter((a) => a.kind === "price_drop_response");
+            content = r.length ? r.map((a) => `• ${a.reason}`).join("\n") : "לא זוהו תגובות אחרונות לעדכוני מחיר.";
+          } else {
+            const drops = brief.priorityActions.filter((a) => a.kind === "price_drop");
+            content = drops.length
+              ? "נכסים שירדו במחיר לאחרונה (עם מתעניינים רלוונטיים):\n" + drops.slice(0, 12).map((a) => `• ${a.title} — ${a.reason}`).join("\n")
+              : "לא זוהו ירידות מחיר עם מתעניינים רלוונטיים כרגע.";
+          }
+          const pMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: pMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
     }

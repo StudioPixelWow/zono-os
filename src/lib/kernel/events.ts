@@ -66,6 +66,12 @@ export const DOMAIN_EVENTS = {
   propertyStageChanged: "property.stage_changed",
   propertySold: "property.sold",
   propertyArchived: "property.archived",
+  // Property CHANGE automation (Slice 4). property.price_changed (with {oldPrice,
+  // newPrice}) is emitted by the property write path; these two are the customer-
+  // lifecycle OUTCOME events the price-drop / back-on-market automation emits once
+  // per property+version for surfacing (brief/ZI) + audit (never external sends).
+  propertyPriceDropped: "property.price_dropped",
+  propertyBackOnMarket: "property.back_on_market",
   // External listing
   externalListingIngested: "external_listing.ingested",
   externalListingUpdated: "external_listing.updated",

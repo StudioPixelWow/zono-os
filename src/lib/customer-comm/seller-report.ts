@@ -17,11 +17,11 @@ const WEEK_MS = 7 * 86_400_000;
 const ils = (n: number | null | undefined) =>
   n == null ? null : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : `₪${Math.round(n).toLocaleString("he-IL")}`;
 
-interface WeeklyStats { publications: number; inquiries: number; qualified: number; viewings: number; activeCampaigns: number }
+interface WeeklyStats { publications: number; inquiries: number; qualified: number; viewings: number; activeCampaigns: number; priceUpdates: number }
 
 async function weeklyStats(db: any, orgId: string, propertyId: string, sinceIso: string): Promise<WeeklyStats> {
   const countOf = async (q: any): Promise<number> => { try { const { count } = await q; return count ?? 0; } catch { return 0; } };
-  const [publications, leadsInq, contactClicks, qualified, viewings, activeCampaigns] = await Promise.all([
+  const [publications, leadsInq, contactClicks, qualified, viewings, activeCampaigns, priceUpdates] = await Promise.all([
     countOf(db.from("distribution_posts").select("id", { count: "exact", head: true })
       .eq("org_id", orgId).eq("property_id", propertyId).eq("publish_state", "published").gte("published_at", sinceIso)),
     countOf(db.from("leads").select("id", { count: "exact", head: true })
@@ -34,8 +34,12 @@ async function weeklyStats(db: any, orgId: string, propertyId: string, sinceIso:
       .eq("org_id", orgId).eq("property_id", propertyId).in("type", ["viewing", "open_house"]).gte("start_at", sinceIso)),
     countOf(db.from("distribution_campaigns").select("id", { count: "exact", head: true })
       .eq("org_id", orgId).eq("property_id", propertyId).eq("status", "active")),
+    // Price/property update messages delivered to relevant buyers this week (real
+    // delivery ledger; aggregate only — NO buyer identities ever reach the seller).
+    countOf(db.from("notification_deliveries").select("id", { count: "exact", head: true })
+      .eq("org_id", orgId).in("status", ["sent", "delivered", "read"]).gte("created_at", sinceIso).like("dedup_key", `propupd:%:${propertyId}:%`)),
   ]);
-  return { publications, inquiries: leadsInq + contactClicks, qualified, viewings, activeCampaigns };
+  return { publications, inquiries: leadsInq + contactClicks, qualified, viewings, activeCampaigns, priceUpdates };
 }
 
 function renderReport(args: {
@@ -57,6 +61,7 @@ function renderReport(args: {
     `⭐ לידים מוסמכים: ${stats.qualified}`,
     `👁️ צפיות/ביקורים: ${stats.viewings}`,
     `🗂️ קמפיינים פעילים: ${stats.activeCampaigns}`,
+    ...(stats.priceUpdates > 0 ? [`📣 עדכון מחיר נשלח ל-${stats.priceUpdates} מתעניינים רלוונטיים`] : []),
     ``,
     active ? "נמשיך לפעול כדי להביא את הקונים הנכונים." : "השבוע היה שקט יחסית — אנחנו כבר עובדים על הגברת החשיפה בשבוע הקרוב.",
     ``,
@@ -81,6 +86,7 @@ function renderReport(args: {
         ${row("⭐", "לידים מוסמכים", stats.qualified)}
         ${row("👁️", "צפיות / ביקורים", stats.viewings)}
         ${row("🗂️", "קמפיינים פעילים", stats.activeCampaigns)}
+        ${stats.priceUpdates > 0 ? row("📣", "עדכון מחיר נשלח למתעניינים", stats.priceUpdates) : ""}
       </table>
       <p style="margin:16px 0 0;color:#334155;font-size:14px">${active ? "נמשיך לפעול כדי להביא את הקונים הנכונים." : "השבוע היה שקט יחסית — אנחנו כבר עובדים על הגברת החשיפה בשבוע הקרוב."}</p>
       <p style="margin:18px 0 0;color:#0f172a;font-size:14px;font-weight:700">בברכה, ${officeName}</p>
