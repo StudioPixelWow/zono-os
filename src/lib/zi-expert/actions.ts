@@ -151,13 +151,33 @@ function detectPriceDropQuery(q: string): "dropped" | "responses" | null {
 
 /** Detect marketing-autopilot questions. "plan"/"property" answer from the property
  *  in context; "portfolio" answers across the org. */
-function detectMarketingQuery(q: string): "portfolio" | "property" | "plan" | null {
+function detectMarketingQuery(q: string): "portfolio" | "property" | "plan" | "plan_status" | "approve" | null {
   const t = q.toLowerCase();
   const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  // Approval is a consequential external action — ZI recognizes the ASK but never executes it.
+  if (has(["אשר את התוכנית", "אשר והפעל", "הפעל את התוכנית", "approve the plan", "activate the plan"])) return "approve";
+  if (has(["מה יש בתוכנית", "מה יפורסם השבוע", "מה מתוכנן השבוע", "מה מחכה לאישור", "יש בעיות בתוכנית", "מה מצב התוכנית", "what's in the plan", "what is scheduled this week", "what is awaiting approval", "any problems with the plan"])) return "plan_status";
   if (has(["תכין לי תוכנית שיווק", "תוכנית שיווק לשבוע", "הכן תוכנית שיווק", "תכין תוכנית שיווק", "prepare a marketing plan", "marketing plan for the week"])) return "plan";
   if (has(["מה אני צריך לשווק", "מה לשווק היום", "איזה נכסים לא משווקים", "נכסים לא משווקים", "איפה אין פרסום", "אילו נכסים דורשים שיווק", "what to market", "which properties are not marketed", "where is there no future marketing"])) return "portfolio";
   if (has(["מה כדאי לעשות עם הנכס", "מה לשווק בנכס", "איזה קריאייטיב צריך להחליף", "לאילו לקוחות כדאי לשלוח את הנכס", "לאילו קבוצות עוד לא פרסמנו", "what should i do with this property"])) return "property";
   return null;
+}
+
+/** Deterministic ZI summary of a property's OPEN plan (facts from the snapshot only). */
+async function summarizeOpenPlanForZi(orgId: string, propertyId: string): Promise<string | null> {
+  const { getOpenPlanWorkboard } = await import("@/lib/marketing-autopilot/plan-view");
+  const { PLAN_STATUS_LABEL, ITEM_STATUS_LABEL } = await import("@/lib/marketing-autopilot/plan-core");
+  const wb = await getOpenPlanWorkboard(orgId, propertyId);
+  if (!wb) return null;
+  const s = wb.snapshot;
+  const failed = s.items.filter((i) => (i.execution?.status ?? i.status) === "failed");
+  const lines = [
+    `📋 תוכנית השיווק ל${s.propertyTitle ?? "נכס"} — ${PLAN_STATUS_LABEL[wb.row.status]}`,
+    ...s.items.map((i) => `• ${i.title} — ${ITEM_STATUS_LABEL[(i.execution?.status ?? i.status) as keyof typeof ITEM_STATUS_LABEL] ?? i.status}`),
+  ];
+  if (failed.length) lines.push(`⚠️ ${failed.length} פעולות דורשות טיפול.`);
+  lines.push(`לצפייה ואישור: /distribution/marketing-plan/${propertyId}`);
+  return lines.join("\n");
 }
 
 /** Detect a "what does the customer see in their portal" question (answered from
@@ -380,10 +400,23 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: mMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
         if (orgId && ctx.selectedPropertyId) {
-          const summary = (await summarizeMarketingForZi(orgId, ctx.selectedPropertyId, false)) ?? "לא נמצאו נתוני שיווק לנכס הנוכחי.";
-          const content = mktIntent === "plan"
-            ? `${summary}\n\nהכנתי תוכנית. לעבור עליה ולאשר? /distribution/marketing-plan/${ctx.selectedPropertyId}`
-            : summary;
+          const propertyId = ctx.selectedPropertyId;
+          let content: string;
+          if (mktIntent === "approve") {
+            // Consequential external action — ZI NEVER approves/activates from chat.
+            content = `אני לא מאשר תוכניות מהצ׳אט — האישור הוא פעולה משמעותית. התוכנית מוכנה, אפשר לעבור עליה ולאשר כאן: /distribution/marketing-plan/${propertyId}`;
+          } else if (mktIntent === "plan") {
+            const { preparePlanAction } = await import("@/lib/marketing-autopilot/plan-actions");
+            const r = await preparePlanAction(propertyId);
+            content = r.ok
+              ? `הכנתי תוכנית שיווק מלאה לשבוע (טיוטה). לעבור עליה, לערוך ולאשר כאן: /distribution/marketing-plan/${propertyId}`
+              : (r.error ?? "לא הצלחתי להכין תוכנית לנכס הזה.");
+          } else if (mktIntent === "plan_status") {
+            content = (await summarizeOpenPlanForZi(orgId, propertyId))
+              ?? "עדיין אין תוכנית שיווק פתוחה לנכס הזה. אפשר להכין אחת כאן: /distribution/marketing-plan/" + propertyId;
+          } else {
+            content = (await summarizeMarketingForZi(orgId, propertyId, false)) ?? "לא נמצאו נתוני שיווק לנכס הנוכחי.";
+          }
           const mMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
           await touchConversation(conversationId, 2);
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: mMsg, source: "fallback", model: null, sources: [], followups: [] } };

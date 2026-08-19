@@ -37,7 +37,7 @@ function covCta(status: CoverageStatus, propertyId: string): { label: string; hr
 
 interface Row { post: ControlPost; st: TodayStatus }
 
-export function DistributionHome({ today, center, coverage, readiness, marketingWeek }: { today: PublishingControlData; center: DistributionCenterData; coverage: PropertyMarketingCoverage; readiness?: ExtensionReadinessView; marketingWeek?: import("@/lib/marketing-autopilot/autopilot").PortfolioAutopilot | null }) {
+export function DistributionHome({ today, center, coverage, readiness, marketingWeek, weekReview }: { today: PublishingControlData; center: DistributionCenterData; coverage: PropertyMarketingCoverage; readiness?: ExtensionReadinessView; marketingWeek?: import("@/lib/marketing-autopilot/autopilot").PortfolioAutopilot | null; weekReview?: import("@/lib/marketing-autopilot/plan-view").WeekReview | null }) {
   // Server component (no client render) — reading the clock here is correct.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
@@ -87,8 +87,18 @@ export function DistributionHome({ today, center, coverage, readiness, marketing
         <section className="bg-card border-line rounded-[22px] border p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-ink flex items-center gap-2 text-sm font-black"><Icon name="Sparkles" size={16} /> שיווק השבוע</h2>
-            <span className="text-muted text-[12px]">{marketingWeek.needAction > 0 ? `${marketingWeek.needAction} נכסים דורשים פעולה` : "הכול במסלול תקין ✓"}</span>
+            <Link href="/distribution/week" className="text-brand text-[12px] font-bold hover:underline">השבוע ב-ZONO ←</Link>
           </div>
+
+          {/* Operational plan buckets (Phase 14) */}
+          {weekReview && (weekReview.counts.needsPlan + weekReview.counts.drafts + weekReview.counts.active + weekReview.counts.attention > 0) && (
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Link href="/distribution/week" className="bg-warning-soft rounded-2xl p-3 text-center"><p className="text-warning text-xl font-black">{weekReview.counts.needsPlan}</p><p className="text-muted text-[11px] font-semibold">דורשים תוכנית</p></Link>
+              <Link href="/distribution/week" className="bg-brand-soft rounded-2xl p-3 text-center"><p className="text-brand text-xl font-black">{weekReview.counts.drafts}</p><p className="text-muted text-[11px] font-semibold">טיוטות לאישור</p></Link>
+              <Link href="/distribution/week" className="bg-success-soft rounded-2xl p-3 text-center"><p className="text-success text-xl font-black">{weekReview.counts.active}</p><p className="text-muted text-[11px] font-semibold">תוכניות פעילות</p></Link>
+              <Link href="/distribution/week" className="bg-danger-soft rounded-2xl p-3 text-center"><p className="text-danger text-xl font-black">{weekReview.counts.attention}</p><p className="text-muted text-[11px] font-semibold">דורשות טיפול</p></Link>
+            </div>
+          )}
           {marketingWeek.needAction > 0 ? (
             <ul className="mt-3 flex flex-col gap-2">
               {marketingWeek.items.filter((i) => i.priority === "P0" || i.priority === "P1").slice(0, 6).map((i) => (

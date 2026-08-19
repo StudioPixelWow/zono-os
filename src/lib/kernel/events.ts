@@ -156,6 +156,15 @@ export const DOMAIN_EVENTS = {
   // human-reviewed plan draft. entityType = "property".
   marketingAttentionRequired: "marketing.attention_required",
   marketingPlanPrepared: "marketing.plan_prepared",
+  // Marketing Autopilot 2.0 — STATEFUL plan lifecycle (surfacing + audit only; the
+  // ACTUAL external actions ride each canonical engine's own events). One row per
+  // transition, idempotent per plan. entityType = "property".
+  marketingPlanCreated: "marketing.plan_created",
+  marketingPlanUpdated: "marketing.plan_updated",
+  marketingPlanApproved: "marketing.plan_approved",
+  marketingPlanActivated: "marketing.plan_activated",
+  marketingPlanPartialFailure: "marketing.plan_partial_failure",
+  marketingPlanCompleted: "marketing.plan_completed",
   // WhatsApp operational (NEVER message content — operational metadata only)
   whatsappMessageSent: "whatsapp.message_sent",
   whatsappMessageFailed: "whatsapp.message_failed",

@@ -235,6 +235,110 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
   return { org: orgId, buyers: buyerIds.length, bundlesSent, skipped, viaWhatsapp, viaEmail, deferred };
 }
 
+export interface PropertySendResult { property: string; recipients: number; sent: number; skipped: number; viaWhatsapp: number; viaEmail: number; deferred: number; sentBuyerIds: string[] }
+
+/** Marketing Autopilot 2.0 execution primitive — send ONE property to its strong,
+ *  eligible, NET-NEW matched buyers through the SAME consent-gated transport +
+ *  recommendation ledger the daily bundle engine uses (no second notification
+ *  system). Idempotent: the per-(property,buyer) dedupKey and the
+ *  customer_property_recommendations unique constraint both prevent a re-send, so
+ *  a plan retry/double-activate never messages a buyer twice. `recipientIds`
+ *  restricts to the plan's approved audience; consent is STILL re-checked here. */
+export async function sendPropertyMatchesForOrg(
+  orgId: string, propertyId: string,
+  opts?: { recipientIds?: string[]; limit?: number; db?: any },
+): Promise<PropertySendResult> {
+  const db: any = opts?.db ?? createServiceRoleClient();
+  const restrict = opts?.recipientIds && opts.recipientIds.length ? new Set(opts.recipientIds) : null;
+
+  // Property must still be available.
+  const { data: prop } = await db.from("properties")
+    .select("id,title,city,price,rooms,primary_image_url,status")
+    .eq("id", propertyId).eq("org_id", orgId).maybeSingle();
+  if (!prop || prop.status !== "active") return { property: propertyId, recipients: 0, sent: 0, skipped: 0, viaWhatsapp: 0, viaEmail: 0, deferred: 0, sentBuyerIds: [] };
+
+  // Strong, active matches for THIS property.
+  const { data: matchRows } = await db.from("match_intelligence_profiles")
+    .select("buyer_id,compatibility_score")
+    .eq("org_id", orgId).eq("property_id", propertyId).eq("match_status", "active").gte("compatibility_score", MATCH_THRESHOLD)
+    .order("compatibility_score", { ascending: false }).limit(500);
+  let buyerIds = ((matchRows ?? []) as any[]).map((m) => m.buyer_id as string);
+  const scoreOf = new Map(((matchRows ?? []) as any[]).map((m) => [m.buyer_id as string, m.compatibility_score as number]));
+  if (restrict) buyerIds = buyerIds.filter((id) => restrict.has(id));
+  buyerIds = buyerIds.slice(0, opts?.limit ?? 200);
+  if (!buyerIds.length) return { property: propertyId, recipients: 0, sent: 0, skipped: 0, viaWhatsapp: 0, viaEmail: 0, deferred: 0, sentBuyerIds: [] };
+
+  // Already-sent (this property) → net-new only.
+  const { data: recRows } = await db.from("customer_property_recommendations")
+    .select("contact_id").eq("org_id", orgId).eq("contact_type", "buyer").eq("property_id", propertyId).in("contact_id", buyerIds);
+  const alreadySent = new Set(((recRows ?? []) as any[]).map((r) => r.contact_id as string));
+
+  const { data: buyerRows } = await db.from("buyers").select("id,full_name,email,phone").in("id", buyerIds);
+  const buyers = new Map<string, { full_name: string | null; email: string | null; phone: string | null }>();
+  for (const b of (buyerRows ?? []) as any[]) buyers.set(b.id, { full_name: b.full_name, email: b.email, phone: b.phone });
+
+  const { data: orgRow } = await db.from("organizations").select("name").eq("id", orgId).maybeSingle();
+  const officeName = (orgRow?.name as string) || "צוות ZONO";
+  const waTemplate = WA_MATCH_TEMPLATE();
+  const waConnected = waTemplate ? await providerFor("whatsapp").isConfigured(orgId) : false;
+
+  const bundleProp: BundleProp = { id: prop.id, title: (prop.title as string)?.trim() || "נכס", city: prop.city, price: prop.price, rooms: prop.rooms, imageUrl: prop.primary_image_url, score: 0 };
+  let sent = 0, skipped = 0, viaWhatsapp = 0, viaEmail = 0, deferred = 0;
+  const sentBuyerIds: string[] = [];
+  const nowIso = new Date().toISOString();
+
+  for (const buyerId of buyerIds) {
+    const buyer = buyers.get(buyerId);
+    if (!buyer) { skipped++; continue; }
+    if (alreadySent.has(buyerId)) { skipped++; continue; }   // net-new only (idempotent ledger)
+
+    const phone = normalizePhone(buyer.phone);
+    const waGate = phone && waTemplate && waConnected
+      ? await checkChannelEligibility({ orgId, contactType: "buyer", contactId: buyerId, channel: "whatsapp", purpose: "marketing" }, db)
+      : { eligible: false, status: null, reason: "wa_not_available" };
+    const emailGate = buyer.email
+      ? await checkChannelEligibility({ orgId, contactType: "buyer", contactId: buyerId, channel: "email", purpose: "marketing" }, db)
+      : { eligible: false, status: null, reason: "no_email" };
+    if (!waGate.eligible && !emailGate.eligible) { skipped++; continue; }
+
+    const score = scoreOf.get(buyerId) ?? 0;
+    const props = [{ ...bundleProp, score }];
+    const dedupKey = `marketing-plan-send:${propertyId}:${buyerId}`;  // STABLE → retry-safe
+    const viewUrl = recoUrl({ o: orgId, t: "buyer", c: buyerId, b: propertyId });
+    const channelUsed: "whatsapp" | "email" = waGate.eligible ? "whatsapp" : "email";
+    let anySent = false, anyDeferred = false;
+
+    if (waGate.eligible) {
+      const firstName = (buyer.full_name ?? "").trim().split(/\s+/)[0] || "לקוח";
+      const area = prop.city ?? "האזור שלך";
+      const waText = `היי ${firstName}, יש נכס חדש שמתאים למה שחיפשת ב${area}. לצפייה: ${viewUrl ?? ""}`;
+      const template = { name: waTemplate as string, language: "he", variables: [firstName, "1", area, viewUrl ?? ""] };
+      const wreq = { orgId, userId: null as string | null, channel: "whatsapp" as const, to: phone as string, title: null, body: waText, template, dedupKey: `${dedupKey}:wa` };
+      if (isQuietHours(nowIso)) { await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: morningSendTime(nowIso) }); deferred++; anyDeferred = true; }
+      else { const r = await dispatchExternal(db, "whatsapp", wreq, { scheduledAt: null }); if (r.sent) { viaWhatsapp++; anySent = true; } }
+    }
+    if (emailGate.eligible && buyer.email) {
+      const unsub = unsubUrl({ o: orgId, t: "buyer", c: buyerId, ch: "email" });
+      const msg = renderBundleEmail({ officeName, buyerName: buyer.full_name ?? "", props, viewUrl, unsubscribeUrl: unsub });
+      const res = await sendCustomerEmail({ orgId, contact: { type: "buyer", id: buyerId, name: buyer.full_name, email: buyer.email }, purpose: "marketing", subject: msg.subject, text: msg.text, html: msg.html, dedupKey: `${dedupKey}:email` }, db);
+      if (res.sent) { viaEmail++; anySent = true; }
+    }
+    if (!anySent && !anyDeferred) { skipped++; continue; }
+
+    try {
+      await db.from("customer_property_recommendations").upsert([{
+        org_id: orgId, contact_type: "buyer", contact_id: buyerId, property_id: propertyId,
+        bundle_id: propertyId, channel: channelUsed, status: "recommended",
+        match_score: score, price_at_send: prop.price ?? null, recommended_at: new Date().toISOString(),
+      }], { onConflict: "org_id,contact_type,contact_id,property_id", ignoreDuplicates: true });
+    } catch { /* ledger best-effort */ }
+    alreadySent.add(buyerId);
+    sent++; sentBuyerIds.push(buyerId);
+    await emitBusinessEvent({ type: DOMAIN_EVENTS.buyerMatchesReady, entityType: "buyer", entityId: buyerId, orgId, idempotencyKey: `buyer.matches_ready:marketing-plan:${propertyId}:${buyerId}`, metadata: { property: propertyId, channel: channelUsed, source: "marketing_plan" } });
+  }
+  return { property: propertyId, recipients: buyerIds.length, sent, skipped, viaWhatsapp, viaEmail, deferred, sentBuyerIds };
+}
+
 /** Weekly/daily cron entry point — bounded across orgs. */
 export async function runAllOrgsBuyerMatchBundles(opts?: { orgLimit?: number; perOrgLimit?: number }): Promise<{ orgs: number; bundlesSent: number; skipped: number; viaWhatsapp: number; viaEmail: number; deferred: number; results: BundleResult[] }> {
   const db: any = createServiceRoleClient();

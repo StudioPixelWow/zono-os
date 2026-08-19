@@ -13,6 +13,7 @@ import { getOrgExtensionReadiness } from "@/lib/distribution/extension-service";
 import { computeExtensionReadiness } from "@/lib/distribution/extension-readiness";
 import { DistributionHome } from "./_home/DistributionHome";
 import { getPortfolioMarketingAutopilot, type PortfolioAutopilot } from "@/lib/marketing-autopilot/autopilot";
+import { getMarketingWeekReview, type WeekReview } from "@/lib/marketing-autopilot/plan-view";
 
 export const dynamic = "force-dynamic";
 
@@ -34,5 +35,7 @@ export default async function DistributionPage() {
   try { readiness = await getOrgExtensionReadiness(); } catch (e) { console.error("[distribution] readiness load failed:", e); }
   let marketingWeek: PortfolioAutopilot | null = null;
   try { marketingWeek = await getPortfolioMarketingAutopilot({ limit: 200 }); } catch (e) { console.error("[distribution] autopilot load failed:", e); }
-  return <DistributionHome today={today} center={center} coverage={coverage} readiness={readiness} marketingWeek={marketingWeek} />;
+  let weekReview: WeekReview | null = null;
+  try { weekReview = await getMarketingWeekReview({ limit: 200 }); } catch (e) { console.error("[distribution] week review load failed:", e); }
+  return <DistributionHome today={today} center={center} coverage={coverage} readiness={readiness} marketingWeek={marketingWeek} weekReview={weekReview} />;
 }

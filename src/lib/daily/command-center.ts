@@ -288,6 +288,28 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     }
   } catch { /* best-effort */ }
 
+  // ── Marketing PLAN state (Autopilot 2.0) — drafts awaiting approval + failed
+  //    actions become their own brief actions (real counts, no duplicate engine).
+  try {
+    const { getMarketingWeekReview } = await import("@/lib/marketing-autopilot/plan-view");
+    const w = await getMarketingWeekReview({ limit: 200 });
+    if (w.counts.attention > 0) {
+      const failedProp = w.attention.find((p) => p.failedItems > 0) ?? w.attention[0];
+      actions.push({
+        id: "mkt-plan:attention", kind: "marketing_attention", priority: "P0",
+        title: "תוכנית שיווק דורשת טיפול", reason: failedProp ? `בתוכנית של ${failedProp.propertyTitle ?? "נכס"} יש פעולה שנכשלה` : `${w.counts.attention} תוכניות דורשות טיפול`,
+        href: failedProp ? `/distribution/marketing-plan/${failedProp.propertyId}` : "/distribution/week", cta: "טיפול בתוכנית", icon: "Megaphone", urgency: 95,
+      });
+    }
+    if (w.counts.drafts > 0) {
+      actions.push({
+        id: "mkt-plan:drafts", kind: "marketing_attention", priority: "P1",
+        title: `${w.counts.drafts} תוכניות שיווק מחכות לאישור`, reason: "ZONO הכינה תוכניות — נותר לעבור עליהן ולאשר.",
+        href: "/distribution/week", cta: "מעבר לאישור", icon: "Megaphone", urgency: 58,
+      });
+    }
+  } catch { /* best-effort */ }
+
   // ── PIPELINE movement (manager/owner) ──────────────────────────────────────
   let pipeline: DailyCommandCenter["pipeline"] = null;
   if (isManager) {

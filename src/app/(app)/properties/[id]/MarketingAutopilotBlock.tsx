@@ -9,6 +9,8 @@ import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { getPropertyMarketingAutopilot } from "@/lib/marketing-autopilot/autopilot";
+import { getOpenPlanBadge } from "@/lib/marketing-autopilot/plan-view";
+import { PLAN_STATUS_LABEL } from "@/lib/marketing-autopilot/plan-core";
 
 function Chip({ tone, children }: { tone: "brand" | "success" | "warning" | "danger" | "muted"; children: React.ReactNode }) {
   const cls = tone === "success" ? "bg-success-soft text-success" : tone === "warning" ? "bg-warning-soft text-warning" : tone === "danger" ? "bg-danger-soft text-danger" : tone === "muted" ? "bg-surface text-muted" : "bg-brand-soft text-brand";
@@ -22,10 +24,22 @@ export async function MarketingAutopilotBlock({ propertyId }: { propertyId: stri
   let isManager = false;
   try { const sb = await createClient(); const { data } = await sb.rpc("has_min_role", { p_min: "manager" }); isManager = data === true; } catch { /* agent */ }
 
-  const a = await getPropertyMarketingAutopilot(orgId, propertyId, { isManager });
+  const [a, planBadge] = await Promise.all([
+    getPropertyMarketingAutopilot(orgId, propertyId, { isManager }),
+    getOpenPlanBadge(orgId, propertyId),
+  ]);
   if (!a) return null;
 
   const rec = a.recommendation;
+  const planHref = `/distribution/marketing-plan/${propertyId}`;
+  // State-aware primary CTA driven by the stateful plan (Phase 13).
+  const planCta = planBadge
+    ? planBadge.failedItems > 0 ? { label: "פעולה בתוכנית דורשת טיפול", tone: "danger" as const }
+      : planBadge.status === "draft" ? { label: "המשך עריכת התוכנית", tone: "brand" as const }
+      : planBadge.status === "approved" || planBadge.status === "activating" || planBadge.status === "active" ? { label: "צפה בתוכנית הפעילה", tone: "success" as const }
+      : planBadge.status === "partially_completed" ? { label: "פעולה בתוכנית דורשת טיפול", tone: "danger" as const }
+      : { label: "צפה בתוכנית", tone: "brand" as const }
+    : { label: "הכן תוכנית שיווק", tone: "brand" as const };
   const naTone = rec.priority === "P0" ? "danger" : rec.priority === "P1" ? "brand" : "muted";
   const naCls = naTone === "danger" ? "bg-danger-soft border-danger/30" : naTone === "brand" ? "bg-brand-soft border-brand/30" : "bg-surface border-line";
   const ev = a.evidence;
@@ -35,8 +49,17 @@ export async function MarketingAutopilotBlock({ propertyId }: { propertyId: stri
     <div className="bg-card border-line rounded-[20px] border p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-ink text-sm font-extrabold">שיווק אוטומטי</p>
-        <Chip tone={a.state === "blocked" ? "danger" : a.state === "healthy" || a.state === "active" ? "success" : "warning"}>{a.stateLabel}</Chip>
+        <div className="flex items-center gap-2">
+          {planBadge && <Chip tone={planCta.tone}>{PLAN_STATUS_LABEL[planBadge.status]}</Chip>}
+          <Chip tone={a.state === "blocked" ? "danger" : a.state === "healthy" || a.state === "active" ? "success" : "warning"}>{a.stateLabel}</Chip>
+        </div>
       </div>
+
+      {/* State-aware plan CTA (stateful plan overrides the raw recommendation) */}
+      <Link href={planHref} className={`mb-3 flex items-center justify-between gap-2 rounded-2xl border p-3 ${planCta.tone === "danger" ? "bg-danger-soft border-danger/30" : planCta.tone === "success" ? "bg-success-soft border-success/30" : "bg-brand-soft border-brand/30"}`}>
+        <span className="text-ink text-sm font-extrabold">{planCta.label}</span>
+        <span className="text-muted text-xs font-bold">{planBadge ? `${planBadge.itemCount} פעולות` : "→"}</span>
+      </Link>
 
       {/* The one recommended action */}
       {rec.priority !== "none" ? (
