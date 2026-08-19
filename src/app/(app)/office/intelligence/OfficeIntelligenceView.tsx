@@ -10,6 +10,7 @@
 // ============================================================================
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
+import { SurfaceTabs } from "@/components/navigation/SurfaceTabs";
 import { recordUsageAction } from "@/lib/launch/server/actions";
 import { CONFIDENCE_LABEL, type Insight } from "@/lib/office/intelligence-core";
 import type { OfficeIntelligence } from "@/lib/office/office-intelligence";
@@ -25,7 +26,7 @@ function Bar({ value, max, label, sub }: { value: number; max: number; label: st
     <div className="flex items-center gap-3">
       <span className="text-muted w-28 shrink-0 truncate text-xs">{label}</span>
       <div className="bg-surface h-6 flex-1 overflow-hidden rounded-lg"><div className="bg-brand h-full rounded-lg" style={{ width: `${pct}%` }} /></div>
-      <span className="text-ink w-16 shrink-0 text-left text-xs font-bold">{sub ?? value}</span>
+      <span className="text-ink w-16 shrink-0 text-end text-xs font-bold">{sub ?? value}</span>
     </div>
   );
 }
@@ -66,10 +67,7 @@ export function OfficeIntelligenceView({ intel }: { intel: OfficeIntelligence })
       {/* Header + tabs + period */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="border-line mb-2 inline-flex items-center gap-1 rounded-2xl border p-1 text-sm font-bold">
-            <Link href="/office" className="text-muted rounded-xl px-4 py-2 hover:bg-surface">המשרד</Link>
-            <span className="bg-brand rounded-xl px-4 py-2 text-white">תובנות</span>
-          </div>
+          <div className="mb-2"><SurfaceTabs active="intelligence" isManager /></div>
           <h1 className="text-ink text-2xl font-black">תובנות על המשרד</h1>
         </div>
         <div className="border-line inline-flex items-center gap-1 self-start rounded-2xl border p-1 text-sm font-bold">

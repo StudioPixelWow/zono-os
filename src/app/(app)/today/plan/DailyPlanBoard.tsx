@@ -10,6 +10,7 @@
 // ============================================================================
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
+import { SurfaceTabs } from "@/components/navigation/SurfaceTabs";
 import { recordUsageAction } from "@/lib/launch/server/actions";
 import { PLAN_BUCKET_LABEL, type DailyPlan, type DailyPlanItem } from "@/lib/daily/daily-plan-core";
 import type { DailyMarketing, DailyHeroSummary, DailyTeamException, DailyPipeline } from "@/lib/daily/priority";
@@ -75,6 +76,8 @@ export function DailyPlanBoard({ plan, rail }: { plan: DailyPlan; rail: RailData
     <div dir="rtl" className="mx-auto grid max-w-6xl grid-cols-1 gap-6 pb-24 lg:grid-cols-3">
       {/* MAIN */}
       <div className="flex flex-col gap-5 lg:col-span-2">
+        {/* Shared operating-surface nav — office tabs appear for managers only */}
+        <SurfaceTabs active="today" isManager={rail.isManager} />
         <header>
           <p className="text-muted text-sm font-semibold">{today}</p>
           <h1 className="text-ink mt-1 text-2xl font-black">{plan.headline}</h1>

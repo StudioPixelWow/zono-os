@@ -8,10 +8,11 @@
 // distinct from the office ("המשרד"). Execution routes into existing engines;
 // consequential actions confirm. Desktop uses width; mobile is a touch stack. RTL.
 // ============================================================================
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
+import { SurfaceTabs } from "@/components/navigation/SurfaceTabs";
 import { reassignLeadAction, recordManagerExceptionOpenedAction } from "@/lib/office/manager-actions";
 import {
   DIMENSION_LABEL, HEALTH_LABEL, type ManagerCommandCenter, type ManagerException, type DimensionHealth,
@@ -73,7 +74,6 @@ export function OfficeCommandCenter({ center, agents }: { center: ManagerCommand
   const router = useRouter();
   const [, start] = useTransition();
   const refresh = () => start(() => router.refresh());
-  const [tab] = useState<"office">("office");
   const dateHe = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem" }).format(new Date());
 
   const s = center.summary;
@@ -84,12 +84,8 @@ export function OfficeCommandCenter({ center, agents }: { center: ManagerCommand
 
   return (
     <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-6 pb-16">
-      {/* Tabs — personal day vs office exceptions vs office intelligence */}
-      <div className="border-line flex items-center gap-1 rounded-2xl border p-1 self-start text-sm font-bold">
-        <Link href="/today/plan" className="text-muted rounded-xl px-4 py-2 hover:bg-surface">היום שלי</Link>
-        <span className={`rounded-xl px-4 py-2 ${tab === "office" ? "bg-brand text-white" : "text-muted"}`}>המשרד</span>
-        <Link href="/office/intelligence" className="text-muted rounded-xl px-4 py-2 hover:bg-surface">תובנות</Link>
-      </div>
+      {/* Shared operating-surface nav — manager moves between day / office / insights */}
+      <SurfaceTabs active="office" isManager />
 
       <header>
         <p className="text-muted text-sm font-semibold">{dateHe}</p>
