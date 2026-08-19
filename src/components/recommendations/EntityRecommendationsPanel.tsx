@@ -16,7 +16,7 @@ const CONF_TONE: Record<string, string> = {
   verified: "text-success bg-success-soft", high: "text-success bg-success-soft",
   medium: "text-warning bg-warning-soft", low: "text-muted bg-surface", insufficient: "text-danger bg-danger-soft",
 };
-const CONF_LABEL: Record<string, string> = { verified: "מאומת", high: "גבוה", medium: "בינוני", low: "נמוך", insufficient: "חסר דאטה" };
+const CONF_LABEL: Record<string, string> = { verified: "מאומת", high: "גבוה", medium: "בינוני", low: "נמוך", insufficient: "חסרים נתונים" };
 const fmtMoney = (n: number) => (n >= 1000 ? `₪${Math.round(n / 1000).toLocaleString("he-IL")}K` : `₪${n.toLocaleString("he-IL")}`);
 
 type EntityType = "buyer" | "seller" | "property";

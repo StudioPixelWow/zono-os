@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { selectPhoneNumberAction, sendTestMessageAction } from "@/lib/whatsapp/business/actions";
 import type { WhatsappOverview } from "@/lib/whatsapp/business/account";
 import type { WaHealth } from "@/lib/whatsapp/business/types";
+import { WA_TEMPLATE_STATUS_HE } from "@/lib/i18n/labels";
 
 const HEALTH_HE: Record<WaHealth, { label: string; tone: string }> = {
   healthy: { label: "תקין", tone: "text-emerald-600" },
@@ -122,7 +123,7 @@ export function WhatsappView({ overview, notice }: { overview: WhatsappOverview;
             {templates.slice(0, 20).map((t) => (
               <li key={t.id} className="flex items-center justify-between rounded-[10px] border border-[var(--line)] px-3 py-2 text-[12px]">
                 <span className="text-ink font-bold">{t.name} <span className="text-muted font-normal">· {t.language} · {t.variableCount} משתנים</span></span>
-                <span className={t.status === "APPROVED" ? "text-emerald-600" : "text-amber-600"}>{t.status}</span>
+                <span className={t.status === "APPROVED" ? "text-emerald-600" : "text-amber-600"}>{WA_TEMPLATE_STATUS_HE[t.status] ?? t.status}</span>
               </li>
             ))}
           </ul>

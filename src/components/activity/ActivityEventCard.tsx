@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { eventIcon, type ActivityEventRow } from "@/lib/activity/types";
+import { eventTypeHe, TASK_PRIORITY_HE } from "@/lib/i18n/labels";
 
 const PRIORITY_TONE: Record<string, string> = {
   high: "bg-danger-soft text-danger",
@@ -26,13 +27,13 @@ export function ActivityEventCard({ event: e }: { event: ActivityEventRow }) {
           <p className="text-ink text-sm font-semibold">{e.title}</p>
           {e.priority && (
             <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", PRIORITY_TONE[e.priority] ?? PRIORITY_TONE.low)}>
-              {e.priority}
+              {TASK_PRIORITY_HE[e.priority] ?? e.priority}
             </span>
           )}
         </div>
         {e.description && <p className="text-muted text-xs">{e.description}</p>}
         <p className="text-muted mt-0.5 text-[11px]">
-          {fmt(e.occurred_at)} · <span className="opacity-70">{e.event_type}</span>
+          {fmt(e.occurred_at)} · <span className="opacity-70">{eventTypeHe(e.event_type)}</span>
         </p>
       </div>
     </li>

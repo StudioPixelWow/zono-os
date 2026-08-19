@@ -75,7 +75,7 @@ export function DailyDistributionView({ workspace }: { workspace: DailyWorkspace
                     <p className="text-ink truncate text-sm font-extrabold">{item.property_title ?? "נכס"}</p>
                     <p className="text-muted text-[11px]">{item.community_name} · {PLATFORM[item.platform ?? ""] ?? item.platform} · {item.recommended_time}</p>
                   </div>
-                  <span className="text-muted shrink-0 text-[11px] font-bold">צפי {item.expected_leads} לידים · {item.expected_reach.toLocaleString()} חשיפה</span>
+                  <span className="text-muted shrink-0 text-[11px] font-bold">צפי {item.expected_leads} לידים · {item.expected_reach.toLocaleString("he-IL")} חשיפה</span>
                 </div>
 
                 <div className="bg-surface rounded-xl p-3">

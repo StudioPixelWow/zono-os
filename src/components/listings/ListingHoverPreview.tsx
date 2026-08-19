@@ -109,7 +109,7 @@ function PreviewCard({ d }: { d: ListingPreview }) {
 
         <span className="text-ink mt-2 flex items-center gap-2 text-sm font-black">
           {d.price ? formatShekels(d.price) : "—"}
-          {d.pricePerSqm && <span className="text-muted text-[11px] font-bold">₪{d.pricePerSqm.toLocaleString()}/מ״ר</span>}
+          {d.pricePerSqm && <span className="text-muted text-[11px] font-bold">₪{d.pricePerSqm.toLocaleString("he-IL")}/מ״ר</span>}
         </span>
         {meta.length > 0 && <span className="text-muted mt-0.5 block text-[11px]">{meta.join(" · ")}</span>}
 

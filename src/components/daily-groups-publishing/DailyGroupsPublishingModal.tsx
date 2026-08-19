@@ -183,7 +183,7 @@ function PropertyBlock({
               <div className="min-w-0">
                 <p className="text-ink truncate text-sm font-bold">{card.groupName ?? "קבוצה"}</p>
                 <p className="text-muted text-[11px]">
-                  {card.membersCount > 0 ? `${card.membersCount.toLocaleString()} חברים` : "פייסבוק"}
+                  {card.membersCount > 0 ? `${card.membersCount.toLocaleString("he-IL")} חברים` : "פייסבוק"}
                   {card.category ? ` · ${card.category}` : ""}
                 </p>
               </div>

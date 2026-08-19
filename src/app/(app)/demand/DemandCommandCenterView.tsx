@@ -172,7 +172,7 @@ function Reasons({ reasons }: { reasons: { label: string; detail: string }[] }) 
     <ul className="mt-2 space-y-1 border-t border-line/60 pt-2">
       {reasons.map((r, i) => (
         <li key={i} className="text-muted flex items-start justify-between gap-2 text-xs">
-          <span className="text-ink font-bold">{r.label}</span><span className="text-left">{r.detail}</span>
+          <span className="text-ink font-bold">{r.label}</span><span className="text-start">{r.detail}</span>
         </li>
       ))}
     </ul>

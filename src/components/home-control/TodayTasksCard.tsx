@@ -10,6 +10,7 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { cn } from "@/lib/utils";
 import { setHomeTaskDoneAction } from "@/lib/home/actions";
+import { TASK_PRIORITY_HE } from "@/lib/i18n/labels";
 import type { HomeTaskItem } from "@/lib/home/home-service";
 
 const PRIORITY_TONE: Record<string, string> = {
@@ -18,7 +19,8 @@ const PRIORITY_TONE: Record<string, string> = {
   medium: "bg-warning-soft text-warning",
   low: "bg-surface text-muted",
 };
-const PRIORITY_HE: Record<string, string> = { urgent: "דחוף", high: "גבוה", medium: "בינוני", low: "נמוך" };
+// Canonical (feminine — a task, "משימה", is feminine): נמוכה / בינונית / גבוהה / דחופה.
+const PRIORITY_HE: Record<string, string> = TASK_PRIORITY_HE;
 
 function timeLabel(iso: string | null): string | null {
   if (!iso) return null;

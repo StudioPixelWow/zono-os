@@ -10,6 +10,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { BrokerWorkspace, ScoredEntity, WsMission, WsInboxItem } from "@/lib/broker-workspace/types";
 import { askBrokerZonoAction, approveBrokerInboxAction, rejectBrokerInboxAction } from "@/lib/broker-workspace/actions";
+import { WORKFLOW_STATUS_HE, INSIGHT_STATUS_HE } from "@/lib/i18n/labels";
 
 type Tab = "today" | "calendar" | "comms" | "inbox" | "performance" | "ask";
 const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -227,7 +228,7 @@ function TodayTab({ data }: { data: BrokerWorkspace }) {
         {d.activeWorkflows.length === 0 ? <Empty text="אין תהליכים פעילים." /> : d.activeWorkflows.slice(0, 5).map((w) => (
           <div key={w.id} className="bg-surface flex items-center justify-between rounded-2xl p-3">
             <span className="text-ink line-clamp-1 text-[13px] font-bold">{w.name}</span>
-            <span className="bg-brand-soft text-brand rounded-full px-2 py-0.5 text-[10px] font-bold">{w.status}</span>
+            <span className="bg-brand-soft text-brand rounded-full px-2 py-0.5 text-[10px] font-bold">{WORKFLOW_STATUS_HE[w.status] ?? w.status}</span>
           </div>
         ))}
       </Section>
@@ -331,7 +332,7 @@ function InboxTab({ items, approvals }: { items: WsInboxItem[]; approvals: WsInb
         {items.length === 0 ? <Empty text="אין המלצות כרגע." /> : items.slice(0, 12).map((i) => (
           <div key={i.id} className="bg-surface rounded-2xl p-3">
             <div className="text-ink line-clamp-2 text-[13px] font-bold">{i.recommendation}</div>
-            <div className="text-muted mt-0.5 text-[11px]">{i.agentName ?? "AI"}{i.entityName ? ` · ${i.entityName}` : ""} · {i.status}</div>
+            <div className="text-muted mt-0.5 text-[11px]">{i.agentName ?? "ZONO"}{i.entityName ? ` · ${i.entityName}` : ""} · {INSIGHT_STATUS_HE[i.status] ?? i.status}</div>
           </div>
         ))}
       </Section>

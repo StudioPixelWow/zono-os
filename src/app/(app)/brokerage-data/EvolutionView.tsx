@@ -161,7 +161,7 @@ export function EvolutionView() {
                 <span className="text-sm font-black text-ink">{nb.neighborhood}<span className="text-muted"> · {nb.city}</span></span>
                 <Badge tone={nb.competitionLevel === "high" ? "green" : nb.competitionLevel === "medium" ? "amber" : "violet"}>{COMP_HE[nb.competitionLevel ?? ""] ?? "—"}</Badge>
               </div>
-              <p className="mt-2 text-[11px] text-muted">{nb.listingVolume} מודעות · נתח מוביל {nb.marketShare}% · ריכוזיות {Math.round(nb.concentration * 100)}%{nb.avgPrice ? ` · ממוצע ₪${nb.avgPrice.toLocaleString()}` : ""}</p>
+              <p className="mt-2 text-[11px] text-muted">{nb.listingVolume} מודעות · נתח מוביל {nb.marketShare}% · ריכוזיות {Math.round(nb.concentration * 100)}%{nb.avgPrice ? ` · ממוצע ₪${nb.avgPrice.toLocaleString("he-IL")}` : ""}</p>
               <div className="mt-2 text-[11px] text-muted">ביטחון {nb.confidence}%</div>
             </div>
           ))}

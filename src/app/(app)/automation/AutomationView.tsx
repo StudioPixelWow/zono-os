@@ -315,7 +315,7 @@ function RunCard({ run, r, canManage, expandable }: { run: AutomationCommandCent
                 {detail.actions.map((act) => (
                   <div key={act.id} className="flex items-center justify-between gap-2 text-[12px]">
                     <span className="text-ink">{act.title}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_TONE[act.status] ?? "bg-surface text-muted"}`}>{act.status}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_TONE[act.status] ?? "bg-surface text-muted"}`}>{RUN_STATUS_LABELS[act.status] ?? act.status}</span>
                   </div>
                 ))}
               </div>

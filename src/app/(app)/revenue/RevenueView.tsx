@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, formatShekels } from "@/lib/utils";
+import { PROPERTY_TYPE_LABELS } from "@/lib/properties/labels";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { recomputeRevenueAction, setRevenueTargetAction } from "@/lib/revenue/actions";
@@ -166,7 +167,7 @@ export function RevenueView({ board }: { board: RevenueBoard }) {
             {propertyTypes.length === 0 ? <p className="text-muted text-sm">—</p> : (
               <ul className="flex flex-col gap-1.5">{propertyTypes.slice(0, 8).map((p) => (
                 <li key={p.type} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-ink min-w-0 flex-1 truncate font-semibold">{p.type}</span>
+                  <span className="text-ink min-w-0 flex-1 truncate font-semibold">{PROPERTY_TYPE_LABELS[p.type as keyof typeof PROPERTY_TYPE_LABELS] ?? p.type}</span>
                   <span className="text-muted text-[11px]">{p.deals} עסקאות · המרה {p.conversion}%</span>
                   <span className="text-success shrink-0 text-[11px] font-bold">{formatShekels(p.revenue)}</span>
                 </li>

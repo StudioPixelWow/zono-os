@@ -16,6 +16,7 @@ import {
   IntelligenceSidebar, IntelligenceDrawer, IntelligenceEmptyState,
 } from "@/components/intelligence/framework";
 import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
+import { PROPERTY_STATUS_LABELS, PROPERTY_TYPE_LABELS } from "@/lib/properties/labels";
 import { getZoneIntelligenceAction } from "@/lib/intelligence-explorer/zone-actions";
 import type { MapIntelligenceDTO, MapLayer, MapZone, MapPoint, MapPointMetrics } from "@/lib/intelligence-explorer/map";
 import type { TerritoryIntelligenceDTO } from "@/lib/agencies/api/agencyIntelligenceApiTypes";
@@ -390,8 +391,8 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
               {selected.m.freshnessDays != null && <Metric label="גיל מודעה" value={`${selected.m.freshnessDays} ימים`} />}
             </MetricGrid>
             <div className="flex flex-wrap gap-1.5">
-              {selected.m.propertyType && <Pill tone="neutral">{selected.m.propertyType}</Pill>}
-              {selected.m.status && <Pill tone="neutral">{selected.m.status}</Pill>}
+              {selected.m.propertyType && <Pill tone="neutral">{PROPERTY_TYPE_LABELS[selected.m.propertyType as keyof typeof PROPERTY_TYPE_LABELS] ?? selected.m.propertyType}</Pill>}
+              {selected.m.status && <Pill tone="neutral">{PROPERTY_STATUS_LABELS[selected.m.status as keyof typeof PROPERTY_STATUS_LABELS] ?? selected.m.status}</Pill>}
               {selected.m.source && <Pill tone="neutral">מקור: {selected.m.source}</Pill>}
               {selected.m.exclusive && <Pill tone="rising">בלעדיות</Pill>}
               {selected.m.offmarket && <Pill tone="contender">ללא מתווך</Pill>}

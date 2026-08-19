@@ -11,6 +11,7 @@ import { advanceDealStageAction } from "@/lib/deals/actions";
 import { createCommissionAction } from "@/lib/commissions/actions";
 import { createDocumentManualAction } from "@/lib/documents/actions";
 import { DEAL_STAGE_OPTIONS } from "@/lib/deals/options";
+import { OFFER_STATUS_HE, COMMISSION_STATUS_HE } from "@/lib/i18n/labels";
 import type { DealDetail } from "@/lib/deals/detail";
 import type { NoteDTO } from "@/lib/notes/service";
 import type { DealStage } from "@/lib/deals/engine";
@@ -79,7 +80,7 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
       {/* offers */}
       <Section title="הצעות מקושרות" extra={<Link href="/offers" className="text-brand-strong text-[12px] font-bold">כל ההצעות ↗</Link>}>
         {deal.offers.length === 0 ? <Empty text="אין הצעות מקושרות" /> : deal.offers.map((o) => (
-          <Row key={o.id} main={ils(o.amount)} sub={o.status} />
+          <Row key={o.id} main={ils(o.amount)} sub={OFFER_STATUS_HE[o.status] ?? o.status} />
         ))}
       </Section>
 
@@ -93,7 +94,7 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
           </div>
         )}
         {deal.commissions.length === 0 ? <Empty text="אין עמלות לעסקה זו" /> : deal.commissions.map((c) => (
-          <Row key={c.id} main={`ברוטו ${ils(c.gross_amount)} · נטו ${ils(c.net_amount)}`} sub={`${c.status} · נגבה ${ils(c.totalCollected)}/${ils(c.totalDue)}`} />
+          <Row key={c.id} main={`ברוטו ${ils(c.gross_amount)} · נטו ${ils(c.net_amount)}`} sub={`${COMMISSION_STATUS_HE[c.status] ?? c.status} · נגבה ${ils(c.totalCollected)}/${ils(c.totalDue)}`} />
         ))}
       </Section>
 

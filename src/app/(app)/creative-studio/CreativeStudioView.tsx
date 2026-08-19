@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { CreativeGenerationModal } from "@/components/creative/CreativeGenerationModal";
+import { CONTENT_MIX_HE } from "@/lib/i18n/labels";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 import { ActionFeedback } from "@/components/ui/ActionFeedback";
 import { uploadMarketingAsset } from "@/lib/creative-studio/assets";
@@ -541,7 +542,7 @@ function CampaignDrawer({ c, assets, onClose }: { c: Campaign; assets: CampaignA
           <DrawerRow label="קהל יעד" value={c.target_audience} />
           <DrawerRow label="זווית שיווק" value={c.marketing_angle} />
           <DrawerRow label="תקציר" value={c.campaign_summary} />
-          {mix.length > 0 && <div className="flex flex-col gap-0.5"><span className="text-muted text-[11px] font-bold">תמהיל תוכן</span><span className="text-ink text-[13px]">{mix.map((m) => `${m.type} ${m.share}%`).join(" · ")}</span></div>}
+          {mix.length > 0 && <div className="flex flex-col gap-0.5"><span className="text-muted text-[11px] font-bold">תמהיל תוכן</span><span className="text-ink text-[13px]">{mix.map((m) => `${CONTENT_MIX_HE[m.type] ?? m.type} ${m.share}%`).join(" · ")}</span></div>}
           {meta.campaign_dna?.postingFrequency && <DrawerRow label="תדירות פרסום" value={meta.campaign_dna.postingFrequency} />}
         </div>
         <div className="mt-4">

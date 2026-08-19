@@ -26,6 +26,7 @@ const STATUS_HE: Record<string, string> = {
   inactive: "לא פעיל", not_found_recently: "לא נמצא לאחרונה", conflict: "קונפליקט",
   auto_linked: "קושר אוטומטית", pending_review: "לבדיקה", confirmed: "אושר", rejected: "נדחה",
   completed: "הושלם", failed: "נכשל", running: "פועל", partial: "חלקי", pending: "ממתין",
+  queued: "בתור", cancelled: "בוטל", waiting: "ממתין",
 };
 const statusHe = (s: string) => STATUS_HE[s] ?? s;
 
@@ -526,7 +527,7 @@ export function BrokerageDataView({ cc }: { cc: BrokerageCommandCenter }) {
                 <div key={r.id} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-ink">{r.runType}</span>
-                    <Badge tone={r.status === "completed" ? "green" : r.status === "failed" ? "red" : "amber"}>{r.status}</Badge>
+                    <Badge tone={r.status === "completed" ? "green" : r.status === "failed" ? "red" : "amber"}>{statusHe(r.status)}</Badge>
                   </div>
                   <div className="mt-1 text-xs text-muted">חדשים: {r.newOffices}/{r.newAgents} · עודכנו: {r.updatedRecords} · קונפליקטים: {r.conflictsCreated}</div>
                 </div>

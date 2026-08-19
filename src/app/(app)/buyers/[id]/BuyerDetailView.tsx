@@ -26,6 +26,7 @@ import type { BuyerCommandCenter as BuyerCCData } from "@/lib/buyer-intelligence
 import { RecommendedMatches, type RecoItemView } from "@/components/activity/RecommendedMatches";
 import type { BuyerPropertyMatch } from "@/lib/matching-intelligence/service";
 import { recalcMatchesAction } from "@/lib/matching-intelligence/actions";
+import { MEETING_STATUS_HE } from "@/lib/i18n/labels";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
@@ -296,7 +297,7 @@ export function BuyerDetailView({
                   {meetings.map((m) => (
                     <li key={m.id} className="border-line flex items-center justify-between border-b py-2.5 last:border-0">
                       <div><p className="text-ink text-sm font-semibold">{m.title}</p><p className="text-muted text-xs">{fmtDate(m.start_at)}</p></div>
-                      <Badge tone="neutral" size="sm">{m.status}</Badge>
+                      <Badge tone="neutral" size="sm">{MEETING_STATUS_HE[m.status] ?? m.status}</Badge>
                     </li>
                   ))}
                 </ul>
