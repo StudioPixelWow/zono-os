@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { DIST, type DistPostRow } from "./db-types";
 import type { PostingStatus } from "./scheduler-planner";
+import type { ResolvedMediaItem } from "@/lib/facebook-groups/campaign-media";
 import { buildContentHash, buildIdempotencyKey } from "./publishing-state-machine";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
@@ -25,6 +26,7 @@ export interface QueuePostInput {
   status?: PostingStatus; postTitle?: string | null; postText?: string | null;
   hashtags?: string[]; cta?: string | null; imageUrl?: string | null; propertyId?: string | null;
   creativeOutputId?: string | null; creativeVersion?: number | null;
+  imageUrls?: ResolvedMediaItem[] | null; // ordered 1..N resolved media (multi-image)
 }
 export interface QueueFilters {
   campaignId?: string; groupId?: string; status?: PostingStatus; from?: string; to?: string; limit?: number;
@@ -50,7 +52,12 @@ export const distributionPostsRepository = {
     const s = await scope(); if (!s || !rows.length) return [];
     const created: DistPostRow[] = [];
     for (const r of rows) {
-      const contentHash = buildContentHash({ text: r.postText ?? "", imageUrl: r.imageUrl ?? null, destinationId: r.groupId });
+      const media = Array.isArray(r.imageUrls) ? r.imageUrls : [];
+      // Content-hash identity includes the ORDERED media list so a different image
+      // set (or order) is a distinct post, not a dedup collision. Falls back to the
+      // single legacy image for back-compat when no list is supplied.
+      const hashImage = media.length > 0 ? media.map((m) => m.url).join("|") : (r.imageUrl ?? null);
+      const contentHash = buildContentHash({ text: r.postText ?? "", imageUrl: hashImage, destinationId: r.groupId });
       const idempotencyKey = buildIdempotencyKey({
         orgId: s.orgId, campaignId: r.campaignId, groupId: r.groupId, propertyId: r.propertyId ?? null,
         contentHash, scheduleKey: (r.scheduledAt ?? "").slice(0, 13),
@@ -59,7 +66,7 @@ export const distributionPostsRepository = {
         org_id: s.orgId, campaign_id: r.campaignId, group_id: r.groupId, variation_id: r.variationId,
         property_id: r.propertyId ?? null, platform: "facebook", status: r.status ?? "scheduled", publish_state: "queued",
         post_title: r.postTitle ?? null, post_text: r.postText ?? null, hashtags: r.hashtags ?? [],
-        cta: r.cta ?? null, image_url: r.imageUrl ?? null,
+        cta: r.cta ?? null, image_url: r.imageUrl ?? null, image_urls: media,
         creative_output_id: r.creativeOutputId ?? null, creative_version: r.creativeOutputId ? (r.creativeVersion ?? 1) : null,
         scheduled_at: r.scheduledAt, created_by: s.userId,
         assigned_user_id: s.userId, content_hash: contentHash, idempotency_key: idempotencyKey,

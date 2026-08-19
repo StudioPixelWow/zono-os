@@ -200,7 +200,10 @@ export function TodayView({ data, readiness }: { data: PublishingControlData; re
               <div key={r.post.id} className={cn("border-line flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2.5", r.overdue && "border-warning/40")}>
                 <span className="text-ink w-12 shrink-0 text-[13px] font-black tabular-nums">{timeHe(r.post.scheduledAt)}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-ink truncate text-[13px] font-bold">{r.post.title ?? r.post.campaignName ?? "פרסום"}</div>
+                  <div className="text-ink flex items-center gap-1.5 truncate text-[13px] font-bold">
+                    <span className="truncate">{r.post.title ?? r.post.campaignName ?? "פרסום"}</span>
+                    {r.post.mediaCount > 1 && <span className="bg-surface text-muted shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold">🖼️ {r.post.mediaCount} תמונות</span>}
+                  </div>
                   <div className="text-muted truncate text-[11px]">{[r.post.groupName, r.post.campaignName].filter(Boolean).join(" · ") || "קבוצת פייסבוק"}{r.overdue ? " · באיחור" : ""}</div>
                 </div>
                 <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold", TONE[r.st.tone])}>{r.st.label}</span>

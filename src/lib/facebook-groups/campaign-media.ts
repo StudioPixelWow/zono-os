@@ -20,6 +20,13 @@ export type MediaRefKind = "property_media" | "creative_output" | "property_prim
 
 export interface MediaRef { kind: MediaRefKind; id: string; url: string }
 
+// Re-export the canonical limit + resolved-media shape from the pure constants module
+// (client-safe) so server callers can keep importing them from here unchanged.
+export { FB_GROUPS_MAX_IMAGES } from "./media-constants";
+export type { ResolvedMediaItem } from "./media-constants";
+import { FB_GROUPS_MAX_IMAGES } from "./media-constants";
+import type { ResolvedMediaItem } from "./media-constants";
+
 export interface CampaignMediaItem {
   id: string;                    // stable identity (row id, or "primary")
   source: CampaignMediaSource;
@@ -137,4 +144,42 @@ export async function assertCampaignMediaAllowed(
     return { ok: true, imageUrl: (data.image_url as string | null) ?? null, creativeOutputId: String(data.id), creativeVersion: (data.creative_version as number | null) ?? 1 };
   }
   return { ok: false };
+}
+
+/**
+ * P0 security for MULTI-image selection. Validates an ORDERED list of media refs:
+ * every item must belong to the current org AND the given property (reusing the
+ * single-item guard), duplicates (same resolved url) are collapsed preserving first
+ * position, and the count is capped at FB_GROUPS_MAX_IMAGES. Order is preserved so
+ * the persisted list == the previewed list. Returns a customer-safe Hebrew error on
+ * the FIRST invalid item — never silently drops an image and publishes fewer.
+ */
+export async function assertCampaignMediaListAllowed(
+  propertyId: string,
+  refs: MediaRef[] | null | undefined,
+): Promise<{ ok: true; media: ResolvedMediaItem[] } | { ok: false; error: string }> {
+  const list = Array.isArray(refs) ? refs.filter(Boolean) : [];
+  if (list.length === 0) return { ok: true, media: [] };            // text-only is allowed
+  if (list.length > FB_GROUPS_MAX_IMAGES) {
+    return { ok: false, error: `ניתן לצרף עד ${FB_GROUPS_MAX_IMAGES} תמונות לפוסט` };
+  }
+  const media: ResolvedMediaItem[] = [];
+  const seenUrl = new Set<string>();
+  for (const ref of list) {
+    const r = await assertCampaignMediaAllowed(propertyId, ref);
+    if (!r.ok) return { ok: false, error: "אחת התמונות שנבחרו אינה זמינה או אינה שייכת לנכס" };
+    const url = r.imageUrl ?? ref.url ?? "";
+    if (!url) return { ok: false, error: "אחת התמונות שנבחרו אינה זמינה יותר" };
+    if (seenUrl.has(url)) continue;                                  // collapse exact duplicates, keep order
+    seenUrl.add(url);
+    media.push({
+      kind: ref.kind,
+      url,
+      creativeOutputId: r.creativeOutputId,
+      creativeVersion: r.creativeVersion,
+      source: ref.kind === "creative_output" ? "studio" : "property",
+    });
+  }
+  if (media.length === 0) return { ok: false, error: "לא נבחרו תמונות תקינות" };
+  return { ok: true, media };
 }

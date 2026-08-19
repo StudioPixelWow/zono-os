@@ -33,10 +33,29 @@ function renderPost(post) {
   if (!post) return;
   $("dest").textContent = post.destinationName || "יעד פרסום";
   $("text").textContent = [post.text, (post.hashtags || []).join(" ")].filter(Boolean).join("\n\n");
-  const img = post.imageUrls && post.imageUrls[0];
-  const thumb = $("thumb"); const openImg = $("openImgBtn");
-  if (img) { thumb.src = img; thumb.style.display = "block"; openImg.style.display = "inline-block"; }
-  else { thumb.removeAttribute("src"); thumb.style.display = "none"; openImg.style.display = "none"; }
+  // Multi-image: render ALL ordered images with 1..N numbering so the user attaches
+  // them in the exact previewed order. The server sends the full ordered imageUrls[].
+  const urls = (post.imageUrls || []).filter(Boolean);
+  const gallery = $("gallery"); const openImg = $("openImgBtn"); const hint = $("mediaHint");
+  gallery.textContent = "";
+  if (urls.length > 0) {
+    urls.forEach((u, i) => {
+      const cell = document.createElement("div");
+      cell.className = "mediaItem";
+      const im = document.createElement("img"); im.src = u; im.alt = `תמונה ${i + 1}`;
+      const badge = document.createElement("span"); badge.className = "idx"; badge.textContent = String(i + 1);
+      cell.appendChild(im); cell.appendChild(badge);
+      cell.title = `תמונה ${i + 1} מתוך ${urls.length} — צרף בסדר הזה`;
+      gallery.appendChild(cell);
+    });
+    hint.style.display = "block";
+    hint.textContent = urls.length === 1 ? "תמונה אחת — צרף לפוסט" : `${urls.length} תמונות — צרף אותן בסדר המוצג (1…${urls.length})`;
+    openImg.style.display = "inline-block";
+    openImg.textContent = urls.length === 1 ? "פתח/הורד תמונה" : "פתח/הורד את כל התמונות";
+  } else {
+    hint.style.display = "none"; hint.textContent = "";
+    openImg.style.display = "none";
+  }
 }
 
 // Non-destructive: request the next post, decide the view, keep the user CONNECTED
@@ -86,8 +105,10 @@ $("openBtn").addEventListener("click", () => {
   if (currentPost && currentPost.destinationUrl) { chrome.tabs.create({ url: currentPost.destinationUrl }); send("EVENT", { postId: currentPost.postId, event: "opened" }); }
 });
 $("openImgBtn").addEventListener("click", () => {
-  const url = currentPost && currentPost.imageUrls && currentPost.imageUrls[0];
-  if (url) chrome.tabs.create({ url });
+  // Open EVERY image in order (each in its own tab) so the user can save/attach all
+  // of them — never just the first. Opened in reverse so tab order matches 1..N.
+  const urls = (currentPost && currentPost.imageUrls) || [];
+  for (let i = urls.length - 1; i >= 0; i--) { if (urls[i]) chrome.tabs.create({ url: urls[i], active: i === 0 }); }
 });
 $("publishedBtn").addEventListener("click", async () => {
   if (!currentPost) return;

@@ -98,9 +98,13 @@ export async function isOrgEmergencyActive(db: Db, orgId: string): Promise<boole
 export interface ClaimedPost {
   id: string; org_id: string; campaign_id: string | null; group_id: string | null;
   property_id: string | null; post_text: string | null; hashtags: string[] | null;
-  image_url: string | null; external_destination_url: string | null;
+  image_url: string | null; image_urls: ClaimedMediaItem[] | null; external_destination_url: string | null;
   creative_output_id: string | null; creative_version: number | null;
   metadata: Record<string, unknown> | null; publish_state: string | null;
+}
+/** One persisted media item on a claimed post (jsonb element of distribution_posts.image_urls). */
+export interface ClaimedMediaItem {
+  kind: string; url: string; creativeOutputId: string | null; creativeVersion: number | null; source?: string;
 }
 /** Claim ONE eligible post for ONE instance. Returns null when nothing is claimable. */
 export async function claimNextPost(db: Db, args: { orgId: string; userId: string; instanceId: string; leaseSeconds?: number }): Promise<ClaimedPost | null> {

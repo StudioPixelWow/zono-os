@@ -37,6 +37,7 @@ export interface ControlPost {
   failureReason: string | null;
   failureCode: string | null;
   externalPostUrl: string | null;
+  mediaCount: number;                 // number of images on the post (0 = text-only)
 }
 
 export interface ControlEvent {
@@ -133,6 +134,7 @@ function mapPost(row: any, groupName: string | null, campaignName: string | null
     failureReason: row.failure_reason ?? null,
     failureCode: row.failure_code ?? null,
     externalPostUrl: row.external_post_url ?? null,
+    mediaCount: Array.isArray(row.image_urls) && row.image_urls.length > 0 ? row.image_urls.length : (row.image_url ? 1 : 0),
   };
 }
 
@@ -160,7 +162,7 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
   const { data: activeRows } = await db
     .from("distribution_posts")
     .select(
-      "id,status,publish_state,post_title,post_text,group_id,campaign_id,property_id,scheduled_at,updated_at,attempt_count,max_attempts,next_retry_at,lease_expires_at,locked_by,failure_reason,failure_code,external_post_url,terminal",
+      "id,status,publish_state,post_title,post_text,group_id,campaign_id,property_id,scheduled_at,updated_at,attempt_count,max_attempts,next_retry_at,lease_expires_at,locked_by,failure_reason,failure_code,external_post_url,image_url,image_urls,terminal",
     )
     .eq("org_id", orgId)
     .or("terminal.is.null,terminal.eq.false")
@@ -175,7 +177,7 @@ export async function getPublishingControlData(): Promise<PublishingControlData>
   const todayIsrael = israelDay(new Date().toISOString());
   const { data: pubTodayRaw } = await db
     .from("distribution_posts")
-    .select("id,status,publish_state,post_title,post_text,group_id,campaign_id,property_id,scheduled_at,updated_at,published_at,external_post_url,terminal")
+    .select("id,status,publish_state,post_title,post_text,group_id,campaign_id,property_id,scheduled_at,updated_at,published_at,external_post_url,image_url,image_urls,terminal")
     .eq("org_id", orgId)
     .eq("publish_state", "published")
     .gte("published_at", new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString())

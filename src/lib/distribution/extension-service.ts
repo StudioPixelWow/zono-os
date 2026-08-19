@@ -203,7 +203,7 @@ const GROUP_COMPLIANCE = [
  *  payload builder as a fresh claim. */
 async function findOwnClaimedPost(db: ReturnType<typeof createServiceRoleClient>, inst: AuthedInstance): Promise<ClaimedPost | null> {
   const { data } = await db.from(DIST.posts as never)
-    .select("id,org_id,campaign_id,group_id,property_id,post_text,hashtags,image_url,external_destination_url,creative_output_id,creative_version,metadata,publish_state")
+    .select("id,org_id,campaign_id,group_id,property_id,post_text,hashtags,image_url,image_urls,external_destination_url,creative_output_id,creative_version,metadata,publish_state")
     .eq("org_id", inst.orgId).eq("locked_by", inst.id).eq("publish_state", "dispatching")
     .order("dispatched_at", { ascending: true }).limit(1).maybeSingle();
   return (data as unknown as ClaimedPost | null) ?? null;
@@ -243,25 +243,47 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
   // channel/job-scoped signed URL — never the private master, a draft, or a
   // service-role URL. A missing/revoked derivative or an active emergency stop is
   // an honest block: we do not hand out an image and do not mark the post ready.
+  // MULTI-IMAGE hand-off. Resolve the ORDERED media list to publishable URLs. Each
+  // studio creative resolves to its approved facebook_groups derivative (signed);
+  // property images pass through their stored URL. This is ALL-OR-NOTHING: if any one
+  // item cannot be resolved we release the whole post back to queued and hand out
+  // NOTHING — the user never publishes fewer images than were previewed/approved.
+  // Backward compat: an empty list falls back to the legacy single-image path.
+  const emergencyActive = await isGroupsEmergencyActive(db, inst.orgId, pick.group_id);
+  const releaseAndBlock = async (reason: string): Promise<null> => {
+    console.warn(`${LOG} getNextPost blocked for post ${pick.id}: ${reason}`);
+    await transitionPost(db as never, {
+      postId: pick.id, orgId: inst.orgId, from: "dispatching", to: "queued",
+      kind: "handoff_block", actorId: inst.userId, reason,
+      patch: { status: "scheduled", lease_expires_at: null, locked_by: null },
+    });
+    return null;
+  };
+
   let imageUrls: string[] = [];
-  if (pick.creative_output_id) {
-    const emergencyActive = await isGroupsEmergencyActive(db, inst.orgId, pick.group_id);
+  const mediaList = Array.isArray(pick.image_urls) ? pick.image_urls : [];
+  if (mediaList.length > 0) {
+    for (const item of mediaList) {
+      if (item.creativeOutputId) {
+        const handoff = await resolveJobDerivative({
+          orgId: inst.orgId, outputId: item.creativeOutputId, targetChannel: "facebook_groups",
+          creativeVersion: item.creativeVersion ?? 1, emergencyActive, db: db as never,
+        });
+        if (!handoff.ok || !handoff.signedUrl) return releaseAndBlock(handoff.reason ?? "no_derivative");
+        imageUrls.push(handoff.signedUrl);
+      } else if (item.url) {
+        imageUrls.push(item.url);
+      } else {
+        return releaseAndBlock("media_item_unresolvable");
+      }
+    }
+  } else if (pick.creative_output_id) {
+    // Legacy single-creative post (pre multi-image).
     const handoff = await resolveJobDerivative({
       orgId: inst.orgId, outputId: pick.creative_output_id, targetChannel: "facebook_groups",
       creativeVersion: pick.creative_version ?? 1, emergencyActive, db: db as never,
     });
-    if (!handoff.ok || !handoff.signedUrl) {
-      // Honest preflight block. The post was atomically claimed (dispatching); release
-      // it back to queued so it isn't stuck under lease and can retry once the
-      // derivative is available. Not counted as a publish failure.
-      console.warn(`${LOG} getNextPost blocked for post ${pick.id}: ${handoff.reason ?? "no_derivative"}`);
-      await transitionPost(db as never, {
-        postId: pick.id, orgId: inst.orgId, from: "dispatching", to: "queued",
-        kind: "handoff_block", actorId: inst.userId, reason: handoff.reason ?? "no_derivative",
-        patch: { status: "scheduled", lease_expires_at: null, locked_by: null },
-      });
-      return null;
-    }
+    if (!handoff.ok || !handoff.signedUrl) return releaseAndBlock(handoff.reason ?? "no_derivative");
     imageUrls = [handoff.signedUrl];
   } else if (pick.image_url) {
     imageUrls = [pick.image_url]; // legacy task (pre-derivative) — historical public URL

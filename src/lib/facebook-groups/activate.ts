@@ -18,7 +18,7 @@ import { generateCampaignVariationsAction } from "@/lib/distribution/variation-a
 import { createPostingQueueAction, previewPostingQueueAction } from "@/lib/distribution/distribution-actions";
 import type { ScheduleConfig } from "@/lib/distribution/scheduler-planner";
 import type { Frequency } from "./planner";
-import { assertCampaignMediaAllowed, type MediaRef } from "./campaign-media";
+import { assertCampaignMediaListAllowed, type MediaRef } from "./campaign-media";
 
 export interface ActivateInput {
   propertyId: string;
@@ -26,7 +26,8 @@ export interface ActivateInput {
   groupIds: string[];
   frequency: Frequency;
   startDate: string;      // yyyy-mm-dd (first eligible day)
-  media?: MediaRef | null; // selected image (validated server-side); null = text-only
+  media?: MediaRef | null;      // legacy single image (still accepted; = mediaList of one)
+  mediaList?: MediaRef[] | null; // ordered 1..N images (validated server-side); empty = text-only
   postText?: string | null; // the caption the user WROTE + previewed (parity: this IS what publishes)
 }
 
@@ -62,21 +63,31 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
   const property = prop as { id: string; title: string | null } | null;
   if (!property) return { ok: false, error: "הנכס לא נמצא או שאינו שייך למשרד." };
 
-  // Validate selected media SERVER-SIDE (P0): it must belong to THIS org AND this
-  // property. A tampered payload (Property A + media from Property B/another org) is
-  // rejected before any post is scheduled. No media = allowed (deliberate text-only).
-  const mediaCheck = await assertCampaignMediaAllowed(input.propertyId, input.media ?? null);
-  if (!mediaCheck.ok) return { ok: false, error: "התמונה שנבחרה לפרסום אינה זמינה או אינה שייכת לנכס זה. בחר תמונה אחרת." };
+  // Validate selected media SERVER-SIDE (P0): every image must belong to THIS org
+  // AND this property, order preserved, capped at FB_GROUPS_MAX_IMAGES. A tampered
+  // payload (Property A + media from Property B/another org) is rejected before any
+  // post is scheduled. Empty list = allowed (deliberate text-only). Backward compat:
+  // a legacy single `media` is treated as a one-item list.
+  const refs: MediaRef[] = (input.mediaList && input.mediaList.length > 0)
+    ? input.mediaList
+    : (input.media ? [input.media] : []);
+  const mediaCheck = await assertCampaignMediaListAllowed(input.propertyId, refs);
+  if (!mediaCheck.ok) return { ok: false, error: mediaCheck.error };
+  const resolvedMedia = mediaCheck.media;                 // ordered ResolvedMediaItem[]
+  const firstItem = resolvedMedia[0] ?? null;
 
-  // PUBLISH-READINESS guard (P0): a selected Creative Studio asset must have an
-  // approved facebook_groups derivative before ANY post is scheduled — otherwise
-  // the user would reach Today with a creative that cannot publish. We reuse the
-  // existing promotion flow (auto-promotes when the caller is a manager); if it
-  // still can't be prepared, we block honestly. Property photos are unaffected.
-  if (mediaCheck.creativeOutputId) {
+  // PUBLISH-READINESS guard (P0): EVERY selected Creative Studio asset must have an
+  // approved facebook_groups derivative before ANY post is scheduled — otherwise the
+  // user would reach Today with a creative that cannot publish. We reuse the existing
+  // promotion flow (auto-promotes when the caller is a manager); if any still can't be
+  // prepared, we block honestly. Property photos are unaffected.
+  const studioIds = resolvedMedia.map((m) => m.creativeOutputId).filter((v): v is string => !!v);
+  if (studioIds.length > 0) {
     const { ensureCreativeFacebookReady } = await import("./creative-readiness");
-    const ready = await ensureCreativeFacebookReady(mediaCheck.creativeOutputId);
-    if (!ready.ready) return { ok: false, error: "הקריאייטיב עדיין לא מוכן לפרסום בפייסבוק. הכינו אותו לפרסום (או בחרו תמונת נכס) לפני הפעלת הקמפיין." };
+    for (const outputId of studioIds) {
+      const ready = await ensureCreativeFacebookReady(outputId);
+      if (!ready.ready) return { ok: false, error: "אחד הקריאייטיבים שנבחרו עדיין לא מוכן לפרסום בפייסבוק. הכינו אותו לפרסום (או הסירו אותו) לפני הפעלת הקמפיין." };
+    }
   }
 
   // Only ACTIVE (office-approved) groups of THIS org may be targeted. A tampered
@@ -118,8 +129,12 @@ export async function activateFacebookCampaignAction(input: ActivateInput): Prom
       windowStartHour: 9, windowEndHour: 20, delayMinutes: 90,
       maxPostsPerDay: maxPerDay(input.frequency),
       groupIds: input.groupIds, variationIds,
-      imageUrl: mediaCheck.imageUrl, creativeOutputId: mediaCheck.creativeOutputId,
-      creativeVersion: mediaCheck.creativeOutputId ? (mediaCheck.creativeVersion ?? 1) : null, propertyId: input.propertyId,
+      // Legacy single-image fields = the FIRST (cover) image, for backward compat.
+      imageUrl: firstItem?.url ?? null, creativeOutputId: firstItem?.creativeOutputId ?? null,
+      creativeVersion: firstItem?.creativeOutputId ? (firstItem.creativeVersion ?? 1) : null,
+      // Ordered 1..N resolved media — the canonical multi-image list.
+      imageUrls: resolvedMedia,
+      propertyId: input.propertyId,
     };
     // Preview first (first-slot + planned count for the success screen), then persist.
     const preview = await previewPostingQueueAction(config);

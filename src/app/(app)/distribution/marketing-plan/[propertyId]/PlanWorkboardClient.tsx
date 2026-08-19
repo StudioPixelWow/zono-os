@@ -206,7 +206,7 @@ function ItemCard({ it, planId, propertyId, editable, activated, groups, creativ
       {/* FACEBOOK item */}
       {isFb && it.facebook && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <FacebookPreview identity={identity} text={editable ? caption : it.facebook.caption} imageUrl={it.facebook.media?.url ?? null} />
+          <FacebookPreview identity={identity} text={editable ? caption : it.facebook.caption} imageUrls={(it.facebook.mediaList && it.facebook.mediaList.length > 0) ? it.facebook.mediaList.map((m) => m.url) : (it.facebook.media?.url ? [it.facebook.media.url] : [])} />
           <div className="flex flex-col gap-3">
             {editable ? (
               <>

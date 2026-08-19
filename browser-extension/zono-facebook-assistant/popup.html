@@ -17,6 +17,10 @@
     button.link { background: transparent; color: #6b6b76; font-weight: 600; padding: 4px; text-decoration: underline; }
     pre { white-space: pre-wrap; font-size: 12px; background: #f6f5fb; padding: 8px; border-radius: 8px; }
     img#thumb { max-width: 100%; border-radius: 8px; margin-top: 8px; display: none; }
+    .gallery { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .gallery .mediaItem { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; }
+    .gallery .mediaItem img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gallery .mediaItem .idx { position: absolute; inset-inline-start: 3px; inset-block-start: 3px; background: rgba(0,0,0,.72); color: #fff; font-size: 10px; font-weight: 700; line-height: 1; padding: 2px 5px; border-radius: 999px; }
     .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   </style>
 </head>
@@ -58,11 +62,12 @@
     <p class="muted">הפוסט הבא לפרסום ידני (אתה מפרסם, ZONO לא):</p>
     <p id="dest" style="font-weight:700"></p>
     <pre id="text"></pre>
-    <img id="thumb" alt="תצוגת תמונה" />
+    <p class="muted" id="mediaHint" style="display:none"></p>
+    <div id="gallery" class="gallery"></div>
     <div class="row">
       <button id="copyBtn" class="secondary">העתק טקסט</button>
       <button id="openBtn" class="secondary">פתח קבוצה</button>
-      <button id="openImgBtn" class="secondary" style="display:none">פתח/הורד תמונה</button>
+      <button id="openImgBtn" class="secondary" style="display:none">פתח/הורד את כל התמונות</button>
     </div>
     <div class="row">
       <button id="publishedBtn">פרסמתי ✓</button>

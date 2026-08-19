@@ -7,7 +7,9 @@
 // composer: a controlled caption editor (the EXACT text that publishes — parity),
 // a real property/Studio media selector, a Creative-Studio round-trip that
 // preserves campaign state, and a LIVE Facebook-style preview bound to state.
-// Single image only — matches the real extension capability (no fake carousel).
+// Supports 1..N ordered images (FB_GROUPS_MAX_IMAGES) — every image is validated
+// server-side and the extension surfaces the full ordered list for manual, in-order
+// attachment. No fake carousel: the preview reflects the exact persisted media list.
 // ============================================================================
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -17,24 +19,10 @@ import { buildPlan, FREQUENCY_HE, type Frequency, type WizardGroup, type GroupFo
 import { generatePostVariations, type PropertyFacts } from "@/lib/facebook-groups/content";
 import { activateFacebookCampaignAction } from "@/lib/facebook-groups/activate";
 import { listPropertyCampaignMediaAction, creativeFacebookReadinessAction, prepareCreativeForFacebookAction } from "@/lib/facebook-groups/media-actions";
+import { FB_GROUPS_MAX_IMAGES } from "@/lib/facebook-groups/media-constants";
 import type { CampaignMediaItem, MediaRef } from "@/lib/facebook-groups/campaign-media";
 import type { FbReadiness } from "@/lib/facebook-groups/creative-readiness";
 import { FacebookPreview } from "./FacebookPreview";
-
-// Publish-readiness status for a selected Studio creative (Facebook groups).
-function FbReadinessChip({ readiness, preparing, onPrepare }: { readiness: FbReadiness; preparing: boolean; onPrepare: () => void }) {
-  if (readiness.status === "ready") {
-    return <div className="bg-success-soft text-success mt-2 inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold">מוכן לפרסום ✓</div>;
-  }
-  return (
-    <div className="bg-warning-soft mt-2 flex flex-wrap items-center gap-2 rounded-lg px-3 py-1.5">
-      <span className="text-warning text-[12px] font-bold">נדרשת הכנה לפרסום</span>
-      {readiness.canAutoPromote
-        ? <button type="button" onClick={onPrepare} disabled={preparing} className="bg-brand rounded-lg px-3 py-1 text-[11px] font-bold text-white disabled:opacity-50">{preparing ? "מכין…" : "הכן לפרסום בפייסבוק"}</button>
-        : <span className="text-muted text-[11px]">הקריאייטיב עדיין לא מוכן לפרסום בפייסבוק — פנו למנהל להכנתו.</span>}
-    </div>
-  );
-}
 
 interface WProperty extends PropertyFacts { id: string; image: string | null }
 interface Connection { label: string; status: string; connected: boolean; message: string }
@@ -49,7 +37,8 @@ const dateTimeHe = (iso: string | null) => (iso ? new Date(iso).toLocaleString("
 const draftKey = (id: string) => `zono:fbcampaign:draft:${id}`;
 
 interface Activated { campaignId: string; created: number; groupCount: number; firstPublishAt: string | null; endDate: string }
-interface Draft { postText: string; selectedGroups: string[]; frequency: Frequency; step: number; selectedMedia: MediaRef | null; knownMediaIds: string[] }
+interface Draft { postText: string; selectedGroups: string[]; frequency: Frequency; step: number; selectedMedia: MediaRef[]; knownMediaIds: string[] }
+const sameRef = (a: MediaRef, b: MediaRef) => a.kind === b.kind && a.id === b.id;
 
 export function CampaignWizard({ properties, folders, notes, initialPropertyId, identity }: Props) {
   const preId = initialPropertyId && properties.some((p) => p.id === initialPropertyId) ? initialPropertyId : null;
@@ -62,10 +51,10 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
   const [activateError, setActivateError] = useState<string | null>(null);
   const [done, setDone] = useState<Activated | null>(null);
   const [mediaItems, setMediaItems] = useState<CampaignMediaItem[]>([]);
-  const [selectedMedia, setSelectedMedia] = useState<MediaRef | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<MediaRef[]>([]);   // ordered 1..N
   const [postText, setPostText] = useState("");
   const [justCreated, setJustCreated] = useState<Set<string>>(new Set());
-  const [fbReadiness, setFbReadiness] = useState<(FbReadiness & { forId: string }) | null>(null);
+  const [readinessById, setReadinessById] = useState<Record<string, FbReadiness>>({});
   const [preparing, setPreparing] = useState(false);
   const activatingRef = useRef(false);
   const bootRef = useRef(false);
@@ -99,47 +88,66 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
           const known = new Set<string>(draft.knownMediaIds ?? []);
           const created = items.filter((m) => m.source === "studio" && !known.has(m.id));
           setJustCreated(new Set(created.map((m) => m.id)));
-          const restored = draft.selectedMedia && items.find((m) => m.ref.kind === draft!.selectedMedia!.kind && m.ref.id === draft!.selectedMedia!.id);
-          const def = created[0] ?? restored ?? items.find((m) => m.isPrimary) ?? items.find((m) => m.publishable) ?? items[0] ?? null;
-          setSelectedMedia(def ? def.ref : null);
+          // Restore the FULL ordered selection (only refs still present), then APPEND
+          // any freshly-created studio creative — never erase existing selections.
+          const prevSel = Array.isArray(draft.selectedMedia) ? draft.selectedMedia : [];
+          const restored = prevSel.filter((r) => items.some((m) => sameRef(m.ref, r)));
+          const additions = created.map((m) => m.ref).filter((r) => !restored.some((x) => sameRef(x, r)));
+          let next = [...restored, ...additions].slice(0, FB_GROUPS_MAX_IMAGES);
+          if (next.length === 0) { const def = items.find((m) => m.isPrimary) ?? items.find((m) => m.publishable) ?? items[0]; if (def) next = [def.ref]; }
+          setSelectedMedia(next);
         } else {
           setJustCreated(new Set());
           setPostText((prev) => (prev.trim() ? prev : seedText));   // seed only when empty
-          const def = items.find((m) => m.isPrimary) ?? items.find((m) => m.publishable) ?? items[0] ?? null;
-          setSelectedMedia((prev) => (prev && items.some((m) => m.ref.kind === prev.kind && m.ref.id === prev.id) ? prev : (def ? def.ref : null)));
+          // Default to the cover image (single) so single-image behaviour is preserved.
+          setSelectedMedia((prev) => {
+            const kept = prev.filter((r) => items.some((m) => sameRef(m.ref, r)));
+            if (kept.length > 0) return kept;
+            const def = items.find((m) => m.isPrimary) ?? items.find((m) => m.publishable) ?? items[0];
+            return def ? [def.ref] : [];
+          });
         }
       })
-      .catch(() => { if (alive) { setMediaItems([]); setSelectedMedia(null); } });
+      .catch(() => { if (alive) { setMediaItems([]); setSelectedMedia([]); } });
     return () => { alive = false; };
   }, [propId, preId, variations]);
 
-  const isSel = (m: CampaignMediaItem) => !!selectedMedia && selectedMedia.kind === m.ref.kind && selectedMedia.id === m.ref.id;
+  const selIndex = (m: CampaignMediaItem) => selectedMedia.findIndex((r) => sameRef(r, m.ref));
+  const isSel = (m: CampaignMediaItem) => selIndex(m) >= 0;
   const allGroups = useMemo(() => folders.flatMap((f) => f.groups), [folders]);
   const chosen: WizardGroup[] = allGroups.filter((g) => selectedGroups.has(g.id));
   const plan = useMemo(() => (chosen.length ? buildPlan(chosen, frequency, startDate, { variations: 4 }) : null), [chosen, frequency, startDate]);
-  const previewImg = selectedMedia?.url ?? null;
-  // Publish-readiness applies only to a selected STUDIO creative (property photos
-  // are always publishable). Shown only when it matches the current selection.
-  const readiness = selectedMedia?.kind === "creative_output" && fbReadiness?.forId === selectedMedia.id ? fbReadiness : null;
+  const previewImgs = useMemo(() => selectedMedia.map((r) => {
+    const it = mediaItems.find((m) => sameRef(m.ref, r)); return it?.url ?? r.url;
+  }).filter(Boolean), [selectedMedia, mediaItems]);
+  const itemForRef = (r: MediaRef) => mediaItems.find((m) => sameRef(m.ref, r)) ?? null;
+  // Publish-readiness applies to each selected STUDIO creative (property photos are
+  // always publishable). Collect the ones not yet ready to gate + guide the user.
+  const selectedStudioIds = useMemo(() => selectedMedia.filter((r) => r.kind === "creative_output").map((r) => r.id), [selectedMedia]);
+  const notReadyStudioIds = selectedStudioIds.filter((id) => readinessById[id] && readinessById[id].status !== "ready");
+  const canAutoPromoteAny = notReadyStudioIds.some((id) => readinessById[id]?.canAutoPromote);
 
-  // Fetch readiness whenever a Studio creative is selected (async — never sets
-  // state synchronously in the effect body).
+  // Fetch readiness for every selected Studio creative (async — never sets state
+  // synchronously in the effect body).
   useEffect(() => {
-    if (selectedMedia?.kind !== "creative_output") return;
-    const id = selectedMedia.id;
+    if (selectedStudioIds.length === 0) return;
     let alive = true;
-    creativeFacebookReadinessAction(id).then((r) => { if (alive) setFbReadiness({ ...r, forId: id }); }).catch(() => { /* keep prior */ });
+    Promise.all(selectedStudioIds.map(async (id) => [id, await creativeFacebookReadinessAction(id)] as const))
+      .then((pairs) => { if (alive) setReadinessById((prev) => { const n = { ...prev }; for (const [id, r] of pairs) n[id] = r; return n; }); })
+      .catch(() => { /* keep prior */ });
     return () => { alive = false; };
-  }, [selectedMedia]);
+  }, [selectedStudioIds]);
 
   async function prepareForFacebook() {
-    if (selectedMedia?.kind !== "creative_output") return;
-    const id = selectedMedia.id;
+    if (notReadyStudioIds.length === 0) return;
     setPreparing(true);
     try {
-      await prepareCreativeForFacebookAction(id);
-      const r = await creativeFacebookReadinessAction(id);
-      setFbReadiness({ ...r, forId: id });
+      for (const id of notReadyStudioIds) {
+        if (!readinessById[id]?.canAutoPromote) continue;
+        await prepareCreativeForFacebookAction(id);
+        const r = await creativeFacebookReadinessAction(id);
+        setReadinessById((prev) => ({ ...prev, [id]: r }));
+      }
     } finally { setPreparing(false); }
   }
 
@@ -147,7 +155,25 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
   const toggleGroup = (id: string) => setSelectedGroups((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleFolder = (f: GroupFolder) => setSelectedGroups((s) => { const n = new Set(s); const all = f.groups.every((g) => n.has(g.id)); f.groups.forEach((g) => (all ? n.delete(g.id) : n.add(g.id))); return n; });
 
-  function pickMedia(ref: MediaRef) { setSelectedMedia(ref); }
+  // Toggle a media ref in/out of the ordered selection. Appends to the end (becomes
+  // the next in order); re-clicking removes it. Enforces the canonical max in the UI
+  // (the server enforces the same limit).
+  function pickMedia(ref: MediaRef) {
+    setSelectedMedia((prev) => {
+      const at = prev.findIndex((r) => sameRef(r, ref));
+      if (at >= 0) return prev.filter((_, i) => i !== at);
+      if (prev.length >= FB_GROUPS_MAX_IMAGES) return prev;  // capped
+      return [...prev, ref];
+    });
+  }
+  function removeAt(i: number) { setSelectedMedia((prev) => prev.filter((_, idx) => idx !== i)); }
+  function moveMedia(i: number, dir: -1 | 1) {
+    setSelectedMedia((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const n = [...prev]; const t = n[i]; n[i] = n[j]; n[j] = t; return n;
+    });
+  }
   function regenerate() {
     if (!variations.length) return;
     const idx = variations.findIndex((v) => v.text === postText.trim());
@@ -159,7 +185,7 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
   function openStudio() {
     if (!propId) return;
     try {
-      const draft: Draft = { postText, selectedGroups: [...selectedGroups], frequency, step, selectedMedia, knownMediaIds: mediaItems.map((m) => m.id) };
+      const draft: Draft = { postText, selectedGroups: [...selectedGroups], frequency, step, selectedMedia: [...selectedMedia], knownMediaIds: mediaItems.map((m) => m.id) };
       sessionStorage.setItem(draftKey(propId), JSON.stringify(draft));
     } catch { /* ignore */ }
     const ret = `/distribution/campaign-wizard?property=${propId}`;
@@ -175,7 +201,7 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
       const res = await activateFacebookCampaignAction({
         propertyId: property.id, propertyTitle: property.title,
         groupIds: chosen.map((g) => g.id), frequency, startDate,
-        media: selectedMedia, postText: postText.trim() || null,
+        mediaList: selectedMedia, postText: postText.trim() || null,
       });
       if (res.ok) { try { sessionStorage.removeItem(draftKey(property.id)); } catch { /* ignore */ } setDone({ campaignId: res.campaignId, created: res.created, groupCount: res.groupCount, firstPublishAt: res.firstPublishAt, endDate: res.endDate }); }
       else setActivateError(res.error);
@@ -268,7 +294,11 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
               </section>
 
               <section>
-                <div className="text-ink mb-1 text-[14px] font-black">תמונות לפוסט</div>
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="text-ink text-[14px] font-black">תמונות לפוסט</div>
+                  <span className="text-muted text-[11px] font-bold">{selectedMedia.length}/{FB_GROUPS_MAX_IMAGES} נבחרו</span>
+                </div>
+                <p className="text-muted mb-2 text-[11px]">אפשר לבחור עד {FB_GROUPS_MAX_IMAGES} תמונות. הסדר שתבחרו הוא הסדר שיוצג ושבו יש לצרף אותן. התמונה הראשונה היא הכריכה.</p>
                 {mediaItems.length === 0 ? (
                   <div className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-[12px]">אין עדיין תמונות לנכס. אפשר ליצור קריאייטיב בסטודיו, או להמשיך ללא תמונה (מומלץ לצרף תמונה).</div>
                 ) : (
@@ -281,7 +311,7 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
                             <button type="button" key={m.id} onClick={() => pickMedia(m.ref)} aria-pressed={isSel(m)} aria-label={`בחירת ${m.label}`} className={cn("relative aspect-square overflow-hidden rounded-xl border-2 transition", isSel(m) ? "border-brand ring-2 ring-brand/40" : "border-transparent hover:border-line")}>
                               <img src={m.thumbnailUrl ?? m.url} alt={m.label} className="h-full w-full object-cover" />
                               {m.isPrimary && <span className="bg-ink/70 absolute top-1 end-1 rounded px-1 py-0.5 text-[8px] font-bold text-white">ראשית</span>}
-                              {isSel(m) && <span className="bg-brand absolute inset-x-0 bottom-0 py-0.5 text-center text-[9px] font-bold text-white">✓ נבחרה</span>}
+                              {isSel(m) && <span className="bg-brand absolute top-1 start-1 grid h-5 w-5 place-items-center rounded-full text-[10px] font-black text-white">{selIndex(m) + 1}</span>}
                             </button>
                           ))}
                         </div>
@@ -294,9 +324,9 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
                           {studioMedia.map((m) => (
                             <button type="button" key={m.id} onClick={() => m.publishable && pickMedia(m.ref)} aria-pressed={isSel(m)} aria-label={`בחירת קריאייטיב${m.publishable ? "" : " (דרוש אישור)"}`} className={cn("relative aspect-square overflow-hidden rounded-xl border-2 transition", isSel(m) ? "border-brand ring-2 ring-brand/40" : "border-transparent hover:border-line", !m.publishable && "opacity-70")}>
                               <img src={m.thumbnailUrl ?? m.url} alt="קריאייטיב מהסטודיו" className="h-full w-full object-cover" />
-                              {justCreated.has(m.id) && <span className="bg-success absolute top-1 start-1 rounded px-1 py-0.5 text-[8px] font-bold text-white">נוצר עכשיו</span>}
+                              {justCreated.has(m.id) && <span className="bg-success absolute top-1 end-1 rounded px-1 py-0.5 text-[8px] font-bold text-white">נוצר עכשיו</span>}
                               {!m.publishable && <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[8px] text-white">דרוש אישור</span>}
-                              {isSel(m) && <span className="bg-brand absolute inset-x-0 bottom-0 py-0.5 text-center text-[9px] font-bold text-white">✓ נבחרה</span>}
+                              {isSel(m) && <span className="bg-brand absolute top-1 start-1 grid h-5 w-5 place-items-center rounded-full text-[10px] font-black text-white">{selIndex(m) + 1}</span>}
                             </button>
                           ))}
                         </div>
@@ -304,7 +334,42 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
                     )}
                   </div>
                 )}
-                {readiness && <FbReadinessChip readiness={readiness} preparing={preparing} onPrepare={prepareForFacebook} />}
+
+                {/* Ordered selection strip — reorder / remove, RTL-safe (start=earlier). */}
+                {selectedMedia.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-muted mb-1 text-[11px] font-bold">סדר הפרסום ({selectedMedia.length})</div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedMedia.map((r, i) => {
+                        const it = itemForRef(r);
+                        return (
+                          <div key={`${r.kind}:${r.id}`} className="border-line relative w-20 overflow-hidden rounded-xl border">
+                            <div className="relative aspect-square bg-slate-100">
+                              {it ? <img src={it.thumbnailUrl ?? it.url} alt={`תמונה ${i + 1}`} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-slate-400">🖼️</div>}
+                              <span className="bg-brand absolute top-1 start-1 grid h-5 w-5 place-items-center rounded-full text-[10px] font-black text-white">{i + 1}</span>
+                              {i === 0 && <span className="bg-ink/70 absolute bottom-0 inset-x-0 py-0.5 text-center text-[8px] font-bold text-white">כריכה</span>}
+                            </div>
+                            <div className="flex items-center justify-between px-1 py-0.5">
+                              <button type="button" onClick={() => moveMedia(i, -1)} disabled={i === 0} aria-label="הזז אחורה" className="text-muted disabled:opacity-30 text-[12px] font-black">›</button>
+                              <button type="button" onClick={() => removeAt(i)} aria-label="הסר תמונה" className="text-danger text-[11px] font-bold">✕</button>
+                              <button type="button" onClick={() => moveMedia(i, 1)} disabled={i === selectedMedia.length - 1} aria-label="הזז קדימה" className="text-muted disabled:opacity-30 text-[12px] font-black">‹</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Publish-readiness for selected Studio creatives (all must be ready). */}
+                {notReadyStudioIds.length > 0 && (
+                  <div className="bg-warning-soft mt-2 flex flex-wrap items-center gap-2 rounded-lg px-3 py-1.5">
+                    <span className="text-warning text-[12px] font-bold">{notReadyStudioIds.length === 1 ? "קריאייטיב אחד עדיין לא מוכן לפרסום" : `${notReadyStudioIds.length} קריאייטיבים עדיין לא מוכנים לפרסום`}</span>
+                    {canAutoPromoteAny
+                      ? <button type="button" onClick={prepareForFacebook} disabled={preparing} className="bg-brand rounded-lg px-3 py-1 text-[11px] font-bold text-white disabled:opacity-50">{preparing ? "מכין…" : "הכן לפרסום בפייסבוק"}</button>
+                      : <span className="text-muted text-[11px]">חלק מהקריאייטיבים דורשים אישור מנהל להכנתם לפרסום.</span>}
+                  </div>
+                )}
               </section>
 
               {/* Creative Studio CTA */}
@@ -320,7 +385,7 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
             {/* sticky live preview */}
             <div className="lg:sticky lg:top-4 lg:self-start">
               <div className="text-ink mb-1 text-[13px] font-black">תצוגה מקדימה בפייסבוק</div>
-              <FacebookPreview identity={identity} text={postText} imageUrl={previewImg} onPickMedia={mediaItems.length ? undefined : openStudio} />
+              <FacebookPreview identity={identity} text={postText} imageUrls={previewImgs} onPickMedia={mediaItems.length ? undefined : openStudio} />
             </div>
           </div>
         )}
@@ -385,8 +450,14 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
                   <div className="text-muted mb-1 text-[11px] font-bold">טקסט הפוסט</div>
                   <div className="text-ink whitespace-pre-wrap text-[12px] leading-relaxed">{postText.trim() || "— ללא טקסט —"}</div>
                 </div>
-                {!selectedMedia && <div className="bg-warning-soft text-warning rounded-xl p-3 text-[12px]">פרסום ללא תמונה. מומלץ לחזור לשלב התוכן ולבחור תמונה או ליצור קריאייטיב.</div>}
-                {readiness && <FbReadinessChip readiness={readiness} preparing={preparing} onPrepare={prepareForFacebook} />}
+                {selectedMedia.length === 0 && <div className="bg-warning-soft text-warning rounded-xl p-3 text-[12px]">פרסום ללא תמונה. מומלץ לחזור לשלב התוכן ולבחור תמונה או ליצור קריאייטיב.</div>}
+                {selectedMedia.length > 0 && <div className="text-muted text-[12px]">{selectedMedia.length === 1 ? "תמונה אחת תפורסם." : `${selectedMedia.length} תמונות יפורסמו לפי הסדר שנבחר.`}</div>}
+                {notReadyStudioIds.length > 0 && (
+                  <div className="bg-warning-soft mt-1 flex flex-wrap items-center gap-2 rounded-lg px-3 py-1.5">
+                    <span className="text-warning text-[12px] font-bold">{notReadyStudioIds.length === 1 ? "קריאייטיב אחד עדיין לא מוכן לפרסום" : `${notReadyStudioIds.length} קריאייטיבים עדיין לא מוכנים לפרסום`}</span>
+                    {canAutoPromoteAny && <button type="button" onClick={prepareForFacebook} disabled={preparing} className="bg-brand rounded-lg px-3 py-1 text-[11px] font-bold text-white disabled:opacity-50">{preparing ? "מכין…" : "הכן לפרסום"}</button>}
+                  </div>
+                )}
                 <div className="bg-surface text-muted rounded-xl p-3 text-[12px]">
                   ZONO יכין ויתזמן כל פרסום. בזמן הפרסום, <b className="text-ink">התוסף ילווה אותך</b> בפרסום בקבוצה בפייסבוק — הפרסום מאושר על ידך. אין פרסום אוטומטי.
                 </div>
@@ -394,7 +465,7 @@ export function CampaignWizard({ properties, folders, notes, initialPropertyId, 
               </div>
               <div className="lg:sticky lg:top-4 lg:self-start">
                 <div className="text-ink mb-1 text-[13px] font-black">תצוגה מקדימה בפייסבוק</div>
-                <FacebookPreview identity={identity} text={postText} imageUrl={previewImg} />
+                <FacebookPreview identity={identity} text={postText} imageUrls={previewImgs} />
               </div>
             </div>
           )

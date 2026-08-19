@@ -11,6 +11,10 @@
 //   • respect max posts/day, the posting window, the delay, and the date range
 // ============================================================================
 
+// Type-only import (erased at build) — keeps this module runtime-pure while reusing
+// the canonical resolved-media shape from the campaign-media resolver.
+import type { ResolvedMediaItem } from "@/lib/facebook-groups/campaign-media";
+
 export type PostingStatus =
   | "draft" | "scheduled" | "queued" | "publishing" | "published" | "failed" | "cancelled";
 
@@ -30,7 +34,8 @@ export interface ScheduleConfig {
   endDate?: string | null;  // campaign range cap (no slot after this)
   // Selected media (validated server-side) persisted onto every post; propertyId
   // also stamps the post so property-level coverage resolves directly.
-  imageUrl?: string | null;
+  imageUrl?: string | null;              // legacy cover (= imageUrls[0]); kept for back-compat
+  imageUrls?: ResolvedMediaItem[] | null; // ordered 1..N resolved media
   creativeOutputId?: string | null;
   creativeVersion?: number | null;
   propertyId?: string | null;

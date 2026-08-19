@@ -114,7 +114,7 @@ export async function buildPreparedSnapshot(
       items.push({
         itemId, type, title: w.title, why: w.reason, who: pick.length ? `${pick.length} קבוצות` : "אין קבוצות פעילות", when,
         status: "draft", requiresApproval: true,
-        facebook: { caption, media, creativeOutputId: approvedCreative?.id ?? null, groupIds: pick.map((g) => g.id), groupNames: pick.map((g) => g.name), frequency: "three_weekly", startDate: defaultStartDate(nowMs) },
+        facebook: { caption, media, mediaList: media ? [media] : [], creativeOutputId: approvedCreative?.id ?? null, groupIds: pick.map((g) => g.id), groupNames: pick.map((g) => g.name), frequency: "three_weekly", startDate: defaultStartDate(nowMs) },
       });
     } else if (type === "buyer_bundle") {
       items.push({

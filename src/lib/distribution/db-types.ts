@@ -54,6 +54,7 @@ export interface DistPostRow {
   id: string; org_id: string; campaign_id: string | null; group_id: string | null; property_id: string | null;
   variation_id: string | null; platform: string | null; status: DistPostStatus; post_title: string | null;
   post_text: string | null; hashtags: string[]; cta: string | null; image_url: string | null;
+  image_urls: { kind: string; url: string; creativeOutputId: string | null; creativeVersion: number | null; source?: string }[];
   scheduled_at: string | null; published_at: string | null; external_post_url: string | null;
   failure_reason: string | null; skipped_reason: string | null; reach: number; engagement: number;
   leads_count: number; priority_score: number; created_by: string | null; metadata: Record<string, unknown>;

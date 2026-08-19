@@ -27,7 +27,8 @@ export type PlanStatus =
 
 export interface PlanFacebookConfig {
   caption: string;
-  media: { kind: string; id: string; url: string } | null;
+  media: { kind: string; id: string; url: string } | null;         // legacy cover (= mediaList[0])
+  mediaList?: { kind: string; id: string; url: string }[];         // ordered 1..N (backward compat: empty → [media])
   creativeOutputId: string | null;
   groupIds: string[];
   groupNames: string[];

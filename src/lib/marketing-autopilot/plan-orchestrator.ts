@@ -61,10 +61,13 @@ async function executeItem(db: any, orgId: string, snapshot: MarketingPlanSnapsh
       const fb = it.facebook!;
       // Guard: a campaign already created for this item is not created again.
       if (it.execution?.campaignId) return { ...it, status: "scheduled" };
+      // Pass the FULL ordered media list (frozen in the approved snapshot); fall back
+      // to the legacy single cover for older snapshots that predate mediaList.
+      const fbMediaList = (fb.mediaList && fb.mediaList.length > 0) ? fb.mediaList : (fb.media ? [fb.media] : []);
       const r = await activateFacebookCampaignAction({
         propertyId: snapshot.propertyId, propertyTitle: snapshot.propertyTitle,
         groupIds: fb.groupIds, frequency: fb.frequency as any, startDate: fb.startDate,
-        media: fb.media as any, postText: fb.caption,
+        mediaList: fbMediaList as any, postText: fb.caption,
       });
       if (r.ok) return { ...it, status: "scheduled", execution: { status: "scheduled", campaignId: r.campaignId, postsCreated: r.created, at } };
       return { ...it, status: "failed", execution: { status: "failed", error: r.error, at } };

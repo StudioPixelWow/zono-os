@@ -104,7 +104,8 @@ export const distributionSchedulerService = {
         status: "scheduled" as const, postTitle: v?.headline ?? null,
         postText: v ? [v.hook, v.body].filter(Boolean).join("\n\n") : null,
         cta: v?.cta ?? null, hashtags: v?.hashtags ?? [],
-        imageUrl: config.imageUrl ?? null, creativeOutputId: config.creativeOutputId ?? null,
+        imageUrl: config.imageUrl ?? null, imageUrls: config.imageUrls ?? [],
+        creativeOutputId: config.creativeOutputId ?? null,
         creativeVersion: config.creativeVersion ?? null, propertyId: config.propertyId ?? null,
       };
     }));

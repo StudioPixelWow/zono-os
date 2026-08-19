@@ -33,13 +33,21 @@ export async function validateSnapshot(orgId: string, snapshot: MarketingPlanSna
   const activeGroupIds = ((groupRows ?? []) as any[]).map((g) => g.id as string);
   const facebookConnected = activeGroupIds.length > 0;
 
-  // Creative readiness per facebook item that pins a creative.
+  // Creative readiness per facebook item. Multi-image: EVERY studio creative in the
+  // ordered media list must be ready (not just a single pinned creative) — the item
+  // is ready only if all are ready. Falls back to the legacy single creativeOutputId.
   const creativeReadyByItem: Record<string, boolean | null> = {};
   for (const it of snapshot.items) {
-    if ((it.type === "facebook_publish" || it.type === "group_expansion") && it.facebook?.creativeOutputId) {
-      try { const r = await getCreativeFacebookReadiness(it.facebook.creativeOutputId); creativeReadyByItem[it.itemId] = r.status === "ready"; }
-      catch { creativeReadyByItem[it.itemId] = null; }
-    }
+    if (it.type !== "facebook_publish" && it.type !== "group_expansion") continue;
+    const fb = it.facebook;
+    if (!fb) continue;
+    const listIds = (fb.mediaList ?? []).filter((m) => m.kind === "creative_output").map((m) => m.id);
+    const ids = [...new Set([...(fb.creativeOutputId ? [fb.creativeOutputId] : []), ...listIds])];
+    if (ids.length === 0) continue;
+    try {
+      const results = await Promise.all(ids.map((id) => getCreativeFacebookReadiness(id)));
+      creativeReadyByItem[it.itemId] = results.every((r) => r.status === "ready");
+    } catch { creativeReadyByItem[it.itemId] = null; }
   }
 
   // Buyer eligibility per buyer item — real candidates/rejected/opted-out/already-sent.
