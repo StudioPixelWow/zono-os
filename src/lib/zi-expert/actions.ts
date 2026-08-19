@@ -24,6 +24,7 @@ import { openSupportTicketFromZi, getMyTicketByNumber, listMyOpenTickets } from 
 import { getOnboardingProgress, summarizeOnboardingForZi } from "@/lib/onboarding/progress";
 import { getDailyCommandCenter } from "@/lib/daily/command-center";
 import { listPropertiesMissingWeeklyReport } from "@/lib/sellers/lifecycle";
+import { summarizePropertyForZi } from "@/lib/properties/control-center";
 import type { DailyCommandCenter } from "@/lib/daily/priority";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { listRecentWhatsAppReplies } from "@/lib/whatsapp/inbound-linkage";
@@ -144,6 +145,18 @@ function detectPriceDropQuery(q: string): "dropped" | "responses" | null {
   if (has(["מי הגיב לעדכון", "מי הגיב לירידת", "מי הגיב על ירידת", "who responded to the price", "responses to the price"])) return "responses";
   if (has(["איזה נכסים ירדו", "אילו נכסים ירדו", "נכסים שירדו במחיר", "ירידת מחיר", "ירידות מחיר", "מי כדאי לשלוח", "למי כדאי לשלוח", "מי ביקר בנכס והמחיר ירד", "which properties dropped", "price drops", "dropped in price"])) return "dropped";
   return null;
+}
+
+/** Detect a "what's happening with THIS property" question (answered from the
+ *  control-center selector when a property is in context). */
+function detectPropertyControlQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  return has([
+    "מה קורה עם הנכס", "מצב הנכס", "מה המצב של הנכס", "מה הפעולה הבאה", "הפעולה הבאה",
+    "מי מתאים לנכס", "מי הכי מתאים", "למי שלחנו את הנכס", "מה בעל הנכס יודע", "איפה יש בעיה בנכס",
+    "מי הגיב לנכס", "what's happening with this property", "status of this property", "next action for this property",
+  ]);
 }
 
 /** Detect seller-lifecycle questions — answered from canonical facts (brief + ledger). */
@@ -319,6 +332,22 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           const wMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
           await touchConversation(conversationId, 2);
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: wMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI Property copilot: "what's happening with THIS property / next action /
+    // who responded" — answered from the ONE control-center selector when a property
+    // is in context (ctx.selectedPropertyId). Deterministic facts, never invented. ──
+    if (detectPropertyControlQuery(question) && ctx.selectedPropertyId) {
+      try {
+        const { profile } = await getSessionContext();
+        const orgId = profile?.org_id ?? null;
+        if (orgId) {
+          const content = (await summarizePropertyForZi(orgId, ctx.selectedPropertyId, false)) ?? "לא נמצאו נתונים לנכס הנוכחי.";
+          const cMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: cMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
     }

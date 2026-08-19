@@ -61,8 +61,9 @@ interface JourneyData {
   context: JourneyContext;
 }
 
-type Tab = "command" | "buyers" | "sellers" | "marketing" | "calendar" | "documents" | "timeline" | "details";
+type Tab = "control" | "command" | "buyers" | "sellers" | "marketing" | "calendar" | "documents" | "timeline" | "details";
 const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "control", label: "מרכז שליטה", icon: "LayoutDashboard" },
   { id: "command", label: "מרכז ניהול", icon: "Sparkles" },
   { id: "buyers", label: "קונים תואמים", icon: "Users" },
   { id: "sellers", label: "מוכר / בעלים", icon: "UserCheck" },
@@ -120,6 +121,7 @@ export function PropertyDetailView({
   recommendationsSlot,
   contextSlot,
   sellersSlot,
+  controlSlot,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
@@ -143,8 +145,9 @@ export function PropertyDetailView({
   recommendationsSlot?: ReactNode;
   contextSlot?: ReactNode;
   sellersSlot?: ReactNode;
+  controlSlot?: ReactNode;
 }) {
-  const [tab, setTab] = useState<Tab>("command");
+  const [tab, setTab] = useState<Tab>("control");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const yes = "כן";
@@ -337,6 +340,10 @@ export function PropertyDetailView({
 
       {/* ── Panels ──────────────────────────────────────────────────────────── */}
       <div>
+        {tab === "control" && (
+          controlSlot ?? <EmptyState icon="LayoutDashboard" text="אין נתוני מרכז שליטה עדיין." />
+        )}
+
         {tab === "command" && (
           <div className="flex flex-col gap-5">
             <CommandCenter
