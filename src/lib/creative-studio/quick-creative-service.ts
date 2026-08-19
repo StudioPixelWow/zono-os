@@ -429,7 +429,14 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     const briefs = g.conceptBriefs.map((s) => (s ?? "").trim()).filter(Boolean).slice(0, 3);
     if (briefs.length) {
       const { spec: baseSpec, kind } = baseSpecForBriefs(g, brand.snapshot);
-      const fmt = g.format || "feed_4_5";
+      const fmt = g.format || "feed_1_1";
+      // Honest dimensions per chosen format (was hardcoded to 1080×1350). The concept
+      // engine renders a 1:1 layout, so a 1:1 selection is pixel-accurate; 4:5 / 9:16
+      // carry their canonical post dimensions.
+      const FMT_DIMS: Record<string, { w: number; h: number }> = {
+        feed_1_1: { w: 1080, h: 1080 }, feed_4_5: { w: 1080, h: 1350 }, story_9_16: { w: 1080, h: 1920 },
+      };
+      const fmtDims = FMT_DIMS[fmt] ?? FMT_DIMS.feed_1_1;
       const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
       const finalRows: Record<string, unknown>[] = await Promise.all(briefs.map(async (brief, i) => {
         const label = `אפשרות ${i + 1}`;
@@ -445,7 +452,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
         if (outcome.imageUrl) {
           const passed = outcome.status === "approved";
           return { ...base, status: passed ? "generated" : "needs_review",
-            render_data: { format: fmt, width: 1080, height: 1350, fullAd: true, concept: { label, brief }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
+            render_data: { format: fmt, width: fmtDims.w, height: fmtDims.h, fullAd: true, concept: { label, brief }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
             private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad",
             image_error: passed ? null : ([outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null),
             quality_status: passed ? "passed" : "review",

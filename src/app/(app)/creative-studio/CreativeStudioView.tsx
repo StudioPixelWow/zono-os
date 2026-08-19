@@ -1918,7 +1918,7 @@ function ImageUploadField({ label, value, orgId, userId, et, eid, onChange }: { 
 function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }: { type: string; et: string; eid: string; orgId: string; userId: string; prefill?: Record<string, string | boolean | number>; onClose: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [format, setFormat] = useState("feed_4_5");
+  const [format, setFormat] = useState("feed_1_1");
   const [improve, setImprove] = useState(false);
   // Prefill from the launching property (#P3-4) so the agent doesn't retype.
   const [f, setF] = useState<Record<string, string | boolean | number>>(() => ({ ...(prefill ?? {}) }));
@@ -2021,7 +2021,7 @@ function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }:
           <div className="flex flex-col gap-3">
             <p className="text-muted text-sm">בחרו פורמט והמשיכו למילוי הפרטים.</p>
             <div className="flex gap-2">
-              {[["feed_4_5", "פוסט פיד 4:5"], ["story_9_16", "סטורי 9:16"]].map(([v, l]) => (
+              {[["feed_1_1", "פוסט ריבוע 1:1"], ["feed_4_5", "פוסט פיד 4:5"], ["story_9_16", "סטורי 9:16"]].map(([v, l]) => (
                 <button key={v} onClick={() => setFormat(v)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${format === v ? "bg-brand text-white" : "bg-surface text-muted"}`}>{l}</button>
               ))}
             </div>

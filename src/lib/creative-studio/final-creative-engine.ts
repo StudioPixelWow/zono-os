@@ -375,6 +375,23 @@ const WHY_CONVERT: Record<ConceptTrigger, string> = {
 
 function buildConceptAd(f: FinalAdFacts, brand: FinalAdBrandAssets, brief: CreativeBrief, trigger: ConceptTrigger): FinalAdData {
   const copy = conceptCopy(trigger, brief);
+  // De-duplicate the locality. It is intentionally woven into the headline/subheadline
+  // for most concepts, so the separate location line and the MapPin chip must NOT repeat
+  // the SAME value — when city == neighborhood == address == "קרית משה" it previously
+  // rendered 3–4×. Keep the locality shown exactly once: prefer the copy, else the
+  // location line, and drop the redundant chip.
+  const locName = (brief.neighborhood || brief.city || "").trim();
+  const copyHay = `${copy.headline} ${copy.subheadline}`;
+  const dedupLocation = (() => {
+    const l = (copy.location || "").trim();
+    if (!l) return "";
+    if (copyHay.includes(l)) return "";                      // exact repeat of copy text
+    if (l === locName && copyHay.includes(locName)) return ""; // pure repeat of a locality already in the copy
+    return l;                                                 // a distinct street-level address stays
+  })();
+  const dedupFeatures = buildFeatures(brief, f).filter(
+    (ft) => !(ft.icon === "MapPin" && (!ft.label || copyHay.includes(ft.label) || ft.label === dedupLocation)),
+  );
   const artDirection = artDirectionFor(trigger, brief);
   const trace: CreativeTrace = {
     property: { propertyType: f.propertyType ?? null, city: f.city ?? null, neighborhood: f.neighborhood ?? null, address: f.address ?? null, price: f.price ?? null, rooms: f.rooms ?? null, sizeSqm: f.sizeSqm ?? null, floor: f.floor ?? null, mediaUrl: f.propertyImage ?? null },
@@ -386,10 +403,10 @@ function buildConceptAd(f: FinalAdFacts, brand: FinalAdBrandAssets, brief: Creat
   };
   const ad: FinalAdData = {
     kind: "final_ad", angleKey: "new_to_market", angleLabel: CONCEPT_LABELS[trigger],
-    headline: copy.headline, subheadline: copy.subheadline, location: copy.location, cta: f.customCta || copy.cta,
+    headline: copy.headline, subheadline: copy.subheadline, location: dedupLocation, cta: f.customCta || copy.cta,
     badge: triggerBadge(trigger, brief),
     price: f.price ? formatPrice(f.price) : null, priceLabel: "מחיר",
-    features: buildFeatures(brief, f),
+    features: dedupFeatures,
     agentName: brand.agentName ?? null, agentPhone: brand.agentPhone ?? null, agentPhoto: brand.agentPhoto ?? null,
     logoUrl: brand.officeLogo ?? null, logoText: brand.officeName ?? null,
     propertyImage: f.propertyImage ?? null,
