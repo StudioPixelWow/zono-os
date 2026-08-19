@@ -100,6 +100,20 @@ function isOnboardingQuery(q: string): boolean {
   return phrases.some((p) => t.includes(p));
 }
 
+/** Detect an office-INTELLIGENCE question → the explainable Office Intelligence DTO
+ *  (patterns/learning), distinct from the exceptions question below. Role-gated. */
+function detectOfficeIntelligenceQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  const phrases = [
+    "מה אתה לומד על המשרד", "מה אתה למד על המשרד", "מה למדת על המשרד", "תובנות על המשרד", "תובנות על העסק",
+    "איזה מקורות לידים", "מקורות לידים עובדים", "איפה עסקאות נתקעות", "איפה עסקאות נתקעו",
+    "איזה נכסים מושכים", "איפה חסרים לנו נכסים", "איפה חסר לנו מלאי", "חוזרים מספיק מהר", "זמן מענה",
+    "איזה אזורים חזקים", "מה הייתי משפר במשרד", "מה כדאי לשפר במשרד",
+    "what are you learning", "which lead sources", "where do deals get stuck", "where are we missing inventory",
+  ];
+  return phrases.some((p) => t.includes(p));
+}
+
 /** Detect a manager/office-exceptions question → the Manager Command Center DTO.
  *  (Naturally role-gated: the summary returns null for non-managers.) */
 function detectManagerOfficeQuery(q: string): boolean {
@@ -529,6 +543,23 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: sMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI Office Intelligence — "מה אתה לומד על המשרד / מקורות לידים / איפה
+    // עסקאות נתקעות / איפה חסר מלאי". Answers from the SAME explainable DTO (role-
+    // gated → null for non-managers). Explains patterns with evidence; never
+    // fabricates strategic/causal claims or quotes private conversations. ──
+    if (detectOfficeIntelligenceQuery(question)) {
+      try {
+        const { summarizeOfficeIntelligenceForZi } = await import("@/lib/office/office-intelligence");
+        const summary = await summarizeOfficeIntelligenceForZi(30);
+        if (summary) {
+          try { const { recordUsage } = await import("@/lib/launch/server/services"); await recordUsage({ category: "ai", name: "office_intelligence_zi_question" }); } catch { /* telemetry best-effort */ }
+          const iMsg = await appendMessageRow({ conversationId, role: "assistant", content: summary, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: iMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through */ }
     }
 
     // ── ZI Manager Command Center — "איפה יש בעיות במשרד / מי מחכה / מה ראשון".
