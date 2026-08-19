@@ -100,6 +100,19 @@ function isOnboardingQuery(q: string): boolean {
   return phrases.some((p) => t.includes(p));
 }
 
+/** Detect a manager/office-exceptions question → the Manager Command Center DTO.
+ *  (Naturally role-gated: the summary returns null for non-managers.) */
+function detectManagerOfficeQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  const phrases = [
+    "איפה יש בעיות במשרד", "מה קורה במשרד", "מצב המשרד", "איפה המשרד צריך אותי",
+    "מי מחכה יותר מדי", "מי מחכה יותר מדאי", "איזה לידים ללא אחראי", "לידים ללא אחראי",
+    "איזה עסקאות תקועות במשרד", "איפה יש עומס", "עומס אצל הסוכנים", "מה במשרד דורש",
+    "what's broken in the office", "office exceptions", "which leads are unassigned", "where is the office overloaded",
+  ];
+  return phrases.some((p) => t.includes(p));
+}
+
 /** Detect the "plan my day" ask → the Agent Daily Autopilot summary. */
 function detectPlanMyDayQuery(q: string): boolean {
   const t = q.toLowerCase();
@@ -516,6 +529,23 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: sMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI Manager Command Center — "איפה יש בעיות במשרד / מי מחכה / מה ראשון".
+    // Answers from the SAME office-exceptions DTO (role-gated: non-managers get
+    // null → falls through). ZI never approves plans or reassigns from ambiguous
+    // chat — consequential actions stay on /office with confirmation. ──
+    if (detectManagerOfficeQuery(question)) {
+      try {
+        const { summarizeManagerForZi } = await import("@/lib/office/manager-command-center");
+        const summary = await summarizeManagerForZi();
+        if (summary) {
+          try { const { recordUsage } = await import("@/lib/launch/server/services"); await recordUsage({ category: "ai", name: "manager_zi_question" }); } catch { /* telemetry best-effort */ }
+          const oMsg = await appendMessageRow({ conversationId, role: "assistant", content: summary, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: oMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through */ }
     }
 
     // ── ZI "תכנן לי את היום" — the Agent Daily Autopilot. Returns a concise,
