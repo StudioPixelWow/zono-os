@@ -12,6 +12,8 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { sendCustomerEmail } from "./send";
 import { unsubUrl } from "./unsubscribe";
+import { sellerReportUrl } from "./seller-report-tokens";
+import { getSellerLifecycle } from "@/lib/sellers/lifecycle";
 
 const WEEK_MS = 7 * 86_400_000;
 const ils = (n: number | null | undefined) =>
@@ -45,8 +47,12 @@ async function weeklyStats(db: any, orgId: string, propertyId: string, sinceIso:
 function renderReport(args: {
   officeName: string; sellerName: string; propertyTitle: string; city: string | null;
   photoUrl: string | null; askingPrice: number | null; stats: WeeklyStats; unsubscribeUrl: string | null;
+  lifecycleLabel?: string | null; nextStep?: string | null; reportUrl?: string | null;
 }): { subject: string; text: string; html: string } {
   const { officeName, sellerName, propertyTitle, city, photoUrl, stats, unsubscribeUrl } = args;
+  const lifecycleLabel = args.lifecycleLabel ?? null;
+  const nextStep = args.nextStep ?? null;
+  const reportUrl = args.reportUrl ?? null;
   const where = city ? ` ב${city}` : "";
   const subject = `השבוע בנכס שלך — ${propertyTitle}`;
   const active = stats.publications + stats.inquiries + stats.viewings > 0;
@@ -55,15 +61,18 @@ function renderReport(args: {
   const lines = [
     `שלום ${sellerName || ""},`.trim(),
     `הנה סיכום השבוע של הנכס שלך${where}: ${propertyTitle}${price ? ` · מחיר מבוקש ${price}` : ""}.`,
+    ...(lifecycleLabel ? [`מצב הנכס: ${lifecycleLabel}`] : []),
     ``,
     `📣 פרסומים השבוע: ${stats.publications}`,
     `📥 פניות חדשות: ${stats.inquiries}`,
     `⭐ לידים מוסמכים: ${stats.qualified}`,
-    `👁️ צפיות/ביקורים: ${stats.viewings}`,
+    `👁️ ביקורים: ${stats.viewings}`,
     `🗂️ קמפיינים פעילים: ${stats.activeCampaigns}`,
     ...(stats.priceUpdates > 0 ? [`📣 עדכון מחיר נשלח ל-${stats.priceUpdates} מתעניינים רלוונטיים`] : []),
     ``,
     active ? "נמשיך לפעול כדי להביא את הקונים הנכונים." : "השבוע היה שקט יחסית — אנחנו כבר עובדים על הגברת החשיפה בשבוע הקרוב.",
+    ...(nextStep ? [``, `הצעד הבא שלנו: ${nextStep}`] : []),
+    ...(reportUrl ? [``, `לצפייה בדוח המלא של הנכס: ${reportUrl}`] : []),
     ``,
     `בברכה, ${officeName}`,
   ];
@@ -78,7 +87,8 @@ function renderReport(args: {
     <div style="padding:22px">
       <p style="margin:0 0 4px;color:#6d28d9;font-size:12px;font-weight:800">השבוע בנכס שלך</p>
       <h1 style="margin:0 0 2px;color:#0f172a;font-size:20px;font-weight:900">${propertyTitle}</h1>
-      <p style="margin:0 0 16px;color:#64748b;font-size:13px">${city ?? ""}${price ? ` · ${price}` : ""}</p>
+      <p style="margin:0 0 12px;color:#64748b;font-size:13px">${city ?? ""}${price ? ` · ${price}` : ""}</p>
+      ${lifecycleLabel ? `<div style="display:inline-block;background:#ede9fe;color:#6d28d9;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:800;margin:0 0 14px">${lifecycleLabel}</div>` : ""}
       <p style="margin:0 0 14px;color:#334155;font-size:15px">שלום ${sellerName || ""}, הנה מה שקרה השבוע:</p>
       <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px">
         ${row("📣", "פרסומים השבוע", stats.publications)}
@@ -89,6 +99,8 @@ function renderReport(args: {
         ${stats.priceUpdates > 0 ? row("📣", "עדכון מחיר נשלח למתעניינים", stats.priceUpdates) : ""}
       </table>
       <p style="margin:16px 0 0;color:#334155;font-size:14px">${active ? "נמשיך לפעול כדי להביא את הקונים הנכונים." : "השבוע היה שקט יחסית — אנחנו כבר עובדים על הגברת החשיפה בשבוע הקרוב."}</p>
+      ${nextStep ? `<p style="margin:10px 0 0;color:#334155;font-size:14px"><strong>הצעד הבא שלנו:</strong> ${nextStep}</p>` : ""}
+      ${reportUrl ? `<a href="${reportUrl}" style="display:inline-block;margin-top:16px;background:#6d28d9;color:#fff;text-decoration:none;border-radius:12px;padding:12px 22px;font-size:15px;font-weight:800">צפייה בדוח המלא</a>` : ""}
       <p style="margin:18px 0 0;color:#0f172a;font-size:14px;font-weight:700">בברכה, ${officeName}</p>
     </div>
   </div>
@@ -140,9 +152,16 @@ export async function runSellerWeeklyReports(orgId: string, opts?: { limit?: num
 
     const stats = await weeklyStats(db, orgId, p.id, sinceIso);
     const uUrl = unsubUrl({ o: orgId, t: "seller", c: sellerId, ch: "email" });
+    // Enrich with the deterministic lifecycle projection (status + next agent step)
+    // and a secure full-report link. Best-effort — never blocks the weekly send.
+    const life = await getSellerLifecycle(orgId, p.id, db).catch(() => null);
+    const reportUrl = sellerReportUrl({ o: orgId, c: sellerId, p: p.id });
     const msg = renderReport({
       officeName, sellerName: seller.full_name ?? "", propertyTitle: p.title?.trim() || "הנכס שלך",
       city: p.city, photoUrl: p.primary_image_url, askingPrice: p.price, stats, unsubscribeUrl: uUrl,
+      lifecycleLabel: life?.stateLabel ?? null,
+      nextStep: life?.nextRecommendedAgentAction.label || null,
+      reportUrl,
     });
 
     const res = await sendCustomerEmail({
@@ -157,9 +176,10 @@ export async function runSellerWeeklyReports(orgId: string, opts?: { limit?: num
       // Best-effort: log the report as a seller touchpoint (feeds the trust score
       // + agent-visible timeline). Never breaks the send if the shape differs.
       try {
+        // Real columns only (the table has no channel/note columns).
         await db.from("property_seller_touchpoints").insert({
           org_id: orgId, property_id: p.id, seller_id: sellerId,
-          touchpoint_type: "דוח שבועי", channel: "email", note: msg.subject,
+          touchpoint_type: "דוח שבועי", title: msg.subject, description: "דוח שבועי נשלח במייל", direction: "outbound",
         });
       } catch { /* best-effort */ }
     } else { skipped++; }

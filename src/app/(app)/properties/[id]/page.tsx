@@ -34,6 +34,7 @@ import { CreateLegalDocumentButton } from "@/components/legal/CreateLegalDocumen
 import { EntityLegalDocuments } from "@/components/legal/EntityLegalDocuments";
 import { ContextPanel } from "@/components/intelligence/ContextPanel";
 import { PropertyMarketingLog } from "@/components/property/PropertyMarketingLog";
+import { SellerCommunicationBlock } from "./SellerCommunicationBlock";
 import { PropertyMarketingActionCenter } from "@/components/property/PropertyMarketingActionCenter";
 import { EntityAIContextSection } from "@/components/ai-context/EntityAIContextSection";
 import { canonicalFactsFor } from "@/lib/ai-context";
@@ -115,6 +116,7 @@ export default async function PropertyDetailsPage({
     </div>
   );
   const contextSlot = <ContextPanel city={property.city} neighborhood={property.neighborhood} />;
+  const sellersSlot = <SellerCommunicationBlock propertyId={id} />;
 
   return (
     <PropertyDetailView
@@ -139,6 +141,7 @@ export default async function PropertyDetailsPage({
       approvalSlot={approvalSlot}
       recommendationsSlot={recommendationsSlot}
       contextSlot={contextSlot}
+      sellersSlot={sellersSlot}
     />
   );
 }

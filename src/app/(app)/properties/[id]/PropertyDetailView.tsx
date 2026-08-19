@@ -119,6 +119,7 @@ export function PropertyDetailView({
   approvalSlot,
   recommendationsSlot,
   contextSlot,
+  sellersSlot,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
@@ -141,6 +142,7 @@ export function PropertyDetailView({
   approvalSlot?: ReactNode;
   recommendationsSlot?: ReactNode;
   contextSlot?: ReactNode;
+  sellersSlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const [error, setError] = useState<string | null>(null);
@@ -359,8 +361,11 @@ export function PropertyDetailView({
         )}
 
         {tab === "sellers" && (
-          <div className="bg-card border-line rounded-[20px] border p-5">
-            <PropertySellersPanel propertyId={p.id} sellers={propertySellers} readiness={sellerReadiness} />
+          <div className="flex flex-col gap-5">
+            <div className="bg-card border-line rounded-[20px] border p-5">
+              <PropertySellersPanel propertyId={p.id} sellers={propertySellers} readiness={sellerReadiness} />
+            </div>
+            {sellersSlot}
           </div>
         )}
 

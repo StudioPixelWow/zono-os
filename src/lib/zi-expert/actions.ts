@@ -23,6 +23,7 @@ import { shouldRunDiagnostics, diagnosticPlan } from "./support-diagnostics-rout
 import { openSupportTicketFromZi, getMyTicketByNumber, listMyOpenTickets } from "./support-bridge";
 import { getOnboardingProgress, summarizeOnboardingForZi } from "@/lib/onboarding/progress";
 import { getDailyCommandCenter } from "@/lib/daily/command-center";
+import { listPropertiesMissingWeeklyReport } from "@/lib/sellers/lifecycle";
 import type { DailyCommandCenter } from "@/lib/daily/priority";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { listRecentWhatsAppReplies } from "@/lib/whatsapp/inbound-linkage";
@@ -142,6 +143,15 @@ function detectPriceDropQuery(q: string): "dropped" | "responses" | null {
   const has = (arr: string[]) => arr.some((p) => t.includes(p));
   if (has(["מי הגיב לעדכון", "מי הגיב לירידת", "מי הגיב על ירידת", "who responded to the price", "responses to the price"])) return "responses";
   if (has(["איזה נכסים ירדו", "אילו נכסים ירדו", "נכסים שירדו במחיר", "ירידת מחיר", "ירידות מחיר", "מי כדאי לשלוח", "למי כדאי לשלוח", "מי ביקר בנכס והמחיר ירד", "which properties dropped", "price drops", "dropped in price"])) return "dropped";
+  return null;
+}
+
+/** Detect seller-lifecycle questions — answered from canonical facts (brief + ledger). */
+function detectSellerQuery(q: string): "need_call" | "no_report" | null {
+  const t = q.toLowerCase();
+  const has = (arr: string[]) => arr.some((p) => t.includes(p));
+  if (has(["למי לא שלחנו דוח", "מי לא קיבל דוח", "מוכרים בלי דוח", "בעלי נכסים בלי דוח", "who didn't get a report", "sellers without a report"])) return "no_report";
+  if (has(["בעלי נכסים צריכים", "איזה בעלי נכסים", "מי מהמוכרים צריך", "מוכרים שצריכים שיחה", "בעל נכס מבקש", "which sellers need", "sellers need a call"])) return "need_call";
   return null;
 }
 
@@ -334,6 +344,36 @@ export async function askZiAction(req: ZiAskRequest): Promise<ZiResult<ZiAskResu
           const pMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
           await touchConversation(conversationId, 2);
           return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: pMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+      } catch { /* fall through to daily / RAG */ }
+    }
+
+    // ── ZI Seller lifecycle: "which owners need a call" (from the brief) and
+    // "which owners didn't get a report this week" (from the delivery ledger).
+    // Deterministic; never invents recipients or metrics. ──
+    const sellerIntent = detectSellerQuery(question);
+    if (sellerIntent) {
+      try {
+        if (sellerIntent === "need_call") {
+          const brief = await getDailyCommandCenter();
+          const acts = brief ? brief.priorityActions.filter((a) => a.kind === "seller_callback" || a.kind === "seller_strategy") : [];
+          const content = acts.length
+            ? "בעלי נכסים שממתינים לטיפול:\n" + acts.slice(0, 12).map((a) => `• ${a.title} — ${a.reason}`).join("\n")
+            : "אין כרגע בעלי נכסים שממתינים לשיחה.";
+          const sMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: sMsg, source: "fallback", model: null, sources: [], followups: [] } };
+        }
+        const { profile } = await getSessionContext();
+        const orgId = profile?.org_id ?? null;
+        if (orgId) {
+          const missing = await listPropertiesMissingWeeklyReport(orgId, createServiceRoleClient(), 100);
+          const content = missing.length
+            ? "נכסים שבעליהם עדיין לא קיבלו דוח השבוע:\n" + missing.slice(0, 15).map((p) => `• ${p.title ?? "נכס"}`).join("\n")
+            : "כל בעלי הנכסים המנויים קיבלו דוח השבוע ✓";
+          const sMsg = await appendMessageRow({ conversationId, role: "assistant", content, source: null, route: ctx.route, moduleId: ctx.moduleId });
+          await touchConversation(conversationId, 2);
+          return { ok: true, data: { conversationId, conversationTitle, question: userMsg, answer: sMsg, source: "fallback", model: null, sources: [], followups: [] } };
         }
       } catch { /* fall through to daily / RAG */ }
     }

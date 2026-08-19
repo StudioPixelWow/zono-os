@@ -240,6 +240,40 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     }
   } catch { /* best-effort */ }
 
+  // ── SELLER actions (Seller Lifecycle). A property owner who asked (via WhatsApp)
+  //    for a call or to discuss price is surfaced as a ranked action — cheap, from
+  //    the tasks the inbound linkage already created. Role-scoped. ──
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
+    let tq = sb.from("tasks").select("id,title,seller_id,property_id,intelligence_source,assignee_id,status")
+      .eq("org_id", orgId).like("intelligence_source", "wa:%:seller:%").in("status", ["todo", "in_progress", "blocked"])
+      .order("created_at", { ascending: false }).limit(15);
+    if (!isManager && userId) tq = tq.eq("assignee_id", userId);
+    const { data: stasks } = await tq;
+    const rows = (stasks ?? []) as Array<{ id: string; property_id: string | null; intelligence_source: string | null }>;
+    if (rows.length) {
+      const pids = [...new Set(rows.map((r) => r.property_id).filter(Boolean))] as string[];
+      const titleById = new Map<string, string>();
+      if (pids.length) {
+        const { data: pr } = await sb.from("properties").select("id,title").in("id", pids).eq("org_id", orgId);
+        for (const p of (pr ?? []) as Array<{ id: string; title: string | null }>) if (p.title) titleById.set(p.id, p.title);
+      }
+      for (const t of rows) {
+        const isPrice = (t.intelligence_source ?? "").includes(":price_discussion:");
+        const propTitle = t.property_id ? titleById.get(t.property_id) ?? null : null;
+        actions.push({
+          id: `seller:${t.id}`, kind: isPrice ? "seller_strategy" : "seller_callback", priority: "P1",
+          title: propTitle ? `בעל הנכס · ${propTitle}` : "בעל הנכס",
+          reason: isPrice ? "בעל הנכס מבקש לדון במחיר / אסטרטגיה" : "בעל הנכס מבקש שיחה",
+          href: t.property_id ? `/properties/${t.property_id}` : "/sellers",
+          cta: "טיפול", icon: "MessageCircle", urgency: isPrice ? 72 : 68,
+          entity: t.property_id ? { type: "property", id: t.property_id } : undefined,
+        });
+      }
+    }
+  } catch { /* best-effort */ }
+
   // ── PIPELINE movement (manager/owner) ──────────────────────────────────────
   let pipeline: DailyCommandCenter["pipeline"] = null;
   if (isManager) {

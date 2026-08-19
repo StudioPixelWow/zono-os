@@ -16,7 +16,7 @@ import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 import { setConsent } from "@/lib/customer-comm/consent";
 import { applyRecommendationFeedback, type FeedbackAction } from "@/lib/customer-comm/recommendation-feedback";
 
-export type ReplyIntent = "interested" | "not_interested" | "request_viewing" | "request_call" | "question" | "other" | "unknown";
+export type ReplyIntent = "interested" | "not_interested" | "request_viewing" | "request_call" | "price_discussion" | "question" | "other" | "unknown";
 export type IdentityConfidence = "exact" | "ambiguous" | "unmatched";
 
 export interface WaIdentity {
@@ -40,6 +40,8 @@ const VIEWING = ["רוצה לראות", "אפשר לראות", "לתאם ביק�
 const CALL = ["תחזרו אליי", "תחזור אליי", "תתקשרו", "תתקשר אליי", "רוצה שתתקשרו", "שיחה טלפונית", "call me"];
 const INTERESTED = ["מעניין אותי", "מעוניין", "מתאים לי", "רוצה פרטים", "נשמע טוב", "interested"];
 const NOT_INTERESTED = ["לא מתאים", "לא מעוניין", "לא רלוונטי", "לא תודה", "not interested"];
+// Seller-side price-discussion cue. Feeds an agent task ONLY — never an auto price write.
+const PRICE_DISCUSSION = ["להוריד מחיר", "הורדת מחיר", "לרדת במחיר", "לרדת מחיר", "לדבר על המחיר", "לשנות מחיר", "המחיר גבוה", "reduce price", "lower the price", "drop the price"];
 
 function includesAny(t: string, arr: string[]): boolean { return arr.some((p) => t.includes(p)); }
 
@@ -52,6 +54,7 @@ export function classifyReplyIntent(text: string): ReplyIntent {
   const t = (text ?? "").toLowerCase();
   if (!t.trim()) return "unknown";
   if (includesAny(t, VIEWING)) return "request_viewing";
+  if (includesAny(t, PRICE_DISCUSSION)) return "price_discussion";
   if (includesAny(t, CALL)) return "request_call";
   if (includesAny(t, NOT_INTERESTED)) return "not_interested";
   if (includesAny(t, INTERESTED)) return "interested";
@@ -202,6 +205,12 @@ export async function processInboundWhatsAppLinkage(db: any, input: InboundLinka
       actionable = true;
     }
     if (intent === "request_call") { await ensureWaTask(db, input.orgId, id, "callback", "בקשת חזרה טלפונית מלקוח (וואטסאפ)"); actionable = true; }
+    if (intent === "price_discussion") {
+      // Seller (or buyer) asks to discuss price → agent task. NEVER writes properties.price.
+      const title = contactType === "seller" ? "בעל הנכס מבקש לדון במחיר (וואטסאפ)" : "בקשת דיון במחיר (וואטסאפ)";
+      await ensureWaTask(db, input.orgId, id, "price_discussion", title);
+      actionable = true;
+    }
     if (intent === "request_viewing" && !propertyId) {
       await ensureWaTask(db, input.orgId, id, "viewing", "בקשת ביקור מלקוח (וואטסאפ)");
       // Canonical viewing.requested (property unresolved — a bare request the agent schedules).
@@ -259,7 +268,7 @@ export async function linkConversationToContact(db: any, orgId: string, conversa
 }
 
 /** Idempotent WhatsApp-derived agent task (callback / viewing) on the owner. */
-async function ensureWaTask(db: any, orgId: string, id: WaIdentity, kind: "callback" | "viewing", title: string): Promise<void> {
+async function ensureWaTask(db: any, orgId: string, id: WaIdentity, kind: "callback" | "viewing" | "price_discussion", title: string): Promise<void> {
   const source = `wa:${kind}:${id.primaryType}:${id.primaryId}`;
   try {
     const { data: existing } = await db.from("tasks").select("id")

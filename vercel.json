@@ -99,6 +99,10 @@
     {
       "path": "/api/cron/price-update-dispatch",
       "schedule": "30 6-16 * * 0-4"
+    },
+    {
+      "path": "/api/cron/seller-lifecycle-dispatch",
+      "schedule": "45 6-16 * * 0-4"
     }
   ]
 }
