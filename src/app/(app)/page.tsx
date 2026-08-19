@@ -117,13 +117,31 @@ function buildZonoWork(rows: ActivityEventRow[]): HomeZonoWork {
   return { windowLabel: "ב-24 השעות האחרונות", items, total: recent.length };
 }
 
+// Hebrew fallback for legacy activity rows whose stored title is English
+// ("meeting · reminder", "lead · followup overdue"). Anything already in Hebrew
+// is kept; anything else is Hebraized by entity so the feed is Hebrew-only.
+const HEB_RE = /[֐-׿]/;
+const ACT_ENTITY_HE: Record<string, string> = {
+  organization: "ארגון", agent: "סוכן", buyer: "קונה", seller: "מוכר", lead: "ליד",
+  property: "נכס", external_listing: "מודעה חיצונית", deal: "עסקה", task: "משימה",
+  meeting: "פגישה", viewing: "ביקור", journey: "מסע לקוח", document: "מסמך",
+  facebook: "פייסבוק", whatsapp: "וואטסאפ", communication: "תקשורת", automation: "אוטומציה",
+  matching: "התאמה", recommendation: "המלצה", campaign: "קמפיין", publish: "פרסום",
+  integration: "אינטגרציה", marketing: "שיווק", support: "תמיכה", billing: "חיוב", customer: "לקוח",
+};
+function hebrewActivityTitle(r: ActivityEventRow): string {
+  if (r.title && HEB_RE.test(r.title)) return r.title;
+  const entity = (r.entity_type ?? (r.event_type ?? "").split(".")[0] ?? "").toLowerCase();
+  return `עדכון ${ACT_ENTITY_HE[entity] ?? "במערכת"}`.trim();
+}
+
 function mapActivity(rows: ActivityEventRow[]): HomeActivityItem[] {
   return rows.map((r) => {
     const key = (r.entity_type ?? "").toLowerCase();
     const meta = ACT_ICON[key] ?? ACT_ICON[(r.event_type ?? "").split("_")[0]] ?? { icon: "Activity", tone: "neutral" as const };
     return {
       id: r.id,
-      title: r.title,
+      title: hebrewActivityTitle(r),
       description: r.description,
       at: r.occurred_at,
       icon: meta.icon,

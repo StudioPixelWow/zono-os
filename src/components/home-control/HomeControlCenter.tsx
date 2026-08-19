@@ -755,6 +755,21 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
         </div>
       )}
 
+      {/* 4a. Recommended property (50%) + Quick actions (50%) — placed directly
+             under "על הבוקר" for fast daily access. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div>
+          <Head title="הנכס המומלץ עבורך" />
+          {p.featuredProperty
+            ? <RecommendedPropertyCard t={t} p={p.featuredProperty} />
+            : <div className="bg-card border-line text-muted flex h-full min-h-[240px] flex-col items-center justify-center gap-1 rounded-[26px] border p-8 text-center"><Icon name="Building2" size={26} className="text-muted/70" /><p className="text-ink text-sm font-bold">אין עדיין נכס מומלץ</p><p className="text-xs">הוסף נכסים כדי לקבל המלצה חכמה</p></div>}
+        </div>
+        <div>
+          <Head title="פעולות מהירות" />
+          <QuickActions />
+        </div>
+      </div>
+
       {/* 4b. WhatsApp — the conversations waiting for you */}
       <WhatsappWaiting wa={p.whatsapp} />
 
@@ -778,20 +793,6 @@ export function HomeControlCenter(p: HomeControlCenterProps) {
 
       {/* 8b. Marketing — what's worth promoting now */}
       <MarketingFocus mk={p.marketing} />
-
-      {/* 9. Recommended property (50%) + Quick actions (50%) — same row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div>
-          <Head title="הנכס המומלץ עבורך" />
-          {p.featuredProperty
-            ? <RecommendedPropertyCard t={t} p={p.featuredProperty} />
-            : <div className="bg-card border-line text-muted flex h-full min-h-[240px] flex-col items-center justify-center gap-1 rounded-[26px] border p-8 text-center"><Icon name="Building2" size={26} className="text-muted/70" /><p className="text-ink text-sm font-bold">אין עדיין נכס מומלץ</p><p className="text-xs">הוסף נכסים כדי לקבל המלצה חכמה</p></div>}
-        </div>
-        <div>
-          <Head title="פעולות מהירות" />
-          <QuickActions />
-        </div>
-      </div>
 
       {/* 10. Live area map — full-width, its own section */}
       <div>

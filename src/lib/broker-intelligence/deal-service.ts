@@ -14,6 +14,15 @@ import type { Recommendation } from "./types";
 const DAY = 86_400_000;
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
+// Hebrew labels for the free-text deal_profiles.deal_stage (never show the raw
+// English value in the UI).
+const DEAL_STAGE_HE: Record<string, string> = {
+  new_opportunity: "הזדמנות חדשה", contacted: "יצירת קשר", meeting_scheduled: "פגישה נקבעה",
+  property_visit: "ביקור בנכס", negotiation: "משא ומתן", offer_sent: "הצעה נשלחה",
+  offer_received: "הצעה התקבלה", agreement_draft: "טיוטת הסכם", legal_review: "בדיקה משפטית",
+  signed: "נחתם", closed: "נסגר", lost: "אבוד",
+};
+
 export interface DealIntelligence {
   recommendations: Recommendation[];
   scanned: number;
@@ -54,7 +63,7 @@ export async function getDealIntelligence(limit = 12): Promise<DealIntelligence>
       const daysToClose = close != null && !Number.isNaN(close) ? Math.round((close - now) / DAY) : null;
       return {
         dealId: (r.deal_id as string | null) ?? (r.id as string),
-        title: `עסקה · ${(r.deal_stage as string | null) ?? "פעילה"}`,
+        title: `עסקה · ${DEAL_STAGE_HE[(r.deal_stage as string | null) ?? ""] ?? "פעילה"}`,
         stage: (r.deal_stage as string | null) ?? null,
         status: (r.status as string | null) ?? null,
         dealRisk: num(r.deal_risk),

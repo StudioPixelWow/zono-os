@@ -116,6 +116,63 @@ const TITLES: Record<string, string> = {
   "automation.activated": "אוטומציה הופעלה",
   "automation.run_completed": "ריצת אוטומציה הושלמה",
   "automation.run_failed": "ריצת אוטומציה נכשלה",
+  // Follow-up engine + lead exceptions (were falling back to English).
+  "lead.followup_due": "מעקב ליד מתוזמן",
+  "lead.followup_overdue": "מעקב ליד באיחור",
+  "lead.unassigned": "ליד ללא שיוך",
+  "lead.hot_without_next_action": "ליד חם ללא פעולה הבאה",
+  "lead.sla_breached": "חריגת זמן טיפול בליד",
+  // Meeting reminder + viewing automation.
+  "meeting.reminder": "תזכורת פגישה",
+  "viewing.requested": "התבקש ביקור",
+  "viewing.scheduled": "נקבע ביקור",
+  "viewing.confirmed": "ביקור אושר",
+  "viewing.rescheduled": "ביקור נדחה למועד אחר",
+  "viewing.cancelled": "ביקור בוטל",
+  "viewing.completed": "ביקור הושלם",
+  "viewing.feedback_received": "התקבל משוב לאחר ביקור",
+  "viewing.followup_required": "נדרש מעקב לאחר ביקור",
+  // Property lifecycle additions.
+  "property.stage_changed": "שלב הנכס השתנה",
+  "property.price_dropped": "מחיר הנכס ירד",
+  "property.back_on_market": "הנכס חזר לשוק",
+  // Matching / recommendations.
+  "matching.executed": "בוצעה התאמה",
+  "buyer.matches_ready": "נמצאו התאמות לקונה",
+  "recommendation.generated": "נוצרה המלצה",
+  "recommendation.opened": "המלצה נפתחה",
+  // Distribution / marketing.
+  "campaign.created": "נוצר קמפיין",
+  "publish.requested": "התבקש פרסום",
+  "publish.succeeded": "פרסום הצליח",
+  "publish.failed": "פרסום נכשל",
+  "marketing.attention_required": "נכס דורש שיווק",
+  "marketing.plan_prepared": "הוכנה תוכנית שיווק",
+  "marketing.plan_created": "נוצרה תוכנית שיווק",
+  "marketing.plan_updated": "תוכנית שיווק עודכנה",
+  "marketing.plan_approved": "תוכנית שיווק אושרה",
+  "marketing.plan_activated": "תוכנית שיווק הופעלה",
+  "marketing.plan_partial_failure": "תוכנית שיווק — כשל חלקי",
+  "marketing.plan_completed": "תוכנית שיווק הושלמה",
+  // Customer inbound + channels.
+  "customer.whatsapp_received": "לקוח הגיב בוואטסאפ",
+  "customer.whatsapp_action_required": "הודעת לקוח דורשת טיפול",
+  "whatsapp.message_sent": "הודעת וואטסאפ נשלחה",
+  "whatsapp.message_failed": "שליחת וואטסאפ נכשלה",
+  // Support + billing.
+  "support.ticket_created": "נפתחה פנייה",
+  "support.ticket_updated": "פנייה עודכנה",
+  "support.ticket_customer_action_required": "פנייה ממתינה ללקוח",
+  "support.ticket_resolved": "פנייה נסגרה",
+  "billing.payment_failed": "תשלום נכשל",
+  "billing.payment_verified": "תשלום אושר",
+  "billing.subscription_activated": "מנוי הופעל",
+  "billing.subscription_cancelled": "מנוי בוטל",
+  // Integrations.
+  "integration.connected": "אינטגרציה חוברה",
+  "integration.disconnected": "אינטגרציה נותקה",
+  "integration.sync_succeeded": "סנכרון הצליח",
+  "integration.sync_failed": "סנכרון נכשל",
 };
 
 /**
@@ -304,8 +361,20 @@ export function projectEventToTimeline(evt: DomainEventLike): TimelineProjection
   });
 }
 
-/** Fallback title for a type absent from the map: "<entity> · <verb>". */
+// Hebrew entity labels for the fallback title — the timeline is Hebrew-only, so an
+// event type absent from TITLES still renders in Hebrew (never "<entity> · <verb>").
+const ENTITY_HE: Record<string, string> = {
+  organization: "ארגון", agent: "סוכן", buyer: "קונה", seller: "מוכר", lead: "ליד",
+  property: "נכס", external_listing: "מודעה חיצונית", deal: "עסקה", task: "משימה",
+  meeting: "פגישה", viewing: "ביקור", journey: "מסע לקוח", document: "מסמך",
+  facebook: "פייסבוק", whatsapp: "וואטסאפ", communication: "תקשורת", automation: "אוטומציה",
+  matching: "התאמה", recommendation: "המלצה", campaign: "קמפיין", publish: "פרסום",
+  integration: "אינטגרציה", ai: "בינה מלאכותית", marketing: "שיווק", support: "תמיכה",
+  billing: "חיוב", customer: "לקוח", price: "מחיר", session: "התחברות", subscription: "מנוי",
+};
+
+/** Fallback title for a type absent from the map — ALWAYS Hebrew, never English. */
 function genericTitle(eventType: string): string {
-  const parts = eventType.split(".");
-  return parts.length === 2 ? `${parts[0]} · ${parts[1].replace(/_/g, " ")}` : eventType;
+  const entity = eventType.split(".")[0] ?? "";
+  return `עדכון ${ENTITY_HE[entity] ?? "במערכת"}`.trim();
 }
