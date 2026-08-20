@@ -75,6 +75,15 @@ export function DealDetailView({ deal, notes }: { deal: DealDetail; notes: NoteD
         <ActionFeedback runner={r} />
       </header>
 
+      {/* next best action — canonical (same value the deals list shows) */}
+      {deal.nextBestAction && (
+        <div className="bg-brand-soft border-line rounded-2xl border p-4">
+          <p className="text-brand-strong text-[11px] font-black">הפעולה הבאה</p>
+          <p className="text-ink mt-1 text-[15px] font-bold">{deal.nextBestAction}</p>
+          {deal.primaryBlocker && <p className="text-muted mt-1 text-[12px]">חסם עיקרי: {deal.primaryBlocker}</p>}
+        </div>
+      )}
+
       {/* offers */}
       <Section title="הצעות מקושרות" extra={<Link href="/offers" className="text-brand-strong text-[12px] font-bold">כל ההצעות ↗</Link>}>
         {deal.offers.length === 0 ? <Empty text="אין הצעות מקושרות" /> : deal.offers.map((o) => (

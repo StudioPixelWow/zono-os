@@ -46,14 +46,21 @@ function Row({ label, value, tone }: { label: string; value: React.ReactNode; to
 }
 function Empty({ text }: { text: string }) { return <p className="text-muted py-1 text-sm">{text}</p>; }
 
-export async function PropertyControlCenter({ propertyId }: { propertyId: string }) {
-  const { profile } = await getSessionContext();
-  const orgId = profile?.org_id ?? null;
-  if (!orgId) return null;
-  let isManager = false;
-  try { const sb = await createClient(); const { data } = await sb.rpc("has_min_role", { p_min: "manager" }); isManager = data === true; } catch { /* agent */ }
-
-  const cc = await getPropertyLifecycleControlCenter(orgId, propertyId, { isManager });
+// `cc` may be supplied by the parent page (which computes the canonical control
+// center ONCE and shares it with the detail hero); when omitted, we fetch it here
+// so the component still works standalone. undefined = not supplied → fetch.
+export async function PropertyControlCenter(
+  { propertyId, cc: ccProp }: { propertyId: string; cc?: Awaited<ReturnType<typeof getPropertyLifecycleControlCenter>> },
+) {
+  let cc = ccProp;
+  if (cc === undefined) {
+    const { profile } = await getSessionContext();
+    const orgId = profile?.org_id ?? null;
+    if (!orgId) return null;
+    let isManager = false;
+    try { const sb = await createClient(); const { data } = await sb.rpc("has_min_role", { p_min: "manager" }); isManager = data === true; } catch { /* agent */ }
+    cc = await getPropertyLifecycleControlCenter(orgId, propertyId, { isManager });
+  }
   if (!cc) return <Card title="מרכז שליטה"><Empty text="לא נמצאו נתונים לנכס זה." /></Card>;
 
   const id = cc.property.id;

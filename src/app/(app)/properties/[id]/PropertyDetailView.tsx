@@ -122,6 +122,7 @@ export function PropertyDetailView({
   contextSlot,
   sellersSlot,
   controlSlot,
+  canonicalNextAction,
 }: {
   property: PropertyRow;
   activities: ActivityRow[];
@@ -146,6 +147,9 @@ export function PropertyDetailView({
   contextSlot?: ReactNode;
   sellersSlot?: ReactNode;
   controlSlot?: ReactNode;
+  /** Canonical property next-action (from the Lifecycle Control Center) — the ONE
+   *  user-facing next action, shared with the control tab so they never disagree. */
+  canonicalNextAction?: { label: string; cta: string | null; href: string; priority: string } | null;
 }) {
   const [tab, setTab] = useState<Tab>("control");
   const [error, setError] = useState<string | null>(null);
@@ -172,7 +176,10 @@ export function PropertyDetailView({
   const prof = commandCenter?.profile ?? null;
   const aiScore = prof?.success_score ?? null;
   const aiTone = aiScore != null ? scoreTone(aiScore) : "medium";
-  const nextAction = prof?.next_best_action ?? null;
+  // Canonical next-action ONLY (Control Center). The intelligence-profile
+  // next_best_action is kept for internal scoring but is no longer a second,
+  // possibly-divergent user-facing next-action surface.
+  const nextAction = canonicalNextAction?.label ?? null;
   const aiSummary = prof?.intelligence_summary ?? null;
   const primaryImg = media.find((m) => m.is_primary)?.url ?? media[0]?.url ?? null;
   const owner = propertySellers.find((s) => s.isPrimary) ?? propertySellers[0] ?? null;
@@ -240,13 +247,13 @@ export function PropertyDetailView({
             {/* Next best action */}
             <button
               type="button"
-              onClick={() => setTab("command")}
+              onClick={() => setTab("control")}
               className="bg-brand-soft group flex items-start gap-3 rounded-2xl p-3.5 text-right transition hover:brightness-[0.98]"
             >
               <span className="bg-brand mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl text-white"><Icon name="ArrowUpRight" size={16} /></span>
               <span className="min-w-0">
                 <span className="text-brand block text-[11px] font-bold">הפעולה הבאה שלך</span>
-                <span className="text-ink block text-[14px] font-black leading-snug">{nextAction ?? "הפעל את ZONO Intelligence כדי לקבל המלצת פעולה"}</span>
+                <span className="text-ink block text-[14px] font-black leading-snug">{nextAction ?? "אין כרגע פעולה נדרשת — פתח את מרכז השליטה לפרטים"}</span>
               </span>
             </button>
 

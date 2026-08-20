@@ -14,6 +14,9 @@ import { buildJourneyContext } from "@/lib/journey/repository";
 import { getCockpitJourney } from "@/lib/journey-cockpit/service";
 import { listPropertyTasks } from "@/lib/tasks/repository";
 import { getPropertyCommandCenter } from "@/lib/intelligence/service";
+import { getPropertyLifecycleControlCenter } from "@/lib/properties/control-center";
+import { getSessionContext } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { recommendedBuyersForProperty } from "@/lib/matching-intelligence/service";
 import { getPropertySellers } from "@/lib/sellers/service360";
 import { validatePropertySellerReadiness } from "@/lib/sellers/propertySellers";
@@ -50,6 +53,15 @@ export default async function PropertyDetailsPage({
   const { id } = await params;
   const property = await getPropertyById(id);
   if (!property) notFound();
+
+  // Canonical property next-action, computed ONCE here (the single source of truth)
+  // and shared by both the detail hero and the Control Center tab — so the two
+  // surfaces can never disagree, and the heavy aggregator runs only once per load.
+  const { profile } = await getSessionContext();
+  const ccOrgId = profile?.org_id ?? null;
+  let ccIsManager = false;
+  if (ccOrgId) { try { const sb = await createClient(); const { data } = await sb.rpc("has_min_role", { p_min: "manager" }); ccIsManager = data === true; } catch { /* agent */ } }
+  const controlCenter = ccOrgId ? await getPropertyLifecycleControlCenter(ccOrgId, id, { isManager: ccIsManager }) : null;
 
   const [
     activities,
@@ -118,11 +130,12 @@ export default async function PropertyDetailsPage({
   );
   const contextSlot = <ContextPanel city={property.city} neighborhood={property.neighborhood} />;
   const sellersSlot = <SellerCommunicationBlock propertyId={id} />;
-  const controlSlot = <PropertyControlCenter propertyId={id} />;
+  const controlSlot = <PropertyControlCenter propertyId={id} cc={controlCenter} />;
 
   return (
     <PropertyDetailView
       property={property}
+      canonicalNextAction={controlCenter?.nextAction ?? null}
       activities={activities}
       notes={notes}
       documents={documents}

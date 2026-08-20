@@ -227,44 +227,9 @@ function AttentionCenter({ items }: { items: AttentionItem[] }) {
   );
 }
 
-/* ── 5. Smart opportunities (mock buyer matches) ─────────────────────────── */
-
-interface Opportunity { buyer: string; criteria: string; budget: string; matches: { title: string; score: number }[]; cta: string }
-const OPPORTUNITIES: Opportunity[] = [
-  { buyer: "משפחת כהן", criteria: "4-5 חדרים בקרית ביאליק", budget: "תקציב עד ₪2.6M", matches: [{ title: "גושן 90, מוצקין", score: 92 }, { title: "קק״ל 54, קרית ביאליק", score: 88 }], cta: "שלח הצעה" },
-  { buyer: "משפחת לוי", criteria: "פנטהאוז בחיפה", budget: "תקציב עד ₪4M", matches: [{ title: "שדרות ירושלים 22", score: 84 }], cta: "צור קשר" },
-  { buyer: "משקיע — עמיר", criteria: "2-3 חדרים להשקעה", budget: "תקציב עד ₪1.6M", matches: [{ title: "הרצל 15, חיפה", score: 85 }, { title: "שמעוני 6, חיפה", score: 83 }], cta: "צור קשר" },
-];
-
-function SmartOpportunities() {
-  return (
-    <RevealGroup className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {OPPORTUNITIES.map((o) => (
-        <RevealItem key={o.buyer}>
-          <div className="bg-card border-line flex h-full flex-col gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
-            <div className="flex items-center gap-2">
-              <span className="bg-brand-soft text-brand-strong grid h-9 w-9 place-items-center rounded-full text-sm font-black">{o.buyer.slice(0, 1)}</span>
-              <div>
-                <p className="text-ink text-sm font-extrabold">{o.buyer}</p>
-                <p className="text-muted text-[11px]">{o.criteria}</p>
-              </div>
-            </div>
-            <p className="text-muted text-xs font-bold">{o.budget}</p>
-            <div className="border-line flex flex-col gap-1.5 border-t pt-3">
-              {o.matches.map((m) => (
-                <div key={m.title} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-ink truncate font-medium">{m.title}</span>
-                  <span className="text-success font-black">{m.score}%</span>
-                </div>
-              ))}
-            </div>
-            <Link href="/buyers" className="bg-brand text-white mt-auto rounded-lg px-3 py-2 text-center text-[13px] font-bold">{o.cta}</Link>
-          </div>
-        </RevealItem>
-      ))}
-    </RevealGroup>
-  );
-}
+/* ── 5. (removed) Smart opportunities — was hardcoded mock buyer matches;
+   a production surface must not present fabricated buyers/scores as real. When a
+   real buyer-match selector is wired for this hub it can render here. ──────── */
 
 /* ── 6. Hot properties carousel (real rows) ──────────────────────────────── */
 
@@ -449,41 +414,18 @@ function PropertyStudio({ top }: { top: PropertyRow | null }) {
   );
 }
 
-/* ── 10. Market intelligence (mock) ──────────────────────────────────────── */
+/* ── 10. (removed) Market intelligence — was hardcoded mock market stats
+   (price trends, demand %, deal counts) presented as real analytics. Removed until
+   a real market-data source is wired; a production user must not see fabricated
+   figures as truth. ──────────────────────────────────────────────────────── */
 
-const MARKET_INTEL = [
-  { icon: "TrendingUp", tone: "text-success", title: "מחירי דירות בקרית ביאליק עלו 6.4%", sub: "ב-12 החודשים האחרונים" },
-  { icon: "Clock", tone: "text-brand-strong", title: "זמן מכירה ממוצע ירד 8%", sub: "מהיר מהרבעון הקודם" },
-  { icon: "Users", tone: "text-success", title: "ביקוש ל-5 חדרים עלה 23%", sub: "מגמה חזקה באזור" },
-  { icon: "Handshake", tone: "text-ink", title: "12 עסקאות אחרונות באזור", sub: "30 הימים האחרונים" },
-  { icon: "MapPin", tone: "text-warning", title: "רחובות עם ביקוש גבוה", sub: "שדרות ירושלים, קק״ל, גושן" },
-  { icon: "Tag", tone: "text-danger", title: "נכסים מתחת למחיר השוק", sub: "3 הזדמנויות רכישה" },
-];
-
-function MarketIntelligence() {
-  return (
-    <RevealGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {MARKET_INTEL.map((m) => (
-        <RevealItem key={m.title}>
-          <div className="bg-card border-line flex h-full items-start gap-3 rounded-[22px] border p-4 shadow-[var(--shadow-soft)]">
-            <span className="bg-surface grid h-10 w-10 shrink-0 place-items-center rounded-xl"><Icon name={m.icon} size={18} className={m.tone} /></span>
-            <div>
-              <p className="text-ink text-sm font-extrabold leading-snug">{m.title}</p>
-              <p className="text-muted mt-0.5 text-xs">{m.sub}</p>
-            </div>
-          </div>
-        </RevealItem>
-      ))}
-    </RevealGroup>
-  );
-}
-
-/* ── 11. Sticky AI Copilot panel (mock + nav) ────────────────────────────── */
+/* ── 11. Sticky AI Copilot panel (real derived counts + nav) ─────────────── */
 
 function StickyAICopilotPanel({ atRisk, needMarketing }: { atRisk: number; needMarketing: number }) {
+  // Only REAL, derived signals — the previous "2 קונים מוכנים לפגישה" card was a
+  // hardcoded number and has been removed.
   const cards = [
     { icon: "AlertTriangle", tone: "text-danger", bg: "bg-danger-soft", title: `${atRisk} נכסים בסיכון`, sub: "עלולים לאבד בלעדיות", href: "#attention" },
-    { icon: "Users", tone: "text-success", bg: "bg-success-soft", title: "2 קונים מוכנים לפגישה", sub: "התאמה גבוהה", href: "/buyers" },
     { icon: "Megaphone", tone: "text-brand-strong", bg: "bg-brand-soft", title: `${needMarketing} נכסים צריכים שיווק`, sub: "אין פעילות אחרונה", href: "/creative" },
   ];
   return (
@@ -522,25 +464,6 @@ function StickyAICopilotPanel({ atRisk, needMarketing }: { atRisk: number; needM
               <Link key={q.l} href={q.h} className="text-ink hover:bg-surface flex items-center gap-2 rounded-lg px-2 py-2 text-[13px] font-bold transition-colors">
                 <span className="text-brand-strong"><Icon name={q.i} size={15} /></span>{q.l}
               </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-card border-line rounded-[22px] border p-4 shadow-[var(--shadow-card)]">
-          <p className="text-ink mb-2 text-sm font-extrabold">פעילות אחרונה</p>
-          <div className="flex flex-col gap-2.5">
-            {[
-              { t: "ליד חדש לנכס בקרית ביאליק", d: "לפני שעה" },
-              { t: "פגישה נקבעה עם משפחת כהן", d: "לפני 3 שעות" },
-              { t: "פוסט שיווק פורסם", d: "אתמול" },
-            ].map((a) => (
-              <div key={a.t} className="flex items-start gap-2">
-                <span className="bg-brand mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" />
-                <div>
-                  <p className="text-ink text-xs font-bold leading-snug">{a.t}</p>
-                  <p className="text-muted text-[11px]">{a.d}</p>
-                </div>
-              </div>
             ))}
           </div>
         </div>
@@ -590,11 +513,6 @@ export function PropertiesOSView({
           <AttentionCenter items={attention} />
         </section>
 
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="הזדמנויות חדשות" action={<ViewAll href="/buyers" />} />
-          <SmartOpportunities />
-        </section>
-
         <section id="hot-properties" className="flex flex-col gap-3 scroll-mt-6">
           <SectionTitle title="הנכסים החמים שלך" action={<ViewAll />} />
           <HotPropertiesCarousel properties={hot} covers={covers} />
@@ -618,11 +536,6 @@ export function PropertiesOSView({
         <section className="flex flex-col gap-3">
           <SectionTitle title="סטודיו הנכס" />
           <PropertyStudio top={hot[0] ?? null} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="מודיעין שוק" action={<ViewAll href="/market" />} />
-          <MarketIntelligence />
         </section>
       </div>
 

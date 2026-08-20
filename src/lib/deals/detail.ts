@@ -21,6 +21,7 @@ export interface DealDetail {
   buyer_id: string | null; seller_id: string | null; property_id: string | null;
   buyerName: string | null; sellerName: string | null; propertyTitle: string | null;
   expected_close_date: string | null; probability: number | null; lost_reason: string | null;
+  nextBestAction: string | null; primaryBlocker: string | null;   // canonical projection (deal_profiles) — same value DealsView shows
   offers: DealOfferRef[]; commissions: DealCommissionRef[]; documents: DealDocRef[];
   journeys: { stage: string | null; note: string | null; created_at: string }[]; timeline: DealTimelineItem[];
 }
@@ -79,11 +80,24 @@ export async function getDealDetail(dealId: string): Promise<DealDetail | null> 
     timeline = events.map((e) => ({ event_type: e.event_type, title: e.title ?? null, occurred_at: e.occurred_at }));
   } catch { /* best-effort */ }
 
+  // Canonical next-best-action — reuse the SAME value DealsView renders (the deal
+  // engine's projection persisted on deal_profiles). Best-effort: a canonical-only
+  // deal with no projection simply shows no next-action block. dealId is already
+  // org-verified above, so a deal_id filter is sufficient.
+  let nextBestAction: string | null = null; let primaryBlocker: string | null = null;
+  try {
+    const { data: prof } = await db.from("deal_profiles").select("next_best_action,primary_blocker").eq("deal_id", dealId).maybeSingle();
+    const pr = prof as Record<string, unknown> | null;
+    nextBestAction = (pr?.next_best_action as string) ?? null;
+    primaryBlocker = (pr?.primary_blocker as string) ?? null;
+  } catch { /* projection optional */ }
+
   return {
     id: deal.id as string, title: (deal.title as string) ?? "עסקה", stage: (deal.stage as string) ?? "new", status: (deal.status as string) ?? "open",
     value: (deal.value as number) ?? null, buyer_id: (deal.buyer_id as string) ?? null, seller_id: (deal.seller_id as string) ?? null, property_id: (deal.property_id as string) ?? null,
     buyerName, sellerName, propertyTitle,
     expected_close_date: (deal.expected_close_date as string) ?? null, probability: (deal.probability as number) ?? null, lost_reason: (deal.lost_reason as string) ?? null,
+    nextBestAction, primaryBlocker,
     offers: ((offersRes?.data ?? []) as Record<string, unknown>[]).map((o) => ({ id: o.id as string, amount: (o.amount as number) ?? null, status: (o.status as string) ?? "draft" })),
     commissions: commRows.map((c) => {
       const t = colsByComm.get(c.id as string) ?? { due: 0, collected: 0 };
