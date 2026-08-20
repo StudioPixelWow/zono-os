@@ -33,7 +33,10 @@ const ACTIVE_STATUSES = ["open", "in_progress", "waiting_customer"] as const;
 /**
  * Open (or reuse) a support ticket for the current user's org from a ZI support
  * conversation. Org-scoped and fail-closed: no session/org → no ticket. Reuses an
- * existing ACTIVE ticket linked to the same conversation instead of duplicating.
+ * existing ACTIVE ticket linked to the same conversation instead of duplicating —
+ * and APPENDS the new turn (question + transcript + diagnostics) as an internal
+ * note + bumps updated_at, so the human agent sees the follow-up and the ticket
+ * resurfaces as recently active. The customer's new message is never dropped.
  */
 export async function openSupportTicketFromZi(input: OpenTicketInput): Promise<ZiTicketResult> {
   const { profile, user } = await getSessionContext();
@@ -54,7 +57,21 @@ export async function openSupportTicketFromZi(input: OpenTicketInput): Promise<Z
       .limit(1)
       .maybeSingle();
     const ex = existing as { id: string; ticket_number?: string } | null;
-    if (ex?.id) return { ok: true, ticketId: ex.id, ticketNumber: ex.ticket_number, existing: true };
+    if (ex?.id) {
+      // Append the new turn to the existing ticket (internal note — there is no
+      // customer-visible thread yet, by design) and bump updated_at. Its OWN
+      // try/catch: a notes failure must never fall through and create a duplicate.
+      try {
+        const followUp = buildZiTicketDraft(input);
+        await db.from("support_ticket_notes" as never).insert({
+          ticket_id: ex.id, author_operator_id: null, note: followUp.description, internal_only: true,
+        } as never);
+        await db.from("support_tickets" as never)
+          .update({ updated_at: new Date().toISOString() } as never)
+          .eq("id" as never, ex.id as never);
+      } catch { /* append is best-effort — the ticket already exists either way */ }
+      return { ok: true, ticketId: ex.id, ticketNumber: ex.ticket_number, existing: true };
+    }
   } catch {
     // fall through to create — a lookup failure must not block escalation
   }

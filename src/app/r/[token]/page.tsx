@@ -52,6 +52,10 @@ export default async function RecommendationView(
     : done === "viewing_requested" ? "בקשת הביקור נשלחה — נחזור אליך לתיאום 🗝️"
     : done === "talk_to_agent" ? "קיבלנו — הסוכן/ת ייצור/תיצור איתך קשר בהקדם 📞" : null;
 
+  // A prior customer CHOICE (canonical status). "recommended"/"viewed" = not yet
+  // answered → show the full action set; a real choice → collapse to a confirmation.
+  const CHOICE_HE: Record<string, string> = { interested: "מעניין אותי", viewing_requested: "רוצה ביקור", rejected: "לא מתאים" };
+
   return (
     <Shell>
       <p style={{ margin: "0 0 4px", color: "#6d28d9", fontSize: 12, fontWeight: 800 }}>{officeName}</p>
@@ -71,6 +75,16 @@ export default async function RecommendationView(
               <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 14 }}>{[pr.city, pr.rooms ? `${pr.rooms} חד'` : "", ils(pr.price)].filter(Boolean).join(" · ")}</p>
               {unavailable ? (
                 <p style={{ margin: "12px 0 0", color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>הנכס אינו זמין יותר</p>
+              ) : CHOICE_HE[r.status] ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+                  <span style={{ background: "#f1f5f9", color: "#0f172a", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 800 }}>סימנת: {CHOICE_HE[r.status]} ✓</span>
+                  {r.status !== "rejected" && (
+                    <form method="POST" action={`/api/r/${token}/feedback`} style={{ margin: 0 }}>
+                      <input type="hidden" name="propertyId" value={r.property_id} />
+                      <button name="action" value="talk_to_agent" style={{ background: "#fff", color: "#6d28d9", border: "1px solid #ddd6fe", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>לדבר עם הסוכן</button>
+                    </form>
+                  )}
+                </div>
               ) : (
                 <form method="POST" action={`/api/r/${token}/feedback`} style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                   <input type="hidden" name="propertyId" value={r.property_id} />

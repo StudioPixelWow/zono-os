@@ -8,11 +8,13 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { collapseNotifications } from "./collapse";
 
 export type NotifCategory = "opportunity" | "warning" | "task" | "approval" | "review" | "system";
 export interface NotifItem {
   key: string; category: NotifCategory; source: string; title: string; subtitle: string | null;
   href: string; score: number; createdAt: string; read: boolean; pinned: boolean;
+  entityType?: string | null; entityId?: string | null;
 }
 export interface NotificationFeed { items: NotifItem[]; unread: number; counts: Record<string, number> }
 
@@ -51,7 +53,7 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
     supabase.from("competitor_signals").select("id,signal_type,title,description,confidence_score,created_at").eq("organization_id", orgId).order("created_at", { ascending: false }).limit(12),
     supabase.from("marketing_opportunity_signals").select("id,signal_type,title,description,impact_score,entity_type,entity_id,created_at").eq("organization_id", orgId).order("impact_score", { ascending: false }).limit(12),
     // Stage 3 · event-driven notifications from the Event Kernel subscriber.
-    supabase.from("notifications").select("id,level,category,title,body,href,is_read,created_at").eq("org_id", orgId).eq("user_id", user.id).order("created_at", { ascending: false }).limit(30),
+    supabase.from("notifications").select("id,level,category,title,body,href,is_read,created_at,buyer_id,seller_id,lead_id,property_id,deal_id,opportunity_id,task_id,meeting_id").eq("org_id", orgId).eq("user_id", user.id).order("created_at", { ascending: false }).limit(30),
     supabase.from("notification_state").select("item_key,state").eq("user_id", user.id).limit(2000),
   ]);
 
@@ -59,19 +61,19 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
   for (const s of (state.data ?? []) as { item_key: string; state: string }[]) stateMap.set(s.item_key, s.state);
 
   const items: NotifItem[] = [];
-  const add = (key: string, category: NotifCategory, source: string, title: string, subtitle: string | null, href: string, score: number, createdAt: string) => {
+  const add = (key: string, category: NotifCategory, source: string, title: string, subtitle: string | null, href: string, score: number, createdAt: string, entity?: { type: string | null; id: string | null } | null) => {
     const st = stateMap.get(key);
     if (st === "archived") return;
-    items.push({ key, category, source, title, subtitle, href, score: Math.round(score), createdAt, read: st === "read" || st === "pinned", pinned: st === "pinned" });
+    items.push({ key, category, source, title, subtitle, href, score: Math.round(score), createdAt, read: st === "read" || st === "pinned", pinned: st === "pinned", entityType: entity?.type ?? null, entityId: entity?.id ?? null });
   };
 
-  for (const a of attention.data ?? []) add(`attention:${a.id}`, a.entity_type === "system" ? "system" : "warning", "מוח ההחלטות", a.title, a.reason ?? a.recommended_action, entityHref(a.entity_type, a.entity_id, "/command"), a.attention_score, a.detected_at);
-  for (const o of opps.data ?? []) add(`opp:${o.id}`, "opportunity", "הזדמנויות", o.title, null, entityHref(o.entity_type, o.entity_id, "/command"), o.opportunity_score, o.created_at);
+  for (const a of attention.data ?? []) add(`attention:${a.id}`, a.entity_type === "system" ? "system" : "warning", "מוח ההחלטות", a.title, a.reason ?? a.recommended_action, entityHref(a.entity_type, a.entity_id, "/command"), a.attention_score, a.detected_at, { type: a.entity_type, id: a.entity_id });
+  for (const o of opps.data ?? []) add(`opp:${o.id}`, "opportunity", "הזדמנויות", o.title, null, entityHref(o.entity_type, o.entity_id, "/command"), o.opportunity_score, o.created_at, { type: o.entity_type, id: o.entity_id });
   for (const f of fc.data ?? []) add(`fc:${f.id}`, f.signal_type?.includes("likely") || f.signal_type?.includes("pricing") ? "opportunity" : "warning", "תחזית", f.title, f.description, "/forecast", f.impact_score, f.created_at);
-  for (const l of leak.data ?? []) add(`leak:${l.id}`, "warning", "הכנסות", l.title, l.reason, entityHref(l.entity_type, l.entity_id, "/revenue"), l.severity === "high" ? 80 : 60, l.created_at);
-  for (const r of radar.data ?? []) add(`radar:${r.id}`, "opportunity", "רדאר עסקאות", radarTitleHe(r.reason_hebrew, r.opportunity_type), r.city_name, r.property_listing_id ? `/properties/${r.property_listing_id}` : "/transactions/radar", r.opportunity_score, r.created_at);
+  for (const l of leak.data ?? []) add(`leak:${l.id}`, "warning", "הכנסות", l.title, l.reason, entityHref(l.entity_type, l.entity_id, "/revenue"), l.severity === "high" ? 80 : 60, l.created_at, { type: l.entity_type, id: l.entity_id });
+  for (const r of radar.data ?? []) add(`radar:${r.id}`, "opportunity", "רדאר עסקאות", radarTitleHe(r.reason_hebrew, r.opportunity_type), r.city_name, r.property_listing_id ? `/properties/${r.property_listing_id}` : "/transactions/radar", r.opportunity_score, r.created_at, r.property_listing_id ? { type: "property", id: r.property_listing_id } : null);
   for (const c of comp.data ?? []) add(`comp:${c.id}`, "warning", "מתחרים", c.title, c.description, "/competitors", c.confidence_score, c.created_at);
-  for (const m of mkt.data ?? []) add(`mkt:${m.id}`, "opportunity", "שיווק", m.title, m.description, "/marketing", m.impact_score, m.created_at);
+  for (const m of mkt.data ?? []) add(`mkt:${m.id}`, "opportunity", "שיווק", m.title, m.description, "/marketing", m.impact_score, m.created_at, { type: m.entity_type, id: m.entity_id });
 
   // Stage 3 · kernel event notifications (event → subscriber → notifications table
   // → here → Attention Center → header badge). Idempotent upstream (one row per
@@ -79,10 +81,21 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
   // own is_read.
   const KLEVEL_CAT: Record<string, NotifCategory> = { critical: "warning", warning: "warning", success: "opportunity", info: "system" };
   const KLEVEL_SCORE: Record<string, number> = { critical: 90, warning: 70, success: 60, info: 40 };
-  for (const n of (kernel.data ?? []) as { id: string; level: string; category: string | null; title: string; body: string | null; href: string | null; is_read: boolean | null; created_at: string }[]) {
+  type KRow = { id: string; level: string; category: string | null; title: string; body: string | null; href: string | null; is_read: boolean | null; created_at: string; buyer_id: string | null; seller_id: string | null; lead_id: string | null; property_id: string | null; deal_id: string | null; opportunity_id: string | null; task_id: string | null; meeting_id: string | null };
+  const kernelEntity = (n: KRow): { type: string; id: string } | null =>
+    n.property_id ? { type: "property", id: n.property_id }
+    : n.seller_id ? { type: "seller", id: n.seller_id }
+    : n.buyer_id ? { type: "buyer", id: n.buyer_id }
+    : n.deal_id ? { type: "deal", id: n.deal_id }
+    : n.lead_id ? { type: "lead", id: n.lead_id }
+    : n.opportunity_id ? { type: "opportunity", id: n.opportunity_id }
+    : n.task_id ? { type: "task", id: n.task_id }
+    : n.meeting_id ? { type: "meeting", id: n.meeting_id } : null;
+  for (const n of (kernel.data ?? []) as KRow[]) {
     const key = `notif:${n.id}`;
     const st = stateMap.get(key);
     if (st === "archived") continue;
+    const ent = kernelEntity(n);
     items.push({
       key,
       category: KLEVEL_CAT[n.level] ?? "system",
@@ -94,14 +107,22 @@ export async function getNotificationFeed(category?: string): Promise<Notificati
       createdAt: n.created_at,
       read: st === "read" || st === "pinned" || n.is_read === true,
       pinned: st === "pinned",
+      entityType: ent?.type ?? null,
+      entityId: ent?.id ?? null,
     });
   }
 
-  const filtered = category ? items.filter((i) => i.category === category) : items;
+  // Cross-source collapse (D11/D12): one business issue → one in-app row. See
+  // notifications/collapse.ts — rows sharing a (entity, category) key collapse to
+  // the highest-priority source; entity-less rows (forecast, competitor) and
+  // genuinely distinct issues on the same entity stay separate.
+  const collapsed = collapseNotifications(items);
+
+  const filtered = category ? collapsed.filter((i) => i.category === category) : collapsed;
   filtered.sort((a, b) => (Number(b.pinned) - Number(a.pinned)) || (b.score - a.score) || b.createdAt.localeCompare(a.createdAt));
 
   const counts: Record<string, number> = {};
-  for (const i of items) counts[i.category] = (counts[i.category] ?? 0) + 1;
-  const unread = items.filter((i) => !i.read).length;
+  for (const i of collapsed) counts[i.category] = (counts[i.category] ?? 0) + 1;
+  const unread = collapsed.filter((i) => !i.read).length;
   return { items: filtered.slice(0, 80), unread, counts };
 }
