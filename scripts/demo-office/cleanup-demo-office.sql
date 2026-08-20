@@ -50,6 +50,9 @@ begin
   -- support (demo marker)
   delete from public.support_tickets  where org_id=o and (description like '[zdo1]%');
 
+  -- office roster (office_member_id auto-nulls via ON DELETE SET NULL)
+  delete from public.office_members where org_id=o and metadata @> mk;
+
   -- recommendation ledger (by demo buyer) — powers /my + /r
   delete from public.customer_property_recommendations where org_id=o and contact_type='buyer' and contact_id = any(buyers);
 

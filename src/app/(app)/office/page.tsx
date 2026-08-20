@@ -1,20 +1,20 @@
 // ============================================================================
-// ZONO — Manager / Owner Command Center (/office). "המשרד" — one office exceptions
-// + decision screen for managers/owners. Server-gated: getManagerCommandCenter
-// returns null for agents (and no-org), who are sent to their personal day. Records
-// manager_center_opened. Read-derived (replans each load). RTL.
+// ZONO — Office (/office). The manager/owner OFFICE MANAGEMENT screen:
+// overview · agents · properties · leads · deals · attention (preserved command
+// center) · intelligence teaser. Server-gated: getOfficeManagementBoard returns
+// null for agents (and no-org), who are sent to their personal day. RTL.
 // ============================================================================
 import { redirect } from "next/navigation";
-import { getManagerCommandCenter } from "@/lib/office/manager-command-center";
+import { getOfficeManagementBoard } from "@/lib/office/management-board";
 import { recordUsage } from "@/lib/launch/server/services";
-import { OfficeCommandCenter } from "./OfficeCommandCenter";
+import { OfficeManagementCenter } from "./OfficeManagementCenter";
 
 export const dynamic = "force-dynamic";
 
 export default async function OfficePage() {
-  const view = await getManagerCommandCenter();
-  if (!view) redirect("/today/plan");   // agents / no active org → personal day
+  const board = await getOfficeManagementBoard();
+  if (!board) redirect("/today/plan");   // agents / no active org → personal day
 
-  await recordUsage({ category: "screen", name: "manager_center_opened", props: { needsAttention: view.center.summary.needsAttention } });
-  return <OfficeCommandCenter center={view.center} agents={view.agents} />;
+  await recordUsage({ category: "screen", name: "office_management_opened", props: { agents: board.summary.agents, needsAttention: board.center.summary.needsAttention } });
+  return <OfficeManagementCenter board={board} />;
 }

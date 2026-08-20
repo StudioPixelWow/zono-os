@@ -329,3 +329,43 @@ begin
   from (values (21,2),(22,2),(23,2),(24,8),(25,8),(26,8)) as v(g,p)
   on conflict (org_id, contact_type, contact_id, property_id) do nothing;
 end $$;
+
+-- ── Stage 7 — office_members roster + office_member_id workload distribution ──
+-- Requires migration 20280501120000_office_members. Represents 4 demo agents +
+-- the manager WITHOUT Auth users (office_members.user_id is nullable). Attribution
+-- is additive: existing owner_id/assigned_agent_id are untouched.
+do $$
+declare o uuid := '1a1e7da6-bb85-420a-978a-7deb8c35e63f'; u uuid := '18f0ba4d-79e5-46d0-af5c-76980cd74217'; mk jsonb := '{"demo_seed":"zono_demo_office_v1"}';
+begin
+  insert into public.office_members (id, org_id, user_id, full_name, role, status, specialty, metadata)
+  values
+   (md5('zdo1:member:manager')::uuid, o, u, 'מיכל כהן', 'owner', 'active', 'ניהול משרד', mk),
+   (md5('zdo1:member:dana')::uuid, o, null, 'דנה כהן', 'agent', 'active', 'מכירות מגורים', mk),
+   (md5('zdo1:member:yoav')::uuid, o, null, 'יואב לוי', 'agent', 'active', 'השכרות ורוכשים ראשונים', mk),
+   (md5('zdo1:member:maya')::uuid, o, null, 'מאיה ישראלי', 'agent', 'active', 'נכסי יוקרה ובלעדיות', mk),
+   (md5('zdo1:member:omer')::uuid, o, null, 'עומר רז', 'agent', 'active', 'חיפה והקריות', mk)
+  on conflict (id) do nothing;
+
+  update public.properties p set office_member_id = md5('zdo1:member:'||v.k)::uuid
+  from (values (1,'dana'),(2,'dana'),(5,'dana'),(8,'dana'),(14,'dana'),(16,'dana'),(17,'dana'),
+               (9,'yoav'),(18,'yoav'),(19,'yoav'),(20,'yoav'),
+               (3,'maya'),(4,'maya'),(7,'maya'),(10,'maya'),(13,'maya'),(15,'maya'),
+               (6,'omer'),(11,'omer'),(12,'omer')) as v(n,k)
+  where p.org_id=o and p.id = md5('zdo1:prop:'||v.n)::uuid;
+
+  update public.leads l set office_member_id = sub.mid
+  from (select n, md5('zdo1:member:'|| (case when n<=17 then 'dana' when n<=30 then 'yoav' when n<=41 then 'maya' else 'omer' end))::uuid mid,
+               md5('zdo1:lead:'||n)::uuid lid from generate_series(1,50) n where n%6<>0) sub
+  where l.org_id=o and l.id = sub.lid;
+
+  update public.deals d set office_member_id = md5('zdo1:member:'||v.k)::uuid
+  from (values (1,'dana'),(5,'dana'),(7,'dana'),(6,'yoav'),(2,'maya'),(4,'maya'),(9,'maya'),(3,'omer'),(8,'omer')) as v(n,k)
+  where d.org_id=o and d.id = md5('zdo1:deal:'||v.n)::uuid;
+
+  update public.meetings mt set office_member_id = p.office_member_id
+  from public.properties p where mt.org_id=o and mt.property_id = p.id and mt.intelligence_source='demo:zdo1' and p.office_member_id is not null;
+
+  update public.tasks t set office_member_id = sub.mid
+  from (select n, md5('zdo1:member:'|| (array['dana','yoav','maya','omer'])[1+(n%4)])::uuid mid, md5('zdo1:task:'||n)::uuid tid from generate_series(1,35) n) sub
+  where t.org_id=o and t.id = sub.tid;
+end $$;
