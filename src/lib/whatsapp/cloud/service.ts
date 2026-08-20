@@ -31,7 +31,9 @@ export function verifyWebhook(params: { mode: string | null; token: string | nul
 // ── POST signature verification (X-Hub-Signature-256) ────────────────────────
 export function verifySignature(rawBody: string, header: string | null): { ok: boolean; reason: string } {
   const cfg = cloudConfig();
-  if (!cfg.appSecret) return { ok: true, reason: "no_app_secret_configured" }; // can't verify; accept but flag
+  // FAIL-CLOSED: with no app secret we cannot verify authenticity → reject (never
+  // accept-and-flag). The live route uses verifySignatureStrict; this stays consistent.
+  if (!cfg.appSecret) return { ok: false, reason: "no_app_secret_configured" };
   const provided = parseSignatureHeader(header);
   if (!provided) return { ok: false, reason: "missing_or_malformed_signature" };
   return { ok: timingSafeEqualHex(computeSignature(cfg.appSecret, rawBody), provided), reason: "hmac" };

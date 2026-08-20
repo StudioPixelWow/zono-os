@@ -80,7 +80,10 @@ export async function GET(req: NextRequest) {
   console.log(`${LOG} STEP 4: session OK — user_id=${user.id} org_id=${profile.org_id} profile_id=${profile.id ?? "?"}`);
 
   const cookieNonce = req.cookies.get("meta_oauth_nonce")?.value ?? "";
-  const payload = state ? verifySignedState(state, cookieNonce, process.env.META_APP_SECRET as string) : null;
+  // Verify with the SAME alias-resolved secret `start` signs with (META_APP_SECRET
+  // OR FACEBOOK_APP_SECRET) — reading process.env.META_APP_SECRET directly would
+  // fail-closed-break a deploy that only set FACEBOOK_APP_SECRET.
+  const payload = state ? verifySignedState(state, cookieNonce, getMetaOAuthConfig().appSecret) : null;
   if (!payload) {
     console.error(`${LOG} STEP 5: state verification FAILED (bad signature/expired/nonce mismatch). cookie_nonce_present=${cookieNonce ? "yes" : "NO"}`);
     return back("meta=error&reason=state");

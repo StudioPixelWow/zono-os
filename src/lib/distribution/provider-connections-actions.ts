@@ -21,6 +21,8 @@ import {
   type GroupDestination, type GroupTaskStatus, type GroupCreativeOption,
 } from "./extension-service";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
+import { canManageConnections } from "@/lib/auth/connection-roles";
 
 export interface ConnActionResult<T = undefined> { ok: boolean; message?: string; data?: T }
 const revalidate = () => { try { revalidatePath("/settings/distribution-connections"); } catch { /* noop */ } };
@@ -45,6 +47,9 @@ export async function validateProviderConnectionAction(provider: ConnectionProvi
 }
 
 export async function disconnectProviderAction(provider: ConnectionProvider): Promise<ConnActionResult> {
+  // Disconnecting a shared org integration is owner/manager-only.
+  const { profile } = await getSessionContext();
+  if (!canManageConnections(await resolveRoleKey(profile))) return { ok: false, message: "רק מנהל משרד יכול לנתק חיבור." };
   const res = await providerConnectionService.disconnect(provider);
   revalidate();
   return res;

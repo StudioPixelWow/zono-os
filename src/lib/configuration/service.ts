@@ -22,8 +22,21 @@ export function getConfiguration(): ConfigItem[] {
     whatsappItem(),
     growItem(),
     morningItem(),
+    securityItem(),
     { key: "social", label: "רשתות חברתיות", status: "missing", note: "לא מוגדר — מאגר טוקנים עתידי (social_connection_vault)" },
   ];
+}
+
+// Security secrets that previously had NO health surface: the token-vault/OAuth
+// state key and the customer-link signing secret. Presence-only — never values.
+function securityItem(): ConfigItem {
+  const enc = has("ZONO_ENCRYPTION_KEY");        // token vault + OAuth-state signing
+  const unsub = has("UNSUBSCRIBE_SECRET");        // signs unsubscribe/portal/report links
+  const status: ConfigStatus = enc && unsub ? "configured" : enc || unsub ? "partial" : "missing";
+  return { key: "security", label: "מפתחות אבטחה", status,
+    note: enc
+      ? (unsub ? "מפתח הצפנה וסוד חתימת קישורים מוגדרים" : "חסר UNSUBSCRIBE_SECRET — קישורי לקוח ייחתמו בגיבוי CRON_SECRET")
+      : "חסר ZONO_ENCRYPTION_KEY — כספת הטוקנים וחתימת OAuth ייכשלו/ייחלשו" };
 }
 
 // Email = the REAL Resend transport (notify/providers.ts reads RESEND_API_KEY/RESEND_FROM).

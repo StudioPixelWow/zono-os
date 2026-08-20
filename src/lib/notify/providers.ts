@@ -51,7 +51,13 @@ const emailProvider: DeliveryProvider = {
     try {
       const res = await fetch(RESEND_ENDPOINT, {
         method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          // Provider-side idempotency: a crash-after-send + reap retry with the same
+          // dedupKey will not deliver a second email (Resend collapses on this key).
+          ...(req.dedupKey ? { "Idempotency-Key": req.dedupKey } : {}),
+        },
         body: JSON.stringify({ from, to: [req.to], subject: req.title || "ZONO", text: req.body, ...(req.html ? { html: req.html } : {}) }),
       });
       if (res.ok) {
@@ -60,9 +66,13 @@ const emailProvider: DeliveryProvider = {
       }
       const body = await res.text().catch(() => "");
       const transient = res.status === 429 || res.status >= 500;
-      return { ok: false, status: "failed", error: `resend_${res.status}_${transient ? "transient" : "permanent"}:${body.slice(0, 120)}` };
+      // Store a STABLE, customer-safe code only. The raw provider body may carry
+      // recipient/reason detail — keep it in server logs, never in the persisted error.
+      if (body) console.error(`[resend] ${res.status} ${req.dedupKey ?? ""}: ${body.slice(0, 300)}`);
+      return { ok: false, status: "failed", error: `resend_${res.status}_${transient ? "transient" : "permanent"}` };
     } catch (e) {
-      return { ok: false, status: "failed", error: `resend_network_transient:${e instanceof Error ? e.message : "error"}` };
+      if (e instanceof Error) console.error(`[resend] network error ${req.dedupKey ?? ""}: ${e.message}`);
+      return { ok: false, status: "failed", error: "resend_network_transient" };
     }
   },
 };

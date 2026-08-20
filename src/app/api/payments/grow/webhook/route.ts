@@ -94,10 +94,10 @@ export async function POST(req: NextRequest) {
     const outcome = info.ok ? growOutcomeFromStatusCode(info.data?.statusCode) : "unknown";
 
     if (outcome !== "paid") {
-      // Not a confirmed paid transaction → record failure only if the callback
-      // itself claimed a terminal non-paid; otherwise leave pending. No revenue.
-      const claimed = growOutcomeFromStatusCode(d.statusCode);
-      if (claimed === "not_paid") {
+      // Not a confirmed paid transaction → record failure only when the
+      // AUTHORITATIVE re-query says terminal not_paid (never the unauthenticated
+      // callback body — a forged statusCode must not be able to force "failed").
+      if (outcome === "not_paid") {
         await setPaymentStatus(paymentId, growPaymentStatus("not_paid"));
         if (payment.orgId) {
           await emitBusinessEvent({

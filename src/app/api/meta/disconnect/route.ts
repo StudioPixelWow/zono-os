@@ -7,6 +7,8 @@
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { disconnect } from "@/lib/meta/connection/service";
+import { resolveRoleKey } from "@/lib/auth/role";
+import { canManageConnections } from "@/lib/auth/connection-roles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +16,8 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.user || !sc.profile?.org_id) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Managing a shared org integration is owner/manager-only — an agent must not tear it down.
+  if (!canManageConnections(await resolveRoleKey(sc.profile))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   let connectionId = "";
   try { connectionId = (await request.json())?.connectionId ?? ""; } catch { /* empty body */ }

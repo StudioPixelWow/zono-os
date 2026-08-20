@@ -8,6 +8,8 @@
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { startConnection } from "@/lib/meta/connection/service";
+import { resolveRoleKey } from "@/lib/auth/role";
+import { canManageConnections } from "@/lib/auth/connection-roles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +18,8 @@ export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.user || !sc.profile?.org_id) return NextResponse.redirect(new URL("/login", origin));
+  // Connecting a shared org integration is owner/manager-only.
+  if (!canManageConnections(await resolveRoleKey(sc.profile))) return NextResponse.redirect(new URL("/settings/meta?meta_error=forbidden", origin));
 
   const started = startConnection(sc.profile.org_id, sc.user.id);
   if ("error" in started) return NextResponse.redirect(new URL(`/settings/meta?meta_error=${started.error}`, origin));

@@ -6,6 +6,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { getMetaOAuthConfig, createSignedState, buildAuthorizeUrl } from "@/lib/distribution/meta-oauth";
+import { resolveRoleKey } from "@/lib/auth/role";
+import { canManageConnections } from "@/lib/auth/connection-roles";
 
 const SETTINGS = "/settings/distribution-connections";
 
@@ -18,6 +20,8 @@ export async function GET(req: NextRequest) {
   if (!user || !profile?.org_id) {
     return NextResponse.redirect(new URL("/login", origin));
   }
+  // Connecting a shared org integration is owner/manager-only.
+  if (!canManageConnections(await resolveRoleKey(profile))) return back("meta=forbidden");
 
   // Honest setup error if env is missing — never crash, never fake.
   const cfg = getMetaOAuthConfig();
