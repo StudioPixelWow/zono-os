@@ -63,10 +63,21 @@ export async function dispatchExternal(
   if (opts.scheduledAt) return { sent: false }; // deferred → dispatcher sends when due
 
   const result = await providerFor(channel).deliver(req);
+  const nowIso = new Date().toISOString();
+  // A TRANSIENT failure on an immediate send must stay recoverable: re-queue it
+  // with backoff so processDueQueue retries it, instead of collapsing to a
+  // terminal `failed` at attempt 1 that the dispatcher would never pick up.
+  if (!result.ok && /transient/.test(result.error) && MAX_ATTEMPTS > 1) {
+    await db.from(TABLE).update({
+      status: "queued", attempts: 1, error: result.error,
+      scheduled_at: new Date(Date.now() + 15 * 60_000).toISOString(), updated_at: nowIso,
+    }).eq("org_id", req.orgId).eq("dedup_key", req.dedupKey);
+    return { sent: false };
+  }
   await db.from(TABLE).update({
     status: result.status,
     provider_message_id: result.ok ? result.providerMessageId : null,
-    error: result.ok ? null : result.error, attempts: 1, updated_at: new Date().toISOString(),
+    error: result.ok ? null : result.error, attempts: 1, updated_at: nowIso,
   }).eq("org_id", req.orgId).eq("dedup_key", req.dedupKey);
   return { sent: result.ok };
 }

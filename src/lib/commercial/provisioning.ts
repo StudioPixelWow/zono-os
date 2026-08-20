@@ -100,8 +100,8 @@ export async function provisionFromVerifiedPayment(payment: Payment, draft: Regi
     summary: `הופעל חשבון (${tier}) לאחר תשלום מאומת`, metadata: { paymentId: payment.id, tier } as never,
   } as never).then(() => undefined, () => undefined);
 
-  // 7. Send Welcome Email (best-effort; provider wired later)
-  await sendWelcomeEmail(ownerEmail, d.ownerFullName ?? "").catch(() => undefined);
+  // 7. Send Welcome Email (best-effort; canonical Resend dispatch, idempotent per org)
+  await sendWelcomeEmail(org.id, ownerEmail, d.ownerFullName ?? "").catch(() => undefined);
 
   return { ok: true, orgId: org.id };
 }
