@@ -142,8 +142,12 @@ export interface ApproveActivateResult { ok: boolean; status?: string; blockers?
 /** THE single approval: validate → freeze approved snapshot → activate through the
  *  canonical engines. Idempotent + concurrency-safe (repo status claims). */
 export async function approveAndActivatePlanAction(planId: string): Promise<ApproveActivateResult> {
-  const { orgId, userId } = await ctx();
+  const { orgId, userId, isManager } = await ctx();
   if (!orgId) return { ok: false, error: "אין הרשאה." };
+  // FINAL approve+activate triggers EXTERNAL distribution → manager/owner only.
+  // Agents may prepare/edit a plan (above) but never perform the final approval.
+  // Server-side gate (has_min_role 'manager' = manager+owner); fail closed.
+  if (!isManager) return { ok: false, error: "רק מנהל משרד יכול לאשר ולהפעיל תוכנית שיווק." };
   const db: any = serviceDb();
   const row = await getPlanById(db, orgId, planId);
   if (!row) return { ok: false, error: "התוכנית לא נמצאה." };

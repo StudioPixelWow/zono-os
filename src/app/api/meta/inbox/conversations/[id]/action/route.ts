@@ -7,6 +7,7 @@
 // ============================================================================
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { applyInboxAction } from "@/lib/meta/inbox/service";
 import type { InboxAction } from "@/lib/meta/inbox/state";
 
@@ -18,7 +19,7 @@ const ACTIONS = new Set<InboxAction>(["mark_read", "mark_unread", "archive", "un
 async function ctx() {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.user || !sc.profile?.org_id) return null;
-  return { orgId: sc.profile.org_id, userId: sc.user.id, role: (sc.profile as { role?: string })?.role ?? "agent" };
+  return { orgId: sc.profile.org_id, userId: sc.user.id, role: await resolveRoleKey(sc.profile) };
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

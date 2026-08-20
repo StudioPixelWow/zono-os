@@ -7,6 +7,7 @@
 // ============================================================================
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { getInboxConversation, listInboxLabels, canViewInbox, canManageInbox, canAssignInbox } from "@/lib/meta/inbox/service";
 import { canViewIntelligence, canRescore } from "@/lib/meta/intelligence/service";
 import { InboxActions } from "./_actions";
@@ -20,7 +21,7 @@ const PLATFORM_LABEL: Record<string, string> = { facebook: "פייסבוק", ins
 export default async function InboxConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.profile?.org_id) return <main dir="rtl" className="p-8 text-center text-gray-600">נדרשת התחברות.</main>;
-  const role = (sc.profile as { role?: string })?.role ?? "agent";
+  const role = await resolveRoleKey(sc.profile);
   if (!canViewInbox(role)) return <main dir="rtl" className="p-8 text-center text-gray-600">אין הרשאה.</main>;
   const { id } = await params;
   const [conversation, labels] = await Promise.all([getInboxConversation(sc.profile.org_id, id), listInboxLabels(sc.profile.org_id)]);

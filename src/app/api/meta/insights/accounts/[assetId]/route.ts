@@ -5,6 +5,7 @@
 // ============================================================================
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { getAccountInsights, refreshAccountInsights, canViewInsights } from "@/lib/meta/insights/service";
 
 export const runtime = "nodejs";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 async function ctx() {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.profile?.org_id) return null;
-  return { orgId: sc.profile.org_id, role: (sc.profile as { role?: string })?.role ?? "agent" };
+  return { orgId: sc.profile.org_id, role: await resolveRoleKey(sc.profile) };
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ assetId: string }> }) {

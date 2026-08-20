@@ -7,6 +7,7 @@
 // ============================================================================
 import "server-only";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { canViewOps } from "./roles";
 import { getMetaOpsSummary, type MetaOpsSummary } from "./summary";
 
@@ -15,7 +16,7 @@ export type OpsSummaryResult = { ok: true; data: MetaOpsSummary } | { ok: false;
 export async function getMetaOpsSummaryAction(): Promise<OpsSummaryResult> {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.profile?.org_id) return { ok: false, error: "נדרשת התחברות." };
-  const role = (sc.profile as { role?: string })?.role ?? "agent";
+  const role = await resolveRoleKey(sc.profile);
   if (!canViewOps(role)) return { ok: false, error: "אין הרשאה לצפייה במרכז התפעול." };
   return { ok: true, data: await getMetaOpsSummary(sc.profile.org_id) };
 }

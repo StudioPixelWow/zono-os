@@ -6,6 +6,7 @@
 // ============================================================================
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { listDiscrepancies, canRequestVerification } from "@/lib/meta/reconcile/service";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ const STATUS: Record<string, string> = { open: "פתוח", monitoring: "בניט
 export default async function ReconciliationPage() {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.profile?.org_id) return <main dir="rtl" className="p-8 text-center text-gray-600">נדרשת התחברות.</main>;
-  const role = (sc.profile as { role?: string })?.role ?? "agent";
+  const role = await resolveRoleKey(sc.profile);
   if (!canRequestVerification(role)) return <main dir="rtl" className="p-8 text-center text-gray-600">אין הרשאה לצפייה בהתאמת פרסומים.</main>;
   const discrepancies = await listDiscrepancies(sc.profile.org_id);
   const open = discrepancies.filter((d) => d.status === "open" || d.status === "monitoring");

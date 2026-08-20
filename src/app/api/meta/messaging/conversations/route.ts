@@ -5,6 +5,7 @@
 // ============================================================================
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { listConversations, canViewMessaging } from "@/lib/meta/messaging/service";
 import type { ConversationFilter, ConversationSort } from "@/lib/meta/messaging/domain";
 import { isConversationStatus } from "@/lib/meta/messaging/domain";
@@ -13,7 +14,7 @@ import type { MetaPlatform } from "@/lib/meta/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function ctx() { const sc = await getSessionContext(); if (sc.state !== "ready" || !sc.user || !sc.profile?.org_id) return null; return { orgId: sc.profile.org_id, userId: sc.user.id, role: (sc.profile as { role?: string })?.role ?? "agent" }; }
+async function ctx() { const sc = await getSessionContext(); if (sc.state !== "ready" || !sc.user || !sc.profile?.org_id) return null; return { orgId: sc.profile.org_id, userId: sc.user.id, role: await resolveRoleKey(sc.profile) }; }
 const PLATFORMS = new Set<MetaPlatform>(["facebook", "instagram"]);
 
 export async function GET(request: Request) {

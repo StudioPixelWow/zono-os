@@ -5,12 +5,13 @@
 // ============================================================================
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { refreshSource } from "@/lib/meta/listening/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function ctx() { const sc = await getSessionContext(); if (sc.state !== "ready" || !sc.profile?.org_id) return null; return { orgId: sc.profile.org_id, role: (sc.profile as { role?: string })?.role ?? "agent" }; }
+async function ctx() { const sc = await getSessionContext(); if (sc.state !== "ready" || !sc.profile?.org_id) return null; return { orgId: sc.profile.org_id, role: await resolveRoleKey(sc.profile) }; }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const c = await ctx();

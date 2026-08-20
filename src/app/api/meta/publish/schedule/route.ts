@@ -8,6 +8,7 @@
 // ============================================================================
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { schedulePublish, listScheduledOperations } from "@/lib/meta/schedule/service";
 
 export const runtime = "nodejs";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 async function ctx() {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.user || !sc.profile?.org_id) return null;
-  return { orgId: sc.profile.org_id, userId: sc.user.id, role: (sc.profile as { role?: string })?.role ?? "agent" };
+  return { orgId: sc.profile.org_id, userId: sc.user.id, role: await resolveRoleKey(sc.profile) };
 }
 
 export async function GET() {

@@ -8,6 +8,7 @@
 // ============================================================================
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { listInboxConversations, getInboxUnreadCount, listInboxLabels, canViewInbox } from "@/lib/meta/inbox/service";
 import type { InboxFilter, InboxSort, InboxStatus } from "@/lib/meta/inbox/domain";
 import type { MetaPlatform } from "@/lib/meta/types";
@@ -27,7 +28,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export default async function InboxPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.profile?.org_id) return <main dir="rtl" className="p-8 text-center text-gray-600">נדרשת התחברות.</main>;
-  const role = (sc.profile as { role?: string })?.role ?? "agent";
+  const role = await resolveRoleKey(sc.profile);
   if (!canViewInbox(role)) return <main dir="rtl" className="p-8 text-center text-gray-600">אין הרשאה לצפייה בתיבת הדואר הנכנס.</main>;
   const orgId = sc.profile.org_id;
   const sp = await searchParams;

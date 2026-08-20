@@ -5,6 +5,7 @@
 // ============================================================================
 import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { getDiscrepancyDetail, requestVerification } from "@/lib/meta/reconcile/service";
 
 export const runtime = "nodejs";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.user || !sc.profile?.org_id) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const role = (sc.profile as { role?: string })?.role ?? "agent";
+  const role = await resolveRoleKey(sc.profile);
   const { id } = await params;
   const d = await getDiscrepancyDetail(sc.profile.org_id, id);
   if (!d) return NextResponse.json({ error: "not_found" }, { status: 404 });

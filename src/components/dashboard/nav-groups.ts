@@ -22,7 +22,6 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "מרכז הבקרה", href: "/control-center", icon: "LayoutGrid" },
     { label: "היום · מרכז יומי", href: "/today", icon: "CalendarClock" },
     { label: "מוח הברוקר", href: "/brain", icon: "Sparkles" },
-    { label: "מרכז בקרה", href: "/mission-control", icon: "Target" },
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
   ]},
   { key: "office", title: "המשרד שלי", desc: "אנשים • נכסים • הצעות • עסקאות", icon: "Building2", accent: "blue", items: [

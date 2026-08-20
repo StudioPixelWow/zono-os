@@ -5,6 +5,7 @@
 // ============================================================================
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { getObjectInsights, canViewInsights } from "@/lib/meta/insights/service";
 import { RefreshInsights } from "./_refresh";
 
@@ -22,7 +23,7 @@ function sparkline(points: readonly { value: number }[]): string {
 export default async function InsightsPage({ params }: { params: Promise<{ objectId: string }> }) {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.profile?.org_id) return <main dir="rtl" className="p-8 text-center text-gray-600">נדרשת התחברות.</main>;
-  const role = (sc.profile as { role?: string })?.role ?? "agent";
+  const role = await resolveRoleKey(sc.profile);
   if (!canViewInsights(role)) return <main dir="rtl" className="p-8 text-center text-gray-600">אין הרשאה לצפייה בנתונים.</main>;
   const { objectId } = await params;
   const insights = await getObjectInsights(sc.profile.org_id, objectId);

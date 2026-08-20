@@ -7,6 +7,7 @@
 // rest and decrypted only for this authorized view; no token/cursor/key is exposed.
 // ============================================================================
 import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
 import { listConversations, getConversation, canViewMessaging, canApproveSendRole } from "@/lib/meta/messaging/service";
 import type { ConversationFilter, ConversationSort } from "@/lib/meta/messaging/domain";
 import { isConversationStatus } from "@/lib/meta/messaging/domain";
@@ -24,7 +25,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export default async function MessagingPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sc = await getSessionContext();
   if (sc.state !== "ready" || !sc.profile?.org_id) return <main dir="rtl" className="p-8 text-center text-gray-600">נדרשת התחברות.</main>;
-  const role = (sc.profile as { role?: string })?.role ?? "agent";
+  const role = await resolveRoleKey(sc.profile);
   if (!canViewMessaging(role)) return <main dir="rtl" className="p-8 text-center text-gray-600">אין הרשאה להודעות.</main>;
   const orgId = sc.profile.org_id;
   const sp = await searchParams;
