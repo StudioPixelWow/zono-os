@@ -11,6 +11,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { resolveEffectiveBrand } from "@/lib/brand-identity/engine";
 import { buildBrandTokens, waLink } from "@/lib/agent-website/brand-tokens";
+import { resolveAgentAvatar } from "@/lib/office/avatar";
 import type { OfficeProperty, OfficeAgentRef } from "@/lib/office-website/site-data";
 
 const PUBLIC_STATUSES = ["active", "published", "under_offer"] as const;
@@ -88,7 +89,7 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
     agentId ? admin.from("users").select("id,full_name,title,phone,email,avatar_url").eq("id", agentId).maybeSingle() : Promise.resolve({ data: null }),
     agentId ? admin.from("agent_websites").select("user_id,slug,status,display_name,title_hebrew,profile_image_url,whatsapp,phone,email,service_areas").eq("user_id", agentId).maybeSingle() : Promise.resolve({ data: null }),
     admin.from("brand_identity_profiles").select("brand_primary,brand_secondary,brand_accent,logo_url").eq("org_id", orgId).eq("entity_id", orgId).maybeSingle(),
-    admin.from("office_websites").select("office_name,logo_url,phone").eq("organization_id", orgId).maybeSingle(),
+    admin.from("office_websites").select("office_name,logo_url,phone,slug").eq("organization_id", orgId).maybeSingle(),
     agentId ? admin.from("client_reviews").select("reviewer_name,rating,review_text,city,neighborhood,is_featured,status").eq("agent_id", agentId).order("is_featured", { ascending: false }).limit(6) : Promise.resolve({ data: [] }),
     admin.from("properties").select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,listing_tag,has_exclusivity,owner_id").eq("org_id", orgId).in("status", [...PUBLIC_STATUSES] as never).neq("id", id).order("created_at", { ascending: false }).limit(12),
     admin.from("organizations").select("name").eq("id", orgId).maybeSingle(),
@@ -96,7 +97,7 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
 
   // ── Brand (office) → tokens ─────────────────────────────────────────────────
   const ob = (officeBrandR.data ?? null) as Record<string, unknown> | null;
-  const officeSite = (officeSiteR.data ?? null) as { office_name: string | null; logo_url: string | null; phone: string | null } | null;
+  const officeSite = (officeSiteR.data ?? null) as { office_name: string | null; logo_url: string | null; phone: string | null; slug: string | null } | null;
   const effective = resolveEffectiveBrand(null, ob);
   const tokens = buildBrandTokens({
     primary: (ob?.brand_primary as string | null) ?? effective.primary,
@@ -154,6 +155,37 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
     href: agentSlug ? `/agent/${agentSlug}` : null,
   } : null;
 
+  // Prefer the RESPONSIBLE office member (office_member_id) — the office board's
+  // canonical attribution, which works for NON-auth roster agents. Falls back to
+  // the owner-based agent above when no member is set. Public-safe: no email, and
+  // a profile link only when the member is published on the site.
+  let finalAgent: ListingAgent | null = agent;
+  const officeMemberId = (p.office_member_id as string | null) ?? null;
+  if (officeMemberId) {
+    const { data: mRow } = await admin.from("office_members" as never)
+      .select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website")
+      .eq("id", officeMemberId).eq("org_id", orgId).maybeSingle();
+    const m = mRow as { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null; status: string; show_on_website: boolean | null } | null;
+    if (m && m.status === "active") {
+      let linkedAvatar: string | null = null;
+      if (m.user_id) linkedAvatar = ((await admin.from("users").select("avatar_url").eq("id", m.user_id).maybeSingle()).data as { avatar_url: string | null } | null)?.avatar_url ?? null;
+      const memberPhone = m.phone ?? agentPhone ?? null;
+      const officeSlug = officeSite?.slug ?? null;
+      finalAgent = {
+        id: m.id,
+        name: m.full_name,
+        title: m.specialty || (m.role === "owner" ? "מנהל/ת המשרד" : 'יועץ/ת נדל"ן'),
+        photo: resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: linkedAvatar }) ?? agent?.photo ?? null,
+        phone: memberPhone,
+        tel: memberPhone ? `tel:${memberPhone.replace(/[^0-9+]/g, "")}` : null,
+        whatsapp: waLink(null, memberPhone),
+        email: null, // never expose a roster member's email publicly
+        areas: agent?.areas ?? [],
+        href: officeSlug && m.show_on_website ? `/site/${officeSlug}/agents/${m.id}` : null,
+      };
+    }
+  }
+
   // ── Agent testimonials (integrity: only this agent's) ───────────────────────
   const testimonials = ((reviewsR.data ?? []) as { reviewer_name: string | null; rating: number | null; review_text: string | null; city: string | null; neighborhood: string | null; status: string | null }[])
     .filter((r) => r.review_text && (r.status ?? "published") !== "rejected")
@@ -199,7 +231,7 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
     address,
     media,
     features: featureList(p),
-    agent,
+    agent: finalAgent,
     testimonials,
     related,
     shareText,

@@ -265,8 +265,20 @@ function About({ data }: { data: OfficeSitePayload }) {
             ? <p className="mt-4 text-[16px] leading-relaxed text-[var(--brand-muted)]">{office.description}</p>
             : <p className="mt-4 text-[16px] leading-relaxed text-[var(--brand-muted)]">{office.name}{data.areas.length ? ` · פעילים ב${data.areas.slice(0, 3).map((a) => a.name).join(", ")}` : ""}.</p>}
           {data.areas.length > 0 && <div className="mt-5"><AreaChips areas={data.areas.map((a) => a.name)} /></div>}
+          {data.manager && (
+            <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
+              {data.manager.photo
+                ? <img src={data.manager.photo} alt={data.manager.name} loading="lazy" decoding="async" className="h-14 w-14 shrink-0 rounded-full object-cover" />
+                : <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-xl font-black text-[color:var(--brand-primary)]">{data.manager.name.slice(0, 1)}</span>}
+              <div className="min-w-0">
+                <div className="text-[15px] font-black text-[var(--brand-text)]">{data.manager.name}</div>
+                <div className="text-[13px] font-semibold text-[color:var(--brand-link)]">מנהל/ת המשרד</div>
+              </div>
+              {data.manager.href && <Link href={data.manager.href} className="ms-auto shrink-0 text-[13px] font-bold text-[color:var(--brand-link)]">לפרופיל ←</Link>}
+            </div>
+          )}
         </div>
-        {office.cover && <div className="aspect-[4/3] w-full overflow-hidden rounded-3xl bg-[var(--brand-soft)]"><img src={office.cover} alt={office.name} className="h-full w-full object-cover" /></div>}
+        {office.cover && <div className="aspect-[4/3] w-full overflow-hidden rounded-3xl bg-[var(--brand-soft)]"><img src={office.cover} alt={office.name} loading="lazy" decoding="async" className="h-full w-full object-cover" /></div>}
       </div>
     </SectionShell>
   );

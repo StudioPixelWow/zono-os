@@ -16,13 +16,17 @@ import { resolveEffectiveBrand } from "@/lib/brand-identity/engine";
 import { buildBrandTokens, waLink } from "@/lib/agent-website/brand-tokens";
 import { deriveBrandColorFromLogo } from "./logo-brand-color";
 import { isSiteTheme, type SiteTheme } from "@/lib/brokerage-site/branding";
+import { resolveAgentAvatar } from "@/lib/office/avatar";
+import { resolveResponsibleMemberId } from "./attribution";
+
+const ROLE_TITLE_HE: Record<string, string> = { owner: "מנהל/ת המשרד", manager: "מנהל/ת", agent: 'יועץ/ת נדל"ן' };
 
 // ── Public-safe shapes ───────────────────────────────────────────────────────
 export interface OfficeAgentRef {
-  id: string;
+  id: string;         // office_members.id
   name: string;
   photo: string | null;
-  href: string | null; // /agent/[slug] when they have a published site, else null
+  href: string | null; // /site/[slug]/agents/[memberId]
 }
 
 export interface OfficeProperty {
@@ -81,7 +85,8 @@ export interface OfficeSitePayload {
   sections: Record<string, boolean>;
   proofPoints: OfficeStat[];
   stats: OfficeStat[];
-  team: OfficeTeamMember[];
+  team: OfficeTeamMember[];          // public office AGENTS (role != owner)
+  manager: OfficeTeamMember | null;  // office manager/owner — shown separately, not the brand
   featured: OfficeProperty[];
   recommended: OfficeProperty[];
   mapPoints: OfficeProperty[];
@@ -98,8 +103,11 @@ interface RawProp {
   id: string; title: string | null; price: number | null; monthly_rent: number | null; listing_kind: string | null;
   city: string | null; neighborhood: string | null; rooms: number | null; size_sqm: number | null; floor: number | null;
   type: string; status: string; primary_image_url: string | null; latitude: number | null; longitude: number | null;
-  listing_tag: string | null; has_exclusivity: boolean | null; owner_id: string | null; created_at: string;
+  listing_tag: string | null; has_exclusivity: boolean | null; owner_id: string | null; office_member_id: string | null; created_at: string;
 }
+
+// A public roster member (office_members). NON-auth members are first-class here.
+interface RawMember { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null }
 
 const propTag = (p: RawProp): string | null =>
   p.has_exclusivity ? "בלעדיות"
@@ -132,12 +140,15 @@ export async function getOfficeSite(
   }
   const orgId = s.organization_id;
 
-  const [propsR, usersR, agentSitesR, officeBrandR, reviewsR, txnR, orgR] = await Promise.all([
+  const [propsR, membersR, usersR, officeBrandR, reviewsR, txnR, orgR] = await Promise.all([
     admin.from("properties")
-      .select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,latitude,longitude,listing_tag,has_exclusivity,owner_id,created_at")
+      .select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,latitude,longitude,listing_tag,has_exclusivity,owner_id,office_member_id,created_at")
       .eq("org_id", orgId).in("status", [...PUBLIC_STATUSES] as never).order("created_at", { ascending: false }).limit(200),
-    admin.from("users").select("id,full_name,title,phone,avatar_url,status,operating_neighborhoods,property_types").eq("org_id", orgId).eq("status", "active").limit(60),
-    admin.from("agent_websites").select("user_id,slug,status,display_name,title_hebrew,profile_image_url,whatsapp,phone,service_areas,specialties").eq("organization_id", orgId),
+    // CANONICAL public team source: office_members (roster). NON-auth members are
+    // included — publication is governed by show_on_website, not by an Auth login.
+    admin.from("office_members" as never).select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website")
+      .eq("org_id", orgId).eq("status", "active").eq("show_on_website", true).limit(60),
+    admin.from("users").select("id,avatar_url").eq("org_id", orgId).eq("status", "active").limit(60),
     admin.from("brand_identity_profiles").select("*").eq("org_id", orgId).eq("entity_id", orgId).maybeSingle(),
     admin.from("client_reviews").select("agent_id,reviewer_name,rating,review_text,city,neighborhood,is_featured,quality_score,status,created_at").eq("organization_id", orgId).order("is_featured", { ascending: false }).order("created_at", { ascending: false }).limit(24),
     admin.from("property_transactions").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
@@ -151,7 +162,6 @@ export async function getOfficeSite(
     .select("entity_id,entity_type,profile_image_url,brand_primary,brand_secondary,brand_accent,logo_url").eq("org_id", orgId);
   type BrandRow = { entity_id: string; entity_type: string | null; profile_image_url: string | null; brand_primary: string | null; brand_secondary: string | null; brand_accent: string | null; logo_url: string | null };
   const brandRows = (agentBrandRows ?? []) as BrandRow[];
-  const agentPhotoByUser = new Map(brandRows.map((r) => [r.entity_id, r.profile_image_url ?? null]));
 
   // ── Brand → tokens (office colors from brand_identity, office_websites fallback) ─
   // The office brand lives on the OFFICE entity (entity_id = orgId). A fresh office
@@ -184,52 +194,63 @@ export async function getOfficeSite(
   const themeRaw = (s.theme as { preset?: unknown } | null)?.preset;
   const theme: SiteTheme = isSiteTheme(themeRaw) ? themeRaw : "luxury-light";
 
-  // ── Team + agent lookup maps (for property→agent + team section) ────────────
-  interface RawUser { id: string; full_name: string | null; title: string | null; phone: string | null; avatar_url: string | null; operating_neighborhoods: string[] | null; property_types: string[] | null }
-  interface RawSite { user_id: string; slug: string | null; status: string; display_name: string | null; title_hebrew: string | null; profile_image_url: string | null; whatsapp: string | null; phone: string | null; service_areas: string[] | null; specialties: string[] | null }
+  // ── Roster (office_members) → team + property/agent resolution ──────────────
+  interface RawUser { id: string; avatar_url: string | null }
   const users = (usersR.data ?? []) as RawUser[];
-  const sites = (agentSitesR.data ?? []) as RawSite[];
-  const siteByUser = new Map(sites.map((a) => [a.user_id, a]));
-  const publishedSlug = (uid: string): string | null => { const a = siteByUser.get(uid); return a && a.status === "published" && a.slug ? a.slug : null; };
+  const userAvatar = new Map(users.map((u) => [u.id, u.avatar_url ?? null]));  // linked-user avatar fallback
 
-  const rawProps = (propsR.data ?? []) as RawProp[];
-  const propCountByOwner = new Map<string, number>();
-  for (const p of rawProps) if (p.owner_id) propCountByOwner.set(p.owner_id, (propCountByOwner.get(p.owner_id) ?? 0) + 1);
+  const members = (membersR.data ?? []) as RawMember[];
+  const memberById = new Map(members.map((m) => [m.id, m]));
+  const publicMemberIds = new Set(members.map((m) => m.id));
+  const memberIdByUserId = new Map(members.filter((m) => m.user_id).map((m) => [m.user_id as string, m.id]));
+  const memberAvatar = (m: RawMember): string | null =>
+    resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: m.user_id ? userAvatar.get(m.user_id) ?? null : null });
+  const agentHref = (memberId: string) => `/site/${slug}/agents/${memberId}`;
 
-  const agentRef = (uid: string | null): OfficeAgentRef | null => {
-    if (!uid) return null;
-    const u = users.find((x) => x.id === uid); const site = siteByUser.get(uid);
-    const name = site?.display_name || u?.full_name; if (!name) return null;
-    const slug = publishedSlug(uid);
-    return { id: uid, name, photo: agentPhotoByUser.get(uid) ?? site?.profile_image_url ?? u?.avatar_url ?? null, href: slug ? `/agent/${slug}` : null };
+  // Responsible PUBLIC member: office_member_id → legacy owner → null (pure helper).
+  const resolveMemberId = (p: { office_member_id: string | null; owner_id: string | null }): string | null =>
+    resolveResponsibleMemberId(p, publicMemberIds, memberIdByUserId);
+  const memberRef = (memberId: string | null): OfficeAgentRef | null => {
+    if (!memberId) return null; const m = memberById.get(memberId); if (!m) return null;
+    return { id: m.id, name: m.full_name, photo: memberAvatar(m), href: agentHref(m.id) };
   };
 
-  const team: OfficeTeamMember[] = users.map((u) => {
-    const site = siteByUser.get(u.id);
-    const areas = (site?.service_areas?.length ? site.service_areas : (u.operating_neighborhoods ?? [])).filter(Boolean);
-    const specialties = (site?.specialties ?? []).filter(Boolean);
-    const slug = publishedSlug(u.id);
-    return {
-      id: u.id,
-      name: site?.display_name || u.full_name || "סוכן/ת",
-      title: site?.title_hebrew || u.title || 'יועץ נדל"ן',
-      photo: agentPhotoByUser.get(u.id) ?? site?.profile_image_url ?? u.avatar_url ?? null,
-      phone: site?.phone ?? u.phone ?? null,
-      whatsapp: waLink(site?.whatsapp ?? null, site?.phone ?? u.phone ?? null),
-      areas: areas.slice(0, 3),
-      specialties: specialties.slice(0, 3),
-      activeProperties: propCountByOwner.get(u.id) ?? 0,
-      href: slug ? `/agent/${slug}` : null,
-    };
-  }).sort((a, b) => b.activeProperties - a.activeProperties);
+  const rawProps = (propsR.data ?? []) as unknown as RawProp[];
+  const propCountByMember = new Map<string, number>();
+  const areasByMember = new Map<string, Set<string>>();
+  for (const p of rawProps) {
+    const mid = resolveMemberId(p); if (!mid) continue;
+    propCountByMember.set(mid, (propCountByMember.get(mid) ?? 0) + 1);
+    const k = p.neighborhood || p.city;
+    if (k) { const set = areasByMember.get(mid) ?? new Set<string>(); set.add(k); areasByMember.set(mid, set); }
+  }
 
-  // ── Properties (with handling agent) ────────────────────────────────────────
+  const toTeamMember = (m: RawMember): OfficeTeamMember => ({
+    id: m.id,
+    name: m.full_name,
+    title: m.specialty || ROLE_TITLE_HE[m.role] || 'יועץ/ת נדל"ן',
+    photo: memberAvatar(m),
+    phone: m.phone ?? null,
+    whatsapp: waLink(null, m.phone ?? null),
+    areas: [...(areasByMember.get(m.id) ?? [])].slice(0, 3),
+    specialties: m.specialty ? [m.specialty] : [],
+    activeProperties: propCountByMember.get(m.id) ?? 0,
+    href: agentHref(m.id),
+  });
+  // Team = public AGENTS only; the manager/owner is presented separately so no
+  // single person becomes the office brand. Sorted by inventory, but ALL show.
+  const team: OfficeTeamMember[] = members.filter((m) => m.role !== "owner").map(toTeamMember)
+    .sort((a, b) => b.activeProperties - a.activeProperties);
+  const managerMember = members.find((m) => m.role === "owner") ?? null;
+  const manager: OfficeTeamMember | null = managerMember ? toTeamMember(managerMember) : null;
+
+  // ── Properties (with responsible agent) ─────────────────────────────────────
   const toProp = (p: RawProp): OfficeProperty => ({
     id: p.id, title: p.title || [p.neighborhood, p.city].filter(Boolean).join(" · ") || "נכס",
     price: p.price, monthlyRent: p.monthly_rent, listingKind: p.listing_kind, city: p.city, neighborhood: p.neighborhood,
     rooms: p.rooms, sizeSqm: p.size_sqm, floor: p.floor, type: p.type, status: p.status, image: p.primary_image_url, tag: propTag(p),
     lat: typeof p.latitude === "number" ? p.latitude : null, lng: typeof p.longitude === "number" ? p.longitude : null,
-    href: `/p/${p.id}`, agent: agentRef(p.owner_id),
+    href: `/p/${p.id}`, agent: memberRef(resolveMemberId(p)),
   });
   const all = rawProps.map(toProp);
   const featuredIds = (s.featured_property_ids as string[] | undefined) ?? [];
@@ -238,18 +259,18 @@ export async function getOfficeSite(
   const recommended = all.filter((p) => !featuredSet.has(p.id)).slice(0, 4);
   const mapPoints = all.filter((p) => p.lat != null && p.lng != null);
 
-  // ── Areas (property inventory + agents per area) ────────────────────────────
+  // ── Areas (property inventory + public agents per area) ─────────────────────
   const areaAgg = new Map<string, { properties: number; agents: Set<string> }>();
   for (const p of rawProps) {
     const k = p.neighborhood || p.city; if (!k) continue;
     const e = areaAgg.get(k) ?? { properties: 0, agents: new Set<string>() };
-    e.properties++; if (p.owner_id) e.agents.add(p.owner_id); areaAgg.set(k, e);
+    e.properties++; const mid = resolveMemberId(p); if (mid) e.agents.add(mid); areaAgg.set(k, e);
   }
   const areas: OfficeArea[] = Array.from(areaAgg.entries())
     .map(([name, e]) => ({ name, properties: e.properties, agents: e.agents.size }))
     .sort((a, b) => b.properties - a.properties).slice(0, 8);
 
-  // ── Testimonials → agent (client_reviews; jsonb fallback) ───────────────────
+  // ── Testimonials → responsible member (client_reviews.agent_id is a user id) ─
   interface RawReview { agent_id: string | null; reviewer_name: string | null; rating: number | null; review_text: string | null; city: string | null; neighborhood: string | null; status: string | null }
   const reviews = ((reviewsR.data ?? []) as RawReview[]).filter((r) => r.review_text && (r.status ?? "published") !== "rejected");
   let testimonials: OfficeTestimonial[] = reviews.slice(0, 8).map((r) => ({
@@ -257,7 +278,7 @@ export async function getOfficeSite(
     text: r.review_text as string,
     rating: r.rating ?? null,
     area: r.neighborhood || r.city || null,
-    agent: agentRef(r.agent_id),
+    agent: memberRef(r.agent_id ? memberIdByUserId.get(r.agent_id) ?? null : null),
   }));
   if (!testimonials.length) {
     const jsonb = ((s.testimonials as { name?: string; text: string; rating?: number }[] | undefined) ?? []).filter((t) => t && t.text);
@@ -305,6 +326,7 @@ export async function getOfficeSite(
     proofPoints,
     stats,
     team,
+    manager,
     featured,
     recommended,
     mapPoints,
@@ -314,40 +336,116 @@ export async function getOfficeSite(
 }
 
 // ── Filtered listing for /site/[slug]/properties ─────────────────────────────
-export interface OfficePropertyFilters { q?: string; area?: string; type?: string; min?: string; max?: string; rooms?: string }
-export interface OfficeListingView { slug: string; brandVars: Record<string, string>; officeName: string; logo: string | null; properties: OfficeProperty[] }
+export interface OfficePropertyFilters { q?: string; area?: string; type?: string; min?: string; max?: string; rooms?: string; agent?: string }
+export interface OfficeListingView { slug: string; brandVars: Record<string, string>; officeName: string; logo: string | null; properties: OfficeProperty[]; members: { id: string; name: string }[] }
 
 export async function getOfficeListing(slug: string, filters: OfficePropertyFilters = {}): Promise<OfficeListingView | "disabled" | null> {
   const full = await getOfficeSite(slug);
   if (full === null || full === "disabled") return full;
-  // getOfficeSite caps featured/recommended; re-derive the full filtered set from map+featured+recommended union is lossy,
-  // so re-query all public properties for the listing (with agent refs already attached via getOfficeSite's map is not reused).
   const admin = createServiceRoleClient();
   const { data: siteRow } = await admin.from("office_websites").select("organization_id,office_name,logo_url").eq("slug", slug).maybeSingle();
   const org = (siteRow as { organization_id: string; office_name: string | null; logo_url: string | null } | null);
   if (!org) return null;
-  const { data } = await admin.from("properties")
-    .select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,latitude,longitude,listing_tag,has_exclusivity,owner_id,created_at")
-    .eq("org_id", org.organization_id).in("status", [...PUBLIC_STATUSES] as never).order("created_at", { ascending: false }).limit(300);
 
-  // Reuse the agent-ref map from the full payload's team.
-  const agentById = new Map(full.team.map((m) => [m.id, { id: m.id, name: m.name, photo: m.photo, href: m.href } as OfficeAgentRef]));
-  let properties: OfficeProperty[] = ((data ?? []) as RawProp[]).map((p) => ({
+  const [{ data: propData }, { data: memberData }, { data: userData }] = await Promise.all([
+    admin.from("properties")
+      .select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,latitude,longitude,listing_tag,has_exclusivity,owner_id,office_member_id,created_at")
+      .eq("org_id", org.organization_id).in("status", [...PUBLIC_STATUSES] as never).order("created_at", { ascending: false }).limit(300),
+    admin.from("office_members" as never).select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website")
+      .eq("org_id", org.organization_id).eq("status", "active").eq("show_on_website", true).limit(60),
+    admin.from("users").select("id,avatar_url").eq("org_id", org.organization_id).eq("status", "active").limit(60),
+  ]);
+
+  // Same office_member resolution as the homepage (office_member_id → linked owner).
+  const members = (memberData ?? []) as RawMember[];
+  const userAvatar = new Map(((userData ?? []) as { id: string; avatar_url: string | null }[]).map((u) => [u.id, u.avatar_url ?? null]));
+  const memberById = new Map(members.map((m) => [m.id, m]));
+  const publicMemberIds = new Set(members.map((m) => m.id));
+  const memberIdByUserId = new Map(members.filter((m) => m.user_id).map((m) => [m.user_id as string, m.id]));
+  const resolveMemberId = (p: { office_member_id: string | null; owner_id: string | null }): string | null =>
+    resolveResponsibleMemberId(p, publicMemberIds, memberIdByUserId);
+  const memberRef = (memberId: string | null): OfficeAgentRef | null => {
+    if (!memberId) return null; const m = memberById.get(memberId); if (!m) return null;
+    return { id: m.id, name: m.full_name, photo: resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: m.user_id ? userAvatar.get(m.user_id) ?? null : null }), href: `/site/${slug}/agents/${m.id}` };
+  };
+
+  let properties: OfficeProperty[] = ((propData ?? []) as unknown as RawProp[]).map((p) => ({
     id: p.id, title: p.title || [p.neighborhood, p.city].filter(Boolean).join(" · ") || "נכס",
     price: p.price, monthlyRent: p.monthly_rent, listingKind: p.listing_kind, city: p.city, neighborhood: p.neighborhood,
     rooms: p.rooms, sizeSqm: p.size_sqm, floor: p.floor, type: p.type, status: p.status, image: p.primary_image_url, tag: propTag(p),
     lat: typeof p.latitude === "number" ? p.latitude : null, lng: typeof p.longitude === "number" ? p.longitude : null,
-    href: `/p/${p.id}`, agent: p.owner_id ? agentById.get(p.owner_id) ?? null : null,
+    href: `/p/${p.id}`, agent: memberRef(resolveMemberId(p)),
   }));
 
   const q = filters.q?.trim().toLowerCase();
   if (q) properties = properties.filter((p) => [p.title, p.city, p.neighborhood].filter(Boolean).some((v) => (v as string).toLowerCase().includes(q)));
   if (filters.area) properties = properties.filter((p) => p.city === filters.area || p.neighborhood === filters.area);
   if (filters.type) properties = properties.filter((p) => p.type === filters.type);
+  if (filters.agent) properties = properties.filter((p) => p.agent?.id === filters.agent);
   const min = Number(filters.min), max = Number(filters.max), rooms = Number(filters.rooms);
   if (Number.isFinite(min) && min > 0) properties = properties.filter((p) => (p.price ?? p.monthlyRent ?? 0) >= min);
   if (Number.isFinite(max) && max > 0) properties = properties.filter((p) => (p.price ?? p.monthlyRent ?? Infinity) <= max);
   if (Number.isFinite(rooms) && rooms > 0) properties = properties.filter((p) => (p.rooms ?? 0) >= rooms);
 
-  return { slug, brandVars: full.brand.tokens, officeName: full.office.name, logo: full.brand.logo, properties };
+  // Agents that actually own public inventory → the "סוכן" filter options.
+  const memberList = members.filter((m) => m.role !== "owner").map((m) => ({ id: m.id, name: m.full_name }));
+  return { slug, brandVars: full.brand.tokens, officeName: full.office.name, logo: full.brand.logo, properties, members: memberList };
+}
+
+// ── Public office-agent profile: /site/[slug]/agents/[memberId] ──────────────
+// Canonical public profile for ONE office member — works for NON-auth roster
+// members. Public-safe only (no CRM stats/leads/deals/notes). Returns null for a
+// non-public / unknown member (never exposes an internal member).
+export interface OfficeSiteAgent {
+  slug: string;
+  brandVars: Record<string, string>;
+  logo: string | null;
+  office: { name: string; phone: string | null; whatsapp: string | null; tel: string | null };
+  member: { id: string; name: string; title: string | null; role: string; photo: string | null; phone: string | null; whatsapp: string | null; areas: string[]; specialties: string[]; activeCount: number };
+  listings: OfficeProperty[];
+}
+
+export async function getOfficeSiteAgent(slug: string, memberId: string): Promise<OfficeSiteAgent | "disabled" | null> {
+  if (!slug || !memberId) return null;
+  const full = await getOfficeSite(slug);
+  if (full === null || full === "disabled") return full;
+  // Only members already resolved into the PUBLIC payload are exposable.
+  const publicMember = [...full.team, ...(full.manager ? [full.manager] : [])].find((m) => m.id === memberId);
+  if (!publicMember) return null;
+
+  const admin = createServiceRoleClient();
+  const { data: siteRow } = await admin.from("office_websites").select("organization_id").eq("slug", slug).maybeSingle();
+  const orgId = (siteRow as { organization_id: string } | null)?.organization_id;
+  if (!orgId) return null;
+  const { data: mRow } = await admin.from("office_members" as never).select("user_id,role").eq("id", memberId).eq("org_id", orgId).maybeSingle();
+  const linkedUserId = (mRow as { user_id: string | null; role: string } | null)?.user_id ?? null;
+  const role = (mRow as { role: string } | null)?.role ?? "agent";
+
+  const { data: propData } = await admin.from("properties")
+    .select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,latitude,longitude,listing_tag,has_exclusivity,owner_id,office_member_id,created_at")
+    .eq("org_id", orgId).in("status", [...PUBLIC_STATUSES] as never).order("created_at", { ascending: false }).limit(200);
+
+  const isMine = (p: RawProp): boolean =>
+    p.office_member_id === memberId || (!p.office_member_id && !!linkedUserId && p.owner_id === linkedUserId);
+  const selfRef: OfficeAgentRef = { id: publicMember.id, name: publicMember.name, photo: publicMember.photo, href: `/site/${slug}/agents/${memberId}` };
+  const listings: OfficeProperty[] = ((propData ?? []) as unknown as RawProp[]).filter(isMine).map((p) => ({
+    id: p.id, title: p.title || [p.neighborhood, p.city].filter(Boolean).join(" · ") || "נכס",
+    price: p.price, monthlyRent: p.monthly_rent, listingKind: p.listing_kind, city: p.city, neighborhood: p.neighborhood,
+    rooms: p.rooms, sizeSqm: p.size_sqm, floor: p.floor, type: p.type, status: p.status, image: p.primary_image_url, tag: propTag(p),
+    lat: typeof p.latitude === "number" ? p.latitude : null, lng: typeof p.longitude === "number" ? p.longitude : null,
+    href: `/p/${p.id}`, agent: selfRef,
+  }));
+
+  return {
+    slug,
+    brandVars: full.brand.tokens,
+    logo: full.brand.logo,
+    office: { name: full.office.name, phone: full.office.phone, whatsapp: full.office.whatsapp, tel: full.office.tel },
+    member: {
+      id: publicMember.id, name: publicMember.name, title: publicMember.title, role,
+      photo: publicMember.photo, phone: publicMember.phone, whatsapp: publicMember.whatsapp,
+      areas: publicMember.areas, specialties: publicMember.specialties, activeCount: listings.length,
+    },
+    listings,
+  };
 }
