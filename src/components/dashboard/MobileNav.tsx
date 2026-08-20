@@ -8,8 +8,8 @@ import { Icon } from "./Icon";
 // Real bottom-nav destinations (existing routes). "עוד" opens the ⌘K command
 // palette so every other surface stays one tap away — no dead buttons.
 const ITEMS: { id: string; label: string; icon: string; href: string }[] = [
-  { id: "home", label: "בית", icon: "Home", href: "/" },
-  { id: "today", label: "היום", icon: "Sun", href: "/today" },
+  { id: "home", label: "היום שלי", icon: "Sun", href: "/" },
+  { id: "control", label: "מרכז הבקרה", icon: "LayoutGrid", href: "/control-center" },
   { id: "properties", label: "נכסים", icon: "Building", href: "/properties" },
   { id: "whatsapp", label: "וואטסאפ", icon: "MessageCircle", href: "/whatsapp" },
 ];

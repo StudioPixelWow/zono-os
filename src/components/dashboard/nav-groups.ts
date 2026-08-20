@@ -17,9 +17,10 @@ export const ACCENTS: Record<Accent, { iconBg: string; ring: string; activeItem:
 };
 
 export const NAV_GROUPS: NavGroup[] = [
-  { key: "command", title: "מרכז הבקרה", desc: "בית • מרכז יומי • מוח הברוקר", icon: "Flame", accent: "purple", items: [
-    { label: "דף הבית", href: "/", icon: "Home" },
-    { label: "היום · מרכז יומי", href: "/today", icon: "Sun" },
+  { key: "command", title: "היום שלי ומרכז הבקרה", desc: "מה לעשות עכשיו • מה קורה בעסק", icon: "Sun", accent: "purple", items: [
+    { label: "היום שלי", href: "/", icon: "Sun" },
+    { label: "מרכז הבקרה", href: "/control-center", icon: "LayoutGrid" },
+    { label: "היום · מרכז יומי", href: "/today", icon: "CalendarClock" },
     { label: "מוח הברוקר", href: "/brain", icon: "Sparkles" },
     { label: "מרכז בקרה", href: "/mission-control", icon: "Target" },
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },

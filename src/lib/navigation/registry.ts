@@ -20,7 +20,8 @@ export const MODULE_CATEGORIES = ["ראשי", "מכירות", "מודיעין", 
 
 export const MODULES: ModuleEntry[] = [
   // ── ראשי ──
-  { id: "home", label: "בית", route: "/", icon: "Home", category: "ראשי", roleMin: "viewer", sidebar: true, searchable: true, description: "דשבורד ראשי" },
+  { id: "home", label: "היום שלי", route: "/", icon: "Sun", category: "ראשי", roleMin: "viewer", sidebar: true, searchable: true, description: "הקוקפיט היומי — מה לעשות עכשיו" },
+  { id: "control-center", label: "מרכז הבקרה", route: "/control-center", icon: "LayoutGrid", category: "ראשי", roleMin: "viewer", sidebar: true, searchable: true, description: "תמונת מצב מלאה של העסק" },
   { id: "command", label: "מרכז פיקוד", route: "/command", icon: "Flame", category: "ראשי", roleMin: "agent", sidebar: true, searchable: true, description: "מרכז ההחלטות הניהולי" },
   { id: "mission-control", label: "🧠 מרכז בקרת AI", route: "/mission-control", icon: "Sparkles", category: "ראשי", roleMin: "agent", sidebar: true, searchable: true, description: "AI Mission Control™ — מערכת ההפעלה של ה-AI (לא צ׳אט): משימת הבוקר, הקשר הסשן, לוח הקשר, תור המשימות מהפיד הקיים וזיכרון AI" },
   { id: "action-center", label: "⚡ מרכז הפעולות", route: "/action-center", icon: "Flame", category: "ראשי", roleMin: "agent", sidebar: true, searchable: true, description: "Intelligence Action Center™ — מה לעשות היום: תור הזדמנויות, פעולות AI Coach, פוקוס מתווכים, רשימת מעקב ופיד מודיעין מאוחד" },
