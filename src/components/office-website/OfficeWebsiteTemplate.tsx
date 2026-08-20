@@ -132,7 +132,7 @@ function FeaturedAgent({ member }: { member: OfficeTeamMember }) {
       <div className="grid items-center gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12">
         <div className="relative mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-[28px] bg-[var(--brand-soft)] shadow-[0_30px_70px_-30px_rgba(15,23,42,0.55)] ring-1 ring-[var(--brand-border)]">
           {member.photo
-            ? <img src={member.photo} alt={member.name} className="h-full w-full object-cover object-top" />
+            ? <img src={member.photo} alt={member.name} loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
             : <div className="grid h-full w-full place-items-center text-7xl font-black text-[color:var(--brand-primary)]">{member.name.slice(0, 1)}</div>}
         </div>
         <div>
@@ -183,7 +183,7 @@ function FeaturedProperty({ property }: { property: OfficeProperty }) {
       <div className="relative aspect-[16/10] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto">
         {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
         {property.image
-          ? <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
+          ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover" />
           : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={60} /></div>}
       </div>
       <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">

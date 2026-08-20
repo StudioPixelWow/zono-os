@@ -92,12 +92,25 @@ export async function reconcileVerifiedGrowActivations(limit = 200): Promise<Act
       } else {
         // Activation failed → payment stays verified (NEVER marked failed); the
         // candidate remains eligible for the next run. Safe category only.
+        // Observability: a stranded paid-but-not-active org is now QUERYABLE via
+        // domain_events (not just console) so a chronic failure is diagnosable.
         out.failed++;
         console.error(`[activation-reconcile] activation failed org=${p.org_id} payment=${p.id}`);
+        await emitBusinessEvent({
+          type: DOMAIN_EVENTS.billingActivationFailed, entityType: "billing", entityId: p.org_id, orgId: p.org_id,
+          payload: { reference: p.id, reason: "activation_call_failed" },
+          idempotencyKey: `billing.activation_failed:${p.id}:${new Date().toISOString().slice(0, 10)}`,
+        }).catch(() => undefined);
       }
     } catch (e) {
       out.failed++;
-      console.error(`[activation-reconcile] error payment=${p.id}: ${e instanceof Error ? e.message : "error"}`);
+      const reason = e instanceof Error ? e.message : "error";
+      console.error(`[activation-reconcile] error payment=${p.id}: ${reason}`);
+      await emitBusinessEvent({
+        type: DOMAIN_EVENTS.billingActivationFailed, entityType: "billing", entityId: p.org_id, orgId: p.org_id,
+        payload: { reference: p.id, reason: "exception" },
+        idempotencyKey: `billing.activation_failed:${p.id}:${new Date().toISOString().slice(0, 10)}`,
+      }).catch(() => undefined);
     }
   }
   return out;

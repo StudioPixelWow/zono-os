@@ -10,10 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { normalizeListingKind, formatPropertyPrice } from "@/lib/property/transaction";
 import { resolveAgentAvatar } from "./avatar";
-
-const ACTIVE_LEAD_STAGES = new Set(["new", "contacted", "qualified", "nurturing"]);
-const ACTIVE_PROP_STATUS = new Set(["active", "published", "ready", "under_offer", "in_contract"]);
-const LATE_STAGES = new Set(["agreement", "contract", "closing"]);
+import { ACTIVE_LEAD_STAGES, ACTIVE_PROPERTY_STATUS as ACTIVE_PROP_STATUS, LATE_DEAL_STAGES as LATE_STAGES } from "./status-predicates";
 const STATUS_HE: Record<string, string> = { active: "פעיל", published: "מפורסם", ready: "מוכן", draft: "טיוטה", under_offer: "התקבלה הצעה", in_contract: "בחוזה", sold: "נמכר", rented: "הושכר", withdrawn: "הוסר", archived: "בארכיון" };
 const STAGE_HE: Record<string, string> = { new: "חדשה", qualified: "מוסמכת", negotiation: "משא ומתן", agreement: "הסכמה", contract: "חוזה", closing: "סגירה" };
 

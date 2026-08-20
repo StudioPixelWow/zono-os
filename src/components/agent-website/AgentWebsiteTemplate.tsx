@@ -144,7 +144,7 @@ function FeaturedProperty({ property }: { property: SiteProperty }) {
       <div className="relative aspect-[16/10] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto">
         {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
         {property.image
-          ? <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
+          ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover" />
           : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={64} /></div>}
       </div>
       <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">

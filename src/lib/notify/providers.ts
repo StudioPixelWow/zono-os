@@ -66,9 +66,11 @@ const emailProvider: DeliveryProvider = {
       }
       const body = await res.text().catch(() => "");
       const transient = res.status === 429 || res.status >= 500;
-      // Store a STABLE, customer-safe code only. The raw provider body may carry
-      // recipient/reason detail — keep it in server logs, never in the persisted error.
-      if (body) console.error(`[resend] ${res.status} ${req.dedupKey ?? ""}: ${body.slice(0, 300)}`);
+      // Log only the STABLE provider error CODE (never the raw body — it can carry
+      // the recipient email / reason). Persisted error is a customer-safe code too.
+      let code = "error";
+      try { const j = JSON.parse(body) as { name?: string; code?: string }; code = j.name || j.code || "error"; } catch { /* non-JSON body → keep generic code */ }
+      console.error(`[resend] ${res.status} ${req.dedupKey ?? ""}: ${code}`);
       return { ok: false, status: "failed", error: `resend_${res.status}_${transient ? "transient" : "permanent"}` };
     } catch (e) {
       if (e instanceof Error) console.error(`[resend] network error ${req.dedupKey ?? ""}: ${e.message}`);

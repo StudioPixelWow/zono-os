@@ -16,9 +16,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getManagerCommandCenter, type ManagerCenterView } from "./manager-command-center";
 import { normalizeListingKind, formatPropertyPrice, type ListingKind } from "@/lib/property/transaction";
 import { resolveAgentAvatar } from "./avatar";
-
-const ACTIVE_LEAD_STAGES = new Set(["new", "contacted", "qualified", "nurturing"]);
-const ACTIVE_PROP_STATUS = new Set(["active", "published", "ready", "under_offer", "in_contract"]);
+import { ACTIVE_LEAD_STAGES, ACTIVE_PROPERTY_STATUS as ACTIVE_PROP_STATUS, LATE_DEAL_STAGES } from "./status-predicates";
 
 export interface OfficeAgentCard {
   id: string; name: string; role: string; specialty: string | null; status: string;
@@ -203,7 +201,7 @@ export async function getOfficeManagementBoard(): Promise<OfficeManagementBoard 
   };
 
   // ── Deals management summary + a few actionable rows ─────────────────────────
-  const LATE_STAGES = new Set(["agreement", "contract", "closing"]);
+  const LATE_STAGES = LATE_DEAL_STAGES;
   const openDeals = deals.filter((d) => d.status === "open");
   const dealRows: OfficeDealRow[] = openDeals
     .map((d) => {
