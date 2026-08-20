@@ -15,6 +15,7 @@ import { getHomeKpiExtras, listTodayTasks } from "@/lib/home/home-service";
 import { getSocialLeadsBoard } from "@/lib/social/service";
 import { getDealsBoard } from "@/lib/deals/service";
 import { listBuyerBoard } from "@/lib/buyers/repository";
+import { externalListingRepository } from "@/lib/external-listings/repository";
 
 type Tone = "brand" | "success" | "warning" | "danger" | "neutral";
 
@@ -24,7 +25,9 @@ export interface CockpitTimelineItem { id: string; time: string; title: string; 
 export interface CockpitPipelineStage { stage: string; label: string; count: number; value: number }
 export interface CockpitInsight { id: string; icon: string; tone: Tone; text: string; href: string }
 export interface CockpitOpportunity { id: string; kind: string; title: string; detail: string; actionLabel: string; href: string | null; score: number | null }
-export interface CockpitClient { id: string; name: string; sub: string; tag: string | null; tagTone: Tone; href: string }
+export interface CockpitClient { id: string; name: string; sub: string; tag: string | null; tagTone: Tone; href: string; whatsappUrl: string | null }
+// A private-owner property (no broker / no exclusivity) the agent could RECRUIT.
+export interface CockpitRecruit { id: string; title: string; sub: string; details: string | null; price: string; badge: string; imageUrl: string | null; href: string; whatsappUrl: string | null }
 
 export interface MyDayCockpit {
   agentName: string;
@@ -44,6 +47,8 @@ export interface MyDayCockpit {
   opportunitiesTotal: number;
   clients: CockpitClient[];
   clientsTotal: number;
+  recruitment: CockpitRecruit[];
+  recruitmentTotal: number;
   state: "active" | "quiet";
 }
 
@@ -70,6 +75,42 @@ function israelHm(iso: string): string {
   catch { return ""; }
 }
 const ilsC = (n: number) => (n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `₪${Math.round(n / 1000)}K` : `₪${Math.round(n).toLocaleString("he-IL")}`);
+const ilsFull = (n: number | null | undefined) => (n == null ? "" : `₪${Math.round(n).toLocaleString("he-IL")}`);
+
+// Owner phone → wa.me (IL) with a concise RECRUITMENT opener (soft intent, not a
+// hard-coded production template — offices can layer real templates later).
+function recruitWhatsappUrl(phone: string | null, city: string | null): string | null {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length < 9) return null;
+  let intl = digits;
+  if (intl.startsWith("972")) { /* keep */ }
+  else if (intl.startsWith("0")) intl = "972" + intl.slice(1);
+  else if (intl.length === 9) intl = "972" + intl;
+  else return null;
+  const where = city ? ` ב${city}` : "";
+  const msg = `שלום, ראיתי את הנכס שלך${where} ואשמח להציע שיווק מקצועי ובלעדי דרך המשרד שלנו 🙂`;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+}
+// Buyer/lead phone → wa.me (IL) for a light follow-up nudge (no fixed template).
+function contactWhatsappUrl(phone: string | null, name: string | null): string | null {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length < 9) return null;
+  let intl = digits;
+  if (intl.startsWith("972")) { /* keep */ }
+  else if (intl.startsWith("0")) intl = "972" + intl.slice(1);
+  else if (intl.length === 9) intl = "972" + intl;
+  else return null;
+  const who = name ? ` ${name.split(/\s+/)[0]}` : "";
+  const msg = `היי${who}, רק בודק מה שלומך וממשיך איתך על מה שחיפשנו 🙂`;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+}
+function firstImageUrl(images: unknown): string | null {
+  if (!Array.isArray(images) || images.length === 0) return null;
+  const f = images[0];
+  if (typeof f === "string") return f;
+  if (f && typeof f === "object") { const o = f as Record<string, unknown>; return (o.url as string) ?? (o.src as string) ?? (o.image as string) ?? null; }
+  return null;
+}
 
 /**
  * Assemble the "היום שלי" cockpit view-model. All sources are best-effort: a failed
@@ -80,8 +121,9 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   const now = new Date();
   const { profile } = await getSessionContext();
   const agentName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "סוכן";
+  const cityName = profile?.primary_city ?? null;
 
-  const [queueR, planR, kpiR, tasksR, leadsR, dealsR, buyersR] = await Promise.allSettled([
+  const [queueR, planR, kpiR, tasksR, leadsR, dealsR, buyersR, recruitR] = await Promise.allSettled([
     getBrokerIntelligenceQueue({ limit: 14 }),
     getAgentDailyPlan(),
     getHomeKpiExtras(),
@@ -89,6 +131,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
     getSocialLeadsBoard(),
     getDealsBoard(),
     listBuyerBoard(),
+    externalListingRepository.listPrivateOwnerListings(8, cityName),
   ]);
   const queue = queueR.status === "fulfilled" ? queueR.value : null;
   const plan = planR.status === "fulfilled" ? planR.value : null;
@@ -97,6 +140,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   const leads = leadsR.status === "fulfilled" ? leadsR.value : null;
   const deals = dealsR.status === "fulfilled" ? dealsR.value : null;
   const buyers = buyersR.status === "fulfilled" ? buyersR.value : null;
+  const recruitRows = recruitR.status === "fulfilled" ? recruitR.value : [];
 
   const role = (plan?.plan.role ?? "agent") as "agent" | "manager" | "owner";
   const newLeads = leads?.counts.new ?? 0;
@@ -119,7 +163,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   if (queue) {
     for (const it of queue.items) {
       const isUrgent = it.urgency === "critical" || it.urgency === "high";
-      if (isUrgent && actions.length < 5) {
+      if (isUrgent && actions.length < 3) {
         actions.push({
           id: it.id, icon: AREA_ICON[it.area] ?? "Bell", tone: URGENCY_TONE[it.urgency] ?? "brand",
           title: it.title, sub: it.why, actionLabel: it.suggestedAction, href: it.href ?? "/action-center", urgency: it.urgency,
@@ -188,10 +232,33 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
         sub: days === null ? "טרם נוצר קשר" : `אין קשר ${days} ימים`,
         tag: hot ? "לקוח חם" : "לקוח חמים", tagTone: hot ? "danger" : "warning",
         href: `/buyers/${b.id}`,
+        whatsappUrl: contactWhatsappUrl(b.phone, b.full_name),
       });
     }
   }
   const clientsTotal = buyers?.followUp.length ?? 0;
+
+  // ── נכסים שכדאי לגייס — REAL private-owner / no-exclusivity listings to recruit. ─
+  // Image-first cards: "צפה בנכס" (open the listing) + "גיוס מהיר" (owner WhatsApp).
+  const recruitment: CockpitRecruit[] = recruitRows.slice(0, 8).map((l) => {
+    const rooms = l.rooms != null ? `${l.rooms} חד׳` : null;
+    const place = l.neighborhood || l.city || null;
+    const area = l.sqm ?? l.area_sqm ?? null;
+    const floor = l.floor != null ? `קומה ${l.floor}` : null;
+    const detailBits = [area != null ? `${Math.round(area)} מ״ר` : null, floor].filter(Boolean) as string[];
+    return {
+      id: l.id,
+      title: (l.title && l.title.trim()) || place || "נכס פרטי",
+      sub: [rooms, place].filter(Boolean).join(" · "),
+      details: detailBits.length ? detailBits.join(" · ") : null,
+      price: ilsFull(l.price),
+      badge: "ללא בלעדיות",
+      imageUrl: firstImageUrl(l.images),
+      href: `/external-listings/${l.id}`,
+      whatsappUrl: recruitWhatsappUrl(l.contact_phone, l.city),
+    };
+  });
+  const recruitmentTotal = recruitRows.length;
 
   // ── ZI brief — DETERMINISTIC (no paid LLM per render); grounded in real counts. ─
   let ziBrief: MyDayCockpit["ziBrief"] = null;
@@ -221,6 +288,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
     pipeline, insights,
     opportunities, opportunitiesTotal,
     clients, clientsTotal,
+    recruitment, recruitmentTotal,
     state,
   };
 }
