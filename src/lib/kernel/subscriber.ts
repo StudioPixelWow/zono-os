@@ -166,6 +166,8 @@ const TITLES: Record<string, string> = {
   "support.ticket_resolved": "פנייה נסגרה",
   "billing.payment_failed": "תשלום נכשל",
   "billing.payment_verified": "תשלום אושר",
+  "accounting.document_issued": "חשבונית הופקה",
+  "accounting.document_failed": "הפקת חשבונית נכשלה",
   "billing.subscription_activated": "מנוי הופעל",
   "billing.subscription_cancelled": "מנוי בוטל",
   // Integrations.

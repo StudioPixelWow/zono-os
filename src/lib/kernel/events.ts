@@ -49,6 +49,9 @@ export const DOMAIN_EVENTS = {
   billingPaymentVerified: "billing.payment_verified",
   billingSubscriptionActivated: "billing.subscription_activated",
   billingSubscriptionCancelled: "billing.subscription_cancelled",
+  // Accounting (Morning/Green-Invoice document lifecycle — downstream of a verified payment)
+  accountingDocumentIssued: "accounting.document_issued",
+  accountingDocumentFailed: "accounting.document_failed",
   // Meetings (dispatcher-scheduled reminder)
   meetingReminder: "meeting.reminder",
   // Property

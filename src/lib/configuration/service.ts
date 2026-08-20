@@ -21,6 +21,7 @@ export function getConfiguration(): ConfigItem[] {
     emailItem(),
     whatsappItem(),
     growItem(),
+    morningItem(),
     { key: "social", label: "רשתות חברתיות", status: "missing", note: "לא מוגדר — מאגר טוקנים עתידי (social_connection_vault)" },
   ];
 }
@@ -53,4 +54,19 @@ function growItem(): ConfigItem {
   const status: ConfigStatus = user && pageCode && apiKey ? "configured" : (user || pageCode || apiKey) ? "partial" : "missing";
   return { key: "grow", label: "חיוב (GROW)", status,
     note: status === "configured" ? "מוגדר — אימות תשלום מתבצע מול השרת" : "חסרים משתני GROW (user-id / page-code / api-key) — חיוב לא פעיל" };
+}
+
+// Morning / Green Invoice auto-invoicing (accounting/morning-config.ts): needs an
+// API id + secret. Reports environment (sandbox/production) and whether a document
+// type was chosen. Never exposes the credentials — presence only.
+function morningItem(): ConfigItem {
+  const id = has("MORNING_API_ID");
+  const secret = has("MORNING_API_SECRET");
+  const env = (process.env.MORNING_ENV || "sandbox").toLowerCase() === "production" ? "production" : "sandbox";
+  const status: ConfigStatus = id && secret ? "configured" : (id || secret) ? "partial" : "missing";
+  const docSet = has("MORNING_DOCUMENT_TYPE");
+  return { key: "morning", label: "הפקת חשבוניות (Morning)", status,
+    note: status === "configured"
+      ? `מחובר · סביבה: ${env === "production" ? "ייצור" : "בדיקות (sandbox)"}${docSet ? "" : " · חסר MORNING_DOCUMENT_TYPE (ברירת מחדל 320 — נדרש אישור רו״ח)"}`
+      : "חסרים משתני Morning (API id / secret) — חשבוניות לא יופקו אוטומטית" };
 }

@@ -50,6 +50,12 @@ export interface Payment {
   verified: boolean;
   verifiedAt: string | null;
   createdAt: string;
+  // Morning / Green-Invoice accounting document (downstream of a verified payment).
+  invoiceStatus: "pending" | "issuing" | "issued" | "failed" | null;
+  invoiceNumber: string | null;
+  invoiceUrl: string | null;
+  invoiceType: number | null;   // Morning document type code (e.g. 320)
+  invoiceIssuedAt: string | null;
 }
 
 // ── License model (Part 5) — a projection over the existing org_plans record ─

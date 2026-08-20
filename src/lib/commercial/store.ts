@@ -18,7 +18,7 @@ import type {
 // convention (not in the generated Database union). Local row shapes keep the
 // mappers typed.
 interface DraftRow { id: string; token: string; email: string | null; auth_user_id: string | null; org_id: string | null; status: string; current_step: number; plan_tier: string | null; data: RegistrationData; expires_at: string }
-interface PaymentRow { id: string; draft_id: string | null; org_id: string | null; provider: string; provider_txn_id: string | null; plan_tier: string; amount_ils: number; currency: string; status: string; verified: boolean; verified_at: string | null; created_at: string }
+interface PaymentRow { id: string; draft_id: string | null; org_id: string | null; provider: string; provider_txn_id: string | null; plan_tier: string; amount_ils: number; currency: string; status: string; verified: boolean; verified_at: string | null; created_at: string; invoice_status?: string | null; invoice_number?: string | null; invoice_url?: string | null; invoice_type?: number | null; invoice_issued_at?: string | null }
 interface SubRow { org_id: string; plan_tier: string; status: string; period_start: string | null; period_end: string | null; trial_ends_at: string | null; grace_until: string | null; grow_subscription_id: string | null; cancel_at_period_end: boolean }
 
 const toDraft = (r: DraftRow): RegistrationDraft => ({
@@ -30,6 +30,8 @@ const toPayment = (r: PaymentRow): Payment => ({
   id: r.id, draftId: r.draft_id, orgId: r.org_id, provider: r.provider, providerTxnId: r.provider_txn_id,
   planTier: r.plan_tier as PlanTier, amountIls: Number(r.amount_ils), currency: r.currency,
   status: r.status as PaymentStatus, verified: r.verified === true, verifiedAt: r.verified_at, createdAt: r.created_at,
+  invoiceStatus: (r.invoice_status as Payment["invoiceStatus"]) ?? null, invoiceNumber: r.invoice_number ?? null,
+  invoiceUrl: r.invoice_url ?? null, invoiceType: r.invoice_type ?? null, invoiceIssuedAt: r.invoice_issued_at ?? null,
 });
 const toSub = (r: SubRow): Subscription => ({
   orgId: r.org_id, planTier: r.plan_tier as PlanTier, status: r.status as SubscriptionStatus,

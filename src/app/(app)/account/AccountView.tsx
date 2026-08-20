@@ -7,9 +7,11 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { changePlanAction, cancelRenewalAction, reactivateAction } from "@/lib/commercial/self-service";
+import { retryAccountingDocumentAction } from "@/lib/accounting/actions";
 import { planCards } from "@/lib/commercial/plans";
+import { MORNING_DOC_TYPE_HE } from "@/lib/accounting/morning-policy";
 import type { AccountOverview } from "@/lib/commercial/account";
-import type { PlanTier } from "@/lib/commercial/types";
+import type { PlanTier, Payment } from "@/lib/commercial/types";
 
 const STATUS_HE: Record<string, string> = {
   trial: "תקופת ניסיון", pending_payment: "ממתין לתשלום", active: "פעיל", suspended: "מושהה",
@@ -78,9 +80,12 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
         {payments.length === 0 ? <p className="text-muted text-[12px]">אין תשלומים עדיין.</p> : (
           <ul className="flex flex-col gap-1.5">
             {payments.map((p) => (
-              <li key={p.id} className="flex items-center justify-between rounded-[10px] border border-[var(--line)] px-3 py-2 text-[12px]">
-                <span className="text-ink font-bold">₪{p.amountIls} · {CARDS.find((c) => c.tier === p.planTier)?.label ?? p.planTier}</span>
-                <span className="text-muted">{STATUS_HE[p.status] ?? p.status}{p.verified ? " ✓" : ""} · {new Date(p.createdAt).toLocaleDateString("he-IL")}</span>
+              <li key={p.id} className="flex flex-col gap-1 rounded-[10px] border border-[var(--line)] px-3 py-2 text-[12px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-ink font-bold">₪{p.amountIls} · {CARDS.find((c) => c.tier === p.planTier)?.label ?? p.planTier}</span>
+                  <span className="text-muted">{STATUS_HE[p.status] ?? p.status}{p.verified ? " ✓" : ""} · {new Date(p.createdAt).toLocaleDateString("he-IL")}</span>
+                </div>
+                {p.verified && <InvoiceRow payment={p} />}
               </li>
             ))}
           </ul>
@@ -116,4 +121,37 @@ function Stat({ label, value }: { label: string; value: string }) {
       <span className="text-muted text-[10px] font-bold">{label}</span>
     </div>
   );
+}
+
+// Accounting-document (Morning) state per verified payment. Honest wording keyed to
+// the ACTUAL document type — a receipt is never called "חשבונית". Owner/manager may
+// retry a failed issuance (re-checked server-side; idempotent).
+function InvoiceRow({ payment: p }: { payment: Payment }) {
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const docHe = MORNING_DOC_TYPE_HE[p.invoiceType ?? 320] ?? "חשבונית";
+
+  if (p.invoiceStatus === "issued") {
+    return (
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-success font-bold">{docHe} הופקה{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</span>
+        {p.invoiceUrl ? <a href={p.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-brand-strong font-bold">צפייה ב{docHe} ↗</a> : null}
+      </div>
+    );
+  }
+  if (p.invoiceStatus === "failed") {
+    return (
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-warning font-bold">הפקת החשבונית נכשלה{err ? ` · ${err}` : ""}</span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => { setErr(null); start(async () => { const r = await retryAccountingDocumentAction(p.id); if (!r.ok) setErr(r.error ?? "retry_failed"); }); }}
+          className="text-brand-strong font-bold disabled:opacity-50"
+        >{pending ? "מפיק…" : "נסה להפיק שוב"}</button>
+      </div>
+    );
+  }
+  // pending / issuing / not-yet-attempted
+  return <span className="text-muted text-[11px]">ממתין להפקת חשבונית</span>;
 }

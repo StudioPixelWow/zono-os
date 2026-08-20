@@ -136,6 +136,13 @@ export async function POST(req: NextRequest) {
         payload: { status: "paid", amount: typeof d.sum === "number" ? `₪${d.sum}` : (d.sum ?? null) },
         idempotencyKey: `billing.verified:${transactionId}`,
       });
+      // Accounting side effect (Morning/Green-Invoice): issue the tax document for
+      // the now-verified payment. Fully error-isolated — a Morning outage marks the
+      // row retryable for the recovery cron and NEVER rolls back the payment /
+      // subscription or fails the webhook. Idempotent + concurrency-safe internally.
+      await import("@/lib/accounting/document-service")
+        .then((m) => m.ensureAccountingDocumentForVerifiedPayment(paymentId))
+        .catch(() => undefined);
     }
 
     // approveTransaction — acknowledgment only (docs: transaction processes even if
