@@ -33,6 +33,8 @@ export interface OfficeDealRow {
   id: string; title: string; stage: string; value: number | null; agentName: string | null;
   ageDays: number | null; stuck: boolean; href: string;
 }
+export interface OfficeMeetingRow { id: string; title: string; time: string; agentName: string | null; kind: string }
+export interface OfficeEventRow { id: string; title: string; when: string; icon: string }
 export interface OfficeManagementBoard {
   officeName: string;
   summary: { agents: number; activeProperties: number; activeLeads: number; activeDeals: number; meetingsToday: number };
@@ -41,6 +43,8 @@ export interface OfficeManagementBoard {
   propertiesTotal: number;
   leads: { unassigned: number; hot: number; overdue: number; newToday: number; byAgent: { name: string; count: number }[] };
   deals: { active: number; stuck: number; lateStage: number; wonPeriod: number; rows: OfficeDealRow[] };
+  meetingsToday: OfficeMeetingRow[];        // rail — the office's real meetings for today
+  recentEvents: OfficeEventRow[];           // rail — a few most-recent real office events
   intelligenceTeaser: { text: string; tone: string }[];
   center: ManagerCenterView["center"];      // existing exceptions / command center (attention)
   reassignAgents: { id: string; name: string }[];
@@ -50,6 +54,25 @@ const STATUS_HE: Record<string, string> = {
   active: "פעיל", published: "מפורסם", ready: "מוכן", draft: "טיוטה", under_offer: "התקבלה הצעה",
   in_contract: "בחוזה", sold: "נמכר", rented: "הושכר", withdrawn: "הוסר", archived: "בארכיון",
 };
+const MEETING_KIND_HE: Record<string, string> = {
+  meeting: "פגישה", viewing: "ביקור", call: "שיחה", signing: "חתימה", valuation: "הערכת שווי", other: "פגישה",
+};
+const EVENT_ICON: Record<string, string> = {
+  "lead.created": "UserPlus", "lead.contacted": "MessageCircle", "property.contact_clicked": "Building",
+  "deal.updated": "Handshake", "meeting.scheduled": "Calendar",
+};
+function clockHe(iso: string): string {
+  return new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem", hour12: false }).format(new Date(iso));
+}
+function relativeHe(iso: string, nowMs: number): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const h = Math.max(0, (nowMs - t) / 3_600_000);
+  if (h < 1) return "לפני פחות משעה";
+  if (h < 24) return `לפני ${Math.floor(h)} שעות`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "אתמול" : `לפני ${d} ימים`;
+}
 
 function israelTodayBounds(now: Date): { start: string; end: string } {
   const d = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
@@ -75,25 +98,27 @@ export async function getOfficeManagementBoard(): Promise<OfficeManagementBoard 
   // Cast table refs to `never` (codebase pattern) — office_members + the additive
   // office_member_id columns are not yet in the generated schema types.
   const t = (name: string) => db.from(name as never);
-  const [orgRes, membersRes, propsRes, leadsRes, dealsRes, meetingsRes, tasksRes, recsRes, officeIntelRes] = await Promise.all([
+  const [orgRes, membersRes, propsRes, leadsRes, dealsRes, meetingsRes, tasksRes, recsRes, officeIntelRes, activityRes] = await Promise.all([
     t("organizations").select("name").eq("id", orgId).maybeSingle(),
     t("office_members").select("id,full_name,role,specialty,status").eq("org_id", orgId).order("role", { ascending: false }),
     t("properties").select("id,office_member_id,status,title,city,neighborhood,rooms,size_sqm,price,monthly_rent,listing_kind,has_exclusivity,primary_image_url,updated_at").eq("org_id", orgId).limit(500),
     t("leads").select("id,office_member_id,owner_id,stage,score,last_activity_at,created_at").eq("org_id", orgId).limit(1000),
     t("deals").select("id,office_member_id,title,stage,status,value,created_at,closed_at").eq("org_id", orgId).limit(500),
-    t("meetings").select("id,office_member_id,start_at,status").eq("org_id", orgId).gte("start_at", todayStart).lt("start_at", todayEnd).limit(500),
+    t("meetings").select("id,office_member_id,start_at,status,title,type").eq("org_id", orgId).gte("start_at", todayStart).lt("start_at", todayEnd).limit(500),
     t("tasks").select("id,office_member_id,status,due_at").eq("org_id", orgId).eq("status", "todo").limit(2000),
     t("customer_property_recommendations").select("property_id,status").eq("org_id", orgId).in("status", ["interested", "viewing_requested"]).limit(2000).then((r) => r, () => ({ data: [] as { property_id: string; status: string }[] })),
     t("office_intelligence_profiles").select("ai_office_summary,ai_management_plan,office_health_score,health_level").eq("organization_id", orgId).maybeSingle().then((r) => r, () => ({ data: null })),
+    t("activity_events").select("id,title,event_type,occurred_at").eq("org_id", orgId).order("occurred_at", { ascending: false }).limit(6).then((r) => r, () => ({ data: [] as { id: string; title: string; event_type: string; occurred_at: string }[] })),
   ]);
 
   const members = (membersRes.data ?? []) as { id: string; full_name: string; role: string; specialty: string | null; status: string }[];
   const props = (propsRes.data ?? []) as Array<{ id: string; office_member_id: string | null; status: string; title: string; city: string | null; neighborhood: string | null; rooms: number | null; size_sqm: number | null; price: number | null; monthly_rent: number | null; listing_kind: string | null; has_exclusivity: boolean | null; primary_image_url: string | null }>;
   const leads = (leadsRes.data ?? []) as Array<{ id: string; office_member_id: string | null; owner_id: string | null; stage: string; score: number | null; last_activity_at: string | null; created_at: string }>;
   const deals = (dealsRes.data ?? []) as Array<{ id: string; office_member_id: string | null; title: string; stage: string; status: string; value: number | null; created_at: string; closed_at: string | null }>;
-  const meetings = (meetingsRes.data ?? []) as Array<{ id: string; office_member_id: string | null; start_at: string; status: string }>;
+  const meetings = (meetingsRes.data ?? []) as Array<{ id: string; office_member_id: string | null; start_at: string; status: string; title: string | null; type: string | null }>;
   const tasks = (tasksRes.data ?? []) as Array<{ id: string; office_member_id: string | null; status: string; due_at: string | null }>;
   const recs = ((recsRes as { data: { property_id: string; status: string }[] | null }).data ?? []);
+  const events = (((activityRes as { data: { id: string; title: string; event_type: string; occurred_at: string }[] | null }).data) ?? []);
 
   const nameOf = new Map(members.map((m) => [m.id, m.full_name]));
   const interestedByProp = new Map<string, number>();
@@ -169,6 +194,27 @@ export async function getOfficeManagementBoard(): Promise<OfficeManagementBoard 
     rows: dealRows,
   };
 
+  // ── Rail: today's real office meetings (soonest first) ───────────────────────
+  const meetingsToday: OfficeMeetingRow[] = meetings
+    .filter((mt) => mt.status !== "cancelled")
+    .sort((a, b) => a.start_at.localeCompare(b.start_at))
+    .slice(0, 5)
+    .map((mt) => ({
+      id: mt.id,
+      title: mt.title && mt.title.trim() && !mt.title.startsWith("[") ? mt.title : (MEETING_KIND_HE[mt.type ?? "other"] ?? "פגישה"),
+      time: clockHe(mt.start_at),
+      agentName: mt.office_member_id ? nameOf.get(mt.office_member_id) ?? null : null,
+      kind: MEETING_KIND_HE[mt.type ?? "other"] ?? "פגישה",
+    }));
+
+  // ── Rail: a few most-recent real office events ───────────────────────────────
+  const recentEvents: OfficeEventRow[] = events.slice(0, 3).map((ev) => ({
+    id: ev.id,
+    title: ev.title || ev.event_type,
+    when: relativeHe(ev.occurred_at, now.getTime()),
+    icon: EVENT_ICON[ev.event_type] ?? "Sparkles",
+  }));
+
   // ── Intelligence teaser (canonical office_intelligence_profiles; no recompute) ─
   const oi = (officeIntelRes as { data: { ai_office_summary: string | null; ai_management_plan: string | null; office_health_score: number | null } | null }).data;
   const intelligenceTeaser: { text: string; tone: string }[] = [];
@@ -178,7 +224,7 @@ export async function getOfficeManagementBoard(): Promise<OfficeManagementBoard 
   return {
     officeName: ((orgRes.data as { name?: string } | null)?.name) || "המשרד שלי",
     summary, agents, properties: propertyCards, propertiesTotal: activeProps.length,
-    leads: leadsSummary, deals: dealsSummary, intelligenceTeaser,
+    leads: leadsSummary, deals: dealsSummary, meetingsToday, recentEvents, intelligenceTeaser,
     center: managerView.center, reassignAgents: managerView.agents,
   };
 }
