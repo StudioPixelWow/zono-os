@@ -35,6 +35,8 @@
     "qa:meta-content": "tsx src/lib/meta/content/qa.ts",
     "qa:meta-publish": "tsx src/lib/meta/publish/qa.ts",
     "test:epic3": "node --experimental-strip-types --test scripts/epic3-tests/*.ts",
+    "test:fd-closure": "node --experimental-strip-types --test scripts/fd-closure-tests/*.test.ts",
+    "test:aliased": "node --import tsx --test",
     "qa:platform-access": "tsx scripts/platform-access-qa.ts",
     "qa:platform-billing": "tsx scripts/platform-billing-qa.ts",
     "qa:platform-ops": "tsx scripts/platform-ops-qa.ts",
