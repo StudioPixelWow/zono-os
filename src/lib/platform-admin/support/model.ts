@@ -36,6 +36,25 @@ export function isClosing(to: TicketStatus): boolean { return to === "closed"; }
 /** Active = not resolved/closed (what "open tickets" counts). */
 export function isActive(s: TicketStatus): boolean { return s !== "resolved" && s !== "closed"; }
 
+// ── Canonical primary next action (deterministic, derived only from existing
+// status + assignment — no new state, no migration). Gives the operator one
+// at-a-glance "who is this blocked on / what to do next" signal. ──────────────
+export type SupportBlockedOn = "customer" | "us" | "none";
+export interface SupportNextAction { label: string; blockedOn: SupportBlockedOn; tone: "brand" | "warning" | "neutral" | "success" }
+export function primaryNextAction(t: { status: TicketStatus; assigned_operator_id: string | null }): SupportNextAction {
+  switch (t.status) {
+    case "waiting_customer": return { label: "ממתין לתגובת הלקוח", blockedOn: "customer", tone: "neutral" };
+    case "resolved":         return { label: "נפתר — לסגור או להמתין לאישור הלקוח", blockedOn: "none", tone: "success" };
+    case "closed":           return { label: "סגור — אין פעולה נדרשת", blockedOn: "none", tone: "neutral" };
+    case "in_progress":      return { label: "בטיפול — להשיב ולעדכן את הלקוח", blockedOn: "us", tone: "brand" };
+    case "open":
+      return t.assigned_operator_id
+        ? { label: "לענות ללקוח", blockedOn: "us", tone: "warning" }
+        : { label: "לשייך נציג ולטפל", blockedOn: "us", tone: "warning" };
+    default:                 return { label: "לבדוק את הפנייה", blockedOn: "us", tone: "warning" };
+  }
+}
+
 // ── Priority ────────────────────────────────────────────────────────────────
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 export const TICKET_PRIORITIES: TicketPriority[] = ["low", "normal", "high", "urgent"];

@@ -495,10 +495,11 @@ export function PropertiesOSView({
   const potentialCommission = useMemo(() => activeProps.reduce((s, p) => s + (p.price ?? 0) * 0.02, 0), [activeProps]);
 
   const kpis: Kpi[] = [
-    { label: "נכסים פעילים", value: String(activeProps.length), icon: "Building2", tone: "bg-brand-soft text-brand-strong", delta: "מהחודש שעבר", deltaUp: true, highlight: true },
+    // No delta/trend arrows: month-over-month is not computed, so an up-arrow would be a fabricated trend signal.
+    { label: "נכסים פעילים", value: String(activeProps.length), icon: "Building2", tone: "bg-brand-soft text-brand-strong", highlight: true },
     { label: "נכסים חמים", value: String(properties.filter((p) => (scoreOf(p) ?? 0) >= 85).length), icon: "Flame", tone: "bg-danger-soft text-danger" },
     { label: "דורשים טיפול", value: String(attention.length), icon: "AlertTriangle", tone: "bg-warning-soft text-warning" },
-    { label: "עמלות פוטנציאליות", value: ilsCompact(potentialCommission), icon: "Wallet", tone: "bg-success-soft text-success", delta: "החודש", deltaUp: true },
+    { label: "עמלות פוטנציאליות", value: ilsCompact(potentialCommission), icon: "Wallet", tone: "bg-success-soft text-success" },
   ];
 
   return (

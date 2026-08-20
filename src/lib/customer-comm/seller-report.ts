@@ -21,7 +21,7 @@ const ils = (n: number | null | undefined) =>
 
 interface WeeklyStats { publications: number; inquiries: number; qualified: number; viewings: number; activeCampaigns: number; priceUpdates: number }
 
-async function weeklyStats(db: any, orgId: string, propertyId: string, sinceIso: string): Promise<WeeklyStats> {
+async function weeklyStats(db: any, orgId: string, propertyId: string, sinceIso: string, untilIso: string): Promise<WeeklyStats> {
   const countOf = async (q: any): Promise<number> => { try { const { count } = await q; return count ?? 0; } catch { return 0; } };
   const [publications, leadsInq, contactClicks, qualified, viewings, activeCampaigns, priceUpdates] = await Promise.all([
     countOf(db.from("distribution_posts").select("id", { count: "exact", head: true })
@@ -32,8 +32,10 @@ async function weeklyStats(db: any, orgId: string, propertyId: string, sinceIso:
       .eq("org_id", orgId).eq("entity_type", "property").eq("entity_id", propertyId).eq("event_type", "property.contact_clicked").gte("occurred_at", sinceIso)),
     countOf(db.from("leads").select("id", { count: "exact", head: true })
       .eq("org_id", orgId).eq("property_id", propertyId).eq("stage", "qualified").gte("created_at", sinceIso)),
+    // Viewings that ACTUALLY took place this week — bounded [sinceIso, untilIso)
+    // so future-dated viewings later in the week aren't counted as "this week".
     countOf(db.from("meetings").select("id", { count: "exact", head: true })
-      .eq("org_id", orgId).eq("property_id", propertyId).in("type", ["viewing", "open_house"]).gte("start_at", sinceIso)),
+      .eq("org_id", orgId).eq("property_id", propertyId).in("type", ["viewing", "open_house"]).gte("start_at", sinceIso).lt("start_at", untilIso)),
     countOf(db.from("distribution_campaigns").select("id", { count: "exact", head: true })
       .eq("org_id", orgId).eq("property_id", propertyId).eq("status", "active")),
     // Price/property update messages delivered to relevant buyers this week (real
@@ -151,7 +153,7 @@ export async function runSellerWeeklyReports(orgId: string, opts?: { limit?: num
     if (!seller?.email) { skipped++; continue; }
     considered++;
 
-    const stats = await weeklyStats(db, orgId, p.id, sinceIso);
+    const stats = await weeklyStats(db, orgId, p.id, sinceIso, new Date(nowMs).toISOString());
     const uUrl = unsubUrl({ o: orgId, t: "seller", c: sellerId, ch: "email" });
     // Enrich with the deterministic lifecycle projection (status + next agent step)
     // and a secure full-report link. Best-effort — never blocks the weekly send.

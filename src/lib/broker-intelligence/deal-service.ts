@@ -10,18 +10,14 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { rankDeals, type DealSignals } from "./deal";
 import type { Recommendation } from "./types";
+import { DEAL_STAGE_LABEL } from "@/lib/deals/engine";
 
 const DAY = 86_400_000;
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
-// Hebrew labels for the free-text deal_profiles.deal_stage (never show the raw
-// English value in the UI).
-const DEAL_STAGE_HE: Record<string, string> = {
-  new_opportunity: "הזדמנות חדשה", contacted: "יצירת קשר", meeting_scheduled: "פגישה נקבעה",
-  property_visit: "ביקור בנכס", negotiation: "משא ומתן", offer_sent: "הצעה נשלחה",
-  offer_received: "הצעה התקבלה", agreement_draft: "טיוטת הסכם", legal_review: "בדיקה משפטית",
-  signed: "נחתם", closed: "נסגר", lost: "אבוד",
-};
+// Hebrew labels for deal_profiles.deal_stage — reuse the ONE canonical projection
+// label map from the deal engine (no second copy to drift).
+const DEAL_STAGE_HE = DEAL_STAGE_LABEL as Record<string, string>;
 
 export interface DealIntelligence {
   recommendations: Recommendation[];

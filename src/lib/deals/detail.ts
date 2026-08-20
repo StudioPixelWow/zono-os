@@ -91,6 +91,15 @@ export async function getDealDetail(dealId: string): Promise<DealDetail | null> 
     nextBestAction = (pr?.next_best_action as string) ?? null;
     primaryBlocker = (pr?.primary_blocker as string) ?? null;
   } catch { /* projection optional */ }
+  // Terminal deals (won/lost/closed) have no "next action" — the projection may
+  // still hold a stale one from the last active recompute, so clear it here. Same
+  // terminal test the Daily command center uses on deals.stage/status.
+  {
+    const terminalRe = /won|lost|clos|cancel/i;
+    const stageRaw = (deal.stage as string) ?? "";
+    const statusRaw = (deal.status as string) ?? "";
+    if (terminalRe.test(stageRaw) || terminalRe.test(statusRaw)) { nextBestAction = null; primaryBlocker = null; }
+  }
 
   return {
     id: deal.id as string, title: (deal.title as string) ?? "עסקה", stage: (deal.stage as string) ?? "new", status: (deal.status as string) ?? "open",

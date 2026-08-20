@@ -5,7 +5,7 @@
 import { notFound } from "next/navigation";
 import { authorizePlatform, currentOperatorCan } from "@/lib/platform-admin/server/auth";
 import { getTicketDetail, listAssignableOperators } from "@/lib/platform-admin/server/support";
-import { CATEGORY_LABEL, SOURCE_LABEL } from "@/lib/platform-admin/support/model";
+import { CATEGORY_LABEL, SOURCE_LABEL, primaryNextAction, type TicketStatus } from "@/lib/platform-admin/support/model";
 import { PlatformDenied } from "@/components/platform-admin/PlatformDenied";
 import { PageHeader, PanelCard, formatPlatformDateTime } from "@/components/platform-admin/ui";
 import { StatusChip, PriorityChip, NoteItem, SupportEmpty } from "@/components/platform-admin/support-ui";
@@ -25,6 +25,9 @@ export default async function Page({ params }: { params: Promise<{ ticketId: str
   const canManage = await currentOperatorCan("platform.support.manage");
   const canImpersonate = await currentOperatorCan("platform.support.impersonate");
   const operators = canManage ? await listAssignableOperators() : [];
+  const next = primaryNextAction({ status: t.status as TicketStatus, assigned_operator_id: t.assignedOperatorId });
+  const NEXT_TONE: Record<string, string> = { brand: "bg-brand-soft text-brand-strong", warning: "bg-warning-soft text-warning", success: "bg-success-soft text-success", neutral: "bg-surface text-muted" };
+  const BLOCKED_HE: Record<string, string> = { customer: "ממתין ללקוח", us: "אצלנו", none: "" };
 
   return (
     <div className="space-y-5">
@@ -38,6 +41,14 @@ export default async function Page({ params }: { params: Promise<{ ticketId: str
               <StatusChip status={t.status} /><PriorityChip priority={t.priority} />
               <span className="bg-surface text-muted rounded-md px-2 py-0.5 text-[11px] font-semibold">{CATEGORY_LABEL[t.category as keyof typeof CATEGORY_LABEL] ?? t.category}</span>
               <span className="bg-surface text-muted rounded-md px-2 py-0.5 text-[11px] font-semibold">{SOURCE_LABEL[t.source]}</span>
+            </div>
+            {/* Canonical primary next action — deterministic, from status + assignment. */}
+            <div className={`mb-3 flex items-center justify-between gap-2 rounded-lg px-3 py-2 ${NEXT_TONE[next.tone]}`}>
+              <div className="flex items-center gap-2">
+                <Icon name="Flame" size={13} />
+                <span className="text-[12px] font-black">הפעולה הבאה: {next.label}</span>
+              </div>
+              {BLOCKED_HE[next.blockedOn] && <span className="rounded-full bg-white/50 px-2 py-0.5 text-[10px] font-bold">{BLOCKED_HE[next.blockedOn]}</span>}
             </div>
             <p className="text-ink whitespace-pre-line px-1 text-[14px] leading-relaxed">{t.description || "אין תיאור"}</p>
             {t.linkedRef && (
