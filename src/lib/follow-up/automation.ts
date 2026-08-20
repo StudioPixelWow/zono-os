@@ -13,6 +13,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { emitBusinessEvent } from "@/lib/kernel/emit";
 import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 import { getFollowUpPolicy, loadStatesWithClient } from "./service";
+import { runIsolated } from "./isolate";
 import { type AutoTaskKind, type FollowUpState } from "./state";
 
 function autoTaskSpec(kind: AutoTaskKind, orgId: string): { title: string; dueAt: string | null } {
@@ -94,18 +95,21 @@ export async function reconcileOrgFollowUps(orgId: string, opts?: { limit?: numb
   return { org: orgId, leads: states.length, tasksCreated, events };
 }
 
-/** Reconcile a bounded set of orgs (cron entry point). */
-export async function reconcileAllOrgs(opts?: { orgLimit?: number; perOrgLimit?: number }): Promise<{ orgs: number; tasksCreated: number; events: number; results: ReconcileResult[] }> {
+/** Reconcile a bounded set of orgs (cron entry point). A single org's failure is
+ *  isolated (logged + counted) so it never aborts the whole run and starves the
+ *  remaining tenants — deterministic order keeps the scan stable across runs. */
+export async function reconcileAllOrgs(opts?: { orgLimit?: number; perOrgLimit?: number }): Promise<{ orgs: number; tasksCreated: number; events: number; failed: number; results: ReconcileResult[] }> {
   const db: any = createServiceRoleClient();
-  const { data } = await db.from("organizations").select("id").limit(opts?.orgLimit ?? 100);
+  const { data } = await db.from("organizations").select("id").order("id", { ascending: true }).limit(opts?.orgLimit ?? 100);
   const orgIds = ((data ?? []) as any[]).map((o) => o.id).filter(Boolean);
-  const results: ReconcileResult[] = [];
+  const { results, failed } = await runIsolated(
+    orgIds,
+    (id: string) => reconcileOrgFollowUps(id, { limit: opts?.perOrgLimit ?? 300 }),
+    (id, err) => console.error(`[followup-reconcile] org ${id} failed:`, err instanceof Error ? err.message : err),
+  );
   let tasksCreated = 0, events = 0;
-  for (const id of orgIds) {
-    const r = await reconcileOrgFollowUps(id, { limit: opts?.perOrgLimit ?? 300 });
-    results.push(r); tasksCreated += r.tasksCreated; events += r.events;
-  }
-  return { orgs: orgIds.length, tasksCreated, events, results };
+  for (const r of results) { tasksCreated += r.tasksCreated; events += r.events; }
+  return { orgs: orgIds.length, tasksCreated, events, failed, results };
 }
 
 // ── Event-driven hooks (exposed for the assign / meeting-complete flows to call

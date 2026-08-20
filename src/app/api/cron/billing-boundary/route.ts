@@ -19,14 +19,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { syncRecurringQuantityAtBoundary, cancelGrowRecurring } from "@/lib/commercial/recurring";
 import { reconcileVerifiedGrowActivations } from "@/lib/commercial/activation-reconcile";
+import { isCronAuthorized } from "@/lib/cron/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
+  return isCronAuthorized(process.env.CRON_SECRET, req.headers.get("authorization"));
 }
 
 interface SubRow {
@@ -36,10 +36,16 @@ interface SubRow {
 
 export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const startedMs = Date.now();
   const now = new Date().toISOString();
   const db = createServiceRoleClient();
 
+  // ── Sub-job A: recurring quantity/cancel boundary (fully isolated) ─────────
+  // Wrapped so a fetch/provider failure here can NEVER skip the activation
+  // reconciler below; each subscription is additionally isolated so one bad row
+  // does not abort the remaining bounded batch.
   let processed = 0, cancelled = 0, synced = 0, failed = 0, inert = 0;
+  let boundaryError: string | null = null;
   try {
     // Read active subscriptions (bounded), then select genuine DUE work in JS —
     // PostgREST cannot compare two columns, so drift is computed here. Provider
@@ -56,35 +62,51 @@ export async function GET(req: NextRequest) {
 
     for (const s of rows) {
       processed++;
-      const cancelDue = s.cancel_at_period_end === true && !!s.period_end && s.period_end <= now;
-      if (cancelDue) {
-        const r = await cancelGrowRecurring(s.org_id);
-        // Provider confirmed OR there is no live instruction to stop → finalize local.
-        if (r.ok || (!r.ok && (r.reason === "NO_RECURRING_SUBSCRIPTION" || r.reason === "PENDING_SANDBOX_CREDENTIALS"))) {
-          if (!r.ok && r.reason === "PENDING_SANDBOX_CREDENTIALS") inert++;
-          await db.from("subscriptions" as never).update({ status: "cancelled", updated_at: now } as never).eq("org_id", s.org_id);
-          cancelled++;
+      try {
+        const cancelDue = s.cancel_at_period_end === true && !!s.period_end && s.period_end <= now;
+        if (cancelDue) {
+          const r = await cancelGrowRecurring(s.org_id);
+          // Provider confirmed OR there is no live instruction to stop → finalize local.
+          if (r.ok || (!r.ok && (r.reason === "NO_RECURRING_SUBSCRIPTION" || r.reason === "PENDING_SANDBOX_CREDENTIALS"))) {
+            if (!r.ok && r.reason === "PENDING_SANDBOX_CREDENTIALS") inert++;
+            await db.from("subscriptions" as never).update({ status: "cancelled", updated_at: now } as never).eq("org_id", s.org_id);
+            cancelled++;
+          } else {
+            failed++; // PROVIDER_ERROR — never local-cancel on provider failure; retry next run.
+          }
         } else {
-          failed++; // PROVIDER_ERROR — never local-cancel on provider failure; retry next run.
+          // Quantity drift → provider-first push at the boundary.
+          const r = await syncRecurringQuantityAtBoundary(s.org_id);
+          if (r.ok) synced++;
+          else if (r.reason === "PENDING_SANDBOX_CREDENTIALS") inert++;
+          else if (r.reason === "NOT_OWED" || r.reason === "NO_RECURRING_SUBSCRIPTION") { /* nothing to do */ }
+          else failed++;
         }
-        continue;
+      } catch (err) {
+        failed++; // isolated: one subscription's failure never aborts the batch
+        console.error(`[billing-boundary] subscription ${s.org_id} failed:`, err instanceof Error ? err.message : err);
       }
-      // Quantity drift → provider-first push at the boundary.
-      const r = await syncRecurringQuantityAtBoundary(s.org_id);
-      if (r.ok) synced++;
-      else if (r.reason === "PENDING_SANDBOX_CREDENTIALS") inert++;
-      else if (r.reason === "NOT_OWED" || r.reason === "NO_RECURRING_SUBSCRIPTION") { /* nothing to do */ }
-      else failed++;
     }
-
-    // Recover any verified GROW payment whose subscription never converged to
-    // 'active' (webhook crashed between markPaymentVerified and activation).
-    // Idempotent + bounded; drives stranded payments through the canonical helper.
-    let activation = { checked: 0, activated: 0, alreadyConverged: 0, skipped: 0, failed: 0 };
-    try { activation = await reconcileVerifiedGrowActivations(); } catch { /* isolated: never aborts the boundary run */ }
-
-    return NextResponse.json({ ok: true, processed, cancelled, synced, failed, inert, activation, durationMs: Date.now() - new Date(now).getTime() });
-  } catch (e) {
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "billing_boundary_failed", processed, cancelled, synced, failed }, { status: 500 });
+  } catch (err) {
+    boundaryError = err instanceof Error ? err.message : "boundary_sub_job_failed";
+    console.error("[billing-boundary] boundary sub-job failed:", boundaryError);
   }
+
+  // ── Sub-job B: verified-GROW activation reconcile (independent) ────────────
+  // Recover any verified GROW payment whose subscription never converged to
+  // 'active' (webhook crashed between markPaymentVerified and activation).
+  // Idempotent + bounded. Runs regardless of the boundary sub-job's outcome.
+  let activation = { checked: 0, activated: 0, alreadyConverged: 0, skipped: 0, failed: 0 };
+  let activationError: string | null = null;
+  try { activation = await reconcileVerifiedGrowActivations(); }
+  catch (err) { activationError = err instanceof Error ? err.message : "activation_reconcile_failed"; console.error("[billing-boundary] activation reconcile failed:", activationError); }
+
+  // Both sub-jobs failing looks like infra failure (non-2xx); a single sub-job
+  // failure is a partial outcome reported honestly with ok:false + 200.
+  const ok = boundaryError === null && activationError === null;
+  const status = boundaryError !== null && activationError !== null ? 500 : 200;
+  return NextResponse.json(
+    { ok, processed, cancelled, synced, failed, inert, boundaryError, activation, activationError, durationMs: Date.now() - startedMs },
+    { status },
+  );
 }

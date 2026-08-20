@@ -18,6 +18,7 @@ import { sendCustomerEmail } from "./send";
 import { checkChannelEligibility } from "./consent";
 import { recoUrl } from "./recommend-tokens";
 import { unsubUrl } from "./unsubscribe";
+import { buyerMatchDedupKey, buyerMatchEventKey } from "./match-bundle-keys";
 import { dispatchExternal } from "@/lib/communication/dispatch";
 import { providerFor } from "@/lib/notify/providers";
 import { isQuietHours, morningSendTime } from "@/lib/communication/quiet-hours";
@@ -163,9 +164,11 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
       .slice(0, MAX_PER_BUNDLE);
     if (!props.length) { skipped++; continue; }
 
-    const bundleId = randomUUID();
+    const bundleId = randomUUID();                          // random: only the tracking URL + ledger grouping
     const viewUrl = recoUrl({ o: orgId, t: "buyer", c: buyerId, b: bundleId });
-    const dedupKey = `buyer-match:${buyerId}:${bundleId}`;   // ONE business communication across channels
+    // Deterministic per buyer-per-Israel-day so two concurrent/replayed runs
+    // resolve to the SAME dedup key → unique(org_id, dedup_key) blocks a 2nd send.
+    const dedupKey = buyerMatchDedupKey(buyerId, nowMs);   // ONE business communication across channels
 
     // ── Deterministic channel strategy — WhatsApp preferred, email fallback.
     //    Consent is evaluated INDEPENDENTLY per channel (email opt-in never implies
@@ -227,7 +230,7 @@ export async function runBuyerMatchBundlesForOrg(orgId: string, opts?: { limit?:
 
     await emitBusinessEvent({
       type: DOMAIN_EVENTS.buyerMatchesReady, entityType: "buyer", entityId: buyerId, orgId,
-      idempotencyKey: `buyer.matches_ready:${bundleId}`,
+      idempotencyKey: buyerMatchEventKey(buyerId, nowMs),
       metadata: { count: props.length, bundleId, channel: channelUsed },
     });
     bundlesSent++;

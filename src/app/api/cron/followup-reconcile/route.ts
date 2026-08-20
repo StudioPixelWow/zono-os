@@ -9,14 +9,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { reconcileAllOrgs } from "@/lib/follow-up/automation";
 import { reconcileAllOrgsDeals } from "@/lib/follow-up/deal-automation";
+import { isCronAuthorized } from "@/lib/cron/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
+  return isCronAuthorized(process.env.CRON_SECRET, req.headers.get("authorization"));
 }
 
 export async function GET(req: NextRequest) {
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
     const d = await reconcileAllOrgsDeals({ orgLimit: 100, perOrgLimit: 300 });
     return NextResponse.json({
       ok: true,
-      leads: { orgs: r.orgs, tasksCreated: r.tasksCreated, events: r.events },
-      deals: { orgs: d.orgs, tasksCreated: d.tasksCreated, stale: d.stale },
+      leads: { orgs: r.orgs, tasksCreated: r.tasksCreated, events: r.events, failedOrgs: r.failed },
+      deals: { orgs: d.orgs, tasksCreated: d.tasksCreated, stale: d.stale, failedOrgs: d.failed },
       durationMs: Date.now() - started,
     });
   } catch (e) {

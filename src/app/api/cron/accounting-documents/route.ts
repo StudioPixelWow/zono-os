@@ -11,6 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { ensureAccountingDocumentForVerifiedPayment } from "@/lib/accounting/document-service";
 import { morningConfig } from "@/lib/accounting/morning-config";
+import { isCronAuthorized } from "@/lib/cron/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,8 +20,7 @@ export const maxDuration = 120;
 const BATCH = 25;
 
 function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
+  return isCronAuthorized(process.env.CRON_SECRET, req.headers.get("authorization"));
 }
 
 interface Row { id: string; invoice_status: string | null; invoice_next_retry_at: string | null; verified_at: string | null }
@@ -61,7 +61,27 @@ export async function GET(req: NextRequest) {
       else if (out.status === "failed") failed++;
       else skipped++;
     }
-    return NextResponse.json({ ok: true, scanned: rows.length, issued, retried, failed, skipped });
+
+    // OBSERVABILITY (no recovery): a hard crash between Morning success and the
+    // terminal DB write strands a row at invoice_status='issuing' with a null
+    // invoice_doc_id — the candidate scan never re-selects 'issuing' (which
+    // correctly prevents a DUPLICATE fiscal document, but also means a real
+    // Morning doc may go unrecorded). We do NOT auto-reset it (re-issuing risks a
+    // second legal document) — we surface it as a queryable signal so it is never
+    // a silent failure. A stale row = 'issuing' with no doc, untouched > 15 min.
+    const staleBeforeIso = new Date(Date.now() - 15 * 60_000).toISOString();
+    let staleIssuing = 0;
+    try {
+      const { count } = await db.from("payments" as never)
+        .select("id", { count: "exact", head: true })
+        .eq("verified", true)
+        .is("invoice_doc_id", null)
+        .eq("invoice_status", "issuing")
+        .lt("updated_at", staleBeforeIso);
+      staleIssuing = count ?? 0;
+    } catch { /* signal is best-effort; never fail the run over it */ }
+
+    return NextResponse.json({ ok: true, scanned: rows.length, issued, retried, failed, skipped, staleIssuing });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "accounting_cron_failed", issued, retried, failed }, { status: 500 });
   }

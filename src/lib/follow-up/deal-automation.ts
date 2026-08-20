@@ -12,6 +12,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { emitBusinessEvent } from "@/lib/kernel/emit";
 import { DOMAIN_EVENTS } from "@/lib/kernel/events";
+import { runIsolated } from "./isolate";
 
 // Deterministic next-action title per CANONICAL deal_stage (the 8-value enum on
 // `deals`). Terminal stages (won/lost) get no next action.
@@ -138,16 +139,19 @@ export async function reconcileOrgDeals(orgId: string, opts?: { limit?: number }
   return { org: orgId, deals: deals.length, tasksCreated, stale };
 }
 
-/** Reconcile a bounded set of orgs' deals (cron entry point). */
-export async function reconcileAllOrgsDeals(opts?: { orgLimit?: number; perOrgLimit?: number }): Promise<{ orgs: number; tasksCreated: number; stale: number; results: DealReconcileResult[] }> {
+/** Reconcile a bounded set of orgs' deals (cron entry point). A single org's
+ *  failure is isolated (logged + counted) so it never aborts the whole run;
+ *  deterministic order keeps the scan stable across runs. */
+export async function reconcileAllOrgsDeals(opts?: { orgLimit?: number; perOrgLimit?: number }): Promise<{ orgs: number; tasksCreated: number; stale: number; failed: number; results: DealReconcileResult[] }> {
   const db: any = createServiceRoleClient();
-  const { data } = await db.from("organizations").select("id").limit(opts?.orgLimit ?? 100);
+  const { data } = await db.from("organizations").select("id").order("id", { ascending: true }).limit(opts?.orgLimit ?? 100);
   const orgIds = ((data ?? []) as any[]).map((o) => o.id).filter(Boolean);
-  const results: DealReconcileResult[] = [];
+  const { results, failed } = await runIsolated(
+    orgIds,
+    (id: string) => reconcileOrgDeals(id, { limit: opts?.perOrgLimit ?? 300 }),
+    (id, err) => console.error(`[followup-reconcile] deals org ${id} failed:`, err instanceof Error ? err.message : err),
+  );
   let tasksCreated = 0, stale = 0;
-  for (const id of orgIds) {
-    const r = await reconcileOrgDeals(id, { limit: opts?.perOrgLimit ?? 300 });
-    results.push(r); tasksCreated += r.tasksCreated; stale += r.stale;
-  }
-  return { orgs: orgIds.length, tasksCreated, stale, results };
+  for (const r of results) { tasksCreated += r.tasksCreated; stale += r.stale; }
+  return { orgs: orgIds.length, tasksCreated, stale, failed, results };
 }
