@@ -25,6 +25,11 @@ export const EXTENSION_FRESH_WINDOW_MS = 12 * 60 * 1000;
  *  genuinely unsupported builds (< this), NOT merely "not the latest" — otherwise a
  *  connected, FB-logged-in office is falsely shown as unable to publish. */
 export const MIN_SUPPORTED_EXTENSION_VERSION = "1.0.2";
+/** Minimum version that can render a MULTI-IMAGE (ordered image_urls) post. Older
+ *  builds only understand the legacy single-image payload, so the claim path must
+ *  refuse to hand a multi-image job to a sub-1.0.3 instance (it would publish fewer
+ *  images than approved). Single-image posts remain available to 1.0.2. */
+export const MIN_MULTI_IMAGE_VERSION = "1.0.3";
 
 export interface ExtensionReadinessInput {
   status: string | null | undefined;          // raw ExtensionPathStatus

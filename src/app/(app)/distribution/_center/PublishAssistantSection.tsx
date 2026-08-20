@@ -337,8 +337,9 @@ export function PublishAssistantSection({
                     <Icon name="ExternalLink" size={13} /> צפה בפוסט
                   </a>
                 ) : (
-                  <span className="text-success bg-success-soft inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold">
-                    <Icon name="Check" size={11} /> פורסם
+                  <span className="text-warning bg-warning-soft inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
+                    title="הפרסום דווח ידנית אך קישור לפוסט לא נשמר — לא ניתן לאמת אוטומטית">
+                    <Icon name="Check" size={11} /> פורסם — קישור לא נשמר
                   </span>
                 )}
               </Glass>

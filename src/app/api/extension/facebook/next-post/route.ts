@@ -12,6 +12,13 @@ export async function GET(req: NextRequest) {
   if (!inst) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
   const post = await getNextPost(inst);
+  if (post && "updateRequired" in post) {
+    // Too old to render a multi-image job; the post was released back to the queue.
+    return NextResponse.json(
+      { ok: false, error: "update_required", message: "גרסת התוסף אינה נתמכת לפרסום מרובה תמונות. עדכן את התוסף לגרסה האחרונה." },
+      { status: 426 },
+    );
+  }
   if (!post) return NextResponse.json({ ok: true, post: null });
   return NextResponse.json({ ok: true, post });
 }

@@ -24,7 +24,7 @@ import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
 import { promoteForChannel, resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
 import { claimNextPost, transitionPost, buildContentHash, buildIdempotencyKey, type PublishState, type ClaimedPost } from "./publishing-state-machine";
-import { computeExtensionReadiness, pickBestReadiness, type ExtensionReadinessView } from "./extension-readiness";
+import { computeExtensionReadiness, pickBestReadiness, compareVersions, MIN_MULTI_IMAGE_VERSION, type ExtensionReadinessView } from "./extension-readiness";
 
 type UserDb = Awaited<ReturnType<typeof createClient>>;
 
@@ -93,20 +93,20 @@ export async function completePairing(code: string, version?: string): Promise<P
 }
 
 // ── Instance auth (Part C) ──────────────────────────────────────────────────
-export interface AuthedInstance { id: string; orgId: string; userId: string; status: string }
+export interface AuthedInstance { id: string; orgId: string; userId: string; status: string; version: string | null }
 
 /** Authenticate an extension request by instance_id + raw secret (hash compare). */
 export async function authInstance(instanceId: string | null, secret: string | null): Promise<AuthedInstance | null> {
   if (!instanceId || !secret || !isServiceRoleConfigured()) return null;
   const db = createServiceRoleClient();
   const { data } = await db.from(INSTANCES as never)
-    .select("id,org_id,user_id,status,secret_hash").eq("instance_id", instanceId).maybeSingle();
-  const row = data as { id: string; org_id: string; user_id: string; status: string; secret_hash: string } | null;
+    .select("id,org_id,user_id,status,secret_hash,version").eq("instance_id", instanceId).maybeSingle();
+  const row = data as { id: string; org_id: string; user_id: string; status: string; secret_hash: string; version: string | null } | null;
   if (!row || row.status === "revoked") return null;
   const a = Buffer.from(sha256(secret));
   const b = Buffer.from(row.secret_hash);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  return { id: row.id, orgId: row.org_id, userId: row.user_id, status: row.status };
+  return { id: row.id, orgId: row.org_id, userId: row.user_id, status: row.status, version: row.version };
 }
 
 // ── Heartbeat (Part B) ────────────────────────────────────────────────────────
@@ -216,7 +216,12 @@ async function findOwnClaimedPost(db: ReturnType<typeof createServiceRoleClient>
  * a double GET / concurrent workers can NEVER receive the same post. Resumes an
  * already-claimed post owned by this instance first (P9.7B popup-reopen safety).
  */
-export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload | null> {
+/** Returned when the claimed post is multi-image but the instance is too old to
+ *  render it. The post is released back to the queue (a capable instance can take
+ *  it); the route surfaces a customer-safe "update required" response. */
+export interface ExtUpdateRequired { updateRequired: true }
+
+export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload | ExtUpdateRequired | null> {
   const db = createServiceRoleClient();
   // RESUME FIRST (P9.7B): if this instance already holds a claimed (dispatching)
   // post — e.g. the popup was closed/reopened after claiming — re-hand THAT SAME
@@ -262,6 +267,14 @@ export async function getNextPost(inst: AuthedInstance): Promise<NextPostPayload
 
   let imageUrls: string[] = [];
   const mediaList = Array.isArray(pick.image_urls) ? pick.image_urls : [];
+  // VERSION GATE: a multi-image job must never be handed to an instance too old to
+  // render the ordered image_urls payload (it would publish fewer images than the
+  // user approved). Release the post back to queued so a capable instance can take
+  // it, and signal update-required to the caller. Single-image posts are unaffected.
+  if (mediaList.length > 1 && (!inst.version || compareVersions(inst.version, MIN_MULTI_IMAGE_VERSION) < 0)) {
+    await releaseAndBlock("extension_update_required_multi_image");
+    return { updateRequired: true };
+  }
   if (mediaList.length > 0) {
     for (const item of mediaList) {
       if (item.creativeOutputId) {
