@@ -18,6 +18,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { syncRecurringQuantityAtBoundary, cancelGrowRecurring } from "@/lib/commercial/recurring";
+import { reconcileVerifiedGrowActivations } from "@/lib/commercial/activation-reconcile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,7 +77,13 @@ export async function GET(req: NextRequest) {
       else failed++;
     }
 
-    return NextResponse.json({ ok: true, processed, cancelled, synced, failed, inert, durationMs: Date.now() - new Date(now).getTime() });
+    // Recover any verified GROW payment whose subscription never converged to
+    // 'active' (webhook crashed between markPaymentVerified and activation).
+    // Idempotent + bounded; drives stranded payments through the canonical helper.
+    let activation = { checked: 0, activated: 0, alreadyConverged: 0, skipped: 0, failed: 0 };
+    try { activation = await reconcileVerifiedGrowActivations(); } catch { /* isolated: never aborts the boundary run */ }
+
+    return NextResponse.json({ ok: true, processed, cancelled, synced, failed, inert, activation, durationMs: Date.now() - new Date(now).getTime() });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "billing_boundary_failed", processed, cancelled, synced, failed }, { status: 500 });
   }
