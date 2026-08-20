@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { COMM_EVENT_MATRIX } from "@/lib/communication/policy";
 import { processCommunicationEvent } from "@/lib/communication/orchestrator";
-import { processDueQueue } from "@/lib/communication/dispatch";
+import { processDueQueue, reapOrphanDeliveries } from "@/lib/communication/dispatch";
 import { scanMeetingReminders } from "@/lib/communication/meeting-reminders";
 
 export const runtime = "nodejs";
@@ -47,8 +47,11 @@ export async function GET(req: NextRequest) {
       });
       processed++;
     }
+    // Reap orphaned queued rows (crashed immediate sends) so the dispatcher below
+    // finishes them, and surface the terminal dead-letter count for operators.
+    const reap = await reapOrphanDeliveries(200, 15);
     const q = await processDueQueue(200);
-    return NextResponse.json({ ok: true, meetingReminders: mr.emitted, processed, ...q, durationMs: Date.now() - started });
+    return NextResponse.json({ ok: true, meetingReminders: mr.emitted, processed, ...q, reaped: reap.reaped, deadLetter: reap.failedCount, durationMs: Date.now() - started });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "comm_dispatch_failed" }, { status: 500 });
   }

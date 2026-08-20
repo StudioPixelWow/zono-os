@@ -51,14 +51,23 @@ async function resolveOrgByPhoneNumberId(db: ReturnType<typeof createServiceRole
       if (row?.organization_id) return { orgId: s(row.organization_id), accountId: s(row.id) };
     } catch { /* fall through */ }
   }
-  // Single-tenant fallback (env or the one connected account).
+  // Single-tenant fallback — ONLY when the operator has explicitly declared a
+  // single tenant. An explicit WHATSAPP_ORG_ID pins the org; WHATSAPP_SINGLE_TENANT=1
+  // opts into "the one connected account". Otherwise DO NOT GUESS: an unmatched or
+  // missing phone_number_id must never be attributed to an arbitrary org (that would
+  // link one tenant's inbound message + CRM identity into another tenant). Returning
+  // null makes processWebhook reject safely with `unknown_phone_number_id` BEFORE any
+  // persistence or CRM linkage.
   const envOrg = process.env.WHATSAPP_ORG_ID?.trim();
   if (envOrg) return { orgId: envOrg, accountId: null };
-  try {
-    const { data } = await db.from("whatsapp_accounts").select("id,organization_id").in("connection_status", ["connected", "sandbox"]).limit(1).maybeSingle();
-    const row = data as Row | null;
-    return { orgId: s(row?.organization_id), accountId: s(row?.id) };
-  } catch { return { orgId: null, accountId: null }; }
+  if (process.env.WHATSAPP_SINGLE_TENANT?.trim() === "1") {
+    try {
+      const { data } = await db.from("whatsapp_accounts").select("id,organization_id").in("connection_status", ["connected", "sandbox"]).limit(1).maybeSingle();
+      const row = data as Row | null;
+      return { orgId: s(row?.organization_id), accountId: s(row?.id) };
+    } catch { return { orgId: null, accountId: null }; }
+  }
+  return { orgId: null, accountId: null };
 }
 
 async function touchWebhookHealth(db: ReturnType<typeof createServiceRoleClient>, accountId: string | null): Promise<void> {

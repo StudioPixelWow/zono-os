@@ -9,6 +9,7 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { israelWeekWindow } from "@/lib/trends/model";
 import {
   deriveSellerLifecycleState, deriveMarketingHealth, nextAgentAction, isSellerLifecycleClosed,
   type SellerSignals, type SellerLifecycleState, type MarketingHealth, type NextAgentAction,
@@ -254,11 +255,10 @@ export async function getSellerCommunicationSummary(orgId: string, propertyId: s
   return { sellerId, sellerName, receivesReports: link?.receives_reports !== false, lastUpdate, updatesLast30d, reportsSent };
 }
 
-const WEEK_MS = 7 * DAY_MS;
 /** Report-subscribed properties that have NOT received a weekly report this week (ZI + brief). Bounded. */
 export async function listPropertiesMissingWeeklyReport(orgId: string, db?: any, limit = 100): Promise<Array<{ propertyId: string; title: string | null }>> {
   const client: any = db ?? createServiceRoleClient();
-  const weekBucket = Math.floor(Date.now() / WEEK_MS);
+  const weekBucket = israelWeekWindow(Date.now()).weekBucket; // Israel Sunday-anchored (parity with seller-report)
   const { data: props } = await client.from("properties")
     .select("id,title").eq("org_id", orgId).in("status", ["active", "under_offer", "in_contract"]).limit(limit);
   const list = (props ?? []) as Array<{ id: string; title: string | null }>;

@@ -92,11 +92,23 @@ export async function processDueQueue(limit = 200): Promise<{ sent: number; fail
   const rows = (data ?? []) as any[];
   let sent = 0, failed = 0, retried = 0;
   for (const r of rows) {
+    // PER-ROW CLAIM (concurrency): atomically lease this row before sending so two
+    // overlapping dispatcher runs never both call deliver() on it. The status CHECK
+    // has no intermediate 'sending' state, so we lease by pushing scheduled_at ~10m
+    // ahead (removing it from every other worker's `.lte(scheduled_at, now)` window)
+    // guarded by an optimistic attempts match. A crash mid-send self-heals when the
+    // lease elapses (bounded by MAX_ATTEMPTS). Loser → skip.
+    const prevAttempts = r.attempts ?? 0;
+    const { data: claimed } = await db.from(TABLE)
+      .update({ scheduled_at: new Date(Date.now() + 10 * 60_000).toISOString(), attempts: prevAttempts + 1, updated_at: nowIso })
+      .eq("id", r.id).eq("status", "queued").eq("attempts", prevAttempts).lte("scheduled_at", nowIso)
+      .select("id").maybeSingle();
+    if (!claimed) continue; // another worker claimed it
     const channel = r.channel as NotificationChannel;
     const p = r.payload ?? {};
     const req: DeliveryRequest = { orgId: r.org_id, userId: r.user_id, channel, to: p.to, title: p.title, body: p.body, html: p.html ?? null, template: p.template ?? null, dedupKey: r.dedup_key };
     const result = await providerFor(channel).deliver(req);
-    const attempts = (r.attempts ?? 0) + 1;
+    const attempts = prevAttempts + 1;
     if (result.ok) {
       await db.from(TABLE).update({ status: result.status, provider_message_id: result.providerMessageId, attempts, updated_at: nowIso }).eq("id", r.id);
       sent++;
@@ -109,4 +121,46 @@ export async function processDueQueue(limit = 200): Promise<{ sent: number; fail
     }
   }
   return { sent, failed, retried };
+}
+
+/**
+ * ORPHAN REAPER (reliability). An immediate external send inserts a `queued` row
+ * with `scheduled_at = null` then delivers in the same call; if the process crashes
+ * between the insert and the terminal update, the row is stuck `queued`+null and is
+ * NEVER selected by processDueQueue (`.lte(scheduled_at, now)` excludes null). This
+ * makes such stale rows due again so the existing dispatcher finishes them — no
+ * second job platform, no new status. Bounded. Also returns the terminal dead-letter
+ * count for minimal operator visibility.
+ */
+export async function reapOrphanDeliveries(limit = 200, staleMinutes = 15): Promise<{ reaped: number; failedCount: number }> {
+  const db: any = createServiceRoleClient();
+  const nowIso = new Date().toISOString();
+  const staleIso = new Date(Date.now() - staleMinutes * 60_000).toISOString();
+  // External queued rows the dispatcher can't see: scheduled_at IS NULL, older than
+  // the stale window (created_at guard avoids yanking a row mid immediate-send).
+  const { data } = await db.from(TABLE)
+    .update({ scheduled_at: nowIso, updated_at: nowIso })
+    .eq("status", "queued").neq("channel", "in_app").is("scheduled_at", null).lt("created_at", staleIso)
+    .select("id").limit(limit);
+  let failedCount = 0;
+  try {
+    const { count } = await db.from(TABLE).select("id", { count: "exact", head: true }).eq("status", "failed");
+    failedCount = count ?? 0;
+  } catch { /* best-effort */ }
+  return { reaped: (data ?? []).length, failedCount };
+}
+
+/**
+ * Manager/admin manual retry of a terminally-FAILED external delivery. Re-queues the
+ * row (attempts reset, due now) so the existing dispatcher re-sends it — reuses the
+ * dispatch path, no new mechanism. Caller MUST enforce org scope + role. Idempotent:
+ * only a row currently `failed` in the caller's org is re-queued.
+ */
+export async function requeueFailedDelivery(orgId: string, deliveryId: string): Promise<boolean> {
+  const db: any = createServiceRoleClient();
+  const { data } = await db.from(TABLE)
+    .update({ status: "queued", attempts: 0, scheduled_at: new Date().toISOString(), error: null, updated_at: new Date().toISOString() })
+    .eq("id", deliveryId).eq("org_id", orgId).eq("status", "failed")
+    .select("id").maybeSingle();
+  return !!data;
 }

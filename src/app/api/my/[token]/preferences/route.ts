@@ -8,6 +8,7 @@
 // ============================================================================
 import { NextResponse } from "next/server";
 import { verifyPortalToken } from "@/lib/customer-portal/portal-tokens";
+import { currentPortalVersion } from "@/lib/customer-portal/buyer-portal";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -17,6 +18,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const { token } = await ctx.params;
   const p = verifyPortalToken(token);
   if (!p) return NextResponse.redirect(new URL(`/my/${token}`, req.url), { status: 303 });
+  // Enforce REVOCATION on the mutation path too (parity with the read page).
+  const liveVer = await currentPortalVersion(createServiceRoleClient(), p.o, p.t, p.c);
+  if (liveVer == null || liveVer !== p.v) return NextResponse.redirect(new URL(`/my/${token}`, req.url), { status: 303 });
 
   let note = "";
   try { note = String((await req.formData()).get("note") ?? "").slice(0, 500).trim(); } catch { /* no body */ }

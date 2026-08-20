@@ -12,11 +12,11 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSellerLifecycle, getSellerCommunicationSummary, type SellerLifecycle, type SellerCommSummary } from "@/lib/sellers/lifecycle";
 import { derivePropertyNextAction, buildRecoFunnel, recoStatusLabel, type ControlSignals, type PropertyNextAction, type RecoFunnel } from "./control-center-core";
+import { israelWeekWindow } from "@/lib/trends/model";
 
 const VIEWING_TYPES = ["viewing", "open_house"];
 const STRONG_MATCH = 70;
 const DAY_MS = 86_400_000;
-const WEEK_MS = 7 * DAY_MS;
 
 export interface CcMatch { buyerId: string; name: string; compatibility: number | null; status: string; statusLabel: string; reason: string | null }
 export interface CcResponse { contactType: string; contactId: string; name: string; status: string; statusLabel: string; at: string | null }
@@ -161,7 +161,7 @@ export async function getPropertyLifecycleControlCenter(orgId: string, propertyI
   let reportDueUnsent = false;
   if (comm?.receivesReports && comm?.sellerId && ["active", "under_offer", "in_contract"].includes(String(prop.status))) {
     try {
-      const weekBucket = Math.floor(nowMs / WEEK_MS);
+      const weekBucket = israelWeekWindow(nowMs).weekBucket; // Israel Sunday-anchored (parity with seller-report)
       const { count } = await db.from("notification_deliveries").select("id", { count: "exact", head: true })
         .eq("org_id", orgId).like("dedup_key", `seller_weekly:${propertyId}:%:${weekBucket}`);
       reportDueUnsent = (count ?? 0) === 0;

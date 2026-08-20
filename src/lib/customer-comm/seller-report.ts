@@ -14,8 +14,8 @@ import { sendCustomerEmail } from "./send";
 import { unsubUrl } from "./unsubscribe";
 import { sellerReportUrl } from "./seller-report-tokens";
 import { getSellerLifecycle } from "@/lib/sellers/lifecycle";
+import { israelWeekWindow } from "@/lib/trends/model";
 
-const WEEK_MS = 7 * 86_400_000;
 const ils = (n: number | null | undefined) =>
   n == null ? null : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : `₪${Math.round(n).toLocaleString("he-IL")}`;
 
@@ -31,7 +31,7 @@ async function weeklyStats(db: any, orgId: string, propertyId: string, sinceIso:
     countOf(db.from("activity_events").select("id", { count: "exact", head: true })
       .eq("org_id", orgId).eq("entity_type", "property").eq("entity_id", propertyId).eq("event_type", "property.contact_clicked").gte("occurred_at", sinceIso)),
     countOf(db.from("leads").select("id", { count: "exact", head: true })
-      .eq("org_id", orgId).eq("property_id", propertyId).eq("stage", "qualified")),
+      .eq("org_id", orgId).eq("property_id", propertyId).eq("stage", "qualified").gte("created_at", sinceIso)),
     countOf(db.from("meetings").select("id", { count: "exact", head: true })
       .eq("org_id", orgId).eq("property_id", propertyId).in("type", ["viewing", "open_house"]).gte("start_at", sinceIso)),
     countOf(db.from("distribution_campaigns").select("id", { count: "exact", head: true })
@@ -115,8 +115,9 @@ export interface SellerReportResult { org: string; considered: number; sent: num
 export async function runSellerWeeklyReports(orgId: string, opts?: { limit?: number }): Promise<SellerReportResult> {
   const db: any = createServiceRoleClient();
   const nowMs = Date.now();
-  const sinceIso = new Date(nowMs - WEEK_MS).toISOString();
-  const weekBucket = Math.floor(nowMs / WEEK_MS);
+  // Israel Sunday-anchored week window (DST-aware) — weekly metrics bound to this
+  // week and the dedup bucket keyed to the Israel week (no UTC Sunday drift).
+  const { sinceIso, weekBucket } = israelWeekWindow(nowMs);
 
   const { data: orgRow } = await db.from("organizations").select("name").eq("id", orgId).maybeSingle();
   const officeName = (orgRow?.name as string) || "צוות ZONO";

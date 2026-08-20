@@ -35,6 +35,42 @@ export function israelDayKeyBefore(nowMs: number, offsetDays: number): string {
   return israelDayKey(nowMs - offsetDays * DAY_MS);
 }
 
+// ── Israel week window (Sunday-anchored, DST-aware) ─────────────────────────
+const _wallFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: ISRAEL_TZ, hour12: false, year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+/** Israel UTC offset (ms) at a given instant — DST-aware, dependency-free. */
+function israelOffsetMs(instantMs: number): number {
+  const parts = _wallFmt.formatToParts(new Date(instantMs));
+  const m: Record<string, string> = {};
+  for (const p of parts) m[p.type] = p.value;
+  const hour = m.hour === "24" ? 0 : Number(m.hour);
+  const asUtc = Date.UTC(Number(m.year), Number(m.month) - 1, Number(m.day), hour, Number(m.minute), Number(m.second));
+  return asUtc - instantMs;
+}
+/** Israel weekday index for an instant (Sunday=0 … Saturday=6). */
+function israelWeekday(instantMs: number): number {
+  const wd = new Intl.DateTimeFormat("en-US", { timeZone: ISRAEL_TZ, weekday: "short" }).format(new Date(instantMs));
+  return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[wd] ?? 0;
+}
+/**
+ * The current ISRAEL week window, anchored to Sunday 00:00 Asia/Jerusalem (DST-aware).
+ * Returns the UTC instant of that Sunday midnight (`sinceIso`) and a stable per-week
+ * bucket key (the Israel Sunday date, 'YYYY-MM-DD'). Replaces UTC `floor(ms/WEEK_MS)`
+ * bucketing (Thursday-anchored, drift near the Israel Sunday boundary). PURE.
+ */
+export function israelWeekWindow(nowMs: number): { sinceIso: string; weekBucket: string } {
+  const weekdayIdx = israelWeekday(nowMs);
+  const sundayKey = israelDayKey(nowMs - weekdayIdx * DAY_MS); // 'YYYY-MM-DD' of this week's Sunday
+  const naiveMidnightUtc = Date.parse(`${sundayKey}T00:00:00Z`);
+  // Local Israel midnight = naive-UTC-midnight minus the Israel offset at that wall time.
+  let sinceMs = naiveMidnightUtc - israelOffsetMs(naiveMidnightUtc);
+  const refined = naiveMidnightUtc - israelOffsetMs(sinceMs); // refine once for DST edges
+  if (refined !== sinceMs) sinceMs = refined;
+  return { sinceIso: new Date(sinceMs).toISOString(), weekBucket: sundayKey };
+}
+
 /** Ordered list of Israel day keys for the last `windowDays` (inclusive of today). */
 export function dayKeyRange(nowMs: number, windowDays: number): string[] {
   const out: string[] = [];

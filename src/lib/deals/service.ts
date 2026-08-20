@@ -13,6 +13,7 @@ import {
   negotiationGap, nextDealAction, OBJECTION_LABEL, type DealStage,
 } from "./engine";
 import { syncPropertyOnDealWon } from "./deal-property-sync";
+import { PROFILE_TO_DEAL_STAGE, DEAL_TO_PROFILE_STAGE } from "./stage-map";
 import { emitBusinessEvent, DOMAIN_EVENTS } from "@/lib/kernel";
 
 type DB = Database["public"]["Tables"];
@@ -21,16 +22,8 @@ const NEGOTIATING = new Set<DealStage>(["negotiation", "offer_sent", "offer_rece
 
 // ── Stage 0.1 · Canonical Deal identity ──────────────────────────────────────
 // public.deals is canonical; deal_profiles is a 1:1 projection linked by deal_id.
-// Maps bridge the two stage vocabularies (deals.stage enum ↔ profile deal_stage text).
-const PROFILE_TO_DEAL_STAGE: Record<string, string> = {
-  new_opportunity: "new", contacted: "new", meeting_scheduled: "qualified", property_visit: "qualified",
-  negotiation: "negotiation", offer_sent: "negotiation", offer_received: "negotiation",
-  agreement_draft: "agreement", legal_review: "contract", signed: "closing",
-};
-const DEAL_TO_PROFILE_STAGE: Record<string, string> = {
-  new: "new_opportunity", qualified: "meeting_scheduled", negotiation: "negotiation",
-  agreement: "agreement_draft", contract: "legal_review", closing: "signed",
-};
+// The two stage vocabularies are bridged by the PURE stage-map module (testable):
+// PROFILE_TO_DEAL_STAGE / DEAL_TO_PROFILE_STAGE.
 
 type SB = Awaited<ReturnType<typeof createClient>>;
 
