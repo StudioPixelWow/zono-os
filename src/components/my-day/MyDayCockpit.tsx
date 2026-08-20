@@ -12,6 +12,7 @@ import type {
   MyDayCockpit as Cockpit, CockpitAction, CockpitTimelineItem, CockpitOpportunity,
   CockpitClient, CockpitInsight, CockpitRecruit, CockpitPipelineStage,
 } from "@/lib/my-day/service";
+import { transactionBadge } from "@/lib/property/transaction";
 
 const CARD = "bg-card border-line rounded-[22px] border shadow-[var(--shadow-card)] flex flex-col min-h-0";
 const TONE_SOFT: Record<string, string> = {
@@ -51,19 +52,35 @@ function ActionRow({ a }: { a: CockpitAction }) {
   );
 }
 
+// One contextual action per event, inferred from its icon — a single most-useful
+// verb, never a row of buttons.
+function eventCta(icon: string): string {
+  if (/^(Phone|PhoneCall)$/.test(icon)) return "חייג";
+  if (/^(Building|Building2|Home|MapPin|Map|Navigation)$/.test(icon)) return "פתח נכס";
+  if (/^(Users?|UserCheck|UserPlus|UserCircle)$/.test(icon)) return "פתח לקוח";
+  if (/^(Calendar|CalendarClock|Clock)$/.test(icon)) return "פתח פגישה";
+  return "פתח";
+}
+
 // ── Change #6 — adaptive timeline: hero next-event when the day is light ──────
-function NextEventHero({ t }: { t: CockpitTimelineItem }) {
-  const body = (
+function NextEventHero({ t, untilLabel }: { t: CockpitTimelineItem; untilLabel?: string | null }) {
+  return (
     <div className="bg-brand-soft border-brand-light flex items-center gap-3 rounded-2xl border p-3">
       <span className="bg-brand grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white"><Icon name={t.icon} size={22} /></span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2"><span className="text-brand-strong text-[11px] font-black">האירוע הבא</span><span className="text-brand-strong text-[13px] font-black tabular-nums">{t.time}</span></div>
+        <div className="flex items-center gap-2">
+          <span className="text-brand-strong text-[11px] font-black">האירוע הבא</span>
+          <span className="text-brand-strong text-[13px] font-black tabular-nums">{t.time}</span>
+          {untilLabel && <span className="text-muted text-[11px] font-semibold">· {untilLabel}</span>}
+        </div>
         <p className="text-ink truncate text-[14px] font-black">{t.title}</p>
         {t.detail && <p className="text-muted truncate text-[11px]">{t.detail}</p>}
       </div>
+      {t.href && (
+        <Link href={t.href} className="bg-brand shrink-0 rounded-xl px-3 py-2 text-[12px] font-black text-white">{eventCta(t.icon)}</Link>
+      )}
     </div>
   );
-  return t.href ? <Link href={t.href} className="block">{body}</Link> : body;
 }
 function TimelineRow({ t }: { t: CockpitTimelineItem }) {
   return (
@@ -125,22 +142,30 @@ function Insight({ i }: { i: CockpitInsight }) {
   );
 }
 
-// ── Change #5 — pipeline: readable funnel bars + financial potential ──────────
-function FunnelBar({ s, max }: { s: CockpitPipelineStage; max: number }) {
-  const pct = max > 0 ? Math.max(6, Math.round((s.count / max) * 100)) : 6;
+// ── Change #5 — pipeline: a STEPPED funnel (count chip + full label + spine).
+// Counts are shown as counts, never as identical width-encoded "progress" bars.
+function StageStep({ s, last }: { s: CockpitPipelineStage; last: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-muted w-16 shrink-0 truncate text-[11px] font-semibold">{s.label}</span>
-      <div className="bg-surface relative h-5 flex-1 overflow-hidden rounded-lg">
-        <div className="bg-brand/80 h-full rounded-lg" style={{ width: `${pct}%` }} />
-        <span className="text-ink absolute inset-y-0 left-2 flex items-center text-[11px] font-black tabular-nums">{s.count}</span>
+    <div className="flex items-stretch gap-2.5">
+      <div className="flex flex-col items-center">
+        <span className="bg-brand-soft text-brand-strong grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[13px] font-black tabular-nums">{s.count}</span>
+        {!last && <span className="bg-line my-0.5 w-px flex-1" />}
+      </div>
+      <div className="flex flex-1 items-center pb-1.5">
+        <span className="text-ink text-[12.5px] font-bold leading-tight">{s.label}</span>
+        {s.value > 0 && <span className="text-muted mr-auto text-[11px] font-semibold tabular-nums">{`₪${Math.round(s.value / 1000)}K`}</span>}
       </div>
     </div>
   );
 }
 
+// Transaction pill over an image — solid semantic fill + white text so it stays
+// legible over any photo (never color-only; the word מכירה/השכרה is always shown).
+const TXN_OVER_IMG: Record<"brand" | "success", string> = { brand: "bg-brand text-white", success: "bg-success text-white" };
+
 // ── Change #2 — property recruitment card: image-first, צפה בנכס + גיוס מהיר ──
 function RecruitCard({ r }: { r: CockpitRecruit }) {
+  const txn = transactionBadge(r.kind);
   return (
     <div className="border-line bg-card flex w-[248px] shrink-0 flex-col overflow-hidden rounded-2xl border shadow-[var(--shadow-soft)]">
       <div className="relative h-24 w-full overflow-hidden bg-surface">
@@ -150,8 +175,10 @@ function RecruitCard({ r }: { r: CockpitRecruit }) {
         ) : (
           <div className="text-muted grid h-full w-full place-items-center"><Icon name="Building" size={28} /></div>
         )}
-        <span className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-black text-white">{r.badge}</span>
-        {r.price && <span className="absolute bottom-2 right-2 rounded-lg bg-white/95 px-2 py-0.5 text-[12px] font-black text-ink shadow-sm">{r.price}</span>}
+        {/* top-right: transaction type (מכירה/השכרה) · top-left: exclusivity — never stacked */}
+        {txn && <span className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-black shadow-sm ${TXN_OVER_IMG[txn.tone]}`}>{txn.label}</span>}
+        <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-black text-white">{r.badge}</span>
+        {r.price && r.price !== "—" && <span className="absolute bottom-2 right-2 rounded-lg bg-white/95 px-2 py-0.5 text-[12px] font-black text-ink shadow-sm">{r.price}</span>}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 p-2.5">
         <p className="text-ink truncate text-[12.5px] font-black">{r.title}</p>
@@ -171,7 +198,6 @@ function RecruitCard({ r }: { r: CockpitRecruit }) {
 export function MyDayCockpit({ data }: { data: Cockpit }) {
   const ilsK = (n: number) => (n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(1)}M` : `₪${Math.round(n / 1000)}K`);
   const stages = data.pipeline.stages.slice(0, 5);
-  const maxStage = stages.reduce((m, s) => Math.max(m, s.count), 0);
   const fewEvents = data.timeline.length > 0 && data.timeline.length <= 2;
   const next = data.timeline.find((t) => t.isNext) ?? data.timeline[0];
   const restTimeline = fewEvents ? [] : data.timeline;
@@ -207,12 +233,16 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[46%]">
-          {data.kpis.map((k) => (
-            <Link key={k.id} href={k.href} className="bg-card border-line flex flex-col justify-between rounded-[18px] border p-2.5 shadow-[var(--shadow-soft)] transition hover:border-brand-light">
-              <span className={`grid h-7 w-7 place-items-center rounded-xl ${KPI_ACCENT[k.accent]}`}><Icon name={k.icon} size={15} /></span>
-              <div className="mt-1.5"><div className="text-ink text-xl font-black leading-none">{k.value}</div><div className="text-muted mt-1 text-[11px] font-semibold leading-tight">{k.label}</div></div>
-            </Link>
-          ))}
+          {data.kpis.map((k) => {
+            // Quiet zeros: a 0 stays legible but recedes so active numbers lead the eye.
+            const zero = k.value === "0";
+            return (
+              <Link key={k.id} href={k.href} className={`bg-card border-line flex flex-col justify-between rounded-[18px] border p-2.5 shadow-[var(--shadow-soft)] transition hover:border-brand-light ${zero ? "opacity-70" : ""}`}>
+                <span className={`grid h-7 w-7 place-items-center rounded-xl ${zero ? "bg-surface text-muted" : KPI_ACCENT[k.accent]}`}><Icon name={k.icon} size={15} /></span>
+                <div className="mt-1.5"><div className={`text-xl font-black leading-none ${zero ? "text-muted" : "text-ink"}`}>{k.value}</div><div className="text-muted mt-1 text-[11px] font-semibold leading-tight">{k.label}</div></div>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
@@ -221,7 +251,7 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
         {/* Col 1 — דורש טיפול (compact) + לקוחות */}
         <div className="flex min-h-0 flex-col gap-3">
           <section className={`${CARD} flex-1`}>
-            <PanelHead title="דורש טיפול" count={data.actionsTotal} icon="Flame" href="/action-center" hrefLabel="כל המשימות" />
+            <PanelHead title="דורש טיפול" count={data.urgentTotal} icon="Flame" href="/action-center" hrefLabel={`כל המשימות (${data.actionsTotal})`} />
             <div className="zono-scroll min-h-0 flex-1 overflow-y-auto p-2.5">
               {data.actions.length === 0 ? (
                 <div className="text-muted flex h-full items-center justify-center gap-2 py-3 text-center text-[12px]"><Icon name="CheckCircle" size={15} />הכול מטופל — אין משימות דחופות</div>
@@ -247,7 +277,7 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
                 <div className="text-muted flex h-full flex-col items-center justify-center gap-1.5 py-3 text-center text-[12px]"><Icon name="Calendar" size={18} />אין לך פגישות נוספות היום<Link href="/calendar" className="text-brand-strong font-bold">קבע פגישה →</Link></div>
               ) : fewEvents && next ? (
                 <div className="flex flex-col gap-2">
-                  <NextEventHero t={next} />
+                  <NextEventHero t={next} untilLabel={data.nextEventLabel} />
                   {data.timeline.filter((t) => t.id !== next.id).map((t) => <TimelineRow key={t.id} t={t} />)}
                 </div>
               ) : (
@@ -282,7 +312,7 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
                       <div className="text-success text-base font-black leading-tight">{ilsK(data.pipeline.weightedRevenue)}</div>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1.5">{stages.map((s) => <FunnelBar key={s.stage} s={s} max={maxStage} />)}</div>
+                  <div className="flex flex-col">{stages.map((s, i) => <StageStep key={s.stage} s={s} last={i === stages.length - 1} />)}</div>
                   {data.insights.length > 0 && <div className="border-line flex flex-col border-t pt-1.5">{data.insights.map((i) => <Insight key={i.id} i={i} />)}</div>}
                 </div>
               )}
@@ -294,7 +324,7 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
       {/* ── Change #2 — נכסים שכדאי לגייס (real private-owner recruitment carousel) ─ */}
       {data.recruitment.length > 0 && (
         <section className={`${CARD} shrink-0`}>
-          <PanelHead title="נכסים שכדאי לגייס" count={data.recruitmentTotal} icon="Target" href="/external-listings" hrefLabel="הצג הכל" />
+          <PanelHead title="הזדמנויות גיוס באזור שלך" count={data.recruitmentTotal} icon="Target" href="/external-listings" hrefLabel="הצג הכל" />
           <div className="zono-scroll flex gap-3 overflow-x-auto p-3">
             {data.recruitment.map((r) => <RecruitCard key={r.id} r={r} />)}
           </div>

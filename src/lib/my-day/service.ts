@@ -16,6 +16,7 @@ import { getSocialLeadsBoard } from "@/lib/social/service";
 import { getDealsBoard } from "@/lib/deals/service";
 import { listBuyerBoard } from "@/lib/buyers/repository";
 import { externalListingRepository } from "@/lib/external-listings/repository";
+import { normalizeListingKind, formatPropertyPrice, type ListingKind } from "@/lib/property/transaction";
 
 type Tone = "brand" | "success" | "warning" | "danger" | "neutral";
 
@@ -27,7 +28,7 @@ export interface CockpitInsight { id: string; icon: string; tone: Tone; text: st
 export interface CockpitOpportunity { id: string; kind: string; title: string; detail: string; actionLabel: string; href: string | null; score: number | null }
 export interface CockpitClient { id: string; name: string; sub: string; tag: string | null; tagTone: Tone; href: string; whatsappUrl: string | null }
 // A private-owner property (no broker / no exclusivity) the agent could RECRUIT.
-export interface CockpitRecruit { id: string; title: string; sub: string; details: string | null; price: string; badge: string; imageUrl: string | null; href: string; whatsappUrl: string | null }
+export interface CockpitRecruit { id: string; title: string; sub: string; details: string | null; price: string; kind: ListingKind | null; badge: string; imageUrl: string | null; href: string; whatsappUrl: string | null }
 
 export interface MyDayCockpit {
   agentName: string;
@@ -38,6 +39,7 @@ export interface MyDayCockpit {
   kpis: CockpitKpi[];
   actions: CockpitAction[];
   actionsTotal: number;
+  urgentTotal: number;
   timeline: CockpitTimelineItem[];
   nextEventLabel: string | null;
   timelineTotal: number;
@@ -75,7 +77,6 @@ function israelHm(iso: string): string {
   catch { return ""; }
 }
 const ilsC = (n: number) => (n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `₪${Math.round(n / 1000)}K` : `₪${Math.round(n).toLocaleString("he-IL")}`);
-const ilsFull = (n: number | null | undefined) => (n == null ? "" : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
 // Owner phone → wa.me (IL) with a concise RECRUITMENT opener (soft intent, not a
 // hard-coded production template — offices can layer real templates later).
@@ -148,11 +149,15 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   // ── KPIs (operational, not vanity). Only real, useful metrics. ──────────────
   const attentionCount = queue ? queue.items.filter((i) => i.urgency === "critical" || i.urgency === "high").length : 0;
   const meetingsToday = plan ? plan.plan.buckets.fixedTime.length : 0;
+  const openActivities = queue?.total ?? (kpi?.tasksToday ?? tasks.length);
   const kpis: CockpitKpi[] = [
+    // KPI labels describe EXACTLY the underlying dataset. "דורש טיפול" = urgent
+    // only (same semantics as the panel below, so the two never contradict);
+    // "פעילויות פתוחות" = the full open work list surfaced via "כל המשימות".
     { id: "leads", label: "לידים חדשים היום", value: String(newLeads), icon: "Users", href: "/leads", accent: "success" },
-    { id: "attention", label: "דברים דורשים טיפול", value: String(attentionCount || (queue?.total ?? 0)), icon: "Flame", href: "/action-center", accent: "danger" },
+    { id: "attention", label: "דורש טיפול", value: String(attentionCount), icon: "Flame", href: "/action-center", accent: "danger" },
     { id: "meetings", label: "פגישות היום", value: String(meetingsToday), icon: "Calendar", href: "/calendar", accent: "info" },
-    { id: "tasks", label: "משימות פעילות", value: String(kpi?.tasksToday ?? tasks.length), icon: "ListChecks", href: "/action-center", accent: "brand" },
+    { id: "tasks", label: "פעילויות פתוחות", value: String(openActivities), icon: "ListChecks", href: "/action-center", accent: "brand" },
   ];
 
   // ── דורש טיפול — the prioritized action queue (P0/P1 first). Dedup by id. ────
@@ -184,7 +189,8 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
       usedIds.add(it.id);
     }
   }
-  const actionsTotal = queue?.total ?? actions.length;
+  const actionsTotal = queue?.total ?? actions.length; // ALL open work (→ "כל המשימות")
+  const urgentTotal = attentionCount;                  // URGENT only (→ "דורש טיפול" badge)
   const opportunitiesTotal = queue ? queue.items.filter((i) => i.area === "buyer" || i.area === "seller" || i.area === "acquisition" || i.urgency === "medium" || i.urgency === "low").length : opportunities.length;
 
   // ── היום שלי — chronological timeline from the agent plan's fixed-time bucket. ─
@@ -246,12 +252,14 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
     const area = l.sqm ?? l.area_sqm ?? null;
     const floor = l.floor != null ? `קומה ${l.floor}` : null;
     const detailBits = [area != null ? `${Math.round(area)} מ״ר` : null, floor].filter(Boolean) as string[];
+    const kind = normalizeListingKind(l.deal_type);
     return {
       id: l.id,
       title: (l.title && l.title.trim()) || place || "נכס פרטי",
       sub: [rooms, place].filter(Boolean).join(" · "),
       details: detailBits.length ? detailBits.join(" · ") : null,
-      price: ilsFull(l.price),
+      price: formatPropertyPrice({ kind, price: l.price }),
+      kind,
       badge: "ללא בלעדיות",
       imageUrl: firstImageUrl(l.images),
       href: `/external-listings/${l.id}`,
@@ -265,7 +273,8 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   {
     const parts: string[] = [];
     if (newLeads > 0) parts.push(`${newLeads} לידים חדשים`);
-    if (actions.length > 0) parts.push(`${actionsTotal} דברים לטיפול`);
+    if (urgentTotal > 0) parts.push(`${urgentTotal} דורש טיפול`);
+    else if (actionsTotal > 0) parts.push(`${actionsTotal} פעילויות פתוחות`);
     if (nextEventLabel && timeline[0]) parts.push(`פגישה ב־${timeline.find((t) => t.isNext)?.time ?? timeline[0].time}`);
     if (opportunities.length > 0) parts.push(`${opportunitiesTotal} הזדמנויות ש-ZI מצא`);
     if (parts.length > 0) {
@@ -283,7 +292,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   return {
     agentName, greeting: israelGreeting(now), dateLabel: israelDateLabel(now), role,
     ziBrief, kpis,
-    actions, actionsTotal,
+    actions, actionsTotal, urgentTotal,
     timeline, nextEventLabel, timelineTotal: timelineAll.length,
     pipeline, insights,
     opportunities, opportunitiesTotal,

@@ -14,8 +14,10 @@ export interface RealEstateCardData {
   imageUrl?: string | null;
   statusLabel?: string | null;
   statusTone?: string;
-  /** למכירה / להשכרה */
+  /** מכירה / השכרה */
   dealLabel?: string | null;
+  /** Badge tone for dealLabel — brand (מכירה) / success (השכרה). Defaults to brand. */
+  dealTone?: "brand" | "success";
   price?: number | null;
   priceLabel?: string | null; // pre-formatted (e.g. "₪2,200,000")
   addressLine?: string | null;
@@ -44,7 +46,7 @@ export function RealEstatePropertyCard({ d }: { d: RealEstateCardData }) {
           <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Building2" size={32} /></div>
         )}
         <div className="absolute end-3 top-3 flex flex-wrap gap-1.5">
-          {d.dealLabel && <Badge tone="brand" size="sm">{d.dealLabel}</Badge>}
+          {d.dealLabel && <Badge tone={d.dealTone ?? "brand"} size="sm">{d.dealLabel}</Badge>}
           {d.statusLabel && <Badge tone={(d.statusTone ?? "neutral") as never} size="sm">{d.statusLabel}</Badge>}
         </div>
         {(d.tags ?? []).length > 0 && (

@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { cn, formatShekels } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { RealEstatePropertyCard } from "@/components/property/RealEstatePropertyCard";
+import { normalizeListingKind, transactionBadge, formatPropertyPrice } from "@/lib/property/transaction";
 import { ContextualZeroState } from "@/components/common/ContextualZeroState";
 import {
   PROPERTY_STATUS_LABELS,
@@ -207,8 +208,9 @@ export function PropertiesListView({
                 imageUrl: covers[p.id] ?? p.primary_image_url,
                 statusLabel: PROPERTY_STATUS_LABELS[p.status],
                 statusTone: PROPERTY_STATUS_TONES[p.status],
-                dealLabel: p.listing_kind === "rent" ? "להשכרה" : "למכירה",
-                price: p.price,
+                dealLabel: transactionBadge(normalizeListingKind(p.listing_kind))?.label ?? null,
+                dealTone: normalizeListingKind(p.listing_kind) === "rent" ? "success" : "brand",
+                priceLabel: formatPropertyPrice({ kind: normalizeListingKind(p.listing_kind), price: p.price, monthlyRent: p.monthly_rent }),
                 addressLine: `${PROPERTY_TYPE_LABELS[p.type]} · ${propertyAddressLine(p)}`,
                 rooms: p.rooms,
                 sqm: p.size_sqm,
@@ -246,7 +248,18 @@ export function PropertiesListView({
                       {PROPERTY_STATUS_LABELS[p.status]}
                     </Badge>
                   </td>
-                  <td className="text-ink px-4 py-3 font-bold">{formatShekels(p.price)}</td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const k = normalizeListingKind(p.listing_kind);
+                      const b = transactionBadge(k);
+                      return (
+                        <span className="flex flex-col gap-0.5">
+                          {b && <span className={`inline-block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${b.tone === "success" ? "bg-success-soft text-success" : "bg-brand-soft text-brand-strong"}`}>{b.label}</span>}
+                          <span className="text-ink font-bold">{formatPropertyPrice({ kind: k, price: p.price, monthlyRent: p.monthly_rent })}</span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="text-muted px-4 py-3">{p.rooms ?? "—"}</td>
                   <td className="text-muted px-4 py-3">{p.size_sqm ?? "—"}</td>
                 </tr>
