@@ -337,14 +337,14 @@ end $$;
 do $$
 declare o uuid := '0f1825d2-0ac8-45d1-b03c-50ce9e9366a2'; u uuid := '139e649a-25d6-4501-ab95-f02d796d4aab'; mk jsonb := '{"demo_seed":"zono_demo_office_pixel_v1"}';
 begin
-  insert into public.office_members (id, org_id, user_id, full_name, role, status, specialty, metadata)
+  insert into public.office_members (id, org_id, user_id, full_name, role, status, specialty, avatar_url, metadata)
   values
-   (md5('zdo1p:member:manager')::uuid, o, u, 'מיכל כהן', 'owner', 'active', 'ניהול משרד', mk),
-   (md5('zdo1p:member:dana')::uuid, o, null, 'דנה כהן', 'agent', 'active', 'מכירות מגורים', mk),
-   (md5('zdo1p:member:yoav')::uuid, o, null, 'יואב לוי', 'agent', 'active', 'השכרות ורוכשים ראשונים', mk),
-   (md5('zdo1p:member:maya')::uuid, o, null, 'מאיה ישראלי', 'agent', 'active', 'נכסי יוקרה ובלעדיות', mk),
-   (md5('zdo1p:member:omer')::uuid, o, null, 'עומר רז', 'agent', 'active', 'חיפה והקריות', mk)
-  on conflict (id) do nothing;
+   (md5('zdo1p:member:manager')::uuid, o, u, 'מיכל כהן', 'owner', 'active', 'ניהול משרד', '/demo/agents/michal.svg', mk),
+   (md5('zdo1p:member:dana')::uuid, o, null, 'דנה כהן', 'agent', 'active', 'מכירות מגורים', '/demo/agents/dana.svg', mk),
+   (md5('zdo1p:member:yoav')::uuid, o, null, 'יואב לוי', 'agent', 'active', 'השכרות ורוכשים ראשונים', '/demo/agents/yoav.svg', mk),
+   (md5('zdo1p:member:maya')::uuid, o, null, 'מאיה ישראלי', 'agent', 'active', 'נכסי יוקרה ובלעדיות', '/demo/agents/maya.svg', mk),
+   (md5('zdo1p:member:omer')::uuid, o, null, 'עומר רז', 'agent', 'active', 'חיפה והקריות', '/demo/agents/omer.svg', mk)
+  on conflict (id) do update set avatar_url = excluded.avatar_url;
 
   update public.properties p set office_member_id = md5('zdo1p:member:'||v.k)::uuid
   from (values (1,'dana'),(2,'dana'),(5,'dana'),(8,'dana'),(14,'dana'),(16,'dana'),(17,'dana'),

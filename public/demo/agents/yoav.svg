@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" role="img">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8f0ff"/><stop offset="1" stop-color="#d3e2ff"/></linearGradient>
+  <clipPath id="c"><circle cx="120" cy="120" r="120"/></clipPath></defs>
+  <g clip-path="url(#c)">
+    <rect width="240" height="240" fill="url(#bg)"/>
+    <path d="M40 240 C40 190 74 168 120 168 C166 168 200 190 200 240 Z" fill="#1e3a8a"/>
+    <path d="M96 150 h48 v22 c0 10 -48 10 -48 0 Z" fill="#e8b98f"/>
+    <ellipse cx="120" cy="118" rx="40" ry="46" fill="#e8b98f"/>
+    
+    <circle cx="107" cy="116" r="3.4" fill="#3b2f2a"/><circle cx="133" cy="116" r="3.4" fill="#3b2f2a"/>
+    <path d="M112 132 c4 4 12 4 16 0" stroke="#b06a54" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <g fill="none" stroke="#1f2937" stroke-width="3"><rect x="96" y="104" width="20" height="15" rx="5"/><rect x="124" y="104" width="20" height="15" rx="5"/><path d="M116 111 h8"/></g>
+    <path d="M82 96 C80 66 98 50 120 50 C142 50 160 66 158 96 C150 82 140 74 120 74 C100 74 90 82 82 96 Z" fill="#241a12"/>
+  </g>
+  <circle cx="120" cy="120" r="118" fill="none" stroke="#ffffff" stroke-width="4"/>
+</svg>
