@@ -11,6 +11,9 @@ import { buildMorningBrief, buildOfficeBrief } from "./summaries";
 import { buildExplainOpportunity } from "./recommendations";
 import { buildWhatsapp, buildEmail } from "./communication";
 import type { AiResult, AiTone, EmailType, WhatsappMessageType } from "./types";
+import { getSessionContext } from "@/lib/auth/session";
+import { resolveRoleKey } from "@/lib/auth/role";
+import { isManagerRole } from "@/lib/auth/office-roles";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 function fail(e: unknown): { ok: false; error: string } { return { ok: false, error: e instanceof Error ? e.message : "אירעה שגיאה." }; }
@@ -100,6 +103,10 @@ export async function morningBriefAction(): Promise<Result<Out>> {
 
 export async function officeBriefAction(): Promise<Result<Out>> {
   try {
+    // Office-wide acquisition aggregates are manager/owner only (an agent must not
+    // read office-level intelligence). Role is server-derived.
+    const { profile } = await getSessionContext();
+    if (!isManagerRole(await resolveRoleKey(profile))) return { ok: false, error: "forbidden" };
     const context = await buildOfficeContext();
     const dataHash = computeDataHash(context);
     const { instruction, fallback } = buildOfficeBrief(context);

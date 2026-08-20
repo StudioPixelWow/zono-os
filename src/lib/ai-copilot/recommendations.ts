@@ -16,13 +16,10 @@ export function nextBestAction(c: SellerCallContext): { kind: NextBestActionKind
   const map: Record<string, NextBestActionKind> = {
     call_today: "call", send_whatsapp: "whatsapp", schedule_meeting: "schedule_meeting", follow_up_tomorrow: "create_reminder", wait: "wait",
   };
-  let kind: NextBestActionKind = map[c.recommendedAction] ?? "wait";
-  let reason = c.recommendedActionReason || "בהתאם למנוע מודיעין המוכרים";
-  // Augment (still deterministic): strong buyer demand on an uncontacted lead → invite a buyer.
-  if (c.buyerMatchCount > 0 && (c.lifecycleStage === "new_opportunity" || c.lifecycleStage === "contact_recommended") && kind === "call") {
-    kind = "invite_buyer";
-    reason = `יש ${c.buyerMatchCount} קונים מתאימים — אפשר להוביל עם הזמנת קונה`;
-  }
+  // Consume the deterministic Seller-Intelligence action VERBATIM — the copilot
+  // never mints its own next-best-action (no ad-hoc prioritization in ZI/copilot).
+  const kind: NextBestActionKind = map[c.recommendedAction] ?? "wait";
+  const reason = c.recommendedActionReason || "בהתאם למנוע מודיעין המוכרים";
   return { kind, label: NBA_LABEL[kind], reason };
 }
 

@@ -29,6 +29,8 @@ import { summarizeBuyerPortalForZi } from "@/lib/customer-portal/buyer-portal";
 import { getPortfolioMarketingAutopilot, summarizeMarketingForZi } from "@/lib/marketing-autopilot/autopilot";
 import type { DailyCommandCenter } from "@/lib/daily/priority";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { resolveRoleKey } from "@/lib/auth/role";
+import { isOwnerRole } from "@/lib/auth/office-roles";
 import { listRecentWhatsAppReplies } from "@/lib/whatsapp/inbound-linkage";
 import { collectDiagnosticSignals, persistDiagnosticRun, listDiagnosticRuns, type DiagnosticRunRow } from "./diagnostic-repository";
 import type { DiagnosticInput, DiagnosticResult, IssueType } from "./diagnostic-types";
@@ -785,11 +787,14 @@ export async function submitKnowledgeFeedbackAction(input: ZiKnowledgeFeedbackIn
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "feedback_failed" }; }
 }
 
-/** Seed/refresh the built-in knowledge base (idempotent). Admin-triggered. */
+/** Seed/refresh the built-in knowledge base (idempotent). Owner/admin only —
+ *  writes GLOBAL (org_id null) system articles via service-role, so it must not
+ *  be triggerable by any authenticated user. */
 export async function syncKnowledgeAction(): Promise<ZiResult<KnowledgeSyncResult>> {
   try {
     const { profile, state } = await getSessionContext();
     if (state !== "ready" || !profile) return { ok: false, error: "unauthorized" };
+    if (!isOwnerRole(await resolveRoleKey(profile))) return { ok: false, error: "forbidden" };
     const res = await syncZIKnowledgeBase();
     return res.ok ? { ok: true, data: res } : { ok: false, error: res.error ?? "sync_failed" };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "sync_failed" }; }
