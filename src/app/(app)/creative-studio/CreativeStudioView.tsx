@@ -54,8 +54,9 @@ import {
 import type { FinalAdPreview } from "@/components/creative/FinalAdsSkeleton";
 import { QUICK_TYPE_LABELS } from "@/lib/creative-studio/quick-creative-engine";
 import type { CreativeStudio } from "@/lib/creative-studio/service";
+import { QuickCreativeWorkspace } from "./quick/QuickCreativeWorkspace";
 
-type QuickOutput = Record<string, unknown> & {
+export type QuickOutput = Record<string, unknown> & {
   id: string; request_id: string; output_type: string; variant_name: string; format: string; title: string | null; render_data: RenderData;
   headline: string | null; cta_text: string | null; overall_score: number; brand_match_score: number; readability_score: number; seller_lead_score: number; buyer_lead_score: number; is_approved: boolean; is_favorite: boolean; status: string;
   internal_prompt: string | null; creative_strategy: string | null; visual_hook: string | null; scroll_stop_reason: string | null; scroll_stop_score: number; creative_director_score: number; anti_ai_score: number; rtl_readability_score: number;
@@ -141,6 +142,17 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
 
   return (
     <main dir="rtl" className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6">
+      {/* CREATIVE STUDIO 2.2 — the modern per-entity creation experience (dominant).
+          Reuses the proven QuickCreativeWizard + QuickResultCard (generation
+          semantics untouched). Everything else — materials, DNA, and the previous
+          multi-phase engine — moves behind ONE collapsed advanced boundary. */}
+      <QuickCreativeWorkspace studio={studio} quickOutputs={quickOutputs} et={et} eid={eid} wrap={wrap} orgId={orgId} userId={userId} prefill={quickPrefill} aiProvider={aiProvider} isManager={isManager} />
+
+      <details className="border-line bg-card rounded-2xl border">
+        <summary className="text-ink flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[13.5px] font-black">
+          <Icon name="Settings" size={15} className="text-muted" />כלים מתקדמים · חומרים, DNA ומנוע יצירה קודם
+        </summary>
+        <div className="flex flex-col gap-5 p-4 pt-1">
       {/* SECTION 1 — HEADER */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
@@ -242,6 +254,8 @@ export function CreativeStudioView({ studio, concepts: conceptsRaw, campaigns: c
         <button disabled className="bg-surface text-muted mt-3 cursor-not-allowed rounded-xl px-4 py-2 text-sm font-bold opacity-70">בקרוב: צור קמפיין נדל״ן</button>
       </section>
 
+        </div>
+      </details>
       {/* SECTION 3 — UPLOAD MODAL */}
       {uploadOpen && <UploadModal onClose={() => setUploadOpen(false)} onDone={() => { setUploadOpen(false); router.refresh(); }} orgId={orgId} userId={userId} et={et} eid={eid} />}
     </main>
@@ -1494,7 +1508,7 @@ function VisualCard({ v, et, eid, wrap }: { v: Visual; et: string; eid: string; 
   );
 }
 
-const QUICK_CARDS: { type: string; title: string; desc: string; cta: string }[] = [
+export const QUICK_CARDS: { type: string; title: string; desc: string; cta: string }[] = [
   { type: "testimonial_post", title: "פוסט המלצה", desc: "הפכו המלצה של מוכר או קונה לפוסט ממותג שמחזק אמון.", cta: "צור פוסט המלצה" },
   { type: "sold_post", title: "פוסט נמכר", desc: "צרו פוסט נמכר ממותג שמביא עוד מוכרים.", cta: "צור פוסט נמכר" },
   { type: "property_ad_post", title: "פוסט פרסום דירה", desc: "צרו מודעת נכס ממותגת עם תמונה, פרטים וקריאה לפעולה.", cta: "צור פוסט פרסום דירה" },
@@ -1587,7 +1601,7 @@ function AdminCandidatesPanel({ et, eid }: { et: string; eid: string }) {
   );
 }
 
-function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
+export function QuickResultCard({ o, et, eid, wrap, canViewPrompt }: { o: QuickOutput; et: string; eid: string; wrap: Wrap; canViewPrompt?: boolean }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1915,10 +1929,10 @@ function ImageUploadField({ label, value, orgId, userId, et, eid, onChange }: { 
   );
 }
 
-function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose }: { type: string; et: string; eid: string; orgId: string; userId: string; prefill?: Record<string, string | boolean | number>; onClose: () => void }) {
+export function QuickCreativeWizard({ type, et, eid, orgId, userId, prefill, onClose, initialFormat, startStep }: { type: string; et: string; eid: string; orgId: string; userId: string; prefill?: Record<string, string | boolean | number>; onClose: () => void; initialFormat?: string; startStep?: number }) {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [format, setFormat] = useState("feed_1_1");
+  const [step, setStep] = useState(startStep ?? 1);
+  const [format, setFormat] = useState(initialFormat ?? "feed_1_1");
   const [improve, setImprove] = useState(false);
   // Prefill from the launching property (#P3-4) so the agent doesn't retype.
   const [f, setF] = useState<Record<string, string | boolean | number>>(() => ({ ...(prefill ?? {}) }));

@@ -91,7 +91,8 @@ export function deriveCreativeOpportunities(input: {
     }
     const hasStory = rows.some((r) => r.format === STORY_FORMAT);
     if (!hasStory) {
-      out.push({ ...base, type: "MISSING_STORY", priority: PRIORITY.MISSING_STORY, evidence: { creatives: rows.length, hasStory: false }, reasonHe: "אין גרסת סטורי (9:16) לנכס הזה" });
+      // Evidence is exactly "missing story" → safe to preselect format=story_9_16.
+      out.push({ ...base, type: "MISSING_STORY", priority: PRIORITY.MISSING_STORY, evidence: { creatives: rows.length, hasStory: false }, reasonHe: "אין גרסת סטורי (9:16) לנכס הזה", studioHref: `${href}?format=story_9_16` });
       continue;
     }
     // Property is well-covered → no opportunity (never a fabricated one).
