@@ -12,7 +12,7 @@
 import Link from "next/link";
 import type { CommandCenter, Kpi, LocalityTrend, TrendSeries } from "@/lib/market-intelligence/command-center";
 import {
-  IntelligenceHeader, IntelligenceActionBar, IntelligenceActionLink, IntelligenceSection,
+  IntelligenceHeader, IntelligenceSection,
   IntelligenceFeed, IntelligenceEmptyState, IntelligenceEmptyInline,
 } from "@/components/intelligence/framework";
 import { BarMeter, StatusBadge } from "@/components/intelligence/terminal";
@@ -49,13 +49,6 @@ export function MarketCommandCenterView({ data }: { data: CommandCenter }) {
         title="מרכז מודיעין שוק"
         subtitle="תמונת השוק החיצוני שלך במבט אחד — הזדמנויות לפעולה, מגמות מחיר ומודיעין שכונתי. לא CRM."
         status={<StatusBadge label={`ביטחון נתונים ${data.dataConfidence}%`} tone={data.dataConfidence >= 70 ? "rising" : data.dataConfidence >= 40 ? "contender" : "warn"} />}
-        actions={
-          <IntelligenceActionBar>
-            <IntelligenceActionLink href="/market-intelligence/listings" primary>🌍 כל מודעות השוק</IntelligenceActionLink>
-            <IntelligenceActionLink href="/market-intelligence/map">🗺️ מפת שוק חיה</IntelligenceActionLink>
-            <IntelligenceActionLink href="/market-intelligence/dashboard">📊 דשבורד</IntelligenceActionLink>
-          </IntelligenceActionBar>
-        }
       />
 
       {/* ── Primary metric + KPI grid ───────────────────────────────────────── */}

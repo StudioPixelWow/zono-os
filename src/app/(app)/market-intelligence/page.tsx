@@ -10,11 +10,17 @@
 // ============================================================================
 import { getMarketCommandCenter } from "@/lib/market-intelligence/service";
 import { MarketCommandCenterView } from "./MarketCommandCenterView";
+import { MarketIntelNav } from "@/components/market-intelligence/MarketIntelNav";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function MarketIntelligencePage() {
   const data = await getMarketCommandCenter();
-  return <MarketCommandCenterView data={data} />;
+  return (
+    <div dir="rtl" className="flex flex-col gap-4">
+      <MarketIntelNav active="center" />
+      <MarketCommandCenterView data={data} />
+    </div>
+  );
 }

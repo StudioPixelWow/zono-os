@@ -10,13 +10,15 @@ import { IntelligenceBreadcrumbs, IntelligenceTabs, type Crumb } from "@/compone
 
 export type { Crumb };
 
-/** Every tab points to a route/surface that already exists. */
+/** Every tab points to a route/surface that already exists. The section now LEADS
+ *  with the synthesized command center; the former query-only tabs (הזדמנויות /
+ *  ירידות מחיר / Likely Exit) were removed — they resolved to the same listings
+ *  page with only a hint changed, and their intelligence now lives, synthesized,
+ *  in the command center itself. */
 const TABS: { key: string; label: string; href: string }[] = [
+  { key: "center", label: "מרכז מודיעין", href: "/market-intelligence" },
   { key: "listings", label: "נכסי השוק", href: "/market-intelligence/listings" },
   { key: "dashboard", label: "דשבורד מודיעין", href: "/market-intelligence/dashboard" },
-  { key: "opportunities", label: "הזדמנויות", href: "/market-intelligence/listings?focus=opportunities" },
-  { key: "price-drops", label: "ירידות מחיר", href: "/market-intelligence/listings?focus=price-drops" },
-  { key: "likely-exit", label: "Likely Market Exit", href: "/market-intelligence/listings?focus=likely-exit" },
   { key: "map", label: "מפת שוק חיה", href: "/market-intelligence/map" },
   { key: "heatmap", label: "Heatmap", href: "/market" },
   { key: "radar", label: "Property Radar", href: "/property-radar" },
