@@ -8,20 +8,23 @@
 import Link from "next/link";
 import type { AgentSitePayload, SiteProperty } from "@/lib/agent-website/site-data";
 import { AgentHeader, type HeaderNavItem } from "./AgentHeader";
-import { PropertyExplorer } from "./PropertyExplorer";
 import { ExpertiseMap } from "./ExpertiseMap";
 import { Testimonials } from "./Testimonials";
 import { MobileStickyCta } from "./MobileStickyCta";
 import { AgentPropertyCard, SectionShell, TextLink, StatStrip, ProofPoints, money } from "./ui";
 import { AgentLeadForm } from "@/app/agent/[slug]/AgentLeadForm";
 import { PublicIcon, type PublicIconName } from "@/components/public-site/PublicIcon";
-import { PublicFeatureCard } from "@/components/public-site/PublicFeatureCard";
+
+// Homepage inventory is BOUNDED (a curated shortlist, never the whole feed) — the
+// full inventory lives on /agent/[slug]/properties. Personal-brand editorial, not
+// a search tool: the site sells the agent, the properties prove it.
+const HOME_FEATURED_MAX = 8;
 
 const ADVANTAGES: { icon: PublicIconName; title: string; text: string }[] = [
-  { icon: "map", title: "היכרות עמוקה עם האזור", text: "ידע מקומי מדויק שמביא לעסקה הנכונה." },
-  { icon: "megaphone", title: "שיווק מתקדם", text: "חשיפה מקסימלית לנכס מול הקהל הנכון." },
-  { icon: "handshake", title: "ליווי אישי", text: "זמינות ויחס אישי מהשלב הראשון ועד המסירה." },
-  { icon: "scale", title: "משא ומתן מקצועי", text: "מיצוי מלא של תנאי העסקה עבורכם." },
+  { icon: "map", title: "היכרות עמוקה עם האזור", text: "ידע מקומי מדויק שמביא לעסקה הנכונה — לא רק מחירים, אלא הבנה של הרחוב, הבניין והשכונה." },
+  { icon: "megaphone", title: "שיווק מתקדם", text: "כל נכס מקבל קמפיין חשיפה ממוקד מול הקהל הנכון, לא סתם עוד מודעה." },
+  { icon: "handshake", title: "ליווי אישי לאורך כל הדרך", text: "זמינות אמיתית ויחס אישי מהשיחה הראשונה ועד מסירת המפתח." },
+  { icon: "scale", title: "משא ומתן שממקסם עבורכם", text: "מיצוי מלא של תנאי העסקה — כל שקל וכל סעיף עובדים לטובתכם." },
 ];
 
 export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
@@ -30,12 +33,12 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
   const on = (k: string) => S[k] !== false;
   const propertiesHref = `/agent/${slug}/properties`;
   const primaryArea = agent.areas[0] ?? null;
-  const types = Array.from(new Set([...data.featured, ...data.recommended, ...data.mapPoints].map((p) => p.type))).filter(Boolean);
 
   const nav: HeaderNavItem[] = [
     { href: "#top", label: "דף הבית" },
     { href: "#properties", label: "נכסים" },
     { href: "#areas", label: "אזורי התמחות" },
+    { href: "#seller", label: "הערכת שווי" },
     { href: "#about", label: "אודות" },
     ...(data.testimonials.length ? [{ href: "#testimonials", label: "לקוחות ממליצים" }] : []),
     { href: "#contact", label: "צור קשר" },
@@ -48,16 +51,16 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       {on("hero") && <Hero data={data} />}
 
-      {/* ── PROPERTY SEARCH + FEATURED — LIVE in-page filtering (P9.6A/P1-1).
-             The search bar filters the agent's real inventory instantly on this
-             page (no navigation, no reload). A single listing keeps the
-             cinematic treatment; no inventory → a buyer marketing state. ────── */}
+      {/* ── PROPERTIES I MARKET — a BOUNDED curated shortlist (≤8), never the
+             whole feed. One cinematic hero + a grid; a single listing keeps the
+             cinematic treatment; no inventory → a buyer marketing state. The full
+             inventory lives on /agent/[slug]/properties (§H). ────────────────── */}
       {on("featured_properties") && (
         data.allProperties.length > 1 ? (
-          <PropertyExplorer properties={data.allProperties} areas={agent.areas} types={types} propertiesHref={propertiesHref} />
-        ) : data.featured.length === 1 ? (
-          <SectionShell id="properties" title="נכסים נבחרים" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
-            <FeaturedProperty property={data.featured[0]} />
+          <FeaturedProperties properties={data.allProperties} total={data.allProperties.length} propertiesHref={propertiesHref} />
+        ) : data.allProperties.length === 1 ? (
+          <SectionShell id="properties" eyebrow="נכסים נבחרים" title="נכס שאני משווק" action={<TextLink href={propertiesHref}>כל הנכסים שלי ←</TextLink>}>
+            <FeaturedProperty property={data.allProperties[0]} />
           </SectionShell>
         ) : data.recommended.length === 0 ? (
           <BuyerCta data={data} />
@@ -69,14 +72,12 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
         <ExpertiseMap points={data.mapPoints} areas={data.areas} primaryArea={primaryArea} propertiesHref={propertiesHref} />
       )}
 
-      {/* ── WHY WORK WITH ME ─────────────────────────────────────────────── */}
-      {on("why_me") && (
-        <SectionShell title="למה לעבוד איתי?" tone="soft">
-          <div className="grid grid-cols-1 gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
-            {ADVANTAGES.map((a) => <PublicFeatureCard key={a.title} icon={a.icon} title={a.title} text={a.text} />)}
-          </div>
-        </SectionShell>
-      )}
+      {/* ── SELLER VALUATION MOMENT — the personal seller-lead engine (§ seller).
+             Uses the real valuation lead flow; shows by default (opt-out only). ── */}
+      {on("seller_valuation") && <SellerValuation data={data} />}
+
+      {/* ── WHY WORK WITH ME — editorial, personal (not a 4-card grid) ─────── */}
+      {on("why_me") && <WhyMe data={data} />}
 
       {/* ── ABOUT ────────────────────────────────────────────────────────── */}
       {on("about") !== false && (agent.bio || agent.specialties.length > 0) && <About data={data} />}
@@ -95,16 +96,11 @@ export function AgentWebsiteTemplate({ data }: { data: AgentSitePayload }) {
         </SectionShell>
       )}
 
-      {/* ── SECOND PROPERTY DISCOVERY ────────────────────────────────────── */}
-      {data.recommended.length > 0 && (
-        <SectionShell title="עוד נכסים שעשויים להתאים לכם" tone="surface" action={<TextLink href={propertiesHref}>לכל הנכסים ←</TextLink>}>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {data.recommended.map((p) => <AgentPropertyCard key={p.id} property={p} />)}
-          </div>
-        </SectionShell>
-      )}
+      {/* Property discovery is intentionally consolidated into the single bounded
+         "נכסים שאני משווק" shortlist above + "כל הנכסים שלי →" (the full inventory
+         page) — no second sprawling grid on the personal homepage. */}
 
-      {/* ── CONTACT CTA ──────────────────────────────────────────────────── */}
+      {/* ── CONTACT CTA — personal final invitation ───────────────────────── */}
       {on("contact") && <ContactCta data={data} />}
 
       {/* ── FOOTER ───────────────────────────────────────────────────────── */}
@@ -123,6 +119,38 @@ function BuyerCta({ data }: { data: AgentSitePayload }) {
       <p className="mx-auto -mt-4 mb-8 max-w-2xl text-center text-[16px] leading-relaxed text-[var(--brand-muted)]">הנכסים שאני משווק מתעדכנים כאן באופן שוטף. ספרו לי מה אתם מחפשים ואעדכן אתכם ברגע שתופיע הזדמנות שמתאימה בדיוק לכם.</p>
       <div className="mx-auto max-w-xl rounded-[24px] border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 shadow-[0_18px_44px_-26px_rgba(15,23,42,0.3)] sm:p-8">
         <AgentLeadForm slug={data.slug} variant="buyer_request" cta="ספרו לי מה אתם מחפשים" accent={data.brand.primary} />
+      </div>
+    </SectionShell>
+  );
+}
+
+// ── BOUNDED featured shortlist — one cinematic hero + a small grid (≤8 total),
+//    then a single strong path to the full inventory. Never the whole feed. ──────
+function FeaturedProperties({ properties, total, propertiesHref }: { properties: SiteProperty[]; total: number; propertiesHref: string }) {
+  const hero = properties[0];
+  const rest = properties.slice(1, HOME_FEATURED_MAX); // hero + up to 7 = ≤8 shown
+  const shown = 1 + rest.length;
+  const moreLabel = total > shown ? `כל הנכסים שלי (${total}) ←` : "כל הנכסים שלי ←";
+  return (
+    <SectionShell
+      id="properties"
+      eyebrow="התיק שלי"
+      title="נכסים שאני משווק"
+      subtitle="מבחר מהנכסים שאני מלווה כרגע. לתיק המלא — המשיכו לכל הנכסים שלי."
+      action={<TextLink href={propertiesHref}>{moreLabel}</TextLink>}
+    >
+      <div className="grid gap-5">
+        <FeaturedProperty property={hero} />
+        {rest.length > 0 && (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {rest.map((p) => <AgentPropertyCard key={p.id} property={p} />)}
+          </div>
+        )}
+      </div>
+      <div className="mt-10 flex justify-center">
+        <Link href={propertiesHref} className="inline-flex items-center gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-7 py-3.5 text-[15px] font-black text-[var(--brand-text)] shadow-sm transition hover:-translate-y-0.5 hover:border-[color:var(--brand-primary)]">
+          {moreLabel}
+        </Link>
       </div>
     </SectionShell>
   );
@@ -184,9 +212,14 @@ function Hero({ data }: { data: AgentSitePayload }) {
 
           {data.proofPoints.length > 0 && <div className={`mt-7 ${hasPhoto ? "" : "flex justify-center"}`}><ProofPoints points={data.proofPoints} /></div>}
 
+          {/* Personal CTA matrix — primary is a direct, human "talk to me" (WhatsApp
+             when available, else the contact form); secondary sends buyers to the
+             inventory. Both brand-token driven. */}
           <div className={`mt-9 flex flex-wrap gap-3 ${hasPhoto ? "" : "justify-center"}`}>
-            <a href="#contact" className="inline-flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-7 py-4 text-[15px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5">קבעו פגישת ייעוץ <PublicIcon name="arrow" size={18} /></a>
-            {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-7 py-4 text-[15px] font-black text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]"><PublicIcon name="whatsapp" size={18} /> שלחו הודעת WhatsApp</a>}
+            {agent.whatsapp
+              ? <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-7 py-4 text-[15px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5"><PublicIcon name="whatsapp" size={18} /> דברו איתי</a>
+              : <a href="#contact" className="inline-flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-7 py-4 text-[15px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5">דברו איתי <PublicIcon name="arrow" size={18} /></a>}
+            <a href="#properties" className="inline-flex items-center gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-7 py-4 text-[15px] font-black text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]"><PublicIcon name="home" size={18} /> נכסים שאני משווק</a>
           </div>
         </div>
 
@@ -222,6 +255,65 @@ function OfficeCard({ data }: { data: AgentSitePayload }) {
         {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] py-2.5 text-center text-[13px] font-bold text-[var(--brand-text)]">שליחת הודעת WhatsApp</a>}
       </div>
     </div>
+  );
+}
+
+// ── Seller valuation moment — the personal seller-lead engine (real flow) ──────
+function SellerValuation({ data }: { data: AgentSitePayload }) {
+  const { agent, brand, slug } = data;
+  const area = agent.areas[0];
+  const points = [
+    { icon: "chart" as PublicIconName, title: "הערכה מבוססת שוק", text: "מבוססת על עסקאות אמת באזור — לא ניחוש." },
+    { icon: "shield" as PublicIconName, title: "ללא התחייבות", text: "בדיקה חינמית ודיסקרטית, אתם מחליטים מה הלאה." },
+    { icon: "handshake" as PublicIconName, title: "ליווי אישי", text: `${agent.firstName} חוזר/ת אליכם אישית עם התמונה המלאה.` },
+  ];
+  return (
+    <section id="seller" className="bg-[var(--brand-soft)]">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-5 py-16 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:py-20">
+        <div>
+          <div className="mb-1 text-[13px] font-bold text-[color:var(--brand-link)]">חושבים למכור?</div>
+          <h2 className="text-3xl font-black leading-tight text-[var(--brand-text)] sm:text-4xl">{area ? `כמה הנכס שלכם ב${area} שווה היום?` : "כמה הנכס שלכם שווה היום?"}</h2>
+          <p className="mt-4 max-w-xl text-[16px] leading-relaxed text-[var(--brand-muted)]">מחיר נכון הוא ההבדל בין נכס שנמכר מהר ובתנאים טובים לבין נכס שתקוע. קבלו הערכת שווי מקצועית ומדויקת, ללא התחייבות.</p>
+          <div className="mt-7 grid gap-4 sm:grid-cols-3">
+            {points.map((p) => (
+              <div key={p.title} className="flex flex-col gap-1.5">
+                <span className="text-[color:var(--brand-primary)]"><PublicIcon name={p.icon} size={22} /></span>
+                <span className="text-[14px] font-black text-[var(--brand-text)]">{p.title}</span>
+                <span className="text-[13px] leading-relaxed text-[var(--brand-muted)]">{p.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-[24px] border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.35)] sm:p-8">
+          <h3 className="mb-1 text-[18px] font-black text-[var(--brand-text)]">קבלו הערכת שווי לנכס</h3>
+          <p className="mb-4 text-[13px] text-[var(--brand-muted)]">השאירו פרטים ואחזור אליכם עם הערכה מסודרת.</p>
+          <AgentLeadForm slug={slug} variant="valuation" cta="בדיקת שווי הנכס" accent={brand.primary} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Why work with me — editorial, personal (numbered rows, not a card grid) ────
+function WhyMe({ data }: { data: AgentSitePayload }) {
+  const { agent } = data;
+  return (
+    <SectionShell tone="soft" eyebrow="הגישה שלי" title={`למה לעבוד עם ${agent.firstName}?`} subtitle="לא רק לסגור עסקה — ללוות אתכם נכון לאורך כל הדרך, בגישה אישית שמרגישים בכל שלב.">
+      <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+        {ADVANTAGES.map((a, i) => (
+          <div key={a.title} className="flex gap-5 border-t border-[var(--brand-border)] pt-6">
+            <div className="text-2xl font-black leading-none text-[color:var(--brand-primary)] opacity-40">{String(i + 1).padStart(2, "0")}</div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="text-[color:var(--brand-primary)]"><PublicIcon name={a.icon} size={20} /></span>
+                <h3 className="text-[18px] font-black text-[var(--brand-text)]">{a.title}</h3>
+              </div>
+              <p className="mt-2 text-[15px] leading-relaxed text-[var(--brand-muted)]">{a.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </SectionShell>
   );
 }
 
@@ -261,7 +353,7 @@ function ContactCta({ data }: { data: AgentSitePayload }) {
       <div className="mx-auto grid w-full max-w-7xl items-center gap-8 px-5 py-16 sm:px-8 lg:grid-cols-2 lg:py-20">
         <div>
           <h2 className="text-3xl font-black leading-tight sm:text-4xl">{area ? `מחפשים נכס ב${area}?` : "מחפשים את הבית הבא שלכם?"}</h2>
-          <p className="mt-3 text-[16px] opacity-90">בואו נמצא יחד את הבית הבא שלכם — השאירו פרטים ואחזור אליכם.</p>
+          <p className="mt-3 text-[16px] opacity-90">אני {agent.firstName}, ואשמח ללוות אתכם — בין אם אתם קונים, מוכרים או רק מתלבטים. השאירו פרטים ואחזור אליכם באופן אישי.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-background)] px-6 py-3.5 text-[15px] font-bold text-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
             {agent.tel && <a href={agent.tel} className="rounded-xl border border-white/40 px-6 py-3.5 text-[15px] font-bold">התקשרו {agent.phone}</a>}
