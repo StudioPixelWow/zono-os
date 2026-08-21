@@ -18,7 +18,7 @@ export interface OfficeAgentDetail {
   member: { id: string; name: string; role: string; specialty: string | null; phone: string | null; email: string | null; status: string; avatarUrl: string | null; hasLogin: boolean };
   accessLabel: string;
   stats: { activeProperties: number; openLeads: number; hotLeads: number; overdueLeads: number; activeDeals: number; stuckDeals: number; todayMeetings: number; overdueTasks: number };
-  properties: { id: string; title: string; sub: string; price: string; statusLabel: string; href: string }[];
+  properties: { id: string; title: string; sub: string; price: string; statusLabel: string; image: string | null; href: string }[];
   leads: { id: string; name: string; stage: string; hot: boolean; href: string }[];
   deals: { id: string; title: string; stage: string; value: number | null; ageDays: number | null; stuck: boolean; href: string }[];
   meetingsToday: { id: string; title: string; time: string; kind: string }[];
@@ -64,7 +64,7 @@ export async function getOfficeAgentDetail(memberId: string): Promise<OfficeAgen
   }
 
   const [propsRes, leadsRes, dealsRes, meetingsRes, tasksRes] = await Promise.all([
-    t("properties").select("id,status,title,city,neighborhood,rooms,size_sqm,price,monthly_rent,listing_kind,updated_at").eq("org_id", orgId).eq("office_member_id", memberId).limit(200),
+    t("properties").select("id,status,title,city,neighborhood,rooms,size_sqm,price,monthly_rent,listing_kind,primary_image_url,updated_at").eq("org_id", orgId).eq("office_member_id", memberId).limit(200),
     t("leads").select("id,full_name,stage,score,last_activity_at,created_at").eq("org_id", orgId).eq("office_member_id", memberId).limit(500),
     t("deals").select("id,title,stage,status,value,created_at").eq("org_id", orgId).eq("office_member_id", memberId).limit(200),
     t("meetings").select("id,start_at,status,title,type").eq("org_id", orgId).eq("office_member_id", memberId).gte("start_at", todayStart).lt("start_at", todayEnd).limit(100),
@@ -118,7 +118,7 @@ export async function getOfficeAgentDetail(memberId: string): Promise<OfficeAgen
     properties: activeProps.slice(0, 12).map((p) => {
       const kind = normalizeListingKind(p.listing_kind);
       const sub = [p.rooms != null ? `${p.rooms} חד׳` : null, p.neighborhood || p.city || "", p.size_sqm != null ? `${p.size_sqm} מ״ר` : null].filter(Boolean).join(" · ");
-      return { id: p.id, title: p.title, sub, price: formatPropertyPrice({ kind, price: p.price, monthlyRent: p.monthly_rent }), statusLabel: STATUS_HE[p.status] ?? p.status, href: `/properties/${p.id}` };
+      return { id: p.id, title: p.title, sub, price: formatPropertyPrice({ kind, price: p.price, monthlyRent: p.monthly_rent }), statusLabel: STATUS_HE[p.status] ?? p.status, image: (p as { primary_image_url?: string | null }).primary_image_url ?? null, href: `/properties/${p.id}` };
     }),
     leads: openLeads.slice(0, 10).map((l) => ({ id: l.id, name: l.full_name || "ליד", stage: STAGE_HE[l.stage] ?? l.stage, hot: (l.score ?? 0) >= 85, href: `/leads/${l.id}` })),
     deals: openDeals.slice(0, 10).map((d) => { const ageDays = d.created_at ? Math.floor((nowMs - new Date(d.created_at).getTime()) / 86_400_000) : null; return { id: d.id, title: d.title, stage: STAGE_HE[d.stage] ?? d.stage, value: d.value, ageDays, stuck: (ageDays ?? 0) >= 21 && !LATE_STAGES.has(d.stage), href: `/deals/${d.id}` }; }),
