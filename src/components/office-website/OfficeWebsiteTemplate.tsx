@@ -127,7 +127,7 @@ function Hero({ data }: { data: OfficeSitePayload }) {
         {hasCover ? (
           <>
             <img src={office.cover!} alt={office.name} className="h-full w-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/55 to-black/30" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/55 to-black/65" />
           </>
         ) : (
           <>
@@ -139,18 +139,18 @@ function Hero({ data }: { data: OfficeSitePayload }) {
         <div className="absolute inset-0 opacity-[0.14]" style={{ backgroundImage: "radial-gradient(58% 58% at 80% 6%, #fff, transparent 60%)" }} />
       </div>
 
-      <div className="mx-auto flex min-h-[74vh] w-full max-w-7xl flex-col justify-center gap-5 px-5 py-20 sm:px-8">
+      <div className="mx-auto flex min-h-[74vh] w-full max-w-4xl flex-col items-center justify-center gap-5 px-5 py-20 text-center sm:px-8">
         {brand.logo
-          ? <img src={brand.logo} alt={office.name} className="mb-1 h-20 w-auto max-w-[260px] self-start rounded-3xl bg-white/95 p-3.5 object-contain shadow-2xl ring-1 ring-white/40 sm:h-24" />
+          ? <img src={brand.logo} alt={office.name} className="mb-1 h-20 w-auto max-w-[260px] self-center rounded-3xl bg-white/95 p-3.5 object-contain shadow-2xl ring-1 ring-white/40 sm:h-24" />
           : <div className="text-2xl font-black text-white/95">{office.name}</div>}
-        {areaLine && <div className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-wide text-[color:var(--brand-primary)]"><PublicIcon name="map" size={16} />{areaLine}</div>}
-        <h1 className="max-w-4xl text-4xl font-black leading-[1.05] text-white drop-shadow-sm sm:text-6xl lg:text-7xl">{title}</h1>
-        <p className="max-w-xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]">
+        {areaLine && <div className="flex items-center justify-center gap-2 text-[13px] font-bold uppercase tracking-wide text-[color:var(--brand-primary)]"><PublicIcon name="map" size={16} />{areaLine}</div>}
+        <h1 className="mx-auto max-w-3xl text-4xl font-black leading-[1.05] text-white drop-shadow-sm sm:text-6xl lg:text-7xl">{title}</h1>
+        <p className="mx-auto max-w-xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]">
           {office.description || "צוות המשרד שלנו מלווה מוכרים, קונים ומשקיעים באזור — עם היכרות מקומית, שיווק מתקדם וליווי אישי לאורך כל הדרך."}
         </p>
 
         {data.proofPoints.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-2.5">
+          <div className="mt-1 flex flex-wrap justify-center gap-2.5">
             {data.proofPoints.slice(0, 4).map((pp) => (
               <div key={pp.label} className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-md">
                 <span className="text-xl font-black text-[color:var(--brand-primary)] drop-shadow sm:text-2xl">{pp.value}</span>
@@ -161,7 +161,7 @@ function Hero({ data }: { data: OfficeSitePayload }) {
         )}
 
         {/* Two user journeys — seller primary, buyer secondary */}
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap justify-center gap-3">
           <a href="#seller" className="rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[15px] font-black text-[color:var(--brand-on-primary)] shadow-2xl transition hover:-translate-y-0.5">אני רוצה למכור נכס</a>
           <a href="#properties" className="rounded-xl border border-white/40 bg-white/10 px-8 py-4 text-[15px] font-bold text-white backdrop-blur-md transition hover:bg-white/20">אני מחפש נכס</a>
         </div>
