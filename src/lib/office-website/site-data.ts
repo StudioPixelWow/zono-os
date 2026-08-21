@@ -64,7 +64,7 @@ export interface OfficeTeamMember {
 }
 
 export interface OfficeStat { value: string; label: string }
-export interface OfficeArea { name: string; properties: number; agents: number }
+export interface OfficeArea { name: string; properties: number; agents: number; agentNames: string[] }
 export interface OfficeTestimonial {
   name: string;
   text: string;
@@ -91,6 +91,7 @@ export interface OfficeSitePayload {
   recommended: OfficeProperty[];
   mapPoints: OfficeProperty[];
   areas: OfficeArea[];
+  recentSold: OfficeProperty[];   // public-safe closed inventory (no price/parties)
   testimonials: OfficeTestimonial[];
 }
 
@@ -267,8 +268,20 @@ export async function getOfficeSite(
     e.properties++; const mid = resolveMemberId(p); if (mid) e.agents.add(mid); areaAgg.set(k, e);
   }
   const areas: OfficeArea[] = Array.from(areaAgg.entries())
-    .map(([name, e]) => ({ name, properties: e.properties, agents: e.agents.size }))
+    .map(([name, e]) => ({ name, properties: e.properties, agents: e.agents.size, agentNames: [...e.agents].map((id) => memberById.get(id)?.full_name).filter((n): n is string => !!n).slice(0, 3) }))
     .sort((a, b) => b.properties - a.properties).slice(0, 8);
+
+  // ── Recent success (public-safe closed inventory) — NO price, NO parties ────
+  const { data: soldRows } = await admin.from("properties")
+    .select("id,title,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,owner_id,office_member_id,created_at")
+    .eq("org_id", orgId).in("status", ["sold", "rented"] as never).order("updated_at", { ascending: false }).limit(6);
+  const recentSold: OfficeProperty[] = ((soldRows ?? []) as unknown as RawProp[]).map((p) => ({
+    id: p.id, title: p.title || [p.neighborhood, p.city].filter(Boolean).join(" · ") || "נכס",
+    price: null, monthlyRent: null, listingKind: p.listing_kind, city: p.city, neighborhood: p.neighborhood,
+    rooms: p.rooms, sizeSqm: p.size_sqm, floor: p.floor, type: p.type, status: p.status, image: p.primary_image_url,
+    tag: p.status === "rented" ? "הושכר" : "נמכר",
+    lat: null, lng: null, href: `/p/${p.id}`, agent: memberRef(resolveMemberId(p)),
+  }));
 
   // ── Testimonials → responsible member (client_reviews.agent_id is a user id) ─
   interface RawReview { agent_id: string | null; reviewer_name: string | null; rating: number | null; review_text: string | null; city: string | null; neighborhood: string | null; status: string | null }
@@ -331,6 +344,7 @@ export async function getOfficeSite(
     recommended,
     mapPoints,
     areas,
+    recentSold,
     testimonials,
   };
 }
