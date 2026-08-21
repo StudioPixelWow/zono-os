@@ -6,7 +6,7 @@
 // Supports a ?agent=<id> deep link (reopen/back) and restores focus to the
 // triggering card on close. Detailed drawer data is lazy-loaded per agent.
 // ============================================================================
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { AgentAvatar } from "@/components/office/AgentAvatar";
@@ -57,18 +57,25 @@ export function OfficeTeamSection({ agents, agentOptions }: { agents: OfficeAgen
   const searchParams = useSearchParams();
   const triggerRef = useRef<HTMLElement | null>(null);
 
-  // The URL is the single source of truth for which drawer is open (?agent=<id>),
-  // so back/forward and deep links work with no state-sync effect. Only a VALID
-  // in-list agent opens (a foreign/unknown id never does).
-  const q = searchParams.get("agent");
-  const openId = q && agents.some((a) => a.id === q) ? q : null;
+  // LOCAL state is the source of truth so a click opens the drawer INSTANTLY,
+  // independent of any server round-trip (the /office server page is force-dynamic
+  // and does not read searchParams, so a query-only navigation does not reliably
+  // re-render this island). The URL is kept in sync best-effort for deep links /
+  // refresh; the initializer honours an incoming ?agent=<id>. Only a VALID in-list
+  // agent may open (a foreign/unknown id never does).
+  const [openId, setOpenId] = useState<string | null>(() => {
+    const q = searchParams.get("agent");
+    return q && agents.some((a) => a.id === q) ? q : null;
+  });
 
   const open = useCallback((id: string, el: HTMLElement) => {
     triggerRef.current = el;
+    setOpenId(id);
     router.replace(`/office?agent=${id}`, { scroll: false });
   }, [router]);
 
   const close = useCallback(() => {
+    setOpenId(null);
     router.replace("/office", { scroll: false });
     const el = triggerRef.current; triggerRef.current = null;
     if (el) setTimeout(() => el.focus(), 0);
