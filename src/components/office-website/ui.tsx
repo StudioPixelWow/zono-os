@@ -53,34 +53,51 @@ function AgentChip({ agent, label = "מטפל בנכס" }: { agent: OfficeAgentR
   );
 }
 
-/** Premium office property card — reference geometry + handling-agent footer. */
+/** A branded no-image fallback — office-brand gradient + a building motif (never
+ *  a gray box + tiny icon, never a fabricated photo). */
+function PropertyBrandFallback() {
+  return (
+    <div className="relative grid h-full w-full place-items-center overflow-hidden" style={{ background: "linear-gradient(135deg, var(--brand-soft) 0%, var(--brand-hero) 130%)" }}>
+      <svg viewBox="0 0 120 80" className="h-1/2 w-1/2 text-[color:var(--brand-primary)] opacity-40" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden>
+        <path d="M8 74V34l20-12 20 12v40M48 74V22l24-14 24 14v52M28 74v-14M28 48v-6M72 74v-16M88 74v-16M72 44v-6M88 44v-6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
+/** Premium office property card — image dominates (price over the image),
+ *  sale/rent chip, branded fallback, subtle handling-agent footer. */
 export function OfficePropertyCard({ property }: { property: OfficeProperty }) {
   const loc = [property.neighborhood, property.city].filter(Boolean).join(", ");
   const priceLabel = property.listingKind === "rent"
     ? (money(property.monthlyRent) ? `${money(property.monthlyRent)} / חודש` : null)
     : money(property.price);
+  const kindLabel = property.listingKind === "rent" ? "להשכרה" : property.listingKind === "sale" ? "למכירה" : null;
   const meta = [
     property.rooms != null ? `${property.rooms} חד׳` : null,
     property.sizeSqm != null ? `${property.sizeSqm} מ״ר` : null,
     property.floor != null ? `קומה ${property.floor}` : null,
   ].filter(Boolean);
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] transition duration-200 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
+    <div className="group relative flex flex-col overflow-hidden rounded-3xl bg-[var(--brand-background)] shadow-[0_10px_30px_-18px_rgba(15,23,42,0.25)] ring-1 ring-[var(--brand-border)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_50px_-24px_rgba(15,23,42,0.42)]">
       <Link href={property.href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]">
-        <div className="relative aspect-[4/3] overflow-hidden bg-[var(--brand-surface)]">
+        <div className="relative aspect-[4/3] overflow-hidden">
           <FavoriteButton label={`שמירת ${property.title}`} />
-          {property.tag && <span className="absolute end-3 top-3 z-10 rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-[11px] font-bold text-[var(--brand-on-primary)] shadow-sm">{property.tag}</span>}
+          {kindLabel && <span className="absolute start-3 top-3 z-10 rounded-full bg-[var(--brand-primary)] px-2.5 py-1 text-[11px] font-black text-[var(--brand-on-primary)] shadow">{kindLabel}</span>}
+          {property.tag && property.tag !== kindLabel && <span className="absolute end-3 top-3 z-10 rounded-lg bg-white/90 px-2.5 py-1 text-[11px] font-black text-[var(--brand-text)] shadow-sm backdrop-blur">{property.tag}</span>}
           {property.image
-            ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
-            : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><HouseGlyph /></div>}
+            ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+            : <PropertyBrandFallback />}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent p-4 pt-10">
+            {priceLabel
+              ? <div className="text-[19px] font-black text-white drop-shadow-sm">{priceLabel}</div>
+              : <div className="text-[13px] font-bold text-white/90">מחיר לפי פנייה</div>}
+          </div>
         </div>
         <div className="flex flex-col gap-1 p-4">
           <div className="line-clamp-1 text-[15px] font-black text-[var(--brand-text)]">{property.title}</div>
           {loc && <div className="line-clamp-1 text-[13px] text-[var(--brand-muted)]">{loc}</div>}
-          <div className="mt-2 border-t border-[var(--brand-border)] pt-2">
-            {priceLabel ? <div className="text-[17px] font-black text-[color:var(--brand-link)]">{priceLabel}</div> : <div className="text-[13px] font-semibold text-[var(--brand-muted)]">מחיר לפי פנייה</div>}
-          </div>
-          {meta.length > 0 && <div className="mt-1 flex items-center gap-3 text-[12px] font-semibold text-[var(--brand-muted)]">{meta.map((m, i) => <span key={i} className="flex items-center gap-3">{i > 0 && <i className="h-3 w-px bg-[var(--brand-border)]" />}{m}</span>)}</div>}
+          {meta.length > 0 && <div className="mt-1.5 flex items-center gap-2.5 text-[12px] font-semibold text-[var(--brand-muted)]">{meta.map((m, i) => <span key={i} className="flex items-center gap-2.5">{i > 0 && <i className="h-3 w-px bg-[var(--brand-border)]" />}{m}</span>)}</div>}
         </div>
       </Link>
       {property.agent && <div className="border-t border-[var(--brand-border)] px-4 py-2.5"><AgentChip agent={property.agent} /></div>}
@@ -92,42 +109,36 @@ export function OfficePropertyCard({ property }: { property: OfficeProperty }) {
  *  Server-safe: no event handlers; the WhatsApp link is a SIBLING of the profile
  *  link (never an <a> nested inside another <a>). */
 export function TeamCard({ member }: { member: OfficeTeamMember }) {
-  const cls = "group flex flex-col overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] transition duration-200 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]";
   const photo = (
-    <div className="relative aspect-[4/5] overflow-hidden bg-[var(--brand-soft)]">
+    <div className="relative aspect-[4/5] overflow-hidden rounded-[20px] bg-[var(--brand-soft)] shadow-[0_14px_34px_-20px_rgba(15,23,42,0.4)]">
       {member.photo
-        ? <img src={member.photo} alt={member.name} loading="lazy" className="h-full w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]" />
-        : <div className="grid h-full w-full place-items-center text-5xl font-black text-[color:var(--brand-primary)]">{member.name.slice(0, 1)}</div>}
+        ? <img src={member.photo} alt={member.name} loading="lazy" className="h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]" />
+        : <div className="grid h-full w-full place-items-center text-6xl font-black text-[color:var(--brand-primary)]">{member.name.slice(0, 1)}</div>}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent p-3.5 pt-10">
+        <div className="text-[17px] font-black leading-tight text-white drop-shadow">{member.name}</div>
+        {member.title && <div className="text-[12.5px] font-semibold text-white/85">{member.title}</div>}
+      </div>
     </div>
   );
-  const heading = (
-    <>
-      <div className="text-[16px] font-black text-[var(--brand-text)]">{member.name}</div>
-      {member.title && <div className="text-[13px] font-semibold text-[color:var(--brand-link)]">{member.title}</div>}
-    </>
-  );
+  const meta = member.areas.length > 0 ? member.areas.join(" · ") : (member.activeProperties > 0 ? `${member.activeProperties} נכסים פעילים` : "");
   return (
-    <div className={cls}>
-      {member.href ? <Link href={member.href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]">{photo}</Link> : photo}
-      <div className="flex flex-1 flex-col p-4">
-        {member.href ? <Link href={member.href} className="hover:opacity-90">{heading}</Link> : heading}
-        {member.areas.length > 0 && <div className="mt-1 line-clamp-1 text-[12px] text-[var(--brand-muted)]">{member.areas.join(" · ")}</div>}
-        {member.activeProperties > 0 && <div className="mt-2 text-[12px] font-bold text-[var(--brand-text)]">{member.activeProperties} נכסים פעילים</div>}
-        <div className="mt-3 flex items-center gap-2 pt-1">
-          {member.whatsapp && <a href={member.whatsapp} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp ${member.name}`} className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--brand-primary)] text-[var(--brand-on-primary)]"><WaGlyph /></a>}
-          {member.href && <Link href={member.href} className="text-[13px] font-bold text-[color:var(--brand-link)]">לפרופיל ←</Link>}
-        </div>
+    <div className="group flex flex-col gap-2.5">
+      {member.href ? <Link href={member.href} className="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]">{photo}</Link> : photo}
+      <div className="flex items-center justify-between gap-2 px-1">
+        {meta && <span className="line-clamp-1 text-[12.5px] text-[var(--brand-muted)]">{meta}</span>}
+        {member.href && <Link href={member.href} className="shrink-0 text-[12.5px] font-bold text-[color:var(--brand-link)] transition hover:opacity-80">לפרופיל ←</Link>}
       </div>
     </div>
   );
 }
 
-/** Testimonial card with agent attribution (integrity: linked agent only). */
-export function OfficeTestimonialCard({ t }: { t: OfficeTestimonial }) {
+/** Testimonial card with agent attribution (integrity: linked agent only).
+ *  `featured` renders the hero-sized quote for the lead review. */
+export function OfficeTestimonialCard({ t, featured }: { t: OfficeTestimonial; featured?: boolean }) {
   return (
-    <figure className="flex flex-col rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-6">
-      {t.rating ? <div className="text-[color:var(--brand-accent)]" aria-label={`דירוג ${t.rating}`}>{"★".repeat(Math.max(1, Math.min(5, Math.round(t.rating))))}</div> : null}
-      <blockquote className="mt-3 flex-1 text-[15px] leading-relaxed text-[var(--brand-text)]">{t.text}</blockquote>
+    <figure className={`flex h-full flex-col rounded-3xl border border-[var(--brand-border)] bg-[var(--brand-background)] ${featured ? "p-7 shadow-[0_18px_44px_-28px_rgba(15,23,42,0.3)] sm:p-9" : "p-6"}`}>
+      {t.rating ? <div className={`text-[color:var(--brand-accent)] ${featured ? "text-lg" : ""}`} aria-label={`דירוג ${t.rating}`}>{"★".repeat(Math.max(1, Math.min(5, Math.round(t.rating))))}</div> : null}
+      <blockquote className={`mt-3 flex-1 leading-relaxed text-[var(--brand-text)] ${featured ? "text-[19px] font-semibold sm:text-[23px]" : "text-[15px]"}`}>{featured ? `״${t.text}״` : t.text}</blockquote>
       <figcaption className="mt-4">
         <div className="text-[14px] font-black text-[var(--brand-text)]">{t.name}</div>
         {t.area && <div className="text-[12px] font-semibold text-[var(--brand-muted)]">{t.area}</div>}
@@ -143,6 +154,3 @@ export function OfficeTestimonialCard({ t }: { t: OfficeTestimonial }) {
     </figure>
   );
 }
-
-function HouseGlyph() { return <svg viewBox="0 0 24 24" width={40} height={40} fill="none" stroke="currentColor" strokeWidth={1.4} aria-hidden><path d="M3 11l9-7 9 7M5 10v9h5v-5h4v5h5v-9" strokeLinejoin="round" strokeLinecap="round" /></svg>; }
-function WaGlyph() { return <svg viewBox="0 0 24 24" width={17} height={17} fill="currentColor" aria-hidden><path d="M12 2a10 10 0 00-8.5 15.3L2 22l4.8-1.5A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.9.9.9-2.8-.2-.3A8 8 0 1112 20zm4.5-6c-.25-.13-1.47-.72-1.7-.8-.23-.09-.4-.13-.56.13-.17.25-.64.8-.78.97-.14.16-.29.18-.54.06a6.5 6.5 0 01-3.2-2.8c-.24-.42.24-.39.69-1.3.08-.16.04-.3-.02-.42-.06-.13-.56-1.35-.77-1.85-.2-.48-.4-.42-.56-.42h-.48c-.16 0-.42.06-.64.3-.22.25-.85.83-.85 2.02s.87 2.35.99 2.51c.12.16 1.7 2.6 4.12 3.64 1.53.66 2.13.72 2.9.6.46-.06 1.47-.6 1.68-1.18.2-.58.2-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" /></svg>; }

@@ -79,7 +79,15 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
           <SectionShell id="properties" eyebrow="נכסי המשרד" title="נכסים נבחרים" subtitle="מבחר מתוך האינוונטר של המשרד — לכל נכס סוכן אחראי" action={<TextLink href={propertiesHref}>כל נכסי המשרד ←</TextLink>}>
             {data.featured.length === 1
               ? <FeaturedProperty property={data.featured[0]} />
-              : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">{data.featured.slice(0, 6).map((p) => <OfficePropertyCard key={p.id} property={p} />)}</div>}
+              : (
+                // Editorial break-the-grid: one large hero listing + a supporting grid.
+                <div className="flex flex-col gap-6">
+                  <FeaturedProperty property={data.featured[0]} />
+                  {data.featured.length > 1 && (
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">{data.featured.slice(1, 7).map((p) => <OfficePropertyCard key={p.id} property={p} />)}</div>
+                  )}
+                </div>
+              )}
           </SectionShell>
         ) : data.recommended.length === 0 ? <BuyerCta data={data} /> : null
       )}
@@ -105,7 +113,13 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
       {/* K · TESTIMONIALS (only when real, agent-linked) */}
       {on("testimonials") && data.testimonials.length > 0 && (
         <SectionShell id="testimonials" eyebrow="המלצות" title="הלקוחות שלנו מספרים" tone="surface">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{data.testimonials.slice(0, 6).map((t, i) => <OfficeTestimonialCard key={i} t={t} />)}</div>
+          {/* One hero review + compact supporting proof (not a flat 3-up grid). */}
+          <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+            <OfficeTestimonialCard t={data.testimonials[0]} featured />
+            {data.testimonials.length > 1 && (
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">{data.testimonials.slice(1, 3).map((t, i) => <OfficeTestimonialCard key={i} t={t} />)}</div>
+            )}
+          </div>
         </SectionShell>
       )}
 
@@ -137,8 +151,9 @@ function Hero({ data }: { data: OfficeSitePayload }) {
       <div className="absolute inset-0 -z-10">
         {/* Office brand color is the BASE; a cover photo sits over it faintly. */}
         <div className="absolute inset-0" style={{ background: "linear-gradient(120deg, var(--brand-hero) 0%, var(--brand-hero-2) 100%)" }} />
-        {hasCover && <img src={office.cover!} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-[0.16]" />}
-        <div className="absolute inset-0 bg-gradient-to-bl from-black/10 via-transparent to-black/45" />
+        {hasCover && <img src={office.cover!} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-[0.18]" />}
+        <div className="absolute inset-0 bg-gradient-to-bl from-black/25 via-transparent to-black/55" />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/45 to-transparent" />
         <div aria-hidden className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: "radial-gradient(52% 55% at 14% 6%, #fff, transparent 60%)" }} />
       </div>
 
@@ -153,19 +168,20 @@ function Hero({ data }: { data: OfficeSitePayload }) {
           <p className="max-w-xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]">
             {office.description || "צוות המשרד שלנו מלווה מוכרים, קונים ומשקיעים באזור — עם היכרות מקומית, שיווק מתקדם וליווי אישי לאורך כל הדרך."}
           </p>
+          {/* Primary = buyer/search, secondary = seller/valuation — DISTINCT destinations */}
           <div className="mt-2 flex flex-wrap gap-3">
-            <a href={SELLER_ANCHOR} className="rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[15px] font-black text-[color:var(--brand-on-primary)] shadow-2xl transition hover:-translate-y-0.5">בדיקת שווי הנכס</a>
-            <a href={BUYER_ANCHOR} className="rounded-xl border border-white/40 bg-white/10 px-8 py-4 text-[15px] font-bold text-white backdrop-blur-md transition hover:bg-white/20">צפו בנכסים</a>
+            <a href={BUYER_ANCHOR} className="rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[15px] font-black text-[color:var(--brand-on-primary)] shadow-2xl transition hover:-translate-y-0.5">חיפוש נכסים</a>
+            <a href={SELLER_ANCHOR} className="rounded-xl border border-white/45 bg-white/10 px-8 py-4 text-[15px] font-bold text-white backdrop-blur-md transition hover:bg-white/20">כמה הנכס שלי שווה?</a>
           </div>
         </div>
 
-        {/* Left (RTL end) — data-backed proof stack (asymmetric counterweight) */}
+        {/* Left (RTL end) — open proof (big numbers, minimal chrome) */}
         {data.proofPoints.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 lg:pb-1">
+          <div className="flex flex-wrap gap-x-8 gap-y-5 lg:flex-col lg:gap-6 lg:border-s lg:border-white/25 lg:ps-7">
             {data.proofPoints.slice(0, 4).map((pp) => (
-              <div key={pp.label} className="rounded-2xl border border-white/20 bg-white/10 px-4 py-4 backdrop-blur-md">
-                <div className="text-2xl font-black text-[color:var(--brand-primary)] drop-shadow sm:text-3xl">{pp.value}</div>
-                <div className="mt-0.5 text-[12.5px] font-semibold text-white/80">{pp.label}</div>
+              <div key={pp.label}>
+                <div className="text-3xl font-black leading-none text-[color:var(--brand-primary)] drop-shadow sm:text-[40px]">{pp.value}</div>
+                <div className="mt-1.5 text-[13px] font-semibold text-white/80">{pp.label}</div>
               </div>
             ))}
           </div>
@@ -202,16 +218,16 @@ function SellerValuationSection({ data }: { data: OfficeSitePayload }) {
       <div className="relative mx-auto grid w-full max-w-7xl gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[1fr_1fr] lg:items-center lg:py-24">
         <div>
           <div className="text-[13px] font-black uppercase tracking-[0.14em] opacity-80">בעלי נכס</div>
-          <h2 className="mt-2 text-3xl font-black leading-[1.08] sm:text-4xl lg:text-5xl">רוצים לדעת כמה הנכס שלכם שווה?</h2>
-          <p className="mt-4 max-w-md text-[16px] leading-relaxed opacity-90">קבלו הערכת שווי ראשונית וליווי מקומי של צוות שמכיר את {area ? `שוק ${area}` : "השוק"} — ללא התחייבות.</p>
+          <h2 className="mt-2 text-3xl font-black leading-[1.08] sm:text-4xl lg:text-5xl">כמה הנכס שלכם שווה היום?</h2>
+          <p className="mt-4 max-w-md text-[16px] leading-relaxed opacity-90">קבלו הערכת שווי ראשונית לנכס באזור שלכם וליווי מקומי של צוות שמכיר את {area ? `שוק ${area}` : "השוק"} — ללא התחייבות.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             {office.whatsapp && <a href={office.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-background)] px-6 py-3 text-[14px] font-black text-[color:var(--brand-primary)] shadow-lg transition hover:-translate-y-0.5">דברו עם המשרד</a>}
             {office.tel && <a href={office.tel} className="rounded-xl border border-white/45 px-6 py-3 text-[14px] font-bold transition hover:bg-white/10">התקשרו {office.phone}</a>}
           </div>
         </div>
         <div className="rounded-[26px] bg-[var(--brand-background)] p-6 text-[var(--brand-text)] shadow-2xl sm:p-8">
-          <div className="mb-3 text-[16px] font-black">קבלת הערכת שווי</div>
-          <SiteLeadForm slug={slug} variant="valuation" cta="קבלת הערכת שווי" />
+          <div className="mb-3 flex items-center gap-2 text-[16px] font-black"><span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><PublicIcon name="home" size={16} /></span>הערכת שווי לנכס</div>
+          <SiteLeadForm slug={slug} variant="valuation" cta="בדיקת שווי הנכס" />
         </div>
       </div>
     </section>
