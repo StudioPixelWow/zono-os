@@ -23,6 +23,7 @@ export interface OfficeAgentDetail {
   deals: { id: string; title: string; stage: string; value: number | null; ageDays: number | null; stuck: boolean; href: string }[];
   meetingsToday: { id: string; title: string; time: string; kind: string }[];
   needsAttention: { id: string; label: string; sub: string; href: string }[];
+  recentActivity: { id: string; label: string; when: string; kind: string }[];
 }
 
 function israelTodayBounds(now: Date): { start: string; end: string } {
@@ -90,6 +91,23 @@ export async function getOfficeAgentDetail(memberId: string): Promise<OfficeAgen
 
   const accessLabel = m.status === "inactive" ? "לא פעיל" : m.status === "invited" ? "ממתין" : m.user_id ? "פעיל · עם כניסה למערכת" : "פעיל · ללא כניסה למערכת";
 
+  // Recent activity — a bounded, real feed synthesized from data already fetched
+  // (no extra query): newest lead touches, deal changes and meetings.
+  const relWhen = (iso: string | null): string => {
+    if (!iso) return "";
+    const h = Math.max(0, (nowMs - new Date(iso).getTime()) / 3_600_000);
+    if (h < 1) return "לפני פחות משעה";
+    if (h < 24) return `לפני ${Math.floor(h)} שעות`;
+    const d = Math.floor(h / 24);
+    return d === 1 ? "אתמול" : `לפני ${d} ימים`;
+  };
+  const recentActivity = [
+    ...leads.map((l) => ({ id: `l:${l.id}`, ts: l.last_activity_at || l.created_at, label: `ליד — ${l.full_name || "ליד"}`, kind: "lead" })),
+    ...deals.map((d) => ({ id: `d:${d.id}`, ts: d.created_at, label: `עסקה — ${d.title}`, kind: "deal" })),
+    ...meetings.map((mt) => ({ id: `m:${mt.id}`, ts: mt.start_at, label: `${KIND_HE[mt.type ?? "other"] ?? "פגישה"} — ${mt.title && !mt.title.startsWith("[") ? mt.title : "מתוזמן"}`, kind: "meeting" })),
+  ].filter((x) => x.ts).sort((a, b) => (b.ts as string).localeCompare(a.ts as string)).slice(0, 5)
+    .map((x) => ({ id: x.id, label: x.label, when: relWhen(x.ts), kind: x.kind }));
+
   return {
     member: { id: m.id, name: m.full_name, role: m.role, specialty: m.specialty, phone: m.phone, email: m.email, status: m.status, avatarUrl: resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: linkedAvatar }), hasLogin: !!m.user_id },
     accessLabel,
@@ -106,5 +124,6 @@ export async function getOfficeAgentDetail(memberId: string): Promise<OfficeAgen
     deals: openDeals.slice(0, 10).map((d) => { const ageDays = d.created_at ? Math.floor((nowMs - new Date(d.created_at).getTime()) / 86_400_000) : null; return { id: d.id, title: d.title, stage: STAGE_HE[d.stage] ?? d.stage, value: d.value, ageDays, stuck: (ageDays ?? 0) >= 21 && !LATE_STAGES.has(d.stage), href: `/deals/${d.id}` }; }),
     meetingsToday: meetings.filter((mt) => mt.status !== "cancelled").sort((a, b) => a.start_at.localeCompare(b.start_at)).slice(0, 8).map((mt) => ({ id: mt.id, title: mt.title && mt.title.trim() && !mt.title.startsWith("[") ? mt.title : (KIND_HE[mt.type ?? "other"] ?? "פגישה"), time: clockHe(mt.start_at), kind: KIND_HE[mt.type ?? "other"] ?? "פגישה" })),
     needsAttention,
+    recentActivity,
   };
 }

@@ -163,9 +163,9 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
   const officeMemberId = (p.office_member_id as string | null) ?? null;
   if (officeMemberId) {
     const { data: mRow } = await admin.from("office_members" as never)
-      .select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website")
+      .select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website,public_slug")
       .eq("id", officeMemberId).eq("org_id", orgId).maybeSingle();
-    const m = mRow as { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null; status: string; show_on_website: boolean | null } | null;
+    const m = mRow as { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null; status: string; show_on_website: boolean | null; public_slug: string | null } | null;
     if (m && m.status === "active") {
       let linkedAvatar: string | null = null;
       if (m.user_id) linkedAvatar = ((await admin.from("users").select("avatar_url").eq("id", m.user_id).maybeSingle()).data as { avatar_url: string | null } | null)?.avatar_url ?? null;
@@ -181,7 +181,7 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
         whatsapp: waLink(null, memberPhone),
         email: null, // never expose a roster member's email publicly
         areas: agent?.areas ?? [],
-        href: officeSlug && m.show_on_website ? `/site/${officeSlug}/agents/${m.id}` : null,
+        href: officeSlug && m.show_on_website ? `/site/${officeSlug}/agents/${m.public_slug ?? m.id}` : null,
       };
     }
   }

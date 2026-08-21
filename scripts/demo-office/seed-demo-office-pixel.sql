@@ -337,14 +337,14 @@ end $$;
 do $$
 declare o uuid := '0f1825d2-0ac8-45d1-b03c-50ce9e9366a2'; u uuid := '139e649a-25d6-4501-ab95-f02d796d4aab'; mk jsonb := '{"demo_seed":"zono_demo_office_pixel_v1"}';
 begin
-  insert into public.office_members (id, org_id, user_id, full_name, role, status, specialty, avatar_url, show_on_website, metadata)
+  insert into public.office_members (id, org_id, user_id, full_name, role, status, specialty, avatar_url, show_on_website, public_slug, metadata)
   values
-   (md5('zdo1p:member:manager')::uuid, o, u, 'מיכל כהן', 'owner', 'active', 'ניהול משרד', '/demo/agents/michal.svg', true, mk),
-   (md5('zdo1p:member:dana')::uuid, o, null, 'דנה כהן', 'agent', 'active', 'מכירות מגורים', '/demo/agents/dana.svg', true, mk),
-   (md5('zdo1p:member:yoav')::uuid, o, null, 'יואב לוי', 'agent', 'active', 'השכרות ורוכשים ראשונים', '/demo/agents/yoav.svg', true, mk),
-   (md5('zdo1p:member:maya')::uuid, o, null, 'מאיה ישראלי', 'agent', 'active', 'נכסי יוקרה ובלעדיות', '/demo/agents/maya.svg', true, mk),
-   (md5('zdo1p:member:omer')::uuid, o, null, 'עומר רז', 'agent', 'active', 'חיפה והקריות', '/demo/agents/omer.svg', true, mk)
-  on conflict (id) do update set avatar_url = excluded.avatar_url, show_on_website = excluded.show_on_website;
+   (md5('zdo1p:member:manager')::uuid, o, u, 'מיכל כהן', 'owner', 'active', 'ניהול משרד', '/demo/agents/michal.svg', true, 'michal-cohen', mk),
+   (md5('zdo1p:member:dana')::uuid, o, null, 'דנה כהן', 'agent', 'active', 'מכירות מגורים', '/demo/agents/dana.svg', true, 'dana-cohen', mk),
+   (md5('zdo1p:member:yoav')::uuid, o, null, 'יואב לוי', 'agent', 'active', 'השכרות ורוכשים ראשונים', '/demo/agents/yoav.svg', true, 'yoav-levi', mk),
+   (md5('zdo1p:member:maya')::uuid, o, null, 'מאיה ישראלי', 'agent', 'active', 'נכסי יוקרה ובלעדיות', '/demo/agents/maya.svg', true, 'maya-israeli', mk),
+   (md5('zdo1p:member:omer')::uuid, o, null, 'עומר רז', 'agent', 'active', 'חיפה והקריות', '/demo/agents/omer.svg', true, 'omer-raz', mk)
+  on conflict (id) do update set avatar_url = excluded.avatar_url, show_on_website = excluded.show_on_website, public_slug = excluded.public_slug;
 
   update public.properties p set office_member_id = md5('zdo1p:member:'||v.k)::uuid
   from (values (1,'dana'),(2,'dana'),(5,'dana'),(8,'dana'),(14,'dana'),(16,'dana'),(17,'dana'),

@@ -5,6 +5,12 @@
 // contact). A private/internal or cross-org member NEVER resolves, so it can
 // never be exposed on the public site.
 // ============================================================================
+/** SEO-friendly public handle for an office member: the slug when set, else the
+ *  raw id. Used to build /site/[office]/agents/[handle] URLs. */
+export function memberHandle(m: { id: string; public_slug: string | null }): string {
+  return m.public_slug || m.id;
+}
+
 export function resolveResponsibleMemberId(
   p: { office_member_id: string | null; owner_id: string | null },
   publicMemberIds: ReadonlySet<string>,

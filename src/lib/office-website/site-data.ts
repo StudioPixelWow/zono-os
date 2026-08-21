@@ -17,7 +17,7 @@ import { buildBrandTokens, waLink } from "@/lib/agent-website/brand-tokens";
 import { deriveBrandColorFromLogo } from "./logo-brand-color";
 import { isSiteTheme, type SiteTheme } from "@/lib/brokerage-site/branding";
 import { resolveAgentAvatar } from "@/lib/office/avatar";
-import { resolveResponsibleMemberId } from "./attribution";
+import { resolveResponsibleMemberId, memberHandle } from "./attribution";
 
 const ROLE_TITLE_HE: Record<string, string> = { owner: "מנהל/ת המשרד", manager: "מנהל/ת", agent: 'יועץ/ת נדל"ן' };
 
@@ -107,7 +107,7 @@ interface RawProp {
 }
 
 // A public roster member (office_members). NON-auth members are first-class here.
-interface RawMember { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null }
+interface RawMember { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null; public_slug: string | null }
 
 const propTag = (p: RawProp): string | null =>
   p.has_exclusivity ? "בלעדיות"
@@ -146,7 +146,7 @@ export async function getOfficeSite(
       .eq("org_id", orgId).in("status", [...PUBLIC_STATUSES] as never).order("created_at", { ascending: false }).limit(200),
     // CANONICAL public team source: office_members (roster). NON-auth members are
     // included — publication is governed by show_on_website, not by an Auth login.
-    admin.from("office_members" as never).select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website")
+    admin.from("office_members" as never).select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website,public_slug")
       .eq("org_id", orgId).eq("status", "active").eq("show_on_website", true).limit(60),
     admin.from("users").select("id,avatar_url").eq("org_id", orgId).eq("status", "active").limit(60),
     admin.from("brand_identity_profiles").select("*").eq("org_id", orgId).eq("entity_id", orgId).maybeSingle(),
@@ -205,14 +205,14 @@ export async function getOfficeSite(
   const memberIdByUserId = new Map(members.filter((m) => m.user_id).map((m) => [m.user_id as string, m.id]));
   const memberAvatar = (m: RawMember): string | null =>
     resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: m.user_id ? userAvatar.get(m.user_id) ?? null : null });
-  const agentHref = (memberId: string) => `/site/${slug}/agents/${memberId}`;
+  const agentHref = (m: RawMember) => `/site/${slug}/agents/${memberHandle(m)}`;
 
   // Responsible PUBLIC member: office_member_id → legacy owner → null (pure helper).
   const resolveMemberId = (p: { office_member_id: string | null; owner_id: string | null }): string | null =>
     resolveResponsibleMemberId(p, publicMemberIds, memberIdByUserId);
   const memberRef = (memberId: string | null): OfficeAgentRef | null => {
     if (!memberId) return null; const m = memberById.get(memberId); if (!m) return null;
-    return { id: m.id, name: m.full_name, photo: memberAvatar(m), href: agentHref(m.id) };
+    return { id: m.id, name: m.full_name, photo: memberAvatar(m), href: agentHref(m) };
   };
 
   const rawProps = (propsR.data ?? []) as unknown as RawProp[];
@@ -235,7 +235,7 @@ export async function getOfficeSite(
     areas: [...(areasByMember.get(m.id) ?? [])].slice(0, 3),
     specialties: m.specialty ? [m.specialty] : [],
     activeProperties: propCountByMember.get(m.id) ?? 0,
-    href: agentHref(m.id),
+    href: agentHref(m),
   });
   // Team = public AGENTS only; the manager/owner is presented separately so no
   // single person becomes the office brand. Sorted by inventory, but ALL show.
@@ -351,7 +351,7 @@ export async function getOfficeListing(slug: string, filters: OfficePropertyFilt
     admin.from("properties")
       .select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,latitude,longitude,listing_tag,has_exclusivity,owner_id,office_member_id,created_at")
       .eq("org_id", org.organization_id).in("status", [...PUBLIC_STATUSES] as never).order("created_at", { ascending: false }).limit(300),
-    admin.from("office_members" as never).select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website")
+    admin.from("office_members" as never).select("id,full_name,role,specialty,avatar_url,user_id,phone,status,show_on_website,public_slug")
       .eq("org_id", org.organization_id).eq("status", "active").eq("show_on_website", true).limit(60),
     admin.from("users").select("id,avatar_url").eq("org_id", org.organization_id).eq("status", "active").limit(60),
   ]);
@@ -366,7 +366,7 @@ export async function getOfficeListing(slug: string, filters: OfficePropertyFilt
     resolveResponsibleMemberId(p, publicMemberIds, memberIdByUserId);
   const memberRef = (memberId: string | null): OfficeAgentRef | null => {
     if (!memberId) return null; const m = memberById.get(memberId); if (!m) return null;
-    return { id: m.id, name: m.full_name, photo: resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: m.user_id ? userAvatar.get(m.user_id) ?? null : null }), href: `/site/${slug}/agents/${m.id}` };
+    return { id: m.id, name: m.full_name, photo: resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: m.user_id ? userAvatar.get(m.user_id) ?? null : null }), href: `/site/${slug}/agents/${memberHandle(m)}` };
   };
 
   let properties: OfficeProperty[] = ((propData ?? []) as unknown as RawProp[]).map((p) => ({
@@ -405,21 +405,31 @@ export interface OfficeSiteAgent {
   listings: OfficeProperty[];
 }
 
-export async function getOfficeSiteAgent(slug: string, memberId: string): Promise<OfficeSiteAgent | "disabled" | null> {
-  if (!slug || !memberId) return null;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function getOfficeSiteAgent(slug: string, handle: string): Promise<OfficeSiteAgent | "disabled" | null> {
+  if (!slug || !handle) return null;
   const full = await getOfficeSite(slug);
   if (full === null || full === "disabled") return full;
-  // Only members already resolved into the PUBLIC payload are exposable.
-  const publicMember = [...full.team, ...(full.manager ? [full.manager] : [])].find((m) => m.id === memberId);
-  if (!publicMember) return null;
 
   const admin = createServiceRoleClient();
   const { data: siteRow } = await admin.from("office_websites").select("organization_id").eq("slug", slug).maybeSingle();
   const orgId = (siteRow as { organization_id: string } | null)?.organization_id;
   if (!orgId) return null;
-  const { data: mRow } = await admin.from("office_members" as never).select("user_id,role").eq("id", memberId).eq("org_id", orgId).maybeSingle();
-  const linkedUserId = (mRow as { user_id: string | null; role: string } | null)?.user_id ?? null;
-  const role = (mRow as { role: string } | null)?.role ?? "agent";
+
+  // Resolve by public_slug first; fall back to the raw id only when it's a UUID
+  // (never cast a slug to uuid). Both org-scoped.
+  type MRow = { id: string; user_id: string | null; role: string; status: string; show_on_website: boolean | null; public_slug: string | null };
+  const sel = "id,user_id,role,status,show_on_website,public_slug";
+  let memberRow = ((await admin.from("office_members" as never).select(sel).eq("org_id", orgId).eq("public_slug", handle).maybeSingle()).data as MRow | null);
+  if (!memberRow && UUID_RE.test(handle)) memberRow = ((await admin.from("office_members" as never).select(sel).eq("org_id", orgId).eq("id", handle).maybeSingle()).data as MRow | null);
+  // Must be an active, publicly-visible member (never expose an internal one).
+  if (!memberRow || memberRow.status !== "active" || memberRow.show_on_website !== true) return null;
+  const publicMember = [...full.team, ...(full.manager ? [full.manager] : [])].find((m) => m.id === memberRow!.id);
+  if (!publicMember) return null;
+  const memberId = memberRow.id;
+  const linkedUserId = memberRow.user_id;
+  const role = memberRow.role;
 
   const { data: propData } = await admin.from("properties")
     .select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,latitude,longitude,listing_tag,has_exclusivity,owner_id,office_member_id,created_at")
@@ -427,7 +437,7 @@ export async function getOfficeSiteAgent(slug: string, memberId: string): Promis
 
   const isMine = (p: RawProp): boolean =>
     p.office_member_id === memberId || (!p.office_member_id && !!linkedUserId && p.owner_id === linkedUserId);
-  const selfRef: OfficeAgentRef = { id: publicMember.id, name: publicMember.name, photo: publicMember.photo, href: `/site/${slug}/agents/${memberId}` };
+  const selfRef: OfficeAgentRef = { id: publicMember.id, name: publicMember.name, photo: publicMember.photo, href: publicMember.href };
   const listings: OfficeProperty[] = ((propData ?? []) as unknown as RawProp[]).filter(isMine).map((p) => ({
     id: p.id, title: p.title || [p.neighborhood, p.city].filter(Boolean).join(" · ") || "נכס",
     price: p.price, monthlyRent: p.monthly_rent, listingKind: p.listing_kind, city: p.city, neighborhood: p.neighborhood,

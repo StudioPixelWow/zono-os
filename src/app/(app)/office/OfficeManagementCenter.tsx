@@ -13,7 +13,8 @@ import { SurfaceTabs } from "@/components/navigation/SurfaceTabs";
 import { AgentAvatar } from "@/components/office/AgentAvatar";
 import { AssignMemberPopover } from "./AssignMemberPopover";
 import { OfficePropertiesStrip } from "./OfficePropertiesStrip";
-import type { OfficeManagementBoard, OfficeAgentCard, OfficeQueue, OfficeDealRow } from "@/lib/office/management-board";
+import { OfficeTeamSection } from "./OfficeTeamSection";
+import type { OfficeManagementBoard, OfficeQueue, OfficeDealRow } from "@/lib/office/management-board";
 
 const CARD = "bg-card border-line rounded-[22px] border shadow-[var(--shadow-card)]";
 const TONE_TEXT: Record<string, string> = { brand: "text-brand-strong", danger: "text-danger", warning: "text-warning", success: "text-success" };
@@ -48,38 +49,6 @@ function SectionHead({ title, sub, icon, href, hrefLabel }: { title: string; sub
         </div>
       </div>
       {href && <Link href={href} className="text-brand-strong flex shrink-0 items-center gap-0.5 text-[13px] font-bold hover:underline">{hrefLabel ?? "הצג הכל"}<Icon name="ArrowLeft" size={14} /></Link>}
-    </div>
-  );
-}
-
-// ── C — Team (dominant) ───────────────────────────────────────────────────────
-function AgentCard({ a }: { a: OfficeAgentCard }) {
-  const metric = (label: string, value: number, icon: string) => (
-    <div className="flex items-center gap-1.5"><Icon name={icon} size={13} className="text-muted" /><span className="text-ink text-[13px] font-black tabular-nums">{value}</span><span className="text-muted text-[11px]">{label}</span></div>
-  );
-  const needs = a.attention > 0;
-  return (
-    <div className={`${CARD} flex w-[80%] shrink-0 snap-start flex-col gap-3 p-4 sm:w-auto`}>
-      <div className="flex items-center gap-3">
-        <AgentAvatar url={a.avatarUrl} name={a.name} size={52} />
-        <div className="min-w-0 flex-1">
-          <p className="text-ink truncate text-[15px] font-black">{a.name}</p>
-          <p className="text-muted truncate text-[12px]">{a.specialty || ROLE_HE[a.role] || "מתווך/ת"}</p>
-          {!a.hasLogin && <p className="text-muted/80 text-[10px]">ללא כניסה למערכת</p>}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-        {metric("נכסים", a.activeProperties, "Building")}
-        {metric("לידים", a.openLeads, "Users")}
-        {metric("עסקאות", a.activeDeals, "Handshake")}
-        {metric("פגישות היום", a.todayMeetings, "Calendar")}
-      </div>
-      <div className="border-line flex items-center justify-between border-t pt-2.5">
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${needs ? "bg-danger-soft text-danger" : "bg-success-soft text-success"}`}>
-          {needs ? <><Icon name="AlertTriangle" size={11} />דורש טיפול {a.attention}</> : <><Icon name="ListChecks" size={11} />הכול תקין</>}
-        </span>
-        <Link href={`/office/agents/${a.id}`} className="text-brand-strong inline-flex items-center gap-0.5 text-[12px] font-bold hover:underline">פתח סוכן<Icon name="ArrowLeft" size={12} /></Link>
-      </div>
     </div>
   );
 }
@@ -181,13 +150,7 @@ export function OfficeManagementCenter({ board }: { board: OfficeManagementBoard
       <section className="flex flex-col gap-3">
         <SectionHead title="הצוות שלי" sub="סוכנים מקומיים · עומס ופעילות לפי סוכן" icon="Users" href="/team" hrefLabel="ניהול צוות" />
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_240px]">
-          {agentCards.length === 0 ? (
-            <div className={`${CARD} text-muted p-6 text-center text-[13px]`}>עדיין אין סוכנים פעילים במשרד</div>
-          ) : (
-            <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 2xl:grid-cols-4 [&::-webkit-scrollbar]:hidden">
-              {agentCards.map((a) => <AgentCard key={a.id} a={a} />)}
-            </div>
-          )}
+          <OfficeTeamSection agents={agentCards} agentOptions={board.agentOptions} />
           {board.manager && (
             <div className={`${CARD} flex flex-col items-center gap-2 p-4 text-center`}>
               <AgentAvatar url={board.manager.avatarUrl} name={board.manager.name} size={56} />

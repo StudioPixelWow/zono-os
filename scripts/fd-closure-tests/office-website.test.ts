@@ -9,7 +9,7 @@
 // ============================================================================
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveResponsibleMemberId } from "../../src/lib/office-website/attribution.ts";
+import { resolveResponsibleMemberId, memberHandle } from "../../src/lib/office-website/attribution.ts";
 
 const PUBLIC = new Set(["m_dana", "m_yoav", "m_manager"]);
 const BY_USER = new Map([["u_manager", "m_manager"]]); // only the manager has an Auth login
@@ -35,4 +35,11 @@ test("privacy: a NON-public / cross-org office_member_id never resolves (not exp
 test("roster-only public member (no Auth login) is fully attributable by office_member_id", () => {
   // דנה/יואב are non-auth roster members (not in BY_USER) yet resolve directly.
   assert.equal(resolveResponsibleMemberId({ office_member_id: "m_yoav", owner_id: null }, PUBLIC, BY_USER), "m_yoav");
+});
+
+// ── public handle (SEO slug → id fallback) ───────────────────────────────────
+test("memberHandle prefers the public_slug and falls back to the id", () => {
+  assert.equal(memberHandle({ id: "abc-123", public_slug: "dana-cohen" }), "dana-cohen");
+  assert.equal(memberHandle({ id: "abc-123", public_slug: null }), "abc-123");
+  assert.equal(memberHandle({ id: "abc-123", public_slug: "" }), "abc-123"); // empty slug is not a handle
 });
