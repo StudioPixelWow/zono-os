@@ -14,13 +14,19 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
+import { useCurrentUser } from "./DashboardDataProvider";
+import { isManagerRole } from "@/lib/auth/office-roles";
 
-import { NAV_GROUPS, ACCENTS } from "./nav-groups";
+import { NAV_GROUPS, ACCENTS, type NavGroup } from "./nav-groups";
 
 const COLLAPSE_KEY = "zono-sidebar-collapsed";
 
 export function Sidebar() {
   const pathname = usePathname();
+  // Manager/owner-only launcher items (e.g. office management) — gated by the
+  // session role so agents never see a surface they'd be redirected away from.
+  const isManager = isManagerRole(useCurrentUser()?.roleKey ?? "");
+  const groups: NavGroup[] = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => !it.managerOnly || isManager) }));
   const [collapsed, setCollapsed] = useState(false);
   // undefined = follow active group; string = user-opened group; null = all closed.
   const [openOverride, setOpenOverride] = useState<string | null | undefined>(undefined);
@@ -33,12 +39,12 @@ export function Sidebar() {
     return pathname === base || pathname.startsWith(`${base}/`);
   };
   // Exactly ONE active item — the longest matching base wins.
-  const activeHref = NAV_GROUPS
+  const activeHref = groups
     .flatMap((g) => g.items.map((it) => it.href))
     .filter((h) => !h.includes("#") && matches(h))
     .sort((a, b) => b.length - a.length)[0] ?? null;
   const itemActive = (href: string) => !href.includes("#") && href === activeHref;
-  const activeGroupKey = NAV_GROUPS.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
+  const activeGroupKey = groups.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
   // Derived (no effect): active group opens by default, fallback מרכז הבקרה.
   const openGroupKey = openOverride === undefined ? (activeGroupKey ?? "command") : openOverride;
 
@@ -79,7 +85,7 @@ export function Sidebar() {
 
       {/* Launcher groups (only this area scrolls) */}
       <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {NAV_GROUPS.map((g) => {
+        {groups.map((g) => {
           const a = ACCENTS[g.accent];
           const groupActive = g.key === activeGroupKey;
 

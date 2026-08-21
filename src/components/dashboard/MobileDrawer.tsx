@@ -11,10 +11,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
-import { NAV_GROUPS, ACCENTS } from "./nav-groups";
+import { useCurrentUser } from "./DashboardDataProvider";
+import { isManagerRole } from "@/lib/auth/office-roles";
+import { NAV_GROUPS, ACCENTS, type NavGroup } from "./nav-groups";
 
 export function MobileDrawer() {
   const pathname = usePathname();
+  const isManager = isManagerRole(useCurrentUser()?.roleKey ?? "");
+  const groups: NavGroup[] = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => !it.managerOnly || isManager) }));
   const [open, setOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null | undefined>(undefined);
 
@@ -41,8 +45,8 @@ export function MobileDrawer() {
     if (base === "/") return pathname === "/";
     return pathname === base || pathname.startsWith(`${base}/`);
   };
-  const activeHref = NAV_GROUPS.flatMap((g) => g.items.map((it) => it.href)).filter((h) => matches(h)).sort((a, b) => b.length - a.length)[0] ?? null;
-  const activeGroupKey = NAV_GROUPS.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
+  const activeHref = groups.flatMap((g) => g.items.map((it) => it.href)).filter((h) => matches(h)).sort((a, b) => b.length - a.length)[0] ?? null;
+  const activeGroupKey = groups.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
   const openGroupKey = openGroup === undefined ? (activeGroupKey ?? "command") : openGroup;
 
   return (
@@ -64,7 +68,7 @@ export function MobileDrawer() {
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {NAV_GROUPS.map((g) => {
+          {groups.map((g) => {
             const a = ACCENTS[g.accent];
             const groupActive = g.key === activeGroupKey;
             const gOpen = openGroupKey === g.key;

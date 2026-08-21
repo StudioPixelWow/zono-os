@@ -124,18 +124,13 @@ function Hero({ data }: { data: OfficeSitePayload }) {
   return (
     <section className="relative isolate overflow-hidden">
       <div className="absolute inset-0 -z-10">
-        {hasCover ? (
-          <>
-            <img src={office.cover!} alt={office.name} className="h-full w-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/55 to-black/65" />
-          </>
-        ) : (
-          <>
-            <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, var(--brand-hero) 0%, var(--brand-hero-2) 100%)" }} />
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/45" />
-            <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full opacity-30 blur-3xl" style={{ background: "var(--brand-primary)" }} />
-          </>
-        )}
+        {/* The office/company brand color is the BASE of the hero. */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, var(--brand-hero) 0%, var(--brand-hero-2) 100%)" }} />
+        {/* A cover photo, when set, sits OVER the brand color at a faint ~14% —
+            a subtle local texture, never a takeover of the brand identity. */}
+        {hasCover && <img src={office.cover!} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-[0.14]" />}
+        <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/40" />
+        {!hasCover && <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full opacity-30 blur-3xl" style={{ background: "var(--brand-primary)" }} />}
         <div className="absolute inset-0 opacity-[0.14]" style={{ backgroundImage: "radial-gradient(58% 58% at 80% 6%, #fff, transparent 60%)" }} />
       </div>
 

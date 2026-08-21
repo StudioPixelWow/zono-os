@@ -95,6 +95,23 @@ export interface OfficeSitePayload {
   testimonials: OfficeTestimonial[];
 }
 
+// Shared site chrome (header + footer) for every office-site page — so internal
+// pages carry the SAME header/footer as the homepage.
+export interface OfficeChrome {
+  slug: string;
+  brandVars: Record<string, string>;
+  logo: string | null;
+  office: { name: string; phone: string | null; whatsapp: string | null; tel: string | null; email: string | null; address: string | null; social: Record<string, string>; description: string | null };
+  areas: string[];
+}
+function buildChrome(slug: string, full: OfficeSitePayload): OfficeChrome {
+  return {
+    slug, brandVars: full.brand.tokens, logo: full.brand.logo,
+    office: { name: full.office.name, phone: full.office.phone, whatsapp: full.office.whatsapp, tel: full.office.tel, email: full.office.email, address: full.office.address, social: full.office.social, description: full.office.description },
+    areas: full.areas.map((a) => a.name),
+  };
+}
+
 const PUBLIC_STATUSES = ["active", "published", "under_offer"] as const;
 const LISTING_TAG_LABEL: Record<string, string> = { new: "חדש", exclusive: "בלעדיות", opportunity: "הזדמנות", premium: "פרימיום", price_drop: "ירידת מחיר", hot: "חם" };
 const TAG_BY_STATUS: Record<string, string> = { under_offer: "בבלעדיות", sold: "נמכר", rented: "הושכר" };
@@ -351,7 +368,7 @@ export async function getOfficeSite(
 
 // ── Filtered listing for /site/[slug]/properties ─────────────────────────────
 export interface OfficePropertyFilters { q?: string; area?: string; type?: string; min?: string; max?: string; rooms?: string; agent?: string }
-export interface OfficeListingView { slug: string; brandVars: Record<string, string>; officeName: string; logo: string | null; properties: OfficeProperty[]; members: { id: string; name: string }[] }
+export interface OfficeListingView { slug: string; brandVars: Record<string, string>; officeName: string; logo: string | null; properties: OfficeProperty[]; members: { id: string; name: string }[]; chrome: OfficeChrome }
 
 export async function getOfficeListing(slug: string, filters: OfficePropertyFilters = {}): Promise<OfficeListingView | "disabled" | null> {
   const full = await getOfficeSite(slug);
@@ -403,7 +420,7 @@ export async function getOfficeListing(slug: string, filters: OfficePropertyFilt
 
   // Agents that actually own public inventory → the "סוכן" filter options.
   const memberList = members.filter((m) => m.role !== "owner").map((m) => ({ id: m.id, name: m.full_name }));
-  return { slug, brandVars: full.brand.tokens, officeName: full.office.name, logo: full.brand.logo, properties, members: memberList };
+  return { slug, brandVars: full.brand.tokens, officeName: full.office.name, logo: full.brand.logo, properties, members: memberList, chrome: buildChrome(slug, full) };
 }
 
 // ── Public office-agent profile: /site/[slug]/agents/[memberId] ──────────────
@@ -417,6 +434,7 @@ export interface OfficeSiteAgent {
   office: { name: string; phone: string | null; whatsapp: string | null; tel: string | null };
   member: { id: string; name: string; title: string | null; role: string; photo: string | null; phone: string | null; whatsapp: string | null; areas: string[]; specialties: string[]; activeCount: number };
   listings: OfficeProperty[];
+  chrome: OfficeChrome;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -471,5 +489,6 @@ export async function getOfficeSiteAgent(slug: string, handle: string): Promise<
       areas: publicMember.areas, specialties: publicMember.specialties, activeCount: listings.length,
     },
     listings,
+    chrome: buildChrome(slug, full),
   };
 }

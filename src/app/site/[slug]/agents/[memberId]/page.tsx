@@ -9,6 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOfficeSiteAgent } from "@/lib/office-website/site-data";
 import { OfficePropertyCard } from "@/components/office-website/ui";
+import { OfficeSiteHeader, OfficeSiteFooter } from "@/components/office-website/OfficeSiteChrome";
 import { PublicIcon } from "@/components/public-site/PublicIcon";
 
 export const dynamic = "force-dynamic";
@@ -34,14 +35,10 @@ export default async function OfficeAgentProfilePage({ params }: { params: Promi
 
   return (
     <div dir="rtl" style={{ ...(d.brandVars as Record<string, string>) }} className="min-h-screen bg-[var(--brand-background)] text-[var(--brand-text)]">
-      <nav className="sticky top-0 z-30 border-b border-[var(--brand-border)] bg-[var(--brand-background)]/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-3.5 sm:px-8">
-          <Link href={`/site/${slug}`} className="text-[14px] font-bold text-[color:var(--brand-link)]">← חזרה לאתר המשרד</Link>
-          {d.logo ? <img src={d.logo} alt={office.name} className="h-8 w-auto max-w-[150px] object-contain" /> : <span className="font-black text-[var(--brand-text)]">{office.name}</span>}
-        </div>
-      </nav>
+      <OfficeSiteHeader chrome={d.chrome} />
 
       <main className="mx-auto w-full max-w-7xl px-5 py-10 sm:px-8">
+        <Link href={`/site/${slug}`} className="mb-6 inline-block text-[13px] font-bold text-[color:var(--brand-link)]">← חזרה לאתר המשרד</Link>
         {/* Agent hero */}
         <section className="grid items-center gap-8 rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-surface)] p-6 sm:grid-cols-[auto_1fr] sm:p-8">
           <div className="mx-auto aspect-square w-40 overflow-hidden rounded-3xl bg-[var(--brand-soft)] sm:w-48">
@@ -90,6 +87,8 @@ export default async function OfficeAgentProfilePage({ params }: { params: Promi
           </div>
         </section>
       </main>
+
+      <OfficeSiteFooter chrome={d.chrome} />
     </div>
   );
 }

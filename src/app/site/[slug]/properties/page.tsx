@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { getOfficeListing, type OfficePropertyFilters } from "@/lib/office-website/site-data";
 import { logSiteEvent } from "@/lib/office-website/service";
 import { OfficePropertyCard } from "@/components/office-website/ui";
+import { OfficeSiteHeader, OfficeSiteFooter } from "@/components/office-website/OfficeSiteChrome";
 
 export const dynamic = "force-dynamic";
 
@@ -31,13 +32,9 @@ export default async function OfficePropertiesPage({ params, searchParams }: {
   const active = Object.values(filters).some(Boolean);
   return (
     <div dir="rtl" style={{ ...(view.brandVars as Record<string, string>) }} className="min-h-screen bg-[var(--brand-background)] text-[var(--brand-text)]">
-      <nav className="sticky top-0 z-30 border-b border-[var(--brand-border)] bg-[var(--brand-background)]/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-3.5 sm:px-8">
-          <Link href={`/site/${slug}`} className="text-[14px] font-bold text-[color:var(--brand-link)]">← חזרה לאתר</Link>
-          {view.logo ? <img src={view.logo} alt={view.officeName} className="h-8 w-auto max-w-[150px] object-contain" /> : <span className="font-black text-[var(--brand-text)]">{view.officeName}</span>}
-        </div>
-      </nav>
+      <OfficeSiteHeader chrome={view.chrome} />
       <main className="mx-auto w-full max-w-7xl px-5 py-10 sm:px-8">
+        <Link href={`/site/${slug}`} className="mb-6 inline-block text-[13px] font-bold text-[color:var(--brand-link)]">← חזרה לאתר המשרד</Link>
         <div className="mb-4 flex items-baseline justify-between gap-4">
           <h1 className="text-2xl font-black sm:text-3xl">כל הנכסים</h1>
           <span className="text-[14px] font-semibold text-[var(--brand-muted)]">{view.properties.length} נכסים{active ? " · מסוננים" : ""}</span>
@@ -62,6 +59,7 @@ export default async function OfficePropertiesPage({ params, searchParams }: {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{view.properties.map((p) => <OfficePropertyCard key={p.id} property={p} />)}</div>
         )}
       </main>
+      <OfficeSiteFooter chrome={view.chrome} />
     </div>
   );
 }

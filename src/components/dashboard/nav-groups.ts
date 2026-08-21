@@ -4,7 +4,7 @@
 // a second hardcoded menu. Presentation/data only; every href is an existing route.
 // ============================================================================
 export type Accent = "purple" | "blue" | "green" | "amber" | "slate";
-export interface NavItem { label: string; href: string; icon: string }
+export interface NavItem { label: string; href: string; icon: string; managerOnly?: boolean }
 export interface NavGroup { key: string; title: string; desc: string; icon: string; accent: Accent; items: NavItem[] }
 
 /** Subtle per-group accents — icon tile + active states. */
@@ -25,6 +25,8 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
   ]},
   { key: "office", title: "המשרד שלי", desc: "אנשים • נכסים • הצעות • עסקאות", icon: "Building2", accent: "blue", items: [
+    { label: "ניהול המשרד", href: "/office", icon: "Building2", managerOnly: true },
+    { label: "תובנות המשרד", href: "/office/intelligence", icon: "BarChart3", managerOnly: true },
     { label: "אנשים", href: "/people", icon: "Users" },
     { label: "נכסים", href: "/properties", icon: "Building" },
     { label: "קונים", href: "/buyers", icon: "Users" },
