@@ -1,6 +1,7 @@
 /** External listings repositories — RLS-scoped (server-only). */
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { normalizeListingKind } from "@/lib/property/transaction";
 
 type DB = Database["public"]["Tables"];
 export type ExternalListingRow = DB["external_listings"]["Row"];
@@ -75,9 +76,12 @@ export const externalListingRepository = {
     return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
   },
   /** Newest PRIVATE-OWNER listings (no broker, no exclusivity) with a photo AND a
-   *  contact phone — the home "נכסים חדשים באזור" strip where the agent can open a
-   *  WhatsApp chat with the owner. Prefers the agent's city, then fills from the
-   *  wider area so the strip is never empty when private inventory exists. */
+   *  contact phone — the home "נכסים חדשים באזור" / recruitment strip where the agent
+   *  can open a WhatsApp chat with the owner. Prefers the agent's city, then fills
+   *  from the wider area so the strip is never empty when private inventory exists.
+   *  SALE-ONLY: recruitment targets a sale/exclusivity mandate, so rentals
+   *  (deal_type=rent) are never surfaced here (mapped via the canonical
+   *  normalizeListingKind so it is robust to source aliases like rental/lease). */
   async listPrivateOwnerListings(limit = 5, city?: string | null): Promise<ExternalListingRow[]> {
     const supabase = await createClient();
     const base = () => supabase
@@ -89,11 +93,18 @@ export const externalListingRepository = {
       .neq("status", "removed")
       .not("has_agent", "is", true)
       .not("contact_phone", "is", null)
+      // For-sale only at the DB layer (the common case in the data); the app-layer
+      // normalizeListingKind guard below is the canonical safety net for aliases.
+      .neq("deal_type", "rent")
       .order("first_seen_at", { ascending: false })
       .order("imported_at", { ascending: false })
       .limit(limit * 4);
     const withImage = (rows: ExternalListingRow[]) =>
-      rows.filter((l) => Array.isArray(l.images) && (l.images as unknown[]).length > 0 && (l.contact_phone ?? "").trim().length > 0);
+      rows.filter((l) =>
+        Array.isArray(l.images) && (l.images as unknown[]).length > 0 &&
+        (l.contact_phone ?? "").trim().length > 0 &&
+        // רק למכירה — recruitment never surfaces rentals (₪X לחודש).
+        normalizeListingKind(l.deal_type) === "sale");
     let pool: ExternalListingRow[] = [];
     if (city && city.trim()) {
       const { data } = await base().eq("city", city.trim());
