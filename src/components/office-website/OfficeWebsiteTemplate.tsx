@@ -14,7 +14,7 @@ import { PropertySearch } from "@/components/agent-website/PropertySearch";
 import { ExpertiseMap } from "@/components/agent-website/ExpertiseMap";
 import { MobileStickyCta } from "@/components/agent-website/MobileStickyCta";
 import { SectionShell, TextLink, money } from "@/components/agent-website/ui";
-import { OfficePropertyCard, TeamCard, OfficeTestimonialCard } from "./ui";
+import { OfficePropertyCard, TeamCard, OfficeTestimonialCard, AreaAgentAvatars } from "./ui";
 import { PublicIcon, type PublicIconName } from "@/components/public-site/PublicIcon";
 import { SiteLeadForm } from "@/app/site/[slug]/SiteLeadForm";
 
@@ -81,7 +81,7 @@ export function OfficeWebsiteTemplate({ data }: { data: OfficeSitePayload }) {
       {/* F · AREAS OF EXPERTISE (areas + the agents strong there) */}
       {on("market_expertise") && data.areas.length > 0 && <AreasExpertise data={data} propertiesHref={propertiesHref} />}
       {on("market_expertise") && data.mapPoints.length > 0 && (
-        <ExpertiseMap points={data.mapPoints} areas={data.areas.map((a) => ({ name: a.name, deals: null, inventory: a.properties }))} primaryArea={primaryArea} propertiesHref={propertiesHref} />
+        <ExpertiseMap sectionId="areas-map" points={data.mapPoints} areas={data.areas.map((a) => ({ name: a.name, deals: null, inventory: a.properties }))} primaryArea={primaryArea} propertiesHref={propertiesHref} />
       )}
 
       {/* G · RECENT SUCCESS (public-safe closed inventory) */}
@@ -187,13 +187,15 @@ function AreasExpertise({ data, propertiesHref }: { data: OfficeSitePayload; pro
     <SectionShell id="areas" eyebrow="פריסה מקומית" title="איפה אנחנו חזקים" subtitle="האזורים שבהם המשרד פעיל — והסוכנים שמכירים אותם" tone="soft">
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
         {data.areas.slice(0, 6).map((a: OfficeArea) => (
-          <Link key={a.name} href={`${propertiesHref}?area=${encodeURIComponent(a.name)}`} className="group flex flex-col gap-1.5 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-5 transition hover:-translate-y-0.5 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.3)]">
+          <Link key={a.name} href={`${propertiesHref}?area=${encodeURIComponent(a.name)}`} className="group flex flex-col gap-2 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-5 transition hover:-translate-y-0.5 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.3)]">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[16px] font-black text-[var(--brand-text)]">{a.name}</span>
+              <span className="text-[17px] font-black text-[var(--brand-text)]">{a.name}</span>
               <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-0.5 text-[12px] font-black text-[color:var(--brand-primary)]">{a.properties} נכסים</span>
             </div>
-            {a.agentNames.length > 0 && <span className="text-[13px] text-[var(--brand-muted)]">{a.agentNames.join(" · ")}</span>}
-            <span className="mt-1 text-[13px] font-bold text-[color:var(--brand-link)] opacity-0 transition group-hover:opacity-100">לצפייה באזור ←</span>
+            {a.agentRefs.length > 0
+              ? <AreaAgentAvatars agents={a.agentRefs} />
+              : a.agentNames.length > 0 && <span className="text-[13px] text-[var(--brand-muted)]">{a.agentNames.join(" · ")}</span>}
+            <span className="mt-auto pt-1 text-[13px] font-bold text-[color:var(--brand-link)] opacity-0 transition group-hover:opacity-100">לצפייה באזור ←</span>
           </Link>
         ))}
       </div>

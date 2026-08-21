@@ -15,6 +15,29 @@ function Avatar({ name, photo, size = 32 }: { name: string; photo: string | null
     : <span className="grid place-items-center rounded-full bg-[var(--brand-soft)] font-black text-[color:var(--brand-primary)]" style={{ width: size, height: size, fontSize: size * 0.4 }}>{name.slice(0, 1)}</span>;
 }
 
+/** Tiny overlapping agent faces for an area card — "the agents strong here".
+ *  Real avatars only (falls back to initials); names read as "דנה + מאיה מוכרים כאן".
+ *  Non-interactive (safe inside an area <Link>): no nested anchors. */
+export function AreaAgentAvatars({ agents }: { agents: OfficeAgentRef[] }) {
+  if (agents.length === 0) return null;
+  const faces = agents.slice(0, 3);
+  const names = agents.slice(0, 2).map((a) => a.name.split(" ")[0]);
+  const extra = agents.length - names.length;
+  const line = extra > 0 ? `${names.join(" + ")} +${extra}` : names.join(" + ");
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex flex-row-reverse items-center">
+        {faces.map((a, i) => (
+          <span key={a.id} className={`ring-2 ring-[var(--brand-background)] rounded-full ${i > 0 ? "-me-2" : ""}`}>
+            <Avatar name={a.name} photo={a.photo} size={26} />
+          </span>
+        ))}
+      </div>
+      <span className="text-[12.5px] font-semibold text-[var(--brand-muted)]">{line} מוכרים כאן</span>
+    </div>
+  );
+}
+
 function AgentChip({ agent, label = "מטפל בנכס" }: { agent: OfficeAgentRef; label?: string }) {
   const inner = (
     <span className="flex items-center gap-2">

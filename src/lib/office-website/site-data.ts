@@ -64,7 +64,7 @@ export interface OfficeTeamMember {
 }
 
 export interface OfficeStat { value: string; label: string }
-export interface OfficeArea { name: string; properties: number; agents: number; agentNames: string[] }
+export interface OfficeArea { name: string; properties: number; agents: number; agentNames: string[]; agentRefs: OfficeAgentRef[] }
 export interface OfficeTestimonial {
   name: string;
   text: string;
@@ -285,7 +285,13 @@ export async function getOfficeSite(
     e.properties++; const mid = resolveMemberId(p); if (mid) e.agents.add(mid); areaAgg.set(k, e);
   }
   const areas: OfficeArea[] = Array.from(areaAgg.entries())
-    .map(([name, e]) => ({ name, properties: e.properties, agents: e.agents.size, agentNames: [...e.agents].map((id) => memberById.get(id)?.full_name).filter((n): n is string => !!n).slice(0, 3) }))
+    .map(([name, e]) => {
+      // The public agents strong in this area (same attribution as everywhere) —
+      // carry their refs (photo + href) so the UI can show real faces, not just
+      // names. Only public roster members resolve; nothing fabricated.
+      const agentRefs = [...e.agents].map((id) => memberRef(id)).filter((r): r is OfficeAgentRef => !!r).slice(0, 4);
+      return { name, properties: e.properties, agents: e.agents.size, agentNames: agentRefs.map((r) => r.name).slice(0, 3), agentRefs };
+    })
     .sort((a, b) => b.properties - a.properties).slice(0, 8);
 
   // ── Recent success (public-safe closed inventory) — NO price, NO parties ────

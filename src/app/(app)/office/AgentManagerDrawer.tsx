@@ -136,12 +136,14 @@ function Header({ id, onClose, closeRef }: { id: Identity; onClose: () => void; 
 
 function KpiStrip({ k }: { k: Kpis }) {
   const cell = (n: number, label: string) => (
-    <div className="bg-card border-line rounded-xl border px-2 py-2 text-center">
-      <div className="text-ink text-lg font-black leading-none tabular-nums">{n}</div>
+    <div className="flex flex-col items-center justify-center rounded-xl py-2 text-center">
+      <div className="text-ink text-xl font-black leading-none tabular-nums">{n}</div>
       <div className="text-muted mt-1 text-[11px] font-semibold">{label}</div>
     </div>
   );
-  return <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{cell(k.activeProperties, "נכסים")}{cell(k.openLeads, "לידים")}{cell(k.activeDeals, "עסקאות")}{cell(k.todayMeetings, "היום")}</div>;
+  // One compact management strip (not four dashboard cards): a single bordered
+  // surface, numbers dominant, labels secondary. 2×2 on mobile, one row on desktop.
+  return <div className="bg-card border-line grid grid-cols-2 gap-1 rounded-2xl border p-1 sm:grid-cols-4">{cell(k.activeProperties, "נכסים")}{cell(k.openLeads, "לידים")}{cell(k.activeDeals, "עסקאות")}{cell(k.todayMeetings, "היום")}</div>;
 }
 
 // A section wrapper — a divider + generous top space gives clear hierarchy.

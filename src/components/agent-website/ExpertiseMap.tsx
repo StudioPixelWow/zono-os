@@ -16,8 +16,8 @@ const ZonoMap = dynamic(() => import("@/components/maps/ZonoMap").then((m) => m.
 
 const money = (n: number | null) => (typeof n === "number" && n > 0 ? `₪${n.toLocaleString("he-IL")}` : null);
 
-export function ExpertiseMap({ points, areas, primaryArea, propertiesHref }: {
-  points: SiteProperty[]; areas: SiteArea[]; primaryArea: string | null; propertiesHref: string;
+export function ExpertiseMap({ points, areas, primaryArea, propertiesHref, sectionId = "areas" }: {
+  points: SiteProperty[]; areas: SiteArea[]; primaryArea: string | null; propertiesHref: string; sectionId?: string;
 }) {
   const mapPoints: ZonoMapPoint[] = points.map((p) => ({
     id: p.id, lat: p.lat as number, lng: p.lng as number, title: p.title,
@@ -29,7 +29,7 @@ export function ExpertiseMap({ points, areas, primaryArea, propertiesHref }: {
   const useHeat = mapPoints.length >= 4; // heat map with cluster counts once several properties are geocoded
 
   return (
-    <section id="areas" className="bg-[var(--brand-surface)]">
+    <section id={sectionId} className="bg-[var(--brand-surface)]">
       <div className="mx-auto grid w-full max-w-7xl gap-8 px-5 py-14 sm:px-8 lg:grid-cols-[1.4fr_1fr] lg:py-20">
         <div className="order-2 lg:order-1">
           {hasMap ? (
