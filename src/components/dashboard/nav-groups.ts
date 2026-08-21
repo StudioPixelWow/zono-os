@@ -55,7 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3" },
     { label: "מודיעין מתווכים", href: "/broker-intelligence", icon: "Users" },
     { label: "מודיעין משרדים", href: "/brokerage-data/offices", icon: "Building2" },
-    { label: "מודיעין שוק", href: "/market-intelligence/listings", icon: "Globe" },
+    { label: "מודיעין שוק", href: "/market-intelligence", icon: "Globe" },
     { label: "ניהול טריטוריה", href: "/territory", icon: "Map" },
     { label: "תחזיות", href: "/predictions", icon: "TrendingUp" },
     { label: "גרף ידע", href: "/graph", icon: "Layers" },
