@@ -12,6 +12,8 @@ import { isUuid } from "@/lib/utils";
 import type { Json } from "@/lib/supabase/types";
 import { toCreativeCardView, clampPageLimit, clampRecent, pageInfo, CREATIVE_PAGE_SIZE, RECENT_MAX, type CreativeCardView, type OrgCreativePage } from "./library-model";
 export type { OrgCreativePage } from "./library-model";
+import { deriveCreativeOpportunities, type CreativeOpportunity, type OpportunityProperty, type OpportunityOutput } from "./creative-opportunities";
+import { ACTIVE_PROPERTY_STATUS } from "@/lib/office/status-predicates";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
 import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
@@ -834,6 +836,31 @@ export async function listOrgQuickOutputs(opts: { limit?: number; offset?: numbe
   const total = count ?? offset + rows.length;
   const { nextOffset, hasMore } = pageInfo(offset, rows.length, total);
   return { items: resolved.map(toCreativeCardView), total, hasMore, nextOffset };
+}
+
+/** REAL creative opportunities for the landing "Smart Opportunities" — evidence-
+ *  backed reasons a property needs a creative, derived from active properties +
+ *  their existing outputs (org-scoped, bounded). Deterministic; never fabricated.
+ *  Returns the top `limit` (default 3). Empty when nothing is provable. */
+export async function getCreativeOpportunities(limit = 3): Promise<CreativeOpportunity[]> {
+  const { orgId, supabase } = await ctx();
+  const cap = Math.max(1, Math.min(6, Math.floor(limit) || 3));
+  const [propsR, outsR] = await Promise.all([
+    supabase.from("properties").select("id,title,city,neighborhood,primary_image_url,status,created_at")
+      .eq("org_id", orgId).in("status", [...ACTIVE_PROPERTY_STATUS] as never).order("created_at", { ascending: false }).limit(200),
+    supabase.from("zono_quick_creative_outputs").select("property_id,format,created_at")
+      .eq("org_id", orgId).neq("status", "deleted").not("is_hidden_due_to_quality", "is", true)
+      .not("property_id", "is", null).order("created_at", { ascending: false }).limit(1000),
+  ]);
+  const propRows = (propsR.data ?? []) as unknown as Array<{ id: string; title: string | null; city: string | null; neighborhood: string | null; primary_image_url: string | null; status: string }>;
+  const outRows = (outsR.data ?? []) as unknown as Array<{ property_id: string | null; format: string | null; created_at: string | null }>;
+
+  const properties: OpportunityProperty[] = propRows.map((p) => ({ id: p.id, title: p.title, city: p.city, neighborhood: p.neighborhood, image: p.primary_image_url, status: p.status }));
+  const outputs: OpportunityOutput[] = outRows
+    .filter((o) => o.property_id)
+    .map((o) => ({ propertyId: o.property_id as string, format: o.format, createdAtMs: o.created_at ? Date.parse(o.created_at) : 0 }));
+
+  return deriveCreativeOpportunities({ properties, outputs, nowMs: Date.now() }).slice(0, cap);
 }
 
 /** Admin/debug: every candidate (selected + rejected) with scores + critic. */
