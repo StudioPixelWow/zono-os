@@ -5,9 +5,11 @@ import { useEffect, useState } from "react";
 
 export interface HeaderNavItem { href: string; label: string }
 
-export function AgentHeader({ brandName, logo, nav, whatsapp, tel, phoneLabel }: {
+export function AgentHeader({ brandName, logo, nav, whatsapp, tel, phoneLabel, cta }: {
   brandName: string; logo: string | null; nav: HeaderNavItem[];
   whatsapp: string | null; tel: string | null; phoneLabel: string | null;
+  /** Optional distinct primary CTA (e.g. the seller valuation journey). */
+  cta?: { href: string; label: string };
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -43,6 +45,9 @@ export function AgentHeader({ brandName, logo, nav, whatsapp, tel, phoneLabel }:
 
         {/* Left (RTL end): CTAs */}
         <div className="flex items-center gap-2">
+          {cta && (
+            <a href={cta.href} className="hidden items-center rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-[13px] font-black text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)] md:flex">{cta.label}</a>
+          )}
           {tel && (
             <a href={tel} aria-label={`התקשרות ${phoneLabel ?? ""}`} className="hidden items-center gap-2 rounded-xl border border-[var(--brand-border)] px-3.5 py-2 text-[13px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)] sm:flex">
               <PhoneIcon /> {phoneLabel}
@@ -74,7 +79,8 @@ export function AgentHeader({ brandName, logo, nav, whatsapp, tel, phoneLabel }:
               ))}
             </nav>
             <div className="mt-auto flex flex-col gap-2 pt-6">
-              {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] py-3 font-bold text-[var(--brand-on-primary)]"><WhatsAppIcon /> שליחת הודעת WhatsApp</a>}
+              {cta && <a href={cta.href} onClick={() => setOpen(false)} className="flex items-center justify-center rounded-xl bg-[var(--brand-primary)] py-3 font-black text-[var(--brand-on-primary)]">{cta.label}</a>}
+              {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-[var(--brand-border)] py-3 font-bold text-[var(--brand-text)]"><WhatsAppIcon /> שליחת הודעת WhatsApp</a>}
               {tel && <a href={tel} className="flex items-center justify-center gap-2 rounded-xl border border-[var(--brand-border)] py-3 font-bold text-[var(--brand-text)]"><PhoneIcon /> {phoneLabel}</a>}
             </div>
           </div>
