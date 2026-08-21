@@ -6,6 +6,7 @@ import { getAuthUser } from "@/lib/auth/session";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { provisionUserProfile } from "@/lib/repositories/userRepository";
 import { getRoleIdByKey } from "@/lib/repositories/organizationRepository";
+import { stageOrgSeatQuantity } from "./seats-server";
 
 export interface TeamActionState { ok?: boolean; error?: string; message?: string; token?: string }
 
@@ -47,6 +48,19 @@ export async function acceptInvitationAction(token: string): Promise<TeamActionS
       onboarding_completed: true,
     });
     await db.from("org_invitations").update({ status: "accepted", accepted_by: user.id, accepted_at: new Date().toISOString() }).eq("id", inv.id);
+    // Link the roster person to the freshly-provisioned Auth user so /team shows
+    // the correct ACTIVE access state (office_members is the canonical person; a
+    // seat = the linked active user). Email-matched, org-scoped, and ONLY when the
+    // roster row is still unlinked — never reassigns an already-linked member.
+    try {
+      const linkEmail = (user.email ?? inv.email).toLowerCase();
+      await db.from("office_members" as never)
+        .update({ user_id: user.id } as never)
+        .eq("org_id", inv.org_id).is("user_id", null).ilike("email", linkEmail);
+    } catch (linkErr) { console.error("[invite] roster link (non-fatal):", linkErr); }
+    // The accepted user is now an active seat → stage the billing quantity so the
+    // boundary cron converges the provider next cycle (no charge here).
+    await stageOrgSeatQuantity(inv.org_id);
   } catch (e) {
     console.error("[invite] accept failed:", e);
     return { error: e instanceof Error ? e.message : "ההצטרפות נכשלה" };

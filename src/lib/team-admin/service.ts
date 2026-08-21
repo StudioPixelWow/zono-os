@@ -8,6 +8,7 @@ import "server-only";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { resolveLimitEnforcementForMutation } from "@/lib/enforcement/server/enforcement";
+import { stageOrgSeatQuantity } from "./seats-server";
 
 async function ctx() {
   const { user, profile } = await getSessionContext();
@@ -119,6 +120,10 @@ export async function setUserStatus(userId: string, active: boolean): Promise<vo
   if (!isManager) throw new Error("נדרשת הרשאת מנהל/בעלים");
   const { error } = await supabase.from("users").update({ status: active ? "active" : "disabled" }).eq("org_id", orgId).eq("id", userId);
   if (error) throw new Error(error.message);
+  // A seat change moves the billable count → STAGE the new quantity so the
+  // billing-boundary cron converges the provider at the next cycle (no direct
+  // GROW call here, no charge, no Morning doc — payment truth stays separate).
+  await stageOrgSeatQuantity(orgId);
 }
 
 export async function setUserRole(userId: string, roleKey: string): Promise<void> {

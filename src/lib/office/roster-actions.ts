@@ -29,6 +29,28 @@ async function managerCtx() {
   return { sb, orgId };
 }
 
+/** Create a ROSTER-ONLY office member (no Auth user, no ZONO seat, no billing
+ *  change). This is the safe "add person to the office" path — access is granted
+ *  separately via the invitation flow. Manager/owner-gated, org from session. */
+export async function createOfficeMemberAction(input: { fullName: string; role?: string; specialty?: string; phone?: string; email?: string }): Promise<OfficeActionResult> {
+  const ctx = await managerCtx();
+  if (!ctx) return { ok: false, error: "נדרשת הרשאת מנהל/בעלים" };
+  const name = (input.fullName ?? "").trim();
+  if (!name) return { ok: false, error: "יש להזין שם" };
+  const email = input.email?.trim().toLowerCase() || null;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "כתובת אימייל לא תקינה" };
+  const { error } = await ctx.sb.from("office_members" as never).insert({
+    org_id: ctx.orgId, user_id: null, full_name: name,
+    role: input.role || "agent", status: "active",
+    specialty: input.specialty?.trim() || null, phone: input.phone?.trim() || null, email,
+    show_on_website: false,
+  } as never);
+  if (error) return { ok: false, error: error.message };
+  try { await recordUsage({ category: "workflow", name: "office_member_added", props: { roster_only: true } }); } catch { /* best-effort */ }
+  try { revalidatePath("/team"); } catch { /* noop */ }
+  return { ok: true };
+}
+
 /** Resolve a roster member inside the caller's org (returns its optional login link). */
 async function memberInOrg(sb: Awaited<ReturnType<typeof createClient>>, orgId: string, memberId: string): Promise<{ id: string; user_id: string | null } | null> {
   const { data } = await sb.from("office_members" as never).select("id,user_id").eq("id", memberId).eq("org_id", orgId).maybeSingle();
