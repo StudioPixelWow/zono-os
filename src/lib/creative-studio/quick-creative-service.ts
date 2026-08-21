@@ -10,6 +10,8 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { isUuid } from "@/lib/utils";
 import type { Json } from "@/lib/supabase/types";
+import { toCreativeCardView, clampPageLimit, clampRecent, pageInfo, CREATIVE_PAGE_SIZE, RECENT_MAX, type CreativeCardView, type OrgCreativePage } from "./library-model";
+export type { OrgCreativePage } from "./library-model";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
 import { buildCreativeDirection } from "./creative-director/engine";
 import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
@@ -785,6 +787,53 @@ export async function listQuickOutputs(opts: { entityType?: string; entityId?: s
   const rows = (data ?? []) as Record<string, unknown>[];
   const resolved = await Promise.all(rows.map((r) => resolveCreativePreview(supabase, r)));
   return resolved as QuickOutputRow[];
+}
+
+// ── Creative Studio landing: org-wide RECENT + bounded, paginated LIBRARY ──────
+// These power the rebuilt /creative-studio workspace (CREATE + LIBRARY). Both are
+// org-scoped (RLS + explicit org filter), read ONLY real rows, resolve a signed
+// preview per bounded row, and never fetch the whole history. The pure view model
+// (labels/mapping/pagination) lives in ./library-model so it can be unit-tested.
+const LIBRARY_COLUMNS = "id,output_type,format,title,headline,image_url,image_status,status,property_id,agent_id,is_favorite,created_at,private_master_path";
+
+/** Sign a bounded row's private master into image_url when it has no public one. */
+async function withSignedPreview(sb: DB, row: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (row.image_url) return row;
+  const path = (row.private_master_path as string | null) ?? null;
+  if (!path) return row;
+  const signed = await signCreativePrivate(sb, path);
+  return signed ? { ...row, image_url: signed } : row;
+}
+
+/** Most-recent org creatives (favorites first) for the "fast resume" strip. */
+export async function listRecentQuickOutputs(limit = RECENT_MAX): Promise<CreativeCardView[]> {
+  const { orgId, supabase } = await ctx();
+  const { data } = await supabase.from("zono_quick_creative_outputs").select(LIBRARY_COLUMNS)
+    .eq("org_id", orgId).neq("status", "deleted").not("is_hidden_due_to_quality", "is", true)
+    .order("is_favorite", { ascending: false }).order("created_at", { ascending: false })
+    .limit(clampRecent(limit));
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  const resolved = await Promise.all(rows.map((r) => withSignedPreview(supabase, r)));
+  return resolved.map(toCreativeCardView);
+}
+
+/** Bounded, offset-paginated org library. Filters (property/type/favorites) run
+ *  at the QUERY layer; the page never exceeds CREATE_PAGE_MAX rows. */
+export async function listOrgQuickOutputs(opts: { limit?: number; offset?: number; propertyId?: string | null; outputType?: string | null; favoritesOnly?: boolean } = {}): Promise<OrgCreativePage> {
+  const { orgId, supabase } = await ctx();
+  const limit = clampPageLimit(opts.limit ?? CREATIVE_PAGE_SIZE);
+  const offset = Math.max(0, Math.floor(opts.offset ?? 0) || 0);
+  let q = supabase.from("zono_quick_creative_outputs").select(LIBRARY_COLUMNS, { count: "exact" })
+    .eq("org_id", orgId).neq("status", "deleted").not("is_hidden_due_to_quality", "is", true);
+  if (opts.propertyId && isUuid(opts.propertyId)) q = q.eq("property_id", opts.propertyId);
+  if (opts.outputType) q = q.eq("output_type", opts.outputType);
+  if (opts.favoritesOnly) q = q.eq("is_favorite", true);
+  const { data, count } = await q.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  const resolved = await Promise.all(rows.map((r) => withSignedPreview(supabase, r)));
+  const total = count ?? offset + rows.length;
+  const { nextOffset, hasMore } = pageInfo(offset, rows.length, total);
+  return { items: resolved.map(toCreativeCardView), total, hasMore, nextOffset };
 }
 
 /** Admin/debug: every candidate (selected + rejected) with scores + critic. */

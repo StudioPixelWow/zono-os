@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import {
   generateQuickCreative, listQuickOutputs, listCreativeCandidates, resolveBrandSnapshot, setQuickFavorite, approveQuickOutput, rejectQuickOutput,
   duplicateQuickOutput, editQuickText, replaceQuickImage, regenerateQuickRequest, generateQuickCreativeImage, buildConceptBriefs, type GenerateQuickInput,
+  listOrgQuickOutputs, type OrgCreativePage,
 } from "./quick-creative-service";
 
 export interface QcActionState { ok?: boolean; error?: string; message?: string; warnings?: string[] }
@@ -41,6 +42,17 @@ export async function buildConceptBriefsAction(g: GenerateQuickInput): Promise<Q
 }
 export async function listQuickOutputsAction(input: { entityType?: string; entityId?: string }): Promise<{ outputs: Record<string, unknown>[] }> {
   try { return { outputs: await listQuickOutputs(input) }; } catch { return { outputs: [] }; }
+}
+/** Landing library: bounded, paginated, org-scoped "load more". Never throws to
+ *  the client — returns an empty page on failure so the grid stays stable. */
+export async function loadOrgCreativesAction(input: { limit?: number; offset?: number; propertyId?: string | null; outputType?: string | null; favoritesOnly?: boolean }): Promise<OrgCreativePage> {
+  try { return await listOrgQuickOutputs(input); }
+  catch { return { items: [], total: 0, hasMore: false, nextOffset: Math.max(0, input.offset ?? 0) }; }
+}
+/** Landing favorite toggle (no per-entity revalidate — the landing uses client state). */
+export async function favoriteOrgCreativeAction(input: { outputId: string; value: boolean }): Promise<QcActionState> {
+  try { await setQuickFavorite(input.outputId, input.value); return { ok: true }; }
+  catch (e) { return { error: e instanceof Error ? e.message : "העדכון נכשל" }; }
 }
 export async function favoriteQuickAction(input: { outputId: string; value: boolean; entityType: string; entityId: string }): Promise<QcActionState> {
   try { await setQuickFavorite(input.outputId, input.value); revalidate(input.entityType, input.entityId); return { ok: true, message: input.value ? "נוסף למועדפים" : "הוסר" }; }

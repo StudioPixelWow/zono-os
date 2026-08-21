@@ -1,50 +1,33 @@
-import Link from "next/link";
-import { Icon } from "@/components/dashboard/Icon";
-import { listStudioEntities, listSelectableEntities, type StudioEntityRef, type SelectableEntity } from "@/lib/creative-studio/service";
-import { ENTITY_LABELS, ENTITY_ICONS } from "@/lib/creative-studio/engine";
-import { StudioLauncher } from "./StudioLauncher";
+import { listSelectableEntities, type SelectableEntity } from "@/lib/creative-studio/service";
+import { listRecentQuickOutputs, listOrgQuickOutputs } from "@/lib/creative-studio/quick-creative-service";
+import { CREATIVE_PAGE_SIZE, RECENT_MAX, type CreativeCardView, type OrgCreativePage } from "@/lib/creative-studio/library-model";
+import { CreativeStudioWorkspace } from "./CreativeStudioWorkspace";
 
 export const dynamic = "force-dynamic";
 
+// /creative-studio — the CREATE-first workspace. The per-entity studio
+// (/creative-studio/[type]/[id]) still owns the canonical generation wizard; this
+// landing gives fast creation entry + a bounded, paginated library over the real
+// org creatives. All selectors are org-scoped; nothing is fetched unbounded.
 export default async function CreativeStudioLauncherPage() {
-  let entities: StudioEntityRef[] = [];
   let selectable: Record<string, SelectableEntity[]> = {};
-  try { entities = await listStudioEntities(); } catch (e) { console.error("[creative-studio] launcher failed:", e); }
+  let recent: CreativeCardView[] = [];
+  let initial: OrgCreativePage = { items: [], total: 0, hasMore: false, nextOffset: 0 };
   try { selectable = await listSelectableEntities(); } catch (e) { console.error("[creative-studio] selectable failed:", e); }
+  try { recent = await listRecentQuickOutputs(RECENT_MAX); } catch (e) { console.error("[creative-studio] recent failed:", e); }
+  try { initial = await listOrgQuickOutputs({ limit: CREATIVE_PAGE_SIZE, offset: 0 }); } catch (e) { console.error("[creative-studio] library failed:", e); }
+
+  // id → name maps for the concise property/agent context chip on each card.
+  const nameMap = (list: SelectableEntity[] | undefined): Record<string, string> =>
+    Object.fromEntries((list ?? []).map((e) => [e.id, e.name]));
 
   return (
-    <main dir="rtl" className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6">
-      <header className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span className="bg-brand text-white grid h-9 w-9 place-items-center rounded-xl"><Icon name="Presentation" size={18} /></span>
-          <h1 className="text-ink text-2xl font-black">ZONO קריאייטיב</h1>
-        </div>
-        <p className="text-muted text-sm">כל החומרים, הסגנון וה-DNA השיווקי של הסוכן, הנכס או הפרויקט — במקום אחד.</p>
-      </header>
-
-      <StudioLauncher entities={selectable} />
-
-      <section className="flex flex-col gap-2">
-        <h2 className="text-ink text-sm font-black">סטודיואים פעילים</h2>
-        {entities.length === 0 ? (
-          <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">עדיין אין חומרים. פתח סטודיו לישות והעלה את החומר הראשון.</div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {entities.map((e) => (
-              <Link key={`${e.entityType}:${e.entityId}`} href={`/creative-studio/${e.entityType}/${e.entityId}`} className="bg-card border-line flex items-center justify-between gap-2 rounded-2xl border p-4 shadow-sm hover:border-brand">
-                <div className="flex items-center gap-2">
-                  <span className="bg-surface text-muted grid h-8 w-8 place-items-center rounded-xl"><Icon name={ENTITY_ICONS[e.entityType] ?? "Circle"} size={15} /></span>
-                  <div>
-                    <p className="text-ink text-sm font-bold">{e.entityName}</p>
-                    <p className="text-muted text-[11px]">{ENTITY_LABELS[e.entityType] ?? e.entityType}</p>
-                  </div>
-                </div>
-                <span className="text-brand-strong text-sm font-black">{e.assetCount} חומרים</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-    </main>
+    <CreativeStudioWorkspace
+      selectable={selectable}
+      recent={recent}
+      initial={initial}
+      propertyNameById={nameMap(selectable.property)}
+      agentNameById={nameMap(selectable.agent)}
+    />
   );
 }
