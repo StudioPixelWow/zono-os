@@ -12,6 +12,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
+import { ZonoMark } from "@/components/zono/ZonoMark";
 import { createCommunityAction, recomputeMarketingAction } from "@/lib/marketing/actions";
 import type { MarketingBoard } from "@/lib/marketing/service";
 
@@ -90,9 +91,9 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
 
       {empty ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
-          <span className="bg-brand-soft text-brand grid h-16 w-16 place-items-center rounded-3xl"><Icon name="Megaphone" size={28} /></span>
-          <p className="text-ink text-lg font-extrabold">אין עדיין מודיעין שיווק</p>
-          <p className="text-muted max-w-sm text-sm">הוסיפו קהילות ולחצו ״חשב מודיעין שיווק״ כדי לבנות DNA שיווקי לכל נכס, דירוג ערוצים והזדמנויות קידום.</p>
+          <ZonoMark size="standard" state="welcome" />
+          <p className="text-ink text-lg font-extrabold">זונו מוכנה לבנות לכם מודיעין שיווקי</p>
+          <p className="text-muted max-w-sm text-sm">הוסיפו קהילות ולחצו ״חשב מודיעין שיווק״ — וזונו תבנה DNA שיווקי לכל נכס, דירוג ערוצים והזדמנויות קידום.</p>
           <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={16} />} className="mt-1">חשב מודיעין שיווק</Button>
         </div>
       ) : (

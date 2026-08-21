@@ -11,6 +11,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { AgentAvatar } from "@/components/office/AgentAvatar";
+import { ZonoInsight } from "@/components/zono/ZonoInsight";
+import { pickAgentZonoRecommendation } from "@/lib/office/agent-zono";
 import { AssignMemberPopover } from "./AssignMemberPopover";
 import { loadOfficeAgentDetailAction } from "@/lib/office/agent-detail-actions";
 import type { OfficeAgentDetail } from "@/lib/office/agent-detail";
@@ -176,8 +178,17 @@ function Sections({ data, agents, onClose }: { data: OfficeAgentDetail; agents: 
   const attn = showAllAttn ? data.needsAttention : data.needsAttention.slice(0, 3);
   const agentPage = `/office/agents/${member.id}`;
 
+  // MAX ONE ZONO recommendation — the single most important real, actionable item
+  // from the canonical agent-detail stats (never fabricated; hidden when none).
+  const topRec = pickAgentZonoRecommendation(stats);
+
   return (
     <div className="px-4 pb-4 pt-1">
+      {topRec && (
+        <div className="mb-3">
+          <ZonoInsight variant="recommendation" markSize="micro" title={topRec.title} action={{ label: topRec.label, href: agentPage }} />
+        </div>
+      )}
       {/* Today */}
       <Section title="היום" count={data.meetingsToday.length || undefined} first>
         {data.meetingsToday.length === 0 ? <Empty text="אין פגישות נוספות להיום" /> : (

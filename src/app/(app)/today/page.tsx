@@ -42,7 +42,7 @@ export default async function TodayPage() {
       <BrokerTodayAgenda />
       {/* The shared Broker-Intelligence priority queue — highest-impact, deduped,
           evidence-based recommendations across all areas, first thing each morning. */}
-      <BrokerIntelligenceQueuePanel title="המשימה של היום" options={{ limit: 6 }} />
+      <BrokerIntelligenceQueuePanel zono title="תובנות ZONO" subtitle="מה שדורש את הטיפול שלך היום — מדורג ומאוחד מכל תחומי המודיעין" options={{ limit: 6 }} />
       <DailyOS data={data} />
     </div>
   );

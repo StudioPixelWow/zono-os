@@ -72,6 +72,14 @@ export function ZIWidget() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Product-wide "שאל את ZONO" triggers (AskZono) open THIS existing widget — no
+  // second chatbot. P0 passes no seeded context (contextual handoff is a later phase).
+  useEffect(() => {
+    const onOpen = () => openWidget();
+    window.addEventListener("zono:open-chat", onOpen);
+    return () => window.removeEventListener("zono:open-chat", onOpen);
+  }, [openWidget]);
+
   // Cleanup any running stream timer on unmount.
   useEffect(() => () => { if (streamTimer.current) window.clearInterval(streamTimer.current); }, []);
 

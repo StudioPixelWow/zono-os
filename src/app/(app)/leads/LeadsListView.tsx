@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { Button } from "@/components/ui/Button";
 import { IconSurface } from "@/components/ui/action-surfaces";
-import { ContextualZeroState } from "@/components/common/ContextualZeroState";
+import { ZonoEmptyState } from "@/components/zono/ZonoEmptyState";
 import { bulkLeadAction, type BulkLeadOp, type BulkLeadResult } from "@/lib/leads/actions";
 import type { LeadListRow } from "@/lib/leads/service";
 import { LEAD_STAGE_HE, LEAD_SOURCE_HE } from "@/lib/i18n/labels";
@@ -105,16 +105,16 @@ export function LeadsListView({ leads, failed, followUp = {} }: { leads: LeadLis
       {failed ? (
         <div className="bg-danger-soft text-danger rounded-2xl px-4 py-6 text-center text-sm font-semibold">טעינת הלידים נכשלה — נסה לרענן</div>
       ) : leads.length === 0 ? (
-        // P9.0B contextual zero-state — the office has no leads yet. Real CTA
-        // (opens Quick-Create via the zono:new-lead event — never a no-op).
-        <ContextualZeroState
-          icon="Users"
-          title="הלקוח הראשון עוד לא כאן."
-          value="ZONO כבר מוכנה לנהל את הדרך שלו מהרגע הראשון ועד העסקה. הוסף ליד ונתחיל לעבוד."
-          cta="הוסף ליד ראשון"
-          onCta={() => window.dispatchEvent(new CustomEvent("zono:new-lead"))}
-          secondaryLabel="הוסף קונה"
-          secondaryHref="/buyers/new"
+        // Contextual zero-state — the office has no leads yet. Real CTAs only:
+        // the primary opens Quick-Create via the zono:new-lead event (handled
+        // globally — never a no-op); the secondary navigates to add a buyer.
+        <ZonoEmptyState
+          title="הלקוח הראשון עוד לא כאן"
+          description="זונו מוכנה לנהל את הדרך שלו מהרגע הראשון ועד העסקה — הוסיפו ליד ונתחיל לעבוד."
+          actions={[
+            { label: "הוסף ליד ראשון", event: "zono:new-lead", primary: true },
+            { label: "הוסף קונה", href: "/buyers/new" },
+          ]}
         />
       ) : filtered.length === 0 ? (
         <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">לא נמצאו לידים התואמים לסינון</div>

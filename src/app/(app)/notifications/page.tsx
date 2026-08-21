@@ -12,7 +12,8 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       {/* Attention threshold: only URGENT intelligence (priority ≥ 65) surfaces
           here so the broker isn't spammed — everything else lives on Today. */}
       <BrokerIntelligenceQueuePanel
-        title="דורש תשומת לב דחופה"
+        zono
+        title="זונו שם לב — דורש טיפול דחוף"
         subtitle="המלצות דחופות בלבד — מעל סף הדחיפות"
         options={{ minPriority: 65, limit: 6 }}
       />

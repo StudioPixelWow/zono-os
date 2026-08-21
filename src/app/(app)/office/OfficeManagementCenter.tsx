@@ -14,6 +14,7 @@ import { AgentAvatar } from "@/components/office/AgentAvatar";
 import { AssignMemberPopover } from "./AssignMemberPopover";
 import { OfficePropertiesStrip } from "./OfficePropertiesStrip";
 import { OfficeTeamSection } from "./OfficeTeamSection";
+import { ZonoMark } from "@/components/zono/ZonoMark";
 import type { OfficeManagementBoard, OfficeQueue, OfficeDealRow } from "@/lib/office/management-board";
 
 const CARD = "bg-card border-line rounded-[22px] border shadow-[var(--shadow-card)]";
@@ -169,6 +170,15 @@ export function OfficeManagementCenter({ board }: { board: OfficeManagementBoard
         {/* LEFT — decision queues */}
         <section className="flex flex-col gap-3 xl:col-span-2">
           <SectionHead title="דורש החלטה ממך" sub="תורים תפעוליים — שייך, טפל, קדם" icon="Flame" />
+          {board.queues.length > 0 && (
+            // ONE ZONO identity on the real attention surface — count is the sum of
+            // the canonical decision queues (no new logic, no fabricated number).
+            <div className="flex items-center gap-2">
+              <ZonoMark size="compact" state="attention" />
+              <p className="text-ink text-[13px] font-black">זונו שם לב</p>
+              <span className="text-muted text-[12px]">· {board.queues.reduce((n, q) => n + q.count, 0)} נושאים דורשים את ההחלטה שלך</span>
+            </div>
+          )}
           {board.queues.length === 0 ? (
             <div className="bg-success-soft flex items-center justify-center gap-2 rounded-2xl p-6 text-center">
               <span className="text-success text-xl">✓</span><span className="text-ink text-[13px] font-black">המשרד בשליטה — אין חריגים שדורשים אותך כרגע</span>

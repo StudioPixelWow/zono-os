@@ -10,19 +10,23 @@ import { Icon } from "@/components/dashboard/Icon";
 import { getBrokerIntelligenceQueue, type QueueOptions } from "@/lib/broker-intelligence/aggregate-service";
 import { explainRecommendation } from "@/lib/broker-intelligence/explain";
 import { RecommendationCard } from "./RecommendationCard";
+import { ZonoMark } from "@/components/zono/ZonoMark";
 
 export async function BrokerIntelligenceQueuePanel({
   title = "מה דורש טיפול היום",
   subtitle = "ההמלצות בעלות ההשפעה הגבוהה ביותר — מכל תחומי המודיעין, מדורג ומאוחד",
   options = { limit: 6 },
-}: { title?: string; subtitle?: string; options?: QueueOptions }) {
+  zono = false,
+}: { title?: string; subtitle?: string; options?: QueueOptions; zono?: boolean }) {
   const queue = await getBrokerIntelligenceQueue(options);
   if (queue.total === 0) return null; // nothing evidence-backed to surface — stay quiet
 
   return (
     <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
       <div className="mb-4 flex items-center gap-2">
-        <span className="bg-brand-soft text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="Sparkles" size={18} /></span>
+        {zono
+          ? <ZonoMark size="compact" state="idea" />
+          : <span className="bg-brand-soft text-brand grid h-9 w-9 place-items-center rounded-xl"><Icon name="Sparkles" size={18} /></span>}
         <div>
           <h3 className="text-ink text-sm font-black">{title}</h3>
           <p className="text-muted text-[11px]">{subtitle} · {queue.total} פעולות פתוחות</p>

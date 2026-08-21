@@ -8,9 +8,10 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 
-// The single official ZI avatar (Hebrew filename, URL-encoded).
-export const ZI_AVATAR_URL = "https://s-pixel.co.il/wp-content/uploads/2026/06/%D7%A6-%D7%91%D7%91%D7%95.png";
-const ZI_AVATAR_LOCAL = "/zi-avatar.png";
+// The canonical ZONO mascot — self-hosted (no remote dependency). Drop the
+// approved PNG at public/zono/zono-default.png; until then the avatar falls back
+// to the Sparkles glyph (never a fabricated/placeholder asset).
+export const ZI_AVATAR_URL = "/zono/zono-default.png";
 
 export type ZiAvatarState = "idle" | "thinking" | "online";
 
@@ -22,7 +23,6 @@ export function ZIAvatar({ size = 56, state = "idle", showStatus = true, bare = 
   bare?: boolean;
   className?: string;
 }) {
-  const [src, setSrc] = useState(ZI_AVATAR_URL);
   const [failed, setFailed] = useState(false);
 
   return (
@@ -37,12 +37,11 @@ export function ZIAvatar({ size = 56, state = "idle", showStatus = true, bare = 
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src}
-          alt="ZI"
+          src={ZI_AVATAR_URL}
+          alt="ZONO"
           className="zi-avatar__img"
-          referrerPolicy="no-referrer"
           draggable={false}
-          onError={() => { if (src !== ZI_AVATAR_LOCAL) setSrc(ZI_AVATAR_LOCAL); else setFailed(true); }}
+          onError={() => setFailed(true)}
         />
       )}
       {showStatus && <span className="zi-avatar__status" />}
