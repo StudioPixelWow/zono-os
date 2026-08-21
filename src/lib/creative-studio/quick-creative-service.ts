@@ -15,6 +15,7 @@ export type { OrgCreativePage } from "./library-model";
 import { deriveCreativeOpportunities, type CreativeOpportunity, type OpportunityProperty, type OpportunityOutput } from "./creative-opportunities";
 import { ACTIVE_PROPERTY_STATUS } from "@/lib/office/status-predicates";
 import { buildQuickVariations, validateRequired, type BrandSnapshot, type QuickInput, type QuickType } from "./quick-creative-engine";
+import { coerceCreativeFormat, formatCanvas, formatOpenAiSize } from "./creative-preselect";
 import { buildCreativeDirection } from "./creative-director/engine";
 import { buildMasterCreativePrompt, VARIATION_STYLES } from "./master-prompt";
 import { generateFinalImage, resolveImageProvider } from "./visual-providers";
@@ -433,14 +434,10 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
     const briefs = g.conceptBriefs.map((s) => (s ?? "").trim()).filter(Boolean).slice(0, 3);
     if (briefs.length) {
       const { spec: baseSpec, kind } = baseSpecForBriefs(g, brand.snapshot);
-      const fmt = g.format || "feed_1_1";
-      // Honest dimensions per chosen format (was hardcoded to 1080×1350). The concept
-      // engine renders a 1:1 layout, so a 1:1 selection is pixel-accurate; 4:5 / 9:16
-      // carry their canonical post dimensions.
-      const FMT_DIMS: Record<string, { w: number; h: number }> = {
-        feed_1_1: { w: 1080, h: 1080 }, feed_4_5: { w: 1080, h: 1350 }, story_9_16: { w: 1080, h: 1920 },
-      };
-      const fmtDims = FMT_DIMS[fmt] ?? FMT_DIMS.feed_1_1;
+      // Canonical selected format + its exact canvas — the generator now produces
+      // this aspect ratio and the stored master is normalized to these pixels.
+      const fmt = coerceCreativeFormat(g.format);
+      const fmtDims = formatCanvas(fmt);
       const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
       const finalRows: Record<string, unknown>[] = await Promise.all(briefs.map(async (brief, i) => {
         const label = `אפשרות ${i + 1}`;
@@ -452,7 +449,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           overall_quality_score: 0, wow_score: 0, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
           used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
         };
-        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind, template: null, spec: baseSpec, assets, conceptBrief: brief, bucket: VISUAL_BUCKET });
+        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind, template: null, spec: baseSpec, assets, conceptBrief: brief, bucket: VISUAL_BUCKET, format: fmt });
         if (outcome.imageUrl) {
           const passed = outcome.status === "approved";
           return { ...base, status: passed ? "generated" : "needs_review",
@@ -504,6 +501,10 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   if (g.requestType === "property_ad_post") {
     const built = await buildFinalAds(g.input, brand.snapshot);
     if (built.length) {
+      // Canonical selected format — the property-ad path previously hardcoded
+      // feed_1_1 / 1080×1080 on the row + render_data, ignoring the picker.
+      const fmt = coerceCreativeFormat(g.format);
+      const fmtDims = formatCanvas(fmt);
       const layoutQa = finalLayoutQA(built.map((b) => b.designPlan));
       const top = built.reduce((a, b) => (b.wow.overall > a.wow.overall ? b : a));
       const selMeta = { candidatesTotal: built.length, rounds: 1, threshold: QUALITY_CONFIG.minQualityScore, layoutApproved: layoutQa.approved, duplicateFamilies: layoutQa.duplicateFamilies, topConcept: top.trigger, topWow: top.wow.overall };
@@ -521,13 +522,13 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
           const features = b.ad.features.map((ft) => (ft.value ? `${ft.value} ${ft.label}` : ft.label)).join(" · ");
           const base: Record<string, unknown> = {
             org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
-            output_type: g.requestType, variant_name: `${isTop ? "★ " : ""}קונספט · ${b.triggerLabel}`, format: "feed_1_1", title: `${b.triggerLabel} · ${b.ad.headline}`,
+            output_type: g.requestType, variant_name: `${isTop ? "★ " : ""}קונספט · ${b.triggerLabel}`, format: fmt, title: `${b.triggerLabel} · ${b.ad.headline}`,
             headline: b.ad.headline, subheadline: b.ad.subheadline, body_text: features, cta_text: b.ad.cta,
             brand_match_score: w.trust, readability_score: w.readability, conversion_score: w.attention, seller_lead_score: 0, buyer_lead_score: 0, overall_score: w.overall, status: "generated",
             overall_quality_score: w.overall, wow_score: w.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
             used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
           };
-          const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind: "property", template: b.designPlan.family, spec: adToSpec(b.ad, "property", g.input, brand.snapshot), assets, bucket: VISUAL_BUCKET });
+          const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind: "property", template: b.designPlan.family, spec: adToSpec(b.ad, "property", g.input, brand.snapshot), assets, bucket: VISUAL_BUCKET, format: fmt });
           // SHOW ANY REAL GENERATED IMAGE. If a full AI ad image was produced — even
           // if the strict 2-layer QA didn't fully approve it (gpt-image-1 often trips
           // the Hebrew-text gate) — we still surface it so the agent SEES the result,
@@ -538,7 +539,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
             // STILL return the most recent AI image — never block — badged for review.
             const passed = outcome.status === "approved";
             return { ...base, status: passed ? "generated" : "needs_review",
-              render_data: { format: "feed_1_1", width: 1080, height: 1080, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
+              render_data: { format: fmt, width: fmtDims.w, height: fmtDims.h, fullAd: true, concept: { trigger: b.trigger, label: b.triggerLabel }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
               private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad",
               image_error: passed ? null : ([outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null),
               quality_status: passed ? "passed" : "review",
@@ -598,7 +599,9 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
   // fallback. Bypasses the legacy candidate matrix below. ──
   if (g.requestType === "sold_post" || g.requestType === "testimonial_post") {
     const kind: AdKind = g.requestType === "sold_post" ? "sold" : "testimonial";
-    const vars = buildQuickVariations(g.requestType, g.input, brand.snapshot, g.format);
+    const fmt = coerceCreativeFormat(g.format);
+    const fmtDims = formatCanvas(fmt);
+    const vars = buildQuickVariations(g.requestType, g.input, brand.snapshot, fmt);
     if (vars.length) {
       const assets: AdGenAssets = { propertyImages: await collectPropertyImages(supabase, propertyId, g.input.propertyImage ?? null), logoUrl: brand.snapshot.officeLogo ?? null, agentPhoto: brand.snapshot.agentPhoto ?? null };
       const rows: Record<string, unknown>[] = [];
@@ -608,17 +611,17 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
       await Promise.all(vars.slice(0, 2).map(async (v) => {
         const base: Record<string, unknown> = {
           org_id: orgId, request_id: requestId, agent_id: brand.agentId, office_id: orgId, property_id: propertyId, deal_id: g.dealId ?? null,
-          output_type: g.requestType, variant_name: v.variantName, format: g.format, title: `${v.variantName} · ${v.headline}`,
+          output_type: g.requestType, variant_name: v.variantName, format: fmt, title: `${v.variantName} · ${v.headline}`,
           headline: v.headline, subheadline: v.subheadline, body_text: v.body, cta_text: v.cta,
           brand_match_score: v.scores.brandMatch, readability_score: v.scores.readability, conversion_score: v.scores.conversion,
           seller_lead_score: v.scores.sellerLead, buyer_lead_score: v.scores.buyerLead, overall_score: v.scores.overall, status: "generated",
           overall_quality_score: v.scores.overall, wow_score: v.scores.overall, quality_review_id: null, generation_round: 1, is_hidden_due_to_quality: false,
           used_inspiration_assets: inspiration.usedInspirationAssets as unknown as Json, property_primary_angle: propertyFirst.propertyPrimaryAngle,
         };
-        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind, template: null, spec: variationToSpec(v, g.input, brand.snapshot, kind), assets, bucket: VISUAL_BUCKET });
+        const outcome = await generateCreativeWithQA(supabase, { orgId, propertyId, requestId, createdBy: userId, kind, template: null, spec: variationToSpec(v, g.input, brand.snapshot, kind), assets, bucket: VISUAL_BUCKET, format: fmt });
         if (outcome.status === "approved" && outcome.imageUrl) {
           rows.push({ ...base,
-            render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
+            render_data: { format: fmt, width: fmtDims.w, height: fmtDims.h, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, generationId: outcome.generationId } as unknown as Json,
             private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad", image_error: null,
             quality_status: "passed",
             critic_summary: `עבר QA + Creative QA · WOW ${outcome.creativeWow ?? "—"} · ${outcome.attempts} ניסיון/ות (${v.variantName}).`,
@@ -630,7 +633,7 @@ export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ re
         // with a review warning (AI-only; never fall back to a deterministic render).
         if (outcome.imageUrl) {
           rows.push({ ...base, status: "needs_review",
-            render_data: { format: g.format, width: 1080, height: 1080, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
+            render_data: { format: fmt, width: fmtDims.w, height: fmtDims.h, fullAd: true, concept: { kind, label: v.variantName }, qa: { overall: outcome.scores?.overall, creativeWow: outcome.creativeWow }, warning: outcome.warning, generationId: outcome.generationId } as unknown as Json,
             private_master_path: outcome.masterPath, storage_visibility: "private", image_url: null, image_provider: outcome.provider, image_status: "ai_full_ad",
             image_error: [outcome.warning, ...outcome.failReasons].filter(Boolean).join(" · ").slice(0, 500) || null,
             quality_status: "review",
@@ -932,7 +935,9 @@ export async function regenerateQuickRequest(requestId: string): Promise<{ creat
   const rq = req as Record<string, unknown> | null;
   if (!rq) throw new Error("הבקשה לא נמצאה");
   const out = await supabase.from("zono_quick_creative_outputs").select("format").eq("org_id", orgId).eq("request_id", requestId).limit(1).maybeSingle();
-  const format = (out.data as { format?: string } | null)?.format ?? "feed_4_5";
+  // Regenerate in the SAME format the request was created with (coerced canonical);
+  // never silently fall back to a different aspect ratio.
+  const format = coerceCreativeFormat((out.data as { format?: string } | null)?.format);
   // archive prior non-approved
   await supabase.from("zono_quick_creative_outputs").update({ status: "archived" }).eq("org_id", orgId).eq("request_id", requestId).eq("status", "generated").eq("is_approved", false).eq("is_favorite", false);
   const r = await generateQuickCreativeFromRequest(supabase, orgId, rq, format);
@@ -1006,11 +1011,15 @@ async function genImageForOutput(supabase: DB, orgId: string, outputId: string):
   const info = resolveImageProvider();
   const { data: o } = await supabase
     .from("zono_quick_creative_outputs")
-    .select("id,internal_prompt,render_data,request_id")
+    .select("id,internal_prompt,render_data,request_id,format")
     .eq("org_id", orgId).eq("id", outputId).maybeSingle();
-  const out = o as { id: string; internal_prompt: string | null; render_data: unknown; request_id: string | null } | null;
+  const out = o as { id: string; internal_prompt: string | null; render_data: unknown; request_id: string | null; format: string | null } | null;
   if (!out) throw new Error("התוצר לא נמצא");
   const prompt = out.internal_prompt || "Premium Hebrew RTL real-estate social ad.";
+  // Request + store in the output's SELECTED format (was implicitly portrait).
+  const fmt = coerceCreativeFormat(out.format);
+  const fmtSize = formatOpenAiSize(fmt);
+  const fmtCanvas = formatCanvas(fmt);
 
   // Reference photo: the property image from the originating request, if any.
   let refUrl: string | null = null;
@@ -1033,13 +1042,21 @@ async function genImageForOutput(supabase: DB, orgId: string, outputId: string):
 
   try {
     log("calling provider", true);
-    const img = await generateFinalImage(prompt, refUrl);
+    const img = await generateFinalImage(prompt, refUrl, { size: fmtSize });
     log("provider response received", true);
-    const bytes = Buffer.from(img.b64, "base64");
-    const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
+    // Normalize to the SELECTED format's exact canvas (fit:cover) so the stored
+    // master's intrinsic dimensions equal the picked aspect ratio. Best-effort.
+    let outB64 = img.b64; let outMime = img.mime;
+    try {
+      const sharpMod = (await import("sharp")).default;
+      outB64 = (await sharpMod(Buffer.from(img.b64, "base64")).resize(fmtCanvas.w, fmtCanvas.h, { fit: "cover", position: "centre" }).png().toBuffer()).toString("base64");
+      outMime = "image/png";
+    } catch { /* keep original bytes on any resize failure */ }
+    const bytes = Buffer.from(outB64, "base64");
+    const ext = outMime.includes("png") ? "png" : outMime.includes("webp") ? "webp" : "jpg";
     const path = `${orgId}/quick/${outputId}-${Date.now()}.${ext}`;
     const admin = createServiceRoleClient() as unknown as DB;
-    const { error: upErr } = await admin.storage.from(CREATIVE_PRIVATE_BUCKET).upload(path, bytes, { contentType: img.mime, upsert: true });
+    const { error: upErr } = await admin.storage.from(CREATIVE_PRIVATE_BUCKET).upload(path, bytes, { contentType: outMime, upsert: true });
     if (upErr) { log("uploaded to storage", false); throw new Error(`העלאת התמונה נכשלה: ${upErr.message}`); }
     log("uploaded to storage", true);
     const imageUrl = (await signCreativePrivate(supabase, path)) ?? "";

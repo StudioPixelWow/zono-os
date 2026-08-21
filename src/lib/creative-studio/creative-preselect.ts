@@ -36,8 +36,48 @@ export const FORMAT_RATIO: Record<CreativeFormat, [number, number]> = {
   story_9_16: [9, 16],
 };
 
+// ── CANONICAL FORMAT SPEC — the ONE source of truth for aspect ratio ──────────
+// Every layer (engine dims, provider request size, stored master normalization,
+// preview aspect-ratio, export dimensions) derives from THIS map — never from an
+// ad-hoc `format === "story_9_16" ? … : …` ternary (that footgun silently made
+// every non-story format portrait). Add a format here and it is honored end-to-end.
+export interface FormatSpec {
+  /** Canonical output canvas in pixels — the stored image's intrinsic size. */
+  canvas: { w: number; h: number };
+  /** CSS aspect-ratio string for preview/frame containers ("W / H"). */
+  cssAspect: string;
+  /** Nearest gpt-image-1 request size (the model only offers 1024² / 1024×1536 /
+   *  1536×1024); the generated master is then normalized (fit:cover) to `canvas`,
+   *  so 4:5 and 9:16 are pixel-distinct even though both request the portrait bucket. */
+  openaiSize: string;
+}
+export const FORMAT_SPEC: Record<CreativeFormat, FormatSpec> = {
+  feed_1_1: { canvas: { w: 1080, h: 1080 }, cssAspect: "1 / 1", openaiSize: "1024x1024" },
+  feed_4_5: { canvas: { w: 1080, h: 1350 }, cssAspect: "4 / 5", openaiSize: "1024x1536" },
+  story_9_16: { canvas: { w: 1080, h: 1920 }, cssAspect: "9 / 16", openaiSize: "1024x1536" },
+};
+
 export const isCreativeGoal = (x: unknown): x is CreativeGoal => typeof x === "string" && (CREATIVE_GOALS as readonly string[]).includes(x);
 export const isCreativeFormat = (x: unknown): x is CreativeFormat => typeof x === "string" && (CREATIVE_FORMATS as readonly string[]).includes(x);
+
+/** Coerce ANY raw format value to a canonical CreativeFormat. Unknown/legacy/
+ *  missing → feed_1_1 (the square default — NEVER silently portrait/story). This
+ *  is the single fallback used everywhere a stored/legacy format is read back. */
+export function coerceCreativeFormat(x: unknown): CreativeFormat {
+  return isCreativeFormat(x) ? x : "feed_1_1";
+}
+/** Canonical output canvas (px) for a format — coerces unknown → feed_1_1. */
+export function formatCanvas(x: unknown): { w: number; h: number } {
+  return FORMAT_SPEC[coerceCreativeFormat(x)].canvas;
+}
+/** Nearest provider request size for a format — coerces unknown → feed_1_1. */
+export function formatOpenAiSize(x: unknown): string {
+  return FORMAT_SPEC[coerceCreativeFormat(x)].openaiSize;
+}
+/** CSS aspect-ratio string for a format — coerces unknown → feed_1_1. */
+export function formatCssAspect(x: unknown): string {
+  return FORMAT_SPEC[coerceCreativeFormat(x)].cssAspect;
+}
 
 /** Parse ?goal / ?format into validated selections; invalid or missing → null. */
 export function parsePreselect(params: { goal?: string | null; format?: string | null }): { goal: CreativeGoal | null; format: CreativeFormat | null } {

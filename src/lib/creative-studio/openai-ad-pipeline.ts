@@ -218,14 +218,19 @@ async function fetchBlob(url: string): Promise<{ blob: Blob; name: string } | nu
 // to a single attempt so total wall-clock stays under the serverless limit.
 const IMAGE_TIMEOUT_MS = Math.max(20_000, Number(process.env.ZONO_CREATIVE_IMAGE_TIMEOUT_MS) || 200_000);
 
-/** Raw gpt-image-1 multi-image edit → finished ad. Throws on no-key / API error / timeout. */
-export async function generateAdImageRaw(prompt: string, refUrls: string[]): Promise<RawImage> {
+/** Raw gpt-image-1 multi-image edit → finished ad. Throws on no-key / API error / timeout.
+ *  `size` is the provider request size that MATCHES the user's selected format
+ *  (1024x1024 for 1:1, 1024x1536 for 4:5/9:16 portrait). It is REQUIRED so the
+ *  generated aspect ratio follows the picker — the previous env-default
+ *  "1024x1536" silently forced every format (including 1:1) to portrait. The
+ *  caller normalizes the returned master to the exact canonical canvas. An
+ *  explicit ZONO_CREATIVE_IMAGE_SIZE env still overrides for ops, if ever set. */
+export async function generateAdImageRaw(prompt: string, refUrls: string[], size = "1024x1024"): Promise<RawImage> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY חסר");
   const form = new FormData();
   form.append("model", IMAGE_MODEL()); form.append("prompt", prompt);
-  // Vertical 4:5 social poster (closest gpt-image-1 portrait size to 1080×1350).
-  form.append("size", process.env.ZONO_CREATIVE_IMAGE_SIZE || "1024x1536"); form.append("quality", process.env.ZONO_CREATIVE_IMAGE_QUALITY || "medium"); form.append("n", "1");
+  form.append("size", process.env.ZONO_CREATIVE_IMAGE_SIZE || size); form.append("quality", process.env.ZONO_CREATIVE_IMAGE_QUALITY || "medium"); form.append("n", "1");
   let attached = 0;
   for (const url of refUrls) { const f = await fetchBlob(url); if (f) { form.append("image[]", f.blob, f.name); attached++; } }
   if (!attached) throw new Error("no reference images could be fetched");

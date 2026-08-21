@@ -13,6 +13,7 @@ import {
   providerIsOpenAI, buildSourceManifest, generateAdImageRaw, runCreativeQA, runCreativeDirectorQA, refUrlsFor,
   type AdSpec, type AdGenAssets, type AdKind, type CreativeFindings,
 } from "./openai-ad-pipeline";
+import { formatOpenAiSize, formatCanvas } from "./creative-preselect";
 import { renderHybridAd, hybridAvailable } from "./hybrid-ad";
 import { buildDynamicAdPrompt } from "./dynamic-ad-prompt";
 import {
@@ -84,9 +85,32 @@ function assembleScores(findings: QaVisionFindings | null, c: QaCritical): QaSco
   return { textAccuracy, numericAccuracy, brand: base.brand, layout, readability, assetIntegrity, realEstateRelevance: base.realEstateRelevance, overall };
 }
 
+/** Normalize a generated master to the EXACT canonical canvas for the selected
+ *  format (fit:cover, center — no letterbox, no distortion). gpt-image-1 only
+ *  offers a square + one portrait bucket, so this is what makes 4:5 and 9:16
+ *  pixel-distinct and guarantees the STORED image's intrinsic dimensions equal
+ *  the picked format. Best-effort: on any sharp failure the original bytes pass
+ *  through (never block generation on a resize). */
+async function normalizeToCanvas(b64: string, canvas: { w: number; h: number }): Promise<{ b64: string; mime: string }> {
+  try {
+    const sharpMod = (await import("sharp")).default;
+    const out = await sharpMod(Buffer.from(b64, "base64"))
+      .resize(canvas.w, canvas.h, { fit: "cover", position: "centre" })
+      .png()
+      .toBuffer();
+    return { b64: out.toString("base64"), mime: "image/png" };
+  } catch {
+    return { b64, mime: "image/png" };
+  }
+}
+
 interface OrchestratorParams {
   orgId: string; propertyId: string | null; requestId: string | null; createdBy: string | null;
   kind: AdKind; template?: string | null; spec: AdSpec; assets: AdGenAssets; bucket: string;
+  /** The user-selected output format (feed_1_1 | feed_4_5 | story_9_16). Drives
+   *  the provider request size AND the stored master's exact canvas. Coerced to
+   *  feed_1_1 when absent/legacy — never silently portrait. */
+  format?: string | null;
   // Optional agent-chosen design direction (the "3 options" flow). When present it
   // is realized faithfully by buildDynamicAdPrompt on every attempt instead of a
   // freshly invented concept — so each of the 3 briefs drives its own distinct ad.
@@ -103,6 +127,11 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
   const refUrls = refUrlsFor(p.assets);
   if (!refUrls.length) return { status: "no_provider", generationId: null, imageUrl: null, masterPath: null, provider: "openai", scores: null, creativeWow: null, attempts: 0, failReasons: ["אין נכסים לרפרנס"], warning: null };
 
+  // Canonical format → provider request size + stored-master canvas. Requesting
+  // the size that matches the picked format is what makes the generated aspect
+  // ratio follow the picker (1:1 → square, 4:5/9:16 → portrait bucket).
+  const openaiSize = formatOpenAiSize(p.format);
+  const canvas = formatCanvas(p.format);
   const manifest: SourceManifest = buildSourceManifest(p.spec);
   const { data: genRow } = await db.from("creative_generations").insert({
     org_id: p.orgId, property_id: p.propertyId, request_id: p.requestId, kind: p.kind,
@@ -158,17 +187,21 @@ export async function generateCreativeWithQA(db: DB, p: OrchestratorParams): Pro
     const useHybrid = HYBRID_ENABLED && hybridAvailable();
     let img: { b64: string; mime: string } | null = null;
     try {
-      img = useHybrid ? await renderHybridAd(p.spec, p.assets) : await generateAdImageRaw(prompt, callRefs);
+      img = useHybrid ? await renderHybridAd(p.spec, p.assets) : await generateAdImageRaw(prompt, callRefs, openaiSize);
     } catch (e) {
       if (useHybrid) {
         allFail.push(`hybrid: ${String(e).slice(0, 160)}`);
-        try { img = await generateAdImageRaw(prompt, callRefs); }
+        try { img = await generateAdImageRaw(prompt, callRefs, openaiSize); }
         catch (e2) { allFail.push(String(e2).slice(0, 160)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail(), creative: null }); continue; }
       } else {
         allFail.push(String(e).slice(0, 200)); await recordAttempt(db, { generationId, orgId: p.orgId, n, prompt, correction, imageUrl: null, passed: false, scores: assembleScores(null, allCriticalFail()), failReasons: ["יצירת התמונה נכשלה"], findings: null, manifest, critical: allCriticalFail(), creative: null }); continue;
       }
     }
     if (!img) continue;
+    // Normalize to the EXACT selected-format canvas BEFORE upload + QA, so the
+    // stored master (and every downstream preview/download/correction-ref) has the
+    // picked aspect ratio's real pixel dimensions.
+    img = await normalizeToCanvas(img.b64, canvas);
 
     const path = `${p.orgId}/qa/${generationId ?? "x"}/${n}-${Date.now()}.png`;
     // PRIVATE master via service role (p.bucket is legacy/ignored). imageUrl is a

@@ -7,6 +7,7 @@
 // Marketing DNA. NEVER invents testimonial/property content — only uses input.
 // Reuses the CreativePreview render_data shape (palette + blocks).
 // ============================================================================
+import { formatCanvas } from "./creative-preselect";
 
 export type QuickType = "testimonial_post" | "sold_post" | "property_ad_post";
 export const QUICK_TYPE_LABELS: Record<string, string> = { testimonial_post: "פוסט המלצה", sold_post: "פוסט נמכר", property_ad_post: "פוסט פרסום דירה" };
@@ -81,7 +82,9 @@ function featureRow(i: QuickInput): string[] {
 /** Build the 4 variations for a request. Hero/blocks vary by type + variant. */
 export function buildQuickVariations(type: QuickType, i: QuickInput, brand: BrandSnapshot, format: string): QuickVariation[] {
   const pal = palettes(brand);
-  const dims = format === "story_9_16" ? { w: 1080, h: 1920 } : { w: 1080, h: 1350 };
+  // Canonical per-format canvas (was: story ? 1080×1920 : 1080×1350 — which
+  // silently made 1:1 a 4:5 portrait). One source of truth in creative-preselect.
+  const dims = ((): { w: number; h: number } => { const c = formatCanvas(format); return { w: c.w, h: c.h }; })();
   const loc = locStr(i);
   const heads = HEADLINES[type];
   const ctas = CTAS[type];
