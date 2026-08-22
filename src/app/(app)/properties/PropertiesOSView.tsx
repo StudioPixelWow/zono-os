@@ -1,546 +1,184 @@
 "use client";
 
 // ============================================================================
-// ZONO — Properties Operating System (נכסים)
+// ZONO — Properties INVENTORY COMMAND CENTER (הנכסים שלי).
 // ----------------------------------------------------------------------------
-// A premium, AI-first, vertically-scrolling Hebrew RTL command center for the
-// agent's inventory. Real data flows in from `properties`; sections without a
-// live data source yet use clearly-scoped mock content. The existing list +
-// filters + inventory tabs are preserved by rendering them as `children` inside
-// the "כל הנכסים" section, so no functionality is lost.
+// The daily inventory operating surface — NOT a catalog. First viewport answers
+// "what's my inventory state" and "what needs me now": one compact header + a KPI
+// strip, an evidence-gated ZONO brief, a DOMINANT "דורשים טיפול" queue, compact
+// quick operations — then the bounded Inventory Explorer (children). Every signal
+// is derived from real rows via the pure inventory-center module (no carousels,
+// no fabricated buyers/scores, no mock studio). Reused by /my-properties and
+// /office-inventory; the explorer + URL filters are preserved as `children`.
 // ============================================================================
-
-import { useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { IconSurface, type Accent } from "@/components/ui/action-surfaces";
+import { propertyAddressLine, PROPERTY_STATUS_LABELS, PROPERTY_STATUS_TONES, type PropertyRow } from "@/lib/properties/labels";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
-import { Reveal, RevealGroup, RevealItem } from "@/components/dashboard/motion";
-import {
-  PROPERTY_STATUS_LABELS,
-  PROPERTY_STATUS_TONES,
-  propertyAddressLine,
-  type PropertyRow,
-} from "@/lib/properties/labels";
 import { cn } from "@/lib/utils";
-import { ZonoMap, type ZonoMapPoint } from "@/components/maps/ZonoMap";
+import {
+  attentionFor, inventoryKpis, inventoryBrief, isTerminal, type Attention,
+} from "@/lib/properties/inventory-center";
 
-/* ── helpers ─────────────────────────────────────────────────────────────── */
+const coverFor = (p: PropertyRow, covers: Record<string, string>): string | null => covers[p.id] ?? p.primary_image_url ?? null;
+const ils = (n: number) => (n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `₪${Math.round(n / 1000)}K` : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
-const ils = (n: number) => `₪${Math.round(n).toLocaleString("he-IL")}`;
-function ilsCompact(n: number): string {
-  if (n >= 1_000_000) return `₪${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `₪${Math.round(n / 1000)}K`;
-  return ils(n);
-}
-const TERMINAL = new Set(["sold", "rented", "withdrawn", "archived", "draft"]);
-/** Resolved cover: media cover → denormalized primary_image_url → none. */
-function coverFor(p: PropertyRow, covers: Record<string, string>): string | null {
-  return covers[p.id] ?? p.primary_image_url ?? null;
-}
-/** Real listing score only — never a fabricated fallback. null = not scored yet. */
-function scoreOf(p: PropertyRow): number | null {
-  return p.zono_score ?? p.quality_score ?? null;
-}
-function daysSince(iso: string | null): number {
-  if (!iso) return 0;
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-}
-function scoreTone(score: number): { ring: string; text: string } {
-  if (score >= 85) return { ring: "ring-success", text: "text-success" };
-  if (score >= 70) return { ring: "ring-brand", text: "text-brand-strong" };
-  return { ring: "ring-warning", text: "text-warning" };
-}
+const KPI_ACCENT: Record<string, Accent> = { Building2: "brand", Handshake: "success", Home: "brand", AlertTriangle: "danger" };
 
-/* ── section shell ───────────────────────────────────────────────────────── */
-
-function SectionTitle({ title, action }: { title: string; action?: ReactNode }) {
+interface Kpi { label: string; value: string; icon: string; highlight?: boolean }
+function KpiStrip({ kpis }: { kpis: Kpi[] }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="text-ink text-lg font-black sm:text-xl">{title}</h2>
-      {action}
-    </div>
-  );
-}
-function ViewAll({ href = "#" }: { href?: string }) {
-  return (
-    <Link href={href} className="text-brand-strong inline-flex items-center gap-1 text-sm font-bold">
-      הצג הכל <Icon name="ChevronLeft" size={15} />
-    </Link>
-  );
-}
-
-/**
- * Horizontal scroll row with always-visible prev/next arrows (RTL-aware). The
- * arrows scroll by ~80% of the visible width; the row still scrolls by drag /
- * trackpad / touch. Arrows hide on small screens where touch scrolling is natural.
- */
-function Carousel({ children, className }: { children: ReactNode; className?: string }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const by = (dir: 1 | -1) =>
-    ref.current?.scrollBy({ left: dir * Math.max(320, ref.current.clientWidth * 0.8), behavior: "smooth" });
-  const arrow =
-    "bg-card/95 border-line text-ink hover:text-brand-strong hover:border-brand-light absolute top-[44%] z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border shadow-[var(--shadow-lift)] backdrop-blur transition md:grid";
-  return (
-    <div className="relative">
-      <div ref={ref} className={cn("no-scrollbar flex overflow-x-auto pb-2", className)}>
-        {children}
-      </div>
-      {/* RTL: right chevron → earlier items, left chevron → later items */}
-      <button type="button" onClick={() => by(1)} aria-label="הקודם" className={cn(arrow, "end-0 sm:-end-2")}>
-        <Icon name="ChevronRight" size={20} />
-      </button>
-      <button type="button" onClick={() => by(-1)} aria-label="הבא" className={cn(arrow, "start-0 sm:-start-2")}>
-        <Icon name="ChevronLeft" size={20} />
-      </button>
-    </div>
-  );
-}
-
-/* ── 1. Hero ─────────────────────────────────────────────────────────────── */
-
-function PropertiesHero({ agentName }: { agentName: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <h1 className="text-ink text-2xl font-black sm:text-3xl">בוקר טוב, {agentName} 👋</h1>
-      <p className="text-muted text-sm sm:text-base">מרכז השליטה של הנכסים שלך</p>
-    </div>
-  );
-}
-
-/* ── 2. KPI cards ────────────────────────────────────────────────────────── */
-
-interface Kpi { label: string; value: string; icon: string; tone: string; delta?: string; deltaUp?: boolean; highlight?: boolean }
-
-const PKPI_ACCENT: Record<string, Accent> = {
-  Building: "brand", Building2: "brand", Home: "brand", Layers: "brand",
-  Banknote: "success", Coins: "success", TrendingUp: "success", Handshake: "success",
-  Users: "info", UserPlus: "info", Eye: "info", Clock: "warn", Flame: "warn", AlertTriangle: "danger",
-};
-function pKpiAccent(icon: string): Accent { return PKPI_ACCENT[icon] ?? "brand"; }
-
-// Number-first premium KPI cards: the value leads at 3xl; the icon earns a real
-// IconSurface (or a bold on-gradient chip for the highlight card) — no tiny box.
-function PropertyKpiCards({ kpis }: { kpis: Kpi[] }) {
-  return (
-    <RevealGroup className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {kpis.map((k) => (
-        <RevealItem key={k.label}>
-          <div className={cn(
-            "relative flex h-full flex-col gap-1.5 rounded-[22px] border p-4 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-lg",
-            k.highlight ? "zono-gradient-glow border-transparent text-white" : "bg-card border-line",
-          )}>
-            <span className="absolute left-4 top-4">
-              {k.highlight
-                ? <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/15 text-white"><Icon name={k.icon} size={24} strokeWidth={2.1} /></span>
-                : <IconSurface name={k.icon} tier="m" accent={pKpiAccent(k.icon)} variant="soft" />}
-            </span>
-            <span className={cn("text-3xl font-black leading-none tracking-tight sm:text-[34px]", k.highlight ? "text-white" : "text-ink")}>{k.value}</span>
-            <span className={cn("text-xs font-bold", k.highlight ? "text-white/80" : "text-muted")}>{k.label}</span>
-            {k.delta && (
-              <span className={cn("inline-flex items-center gap-1 text-xs font-bold", k.highlight ? "text-white/85" : k.deltaUp ? "text-success" : "text-danger")}>
-                <Icon name={k.deltaUp ? "TrendingUp" : "TrendingDown"} size={13} />{k.delta}
-              </span>
-            )}
-          </div>
-        </RevealItem>
+        <div key={k.label} className={cn("relative flex h-full flex-col gap-1 rounded-[22px] border p-4 shadow-[var(--shadow-card)]", k.highlight ? "zono-gradient-glow border-transparent text-white" : "bg-card border-line")}>
+          <span className="absolute end-4 top-4">
+            {k.highlight ? <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white/15 text-white"><Icon name={k.icon} size={22} /></span> : <IconSurface name={k.icon} tier="m" accent={KPI_ACCENT[k.icon] ?? "brand"} variant="soft" />}
+          </span>
+          <span className={cn("text-[34px] font-black leading-none tracking-tight", k.highlight ? "text-white" : "text-ink")}>{k.value}</span>
+          <span className={cn("text-xs font-bold", k.highlight ? "text-white/80" : "text-muted")}>{k.label}</span>
+        </div>
       ))}
-    </RevealGroup>
+    </div>
   );
 }
 
-/* ── 3. AI actions bar ───────────────────────────────────────────────────── */
-
-const AI_ACTIONS = [
-  { label: "מצא נכסים חמים", href: "#hot-properties" },
-  { label: "נכסים ללא לידים", href: "#attention" },
-  { label: "צור פוסטים לנכסים חדשים", href: "/creative" },
-  { label: "מצא קונים מתאימים", href: "/buyers" },
-  { label: "דוח שוק", href: "/market" },
-];
-
-function AIActionsBar() {
+function ZonoBrief({ items }: { items: { key: string; text: string; href: string }[] }) {
+  if (items.length === 0) return null;
   return (
-    <div className="bg-card border-line rounded-[22px] border p-4 shadow-[var(--shadow-card)] sm:p-5">
-      <p className="text-ink mb-3 text-sm font-extrabold">מה תרצה לעשות היום?</p>
-      <div className="flex flex-wrap items-center gap-2">
-        {AI_ACTIONS.map((a) => (
-          <Link key={a.label} href={a.href} scroll className="bg-brand-soft text-brand-strong hover:bg-brand-soft/70 rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors">
-            {a.label}
+    <div className="bg-card border-line rounded-[22px] border p-4 shadow-[var(--shadow-card)]">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="bg-brand text-white grid h-8 w-8 shrink-0 place-items-center rounded-xl text-sm font-black">Z</span>
+        <div><p className="text-ink text-sm font-black leading-tight">זונו על המלאי שלך</p><p className="text-muted text-[11px]">מבוסס-ראיות בלבד</p></div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {items.map((b) => (
+          <Link key={b.key} href={b.href} className="border-line hover:border-brand-light flex items-center justify-between gap-2 rounded-xl border p-3 transition">
+            <span className="text-ink text-[12.5px] font-bold leading-tight">{b.text}</span>
+            <span className="text-brand-strong shrink-0"><Icon name="ChevronLeft" size={15} /></span>
           </Link>
         ))}
-        <span className="bg-brand text-white ms-auto grid h-9 w-9 place-items-center rounded-full">
-          <Icon name="Zap" size={16} />
-        </span>
       </div>
     </div>
   );
 }
 
-/* ── 4. Attention center (derived from real rows) ────────────────────────── */
-
-interface AttentionItem { tone: BadgeTone; status: string; title: string; text: string; cta: string; href: string }
-
-function buildAttention(properties: PropertyRow[], covers: Record<string, string>): AttentionItem[] {
-  const out: AttentionItem[] = [];
-  for (const p of properties) {
-    if (TERMINAL.has(p.status)) continue;
-    const addr = propertyAddressLine(p);
-    const stale = daysSince(p.updated_at);
-    if (!coverFor(p, covers)) {
-      out.push({ tone: "warning", status: "שיווק", title: addr, text: "אין תמונות מקצועיות", cta: "הזמן צילום", href: `/properties/${p.id}` });
-    } else if (stale >= 14) {
-      out.push({ tone: "danger", status: "בסיכון", title: addr, text: `לא עודכן ${stale} ימים`, cta: "טפל עכשיו", href: `/properties/${p.id}` });
-    } else if (!p.marketing_description && !p.ai_description) {
-      out.push({ tone: "neutral", status: "מעקב", title: addr, text: "חסר תיאור שיווקי", cta: "הוסף תיאור", href: `/properties/${p.id}/edit` });
-    } else if (p.price_per_sqm && p.price_per_sqm > 28000) {
-      out.push({ tone: "danger", status: "בסיכון", title: addr, text: "המחיר גבוה מהממוצע באזור", cta: "בדוק מחיר", href: `/properties/${p.id}` });
-    }
-    if (out.length >= 6) break;
-  }
-  return out;
-}
-
-function AttentionCenter({ items }: { items: AttentionItem[] }) {
-  if (items.length === 0) {
-    return (
-      <div className="bg-success-soft/50 border-success/20 rounded-[22px] border p-6 text-center">
-        <Icon name="BadgeCheck" size={28} className="text-success mx-auto" />
-        <p className="text-ink mt-2 text-sm font-bold">הכל תחת שליטה — אין נכסים שדורשים טיפול מיידי כרגע.</p>
-      </div>
-    );
-  }
-  return (
-    <Carousel className="gap-3">
-      {items.map((a, i) => (
-        <div key={i} className="bg-card border-line flex min-w-[240px] max-w-[260px] flex-col gap-2 rounded-2xl border p-4 shadow-[var(--shadow-soft)]">
-          <div className="flex items-center gap-2">
-            <Icon name={a.tone === "danger" ? "AlertTriangle" : a.tone === "warning" ? "Megaphone" : "Clock"} size={15} className={a.tone === "danger" ? "text-danger" : a.tone === "warning" ? "text-warning" : "text-muted"} />
-            <Badge tone={a.tone} size="sm">{a.status}</Badge>
-          </div>
-          <p className="text-ink text-sm font-extrabold leading-snug">{a.title}</p>
-          <p className="text-muted text-xs">{a.text}</p>
-          <Link href={a.href} className="bg-brand-soft text-brand-strong mt-1 rounded-lg px-3 py-2 text-center text-[13px] font-bold">{a.cta}</Link>
-        </div>
-      ))}
-    </Carousel>
-  );
-}
-
-/* ── 5. (removed) Smart opportunities — was hardcoded mock buyer matches;
-   a production surface must not present fabricated buyers/scores as real. When a
-   real buyer-match selector is wired for this hub it can render here. ──────── */
-
-/* ── 6. Hot properties carousel (real rows) ──────────────────────────────── */
-
-const STUDIO_LINKS = (id: string) => [
-  { label: "פרסם", icon: "Megaphone", href: `/properties/${id}` },
-  { label: "צור פוסט", icon: "Sparkles", href: `/creative-studio/property/${id}` },
-  { label: "סטורי", icon: "Image", href: `/creative-studio/property/${id}` },
-  { label: "AI", icon: "Sparkles", href: `/creative-studio/property/${id}` },
-];
-
-function HotPropertyCard({ p, cover }: { p: PropertyRow; cover: string | null }) {
-  const score = scoreOf(p);
-  const tone = scoreTone(score ?? 0);
+function AttentionCard({ p, cover, att }: { p: PropertyRow; cover: string | null; att: Attention }) {
   const statusTone = (PROPERTY_STATUS_TONES[p.status] ?? "neutral") as BadgeTone;
+  const toneText: Record<string, string> = { warning: "text-warning", danger: "text-danger", neutral: "text-muted" };
   return (
-    <div className="bg-card border-line flex min-w-[300px] max-w-[320px] flex-col overflow-hidden rounded-[22px] border shadow-[var(--shadow-card)]">
-      <div className="bg-surface relative aspect-square w-full overflow-hidden">
-        {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt={p.title} className="absolute inset-0 h-full w-full object-cover object-center" />
-        ) : (
-          <div className="text-muted absolute inset-0 grid place-items-center"><Icon name="Building2" size={34} /></div>
-        )}
-        <span className="absolute start-3 top-3"><Badge tone={statusTone} size="sm">{PROPERTY_STATUS_LABELS[p.status]}</Badge></span>
-        {score != null && <span className={cn("bg-card absolute end-3 top-3 grid h-11 w-11 place-items-center rounded-full text-sm font-black ring-2", tone.ring, tone.text)}>{score}</span>}
+    <div className="bg-card border-line flex flex-col overflow-hidden rounded-[20px] border shadow-[var(--shadow-soft)]">
+      <div className="flex items-stretch gap-3 p-3">
+        <div className="bg-surface relative h-20 w-20 shrink-0 overflow-hidden rounded-xl">
+          {cover
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={cover} alt={p.title} className="h-full w-full object-cover" />
+            : <span className="text-muted grid h-full w-full place-items-center"><Icon name="Building2" size={24} /></span>}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center gap-2">
+            <Badge tone={statusTone} size="sm">{PROPERTY_STATUS_LABELS[p.status]}</Badge>
+            {p.price ? <span className="text-brand-strong text-[12.5px] font-black">{ils(p.price)}</span> : null}
+          </div>
+          <p className="text-ink mt-0.5 line-clamp-1 text-[13.5px] font-black">{p.title}</p>
+          <p className="text-muted line-clamp-1 text-[11.5px]">{propertyAddressLine(p)}</p>
+          <p className={cn("mt-0.5 line-clamp-1 text-[11.5px] font-bold", toneText[att.tone])}>דורש טיפול: {att.reason}</p>
+        </div>
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <p className="text-ink text-base font-extrabold leading-snug">{p.title}</p>
-        <p className="text-muted text-xs">{propertyAddressLine(p)}{p.city ? `, ${p.city}` : ""}</p>
-        <p className="text-brand-strong text-lg font-black">{p.price ? ils(p.price) : "—"}</p>
-        <div className="text-muted flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-medium">
-          <span>{p.rooms ?? "—"} חדרים</span><span className="bg-line h-3 w-px" />
-          <span>{p.size_sqm ?? "—"} מ״ר</span><span className="bg-line h-3 w-px" />
-          <span>קומה {p.floor ?? "—"}</span>
-        </div>
-        <div className="border-line mt-1 grid grid-cols-2 gap-1.5 border-t pt-2.5">
-          {STUDIO_LINKS(p.id).map((s) => (
-            <Link key={s.label} href={s.href} className="bg-surface text-ink hover:bg-brand-soft hover:text-brand-strong inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-colors">
-              <Icon name={s.icon} size={12} />{s.label}
-            </Link>
-          ))}
-        </div>
-        <Link href={`/properties/${p.id}`} className="bg-brand text-white mt-1 inline-flex items-center justify-center gap-1 rounded-lg px-3 py-2 text-[13px] font-bold">
-          כניסה לנכס <Icon name="ChevronLeft" size={14} />
+      <Link href={att.href} className="bg-brand-soft text-brand-strong m-3 mt-0 rounded-lg py-2 text-center text-[13px] font-bold">{att.cta}</Link>
+    </div>
+  );
+}
+
+const QUICK_OPS = [
+  { label: "הוספת נכס", icon: "Plus", href: "/properties/new" },
+  { label: "יצירת קריאייטיב", icon: "Sparkles", href: "/creative-studio" },
+  { label: "מסמכים", icon: "FileText", href: "/documents" },
+  { label: "קונים מתאימים", icon: "Users", href: "/buyers" },
+  { label: "הערכת שווי", icon: "BarChart3", href: "/valuation" },
+];
+function QuickOps() {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {QUICK_OPS.map((a) => (
+        <Link key={a.label} href={a.href} className="bg-card border-line text-ink hover:border-brand-light inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[13px] font-bold shadow-[var(--shadow-soft)] transition">
+          <span className="text-brand-strong"><Icon name={a.icon} size={16} /></span>{a.label}
         </Link>
-      </div>
+      ))}
     </div>
   );
 }
 
-function HotPropertiesCarousel({ properties, covers }: { properties: PropertyRow[]; covers: Record<string, string> }) {
-  if (properties.length === 0) {
-    return <p className="text-muted bg-card border-line rounded-[22px] border p-6 text-center text-sm">אין נכסים חמים עדיין — הוסף נכס ראשון כדי לראות אותו כאן.</p>;
-  }
-  return (
-    <Carousel className="gap-4">
-      {properties.map((p) => <HotPropertyCard key={p.id} p={p} cover={coverFor(p, covers)} />)}
-    </Carousel>
-  );
-}
-
-/* ── 7. Properties map (REAL coordinates only — Phase 24) ─────────────────── */
-
-function MarketMapSection({ properties }: { properties: PropertyRow[] }) {
-  // Only properties with REAL coordinates appear on the map. No invented pins.
-  const located = properties.filter((p) => p.latitude != null && p.longitude != null);
-  const points: ZonoMapPoint[] = located.map((p) => ({
-    id: p.id,
-    lat: p.latitude as number,
-    lng: p.longitude as number,
-    title: p.title ?? propertyAddressLine(p),
-    details: [propertyAddressLine(p), (p.price ?? 0) > 0 ? ils(p.price as number) : ""].filter(Boolean),
-    tone: TERMINAL.has(p.status) ? "warning" : "brand",
-    href: `/properties/${p.id}`,
-  }));
-  // Real aggregate stats only (no fabricated numbers).
-  const active = properties.filter((p) => !TERMINAL.has(p.status)).length;
-  const priced = properties.filter((p) => (p.price ?? 0) > 0);
-  const avg = priced.length ? priced.reduce((s, p) => s + (p.price ?? 0), 0) / priced.length : 0;
-
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-      <ZonoMap
-        points={points}
-        heightClass="aspect-[16/9] lg:aspect-auto lg:h-full lg:min-h-[320px]"
-        emptyMessage="נדרש מיקום מדויק להצגת נכסים על המפה. הוסף/י כתובת מדויקת בעת יצירת נכס, או הרץ/י גאוקודינג מהמנהל."
-      />
-      <div className="bg-card border-line flex flex-col gap-3 rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
-        <p className="text-ink text-base font-black">סקירת מלאי</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">נכסים פעילים</p><p className="text-ink text-lg font-black">{active}</p></div>
-          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">על המפה</p><p className="text-ink text-lg font-black">{located.length}</p></div>
-          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">מחיר ממוצע</p><p className="text-ink text-lg font-black">{avg ? ilsCompact(avg) : "—"}</p></div>
-          <div className="bg-surface rounded-xl p-3"><p className="text-muted text-[11px] font-bold">ללא מיקום</p><p className="text-ink text-lg font-black">{properties.length - located.length}</p></div>
-        </div>
-        <Link href="/market" className="bg-brand-soft text-brand-strong mt-auto rounded-xl px-3 py-2.5 text-center text-sm font-bold">פתח מודיעין שוק מלא</Link>
-      </div>
-    </div>
-  );
-}
-
-/* ── 8. Pipeline (real rows by status) ───────────────────────────────────── */
-
-const PIPELINE_COLS: { key: string; label: string; statuses: string[]; tone: string }[] = [
-  { key: "new", label: "נכסים חדשים", statuses: ["draft"], tone: "text-muted" },
-  { key: "marketing", label: "בשיווק", statuses: ["ready", "published"], tone: "text-brand-strong" },
-  { key: "active", label: "פעילים", statuses: ["active"], tone: "text-success" },
-  { key: "negotiation", label: "במשא ומתן", statuses: ["under_offer", "in_contract"], tone: "text-warning" },
-  { key: "sold", label: "נמכר", statuses: ["sold", "rented"], tone: "text-danger" },
-];
-
-function PropertyPipeline({ properties, covers }: { properties: PropertyRow[]; covers: Record<string, string> }) {
-  return (
-    <Carousel className="gap-3">
-      {PIPELINE_COLS.map((col) => {
-        const items = properties.filter((p) => col.statuses.includes(p.status));
-        return (
-          <div key={col.key} className="bg-surface/60 border-line flex min-w-[230px] max-w-[250px] flex-col gap-2 rounded-2xl border p-3">
-            <div className="flex items-center justify-between px-1">
-              <span className={cn("text-sm font-extrabold", col.tone)}>{col.label}</span>
-              <span className="bg-card text-muted rounded-full px-2 py-0.5 text-[11px] font-bold">{items.length}</span>
-            </div>
-            {items.slice(0, 4).map((p) => {
-              const cover = coverFor(p, covers);
-              return (
-              <Link key={p.id} href={`/properties/${p.id}`} className="bg-card border-line flex items-center gap-2 rounded-xl border p-2 shadow-[var(--shadow-soft)]">
-                <span className="bg-surface text-muted grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg">
-                  {cover
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={cover} alt="" className="h-full w-full object-cover" />
-                    : <Icon name="Building2" size={15} />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-ink truncate text-xs font-bold">{p.title}</p>
-                  <p className="text-brand-strong text-[11px] font-black">{p.price ? ilsCompact(p.price) : "—"}</p>
-                </div>
-                <span className="text-success text-[11px] font-black">{scoreOf(p) ?? "—"}</span>
-              </Link>
-              );
-            })}
-            <Link href="/properties/new" className="text-muted hover:text-brand-strong rounded-lg py-1.5 text-center text-[11px] font-bold">+ הוסף נכס</Link>
-          </div>
-        );
-      })}
-    </Carousel>
-  );
-}
-
-/* ── 9. Property studio (mock actions) ───────────────────────────────────── */
-
-const STUDIO_ACTIONS = [
-  { label: "צור פוסט", icon: "Image" }, { label: "צור סטורי", icon: "Sparkles" },
-  { label: "צור רילס", icon: "Presentation" }, { label: "קמפיין פייסבוק", icon: "Megaphone" },
-  { label: "דיוור ללקוחות", icon: "Mail" }, { label: "קמפיין וואטסאפ", icon: "MessageCircle" },
-  { label: "פלייר דיגיטלי", icon: "FileText" }, { label: "עוד פעולות", icon: "LayoutGrid" },
-];
-
-function PropertyStudio({ top }: { top: PropertyRow | null }) {
-  const id = top?.id;
-  return (
-    <div className="bg-gradient-to-br from-brand-soft to-surface border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]">
-      <div className="flex flex-col gap-4 lg:flex-row">
-        <div className="bg-card border-line flex w-full shrink-0 flex-col gap-2 rounded-2xl border p-4 lg:w-64">
-          <span className="text-muted text-[11px] font-bold">נכס נבחר</span>
-          <p className="text-ink text-base font-extrabold">{top ? `${propertyAddressLine(top)}` : "בחר נכס"}</p>
-          <div className="flex items-center gap-2">
-            <span className="text-success text-2xl font-black">{top && scoreOf(top) != null ? scoreOf(top) : "—"}</span>
-            <span className="text-muted text-xs">/ 100</span>
-          </div>
-          <Link href={id ? `/properties/${id}` : "/properties"} className="bg-brand text-white mt-1 rounded-lg px-3 py-2 text-center text-[13px] font-bold">כניסה לנכס</Link>
-        </div>
-        <div className="grid flex-1 grid-cols-2 gap-2.5 sm:grid-cols-4">
-          {STUDIO_ACTIONS.map((a) => (
-            <Link key={a.label} href={id ? `/creative-studio/property/${id}` : "/creative"} className="bg-card border-line hover:shadow-[var(--shadow-lift)] flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 text-center transition-shadow">
-              <span className="bg-brand-soft text-brand-strong grid h-10 w-10 place-items-center rounded-xl"><Icon name={a.icon} size={18} /></span>
-              <span className="text-ink text-[12px] font-bold">{a.label}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── 10. (removed) Market intelligence — was hardcoded mock market stats
-   (price trends, demand %, deal counts) presented as real analytics. Removed until
-   a real market-data source is wired; a production user must not see fabricated
-   figures as truth. ──────────────────────────────────────────────────────── */
-
-/* ── 11. Sticky AI Copilot panel (real derived counts + nav) ─────────────── */
-
-function StickyAICopilotPanel({ atRisk, needMarketing }: { atRisk: number; needMarketing: number }) {
-  // Only REAL, derived signals — the previous "2 קונים מוכנים לפגישה" card was a
-  // hardcoded number and has been removed.
-  const cards = [
-    { icon: "AlertTriangle", tone: "text-danger", bg: "bg-danger-soft", title: `${atRisk} נכסים בסיכון`, sub: "עלולים לאבד בלעדיות", href: "#attention" },
-    { icon: "Megaphone", tone: "text-brand-strong", bg: "bg-brand-soft", title: `${needMarketing} נכסים צריכים שיווק`, sub: "אין פעילות אחרונה", href: "/creative" },
-  ];
-  return (
-    <aside className="hidden w-[300px] shrink-0 xl:block">
-      <div className="sticky top-6 flex flex-col gap-4">
-        <div className="zono-ai-gradient rounded-[22px] p-5 text-white shadow-[var(--shadow-lift)]">
-          <div className="flex items-center gap-2">
-            <Icon name="Sparkles" size={18} />
-            <p className="text-base font-black">עוזר AI</p>
-            <span className="bg-white/15 rounded-full px-2 py-0.5 text-[10px] font-bold">BETA</span>
-          </div>
-          <p className="text-white/80 mt-0.5 text-xs">תמיד כאן לעזור</p>
-          <div className="mt-4 flex flex-col gap-2">
-            {cards.map((c) => (
-              <Link key={c.title} href={c.href} className="bg-white/10 hover:bg-white/15 flex items-center gap-2.5 rounded-xl p-2.5 transition-colors">
-                <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", c.bg, c.tone)}><Icon name={c.icon} size={15} /></span>
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-bold">{c.title}</p>
-                  <p className="text-white/70 truncate text-[11px]">{c.sub}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-          <button className="bg-white text-brand-strong mt-4 w-full rounded-xl px-3 py-2.5 text-sm font-black">שאל את ZONO</button>
-        </div>
-
-        <div className="bg-card border-line rounded-[22px] border p-4 shadow-[var(--shadow-card)]">
-          <p className="text-ink mb-2 text-sm font-extrabold">פעולות מהירות</p>
-          <div className="flex flex-col gap-1">
-            {[
-              { l: "הוסף נכס חדש", i: "Plus", h: "/properties/new" },
-              { l: "הוסף קונה", i: "UserPlus", h: "/buyers/new" },
-              { l: "צור שיווק", i: "Megaphone", h: "/creative" },
-              { l: "ייבא נכסים", i: "Download", h: "?inv=external" },
-            ].map((q) => (
-              <Link key={q.l} href={q.h} className="text-ink hover:bg-surface flex items-center gap-2 rounded-lg px-2 py-2 text-[13px] font-bold transition-colors">
-                <span className="text-brand-strong"><Icon name={q.i} size={15} /></span>{q.l}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-/* ── Root ────────────────────────────────────────────────────────────────── */
-
-export function PropertiesOSView({
-  properties,
-  agentName,
-  covers = {},
-  children,
-}: {
-  properties: PropertyRow[];
-  agentName: string;
-  /** property_id → resolved cover image (from property_media), so a property's
-   *  real image always shows even when primary_image_url is null. */
-  covers?: Record<string, string>;
-  /** The existing inventory tabs + list/external section (preserves filters). */
-  children: ReactNode;
+export function PropertiesOSView({ properties, agentName, covers = {}, children }: {
+  properties: PropertyRow[]; agentName: string; covers?: Record<string, string>; children: ReactNode;
 }) {
-  const activeProps = useMemo(() => properties.filter((p) => !TERMINAL.has(p.status)), [properties]);
-  const hot = useMemo(() => [...properties].sort((a, b) => (scoreOf(b) ?? -1) - (scoreOf(a) ?? -1)).slice(0, 8), [properties]);
-  const attention = useMemo(() => buildAttention(properties, covers), [properties, covers]);
-  const needMarketing = useMemo(() => properties.filter((p) => !TERMINAL.has(p.status) && !coverFor(p, covers)).length, [properties, covers]);
-  const potentialCommission = useMemo(() => activeProps.reduce((s, p) => s + (p.price ?? 0) * 0.02, 0), [activeProps]);
+  const [now] = useState(() => Date.now());
+  const hasCover = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of properties) if (covers[p.id] || p.primary_image_url) s.add(p.id);
+    return (id: string) => s.has(id);
+  }, [properties, covers]);
+
+  const kpisData = useMemo(() => inventoryKpis(properties, hasCover, now), [properties, hasCover, now]);
+  const brief = useMemo(() => inventoryBrief(properties, hasCover, now), [properties, hasCover, now]);
+  const attention = useMemo(() => {
+    const out: { p: PropertyRow; att: Attention }[] = [];
+    for (const p of properties) {
+      if (isTerminal(p.status)) continue;
+      const att = attentionFor(p, hasCover(p.id), now);
+      if (att) out.push({ p, att });
+      if (out.length >= 6) break;
+    }
+    return out;
+  }, [properties, hasCover, now]);
 
   const kpis: Kpi[] = [
-    // No delta/trend arrows: month-over-month is not computed, so an up-arrow would be a fabricated trend signal.
-    { label: "נכסים פעילים", value: String(activeProps.length), icon: "Building2", tone: "bg-brand-soft text-brand-strong", highlight: true },
-    { label: "נכסים חמים", value: String(properties.filter((p) => (scoreOf(p) ?? 0) >= 85).length), icon: "Flame", tone: "bg-danger-soft text-danger" },
-    { label: "דורשים טיפול", value: String(attention.length), icon: "AlertTriangle", tone: "bg-warning-soft text-warning" },
-    { label: "עמלות פוטנציאליות", value: ilsCompact(potentialCommission), icon: "Wallet", tone: "bg-success-soft text-success" },
+    { label: "נכסים פעילים", value: String(kpisData.active), icon: "Building2", highlight: true },
+    { label: "בבלעדיות", value: String(kpisData.exclusive), icon: "Handshake" },
+    { label: "למכירה", value: String(kpisData.forSale), icon: "Home" },
+    { label: "דורשים טיפול", value: String(kpisData.needsAttention), icon: "AlertTriangle" },
   ];
+  const subtitle = `${kpisData.active} נכסים פעילים${kpisData.needsAttention > 0 ? ` · ${kpisData.needsAttention} דורשים טיפול` : ""}${kpisData.forRent > 0 ? ` · ${kpisData.forRent} להשכרה` : ""}`;
 
   return (
-    <div dir="rtl" className="flex flex-col gap-8 xl:flex-row xl:items-start xl:gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-8">
-        <Reveal><PropertiesHero agentName={agentName} /></Reveal>
-        <PropertyKpiCards kpis={kpis} />
-        <AIActionsBar />
-
-        <section id="attention" className="flex flex-col gap-3 scroll-mt-6">
-          <SectionTitle title="דורש טיפול מיידי" action={<ViewAll />} />
-          <AttentionCenter items={attention} />
-        </section>
-
-        <section id="hot-properties" className="flex flex-col gap-3 scroll-mt-6">
-          <SectionTitle title="הנכסים החמים שלך" action={<ViewAll />} />
-          <HotPropertiesCarousel properties={hot} covers={covers} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="מפת הנכסים" action={<ViewAll href="/market" />} />
-          <MarketMapSection properties={properties} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="צינור העסקאות" action={<ViewAll />} />
-          <PropertyPipeline properties={properties} covers={covers} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="כל הנכסים" />
-          {children}
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="סטודיו הנכס" />
-          <PropertyStudio top={hot[0] ?? null} />
-        </section>
+    <div dir="rtl" className="flex flex-col gap-6">
+      {/* INVENTORY NOW — compact header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-muted text-[12px] font-bold">שלום {agentName} 👋</p>
+          <h1 className="text-ink text-2xl font-black sm:text-3xl">הנכסים שלי</h1>
+          <p className="text-muted mt-0.5 text-sm font-semibold">{subtitle}</p>
+        </div>
+        <Link href="/properties/new" className="bg-brand text-white inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[14px] font-black shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5">
+          <Icon name="Plus" size={18} strokeWidth={2.2} /> נכס חדש
+        </Link>
       </div>
 
-      <StickyAICopilotPanel atRisk={attention.filter((a) => a.status === "בסיכון").length} needMarketing={needMarketing} />
+      <KpiStrip kpis={kpis} />
+      <ZonoBrief items={brief} />
+
+      {/* NEEDS ATTENTION — the dominant operational queue */}
+      {attention.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-ink text-lg font-black sm:text-xl">דורשים טיפול</h2>
+            <Link href="/my-properties?attention=no_image" className="text-brand-strong inline-flex items-center gap-1 text-sm font-bold">כל הדורשים טיפול <Icon name="ChevronLeft" size={15} /></Link>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {attention.map(({ p, att }) => <AttentionCard key={p.id} p={p} cover={coverFor(p, covers)} att={att} />)}
+          </div>
+        </section>
+      )}
+
+      {/* QUICK OPERATIONS */}
+      <section className="flex flex-col gap-2">
+        <h2 className="text-ink text-sm font-black">פעולות מהירות</h2>
+        <QuickOps />
+      </section>
+
+      {/* INVENTORY EXPLORER (children) */}
+      <section id="inventory" className="scroll-mt-6">{children}</section>
     </div>
   );
 }

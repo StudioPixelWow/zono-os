@@ -27,16 +27,6 @@ const WORKSPACE_LINKS: WorkspaceLink[] = [
   { href: "/market-intelligence", emoji: "📡", label: "נכסים חיצוניים", hint: "External Listings" },
 ];
 
-const PERSONAL_LINKS: WorkspaceLink[] = [
-  { href: "/sellers", emoji: "🤝", label: "המוכרים שלי", hint: "Seller CRM" },
-  { href: "/buyers", emoji: "👥", label: "הקונים שלי", hint: "Buyer CRM" },
-  { href: "/matches", emoji: "✨", label: "התאמות", hint: "קונה ↔ נכס" },
-  { href: "/valuation", emoji: "📊", label: "הערכות שווי", hint: "ZONO Price Intelligence" },
-  { href: "/deals", emoji: "📁", label: "חדרי עסקה", hint: "Deal Rooms" },
-  { href: "/documents", emoji: "📄", label: "מסמכים וחתימות", hint: "Documents" },
-  { href: "/journeys", emoji: "🗓️", label: "ציר זמן ומסעות", hint: "Timeline" },
-];
-
 export default async function MyPropertiesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
   const str = (k: string): string | undefined => { const v = sp[k]; return typeof v === "string" && v.trim() ? v.trim() : undefined; };
@@ -49,6 +39,9 @@ export default async function MyPropertiesPage({ searchParams }: { searchParams:
   const { user, profile } = await getSessionContext();
   const currentUserId = user?.id ?? null;
   const agentName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "סוכן";
+  const ATTENTION_KEYS = ["no_image", "no_price", "unpublished", "missing_details", "stale"] as const;
+  const attRaw = str("attention");
+  const initialAttention = (ATTENTION_KEYS as readonly string[]).includes(attRaw ?? "") ? (attRaw as (typeof ATTENTION_KEYS)[number]) : null;
 
   let rows: PropertyRow[] = [];
   let error = false;
@@ -63,10 +56,9 @@ export default async function MyPropertiesPage({ searchParams }: { searchParams:
     <PropertiesOSView properties={rows} agentName={agentName} covers={covers}>
       <div className="flex flex-col gap-6">
         <WorkspaceLinks links={WORKSPACE_LINKS} />
-        <WorkspaceLinks links={PERSONAL_LINKS} />
         <PropertiesListView
           properties={rows} filters={filters} error={error} currentUserId={currentUserId} covers={covers}
-          eyebrow="🏠 הנכסים שלי" title="המלאי האישי שלי"
+          eyebrow="🏠 הנכסים שלי" title="כל הנכסים" initialAttention={initialAttention}
         />
       </div>
     </PropertiesOSView>
