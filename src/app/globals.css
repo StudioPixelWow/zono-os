@@ -382,36 +382,43 @@ body {
 .zlogin-grid {
   width: 100%; max-width: 1240px;
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
-  align-items: end; /* bottom-align both zones so ZI's feet land on the form's bottom line */
-  gap: clamp(20px, 3vw, 56px);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); /* ZI ~45% (col1) · form ~55% (col2) */
+  align-items: start; /* top-align both zones so their tops share one horizontal line */
+  gap: clamp(48px, 8vw, 130px);
 }
 /* Form on the physical LEFT (grid col 2 in RTL); LARGE ZI on the physical RIGHT
    (col 1, the wider track). Form stays first in the DOM for keyboard/SR order. */
-.zlogin-form-col { grid-column: 2; display: flex; flex-direction: column; align-items: center; width: 100%; }
-.zlogin-zi-col   { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: center; }
+.zlogin-form-col { position: relative; grid-column: 2; display: flex; flex-direction: column; align-items: center; width: 100%; }
+/* A soft white pool behind the form calms the background so the card leads the eye. */
+.zlogin-form-col::before { content: ""; position: absolute; inset: -8% -12%; z-index: -1; background: radial-gradient(58% 56% at 50% 46%, rgba(255,255,255,0.95), rgba(255,255,255,0) 72%); pointer-events: none; }
+.zlogin-zi-col   { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: flex-start; }
 
-.zlogin-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: clamp(12px, 2.2vh, 20px); }
-.zlogin-title { margin-top: 14px; font-size: clamp(20px, 2.2vw, 27px); font-weight: 800; letter-spacing: -0.015em; line-height: 1.35; color: #1f2233; max-width: 20ch; }
-.zlogin-lede { margin-top: 8px; font-size: clamp(13px, 1vw, 14.5px); font-weight: 500; color: var(--z-muted); max-width: 34ch; line-height: 1.5; }
-.zlogin-card { width: 100%; max-width: 480px; padding: clamp(24px, 2.4vw, 34px) clamp(22px, 2.2vw, 32px); }
+.zlogin-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: clamp(14px, 2vh, 22px); }
+.zlogin-title { margin-top: 18px; font-size: clamp(24px, 2.7vw, 33px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.28; color: #14162b; max-width: 17ch; }
+.zlogin-lede { margin-top: 8px; font-size: clamp(13.5px, 1.05vw, 15px); font-weight: 500; color: #454a5f; max-width: 30ch; line-height: 1.5; }
+.zlogin-card { width: 100%; max-width: 460px; padding: clamp(26px, 2vw, 30px) clamp(24px, 1.8vw, 30px); }
+/* Tighter, lower-profile form (calmer, ~15% shorter) + stronger label contrast. */
+.zlogin-card .zauth-card-sub { margin-bottom: 20px; }
+.zlogin-card .zauth-field { margin-bottom: 14px; }
+.zlogin-card .zauth-input { height: 52px; }
+.zlogin-card .zauth-label { color: #3a3f52; }
 
 /* ── LARGE ZI gateway character ────────────────────────────────────────────── */
-.zlogin-zi-stage { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; max-width: 660px; }
+.zlogin-zi-stage { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; max-width: 460px; }
 .zlogin-zi-img {
   position: relative; z-index: 2;
-  height: clamp(430px, 76vh, 760px); width: auto;
-  filter: drop-shadow(0 36px 52px rgba(91, 33, 182, 0.22));
+  height: clamp(300px, 44vh, 388px); width: auto;
+  filter: drop-shadow(0 22px 38px rgba(91, 33, 182, 0.16));
   animation: zlogin-zi-float 8s ease-in-out infinite;
 }
 @keyframes zlogin-zi-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
 /* Wide, soft purple radial halo (never a hard circle). Pulses once on entry. */
 .zlogin-zi-glow {
   position: absolute; z-index: 1; top: 50%; left: 50%;
-  width: clamp(460px, 46vw, 720px); height: clamp(460px, 46vw, 720px);
+  width: clamp(260px, 26vw, 360px); height: clamp(260px, 26vw, 360px);
   transform: translate(-50%, -46%);
-  background: radial-gradient(circle at 50% 46%, rgba(139, 92, 246, 0.22), rgba(124, 58, 237, 0.08) 46%, transparent 70%);
-  filter: blur(16px);
+  background: radial-gradient(circle at 50% 46%, rgba(139, 92, 246, 0.13), rgba(124, 58, 237, 0.04) 46%, transparent 68%);
+  filter: blur(18px);
   animation: zlogin-zi-pulse 2.6s ease-out 1;
 }
 @keyframes zlogin-zi-pulse { 0% { opacity: 0.55; } 60% { opacity: 1; } 100% { opacity: 0.9; } }
@@ -1202,3 +1209,11 @@ html::-webkit-scrollbar-thumb:hover,
 @media (prefers-reduced-motion: reduce) {
   .zi-char--anim, .zi-char--anim .zi-char__img, .zi-char--anim .zi-char__glow { animation: none !important; }
 }
+
+/* Login hierarchy correction — calm the background so the headline + form lead the
+   eye and ZI stays a supporting element (scoped to .zauth; overrides the base). */
+.zauth .zauth-amb-grid { opacity: 0.28; }
+.zauth .zauth-skyline { opacity: 0.38; }
+.zauth .zauth-particles { opacity: 0.4; }
+.zauth .zauth-amb-map { opacity: 0.5; }
+.zauth .zauth-amb-node { opacity: 0.6; }

@@ -13,18 +13,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { useActionState, useMemo, useState } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, MessageCircle, Building2 } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { signIn, type AuthFormState } from "@/lib/auth/actions";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-
-// Demo capability chips shown around ZI — a FIXED illustration of the OS, never
-// randomised or cycled. Single source of truth.
-const LOGIN_CHIPS = [
-  { Icon: MessageCircle, title: "3 שיחות WhatsApp חדשות", sub: "ממתינות למענה", tone: "g" as const, pos: "top" as const },
-  { Icon: Building2, title: "עסקה חדשה נרשמה", sub: "דירת 4 חדרים · ₪2.4M", tone: "v" as const, pos: "bottom" as const },
-];
 
 export function LoginExperience() {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(signIn, {});
@@ -73,7 +66,7 @@ export function LoginExperience() {
           {/* Form zone (center-left in RTL). */}
           <section className="zlogin-form-col">
             <motion.header className="zlogin-head" variants={rise}>
-              <span className="zauth-logo-wrap"><ZonoLogo priority width={166} height={53} /></span>
+              <span className="zauth-logo-wrap"><ZonoLogo priority width={120} height={38} /></span>
               <h1 className="zlogin-title">ברוכים הבאים לזון שלכם</h1>
               <p className="zlogin-lede">כל הנכסים, הלקוחות, העסקאות והפעולות שלכם — במקום אחד חכם.</p>
             </motion.header>
@@ -141,23 +134,6 @@ export function LoginExperience() {
                 draggable={false}
               />
               <span className="zlogin-zi-floor" aria-hidden="true" />
-              <span className="zlogin-zi-label">ZI כבר מחכה לכם בפנים</span>
-
-              {LOGIN_CHIPS.map((chip) => {
-                const Icon = chip.Icon;
-                return (
-                  <div key={chip.title} className={`zauth-chip zauth-glass zlogin-chip ${chip.pos === "top" ? "is-top" : "is-bottom"}`} aria-hidden="true">
-                    <span className="zauth-chip-inner">
-                      <span className="zauth-chip-ico"><Icon size={16} /></span>
-                      <span className="zauth-chip-body">
-                        <span className="zauth-chip-title">{chip.title}</span>
-                        <span className="zauth-chip-sub">{chip.sub}</span>
-                      </span>
-                      <span className={`zauth-chip-live ${chip.tone === "v" ? "v" : ""}`} />
-                    </span>
-                  </div>
-                );
-              })}
             </div>
           </motion.aside>
 
