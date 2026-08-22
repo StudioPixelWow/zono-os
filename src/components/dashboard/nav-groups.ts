@@ -66,7 +66,6 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "אתר משרד", href: "/office-website", icon: "Building2" },
     { label: "אתר סוכן", href: "/agent-website", icon: "UserCheck" },
     { label: "אתרי נכסים", href: "/property-sites", icon: "Home" },
-    { label: "אתרים ודפי נחיתה", href: "/website", icon: "LayoutGrid" },
     { label: "פורטלים (קונה/מוכר)", href: "/portals", icon: "Users" },
   ]},
   { key: "ops", title: "אוטומציה ותפעול", desc: "אוטומציה • תהליכים • עוזר קולי", icon: "Route", accent: "green", items: [

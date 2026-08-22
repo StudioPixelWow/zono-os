@@ -10,6 +10,7 @@
 // ============================================================================
 import { useState } from "react";
 import Link from "next/link";
+import { resolvePropertyTypeLabel } from "@/lib/property-marketing/presentation";
 import { Icon } from "@/components/dashboard/Icon";
 import type { OfficeLandscapeRow, OfficeDirectory, OfficeRecord } from "@/lib/office-intel/cockpit";
 
@@ -87,7 +88,7 @@ export function OfficeArena({ landscape, directory, detail, baseHref }: { landsc
                 <Stat label="דירוג Google" value={o.rating != null ? String(o.rating) : "—"} />
               </div>
               <Block title="אזורים">{o.areas.length ? <Chips items={o.areas.map((a) => `${a.name} · ${a.count}`)} /> : <Muted />}</Block>
-              <Block title="סוגי נכסים">{o.propertyTypes.length ? <Chips items={o.propertyTypes.map((t) => `${t.type} · ${t.count}`)} /> : <Muted />}</Block>
+              <Block title="סוגי נכסים">{o.propertyTypes.length ? <Chips items={o.propertyTypes.map((t) => `${resolvePropertyTypeLabel(t.type)} · ${t.count}`)} /> : <Muted />}</Block>
               <Block title={`סוכנים (${o.agents})`}>
                 {o.agentSample.length ? (
                   <div className="flex flex-col gap-1">

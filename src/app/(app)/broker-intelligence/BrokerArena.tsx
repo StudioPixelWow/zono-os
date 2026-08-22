@@ -10,6 +10,7 @@
 // ============================================================================
 import { useState } from "react";
 import Link from "next/link";
+import { resolvePropertyTypeLabel } from "@/lib/property-marketing/presentation";
 import { Icon } from "@/components/dashboard/Icon";
 import type { LandscapeRow, Directory, BrokerAgg } from "@/lib/broker-intel/cockpit";
 
@@ -93,7 +94,7 @@ export function BrokerArena({ landscape, directory, detail, baseHref }: { landsc
                 {agg.areas.length ? <div className="flex flex-wrap gap-1.5">{agg.areas.map((a) => <span key={a.name} className="bg-brand-soft text-brand-strong rounded-md px-2 py-0.5 text-[11px] font-bold">{a.name} · {a.count}</span>)}</div> : <Muted text="—" />}
               </DrawerBlock>
               <DrawerBlock title="סוגי נכסים">
-                {agg.propertyTypes.length ? <div className="flex flex-wrap gap-1.5">{agg.propertyTypes.map((t) => <span key={t.type} className="bg-surface text-ink rounded-md px-2 py-0.5 text-[11px] font-bold">{t.type} · {t.count}</span>)}</div> : <Muted text="—" />}
+                {agg.propertyTypes.length ? <div className="flex flex-wrap gap-1.5">{agg.propertyTypes.map((t) => <span key={t.type} className="bg-surface text-ink rounded-md px-2 py-0.5 text-[11px] font-bold">{resolvePropertyTypeLabel(t.type)} · {t.count}</span>)}</div> : <Muted text="—" />}
               </DrawerBlock>
               <DrawerBlock title="נצפה">
                 <div className="text-muted text-xs">ראשון: <span className="text-ink font-bold">{dateHe(agg.firstObservedMs)}</span> · אחרון: <span className="text-ink font-bold">{dateHe(agg.lastObservedMs)}</span></div>

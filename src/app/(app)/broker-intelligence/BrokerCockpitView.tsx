@@ -14,6 +14,7 @@ import type { BrokerCockpitBundle } from "@/lib/broker-intel/service";
 import type { BrokerInsight, Concentration, AreaCompetition, TypeSpecialization } from "@/lib/broker-intel/cockpit";
 import { IntelligenceHeader, IntelligenceKpiGrid, IntelligenceKpi, IntelligenceSection, IntelligenceEmptyState, IntelligenceEmptyInline } from "@/components/intelligence/framework";
 import { StatusBadge } from "@/components/intelligence/terminal";
+import { resolvePropertyTypeLabel } from "@/lib/property-marketing/presentation";
 import { BrokerControlBar } from "./BrokerControlBar";
 import { BrokerArena } from "./BrokerArena";
 
@@ -155,7 +156,7 @@ function TypeView({ types }: { types: TypeSpecialization[] }) {
     <div className="flex flex-col gap-3">
       {types.map((t) => (
         <div key={t.type}>
-          <p className="text-ink mb-1 text-xs font-black">{t.type}</p>
+          <p className="text-ink mb-1 text-xs font-black">{resolvePropertyTypeLabel(t.type)}</p>
           <div className="flex flex-wrap gap-1.5">
             {t.brokers.map((b) => <span key={b.name} className="bg-surface text-ink rounded-md px-2 py-0.5 text-[11px] font-bold">{b.name} · {b.count}</span>)}
           </div>
