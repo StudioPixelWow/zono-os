@@ -42,9 +42,14 @@ export function buildGeoQuery(p: GeoAddressParts): { street: string | null; stre
   const rawStreet = clean(p.street);
   const streetName = rawStreet ? rawStreet.replace(/\s*\d[\d.]*\s*$/, "").trim() || null : null;
   const numFromStreet = rawStreet ? (rawStreet.match(/(\d+)/)?.[1] ?? null) : null;
-  const streetNumber = clean(p.streetNumber) || clean(p.buildingNumber) || numFromStreet;
+  // A building number is only meaningful WITH a street name — a bare number geocodes
+  // to nothing useful.
+  const streetNumber = streetName ? (clean(p.streetNumber) || clean(p.buildingNumber) || numFromStreet) : null;
   const neighborhood = clean(p.neighborhood);
   const city = clean(p.city);
+  // Only a real free-form ADDRESS is used as the query address — NEVER the property
+  // title (a marketing string like "דירה 4 חדרים משופצת" makes Google return
+  // ZERO_RESULTS, which is why street-less subjects were failing to geocode).
   const address = clean(p.address);
 
   let maxResolution: GeoResolution;
@@ -54,7 +59,7 @@ export function buildGeoQuery(p: GeoAddressParts): { street: string | null; stre
   else if (city) maxResolution = "CITY";
   else maxResolution = "UNRESOLVED";
 
-  return { street: streetName, streetNumber, neighborhood, city, address: address || (p.title ? clean(p.title) : null), maxResolution };
+  return { street: streetName, streetNumber, neighborhood, city, address, maxResolution };
 }
 
 /** Final resolution = the coarser of what the address supports and what the

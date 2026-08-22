@@ -23,6 +23,14 @@ test("street parsing splits 'לוטם 2.0' into name + number", () => {
   assert.equal(q.streetNumber, "2");
 });
 
+test("property title is NEVER used as a geocoding address (caused ZERO_RESULTS)", () => {
+  const q = buildGeoQuery({ city: "קרית ביאליק", neighborhood: "רמות", buildingNumber: "5", title: "דירת 4 חדרים משופצת" });
+  assert.equal(q.address, null);            // title ignored
+  assert.equal(q.street, null);
+  assert.equal(q.streetNumber, null);       // bare building number without a street is dropped
+  assert.equal(q.maxResolution, "NEIGHBORHOOD"); // geocodes by neighborhood+city, honestly coarse
+});
+
 test("resolution never exceeds what the address supports", () => {
   // provider says ROOFTOP but address is only city → capped at CITY
   assert.equal(resolveGeoResolution("CITY", 1.0), "CITY");
