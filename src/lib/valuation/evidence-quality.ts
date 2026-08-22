@@ -137,6 +137,44 @@ export function evidenceQualityLine(f: {
   return `${parts.join(" ")} · רמת ודאות ${confidenceLabelHe(f.confidence)}`;
 }
 
+/**
+ * Broker-facing valuation headline (AVM 3.3). A sold-anchored, non-trivial-confidence
+ * estimate is "מבוססת"; an asking-only or low-confidence estimate is honestly framed
+ * as "ראשונית" (preliminary).
+ */
+export function valuationHeadline(f: { confidence: number; soldUsed: number; askingOnly: boolean }): string {
+  if (f.askingOnly || f.soldUsed === 0 || f.confidence < 50) return "הערכת שווי ראשונית";
+  return "הערכת שווי מבוססת";
+}
+
+/**
+ * Structured broker evidence module (AVM 3.3) — the facts a broker needs to trust
+ * (or distrust) the number, in plain Hebrew. `askingOnly` drives the honest
+ * disclosure that no nearby closed deals backed the estimate.
+ */
+export function evidenceModule(f: {
+  tier: EvidenceTier; sold: number; asking: number; internal: number;
+  soldWithin700: number; medianAgeDays: number | null; confidence: number; askingOnly: boolean;
+}): { headline: string; confidenceLabel: string; lines: string[]; disclosure: string | null } {
+  const lines: string[] = [];
+  if (f.sold) lines.push(`${f.sold.toLocaleString("he-IL")} עסקאות מכר`);
+  if (f.asking) lines.push(`${f.asking.toLocaleString("he-IL")} נכסים מוצעים למכירה`);
+  if (f.internal) lines.push(`${f.internal.toLocaleString("he-IL")} נכסי המשרד`);
+  if (f.soldWithin700 > 0) lines.push(`${f.soldWithin700.toLocaleString("he-IL")} עסקאות עד 700 מטר`);
+  if (f.medianAgeDays != null) lines.push(`חציון גיל הנתונים: ${Math.round(f.medianAgeDays).toLocaleString("he-IL")} ימים`);
+  const disclosure = f.askingOnly
+    ? "לא נמצאו מספיק עסקאות מכר קרובות. ההערכה נשענת גם על מחירי פרסום, ולכן טווח השווי רחב יותר."
+    : f.tier === "city"
+      ? "המידע המקומי באזור הנכס עדיין מוגבל, ולכן ההערכה מבוססת על נתונים רחבים יותר ברמת העיר."
+      : null;
+  return {
+    headline: valuationHeadline({ confidence: f.confidence, soldUsed: f.sold, askingOnly: f.askingOnly }),
+    confidenceLabel: confidenceLabelHe(f.confidence),
+    lines,
+    disclosure,
+  };
+}
+
 /** Evidence-quality summary persisted/reported for fallback honesty (§13). */
 export interface EvidenceQuality {
   tier: EvidenceTier;

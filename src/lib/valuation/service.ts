@@ -109,6 +109,20 @@ export async function runValuationById(id: string): Promise<RunOutput> {
   await db.from(TABLE as never).update({ status: "computing" } as never).eq("id", id).eq("organization_id", orgId);
 
   const subjectPropertyId = (valRow as { property_id?: string | null }).property_id ?? null;
+  // AVM 3.3 subject precision safety — carry the subject property's coordinate
+  // precision so the engine only unlocks distance tiers from a precise subject
+  // coordinate (a coarse/unknown one stays at text/city tiers). Best-effort.
+  if (subjectPropertyId) {
+    try {
+      const { data: p } = await db.from("properties" as never)
+        .select("latitude,longitude,geocode_resolution").eq("id", subjectPropertyId).eq("org_id", orgId).maybeSingle();
+      const pr = p as { latitude?: number | null; longitude?: number | null; geocode_resolution?: string | null } | null;
+      if (pr?.latitude != null && pr?.longitude != null) {
+        input.latitude = Number(pr.latitude); input.longitude = Number(pr.longitude);
+        input.locationResolution = pr.geocode_resolution ?? null; // null → treated as imprecise (safe)
+      }
+    } catch { /* keep whatever the valuation row provided */ }
+  }
   const providerCtx = { db, orgId, input, limit: PROVIDER_LIMIT, subjectPropertyId };
   const [evidenceBundle, brokerSoldRaw] = await Promise.all([
     gatherEvidence(providerCtx),

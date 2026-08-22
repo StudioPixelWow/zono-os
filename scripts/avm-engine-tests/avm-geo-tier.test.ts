@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { proximityTier } from "@/lib/valuation/valuation-engine";
 
-const subj: any = { city: "קרית ביאליק", neighborhood: "גבעת הרקפות", street: "יקינתון", latitude: 32.8333, longitude: 35.1039 };
+const subj: any = { city: "קרית ביאליק", neighborhood: "גבעת הרקפות", street: "יקינתון", latitude: 32.8333, longitude: 35.1039, locationResolution: "ROOFTOP" };
 const c = (over: Record<string, unknown>) => ({ source: "govmap", comparableType: "sold", city: "קרית ביאליק", neighborhood: "גבעת הרקפות", pricePerSqm: 15000, sqm: 95, ...over } as any);
 
 test("STREET-resolution coordinate at 0m → STREET tier, never building", () => {

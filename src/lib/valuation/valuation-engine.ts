@@ -480,13 +480,20 @@ const eqText = (a?: string | null, b?: string | null) =>
  *  prevents a street-centroid or city-centroid from being read as "same building". */
 export function proximityTier(input: ValuationInput, c: Comparable): ProximityTier {
   const d = c.distanceMeters;
-  const rooftop = resolutionRank(c.geocodeResolution as GeoResolution | null) >= resolutionRank("ROOFTOP");
-  if (d != null && d <= 30 && rooftop) return "building";
-  if (eqText(input.street, c.street) || (d != null && d <= 120)) return "street";
+  // AVM 3.3 — a distance tier requires BOTH the subject AND the comparable to have a
+  // sufficiently precise coordinate. A subject with a city/neighborhood/unknown
+  // coordinate can NOT reach ≤300m/≤700m/street/building (its own distance would be
+  // meaningless), regardless of the comparable's precision. Text tiers stay open.
+  const subjRank = resolutionRank(input.locationResolution as GeoResolution | null);
+  const subjPreciseStreet = subjRank >= resolutionRank("STREET");
+  const subjRooftop = subjRank >= resolutionRank("ROOFTOP");
+  const compRooftop = resolutionRank(c.geocodeResolution as GeoResolution | null) >= resolutionRank("ROOFTOP");
+  if (d != null && d <= 30 && compRooftop && subjRooftop) return "building";
+  if (eqText(input.street, c.street) || (d != null && d <= 120 && subjPreciseStreet)) return "street";
   const sn = canonicalNeighborhood(input.neighborhood), cn = canonicalNeighborhood(c.neighborhood);
   if (sn && cn && (sn === cn || sn.includes(cn) || cn.includes(sn))) return "neighborhood";
-  if (d != null && d <= 300) return "r300";
-  if (d != null && d <= 700) return "r700";
+  if (d != null && d <= 300 && subjPreciseStreet) return "r300";
+  if (d != null && d <= 700 && subjPreciseStreet) return "r700";
   return "city";
 }
 

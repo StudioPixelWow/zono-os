@@ -111,7 +111,14 @@ export function renderPresentationHtml(payload: ReportPayload): string {
   const weaknesses = (intel?.weaknesses ?? []).map((x) => `<b>${esc(x.label)}</b> — ${esc(x.detail)}`);
   const sellerTips = buildSellerTips(intel);
 
+  // Seller-facing wording (AVM 3.3) — natural, no technical internals; honest when
+  // the evidence is thin.
+  const sellerAskingOnly = (r?.debug?.reasonCodes ?? []).includes("asking_only_no_sold_anchor");
+  const sellerLede = (sellerAskingOnly || (r?.confidenceScore ?? 0) < 50)
+    ? "הערכת השווי ראשונית וקיים טווח רחב יותר בשל היקף מוגבל של עסקאות דומות באזור."
+    : "הערכת השווי מבוססת על עסקאות ונכסים דומים באזור, תוך שקלול מאפייני הנכס, מיקום ועדכניות הנתונים.";
   const trustItems = [
+    sellerLede,
     `ההערכה מבוססת על ${r?.debug?.comparableCount ?? v.comparables.length} השוואות${sourceList.length ? ` ממקורות: ${sourceList.join(", ")}` : ""}.`,
     "עדיפות ניתנה לעסקאות שנסגרו על פני מודעות פעילות.",
     `הוסרו ${r?.debug?.outliersRemoved ?? 0} ערכים חריגים כדי למנוע הטיית מחיר.`,

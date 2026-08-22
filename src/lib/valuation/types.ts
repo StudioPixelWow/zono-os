@@ -42,6 +42,9 @@ export interface ValuationInput {
   apartmentNumber?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** Precision of the SUBJECT's own coordinate (AVM 3.3). A coarse/unknown-precision
+   *  subject coordinate must not unlock building/street/≤300m/≤700m tiers. */
+  locationResolution?: string | null; // ROOFTOP | STREET | NEIGHBORHOOD | CITY | UNRESOLVED
   propertyType?: string | null;
   rooms?: number | null;
   builtSqm?: number | null;

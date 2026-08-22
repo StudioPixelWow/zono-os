@@ -32,7 +32,7 @@ import {
   type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
   STRATEGY_LABEL, VALUATION_DISCLAIMER,
 } from "@/lib/valuation/types";
-import { evidenceQualityLine } from "@/lib/valuation/evidence-quality";
+import { evidenceQualityLine, evidenceModule } from "@/lib/valuation/evidence-quality";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
 function Mini({ label, value, tone }: { label: string; value: string; tone?: "green" | "amber" | "red" }) {
@@ -176,6 +176,35 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
           {r.recommendedAction && <span className="mt-1 block font-normal">המלצה: {r.recommendedAction}</span>}
         </div>
       )}
+
+      {/* Broker evidence module (AVM 3.3) — what the estimate is based on, in plain
+          Hebrew, with an honest asking-only disclosure. No engine internals. */}
+      {!noData && (() => {
+        const em = evidenceModule({
+          tier: (r.debug?.evidenceTier ?? "city") as never,
+          sold: r.debug?.sourceMix?.sold ?? 0,
+          asking: r.debug?.sourceMix?.asking ?? 0,
+          internal: r.debug?.sourceMix?.internal ?? 0,
+          soldWithin700: 0,
+          medianAgeDays: r.debug?.medianComparableAgeDays ?? null,
+          confidence: conf,
+          askingOnly: (r.debug?.reasonCodes ?? []).includes("asking_only_no_sold_anchor"),
+        });
+        return (
+          <div dir="rtl" className="mt-5 rounded-2xl border border-line bg-card p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-ink text-sm font-black">{em.headline}</h3>
+              <span className="bg-surface text-muted rounded-full px-2.5 py-0.5 text-[11px] font-bold">רמת ודאות: {em.confidenceLabel}</span>
+            </div>
+            {em.lines.length > 0 && (
+              <p className="text-muted mt-1.5 text-[13px] leading-relaxed">ההערכה מבוססת על {em.lines.join(" · ")}.</p>
+            )}
+            {em.disclosure && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] font-semibold leading-relaxed text-amber-800">{em.disclosure}</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* KPI cards — only when a real value exists (never render ₪0 prices). */}
       {!noData && (
