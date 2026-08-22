@@ -1122,3 +1122,83 @@ html::-webkit-scrollbar-thumb:hover,
   .zono-celebrate { animation: none !important; }
   .zono-particle { display: none; }
 }
+
+/* ============================================================================
+   ZONO — ZI CHARACTER SYSTEM. Shared styling for <ZICharacter> and its
+   compositions (<ZIEmptyState>, <ZIStateCard>). Uses ONLY existing ZONO tokens;
+   gentle, CSS-only animations that fully stop under prefers-reduced-motion.
+   RTL-safe. Design tokens live on :root so any surface can reuse them.
+   ========================================================================== */
+:root {
+  --zi-size-xs: 44px; --zi-size-sm: 64px; --zi-size-md: 120px; --zi-size-lg: 190px; --zi-size-xl: 240px;
+  --zi-glow-subtle: radial-gradient(circle at 50% 46%, rgba(139,92,246,0.20), rgba(124,58,237,0.06) 48%, transparent 70%);
+  --zi-card-bg: rgba(255,255,255,0.9);
+  --zi-card-border: 1px solid var(--zono-border);
+  --zi-anim-enter: zi-enter 0.5s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* Character figure */
+.zi-char { position: relative; display: inline-grid; place-items: center; line-height: 0; }
+.zi-char--xs { width: var(--zi-size-xs); height: var(--zi-size-xs); }
+.zi-char--sm { width: var(--zi-size-sm); height: var(--zi-size-sm); }
+.zi-char--md { width: var(--zi-size-md); height: var(--zi-size-md); }
+.zi-char--lg { width: var(--zi-size-lg); height: var(--zi-size-lg); }
+.zi-char--xl { width: var(--zi-size-xl); height: var(--zi-size-xl); }
+.zi-char__img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 10px 18px rgba(91,33,182,0.14)); }
+.zi-char__glow { position: absolute; inset: -14% -10% -6%; z-index: 0; border-radius: 9999px; background: var(--zi-glow-subtle); filter: blur(8px); opacity: 0.9; }
+.zi-char--xs .zi-char__glow, .zi-char--sm .zi-char__glow { display: none; }
+
+/* Enter + idle float; state-specific accents (all gentle, capped iterations). */
+.zi-char--anim { animation: var(--zi-anim-enter); }
+.zi-char--anim .zi-char__img { animation: zi-float 7s ease-in-out infinite; }
+.zi-char--anim.zi-char--thinking .zi-char__img { animation: zi-think 3.4s ease-in-out infinite; }
+.zi-char--anim.zi-char--scanning .zi-char__img { animation: zi-scan 3s ease-in-out infinite; }
+.zi-char--anim.zi-char--working .zi-char__img { animation: zi-float 3.2s ease-in-out infinite; }
+.zi-char--anim.zi-char--success .zi-char__img { animation: zi-pop 0.6s cubic-bezier(0.22,1,0.36,1) 1, zi-float 7s ease-in-out 0.6s infinite; }
+.zi-char--anim.zi-char--celebrate .zi-char__img { animation: zi-celebrate 1.8s ease-in-out 1, zi-float 7s ease-in-out 1.8s infinite; }
+.zi-char--anim.zi-char--alert .zi-char__glow { animation: zi-alert-pulse 2.2s ease-out 2; }
+
+@keyframes zi-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes zi-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes zi-think { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-3px) rotate(-1.5deg); } }
+@keyframes zi-scan { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-5px); } }
+@keyframes zi-pop { 0% { transform: scale(0.9); } 60% { transform: scale(1.05); } 100% { transform: scale(1); } }
+@keyframes zi-celebrate { 0%,100% { transform: translateY(0) rotate(0); } 20% { transform: translateY(-8px) rotate(-2deg); } 50% { transform: translateY(-4px) rotate(2deg); } 80% { transform: translateY(-6px) rotate(-1deg); } }
+@keyframes zi-alert-pulse { 0% { opacity: 0.6; transform: scale(0.98); } 60% { opacity: 1; transform: scale(1.03); } 100% { opacity: 0.9; transform: scale(1); } }
+
+/* Character + text block (card-edge / inline). */
+.zi-char-block { display: flex; align-items: center; gap: 14px; }
+.zi-char-block--card-edge .zi-char { margin-block: -18px; }
+.zi-char-block__title { font-size: 14px; font-weight: 800; color: var(--color-ink); }
+.zi-char-block__msg { margin-top: 3px; font-size: 12.5px; color: var(--color-muted); line-height: 1.5; }
+.zi-char-block__cta { display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 700; color: var(--zono-purple); }
+.zi-char-block__cta:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Empty state. */
+.zi-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 28px 24px; background: var(--color-card); border: 1px solid var(--color-line); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+.zi-empty__title { font-size: 16px; font-weight: 800; color: var(--color-ink); }
+.zi-empty__msg { margin-top: 4px; max-width: 44ch; font-size: 13px; color: var(--color-muted); line-height: 1.6; }
+.zi-empty__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 4px; }
+.zi-empty__cta { display: inline-flex; align-items: center; border-radius: 14px; border: 1px solid var(--color-line); background: var(--color-surface); color: var(--color-ink); padding: 10px 18px; font-size: 13px; font-weight: 700; transition: background 0.18s ease, border-color 0.18s ease; }
+.zi-empty__cta:hover { background: #f1ecff; border-color: var(--zono-lavender); }
+.zi-empty__cta--primary { background-image: var(--zono-gradient); color: #fff; border: none; box-shadow: var(--zono-glow-shadow); }
+.zi-empty__cta--primary:hover { filter: brightness(1.05); }
+
+/* State card (insight / success / alert). */
+.zi-card { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--zi-card-bg); border: var(--zi-card-border); border-radius: 18px; box-shadow: var(--shadow-card); backdrop-filter: blur(10px); }
+.zi-card--success { border-color: var(--color-success-soft); }
+.zi-card--alert { border-color: rgba(245,196,81,0.5); }
+.zi-card__body { min-width: 0; flex: 1; }
+.zi-card__tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 800; color: var(--zono-purple); background: var(--color-brand-soft); padding: 2px 8px; border-radius: 999px; }
+.zi-card--alert .zi-card__tag { color: #9a6a00; background: var(--color-warning-soft); }
+.zi-card--success .zi-card__tag { color: var(--color-success); background: var(--color-success-soft); }
+.zi-card__title { margin-top: 6px; font-size: 13.5px; font-weight: 800; color: var(--color-ink); line-height: 1.35; }
+.zi-card__msg { margin-top: 2px; font-size: 12px; color: var(--color-muted); line-height: 1.5; }
+.zi-card__cta { display: inline-block; margin-top: 7px; font-size: 12.5px; font-weight: 700; color: var(--zono-purple); }
+.zi-card__cta:hover { text-decoration: underline; text-underline-offset: 3px; }
+.zi-card__x { position: absolute; inset-inline-end: 8px; top: 8px; display: grid; place-items: center; width: 26px; height: 26px; border: none; background: transparent; color: var(--color-muted); border-radius: 8px; cursor: pointer; }
+.zi-card__x:hover { background: var(--color-surface); color: var(--color-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .zi-char--anim, .zi-char--anim .zi-char__img, .zi-char--anim .zi-char__glow { animation: none !important; }
+}

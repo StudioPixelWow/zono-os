@@ -10,14 +10,18 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { ZonoMark } from "./ZonoMark";
 import type { ZonoState } from "./states";
+import { ZICharacter } from "@/components/characters/ZICharacter";
+import type { ZIState } from "@/lib/characters/zi-registry";
 
 export interface ZonoEmptyAction { label: string; href?: string; event?: string; primary?: boolean }
 
-export function ZonoEmptyState({ title, description, actions = [], state = "welcome", className = "" }: {
+export function ZonoEmptyState({ title, description, actions = [], state = "welcome", character, className = "" }: {
   title: string;
   description?: string;
   actions?: ZonoEmptyAction[];
   state?: ZonoState;
+  /** Opt-in: render the ZI character (given state) instead of the plain mark. */
+  character?: ZIState;
   className?: string;
 }) {
   const cls = (primary?: boolean) => primary
@@ -27,7 +31,7 @@ export function ZonoEmptyState({ title, description, actions = [], state = "welc
 
   return (
     <div className={`bg-card border-line flex flex-col items-center gap-3 rounded-[22px] border p-8 text-center shadow-[var(--shadow-card)] ${className}`}>
-      <ZonoMark size="standard" state={state} />
+      {character ? <ZICharacter state={character} size="lg" decorative /> : <ZonoMark size="standard" state={state} />}
       <div>
         <p className="text-ink text-[15px] font-black">{title}</p>
         {description && <p className="text-muted mx-auto mt-1 max-w-sm text-[13px] leading-relaxed">{description}</p>}
