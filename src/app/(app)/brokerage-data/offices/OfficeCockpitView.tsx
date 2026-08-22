@@ -32,6 +32,13 @@ export function OfficeCockpitView({ bundle, baseHref }: { bundle: OfficeCockpitB
         subtitle="מי פועל באזור שלך, איפה נמצא המלאי ואיך מפת התחרות משתנה — מבוסס על המלאי הנצפה."
         status={<StatusBadge label={`${d.coverage.attributedPct}% מהמלאי משויך למשרד`} tone={d.coverage.attributedPct >= 50 ? "rising" : d.coverage.attributedPct >= 25 ? "contender" : "warn"} />}
       />
+      {/* Territory scope — the office universe is THIS org's specialization areas only. */}
+      <div className="border-line bg-brand-soft/40 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border px-4 py-2.5 text-xs">
+        <span className="text-brand-strong font-black">הטריטוריה שלך:</span>
+        {d.territory.scoped
+          ? <span className="text-ink font-bold">{d.territory.areas.slice(0, 8).join(" · ")}</span>
+          : <span className="text-muted">מוצגים משרדים עם פעילות נצפית שלך בלבד — הגדירו אזורי התמחות (טריטוריה) לכיסוי מלא של האזור.</span>}
+      </div>
       <IntelligenceKpiGrid>
         {d.kpis.map((k) => <IntelligenceKpi key={k.key} label={k.label} value={k.value.toLocaleString("he-IL")} hint={k.def} accent={k.key === "active_offices"} />)}
       </IntelligenceKpiGrid>

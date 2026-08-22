@@ -42,6 +42,7 @@ export interface OfficeInput {
   totalDetectedOffices: number;   // includes candidates without observed activity
   filters: OfficeFilters;
   nowMs: number;
+  territory?: { areas: string[] };  // org specialization areas (P0 scope); [] = activity-only
 }
 
 export interface OfficeKpi { key: string; label: string; value: number; def: string }
@@ -68,6 +69,7 @@ export interface OfficeCockpit {
   unassigned: { agents: number; listings: number };
   dataQuality: { attributedPct: number; possibleDuplicateNames: number; note: string };
   identity: { status: "engine_required"; reason: string };
+  territory: { areas: string[]; scoped: boolean };
   generatedAtMs: number;
 }
 
@@ -173,6 +175,7 @@ export function buildOfficeCockpit(input: OfficeInput): OfficeCockpit {
       note: `מוצגים ${active.length} משרדים עם פעילות נצפית מתוך ${input.totalDetectedOffices} שזוהו (השאר מועמדים ללא פעילות). המספרים מבוססים על המלאי הנצפה בלבד; וריאציות כתיב וסניפים אינם ממוזגים אוטומטית.`,
     },
     identity: { status: "engine_required", reason: "מיזוג זהויות משרד (רשת מול סניף, וריאציות כתיב) דורש מנוע זיהוי ייעודי — לא מבוצע מיזוג אוטומטי מבוסס דמיון מחרוזות." },
+    territory: { areas: input.territory?.areas ?? [], scoped: (input.territory?.areas.length ?? 0) > 0 },
     generatedAtMs: nowMs,
   };
 }

@@ -16,6 +16,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { externalListingRepository } from "@/lib/external-listings/repository";
 import { buildOfficeCockpit, type OfficeCockpit, type OfficeRecord, type OfficeFilters } from "./cockpit";
+import { deriveTerritoryAreas, officeInTerritory } from "./office-territory";
 
 const DAY = 86_400_000;
 const num = (v: unknown): number | null => { const n = Number(v); return Number.isFinite(n) ? n : null; };
@@ -49,6 +50,18 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
   let orgId: string | null = null;
   try { orgId = (await getSessionContext()).profile?.org_id ?? null; } catch { /* ignore */ }
 
+  // ── P0: the office universe is THIS org's territory (canonical territory_profiles),
+  // never the global detected-office graph. Cross-customer mixing is impossible:
+  // an office appears only when its city is a specialization area OR the org has its
+  // own observed activity linked to it. Empty territory ⇒ activity-only (see filter). ──
+  const territoryAreas: string[] = [];
+  if (orgId) {
+    try {
+      const { data } = await db.from("territory_profiles").select("city_name,neighborhood_name").eq("organization_id", orgId).limit(2000);
+      territoryAreas.push(...deriveTerritoryAreas((data ?? []) as unknown as { city_name?: string | null; neighborhood_name?: string | null }[]));
+    } catch (e) { console.error("[office-cockpit] territory failed:", e instanceof Error ? e.message : e); }
+  }
+
   // Org's observed listings → lite map (areas / types / geo / first-seen).
   const listingById = new Map<string, ListingLite>();
   try {
@@ -66,11 +79,10 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
 
   // Agents grouped by office (shared graph). Unassigned = office_id null.
   const agentsByOffice = new Map<string, { count: number; sample: { id: string; name: string }[] }>();
-  let unassignedAgents = 0;
   try {
     const { data } = await db.from("brokerage_agents").select("id,office_id,full_name,status").not("status", "eq", "rejected").limit(50000);
     for (const a of (data ?? []) as unknown as { id: string; office_id: string | null; full_name: string | null }[]) {
-      if (!a.office_id) { unassignedAgents++; continue; }
+      if (!a.office_id) continue;
       const cur = agentsByOffice.get(a.office_id) ?? { count: 0, sample: [] };
       cur.count++; if (cur.sample.length < 6) cur.sample.push({ id: a.id, name: (a.full_name ?? "").trim() || "סוכן" });
       agentsByOffice.set(a.office_id, cur);
@@ -110,13 +122,23 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
     };
   });
 
+  // Territory scope: keep only offices in the org's specialization areas (or with
+  // the org's own observed activity). This is the P0 fix — the directory + every
+  // downstream aggregation now uses the TERRITORY universe, not the global graph.
+  const inTerritory = offices.filter((o) =>
+    officeInTerritory({ city: o.city, observedAreas: o.areas.map((a) => a.name) }, territoryAreas, o.observedListings > 0));
+
   const cockpit = buildOfficeCockpit({
-    offices, unassignedAgents, unassignedListings: Math.max(0, totalObservedListings - attributedListingIds.size),
-    totalObservedListings, totalDetectedOffices: offices.length, filters, nowMs: now,
+    // Territory-scoped unassigned pool: unassigned (no-office) agents live in the
+    // GLOBAL graph and can't be located to a territory, so we never surface that
+    // global number as a customer-local one.
+    offices: inTerritory, unassignedAgents: 0, unassignedListings: Math.max(0, totalObservedListings - attributedListingIds.size),
+    totalObservedListings, totalDetectedOffices: inTerritory.length, filters, nowMs: now,
+    territory: { areas: territoryAreas },
   });
 
   const names = new Set<string>([...cockpit.landscape.map((r) => r.id), ...cockpit.directory.rows.map((r) => r.id)]);
-  const byId = new Map(offices.map((o) => [o.id, o]));
+  const byId = new Map(inTerritory.map((o) => [o.id, o]));
   const detail: Record<string, OfficeRecord> = {};
   for (const id of names) { const o = byId.get(id); if (o) detail[id] = o; }
   return { cockpit, detail };
