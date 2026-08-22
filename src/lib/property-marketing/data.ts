@@ -12,6 +12,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { resolveEffectiveBrand } from "@/lib/brand-identity/engine";
 import { buildBrandTokens, waLink } from "@/lib/agent-website/brand-tokens";
 import { resolveAgentAvatar } from "@/lib/office/avatar";
+import { resolvePropertyFeatures } from "./presentation";
 import type { OfficeProperty, OfficeAgentRef } from "@/lib/office-website/site-data";
 
 const PUBLIC_STATUSES = ["active", "published", "under_offer"] as const;
@@ -67,8 +68,10 @@ function featureList(p: Record<string, unknown>): PropertyFeature[] {
   if (p.has_safe_room) f.push({ label: 'ממ"ד', icon: "shield" });
   if (p.has_storage) f.push({ label: n("storage_count") > 1 ? `${n("storage_count")} מחסנים` : "מחסן", icon: "box" });
   if (p.is_accessible) f.push({ label: "נגישות", icon: "access" });
-  const extra = Array.isArray(p.features) ? (p.features as unknown[]).filter((x) => typeof x === "string") as string[] : [];
-  for (const e of extra) if (!f.some((x) => x.label === e)) f.push({ label: e, icon: "check" });
+  // Free-form features array → Hebrew-only via the canonical resolver. Unknown
+  // internal/English tokens are dropped, never rendered (HEBREW_ONLY_PUBLIC_UI).
+  for (const res of resolvePropertyFeatures(p.features))
+    if (!f.some((x) => x.label === res.label)) f.push(res);
   return f;
 }
 
