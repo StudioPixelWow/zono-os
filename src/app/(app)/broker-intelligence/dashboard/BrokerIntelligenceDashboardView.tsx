@@ -89,7 +89,7 @@ export function BrokerDirectoryView({ directory }: { directory: BrokerDirectory 
   const ACCESS_LINKS: WorkspaceLink[] = [
     { href: "/brokerage-data", emoji: "🏢", label: "דאטה משרדי תיווך", hint: "Brokerage Data Platform" },
     { href: "/intelligence-explorer", emoji: "🔎", label: "חיפוש מתקדם", hint: "Intelligence Explorer" },
-    { href: "/office-intelligence/dashboard", emoji: "🏬", label: "מודיעין משרדים", hint: "Office Intelligence" },
+    { href: "/brokerage-data/offices", emoji: "🏬", label: "מודיעין משרדים", hint: "Office Intelligence" },
   ];
 
   const totalListingsLinked = directory?.listingLinksWithAgent ?? 0;
@@ -165,7 +165,7 @@ export function BrokerDirectoryView({ directory }: { directory: BrokerDirectory 
             )}
 
           <p className="text-muted text-[11px]">
-            מדדי שליטה אזורית / מומנטום / Winning DNA הם ברמת המשרד — ראה <Link href="/office-intelligence/dashboard" className="text-brand-strong font-bold">דשבורד מודיעין משרדים</Link>. <Pill tone="neutral">נתוני אמת בלבד</Pill>
+            מדדי שליטה אזורית / מומנטום / Winning DNA הם ברמת המשרד — ראה <Link href="/brokerage-data/offices" className="text-brand-strong font-bold">זירת המשרדים</Link>. <Pill tone="neutral">נתוני אמת בלבד</Pill>
           </p>
         </>
       )}

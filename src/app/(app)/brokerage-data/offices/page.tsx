@@ -33,7 +33,7 @@ export default async function BrokerageOfficesIndexPage({ searchParams }: { sear
   const filters = parseFilters(await searchParams);
   const bundle = await getOfficeCockpit(filters);
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir="rtl" data-ui-version="office-intelligence-3" className="flex flex-col gap-4">
       <OfficeCockpitView bundle={bundle} baseHref={buildBaseHref(filters)} />
     </div>
   );

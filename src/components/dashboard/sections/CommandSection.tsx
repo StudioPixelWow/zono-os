@@ -25,7 +25,7 @@ const INTEL_QUICK_LINKS: { label: string; href: string; icon: string }[] = [
   { label: "מלאי המשרד", href: "/office-inventory", icon: "Building2" },
   { label: "נכסים חיצוניים", href: "/market-intelligence", icon: "Globe" },
   { label: "מודיעין סוכנים", href: "/broker-intelligence/dashboard", icon: "Users" },
-  { label: "מודיעין משרדים", href: "/office-intelligence/dashboard", icon: "Building2" },
+  { label: "מודיעין משרדים", href: "/brokerage-data/offices", icon: "Building2" },
   { label: "מפת שוק חיה", href: "/market-intelligence/map", icon: "MapPin" },
   { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
 ];

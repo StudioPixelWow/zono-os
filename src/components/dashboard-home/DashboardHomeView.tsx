@@ -40,7 +40,7 @@ const QUICK_LINKS: { label: string; icon: string; href: string }[] = [
   { label: "מודיעין שוק", icon: "Map", href: "/market-intelligence/dashboard" },
   { label: "מפת שוק חיה", icon: "MapPin", href: "/market-intelligence/map" },
   { label: "מודיעין סוכנים", icon: "Users", href: "/broker-intelligence/dashboard" },
-  { label: "מודיעין משרדים", icon: "Building2", href: "/office-intelligence/dashboard" },
+  { label: "מודיעין משרדים", icon: "Building2", href: "/brokerage-data/offices" },
   { label: "מרכז הפעולות", icon: "Flame", href: "/action-center" },
   { label: "Mission Control", icon: "Radar", href: "/mission-control" },
 ];
