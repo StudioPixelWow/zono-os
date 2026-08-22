@@ -83,24 +83,24 @@ export function OfficePropertyCard({ property }: { property: OfficeProperty }) {
       <Link href={property.href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]">
         <div className="relative aspect-[4/3] overflow-hidden">
           <FavoriteButton label={`שמירת ${property.title}`} />
-          {kindLabel && <span className="absolute start-3 top-3 z-10 rounded-full bg-[var(--brand-primary)] px-2.5 py-1 text-[11px] font-black text-[var(--brand-on-primary)] shadow">{kindLabel}</span>}
-          {property.tag && property.tag !== kindLabel && <span className="absolute end-3 top-3 z-10 rounded-lg bg-white/90 px-2.5 py-1 text-[11px] font-black text-[var(--brand-text)] shadow-sm backdrop-blur">{property.tag}</span>}
+          {kindLabel && <span className="absolute start-3 top-3 z-10 rounded-full bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-black text-[var(--brand-on-primary)] shadow">{kindLabel}</span>}
+          {property.tag && property.tag !== kindLabel && <span className="absolute end-3 top-3 z-10 rounded-lg bg-white/90 px-3 py-1 text-[12px] font-black text-[var(--brand-text)] shadow-sm backdrop-blur">{property.tag}</span>}
           {property.image
             ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" />
             : <PropertyBrandFallback />}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent p-4 pt-10">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-5 pt-12">
             {priceLabel
-              ? <div className="text-[19px] font-black text-white drop-shadow-sm">{priceLabel}</div>
-              : <div className="text-[13px] font-bold text-white/90">מחיר לפי פנייה</div>}
+              ? <div className="text-[24px] font-black text-white drop-shadow-sm">{priceLabel}</div>
+              : <div className="text-[14px] font-bold text-white/90">מחיר לפי פנייה</div>}
           </div>
         </div>
-        <div className="flex flex-col gap-1 p-4">
-          <div className="line-clamp-1 text-[15px] font-black text-[var(--brand-text)]">{property.title}</div>
-          {loc && <div className="line-clamp-1 text-[13px] text-[var(--brand-muted)]">{loc}</div>}
-          {meta.length > 0 && <div className="mt-1.5 flex items-center gap-2.5 text-[12px] font-semibold text-[var(--brand-muted)]">{meta.map((m, i) => <span key={i} className="flex items-center gap-2.5">{i > 0 && <i className="h-3 w-px bg-[var(--brand-border)]" />}{m}</span>)}</div>}
+        <div className="flex flex-col gap-1.5 p-5">
+          <div className="line-clamp-1 text-[18px] font-black text-[var(--brand-text)]">{property.title}</div>
+          {loc && <div className="line-clamp-1 text-[14px] text-[var(--brand-muted)]">{loc}</div>}
+          {meta.length > 0 && <div className="mt-2 flex items-center gap-3 text-[14px] font-semibold text-[var(--brand-text)]">{meta.map((m, i) => <span key={i} className="flex items-center gap-3">{i > 0 && <i className="h-3.5 w-px bg-[var(--brand-border)]" />}{m}</span>)}</div>}
         </div>
       </Link>
-      {property.agent && <div className="border-t border-[var(--brand-border)] px-4 py-2.5"><AgentChip agent={property.agent} /></div>}
+      {property.agent && <div className="border-t border-[var(--brand-border)] px-5 py-3"><AgentChip agent={property.agent} /></div>}
     </div>
   );
 }
@@ -114,9 +114,9 @@ export function TeamCard({ member }: { member: OfficeTeamMember }) {
       {member.photo
         ? <img src={member.photo} alt={member.name} loading="lazy" className="h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]" />
         : <div className="grid h-full w-full place-items-center text-6xl font-black text-[color:var(--brand-primary)]">{member.name.slice(0, 1)}</div>}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent p-3.5 pt-10">
-        <div className="text-[17px] font-black leading-tight text-white drop-shadow">{member.name}</div>
-        {member.title && <div className="text-[12.5px] font-semibold text-white/85">{member.title}</div>}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent p-4 pt-12">
+        <div className="text-[19px] font-black leading-tight text-white drop-shadow">{member.name}</div>
+        {member.title && <div className="text-[13px] font-semibold text-white/85">{member.title}</div>}
       </div>
     </div>
   );

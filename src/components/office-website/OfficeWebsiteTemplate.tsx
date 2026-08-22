@@ -157,31 +157,31 @@ function Hero({ data }: { data: OfficeSitePayload }) {
         <div aria-hidden className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: "radial-gradient(52% 55% at 14% 6%, #fff, transparent 60%)" }} />
       </div>
 
-      <div className="mx-auto grid w-full max-w-7xl items-end gap-10 px-5 py-20 sm:px-8 lg:grid-cols-[1.3fr_0.7fr] lg:py-28">
+      <div className="mx-auto grid w-full max-w-7xl items-end gap-10 px-5 py-24 sm:px-8 lg:min-h-[720px] lg:grid-cols-[1.3fr_0.7fr] lg:py-32">
         {/* Right (RTL start) — identity + headline, left-anchored (asymmetric) */}
         <div className="flex flex-col items-start gap-5 text-right">
           {brand.logo
             ? <img src={brand.logo} alt={office.name} className="h-16 w-auto max-w-[220px] rounded-2xl bg-white/95 p-3 object-contain shadow-2xl ring-1 ring-white/40 sm:h-20" />
             : <div className="text-2xl font-black text-white/95">{office.name}</div>}
-          {areaLine && <div className="flex items-center gap-2 text-[13px] font-black uppercase tracking-[0.14em] text-[color:var(--brand-primary)]"><PublicIcon name="map" size={16} />{areaLine}</div>}
-          <h1 className="max-w-2xl text-4xl font-black leading-[1.04] text-white drop-shadow-sm sm:text-6xl lg:text-[68px]">{title}</h1>
-          <p className="max-w-xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]">
+          {areaLine && <div className="flex items-center gap-2 text-[14px] font-black uppercase tracking-[0.14em] text-[color:var(--brand-primary)]"><PublicIcon name="map" size={18} />{areaLine}</div>}
+          <h1 className="max-w-3xl text-[44px] font-black leading-[1.0] tracking-tight text-white drop-shadow-sm sm:text-[68px] lg:text-[82px]">{title}</h1>
+          <p className="max-w-xl text-[18px] leading-relaxed text-white/85 sm:text-[20px]">
             {office.description || "צוות המשרד שלנו מלווה מוכרים, קונים ומשקיעים באזור — עם היכרות מקומית, שיווק מתקדם וליווי אישי לאורך כל הדרך."}
           </p>
           {/* Primary = buyer/search, secondary = seller/valuation — DISTINCT destinations */}
-          <div className="mt-2 flex flex-wrap gap-3">
-            <a href={BUYER_ANCHOR} className="rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[15px] font-black text-[color:var(--brand-on-primary)] shadow-2xl transition hover:-translate-y-0.5">חיפוש נכסים</a>
-            <a href={SELLER_ANCHOR} className="rounded-xl border border-white/45 bg-white/10 px-8 py-4 text-[15px] font-bold text-white backdrop-blur-md transition hover:bg-white/20">כמה הנכס שלי שווה?</a>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <a href={BUYER_ANCHOR} className="rounded-xl bg-[var(--brand-primary)] px-9 py-[18px] text-[17px] font-black text-[color:var(--brand-on-primary)] shadow-2xl transition hover:-translate-y-0.5">חיפוש נכסים</a>
+            <a href={SELLER_ANCHOR} className="rounded-xl border border-white/45 bg-white/10 px-8 py-[18px] text-[16px] font-bold text-white backdrop-blur-md transition hover:bg-white/20">כמה הנכס שלי שווה?</a>
           </div>
         </div>
 
-        {/* Left (RTL end) — open proof (big numbers, minimal chrome) */}
+        {/* Left (RTL end) — open proof as LARGE editorial numbers (minimal chrome) */}
         {data.proofPoints.length > 0 && (
-          <div className="flex flex-wrap gap-x-8 gap-y-5 lg:flex-col lg:gap-6 lg:border-s lg:border-white/25 lg:ps-7">
+          <div className="flex flex-wrap gap-x-10 gap-y-6 lg:flex-col lg:gap-8 lg:border-s lg:border-white/25 lg:ps-8">
             {data.proofPoints.slice(0, 4).map((pp) => (
               <div key={pp.label}>
-                <div className="text-3xl font-black leading-none text-[color:var(--brand-primary)] drop-shadow sm:text-[40px]">{pp.value}</div>
-                <div className="mt-1.5 text-[13px] font-semibold text-white/80">{pp.label}</div>
+                <div className="text-[44px] font-black leading-none tracking-tight text-[color:var(--brand-primary)] drop-shadow sm:text-[56px]">{pp.value}</div>
+                <div className="mt-2 text-[14px] font-semibold text-white/80">{pp.label}</div>
               </div>
             ))}
           </div>
@@ -197,9 +197,9 @@ function TrustStrip({ data }: { data: OfficeSitePayload }) {
     <div className="border-y border-[var(--brand-border)] bg-[var(--brand-surface)]">
       <div className="mx-auto grid w-full max-w-7xl grid-cols-2 gap-px overflow-hidden sm:flex sm:justify-around">
         {data.proofPoints.slice(0, 5).map((pp) => (
-          <div key={pp.label} className="flex flex-col items-center gap-0.5 px-4 py-6 text-center">
-            <span className="text-2xl font-black text-[color:var(--brand-link)] sm:text-3xl">{pp.value}</span>
-            <span className="text-[12.5px] font-semibold text-[var(--brand-muted)]">{pp.label}</span>
+          <div key={pp.label} className="flex flex-col items-center gap-1 px-4 py-7 text-center">
+            <span className="text-[30px] font-black leading-none text-[color:var(--brand-link)] sm:text-[40px]">{pp.value}</span>
+            <span className="text-[13px] font-semibold text-[var(--brand-muted)]">{pp.label}</span>
           </div>
         ))}
       </div>
@@ -215,18 +215,18 @@ function SellerValuationSection({ data }: { data: OfficeSitePayload }) {
     <section id="seller-valuation" className="relative isolate scroll-mt-20 overflow-hidden bg-[var(--brand-primary)] text-[var(--brand-on-primary)]">
       <div aria-hidden className="absolute inset-0 opacity-[0.10]" style={{ backgroundImage: "radial-gradient(55% 60% at 88% 8%, #fff, transparent 60%)" }} />
       <div aria-hidden className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(135deg, transparent 40%, #fff 40%, #fff 41%, transparent 41%)", backgroundSize: "26px 26px" }} />
-      <div className="relative mx-auto grid w-full max-w-7xl gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[1fr_1fr] lg:items-center lg:py-24">
+      <div className="relative mx-auto grid w-full max-w-7xl gap-8 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_1fr] lg:items-center lg:py-28">
         <div>
-          <div className="text-[13px] font-black uppercase tracking-[0.14em] opacity-80">בעלי נכס</div>
-          <h2 className="mt-2 text-3xl font-black leading-[1.08] sm:text-4xl lg:text-5xl">כמה הנכס שלכם שווה היום?</h2>
-          <p className="mt-4 max-w-md text-[16px] leading-relaxed opacity-90">קבלו הערכת שווי ראשונית לנכס באזור שלכם וליווי מקומי של צוות שמכיר את {area ? `שוק ${area}` : "השוק"} — ללא התחייבות.</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            {office.whatsapp && <a href={office.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-background)] px-6 py-3 text-[14px] font-black text-[color:var(--brand-primary)] shadow-lg transition hover:-translate-y-0.5">דברו עם המשרד</a>}
-            {office.tel && <a href={office.tel} className="rounded-xl border border-white/45 px-6 py-3 text-[14px] font-bold transition hover:bg-white/10">התקשרו {office.phone}</a>}
+          <div className="text-[14px] font-black uppercase tracking-[0.16em] opacity-80">בעלי נכס</div>
+          <h2 className="mt-3 text-[34px] font-black leading-[1.03] tracking-tight sm:text-5xl lg:text-[58px]">כמה הנכס שלכם שווה היום?</h2>
+          <p className="mt-5 max-w-md text-[18px] leading-relaxed opacity-90">קבלו הערכת שווי ראשונית לנכס באזור שלכם וליווי מקומי של צוות שמכיר את {area ? `שוק ${area}` : "השוק"} — ללא התחייבות.</p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            {office.whatsapp && <a href={office.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-background)] px-7 py-4 text-[16px] font-black text-[color:var(--brand-primary)] shadow-lg transition hover:-translate-y-0.5">דברו עם המשרד</a>}
+            {office.tel && <a href={office.tel} className="rounded-xl border border-white/45 px-7 py-4 text-[16px] font-bold transition hover:bg-white/10">התקשרו {office.phone}</a>}
           </div>
         </div>
-        <div className="rounded-[26px] bg-[var(--brand-background)] p-6 text-[var(--brand-text)] shadow-2xl sm:p-8">
-          <div className="mb-3 flex items-center gap-2 text-[16px] font-black"><span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><PublicIcon name="home" size={16} /></span>הערכת שווי לנכס</div>
+        <div className="rounded-[30px] bg-[var(--brand-background)] p-7 text-[var(--brand-text)] shadow-2xl sm:p-9">
+          <div className="mb-4 flex items-center gap-2.5 text-[19px] font-black"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><PublicIcon name="home" size={20} /></span>הערכת שווי לנכס</div>
           <SiteLeadForm slug={slug} variant="valuation" cta="בדיקת שווי הנכס" />
         </div>
       </div>
@@ -246,8 +246,8 @@ function AreasExpertise({ data, propertiesHref }: { data: OfficeSitePayload; pro
             <Link key={a.name} href={`${propertiesHref}?area=${encodeURIComponent(a.name)}`}
               className={`group relative flex flex-col justify-between gap-3 overflow-hidden rounded-3xl border border-[var(--brand-border)] p-6 transition hover:-translate-y-0.5 hover:border-[color:var(--brand-primary)] hover:shadow-[0_18px_44px_-24px_rgba(15,23,42,0.32)] ${feature ? "bg-[var(--brand-soft)] sm:col-span-2 lg:row-span-2 lg:p-8" : "bg-[var(--brand-background)]"}`}>
               <div className="flex items-start justify-between gap-2">
-                <span className={`font-black text-[var(--brand-text)] ${feature ? "text-2xl lg:text-3xl" : "text-[18px]"}`}>{a.name}</span>
-                <span className="rounded-full bg-[var(--brand-background)] px-2.5 py-0.5 text-[12px] font-black text-[color:var(--brand-primary)] ring-1 ring-[var(--brand-border)]">{a.properties} נכסים</span>
+                <span className={`font-black leading-tight text-[var(--brand-text)] ${feature ? "text-[30px] lg:text-[44px]" : "text-[20px]"}`}>{a.name}</span>
+                <span className="rounded-full bg-[var(--brand-background)] px-3 py-1 text-[13px] font-black text-[color:var(--brand-primary)] ring-1 ring-[var(--brand-border)]">{a.properties} נכסים</span>
               </div>
               <div className="flex flex-col gap-2">
                 {a.agentRefs.length > 0
@@ -297,14 +297,14 @@ function ProcessTimeline() {
     <SectionShell eyebrow="איך המשרד עובד" title="הדרך שלנו מהפגישה ועד המפתח" subtitle="תהליך מסודר של משרד — לא מתווך אחד." tone="soft">
       <ol className="relative grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4">
         {/* connecting line on desktop */}
-        <span aria-hidden className="absolute inset-x-0 top-5 hidden h-px bg-[var(--brand-border)] lg:block" />
+        <span aria-hidden className="absolute inset-x-0 top-7 hidden h-px bg-[var(--brand-border)] lg:block" />
         {PROCESS.map((s, i) => (
-          <li key={s.title} className="relative flex flex-col gap-2">
-            <div className="flex items-center gap-3 lg:flex-col lg:items-start">
-              <span className="relative z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--brand-primary)] text-[14px] font-black text-[var(--brand-on-primary)] ring-4 ring-[var(--brand-soft)]">{String(i + 1).padStart(2, "0")}</span>
-              <h3 className="text-[16px] font-black text-[var(--brand-text)]">{s.title}</h3>
+          <li key={s.title} className="relative flex flex-col gap-2.5">
+            <div className="flex items-center gap-3.5 lg:flex-col lg:items-start lg:gap-3">
+              <span className="relative z-10 grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[var(--brand-primary)] text-[20px] font-black text-[var(--brand-on-primary)] ring-4 ring-[var(--brand-soft)]">{String(i + 1).padStart(2, "0")}</span>
+              <h3 className="text-[18px] font-black text-[var(--brand-text)]">{s.title}</h3>
             </div>
-            <p className="text-[13.5px] leading-relaxed text-[var(--brand-muted)] lg:pe-2">{s.text}</p>
+            <p className="text-[14.5px] leading-relaxed text-[var(--brand-muted)] lg:pe-2">{s.text}</p>
           </li>
         ))}
       </ol>
@@ -382,20 +382,20 @@ function FeaturedProperty({ property }: { property: OfficeProperty }) {
     property.floor != null ? `קומה ${property.floor}` : null,
   ].filter(Boolean);
   return (
-    <div className="grid items-stretch gap-6 overflow-hidden rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-background)] shadow-[0_24px_60px_-34px_rgba(15,23,42,0.45)] lg:grid-cols-[1.4fr_1fr]">
-      <div className="relative aspect-[16/10] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto">
-        {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
+    <div className="grid items-stretch gap-6 overflow-hidden rounded-[32px] border border-[var(--brand-border)] bg-[var(--brand-background)] shadow-[0_28px_70px_-34px_rgba(15,23,42,0.48)] lg:grid-cols-[1.65fr_1fr]">
+      <div className="relative aspect-[16/9] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto lg:min-h-[460px]">
+        {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3.5 py-1.5 text-[13px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
         {property.image
           ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={60} /></div>}
+          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={72} /></div>}
       </div>
-      <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">
-        <h3 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{property.title}</h3>
-        {loc && <p className="text-[15px] text-[var(--brand-muted)]">{loc}</p>}
-        {price && <p className="text-3xl font-black text-[color:var(--brand-link)]">{price}</p>}
-        {meta.length > 0 && <p className="text-[15px] font-semibold text-[var(--brand-text)]">{meta.join(" · ")}</p>}
-        {property.agent && <p className="text-[13px] font-semibold text-[var(--brand-muted)]">סוכן מטפל: {property.agent.name}</p>}
-        <div className="mt-3"><Link href={property.href} className="inline-flex rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[15px] font-black text-[var(--brand-on-primary)] shadow-lg transition hover:-translate-y-0.5">לפרטי הנכס ←</Link></div>
+      <div className="flex flex-col justify-center gap-3.5 p-8 sm:p-10">
+        <h3 className="text-[28px] font-black leading-tight text-[var(--brand-text)] sm:text-[36px]">{property.title}</h3>
+        {loc && <p className="text-[16px] text-[var(--brand-muted)]">{loc}</p>}
+        {price && <p className="text-[36px] font-black leading-none text-[color:var(--brand-link)] sm:text-[42px]">{price}</p>}
+        {meta.length > 0 && <p className="text-[16px] font-semibold text-[var(--brand-text)]">{meta.join(" · ")}</p>}
+        {property.agent && <p className="text-[14px] font-semibold text-[var(--brand-muted)]">סוכן מטפל: {property.agent.name}</p>}
+        <div className="mt-3"><Link href={property.href} className="inline-flex rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[16px] font-black text-[var(--brand-on-primary)] shadow-lg transition hover:-translate-y-0.5">לפרטי הנכס ←</Link></div>
       </div>
     </div>
   );
@@ -409,17 +409,17 @@ function About({ data }: { data: OfficeSitePayload }) {
     <SectionShell id="about" tone="surface">
       <div className="grid items-start gap-10 lg:grid-cols-[1.15fr_0.85fr]">
         <div>
-          <div className="mb-2 text-[13px] font-black uppercase tracking-[0.14em] text-[color:var(--brand-link)]">מי אנחנו</div>
-          <h2 className="text-3xl font-black leading-tight text-[var(--brand-text)] sm:text-4xl">{office.name}</h2>
+          <div className="mb-2 text-[14px] font-black uppercase tracking-[0.16em] text-[color:var(--brand-link)]">מי אנחנו</div>
+          <h2 className="text-[32px] font-black leading-tight tracking-tight text-[var(--brand-text)] sm:text-[46px]">{office.name}</h2>
           {office.description
-            ? <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-[var(--brand-muted)]">{office.description}</p>
-            : <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-[var(--brand-muted)]">משרד תיווך מקומי{data.areas.length ? ` הפעיל ב${data.areas.slice(0, 3).map((a) => a.name).join(", ")}` : ""} — צוות סוכנים עם התמחויות שונות, מאגר נכסים וקונים, ושיווק מקצועי מקצה לקצה.</p>}
+            ? <p className="mt-4 max-w-xl text-[18px] leading-relaxed text-[var(--brand-muted)]">{office.description}</p>
+            : <p className="mt-4 max-w-xl text-[18px] leading-relaxed text-[var(--brand-muted)]">משרד תיווך מקומי{data.areas.length ? ` הפעיל ב${data.areas.slice(0, 3).map((a) => a.name).join(", ")}` : ""} — צוות סוכנים עם התמחויות שונות, מאגר נכסים וקונים, ושיווק מקצועי מקצה לקצה.</p>}
           {stats.length > 0 && (
-            <div className="mt-7 flex flex-wrap gap-x-10 gap-y-4">
+            <div className="mt-9 flex flex-wrap gap-x-12 gap-y-6">
               {stats.map((st) => (
                 <div key={st.label}>
-                  <div className="text-3xl font-black text-[color:var(--brand-link)]">{st.value}</div>
-                  <div className="text-[12.5px] font-semibold text-[var(--brand-muted)]">{st.label}</div>
+                  <div className="text-[52px] font-black leading-none tracking-tight text-[color:var(--brand-link)] sm:text-[64px]">{st.value}</div>
+                  <div className="mt-2 text-[14px] font-semibold text-[var(--brand-muted)]">{st.label}</div>
                 </div>
               ))}
             </div>
