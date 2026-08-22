@@ -11,7 +11,9 @@
 import type { createClient } from "@/lib/supabase/server";
 import type { Comparable, ValuationInput } from "../types";
 
-export type ProviderStatus = "ok" | "not_connected" | "demo" | "error";
+// AVM 3.0 §20 — "demo" removed: no provider ever emitted it, and the anti-fake
+// gate (isTraceableComparable + !isDemo) already blocks any demo row from evidence.
+export type ProviderStatus = "ok" | "not_connected" | "error";
 
 export interface ProviderContext {
   db: Awaited<ReturnType<typeof createClient>>;
@@ -19,6 +21,9 @@ export interface ProviderContext {
   input: ValuationInput;
   /** Max evidence rows to pull per provider. */
   limit: number;
+  /** The subject property being valued — excluded from internal comparables so a
+   *  property never contributes its own asking price to its own valuation. */
+  subjectPropertyId?: string | null;
 }
 
 export interface ProviderResult {

@@ -14,6 +14,7 @@
 // ============================================================================
 import type { Comparable, ComparableSource } from "../types";
 import { type ProviderContext, type ProviderResult, distanceMeters } from "./types";
+import { sameLocality } from "@/lib/geo/locality";
 
 type Row = Record<string, unknown>;
 const str = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
@@ -25,13 +26,6 @@ const numOf = (v: unknown): number | null => {
 const firstStr = (row: Row, fields: string[]): string => { for (const f of fields) { const v = str(row[f]); if (v) return v; } return ""; };
 const firstNum = (row: Row, fields: string[]): number | null => { for (const f of fields) { const n = numOf(row[f]); if (n != null) return n; } return null; };
 
-// Hebrew-aware city fold (same rules as the diagnostics/evidence-search engines).
-const HEB_FINALS: Record<string, string> = { "ך": "כ", "ם": "מ", "ן": "נ", "ף": "פ", "ץ": "צ" };
-export function normalizeCityForPortal(raw: string | null | undefined): string {
-  return (raw ?? "").trim().replace(/[׳״"'`]/g, "").replace(/[-־–—_]/g, " ")
-    .replace(/קריי/g, "קרי").replace(/[ךםןףץ]/g, (c) => HEB_FINALS[c] ?? c)
-    .replace(/\s+/g, " ").trim().toLowerCase();
-}
 
 const PORTAL_RADIUS_M = 4000;  // fall back to a market radius when city text differs
 const SCAN_CAP = 5000;         // defensive scan cap (we filter in memory)
@@ -66,7 +60,6 @@ export async function readPortalListings(
   }
   if (rows == null) return { source: portal, status: "error", comparables: [], message: lastErr ?? "query failed" };
 
-  const wantCity = normalizeCityForPortal(input.city);
   const hasCoords = input.latitude != null && input.longitude != null;
 
   const matched: Comparable[] = [];
@@ -81,8 +74,11 @@ export async function readPortalListings(
     const rlat = firstNum(r, ["lat", "latitude"]);
     const rlng = firstNum(r, ["lng", "longitude"]);
     const dist = distanceMeters(input, rlat, rlng);
-    // City match: normalized equal, OR (no city text) radius fallback.
-    const cityOk = wantCity ? normalizeCityForPortal(cityRaw) === wantCity : true;
+    // City match via the CANONICAL locality engine (AVM 3.0 §1) — folds Hebrew
+    // spelling drift AND Hebrew⇄English transliteration, so listings stored as
+    // "Kiryat Bialik" now match a subject "קריית ביאליק" (proven live gap). Falls
+    // back to a market radius when the subject has coordinates.
+    const cityOk = input.city ? sameLocality(cityRaw, input.city) : true;
     const radiusOk = hasCoords && dist != null && dist <= PORTAL_RADIUS_M;
     if (!cityOk && !radiusOk) continue;
 

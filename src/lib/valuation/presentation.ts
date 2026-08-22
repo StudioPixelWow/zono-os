@@ -10,6 +10,7 @@ import type { ValuationIntelligence } from "./types";
 import {
   CONFIDENCE_LABEL, DEMAND_LABEL, PRICE_POSITION_LABEL, VALUATION_DISCLAIMER, SOURCE_LABEL,
 } from "./types";
+import { evidenceQualityLine } from "./evidence-quality";
 
 const fmt = (n: number | null | undefined) => `₪${Math.round(Number(n ?? 0)).toLocaleString("he-IL")}`;
 const money = (n: number | null | undefined) => (n != null && Number(n) > 0 ? fmt(n) : "—");
@@ -123,7 +124,12 @@ export function renderPresentationHtml(payload: ReportPayload): string {
     slide("ZONO · דוח הערכת שווי", esc(addr), `
       <p class="lede">${esc(brand.brokerName || brand.orgName)} · ${esc(date)}</p>
       <div class="hero-value">${fmt(r?.estimatedValue)}</div>
-      <div class="hero-sub">שווי מוערך · רמת ביטחון ${r?.confidenceScore ?? 0}% · ${esc(CONFIDENCE_LABEL[r?.confidenceLevel ?? "low"])}</div>`, 1),
+      <div class="hero-sub">שווי מוערך · רמת ביטחון ${r?.confidenceScore ?? 0}% · ${esc(CONFIDENCE_LABEL[r?.confidenceLevel ?? "low"])}</div>
+      <div class="hero-sub" style="opacity:.85;font-size:.9em">${esc(evidenceQualityLine({
+        tier: r?.debug?.evidenceTier ?? "city", comparableCount: r?.debug?.comparableCount ?? 0,
+        sold: r?.debug?.sourceMix?.sold ?? 0, asking: r?.debug?.sourceMix?.asking ?? 0, internal: r?.debug?.sourceMix?.internal ?? 0,
+        medianAgeDays: r?.debug?.medianComparableAgeDays ?? null, confidence: r?.confidenceScore ?? 0,
+      }))}</div>`, 1),
     // 2 — Executive Summary
     slide("סיכום מנהלים", "תמונת מצב", execBody, 2),
     // 3 — Estimated Value + Price per sqm

@@ -6,27 +6,35 @@
 // ============================================================================
 import type { Comparable } from "../types";
 import { type ProviderContext, type ProviderResult, distanceMeters } from "./types";
+import { sameLocality } from "@/lib/geo/locality";
 
+// AVM 3.0 §2 — the REAL `properties` schema uses `title` and `type` (not `name` /
+// `property_type`, which do not exist — the old selector errored on every call and
+// silently contributed ZERO internal comparables). There is no `street` column;
+// address falls back to `building_number` + `title`.
 interface PropRow {
-  id?: string; city?: string; neighborhood?: string; name?: string; street?: string;
-  rooms?: number; size_sqm?: number; floor?: number; property_type?: string; status?: string;
+  id?: string; city?: string; neighborhood?: string; title?: string; building_number?: string;
+  rooms?: number; size_sqm?: number; floor?: number; type?: string; status?: string;
   price?: number; price_per_sqm?: number; latitude?: number; longitude?: number;
   primary_image_url?: string; updated_at?: string; listed_at?: string;
 }
 
 export async function zonoInternalProvider(ctx: ProviderContext): Promise<ProviderResult> {
-  const { db, orgId, input, limit } = ctx;
-  let q = db
+  const { db, orgId, input, limit, subjectPropertyId } = ctx;
+  // Canonical-locality match is done in memory (org inventory is small + bounded),
+  // so spelling/English drift never hides internal comparables.
+  const { data, error } = await db
     .from("properties" as never)
-    .select("id,city,neighborhood,name,rooms,size_sqm,floor,property_type,status,price,price_per_sqm,latitude,longitude,primary_image_url,updated_at,listed_at")
+    .select("id,city,neighborhood,title,building_number,rooms,size_sqm,floor,type,status,price,price_per_sqm,latitude,longitude,primary_image_url,updated_at,listed_at")
     .eq("org_id", orgId)
     .not("price", "is", null)
-    .limit(limit);
-  if (input.city) q = q.eq("city", input.city);
-
-  const { data, error } = await q;
+    .limit(500);
   if (error) return { source: "zono", status: "error", comparables: [], message: error.message };
-  const rows = (data ?? []) as unknown as PropRow[];
+  const allRows = (data ?? []) as unknown as PropRow[];
+  const rows = allRows
+    .filter((r) => r.id !== subjectPropertyId)                     // never value a property against itself (§7 leakage)
+    .filter((r) => (input.city ? sameLocality(r.city, input.city) : true))
+    .slice(0, limit);
   if (rows.length === 0) {
     return { source: "zono", status: "not_connected", comparables: [], message: "אין מלאי פנימי מתומחר בעיר זו." };
   }
@@ -41,9 +49,9 @@ export async function zonoInternalProvider(ctx: ProviderContext): Promise<Provid
       externalId: r.id ?? null,
       city: r.city ?? null,
       neighborhood: r.neighborhood ?? null,
-      street: r.street ?? r.name ?? null,
+      street: r.building_number ? `${r.title ?? ""} ${r.building_number}`.trim() : (r.title ?? null),
       distanceMeters: distanceMeters(input, r.latitude, r.longitude),
-      propertyType: r.property_type ?? null,
+      propertyType: r.type ?? null,
       rooms: r.rooms ?? null,
       sqm,
       floor: r.floor ?? null,

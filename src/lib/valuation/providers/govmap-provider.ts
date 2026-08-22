@@ -5,6 +5,7 @@
 // ============================================================================
 import type { Comparable } from "../types";
 import { type ProviderContext, type ProviderResult, distanceMeters } from "./types";
+import { sameLocality } from "@/lib/geo/locality";
 
 interface TxRow {
   id?: string; city_name?: string; neighborhood_name?: string; address?: string; street?: string;
@@ -22,20 +23,20 @@ const num = (v: unknown): number | null => {
 
 export async function govmapProvider(ctx: ProviderContext): Promise<ProviderResult> {
   const { db, orgId, input, limit } = ctx;
-  // Schema-safe read: select * so a column the real schema lacks (e.g. `price`)
-  // can never error the query, and any future column (price / deal_amount / sqm /
-  // area) is picked up automatically. No SQL order — it would depend on a date
-  // column we can't guarantee exists; the engine ranks by proximity/recency itself.
-  let q = db
+  // Schema-safe read: select * so a column the real schema lacks can never error
+  // the query. City matching is done in memory via the CANONICAL locality engine
+  // (AVM 3.0 §1) — an exact `city_name = input.city` filter silently missed the
+  // whole city when the subject was spelled "קרית ביאליק" but the transactions
+  // were stored "קריית ביאליק" (proven live). We pull a bounded org set and keep
+  // only rows in the same canonical locality.
+  const { data, error } = await db
     .from("property_transactions" as never)
     .select("*")
     .eq("organization_id", orgId)
-    .limit(limit);
-  if (input.city) q = q.eq("city_name", input.city);
-
-  const { data, error } = await q;
+    .limit(2000);
   if (error) return { source: "govmap", status: "error", comparables: [], message: error.message };
-  const rows = (data ?? []) as unknown as TxRow[];
+  const allRows = (data ?? []) as unknown as TxRow[];
+  const rows = input.city ? allRows.filter((r) => sameLocality(r.city_name, input.city)).slice(0, limit) : allRows.slice(0, limit);
   if (rows.length === 0) {
     return { source: "govmap", status: "not_connected", comparables: [], message: "אין עסקאות GovMap מיובאות לעיר זו. ייבוא דרך מודול עסקאות שוק." };
   }

@@ -31,6 +31,9 @@ const PROVIDER_LIMIT = 60;
 const SOURCE_TABLE: Record<string, string> = {
   govmap: "property_transactions", tax_authority: "property_transactions",
   madlan: "external_listings", yad2: "external_listings", zono: "properties",
+  // AVM 3.0 §19 — market-scan rows must keep their source table on read-back so
+  // the traceability proof + source display survive persistence.
+  market: "market_property_sources",
 };
 
 async function ctx() {
@@ -105,7 +108,8 @@ export async function runValuationById(id: string): Promise<RunOutput> {
 
   await db.from(TABLE as never).update({ status: "computing" } as never).eq("id", id).eq("organization_id", orgId);
 
-  const providerCtx = { db, orgId, input, limit: PROVIDER_LIMIT };
+  const subjectPropertyId = (valRow as { property_id?: string | null }).property_id ?? null;
+  const providerCtx = { db, orgId, input, limit: PROVIDER_LIMIT, subjectPropertyId };
   const [evidenceBundle, brokerSoldRaw] = await Promise.all([
     gatherEvidence(providerCtx),
     getBrokerSoldProperties(db, orgId, input),

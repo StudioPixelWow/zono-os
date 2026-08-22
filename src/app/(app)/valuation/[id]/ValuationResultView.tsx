@@ -32,6 +32,7 @@ import {
   type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
   STRATEGY_LABEL, VALUATION_DISCLAIMER,
 } from "@/lib/valuation/types";
+import { evidenceQualityLine } from "@/lib/valuation/evidence-quality";
 
 const fmt = (n: number) => n.toLocaleString("he-IL");
 function Mini({ label, value, tone }: { label: string; value: string; tone?: "green" | "amber" | "red" }) {
@@ -146,7 +147,15 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
                 <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/20">
                   <div className="h-2 rounded-full bg-gradient-to-l from-emerald-300 to-emerald-500" style={{ width: `${conf}%` }} />
                 </div>
-                <p className="mt-2 text-xs text-white/75">מבוסס על עסקאות, מודעות פעילות ונכסים שמכרת באזור</p>
+                <p className="mt-2 text-xs leading-relaxed text-white/80">{evidenceQualityLine({
+                  tier: r.debug?.evidenceTier ?? "city",
+                  comparableCount: r.debug?.comparableCount ?? 0,
+                  sold: r.debug?.sourceMix?.sold ?? 0,
+                  asking: r.debug?.sourceMix?.asking ?? 0,
+                  internal: r.debug?.sourceMix?.internal ?? 0,
+                  medianAgeDays: r.debug?.medianComparableAgeDays ?? null,
+                  confidence: conf,
+                })}</p>
               </div>
             </>
           ) : (

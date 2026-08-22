@@ -14,6 +14,12 @@ import type {
   ValuationAdjustment, MarketSnapshot, PricingStrategy, WhatIfPoint,
   ConfidenceLevel, DemandLevel, ValuationDebug, ValuationQualityLevel,
 } from "./types";
+import { typeRelation } from "./property-type";
+import { canonicalNeighborhood } from "@/lib/geo/locality";
+import {
+  recencyDecay, robustDispersion, computeConfidence, computeRange,
+  confidenceBand, type EvidenceTier,
+} from "./evidence-quality";
 
 /**
  * Per-source reliability (0..1) — public alias of sourceWeight, exposed so the
@@ -70,18 +76,24 @@ export function validateInput(input: ValuationInput): ValidationResult {
 // ── Similarity (0..100) between subject and a comparable ─────────────────────
 export function computeSimilarity(input: ValuationInput, c: Comparable): number {
   let score = 100;
-  // rooms difference
-  if (input.rooms != null && c.rooms != null) score -= Math.min(28, Math.abs(input.rooms - c.rooms) * 12);
+  // property type — a penthouse must not look like an ordinary apartment. Different
+  // families are heavily down-ranked; adjacent ones mildly; unknown → no judgement.
+  const rel = typeRelation(input.propertyType, c.propertyType);
+  if (rel === "different") score -= 34;
+  else if (rel === "adjacent") score -= 12;
+  // rooms difference (strengthened: rooms are a primary comparability axis)
+  if (input.rooms != null && c.rooms != null) score -= Math.min(34, Math.abs(input.rooms - c.rooms) * 15);
   // size difference (%)
   if (input.builtSqm && c.sqm) {
     const diff = Math.abs(input.builtSqm - c.sqm) / input.builtSqm;
     score -= Math.min(25, diff * 60);
   }
-  // floor difference
-  if (input.floor != null && c.floor != null) score -= Math.min(10, Math.abs(input.floor - c.floor) * 2);
-  // neighborhood match
+  // floor difference (strengthened slightly)
+  if (input.floor != null && c.floor != null) score -= Math.min(12, Math.abs(input.floor - c.floor) * 2.5);
+  // neighborhood match (canonical fold — spelling drift no longer counts as a miss)
   if (input.neighborhood && c.neighborhood) {
-    if (input.neighborhood.trim() !== c.neighborhood.trim()) score -= 12;
+    const a = canonicalNeighborhood(input.neighborhood), b = canonicalNeighborhood(c.neighborhood);
+    if (a && b && a !== b && !a.includes(b) && !b.includes(a)) score -= 12;
   }
   // distance
   if (c.distanceMeters != null) score -= Math.min(18, c.distanceMeters / 250);
@@ -113,13 +125,13 @@ export function sourceWeight(c: Comparable): number {
   }
 }
 
-/** Recent evidence is worth more; decays ~2%/month after the first 3 months. */
+/** Recent evidence is worth more; graceful decay via the canonical recency model
+ *  (steeper than the old floor-0.55 curve so 4-5-year-old deals can't dominate). */
 function recencyWeight(c: Comparable): number {
   const d = c.saleDate ?? c.listingDate;
   if (!d) return 0.9;
   const months = (Date.now() - new Date(d).getTime()) / (1000 * 60 * 60 * 24 * 30);
-  if (!Number.isFinite(months) || months < 0) return 1;
-  return clamp(1 - Math.max(0, months - 3) * 0.02, 0.55, 1);
+  return recencyDecay(months);
 }
 
 /** Drop price-per-sqm outliers (IQR fence), but never the majority of evidence. */
@@ -153,18 +165,40 @@ export function computeBasePricePerSqm(
     return { basePpsqm: fallback, avgSimilarity: 0, usable: [], weightedPpsqm: null, medianPpsqm: null, outliersRemoved: 0 };
   }
 
-  const trimmed = removeOutliers(scored);
+  // Trim ₪/m² outliers WITHIN each transaction mode separately — otherwise a flood
+  // of asking listings can evict the minority sold anchor as "outliers" (AVM 3.0 §12).
+  const soldScored = scored.filter((c) => c.comparableType === "sold");
+  const listScored = scored.filter((c) => c.comparableType !== "sold");
+  const trimmed = [...removeOutliers(soldScored), ...removeOutliers(listScored)];
   const outliersRemoved = scored.length - trimmed.length;
-  let wsum = 0, vsum = 0, simSum = 0;
-  for (const c of trimmed) {
+  // Evidentiary-hierarchy cap (AVM 3.0 §12): closed transactions must carry
+  // stronger weight than asking listings. When BOTH sold and asking evidence
+  // exist, the aggregate ASKING weight is capped to at most the aggregate SOLD
+  // weight — so a flood of (higher, fresher) asking prices can never dominate the
+  // real sold anchor. Asking is never treated as a completed sale.
+  const rawW = trimmed.map((c) => {
     const sim = Math.max(0.12, (c.similarityScore ?? 0) / 100); // floor: far comps still count
-    const w = Math.max(0.03, sim * sourceWeight(c) * recencyWeight(c));
+    return Math.max(0.03, sim * sourceWeight(c) * recencyWeight(c));
+  });
+  const soldW = trimmed.reduce((s, c, i) => s + (c.comparableType === "sold" ? rawW[i] : 0), 0);
+  const askW = trimmed.reduce((s, c, i) => s + (c.comparableType === "listing" ? rawW[i] : 0), 0);
+  // Sold must DOMINATE, not merely tie: aggregate asking weight is capped to at
+  // most half the sold weight (a 2:1 evidentiary hierarchy). With no sold evidence
+  // the cap lifts and asking is used fully (still honestly labelled as asking).
+  const askCap = soldW * 0.5;
+  const askScale = soldW > 0 && askW > askCap ? askCap / askW : 1;
+  let wsum = 0, vsum = 0, simSum = 0;
+  trimmed.forEach((c, i) => {
+    const w = rawW[i] * (c.comparableType === "listing" ? askScale : 1);
     wsum += w;
     vsum += w * (c.pricePerSqm as number);
     simSum += c.similarityScore ?? 0;
-  }
+  });
   const weighted = wsum > 0 ? vsum / wsum : null;
-  const med = median(trimmed.map((c) => c.pricePerSqm as number));
+  // Median anchor prefers SOLD transactions when enough exist (§12) — a real
+  // closed-deal median, not an asking median — else falls back to all evidence.
+  const soldPps = trimmed.filter((c) => c.comparableType === "sold").map((c) => c.pricePerSqm as number);
+  const med = soldPps.length >= 5 ? median(soldPps) : median(trimmed.map((c) => c.pricePerSqm as number));
   // Blend weighted mean (65%) with median (35%) to resist skew; fall back to either.
   const base = weighted != null && med != null
     ? Math.round(0.65 * weighted + 0.35 * med)
@@ -394,11 +428,19 @@ export interface RunValuationArgs {
 export function dedupeComparables(comparables: Comparable[]): Comparable[] {
   const keep = new Map<string, Comparable>();
   const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+  let anon = 0;
   for (const c of comparables) {
-    // Address+geometry fingerprint (no coords on the Comparable type) catches the
-    // same property arriving from Yad2/Madlan/GovMap/internal under different ids.
-    const addrKey = `addr:${norm(c.city)}:${norm(c.neighborhood)}:${norm(c.street)}:${c.rooms ?? "?"}:${c.sqm ?? "?"}:${c.floor ?? "?"}`;
-    const key = (norm(c.street) || norm(c.neighborhood)) ? addrKey : `ext:${c.source}:${c.externalId ?? Math.random()}`;
+    // IDENTITY (fixed — the old fingerprint over-merged DISTINCT sold deals that
+    // merely shared neighborhood/rooms/sqm/floor when street was null). A real
+    // transaction is a unique EVENT: its price + date make it distinct. We only
+    // collapse rows that share the SAME transaction identity — same physical
+    // fingerprint AND same price AND same date — which is what a genuine cross-
+    // provider duplicate looks like. Two different sold deals are never merged.
+    const fp = `${c.comparableType}:${norm(c.street)}:${norm(c.neighborhood)}:${c.rooms ?? "?"}:${c.sqm ?? "?"}:${c.floor ?? "?"}:${c.price ?? "?"}:${norm(c.saleDate ?? c.listingDate)}`;
+    // Prefer a real per-row id when the address fingerprint is too thin to be safe
+    // (no street AND no date) — otherwise fall back to the transaction fingerprint.
+    const hasFp = !!(norm(c.street) || norm(c.saleDate) || norm(c.listingDate));
+    const key = hasFp ? fp : `id:${c.source}:${c.externalId ?? `anon${anon++}`}`;
     const prev = keep.get(key);
     if (!prev) { keep.set(key, c); continue; }
     // Prefer SOLD, then higher source weight; merge missing fields from the loser.
@@ -518,6 +560,33 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
   const built = input.builtSqm ?? 0;
   const evidenceCount = usable.length || (market.transactionCount + market.activeListingCount);
 
+  // ── Evidence-quality metrics over the comparables that actually set the price ──
+  const nowMsQ = Date.now();
+  const ageMonths = (c: Comparable): number | null => {
+    const d = c.saleDate ?? c.listingDate; if (!d) return null;
+    const m = (nowMsQ - new Date(d).getTime()) / (1000 * 60 * 60 * 24 * 30);
+    return Number.isFinite(m) && m >= 0 ? m : null;
+  };
+  const disp = robustDispersion(usable.map((c) => c.pricePerSqm as number));
+  const strongComparableCount = usable.filter((c) => (c.similarityScore ?? 0) >= 70).length;
+  const usableAges = usable.map(ageMonths).filter((m): m is number => m != null).sort((a, b) => a - b);
+  const medianAgeMonths = usableAges.length ? usableAges[Math.floor((usableAges.length - 1) / 2)] : null;
+  const typeMatchShare = usable.length
+    ? usable.reduce((s, c) => { const r = typeRelation(input.propertyType, c.propertyType); return s + (r === "same" ? 1 : r === "adjacent" ? 0.5 : 0); }, 0) / usable.length
+    : 0;
+  const sourceDiversity = new Set(usable.map((c) => c.source)).size;
+  const hasGeo = input.latitude != null && input.longitude != null;
+  // Map the ladder tier (building/street/neighborhood/r300/r700/city) → evidence tier.
+  const evidenceTier: EvidenceTier = usable.length === 0 ? "market"
+    : ladder.tier === "r300" || ladder.tier === "r700" ? "radius"
+      : (ladder.tier as EvidenceTier);
+  const sourceMix = {
+    sold: usable.filter((c) => c.comparableType === "sold" && c.source !== "zono").length,
+    asking: usable.filter((c) => c.comparableType === "listing" && c.source !== "zono").length,
+    internal: usable.filter((c) => c.source === "zono").length,
+    brokerSold: 0,
+  };
+
   // QA / debug metadata (returned with every result; also logged).
   const priced = comparables.filter((c) => (c.pricePerSqm ?? 0) > 0);
   const soldCount = priced.filter((c) => c.comparableType === "sold").length;
@@ -530,6 +599,9 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
     reasonCodes.push("ok");
     if (usable.length === 0) reasonCodes.push("market_baseline_only");
     if (soldCount === 0 && activeCount > 0) reasonCodes.push("only_active_listings");
+    if (evidenceTier === "city") reasonCodes.push("city_tier_fallback");
+    if (medianAgeMonths != null && medianAgeMonths > 24) reasonCodes.push("stale_evidence");
+    if (usable.length > 0 && typeMatchShare < 0.35) reasonCodes.push("low_type_match");
   }
   const debug: ValuationDebug = {
     comparableCount: priced.length,
@@ -543,6 +615,12 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
     outliersRemoved,
     confidenceScore: 0, // filled below
     reasonCodes,
+    // Fallback-honesty fields (§13) — persisted so UI/intelligence can be honest.
+    evidenceTier,
+    strongComparableCount,
+    medianComparableAgeDays: medianAgeMonths != null ? Math.round(medianAgeMonths * 30) : null,
+    dispersionRelIqr: Math.round(disp.relIQR * 1000) / 1000,
+    sourceMix,
   };
 
   // Diagnostics — why a valuation could/couldn't be produced.
@@ -591,22 +669,28 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
 
   const estimatedValue = round(builtValue + extrasValue);
 
-  // Confidence.
-  let conf = 40;
-  conf += Math.min(35, sold.length * 7);
-  conf += Math.min(10, listings.length * 2);
-  conf += market.dataQualityScore >= 60 ? 10 : market.dataQualityScore >= 30 ? 5 : 0;
-  if (input.latitude != null && input.longitude != null) conf += 5;
-  if (input.rooms != null && input.builtSqm != null) conf += 5;
-  if (usable.length > 0 && avgSimilarity < 50) conf -= 10;
-  if (usable.length === 0) conf = Math.min(conf, 35);
-  const confidenceScore = clamp(Math.round(conf), 10, 97);
-  const confidenceLevel: ConfidenceLevel = confidenceScore >= 75 ? "high" : confidenceScore >= 50 ? "medium" : "low";
+  // Confidence — ONE canonical, evidence-calibrated model (§6). Broad (city) +
+  // stale + dispersed + type-mismatched evidence pulls it down; near/recent/same-
+  // type/tight evidence pushes it up. No hardcoded outcomes.
+  const confidenceScore = usable.length === 0
+    ? clamp(Math.min(35, Math.round(market.dataQualityScore * 0.3) + 10), 5, 35) // market-baseline-only cap
+    : computeConfidence({
+        tier: evidenceTier,
+        comparableCount: usable.length,
+        strongCount: strongComparableCount,
+        medianAgeMonths,
+        avgSimilarity,
+        typeMatchShare,
+        sourceDiversity,
+        relIQR: disp.relIQR,
+        hasGeo,
+      });
+  const confidenceLevel: ConfidenceLevel = confidenceBand(confidenceScore);
 
-  // Range widens as confidence falls.
-  const spread = confidenceLevel === "high" ? 0.05 : confidenceLevel === "medium" ? 0.08 : 0.13;
-  const lowValue = round(estimatedValue * (1 - spread));
-  const highValue = round(estimatedValue * (1 + spread));
+  // Range from REAL ₪/m² dispersion + confidence (§7) — no cosmetic fixed ±5%.
+  const rng = computeRange(estimatedValue, confidenceScore, disp.relIQR);
+  const lowValue = rng.low;
+  const highValue = rng.high;
 
   // Demand / liquidity / overpricing / DOM.
   const demandScore = clamp(Math.round(

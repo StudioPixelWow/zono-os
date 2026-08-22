@@ -9,14 +9,18 @@
 import type { BrokerSoldProperty, ValuationInput } from "../types";
 import type { createClient } from "@/lib/supabase/server";
 import { distanceMeters } from "./types";
+import { sameLocality } from "@/lib/geo/locality";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
 
 interface DealRow {
   id?: string; value?: number; closed_at?: string; property_id?: string; owner_id?: string;
 }
+// AVM 3.0 §3 — `properties` has no `name` / `street` columns (the old selector
+// errored → broker-sold section was always empty). Real columns: `title`,
+// `building_number`.
 interface PropRow {
-  id?: string; city?: string; neighborhood?: string; name?: string; street?: string; building_number?: string;
+  id?: string; city?: string; neighborhood?: string; title?: string; building_number?: string;
   rooms?: number; size_sqm?: number; latitude?: number; longitude?: number;
   primary_image_url?: string; assigned_agent_id?: string;
 }
@@ -40,7 +44,7 @@ export async function getBrokerSoldProperties(
 
   const { data: props } = await db
     .from("properties" as never)
-    .select("id,city,neighborhood,name,street,building_number,rooms,size_sqm,latitude,longitude,primary_image_url,assigned_agent_id")
+    .select("id,city,neighborhood,title,building_number,rooms,size_sqm,latitude,longitude,primary_image_url,assigned_agent_id")
     .in("id", propertyIds);
   const propMap = new Map<string, PropRow>();
   for (const p of (props ?? []) as unknown as PropRow[]) if (p.id) propMap.set(p.id, p);
@@ -49,19 +53,20 @@ export async function getBrokerSoldProperties(
   for (const d of dealRows) {
     const p = d.property_id ? propMap.get(d.property_id) : undefined;
     if (!p) continue;
-    // Same-city gate (honest geographic relevance). If subject has no city, keep all.
-    if (input.city && p.city && p.city.trim() !== input.city.trim()) continue;
+    // Same-locality gate via the canonical engine (honest geographic relevance,
+    // spelling/English tolerant). If subject has no city, keep all.
+    if (input.city && p.city && !sameLocality(p.city, input.city)) continue;
     const sqm = p.size_sqm ?? null;
     const salePrice = d.value ?? null;
     const ppsqm = salePrice && sqm ? Math.round(salePrice / sqm) : null;
-    const addr = [p.street ?? p.name, p.building_number].filter(Boolean).join(" ") || p.name || null;
+    const addr = [p.title, p.building_number].filter(Boolean).join(" ") || p.title || null;
     out.push({
       propertyId: p.id ?? null,
       dealId: d.id ?? null,
       address: addr,
       city: p.city ?? null,
       neighborhood: p.neighborhood ?? null,
-      street: p.street ?? null,
+      street: null,
       salePrice,
       pricePerSqm: ppsqm,
       saleDate: d.closed_at?.slice(0, 10) ?? null,

@@ -25,6 +25,12 @@ export interface ValuationDebug {
   outliersRemoved: number;
   confidenceScore: number;        // 0..100
   reasonCodes: string[];          // e.g. ok | no_priced_comparables | missing_built_sqm | only_active_listings
+  // ── Fallback-honesty fields (AVM 3.0 §13) — the evidence behind the number ──
+  evidenceTier?: "building" | "street" | "neighborhood" | "radius" | "city" | "market";
+  strongComparableCount?: number;
+  medianComparableAgeDays?: number | null;
+  dispersionRelIqr?: number;      // robust ₪/m² dispersion (p75-p25)/median
+  sourceMix?: { sold: number; asking: number; internal: number; brokerSold: number };
 }
 
 /** Raw human input collected by the wizard. All optional until computed. */
@@ -97,9 +103,11 @@ export interface ComparableTraceability {
 }
 
 /** A comparable is usable as evidence ONLY when it traces to a real row with raw
- *  price + raw sqm. Mirrors the spec's HARD BLOCK (UNTRACEABLE_EVIDENCE). */
+ *  price + raw sqm AND is not a demo row. Mirrors the spec's HARD BLOCK
+ *  (UNTRACEABLE_EVIDENCE); the `!isDemo` clause (AVM 3.0 §18) guarantees no demo
+ *  comparable can ever influence a live valuation even if one were ever emitted. */
 export function isTraceableComparable(c: Comparable): boolean {
-  return !!c.externalId && !!c.sourceTable && (c.price ?? 0) > 0 && (c.sqm ?? 0) > 0;
+  return !!c.externalId && !!c.sourceTable && (c.price ?? 0) > 0 && (c.sqm ?? 0) > 0 && c.isDemo !== true;
 }
 
 /** Broker's own sold property nearby (trust evidence). */
