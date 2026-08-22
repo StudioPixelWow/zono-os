@@ -96,9 +96,16 @@ export async function geocodeOrgTransactions(db: DB, orgId: string, opts: { limi
 }
 
 /**
+ * @deprecated Superseded by runGeoBackfill() in ./geo-pipeline, which resolves
+ * most rows internally (cache → exact → street → neighborhood → city) before ever
+ * calling the paid provider. The canonical cron now calls runGeoBackfill. These
+ * per-org helpers above remain valid provider-only building blocks; this all-orgs
+ * drainer (provider-for-every-row) is kept only for backward compatibility and is
+ * no longer wired to any cron. Do NOT add a second cron for it.
+ *
  * Nightly all-orgs drainer (AVM 3.2 §17) — bounded per-org enrichment of subject
  * properties + sold transactions that still lack coordinates. Reuses the canonical
- * geocoder; org-scoped; idempotent (only NULL-coordinate rows). Called by the cron.
+ * geocoder; org-scoped; idempotent (only NULL-coordinate rows).
  */
 export async function geocodeGeoBacklogForAllOrganizations(opts: { perOrg?: number } = {}): Promise<Array<{ orgId: string; properties: GeoEnrichStats; transactions: GeoEnrichStats }>> {
   const perOrg = opts.perOrg ?? DEFAULT_BATCH;

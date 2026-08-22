@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/properties-transactions-geocode",
-      "schedule": "45 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/madlan-directory-refresh",
