@@ -41,7 +41,7 @@ export function ZiDiagnosticsAdminView() {
             <Icon name="Activity" size={22} /> ZI Diagnostics — יומן אבחונים
           </h1>
           <p className="text-muted mt-1 text-sm">
-            תיעוד מצומצם ולא רגיש של הרצות אבחון „למה זה לא עובד”. ZI מסביר בלבד — אינו מבצע פעולות.
+            תיעוד מצומצם ולא רגיש של הרצות אבחון „למה זה לא עובד”. ZICHAT מסביר בלבד — אינו מבצע פעולות.
           </p>
         </div>
         <button onClick={load} className="bg-card border-line text-muted hover:text-brand inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-bold transition">

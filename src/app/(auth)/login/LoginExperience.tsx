@@ -251,7 +251,7 @@ function Robot({ reduce }: { reduce: boolean }) {
         onError={() => { if (src !== ROBOT_LOCAL) setSrc(ROBOT_LOCAL); else setHidden(true); }}
       />
       <span className="zauth-bubble zauth-glass">
-        <span className="zauth-bubble-t">שלום! אני ZI</span>
+        <span className="zauth-bubble-t">שלום! אני ZICHAT</span>
         <span className="zauth-bubble-s">איך אפשר לעזור?</span>
       </span>
     </motion.div>

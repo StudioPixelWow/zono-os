@@ -181,7 +181,7 @@ function ZiDiagnosticsPanel() {
       <div className="border-line flex flex-wrap items-center justify-between gap-2 border-b p-4">
         <div>
           <p className="text-ink flex items-center gap-1.5 text-sm font-extrabold"><Icon name="Activity" size={16} /> ZI Diagnostics</p>
-          <p className="text-muted text-[11px]">הרצות אבחון „למה זה לא עובד” (קריאה בלבד — ZI מסביר, לא מבצע פעולות).</p>
+          <p className="text-muted text-[11px]">הרצות אבחון „למה זה לא עובד” (קריאה בלבד — ZICHAT מסביר, לא מבצע פעולות).</p>
         </div>
         <div className="flex items-center gap-2">
           {unresolved > 0 && <span className="bg-danger-soft text-danger rounded-md px-2 py-0.5 text-[11px] font-black">{unresolved} קריטיים</span>}
@@ -192,7 +192,7 @@ function ZiDiagnosticsPanel() {
       {rows === null ? (
         <p className="text-muted p-4 text-sm">טוען…</p>
       ) : rows.length === 0 ? (
-        <p className="text-muted p-4 text-sm">אין הרצות אבחון עדיין. כשמשתמש ילחץ „בדוק למה זה לא עובד” ב‑ZI — זה יופיע כאן.</p>
+        <p className="text-muted p-4 text-sm">אין הרצות אבחון עדיין. כשמשתמש ילחץ „בדוק למה זה לא עובד” ב‑ZICHAT — זה יופיע כאן.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
           <div>

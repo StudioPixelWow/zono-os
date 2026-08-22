@@ -162,7 +162,7 @@ export function DailyPlanBoard({ plan, rail }: { plan: DailyPlan; rail: RailData
         )}
 
         <div className="bg-card border-line rounded-[22px] border p-5">
-          <p className="text-ink mb-3 text-sm font-black">שאל את ZI</p>
+          <p className="text-ink mb-3 text-sm font-black">שאל את ZICHAT</p>
           <div className="flex flex-col gap-2 text-sm">
             <p className="text-muted">{`מה הכי דחוף? · על מי לחזור? · מה נשאר לי היום?`}</p>
           </div>

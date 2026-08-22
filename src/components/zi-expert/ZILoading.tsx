@@ -1,6 +1,6 @@
 "use client";
 // ZI Expert™ — thinking / typing indicator.
-export function ZILoading({ label = "ZI חושב…" }: { label?: string }) {
+export function ZILoading({ label = "ZICHAT חושב…" }: { label?: string }) {
   return (
     <div className="flex items-center gap-2 text-white/60" role="status" aria-live="polite">
       <span className="flex items-center gap-1">

@@ -206,7 +206,7 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
             <div className="flex min-w-0 items-center gap-3">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white/15"><Icon name="Sparkles" size={20} /></span>
               <div className="min-w-0">
-                <p className="text-[12px] font-black opacity-90">✨ ZI סידר לך את היום</p>
+                <p className="text-[12px] font-black opacity-90">✨ ZICHAT סידר לך את היום</p>
                 <p className="line-clamp-2 text-[13px] font-medium opacity-95">{data.ziBrief.text}</p>
               </div>
             </div>
@@ -215,7 +215,7 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
         ) : (
           <div className="bg-card border-line flex flex-1 items-center gap-3 rounded-[22px] border p-3.5 shadow-[var(--shadow-card)]">
             <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${TONE_SOFT.success}`}><Icon name="CheckCircle" size={20} /></span>
-            <div><p className="text-ink text-sm font-black">הכול מסודר כרגע 🎉</p><p className="text-muted text-[12px]">ZI ממשיך לחפש הזדמנויות עבורך</p></div>
+            <div><p className="text-ink text-sm font-black">הכול מסודר כרגע 🎉</p><p className="text-muted text-[12px]">ZICHAT ממשיך לחפש הזדמנויות עבורך</p></div>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[46%]">
@@ -272,9 +272,9 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
             </div>
           </section>
           <section className={`${CARD} flex-1`}>
-            <PanelHead title="✨ ZI מצא עבורך" count={data.opportunitiesTotal} href="/recommendations" hrefLabel="עוד הזדמנויות" />
+            <PanelHead title="✨ ZICHAT מצא עבורך" count={data.opportunitiesTotal} href="/recommendations" hrefLabel="עוד הזדמנויות" />
             <div className="zono-scroll min-h-0 flex-1 overflow-y-auto p-2.5">
-              {data.opportunities.length === 0 ? <div className="text-muted flex h-full items-center justify-center py-3 text-center text-[12px]">ZI ממשיך לחפש הזדמנויות עבורך</div> : (
+              {data.opportunities.length === 0 ? <div className="text-muted flex h-full items-center justify-center py-3 text-center text-[12px]">ZICHAT ממשיך לחפש הזדמנויות עבורך</div> : (
                 <div className="flex flex-col gap-2">{data.opportunities.map((o) => <OppCard key={o.id} o={o} />)}</div>
               )}
             </div>

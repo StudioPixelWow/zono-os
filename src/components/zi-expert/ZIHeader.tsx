@@ -18,7 +18,7 @@ export function ZIHeader({ onToggleHistory, onNewChat, onClose, historyOpen, onT
         <ZIAvatar size={38} state="online" />
         <div className="leading-tight">
           <p className="flex items-center gap-1.5 text-sm font-black text-white">
-            ZI
+            ZICHAT
             <span className="text-[10px] font-bold text-emerald-300">● מחובר</span>
           </p>
           <p className="text-[11px] text-white/50">המומחה שלך ל-ZONO</p>

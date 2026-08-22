@@ -8,10 +8,10 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 
-// The canonical ZONO mascot — self-hosted (no remote dependency). Drop the
-// approved PNG at public/zono/zono-default.png; until then the avatar falls back
-// to the Sparkles glyph (never a fabricated/placeholder asset).
-export const ZI_AVATAR_URL = "/zono/zono-default.png";
+// The canonical ZICHAT mascot — self-hosted (no remote dependency). Served from
+// public/zono/zichat.png; until then the avatar falls back to the Sparkles glyph
+// (never a fabricated/placeholder asset).
+export const ZI_AVATAR_URL = "/zono/zichat.png";
 
 export type ZiAvatarState = "idle" | "thinking" | "online";
 
@@ -38,7 +38,7 @@ export function ZIAvatar({ size = 56, state = "idle", showStatus = true, bare = 
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={ZI_AVATAR_URL}
-          alt="ZONO"
+          alt="ZICHAT"
           className="zi-avatar__img"
           draggable={false}
           onError={() => setFailed(true)}

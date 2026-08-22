@@ -16,7 +16,7 @@ const TERM_OPPORTUNITY: { term: string; definition: string } = {
 const TERM_BUYER_MATCH: { term: string; definition: string } = {
   term: "Buyer Matching (התאמת קונים)",
   definition:
-    "התאמה אוטומטית בין נכסים לקונים פעילים לפי תקציב, אזור, סוג נכס, חדרים והעדפות. המנוע מחשב תאימות ומדרג קונים — ZI מסביר את ההיגיון אך לעולם לא מחליט עבורך מי מתאים למי.",
+    "התאמה אוטומטית בין נכסים לקונים פעילים לפי תקציב, אזור, סוג נכס, חדרים והעדפות. המנוע מחשב תאימות ומדרג קונים — ZICHAT מסביר את ההיגיון אך לעולם לא מחליט עבורך מי מתאים למי.",
 };
 
 const DEFAULT_SUGGESTIONS: ZiSuggestion[] = [
@@ -246,7 +246,7 @@ const DEFAULT_ENTRY: ZiKnowledgeEntry = {
     "ZONO היא מערכת ההפעלה של סוכן הנדל\"ן: נכסים, קונים, מוכרים, עסקאות, שיווק, מודיעין ו-AI במקום אחד.",
   details: [
     "כל מנוע ב-ZONO דטרמיניסטי — מבוסס נתונים אמיתיים, לא ניחוש.",
-    "ZI כאן כדי להסביר, להדריך ולענות — אני לא מבצע פעולות במקומך.",
+    "ZICHAT כאן כדי להסביר, להדריך ולענות — אני לא מבצע פעולות במקומך.",
   ],
   glossary: [TERM_OPPORTUNITY, TERM_BUYER_MATCH],
   suggestions: DEFAULT_SUGGESTIONS,

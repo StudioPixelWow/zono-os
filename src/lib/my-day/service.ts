@@ -276,7 +276,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
     if (urgentTotal > 0) parts.push(`${urgentTotal} דורש טיפול`);
     else if (actionsTotal > 0) parts.push(`${actionsTotal} פעילויות פתוחות`);
     if (nextEventLabel && timeline[0]) parts.push(`פגישה ב־${timeline.find((t) => t.isNext)?.time ?? timeline[0].time}`);
-    if (opportunities.length > 0) parts.push(`${opportunitiesTotal} הזדמנויות ש-ZI מצא`);
+    if (opportunities.length > 0) parts.push(`${opportunitiesTotal} הזדמנויות ש-ZICHAT מצא`);
     if (parts.length > 0) {
       const top = actions[0] ?? null;
       ziBrief = {

@@ -47,8 +47,8 @@ export function ZiKnowledgeAdminView() {
         <div className="flex items-center gap-3">
           <span className="zono-gradient-glow grid h-11 w-11 place-items-center rounded-2xl text-white"><Icon name="Sparkles" size={22} /></span>
           <div>
-            <h1 className="text-ink text-2xl font-black">מאגר הידע של ZI</h1>
-            <p className="text-muted text-sm">מאמרי מוצר, חיפוש, משוב ושאלות ללא מענה. ZI מסביר בלבד — לא מבצע פעולות.</p>
+            <h1 className="text-ink text-2xl font-black">מאגר הידע של ZICHAT</h1>
+            <p className="text-muted text-sm">מאמרי מוצר, חיפוש, משוב ושאלות ללא מענה. ZICHAT מסביר בלבד — לא מבצע פעולות.</p>
           </div>
         </div>
         <Button onClick={sync} loading={runner.busyId === "kb-sync"}><Icon name="Download" size={14} className="ms-1" /> סנכרן מאגר מובנה</Button>

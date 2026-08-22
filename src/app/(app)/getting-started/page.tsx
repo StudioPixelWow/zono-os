@@ -119,7 +119,7 @@ export default async function GettingStartedRoute() {
 
       {/* Support discovery — make human help findable without settings/help. */}
       <div className="border-line text-muted rounded-2xl border border-dashed p-4 text-center text-xs">
-        צריכים עזרה? פתחו את <span className="text-ink font-bold">ZI</span> וכתבו “אני רוצה לדבר עם נציג” — ותיפתח פנייה לצוות התמיכה.
+        צריכים עזרה? פתחו את <span className="text-ink font-bold">ZICHAT</span> וכתבו “אני רוצה לדבר עם נציג” — ותיפתח פנייה לצוות התמיכה.
       </div>
     </div>
   );

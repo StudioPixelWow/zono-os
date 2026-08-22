@@ -106,7 +106,7 @@ export function ZILearnPanel({ currentModule, onOpenLesson, onAskGlossary }: {
         </>
       )}
 
-      <p className="mt-3 text-center text-[10px] text-white/30">ZI מלמד ומסביר בלבד — לא מבצע פעולות ולא משנה נתונים.</p>
+      <p className="mt-3 text-center text-[10px] text-white/30">ZICHAT מלמד ומסביר בלבד — לא מבצע פעולות ולא משנה נתונים.</p>
     </div>
   );
 }

@@ -181,7 +181,7 @@ export function OfficeCommandCenter({ center, agents }: { center: ManagerCommand
           )}
 
           <div className="bg-card border-line rounded-[22px] border p-5">
-            <p className="text-ink mb-3 text-sm font-black">שאל את ZI</p>
+            <p className="text-ink mb-3 text-sm font-black">שאל את ZICHAT</p>
             <p className="text-muted text-sm">{`איפה יש בעיות במשרד? · מי מחכה יותר מדי? · מה אני צריך לעשות ראשון?`}</p>
           </div>
         </aside>

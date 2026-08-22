@@ -277,7 +277,7 @@ export function ZIWidget() {
             exit={{ opacity: 0, scale: 0.6 }}
             transition={{ type: "spring", stiffness: 320, damping: 22 }}
             onClick={openWidget}
-            aria-label="פתח את ZI — המומחה שלך ל-ZONO"
+            aria-label="פתח את ZICHAT — המומחה שלך ל-ZONO"
             className="zi-launcher fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-5 z-[150] lg:bottom-5"
           >
             <ZIAvatar size={108} state="idle" bare />

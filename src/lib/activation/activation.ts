@@ -241,7 +241,7 @@ export const JOURNEY_GROUPS: JourneyGroupDef[] = [
   { key: "property", label: "הנכס הראשון", blurb: "הוספת הנכס הראשון ותמונות", icon: "Home", core: ["first_property"], match: "all" },
   { key: "site", label: "האתר שלי", blurb: "נוכחות דיגיטלית שנוצרת מהנתונים שלכם", icon: "Globe", core: ["digital_presence"], match: "all" },
   { key: "marketing", label: "שיווק ופרסום", blurb: "הקמפיין הראשון בקבוצות פייסבוק", icon: "Megaphone", core: ["first_campaign"], match: "all", skippable: true },
-  { key: "ready", label: "המערכת מוכנה", blurb: "לקוחות, פעולות יומיות ו-ZI לצידכם", icon: "Sparkles", core: ["first_contact", "first_task_meeting", "first_deal"], match: "any", skippable: true },
+  { key: "ready", label: "המערכת מוכנה", blurb: "לקוחות, פעולות יומיות ו-ZICHAT לצידכם", icon: "Sparkles", core: ["first_contact", "first_task_meeting", "first_deal"], match: "any", skippable: true },
 ];
 
 export interface JourneyStepView {

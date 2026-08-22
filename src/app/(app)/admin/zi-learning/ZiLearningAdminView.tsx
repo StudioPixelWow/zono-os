@@ -17,7 +17,7 @@ export function ZiLearningAdminView() {
     <div dir="rtl" className="mx-auto max-w-4xl px-4 py-6">
       <div className="mb-5">
         <h1 className="text-ink flex items-center gap-2 text-xl font-black"><Icon name="ListChecks" size={22} /> ZI Learning — מרכז למידה</h1>
-        <p className="text-muted mt-1 text-sm">סקירה של תוכן הלמידה והנושאים שהכי ביקשו עליהם הסבר. ZI מלמד ומסביר — לא מבצע פעולות.</p>
+        <p className="text-muted mt-1 text-sm">סקירה של תוכן הלמידה והנושאים שהכי ביקשו עליהם הסבר. ZICHAT מלמד ומסביר — לא מבצע פעולות.</p>
       </div>
 
       {err && <p className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{err}</p>}
