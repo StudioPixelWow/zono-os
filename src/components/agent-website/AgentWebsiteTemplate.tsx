@@ -20,6 +20,10 @@ import { PublicIcon, type PublicIconName } from "@/components/public-site/Public
 // a search tool: the site sells the agent, the properties prove it.
 const HOME_FEATURED_MAX = 8;
 
+// Subtle editorial backdrop over the hero base gradient (very faint — a texture,
+// not a photo hero; content stays fully legible above it).
+const HERO_BACKDROP = "https://www.raveh-ravid.co.il/Doing-business-in-israel/wp-content/uploads/2025/07/REALESTATE-1024x674.jpg";
+
 const ADVANTAGES: { icon: PublicIconName; title: string; text: string }[] = [
   { icon: "map", title: "היכרות עמוקה עם האזור", text: "ידע מקומי מדויק שמביא לעסקה הנכונה — לא רק מחירים, אלא הבנה של הרחוב, הבניין והשכונה." },
   { icon: "megaphone", title: "שיווק מתקדם", text: "כל נכס מקבל קמפיין חשיפה ממוקד מול הקהל הנכון, לא סתם עוד מודעה." },
@@ -197,6 +201,7 @@ function Hero({ data }: { data: AgentSitePayload }) {
       {/* Layered architectural background — brand-driven depth, not a generic gradient blob */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-b from-[var(--brand-soft)] via-[var(--brand-background)] to-[var(--brand-background)]" />
+        <img src={HERO_BACKDROP} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-10" />
         <div className="absolute inset-0 opacity-60" style={{ backgroundImage: "linear-gradient(var(--brand-border) 1px, transparent 1px), linear-gradient(90deg, var(--brand-border) 1px, transparent 1px)", backgroundSize: "58px 58px", WebkitMaskImage: "radial-gradient(120% 85% at 82% 0%, #000 28%, transparent 74%)", maskImage: "radial-gradient(120% 85% at 82% 0%, #000 28%, transparent 74%)" }} />
         <div className="absolute -top-32 start-[-8rem] h-[36rem] w-[36rem] rounded-full bg-[var(--brand-primary)] opacity-10 blur-3xl" />
         <svg aria-hidden viewBox="0 0 200 200" fill="none" stroke="currentColor" strokeWidth="1.4" className="absolute -bottom-2 end-2 h-64 w-64 text-[color:var(--brand-primary)] opacity-15"><path d="M6 194h64v-64M6 194V78M70 130h64V66M134 130V6h60" strokeLinecap="round" /></svg>
