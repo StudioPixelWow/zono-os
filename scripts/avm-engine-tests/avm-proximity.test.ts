@@ -12,7 +12,8 @@ import assert from "node:assert/strict";
 import { proximityTier, selectByProximityLadder } from "@/lib/valuation/valuation-engine";
 
 const subj: any = { city: "קרית ביאליק", neighborhood: "רמות", street: "הרצל", propertyType: "apartment", rooms: 4, builtSqm: 95, floor: 3, latitude: 32.83, longitude: 35.08 };
-const comp = (over: Record<string, unknown>) => ({ source: "govmap", comparableType: "sold", city: "קרית ביאליק", pricePerSqm: 15000, sqm: 95, ...over } as any);
+// Default ROOFTOP precision so distance tiers apply (AVM 3.2 caps tiers by precision).
+const comp = (over: Record<string, unknown>) => ({ source: "govmap", comparableType: "sold", city: "קרית ביאליק", pricePerSqm: 15000, sqm: 95, geocodeResolution: "ROOFTOP", ...over } as any);
 
 test("coordless comparable with no text match → CITY (honest fallback, not faked)", () => {
   assert.equal(proximityTier(subj, comp({ distanceMeters: null, neighborhood: "אחר", street: "אחר" })), "city");

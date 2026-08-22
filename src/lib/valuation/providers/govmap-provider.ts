@@ -6,12 +6,13 @@
 import type { Comparable } from "../types";
 import { type ProviderContext, type ProviderResult, distanceMeters } from "./types";
 import { sameLocality } from "@/lib/geo/locality";
+import { isPreciseResolution, type GeoResolution } from "@/lib/geo/address";
 
 interface TxRow {
   id?: string; city_name?: string; neighborhood_name?: string; address?: string; street?: string;
   rooms?: number | string; sqm?: number | string; area?: number | string; floor?: number | string; building_year?: number;
   price?: number | string; deal_amount?: number | string; price_per_sqm?: number | string; property_type?: string;
-  deal_date?: string; transaction_date?: string; lat?: number; lng?: number; source?: string;
+  deal_date?: string; transaction_date?: string; lat?: number; lng?: number; source?: string; geocode_resolution?: string;
 }
 
 /** Coerce DB scalars (numeric columns can arrive as strings) → finite number | null. */
@@ -57,7 +58,10 @@ export async function govmapProvider(ctx: ProviderContext): Promise<ProviderResu
       city: r.city_name ?? null,
       neighborhood: r.neighborhood_name ?? null,
       street: r.street ?? r.address ?? null,
-      distanceMeters: distanceMeters(input, r.lat, r.lng),
+      // §9 — only a PRECISE (street/building/rooftop) coordinate yields a distance;
+      // a city/neighborhood centroid must not become a "300m comparable".
+      distanceMeters: isPreciseResolution(r.geocode_resolution as GeoResolution) ? distanceMeters(input, r.lat, r.lng) : null,
+      geocodeResolution: r.geocode_resolution ?? null,
       propertyType: r.property_type ?? null,
       rooms: num(r.rooms),
       sqm,

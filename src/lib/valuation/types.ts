@@ -90,6 +90,9 @@ export interface Comparable {
   originalUrl?: string | null;     // real public listing URL when available
   sourceTable?: string | null;     // the DB table the row came from
   isTraceable?: boolean;           // false → UNTRACEABLE_EVIDENCE, never used
+  // ── Geo precision (AVM 3.2) — how precise the coordinate behind distanceMeters
+  //    is. Coarse coords (CITY/NEIGHBORHOOD) never feed building/street/≤300m tiers.
+  geocodeResolution?: string | null; // ROOFTOP | STREET | NEIGHBORHOOD | CITY | UNRESOLVED
 }
 
 /** Traceability contract — proves a comparable came from a real persisted row. */

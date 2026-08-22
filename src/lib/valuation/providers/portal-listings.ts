@@ -15,6 +15,7 @@
 import type { Comparable, ComparableSource } from "../types";
 import { type ProviderContext, type ProviderResult, distanceMeters } from "./types";
 import { sameLocality } from "@/lib/geo/locality";
+import { isPreciseResolution, resolveGeoResolution } from "@/lib/geo/address";
 
 type Row = Record<string, unknown>;
 const str = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
@@ -85,12 +86,17 @@ export async function readPortalListings(
     const sqm = firstNum(r, ["sqm", "area_sqm", "size_sqm", "area", "built_sqm"]);
     const price = firstNum(r, ["price", "asking_price", "amount"]);
     const ppsqm = price && price > 0 && sqm && sqm > 0 ? Math.round(price / sqm) : null;
+    // §9 — listing coordinate precision from its geocode confidence; a coarse
+    // listing coordinate does not become a "300m comparable".
+    const conf = firstNum(r, ["geocode_confidence"]);
+    const listingRes = resolveGeoResolution(firstStr(r, ["street", "address"]) ? "STREET" : "NEIGHBORHOOD", conf ?? 0.7);
     matched.push({
       source: portal, comparableType: "listing",
       externalId: firstStr(r, ["external_id", "id"]) || null,
       city: cityRaw || null, neighborhood: firstStr(r, ["neighborhood", "neighborhood_name"]) || null,
       street: firstStr(r, ["street", "address"]) || null,
-      distanceMeters: dist, propertyType: firstStr(r, ["property_type", "type"]) || null,
+      distanceMeters: isPreciseResolution(listingRes) ? dist : null, geocodeResolution: listingRes,
+      propertyType: firstStr(r, ["property_type", "type"]) || null,
       rooms: firstNum(r, ["rooms"]), sqm, floor: firstNum(r, ["floor"]),
       price: price && price > 0 ? price : null, pricePerSqm: ppsqm,
       listingDate: firstStr(r, ["published_at", "first_seen_at", "created_at"]) || null,

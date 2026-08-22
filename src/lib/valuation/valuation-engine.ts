@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { typeRelation } from "./property-type";
 import { canonicalNeighborhood } from "@/lib/geo/locality";
+import { resolutionRank, type GeoResolution } from "@/lib/geo/address";
 import {
   recencyDecay, robustDispersion, computeConfidence, computeRange,
   confidenceBand, type EvidenceTier,
@@ -471,12 +472,19 @@ export type ProximityTier = (typeof PROXIMITY_TIERS)[number];
 const eqText = (a?: string | null, b?: string | null) =>
   !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 
-/** Smallest (closest) tier a comparable belongs to relative to the subject. */
+/** Smallest (closest) tier a comparable belongs to relative to the subject.
+ *  AVM 3.2 §9 — distance tiers are CAPPED by the coordinate's precision: only a
+ *  ROOFTOP coordinate can claim "same building"; a STREET-level coordinate reaches
+ *  at most the street/≤300m/≤700m distance tiers; a coarser coordinate (already
+ *  nulled to distanceMeters by the providers) reaches only text-based tiers. This
+ *  prevents a street-centroid or city-centroid from being read as "same building". */
 export function proximityTier(input: ValuationInput, c: Comparable): ProximityTier {
   const d = c.distanceMeters;
-  if (d != null && d <= 30) return "building";
+  const rooftop = resolutionRank(c.geocodeResolution as GeoResolution | null) >= resolutionRank("ROOFTOP");
+  if (d != null && d <= 30 && rooftop) return "building";
   if (eqText(input.street, c.street) || (d != null && d <= 120)) return "street";
-  if (eqText(input.neighborhood, c.neighborhood)) return "neighborhood";
+  const sn = canonicalNeighborhood(input.neighborhood), cn = canonicalNeighborhood(c.neighborhood);
+  if (sn && cn && (sn === cn || sn.includes(cn) || cn.includes(sn))) return "neighborhood";
   if (d != null && d <= 300) return "r300";
   if (d != null && d <= 700) return "r700";
   return "city";
