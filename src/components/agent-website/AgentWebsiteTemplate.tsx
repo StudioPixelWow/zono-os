@@ -168,19 +168,19 @@ function FeaturedProperty({ property }: { property: SiteProperty }) {
     property.floor != null ? `קומה ${property.floor}` : null,
   ].filter(Boolean);
   return (
-    <div className="grid items-stretch gap-6 overflow-hidden rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-background)] shadow-[0_24px_60px_-34px_rgba(15,23,42,0.45)] lg:grid-cols-[1.4fr_1fr]">
-      <div className="relative aspect-[16/10] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto">
-        {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
+    <div className="grid items-stretch gap-6 overflow-hidden rounded-[32px] border border-[var(--brand-border)] bg-[var(--brand-background)] shadow-[0_28px_70px_-34px_rgba(15,23,42,0.48)] lg:grid-cols-[1.55fr_1fr]">
+      <div className="relative aspect-[16/10] overflow-hidden bg-[var(--brand-surface)] lg:aspect-auto lg:min-h-[440px]">
+        {property.tag && <span className="absolute end-4 top-4 z-10 rounded-lg bg-[var(--brand-primary)] px-3.5 py-1.5 text-[13px] font-bold text-[var(--brand-on-primary)] shadow">{property.tag}</span>}
         {property.image
           ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={64} /></div>}
+          : <div className="grid h-full w-full place-items-center text-[var(--brand-muted)]"><PublicIcon name="home" size={72} /></div>}
       </div>
-      <div className="flex flex-col justify-center gap-3 p-7 sm:p-9">
-        <h3 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{property.title}</h3>
-        {loc && <p className="text-[15px] text-[var(--brand-muted)]">{loc}</p>}
-        {price && <p className="text-3xl font-black text-[color:var(--brand-link)]">{price}</p>}
-        {meta.length > 0 && <p className="text-[15px] font-semibold text-[var(--brand-text)]">{meta.join(" · ")}</p>}
-        <div className="mt-3"><Link href={property.href} className="inline-flex rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[15px] font-black text-[var(--brand-on-primary)] shadow-lg transition hover:-translate-y-0.5">לפרטי הנכס ←</Link></div>
+      <div className="flex flex-col justify-center gap-3.5 p-8 sm:p-10">
+        <h3 className="text-[26px] font-black leading-tight text-[var(--brand-text)] sm:text-[34px]">{property.title}</h3>
+        {loc && <p className="text-[16px] text-[var(--brand-muted)]">{loc}</p>}
+        {price && <p className="text-[34px] font-black leading-none text-[color:var(--brand-link)] sm:text-[40px]">{price}</p>}
+        {meta.length > 0 && <p className="text-[16px] font-semibold text-[var(--brand-text)]">{meta.join(" · ")}</p>}
+        <div className="mt-3"><Link href={property.href} className="inline-flex rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[16px] font-black text-[var(--brand-on-primary)] shadow-lg transition hover:-translate-y-0.5">לפרטי הנכס ←</Link></div>
       </div>
     </div>
   );
@@ -204,11 +204,11 @@ function Hero({ data }: { data: AgentSitePayload }) {
 
       <div className={`relative mx-auto grid w-full max-w-7xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 lg:pb-24 lg:pt-20 ${hasPhoto ? "lg:grid-cols-[1.1fr_0.9fr]" : ""}`}>
         <div className={hasPhoto ? "" : "mx-auto max-w-3xl text-center"}>
-          <div className={`inline-flex items-center gap-2 rounded-full border border-[var(--brand-border)] bg-[var(--brand-background)] px-3.5 py-1.5 text-[13px] font-black text-[color:var(--brand-link)] ${hasPhoto ? "" : "mx-auto"}`}>
-            <PublicIcon name="pin" size={15} /> {agent.name}{agent.title ? ` · ${agent.title}` : ""}
+          <div className={`inline-flex items-center gap-2 rounded-full border border-[var(--brand-border)] bg-[var(--brand-background)] px-4 py-2 text-[14px] font-black text-[color:var(--brand-link)] ${hasPhoto ? "" : "mx-auto"}`}>
+            <PublicIcon name="pin" size={18} /> {agent.name}{agent.title ? ` · ${agent.title}` : ""}
           </div>
-          <h1 className="mt-4 text-[40px] font-black leading-[1.03] tracking-tight text-[var(--brand-text)] sm:text-[56px]">{title}</h1>
-          {(agent.bio || agent.title) && <p className={`mt-5 text-[17px] leading-relaxed text-[var(--brand-muted)] ${hasPhoto ? "max-w-lg" : "mx-auto max-w-xl"}`}>{agent.bio || agent.title}</p>}
+          <h1 className="mt-5 text-[46px] font-black leading-[1.02] tracking-tight text-[var(--brand-text)] sm:text-[68px]">{title}</h1>
+          {(agent.bio || agent.title) && <p className={`mt-5 text-[18px] leading-relaxed text-[var(--brand-muted)] ${hasPhoto ? "max-w-lg" : "mx-auto max-w-xl"}`}>{agent.bio || agent.title}</p>}
 
           {data.proofPoints.length > 0 && <div className={`mt-7 ${hasPhoto ? "" : "flex justify-center"}`}><ProofPoints points={data.proofPoints} /></div>}
 
@@ -217,16 +217,16 @@ function Hero({ data }: { data: AgentSitePayload }) {
              inventory. Both brand-token driven. */}
           <div className={`mt-9 flex flex-wrap gap-3 ${hasPhoto ? "" : "justify-center"}`}>
             {agent.whatsapp
-              ? <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-7 py-4 text-[15px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5"><PublicIcon name="whatsapp" size={18} /> דברו איתי</a>
-              : <a href="#contact" className="inline-flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-7 py-4 text-[15px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5">דברו איתי <PublicIcon name="arrow" size={18} /></a>}
-            <a href="#properties" className="inline-flex items-center gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-7 py-4 text-[15px] font-black text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]"><PublicIcon name="home" size={18} /> נכסים שאני משווק</a>
+              ? <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[16px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5"><PublicIcon name="whatsapp" size={20} /> דברו איתי</a>
+              : <a href="#contact" className="inline-flex items-center gap-2.5 rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[16px] font-black text-[var(--brand-on-primary)] shadow-xl transition hover:-translate-y-0.5">דברו איתי <PublicIcon name="arrow" size={20} /></a>}
+            <a href="#properties" className="inline-flex items-center gap-2.5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-8 py-4 text-[16px] font-black text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]"><PublicIcon name="home" size={20} /> נכסים שאני משווק</a>
           </div>
         </div>
 
         {hasPhoto && (
           <div className="relative">
             <div className="absolute -inset-3 -z-0 rounded-[34px] bg-[var(--brand-primary)] opacity-10 blur-2xl" />
-            <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-[28px] bg-[var(--brand-soft)] shadow-[0_44px_90px_-46px_rgba(15,23,42,0.55)] ring-1 ring-[var(--brand-border)]">
+            <div className="relative mx-auto aspect-[4/5] w-full max-w-lg overflow-hidden rounded-[32px] bg-[var(--brand-soft)] shadow-[0_50px_100px_-44px_rgba(15,23,42,0.6)] ring-1 ring-[var(--brand-border)]">
               <img src={brand.profileImage as string} alt={agent.name} className="h-full w-full object-cover object-top" />
               <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent" />
             </div>
@@ -241,18 +241,13 @@ function Hero({ data }: { data: AgentSitePayload }) {
 function OfficeCard({ data }: { data: AgentSitePayload }) {
   const { agent, brand } = data;
   return (
-    <div className="mx-auto mt-4 w-full max-w-md rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-5 shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)] lg:absolute lg:-bottom-8 lg:start-[-2rem] lg:mt-0 lg:max-w-xs">
+    <div className="mx-auto mt-4 w-full max-w-md rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-5 shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)] lg:absolute lg:-bottom-7 lg:start-[-1.5rem] lg:mt-0 lg:max-w-[16rem]">
       <div className="flex items-center gap-3">
-        {brand.logo ? <img src={brand.logo} alt={agent.officeName ?? ""} className="h-9 w-auto max-w-[120px] object-contain" /> : <div className="text-[15px] font-black text-[var(--brand-text)]">{agent.officeName ?? agent.name}</div>}
+        {brand.logo ? <img src={brand.logo} alt={agent.officeName ?? ""} className="h-10 w-auto max-w-[130px] object-contain" /> : <div className="text-[16px] font-black text-[var(--brand-text)]">{agent.officeName ?? agent.name}</div>}
       </div>
-      <div className="mt-3 space-y-2 text-[13px] text-[var(--brand-muted)]">
-        {agent.officeAddress && <div className="flex items-center gap-2"><PublicIcon name="pin" size="inline" className="shrink-0" /> {agent.officeAddress}</div>}
-        {agent.phone && <a href={agent.tel ?? undefined} className="flex items-center gap-2 hover:text-[color:var(--brand-link)]"><PublicIcon name="phone" size="inline" className="shrink-0" /> {agent.phone}</a>}
-        {agent.email && <a href={`mailto:${agent.email}`} className="flex items-center gap-2 hover:text-[color:var(--brand-link)]"><PublicIcon name="mail" size="inline" className="shrink-0" /> {agent.email}</a>}
-      </div>
-      <div className="mt-4 flex flex-col gap-2">
-        <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] py-2.5 text-center text-[13px] font-bold text-[var(--brand-on-primary)]">קביעת פגישה</a>
-        {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] py-2.5 text-center text-[13px] font-bold text-[var(--brand-text)]">שליחת הודעת WhatsApp</a>}
+      <div className="mt-3 space-y-2 text-[14px] text-[var(--brand-muted)]">
+        {agent.officeAddress && <div className="flex items-center gap-2"><PublicIcon name="pin" size={16} className="shrink-0" /> {agent.officeAddress}</div>}
+        {agent.phone && <a href={agent.tel ?? undefined} className="flex items-center gap-2 hover:text-[color:var(--brand-link)]"><PublicIcon name="phone" size={16} className="shrink-0" /> {agent.phone}</a>}
       </div>
     </div>
   );
@@ -273,20 +268,20 @@ function SellerValuation({ data }: { data: AgentSitePayload }) {
         <div>
           <div className="mb-1 text-[13px] font-bold text-[color:var(--brand-link)]">חושבים למכור?</div>
           <h2 className="text-3xl font-black leading-tight text-[var(--brand-text)] sm:text-4xl">{area ? `כמה הנכס שלכם ב${area} שווה היום?` : "כמה הנכס שלכם שווה היום?"}</h2>
-          <p className="mt-4 max-w-xl text-[16px] leading-relaxed text-[var(--brand-muted)]">מחיר נכון הוא ההבדל בין נכס שנמכר מהר ובתנאים טובים לבין נכס שתקוע. קבלו הערכת שווי מקצועית ומדויקת, ללא התחייבות.</p>
-          <div className="mt-7 grid gap-4 sm:grid-cols-3">
+          <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-[var(--brand-muted)]">מחיר נכון הוא ההבדל בין נכס שנמכר מהר ובתנאים טובים לבין נכס שתקוע. קבלו הערכת שווי מקצועית ומדויקת, ללא התחייבות.</p>
+          <div className="mt-8 grid gap-5 sm:grid-cols-3">
             {points.map((p) => (
-              <div key={p.title} className="flex flex-col gap-1.5">
-                <span className="text-[color:var(--brand-primary)]"><PublicIcon name={p.icon} size={22} /></span>
-                <span className="text-[14px] font-black text-[var(--brand-text)]">{p.title}</span>
-                <span className="text-[13px] leading-relaxed text-[var(--brand-muted)]">{p.text}</span>
+              <div key={p.title} className="flex flex-col gap-2">
+                <span className="text-[color:var(--brand-primary)]"><PublicIcon name={p.icon} size={28} /></span>
+                <span className="text-[16px] font-black text-[var(--brand-text)]">{p.title}</span>
+                <span className="text-[14px] leading-relaxed text-[var(--brand-muted)]">{p.text}</span>
               </div>
             ))}
           </div>
         </div>
-        <div className="rounded-[24px] border border-[var(--brand-border)] bg-[var(--brand-background)] p-6 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.35)] sm:p-8">
-          <h3 className="mb-1 text-[18px] font-black text-[var(--brand-text)]">קבלו הערכת שווי לנכס</h3>
-          <p className="mb-4 text-[13px] text-[var(--brand-muted)]">השאירו פרטים ואחזור אליכם עם הערכה מסודרת.</p>
+        <div className="rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-background)] p-7 shadow-[0_30px_70px_-30px_rgba(15,23,42,0.42)] ring-1 ring-[var(--brand-border)] sm:p-9">
+          <h3 className="mb-1.5 text-[22px] font-black text-[var(--brand-text)]">קבלו הערכת שווי לנכס</h3>
+          <p className="mb-5 text-[15px] text-[var(--brand-muted)]">השאירו פרטים ואחזור אליכם עם הערכה מסודרת.</p>
           <AgentLeadForm slug={slug} variant="valuation" cta="בדיקת שווי הנכס" accent={brand.primary} />
         </div>
       </div>
@@ -301,14 +296,14 @@ function WhyMe({ data }: { data: AgentSitePayload }) {
     <SectionShell tone="soft" eyebrow="הגישה שלי" title={`למה לעבוד עם ${agent.firstName}?`} subtitle="לא רק לסגור עסקה — ללוות אתכם נכון לאורך כל הדרך, בגישה אישית שמרגישים בכל שלב.">
       <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
         {ADVANTAGES.map((a, i) => (
-          <div key={a.title} className="flex gap-5 border-t border-[var(--brand-border)] pt-6">
-            <div className="text-2xl font-black leading-none text-[color:var(--brand-primary)] opacity-40">{String(i + 1).padStart(2, "0")}</div>
+          <div key={a.title} className="flex gap-5 border-t border-[var(--brand-border)] pt-7">
+            <div className="text-3xl font-black leading-none text-[color:var(--brand-primary)] opacity-40">{String(i + 1).padStart(2, "0")}</div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <span className="text-[color:var(--brand-primary)]"><PublicIcon name={a.icon} size={20} /></span>
-                <h3 className="text-[18px] font-black text-[var(--brand-text)]">{a.title}</h3>
+              <div className="flex items-center gap-3">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><PublicIcon name={a.icon} size={26} /></span>
+                <h3 className="text-[19px] font-black text-[var(--brand-text)]">{a.title}</h3>
               </div>
-              <p className="mt-2 text-[15px] leading-relaxed text-[var(--brand-muted)]">{a.text}</p>
+              <p className="mt-3 text-[16px] leading-relaxed text-[var(--brand-muted)]">{a.text}</p>
             </div>
           </div>
         ))}
@@ -322,16 +317,16 @@ function About({ data }: { data: AgentSitePayload }) {
   const { agent, brand } = data;
   return (
     <SectionShell id="about">
-      <div className="grid items-center gap-10 lg:grid-cols-[1fr_1.3fr]">
+      <div className="grid items-center gap-12 lg:grid-cols-[0.85fr_1.15fr]">
         {brand.profileImage
-          ? <div className="mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl bg-[var(--brand-soft)]"><img src={brand.profileImage} alt={agent.name} className="h-full w-full object-cover" /></div>
-          : <div className="grid aspect-square w-full max-w-sm place-items-center rounded-3xl bg-[var(--brand-soft)] text-6xl font-black text-[color:var(--brand-primary)]">{agent.firstName.slice(0, 1)}</div>}
+          ? <div className="mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-[32px] bg-[var(--brand-soft)] shadow-[0_40px_90px_-46px_rgba(15,23,42,0.5)] ring-1 ring-[var(--brand-border)]"><img src={brand.profileImage} alt={agent.name} className="h-full w-full object-cover object-top" /></div>
+          : <div className="grid aspect-[4/5] w-full max-w-md place-items-center rounded-[32px] bg-[var(--brand-soft)] text-7xl font-black text-[color:var(--brand-primary)]">{agent.firstName.slice(0, 1)}</div>}
         <div>
-          <div className="mb-1 text-[13px] font-bold text-[color:var(--brand-link)]">קצת עליי</div>
-          <h2 className="text-2xl font-black text-[var(--brand-text)] sm:text-3xl">נדל״ן הוא קודם כל אנשים</h2>
+          <div className="mb-2 text-[14px] font-bold text-[color:var(--brand-link)]">קצת עליי</div>
+          <h2 className="text-[30px] font-black leading-tight text-[var(--brand-text)] sm:text-[42px]">נדל״ן הוא קודם כל אנשים</h2>
           {agent.bio
-            ? <p className="mt-4 text-[16px] leading-relaxed text-[var(--brand-muted)]">{agent.bio}</p>
-            : <p className="mt-4 text-[16px] leading-relaxed text-[var(--brand-muted)]">{agent.name}{agent.title ? ` · ${agent.title}` : ""}{agent.areas.length ? ` · מתמחה ב${agent.areas.slice(0, 3).join(", ")}` : ""}.</p>}
+            ? <p className="mt-5 text-[17px] leading-relaxed text-[var(--brand-muted)]">{agent.bio}</p>
+            : <p className="mt-5 text-[17px] leading-relaxed text-[var(--brand-muted)]">{agent.name}{agent.title ? ` · ${agent.title}` : ""}{agent.areas.length ? ` · מתמחה ב${agent.areas.slice(0, 3).join(", ")}` : ""}.</p>}
           {agent.specialties.length > 0 && (
             <div className="mt-5 flex flex-wrap gap-2">
               {agent.specialties.map((s) => <span key={s} className="rounded-full bg-[var(--brand-soft)] px-3.5 py-1.5 text-[13px] font-semibold text-[color:var(--brand-primary)]">{s}</span>)}
@@ -353,14 +348,14 @@ function ContactCta({ data }: { data: AgentSitePayload }) {
       <div className="mx-auto grid w-full max-w-7xl items-center gap-8 px-5 py-16 sm:px-8 lg:grid-cols-2 lg:py-20">
         <div>
           <h2 className="text-3xl font-black leading-tight sm:text-4xl">{area ? `מחפשים נכס ב${area}?` : "מחפשים את הבית הבא שלכם?"}</h2>
-          <p className="mt-3 text-[16px] opacity-90">אני {agent.firstName}, ואשמח ללוות אתכם — בין אם אתם קונים, מוכרים או רק מתלבטים. השאירו פרטים ואחזור אליכם באופן אישי.</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-background)] px-6 py-3.5 text-[15px] font-bold text-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
-            {agent.tel && <a href={agent.tel} className="rounded-xl border border-white/40 px-6 py-3.5 text-[15px] font-bold">התקשרו {agent.phone}</a>}
+          <p className="mt-3 text-[17px] opacity-90">אני {agent.firstName}, ואשמח ללוות אתכם — בין אם אתם קונים, מוכרים או רק מתלבטים. השאירו פרטים ואחזור אליכם באופן אישי.</p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            {agent.whatsapp && <a href={agent.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-background)] px-7 py-4 text-[16px] font-bold text-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
+            {agent.tel && <a href={agent.tel} className="rounded-xl border border-white/40 px-7 py-4 text-[16px] font-bold">התקשרו {agent.phone}</a>}
           </div>
         </div>
-        <div className="rounded-2xl bg-[var(--brand-background)] p-6 text-[var(--brand-text)]">
-          <h3 className="mb-4 text-[17px] font-black">השאירו פרטים</h3>
+        <div className="rounded-2xl bg-[var(--brand-background)] p-7 text-[var(--brand-text)] sm:p-8">
+          <h3 className="mb-4 text-[19px] font-black">השאירו פרטים</h3>
           <AgentLeadForm slug={slug} variant="contact" cta="שליחת פנייה" accent={brand.primary} />
         </div>
       </div>

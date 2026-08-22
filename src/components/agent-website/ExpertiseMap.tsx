@@ -11,7 +11,7 @@ import { AreaChips } from "./ui";
 
 const ZonoMap = dynamic(() => import("@/components/maps/ZonoMap").then((m) => m.ZonoMap), {
   ssr: false,
-  loading: () => <div className="grid h-full min-h-[340px] w-full place-items-center rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-muted)]">טוען מפה…</div>,
+  loading: () => <div className="grid h-full min-h-[440px] w-full place-items-center rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-muted)]">טוען מפה…</div>,
 });
 
 const money = (n: number | null) => (typeof n === "number" && n > 0 ? `₪${n.toLocaleString("he-IL")}` : null);
@@ -33,8 +33,8 @@ export function ExpertiseMap({ points, areas, primaryArea, propertiesHref, secti
       <div className="mx-auto grid w-full max-w-7xl gap-8 px-5 py-14 sm:px-8 lg:grid-cols-[1.4fr_1fr] lg:py-20">
         <div className="order-2 lg:order-1">
           {hasMap ? (
-            <div className="overflow-hidden rounded-2xl border border-[var(--brand-border)]">
-              <ZonoMap points={mapPoints} heightClass="h-[420px]" clusterThreshold={5} markersWithHeat heatmap={useHeat} markerRevealZoom={15} emptyMessage="אין עדיין נכסים ממופים" />
+            <div className="overflow-hidden rounded-2xl border border-[var(--brand-border)] shadow-[0_24px_60px_-40px_rgba(15,23,42,0.4)]">
+              <ZonoMap points={mapPoints} heightClass="h-[520px]" clusterThreshold={5} markersWithHeat heatmap={useHeat} markerRevealZoom={15} emptyMessage="אין עדיין נכסים ממופים" />
             </div>
           ) : (
             <AreaFallback areas={areas} />
@@ -42,9 +42,9 @@ export function ExpertiseMap({ points, areas, primaryArea, propertiesHref, secti
         </div>
 
         <div className="order-1 flex flex-col justify-center lg:order-2">
-          <div className="mb-1 text-[13px] font-bold text-[color:var(--brand-link)]">אזורי התמחות</div>
-          <h2 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{heading}</h2>
-          <p className="mt-3 text-[15px] leading-relaxed text-[var(--brand-muted)]">היכרות מעמיקה עם האזור מביאה תוצאות — כל רחוב, כל שכונה, וכל הזדמנות.</p>
+          <div className="mb-2 text-[14px] font-bold text-[color:var(--brand-link)]">אזורי התמחות</div>
+          <h2 className="text-[28px] font-black leading-[1.08] tracking-tight text-[var(--brand-text)] sm:text-[40px]">{heading}</h2>
+          <p className="mt-4 text-[17px] leading-relaxed text-[var(--brand-muted)]">היכרות מעמיקה עם האזור מביאה תוצאות — כל רחוב, כל שכונה, וכל הזדמנות.</p>
 
           {areas.length > 0 && (
             <div className="mt-5">
@@ -64,7 +64,7 @@ export function ExpertiseMap({ points, areas, primaryArea, propertiesHref, secti
             </div>
           )}
 
-          <Link href={propertiesHref} className="mt-7 inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-[14px] font-bold text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)]">
+          <Link href={propertiesHref} className="mt-8 inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[16px] font-black text-[var(--brand-on-primary)] transition hover:bg-[color:var(--brand-primary-hover)]">
             צפו בנכסים באזור
           </Link>
         </div>
@@ -75,7 +75,7 @@ export function ExpertiseMap({ points, areas, primaryArea, propertiesHref, secti
 
 function AreaFallback({ areas }: { areas: SiteArea[] }) {
   return (
-    <div className="grid min-h-[340px] grid-cols-2 gap-3 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-5 sm:grid-cols-3">
+    <div className="grid min-h-[440px] grid-cols-2 gap-3 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-5 sm:grid-cols-3">
       {areas.slice(0, 9).map((a) => (
         <div key={a.name} className="flex flex-col justify-center rounded-xl border border-[var(--brand-border)] p-4 text-center">
           <div className="text-[15px] font-black text-[var(--brand-text)]">{a.name}</div>

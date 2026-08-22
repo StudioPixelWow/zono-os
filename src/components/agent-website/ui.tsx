@@ -25,8 +25,8 @@ export function SectionShell({ id, eyebrow, title, subtitle, action, children, t
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <div>
               {eyebrow && <div className="mb-1 text-[13px] font-bold tracking-wide text-[color:var(--brand-link)]">{eyebrow}</div>}
-              {title && <h2 className="text-2xl font-black leading-tight text-[var(--brand-text)] sm:text-3xl">{title}</h2>}
-              {subtitle && <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--brand-muted)]">{subtitle}</p>}
+              {title && <h2 className="text-[28px] font-black leading-[1.08] tracking-tight text-[var(--brand-text)] sm:text-[40px]">{title}</h2>}
+              {subtitle && <p className="mt-3 max-w-2xl text-[17px] leading-relaxed text-[var(--brand-muted)]">{subtitle}</p>}
             </div>
             {action}
           </div>
@@ -74,23 +74,23 @@ export function AgentPropertyCard({ property }: { property: SiteProperty }) {
     >
       <div className="relative aspect-[4/3] overflow-hidden">
         <FavoriteButton label={`שמירת ${property.title} למועדפים`} />
-        {kindLabel && <span className="absolute start-3 top-3 z-10 rounded-full bg-[var(--brand-primary)] px-2.5 py-1 text-[11px] font-black text-[var(--brand-on-primary)] shadow">{kindLabel}</span>}
-        {property.tag && property.tag !== kindLabel && <span className="absolute end-3 top-3 z-10 rounded-lg bg-white/90 px-2.5 py-1 text-[11px] font-black text-[var(--brand-text)] shadow-sm backdrop-blur">{property.tag}</span>}
+        {kindLabel && <span className="absolute start-3 top-3 z-10 rounded-full bg-[var(--brand-primary)] px-3 py-1 text-[12px] font-black text-[var(--brand-on-primary)] shadow">{kindLabel}</span>}
+        {property.tag && property.tag !== kindLabel && <span className="absolute end-3 top-3 z-10 rounded-lg bg-white/90 px-3 py-1 text-[12px] font-black text-[var(--brand-text)] shadow-sm backdrop-blur">{property.tag}</span>}
         {property.image
           ? <img src={property.image} alt={property.title} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" />
           : <PropertyBrandFallback />}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent p-4 pt-10">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-5 pt-12">
           {priceLabel
-            ? <div className="text-[19px] font-black text-white drop-shadow-sm">{priceLabel}</div>
-            : <div className="text-[13px] font-bold text-white/90">מחיר לפי פנייה</div>}
+            ? <div className="text-[24px] font-black text-white drop-shadow-sm">{priceLabel}</div>
+            : <div className="text-[14px] font-bold text-white/90">מחיר לפי פנייה</div>}
         </div>
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-4">
-        <div className="line-clamp-1 text-[15px] font-black text-[var(--brand-text)]">{property.title}</div>
-        {loc && <div className="line-clamp-1 text-[13px] text-[var(--brand-muted)]">{loc}</div>}
+      <div className="flex flex-1 flex-col gap-1.5 p-5">
+        <div className="line-clamp-1 text-[18px] font-black text-[var(--brand-text)]">{property.title}</div>
+        {loc && <div className="line-clamp-1 text-[14px] text-[var(--brand-muted)]">{loc}</div>}
         {meta.length > 0 && (
-          <div className="mt-1.5 flex items-center gap-2.5 text-[12px] font-semibold text-[var(--brand-muted)]">
-            {meta.map((m, i) => <span key={i} className="flex items-center gap-2.5">{i > 0 && <i className="h-3 w-px bg-[var(--brand-border)]" />}{m}</span>)}
+          <div className="mt-2 flex items-center gap-3 text-[14px] font-semibold text-[var(--brand-text)]">
+            {meta.map((m, i) => <span key={i} className="flex items-center gap-3">{i > 0 && <i className="h-3.5 w-px bg-[var(--brand-border)]" />}{m}</span>)}
           </div>
         )}
       </div>
@@ -98,14 +98,16 @@ export function AgentPropertyCard({ property }: { property: SiteProperty }) {
   );
 }
 
-/** Big trust-numbers strip (only real values). */
+/** Centered proof composition of real trust-numbers — large numbers, clear
+ *  labels, a vertical divider between metrics (deliberately balanced for the
+ *  common 2-metric case). Only real values; never fabricated. */
 export function StatStrip({ stats }: { stats: SiteStat[] }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 sm:justify-start">
+    <div className="mx-auto flex max-w-3xl flex-wrap items-stretch justify-center divide-x divide-[var(--brand-border)] rtl:divide-x-reverse">
       {stats.map((s, i) => (
-        <div key={i} className="text-center sm:text-start">
-          <div className="text-3xl font-black text-[color:var(--brand-link)] sm:text-4xl">{s.value}</div>
-          <div className="mt-1 text-[13px] font-semibold text-[var(--brand-muted)]">{s.label}</div>
+        <div key={i} className="flex min-w-[150px] flex-1 flex-col items-center px-8 py-2 text-center sm:px-12">
+          <div className="text-[52px] font-black leading-none tracking-tight text-[color:var(--brand-link)] sm:text-[68px]">{s.value}</div>
+          <div className="mt-3 text-[15px] font-bold text-[var(--brand-muted)] sm:text-[16px]">{s.label}</div>
         </div>
       ))}
     </div>
@@ -116,11 +118,11 @@ export function StatStrip({ stats }: { stats: SiteStat[] }) {
 export function ProofPoints({ points }: { points: SiteStat[] }) {
   if (!points.length) return null;
   return (
-    <div className="flex flex-wrap gap-x-8 gap-y-3">
+    <div className="flex flex-wrap gap-x-9 gap-y-3">
       {points.map((p, i) => (
         <div key={i} className="flex items-baseline gap-2">
-          <span className="text-xl font-black text-[var(--brand-text)]">{p.value}</span>
-          <span className="text-[13px] font-semibold text-[var(--brand-muted)]">{p.label}</span>
+          <span className="text-2xl font-black text-[var(--brand-text)]">{p.value}</span>
+          <span className="text-[14px] font-semibold text-[var(--brand-muted)]">{p.label}</span>
         </div>
       ))}
     </div>
