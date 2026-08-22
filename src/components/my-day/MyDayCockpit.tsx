@@ -10,9 +10,10 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import type {
   MyDayCockpit as Cockpit, CockpitAction, CockpitTimelineItem, CockpitOpportunity,
-  CockpitClient, CockpitInsight, CockpitRecruit, CockpitPipelineStage,
+  CockpitClient, CockpitInsight, CockpitRecruit,
 } from "@/lib/my-day/service";
 import { transactionBadge } from "@/lib/property/transaction";
+import { DealStagePreview } from "./DealStagePreview";
 
 const CARD = "bg-card border-line rounded-[22px] border shadow-[var(--shadow-card)] flex flex-col min-h-0";
 const TONE_SOFT: Record<string, string> = {
@@ -143,21 +144,6 @@ function Insight({ i }: { i: CockpitInsight }) {
 }
 
 // ── Change #5 — pipeline: a STEPPED funnel (count chip + full label + spine).
-// Counts are shown as counts, never as identical width-encoded "progress" bars.
-function StageStep({ s, last }: { s: CockpitPipelineStage; last: boolean }) {
-  return (
-    <div className="flex items-stretch gap-2.5">
-      <div className="flex flex-col items-center">
-        <span className="bg-brand-soft text-brand-strong grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[13px] font-black tabular-nums">{s.count}</span>
-        {!last && <span className="bg-line my-0.5 w-px flex-1" />}
-      </div>
-      <div className="flex flex-1 items-center pb-1.5">
-        <span className="text-ink text-[12.5px] font-bold leading-tight">{s.label}</span>
-        {s.value > 0 && <span className="text-muted mr-auto text-[11px] font-semibold tabular-nums">{`₪${Math.round(s.value / 1000)}K`}</span>}
-      </div>
-    </div>
-  );
-}
 
 // Transaction pill over an image — solid semantic fill + white text so it stays
 // legible over any photo (never color-only; the word מכירה/השכרה is always shown).
@@ -312,7 +298,7 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
                       <div className="text-success text-base font-black leading-tight">{ilsK(data.pipeline.weightedRevenue)}</div>
                     </div>
                   </div>
-                  <div className="flex flex-col">{stages.map((s, i) => <StageStep key={s.stage} s={s} last={i === stages.length - 1} />)}</div>
+                  <div className="flex flex-col">{stages.map((s, i) => <DealStagePreview key={s.stage} stage={s.stage} label={s.label} count={s.count} value={s.value} last={i === stages.length - 1} />)}</div>
                   {data.insights.length > 0 && <div className="border-line flex flex-col border-t pt-1.5">{data.insights.map((i) => <Insight key={i.id} i={i} />)}</div>}
                 </div>
               )}
