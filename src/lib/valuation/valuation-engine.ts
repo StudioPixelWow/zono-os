@@ -680,7 +680,7 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
   // Confidence — ONE canonical, evidence-calibrated model (§6). Broad (city) +
   // stale + dispersed + type-mismatched evidence pulls it down; near/recent/same-
   // type/tight evidence pushes it up. No hardcoded outcomes.
-  const confidenceScore = usable.length === 0
+  let confidenceScore = usable.length === 0
     ? clamp(Math.min(35, Math.round(market.dataQualityScore * 0.3) + 10), 5, 35) // market-baseline-only cap
     : computeConfidence({
         tier: evidenceTier,
@@ -693,6 +693,18 @@ export function runValuation({ input, comparables: rawComparables, brokerSold, m
         relIQR: disp.relIQR,
         hasGeo,
       });
+  // SOLD-ANCHOR SAFETY (AVM 3.2 acceptance — proven defect): when the proximity
+  // ladder narrows to a working set with NO closed transactions (e.g. a geocoded
+  // subject whose nearest tier holds only active listings), the §12 sold-cap has
+  // nothing to anchor to and asking prices drive the whole estimate. Such an
+  // asking-only result must never read as high confidence — cap it to medium and
+  // widen the range, so nearby asking can never overpower (absent) sold evidence.
+  const soldInUsable = usable.filter((c) => c.comparableType === "sold").length;
+  if (soldInUsable === 0 && usable.length > 0) {
+    confidenceScore = Math.min(confidenceScore, 55);
+    if (!reasonCodes.includes("only_active_listings")) reasonCodes.push("only_active_listings");
+    reasonCodes.push("asking_only_no_sold_anchor");
+  }
   const confidenceLevel: ConfidenceLevel = confidenceBand(confidenceScore);
 
   // Range from REAL ₪/m² dispersion + confidence (§7) — no cosmetic fixed ±5%.
