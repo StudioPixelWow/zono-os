@@ -134,8 +134,8 @@ export function LoginExperience() {
                 src="/characters/zi/zi-login-access.png"
                 alt=""
                 aria-hidden="true"
-                width={620}
-                height={620}
+                width={623}
+                height={895}
                 priority
                 className="zlogin-zi-img"
                 draggable={false}
