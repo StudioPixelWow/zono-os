@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ============================================================================
 // ZONO AVM 3.0 — engine integration (runs under tsx: `node --import tsx --test`).
 // Proves the engine-level behaviors that need the full valuation-engine (which
