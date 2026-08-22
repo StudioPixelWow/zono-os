@@ -18,6 +18,7 @@ import { getPropertyLifecycleControlCenter } from "@/lib/properties/control-cent
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { recommendedBuyersForProperty } from "@/lib/matching-intelligence/service";
+import { getPropertyBuyerMatches } from "@/lib/matching-intelligence/property-buyer-matches";
 import { getPropertySellers } from "@/lib/sellers/service360";
 import { validatePropertySellerReadiness } from "@/lib/sellers/propertySellers";
 import { resolvePropertyContactForView } from "@/lib/properties/contact/property-contact-service";
@@ -79,6 +80,7 @@ export default async function PropertyDetailsPage({
     propertySellers,
     sellerReadiness,
     contactCta,
+    buyerMatches,
   ] = await Promise.all([
     getPropertyActivities(id),
     getPropertyNotes(id),
@@ -95,6 +97,7 @@ export default async function PropertyDetailsPage({
     getPropertySellers(id),
     validatePropertySellerReadiness(id),
     resolvePropertyContactForView(property),
+    getPropertyBuyerMatches(id, { price: property.price, city: property.city, neighborhood: property.neighborhood, rooms: property.rooms }).catch(() => []),
   ]);
 
   // The canonical journey + the asset checklist context. No legacy stage anywhere.
@@ -147,6 +150,7 @@ export default async function PropertyDetailsPage({
       relationships={relationships}
       activitySummary={activitySummary}
       recommendedBuyers={recommendedBuyers}
+      buyerMatches={buyerMatches}
       propertySellers={propertySellers}
       sellerReadiness={sellerReadiness}
       contactCta={contactCta}

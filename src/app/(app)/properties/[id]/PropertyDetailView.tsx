@@ -33,6 +33,8 @@ import { EntityTimeline } from "@/components/activity/EntityTimeline";
 import { ActivitySummaryCard } from "@/components/activity/ActivitySummaryCard";
 import { RelationshipGraphMini } from "@/components/activity/RelationshipGraphMini";
 import { RecommendedMatches } from "@/components/activity/RecommendedMatches";
+import { BuyerMatchList } from "./BuyerMatchCard";
+import type { BuyerMatchView } from "@/lib/matching-intelligence/property-buyer-matches";
 import type {
   ActivityEventRow,
   ActivitySummary,
@@ -107,7 +109,7 @@ function Fold({ title, icon, children, open = false }: { title: string; icon: st
 
 export function PropertyDetailView({
   property: p, activities, notes, documents, media, tasks, journey, commandCenter,
-  timeline, relationships, activitySummary, recommendedBuyers, propertySellers,
+  timeline, relationships, activitySummary, recommendedBuyers, buyerMatches, propertySellers,
   sellerReadiness, contactCta, marketingSlot, calendarSlot, documentsSlot,
   approvalSlot, recommendationsSlot, contextSlot, sellersSlot, controlSlot, canonicalNextAction,
 }: {
@@ -123,6 +125,7 @@ export function PropertyDetailView({
   relationships: RelationshipRow[];
   activitySummary: ActivitySummary;
   recommendedBuyers: import("@/components/activity/RecommendedMatches").RecoItemView[];
+  buyerMatches?: BuyerMatchView[];
   propertySellers: PropertySellerView[];
   sellerReadiness: SellerReadiness;
   contactCta: ResolvedPropertyContact;
@@ -384,9 +387,9 @@ export function PropertyDetailView({
 
         {tab === "buyers" && (
           <div className="flex flex-col gap-5">
-            <div className="bg-card border-line rounded-[20px] border p-5">
-              <RecommendedMatches title="קונים מומלצים לנכס" emptyText="אין התאמות עדיין — חשב התאמות במסך 'התאמות'." items={recommendedBuyers} />
-            </div>
+            {buyerMatches && buyerMatches.length > 0
+              ? <BuyerMatchList matches={buyerMatches} />
+              : <div className="bg-card border-line rounded-[20px] border p-5"><RecommendedMatches title="קונים מומלצים לנכס" emptyText="אין התאמות עדיין — חשב התאמות במסך 'התאמות'." items={recommendedBuyers} /></div>}
             {recommendationsSlot}
           </div>
         )}
