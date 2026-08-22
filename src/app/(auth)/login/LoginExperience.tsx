@@ -122,6 +122,7 @@ export function LoginExperience() {
             transition={{ delay: reduce ? 0 : 0.3, duration: 0.6, ease: EASE }}
           >
             <div className="zlogin-zi-stage">
+              <span className="zlogin-zi-ground" aria-hidden="true" />
               <span className="zlogin-zi-glow" aria-hidden="true" />
               <Image
                 src="/characters/zi/zi-login-access.png"
@@ -134,6 +135,10 @@ export function LoginExperience() {
                 draggable={false}
               />
               <span className="zlogin-zi-floor" aria-hidden="true" />
+              <div className="zlogin-zi-say">
+                <p className="zlogin-zi-say__t">הכול מוכן לכניסה</p>
+                <p className="zlogin-zi-say__s">ZI תחכה לכם גם בצד השני</p>
+              </div>
             </div>
           </motion.aside>
 
