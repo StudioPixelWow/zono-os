@@ -63,6 +63,27 @@ export async function applyRecommendationFeedback(
     } catch { /* edge is best-effort (may already exist) */ }
   }
 
+  // 3c) Buyer signal → a broker-visible timeline event (interested/rejected have
+  //     no task, so without this the broker never sees them). Service-role write
+  //     with the KNOWN org — the portal path has no session. Best-effort.
+  if (contactType === "buyer" && (action === "interested" || action === "rejected" || action === "viewing_requested")) {
+    try {
+      const { data: prop } = await db.from("properties").select("title,city").eq("id", propertyId).eq("org_id", orgId).maybeSingle();
+      const label = (prop as any)?.title?.trim() || [(prop as any)?.city, "נכס"].filter(Boolean).join(" ") || "נכס";
+      const verb = action === "interested" ? "סימן/ה שהנכס מעניין" : action === "rejected" ? "סימן/ה שהנכס לא מתאים" : "ביקש/ה לראות את הנכס";
+      await db.from("activity_events").insert({
+        org_id: orgId, actor_user_id: null, actor_type: "system",
+        event_type: "buyer.interaction.created", entity_type: "buyer", entity_id: contactId,
+        related_entity_type: "property", related_entity_id: propertyId,
+        title: `הקונה ${verb}`, description: label,
+        channel: "portal", direction: "inbound",
+        sentiment: action === "rejected" ? "negative" : "positive",
+        metadata: { source: "buyer_portal", action, propertyId },
+        occurred_at: new Date().toISOString(),
+      });
+    } catch { /* timeline entry is best-effort */ }
+  }
+
   // 3b) Talk-to-agent → an idempotent high-priority callback task for the owner.
   if (action === "talk_to_agent") {
     try {

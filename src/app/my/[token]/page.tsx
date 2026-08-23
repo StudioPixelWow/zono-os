@@ -54,6 +54,7 @@ function Card({ token, c }: { token: string; c: PortalCard }) {
       <div style={{ padding: 16 }}>
         <h3 style={{ margin: 0, color: "#0f172a", fontSize: 18, fontWeight: 800 }}>{c.title}</h3>
         <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 14 }}>{[c.city, c.rooms ? `${c.rooms} חד'` : "", ils(c.price)].filter(Boolean).join(" · ")}</p>
+        {c.reason && <p style={{ margin: "10px 0 0", padding: "8px 11px", background: "#f5f3ff", borderRadius: 10, color: "#5b21b6", fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>למה זה מתאים לך: {c.reason}</p>}
         {c.viewingAt && (c.status === "viewing_scheduled") && <p style={{ margin: "8px 0 0", color: "#1d4ed8", fontSize: 13, fontWeight: 700 }}>🗓️ ביקור: {dtime(c.viewingAt)}</p>}
 
         {!c.available ? (

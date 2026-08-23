@@ -119,12 +119,19 @@ export async function getBuyerPortalData(token: string, db?: any): Promise<Buyer
   const recos = (recoRes?.data ?? []) as Array<{ property_id: string; status: string; price_at_send: number | null; responded_at: string | null; recommended_at: string | null; match_score: number | null }>;
   const propertyIds = [...new Set(recos.map((r) => r.property_id))];
 
-  const [propsRes, meetRes] = await Promise.all([
+  const [propsRes, meetRes, matchRes] = await Promise.all([
     propertyIds.length ? client.from("properties").select("id,title,city,rooms,price,status,primary_image_url").in("id", propertyIds).eq("org_id", p.o) : Promise.resolve({ data: [] }),
     propertyIds.length ? client.from("meetings").select("property_id,status,start_at").eq("org_id", p.o).eq("buyer_id", p.t === "buyer" ? p.c : "00000000-0000-0000-0000-000000000000").in("type", VIEWING_TYPES).in("property_id", propertyIds) : Promise.resolve({ data: [] }),
+    // Match reason — the SAME canonical value the broker sees (strongest_advantage).
+    // Buyers only; a lead has no buyer_id in match_intelligence_profiles.
+    propertyIds.length && p.t === "buyer" ? client.from("match_intelligence_profiles").select("property_id,strongest_advantage").eq("org_id", p.o).eq("buyer_id", p.c).in("property_id", propertyIds) : Promise.resolve({ data: [] }),
   ]);
   const propById = new Map<string, any>();
   for (const pr of (propsRes?.data ?? []) as any[]) propById.set(pr.id, pr);
+  const reasonByProp = new Map<string, string>();
+  for (const m of (matchRes?.data ?? []) as Array<{ property_id: string; strongest_advantage: string | null }>) {
+    if (m.strongest_advantage) reasonByProp.set(m.property_id, m.strongest_advantage);
+  }
   // property → best viewing signal
   const viewByProp = new Map<string, { status: string; at: string | null }>();
   for (const m of (meetRes?.data ?? []) as Array<{ property_id: string; status: string; start_at: string | null }>) {
@@ -149,7 +156,7 @@ export async function getBuyerPortalData(token: string, db?: any): Promise<Buyer
     cards.push({
       propertyId: r.property_id, title: pr.title ?? "נכס", city: pr.city ?? null, rooms: pr.rooms ?? null, price: pr.price ?? null,
       imageUrl: pr.primary_image_url ?? null, status, statusLabel: CARD_STATUS_LABEL[status], available, priceDrop,
-      viewingAt: mv?.at ?? null, reason: null, feedbackGiven,
+      viewingAt: mv?.at ?? null, reason: reasonByProp.get(r.property_id) ?? null, feedbackGiven,
     });
     if (viewing === "scheduled") {
       upcoming.push({ propertyId: r.property_id, propertyTitle: pr.title ?? "נכס", at: mv?.at ?? null, status: mv!.status, feedbackPending: false });
