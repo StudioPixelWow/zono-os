@@ -189,8 +189,49 @@ function NewDocumentForm({ r }: { r: Runner }) {
 }
 
 function DocList({ docs, r }: { docs: DocumentSummary[]; r: Runner }) {
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  const s = q.trim().toLowerCase();
+  const filtered = s
+    ? docs.filter((d) => d.title.toLowerCase().includes(s) || (d.categoryLabel ?? "").toLowerCase().includes(s) || signatureStatusLabel(d.signature_status).toLowerCase().includes(s))
+    : docs;
+
+  const total = filtered.length;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const rows = filtered.slice((safePage - 1) * PAGE_SIZE, (safePage - 1) * PAGE_SIZE + PAGE_SIZE);
+  const from = total === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const to = Math.min(safePage * PAGE_SIZE, total);
+  const onSearch = (v: string) => { setQ(v); setPage(1); };
+
   if (docs.length === 0) return <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין מסמכים להצגה</div>;
-  return <div className="flex flex-col gap-2">{docs.map((d) => <DocCard key={d.id} d={d} r={r} />)}</div>;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="relative">
+        <span className="text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"><Icon name="Search" size={15} /></span>
+        <input value={q} onChange={(e) => onSearch(e.target.value)} placeholder="חיפוש לפי כותרת, קטגוריה או סטטוס" className="bg-surface border-line text-ink focus:border-brand-light h-9 w-full rounded-xl border pr-9 pl-3 text-[13px] outline-none" />
+      </div>
+      {total === 0 ? (
+        <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">לא נמצאו מסמכים התואמים לחיפוש</div>
+      ) : (
+        <>
+          {rows.map((d) => <DocCard key={d.id} d={d} r={r} />)}
+          {total > PAGE_SIZE && (
+            <div className="text-muted flex flex-wrap items-center justify-between gap-2 px-1 pt-1 text-[12px]">
+              <span>מציג {from}–{to} מתוך {total}</span>
+              <div className="flex items-center gap-1.5">
+                <button disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="border-line bg-surface text-ink grid h-8 w-8 place-items-center rounded-lg border transition disabled:opacity-40"><Icon name="ChevronRight" size={15} /></button>
+                <span className="min-w-[60px] text-center font-bold">{safePage} / {pageCount}</span>
+                <button disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)} className="border-line bg-surface text-ink grid h-8 w-8 place-items-center rounded-lg border transition disabled:opacity-40"><Icon name="ChevronLeft" size={15} /></button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 function DocCard({ d, r }: { d: DocumentSummary; r: Runner }) {
