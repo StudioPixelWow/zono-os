@@ -226,6 +226,17 @@ export async function archiveProperty(id: string): Promise<void> {
   await setPropertyStatus(id, "archived");
 }
 
+/** Reassign the responsible agent (manager+). Writes the canonical assigned_agent_id
+ *  the inventory scoping + card avatar read. Org-scoped; agentUserId=null unassigns. */
+export async function assignPropertyAgent(id: string, agentUserId: string | null): Promise<void> {
+  const { orgId, svc } = await propertyWriteCtx("manager");
+  const { error } = await svc
+    .from("properties")
+    .update({ assigned_agent_id: agentUserId })
+    .eq("id", id).eq("org_id", orgId);
+  if (error) throw new Error(error.message);
+}
+
 /** Remove the caller's untouched empty drafts (service-role, owner-scoped). */
 async function cleanupAbandonedDrafts(userId: string): Promise<void> {
   try {
