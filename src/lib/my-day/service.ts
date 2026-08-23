@@ -16,6 +16,9 @@ import { getSocialLeadsBoard } from "@/lib/social/service";
 import { getDealsBoard } from "@/lib/deals/service";
 import { listBuyerBoard } from "@/lib/buyers/repository";
 import { externalListingRepository } from "@/lib/external-listings/repository";
+import { matchIntelligenceRepository } from "@/lib/matching-intelligence/repository";
+import { PROFILE_TO_DEAL_STAGE } from "@/lib/deals/stage-map";
+import { createClient } from "@/lib/supabase/server";
 import { normalizeListingKind, formatPropertyPrice, type ListingKind } from "@/lib/property/transaction";
 
 type Tone = "brand" | "success" | "warning" | "danger" | "neutral";
@@ -29,6 +32,10 @@ export interface CockpitOpportunity { id: string; kind: string; title: string; d
 export interface CockpitClient { id: string; name: string; sub: string; tag: string | null; tagTone: Tone; href: string; whatsappUrl: string | null }
 // A private-owner property (no broker / no exclusivity) the agent could RECRUIT.
 export interface CockpitRecruit { id: string; title: string; sub: string; details: string | null; price: string; kind: ListingKind | null; badge: string; imageUrl: string | null; href: string; whatsappUrl: string | null }
+// An individual deal that needs attention (at-risk / closing / high-value).
+export interface CockpitDeal { id: string; title: string; stageLabel: string; value: string; reason: string; tone: Tone; href: string }
+// A real property that matches the office's ACTIVE clients (grouped by match count).
+export interface CockpitMatchProperty { id: string; title: string; sub: string; details: string | null; price: string; kind: ListingKind | null; matchCount: number; imageUrl: string | null; href: string }
 
 export interface MyDayCockpit {
   agentName: string;
@@ -44,6 +51,8 @@ export interface MyDayCockpit {
   nextEventLabel: string | null;
   timelineTotal: number;
   pipeline: { stages: CockpitPipelineStage[]; pipelineValue: number; weightedRevenue: number };
+  dealsAttention: CockpitDeal[];
+  dealsTotal: number;
   insights: CockpitInsight[];
   opportunities: CockpitOpportunity[];
   opportunitiesTotal: number;
@@ -51,7 +60,75 @@ export interface MyDayCockpit {
   clientsTotal: number;
   recruitment: CockpitRecruit[];
   recruitmentTotal: number;
+  matchedProperties: CockpitMatchProperty[];
   state: "active" | "quiet";
+}
+
+/**
+ * REAL "properties matching your active clients" — grouped from the canonical
+ * match_intelligence_profiles (active, non-closed matches) by property, counting
+ * how many active buyers match each, then joined to live property details. Never
+ * fabricated: only properties that actually have ≥1 active buyer match appear.
+ */
+async function matchedPropertiesForActiveClients(limit: number): Promise<CockpitMatchProperty[]> {
+  try {
+    const matches = await matchIntelligenceRepository.listForOrg();
+    const active = matches.filter((m) =>
+      (m as { match_status?: string }).match_status === "active" &&
+      (m as { match_stage?: string }).match_stage !== "closed" &&
+      (m as { match_stage?: string }).match_stage !== "lost" &&
+      (m as { property_id?: string }).property_id && (m as { buyer_id?: string }).buyer_id,
+    );
+    if (active.length === 0) return [];
+    // group by property → distinct buyer count + best opportunity score
+    const byProp = new Map<string, { buyers: Set<string>; score: number }>();
+    for (const m of active) {
+      const pid = (m as { property_id: string }).property_id;
+      const bid = (m as { buyer_id: string }).buyer_id;
+      const score = (m as { opportunity_score?: number }).opportunity_score ?? 0;
+      const cur = byProp.get(pid) ?? { buyers: new Set<string>(), score: 0 };
+      cur.buyers.add(bid);
+      if (score > cur.score) cur.score = score;
+      byProp.set(pid, cur);
+    }
+    const ranked = [...byProp.entries()]
+      .sort((a, b) => (b[1].buyers.size - a[1].buyers.size) || (b[1].score - a[1].score))
+      .slice(0, Math.max(limit, 6));
+    const ids = ranked.map(([pid]) => pid);
+    if (ids.length === 0) return [];
+    const supabase = await createClient();
+    const { data } = await supabase.from("properties")
+      .select("id,title,city,neighborhood,price,monthly_rent,rooms,size_sqm,floor,listing_kind,primary_image_url,status")
+      .in("id", ids);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const pById = new Map(rows.map((p) => [p.id as string, p]));
+    const out: CockpitMatchProperty[] = [];
+    for (const [pid, agg] of ranked) {
+      const p = pById.get(pid);
+      if (!p) continue;
+      const status = (p.status as string) ?? "";
+      if (!["active", "published", "under_offer"].includes(status)) continue; // only live listings
+      const rooms = p.rooms != null ? `${p.rooms} חד׳` : null;
+      const place = (p.neighborhood as string) || (p.city as string) || null;
+      const area = p.size_sqm != null ? `${Math.round(p.size_sqm as number)} מ״ר` : null;
+      const floor = p.floor != null ? `קומה ${p.floor}` : null;
+      const kind = normalizeListingKind(p.listing_kind as string | null);
+      const priceNum = kind === "rent" ? (p.monthly_rent as number | null) : (p.price as number | null);
+      out.push({
+        id: pid,
+        title: ((p.title as string) || "").trim() || place || "נכס",
+        sub: [rooms, place].filter(Boolean).join(" · "),
+        details: [area, floor].filter(Boolean).join(" · ") || null,
+        price: formatPropertyPrice({ kind, price: priceNum }),
+        kind,
+        matchCount: agg.buyers.size,
+        imageUrl: (p.primary_image_url as string) ?? null,
+        href: `/properties/${pid}`,
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  } catch { return []; }
 }
 
 const DAY_MS = 86_400_000;
@@ -124,7 +201,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   const agentName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "סוכן";
   const cityName = profile?.primary_city ?? null;
 
-  const [queueR, planR, kpiR, tasksR, leadsR, dealsR, buyersR, recruitR] = await Promise.allSettled([
+  const [queueR, planR, kpiR, tasksR, leadsR, dealsR, buyersR, recruitR, matchR] = await Promise.allSettled([
     getBrokerIntelligenceQueue({ limit: 14 }),
     getAgentDailyPlan(),
     getHomeKpiExtras(),
@@ -133,6 +210,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
     getDealsBoard(),
     listBuyerBoard(),
     externalListingRepository.listPrivateOwnerListings(8, cityName),
+    matchedPropertiesForActiveClients(6),
   ]);
   const queue = queueR.status === "fulfilled" ? queueR.value : null;
   const plan = planR.status === "fulfilled" ? planR.value : null;
@@ -142,6 +220,7 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
   const deals = dealsR.status === "fulfilled" ? dealsR.value : null;
   const buyers = buyersR.status === "fulfilled" ? buyersR.value : null;
   const recruitRows = recruitR.status === "fulfilled" ? recruitR.value : [];
+  const matchedProperties = matchR.status === "fulfilled" ? matchR.value : [];
 
   const role = (plan?.plan.role ?? "agent") as "agent" | "manager" | "owner";
   const newLeads = leads?.counts.new ?? 0;
@@ -225,6 +304,30 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
     if (deals.revenue.pipelineValue > 0 && insights.length < 3) insights.push({ id: "pv", icon: "TrendingUp", tone: "brand", text: `${ilsC(deals.revenue.pipelineValue)} פוטנציאל בעסקאות פעילות`, href: "/deals" });
   }
 
+  // ── עסקאות שדורשות תשומת לב — the 3 individual deals that need action now:
+  //    at-risk first, then upcoming closings, then highest-value active. Real rows. ─
+  const dealStageLabel = new Map((deals?.pipeline ?? []).map((s) => [s.stage, s.label]));
+  const dealsAttention: CockpitDeal[] = [];
+  if (deals) {
+    const seenDeal = new Set<string>();
+    const pushDeal = (d: typeof deals.deals[number], reason: string, tone: Tone) => {
+      if (seenDeal.has(d.id) || dealsAttention.length >= 3) return;
+      seenDeal.add(d.id);
+      const canonicalStage = PROFILE_TO_DEAL_STAGE[(d.deal_stage as string) ?? ""] ?? "";
+      dealsAttention.push({
+        id: d.id,
+        title: d.propertyTitle || d.buyerName || "עסקה",
+        stageLabel: dealStageLabel.get(canonicalStage) ?? "",
+        value: d.deal_value ? ilsC(d.deal_value) : "—",
+        reason, tone, href: `/deals/${d.id}`,
+      });
+    };
+    deals.atRisk.forEach((d) => pushDeal(d, "בסיכון", "danger"));
+    deals.upcomingClosings.forEach((d) => pushDeal(d, "לקראת סגירה", "success"));
+    [...deals.deals].sort((a, b) => (b.deal_value ?? 0) - (a.deal_value ?? 0)).forEach((d) => pushDeal(d, "עסקה פעילה", "brand"));
+  }
+  const dealsTotal = deals?.deals.length ?? 0;
+
   // ── לקוחות שדורשים תשומת לב — follow-up buyers, deduped vs the action queue. ──
   const clients: CockpitClient[] = [];
   if (buyers) {
@@ -294,10 +397,10 @@ export async function getMyDayCockpit(): Promise<MyDayCockpit> {
     ziBrief, kpis,
     actions, actionsTotal, urgentTotal,
     timeline, nextEventLabel, timelineTotal: timelineAll.length,
-    pipeline, insights,
+    pipeline, dealsAttention, dealsTotal, insights,
     opportunities, opportunitiesTotal,
     clients, clientsTotal,
-    recruitment, recruitmentTotal,
+    recruitment, recruitmentTotal, matchedProperties,
     state,
   };
 }

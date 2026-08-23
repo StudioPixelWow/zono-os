@@ -45,8 +45,9 @@ export function Sidebar() {
     .sort((a, b) => b.length - a.length)[0] ?? null;
   const itemActive = (href: string) => !href.includes("#") && href === activeHref;
   const activeGroupKey = groups.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
-  // Derived (no effect): active group opens by default, fallback מרכז הבקרה.
-  const openGroupKey = openOverride === undefined ? (activeGroupKey ?? "command") : openOverride;
+  // Derived (no effect): by default ONLY the first group ("היום שלי ומרכז הבקרה")
+  // is open; every other group stays closed/compact until the user opens it.
+  const openGroupKey = openOverride === undefined ? "command" : openOverride;
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -61,7 +62,7 @@ export function Sidebar() {
       style={{ "--chatbot-safe-space": "120px" } as CSSProperties}
       className={cn(
         "bg-card/70 border-line sticky top-0 hidden h-screen shrink-0 flex-col border-s pt-5 pb-[var(--chatbot-safe-space)] backdrop-blur-xl transition-[width] duration-200 lg:flex",
-        collapsed ? "w-[78px] items-center" : "w-72",
+        collapsed ? "w-[78px] items-center" : "w-56",
       )}
     >
       {/* Logo — prominent, aspect-preserved, with breathing room */}
