@@ -178,6 +178,23 @@ export async function getBuyerPortalData(token: string, db?: any): Promise<Buyer
     phone: agentPhone, whatsapp: normalizePhone(agentPhone), avatarUrl: agentRow?.avatar_url ?? null,
   };
 
+  // Portal-open tracking (throttled 6h) → broker timeline "הקונה פתח את הבחירה".
+  // Best-effort; never blocks the customer view. Buyers only (leads have no id here).
+  if (p.t === "buyer") {
+    try {
+      const since = new Date(nowMs - 6 * 3_600_000).toISOString();
+      const { data: recent } = await client.from("activity_events").select("id")
+        .eq("org_id", p.o).eq("entity_id", p.c).eq("event_type", "buyer.portal_opened").gte("occurred_at", since).limit(1).maybeSingle();
+      if (!recent?.id) {
+        await client.from("activity_events").insert({
+          org_id: p.o, actor_user_id: null, actor_type: "system", event_type: "buyer.portal_opened",
+          entity_type: "buyer", entity_id: p.c, title: "הקונה פתח את הבחירה האישית",
+          channel: "portal", direction: "inbound", occurred_at: new Date().toISOString(),
+        });
+      }
+    } catch { /* tracking is best-effort */ }
+  }
+
   return {
     contactType: p.t, firstName: firstNameOf(contact.full_name),
     officeName: (orgRes?.data?.name as string) || "ZONO", agent,

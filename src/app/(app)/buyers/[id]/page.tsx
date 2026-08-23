@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { EntityJourneySection } from "@/components/journey/EntityJourneySection";
+import { BuyerShortlistPanel } from "./BuyerShortlistPanel";
 import {
   getBuyerActivities,
   getBuyerById,
@@ -75,10 +76,12 @@ export default async function BuyerDetailsPage({
 
   // Batch 5.5 (Part 10) — the ONE canonical journey block, shared by all five cockpits.
   const journeySlot = <EntityJourneySection entityType="buyer" entityId={id} />;
+  const shortlistSlot = <BuyerShortlistPanel buyerId={id} />;
 
   return (
     <BuyerDetailView
       journeySlot={journeySlot}
+      shortlistSlot={shortlistSlot}
       buyer={buyer}
       activities={activities}
       tasks={tasks}

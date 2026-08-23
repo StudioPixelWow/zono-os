@@ -87,6 +87,7 @@ export function BuyerDetailView({
   recommendationsSlot,
   graphSlot,
   journeySlot,
+  shortlistSlot,
 }: {
   buyer: BuyerRow;
   activities: ActivityRow[];
@@ -103,6 +104,7 @@ export function BuyerDetailView({
   recommendationsSlot?: ReactNode;
   graphSlot?: ReactNode;
   journeySlot?: ReactNode;
+  shortlistSlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("command");
   const prefs = buyerPreferences(b);
@@ -238,6 +240,7 @@ export function BuyerDetailView({
 
         {tab === "matching" && (
           <div className="flex flex-col gap-5">
+            {shortlistSlot}
             <div className="bg-card border-line rounded-[20px] border p-5">
               <RecommendedMatches title="נכסים מומלצים לקונה" emptyText="אין התאמות עדיין — חשב התאמות במסך 'התאמות'." items={recommendations} />
             </div>

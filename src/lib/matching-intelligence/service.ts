@@ -3,9 +3,9 @@
  * Fuses buyer + property + seller intelligence into match "deal twins" with a
  * closing probability, risks, opportunities and revenue signals. Deterministic.
  */
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
-import { logActivityEvent, getEntityTimeline } from "@/lib/activity/service";
+import { getEntityTimeline } from "@/lib/activity/service";
 import type { Database } from "@/lib/supabase/types";
 import {
   calculateCompatibility,
@@ -26,7 +26,6 @@ import {
 import {
   matchIntelligenceRepository,
   matchObjectionRepository,
-  matchOpportunityRepository,
   matchRiskRepository,
   revenueSignalRepository,
   type MatchObjectionRow,
@@ -38,6 +37,8 @@ import {
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 const COMPAT_THRESHOLD = 40;
+/** A Supabase client (service-role for background jobs, or a passed-in client). */
+type SupabaseLike = ReturnType<typeof createServiceRoleClient>;
 const MAX_MATCHES = 200;
 const revenueScoreOf = (price: number | null) => clamp((price ?? 0) / 50_000);
 
@@ -58,17 +59,42 @@ interface Candidate {
   stage: string;
 }
 
+/** Session entry point (manual "רענן התאמות" button). Delegates to the canonical
+ *  org-scoped engine below — ONE engine, not two. */
 export async function generateMatchesForOrg(): Promise<number> {
-  const orgId = await currentOrgId();
-  const supabase = await createClient();
+  return generateMatchesForOrgId(await currentOrgId());
+}
+
+/** Scheduled safety reconciliation across orgs (cron). Bounded — recomputes each
+ *  org's matches so the buyer's set never goes stale between page opens. Uses the
+ *  service-role engine; failures per-org are isolated. Returns a summary. */
+export async function reconcileAllOrgMatches(opts?: { orgLimit?: number }): Promise<{ orgs: number; matches: number; failed: number }> {
+  const db = createServiceRoleClient();
+  const { data } = await db.from("organizations").select("id").limit(opts?.orgLimit ?? 100);
+  const orgIds = ((data ?? []) as Array<{ id: string }>).map((o) => o.id).filter(Boolean);
+  let matches = 0, failed = 0;
+  for (const id of orgIds) {
+    try { matches += await generateMatchesForOrgId(id, { db }); }
+    catch { failed++; }
+  }
+  return { orgs: orgIds.length, matches, failed };
+}
+
+/** Canonical, background-safe matcher for ONE org. Runs under a service-role
+ *  client with EXPLICIT org filters (never depends on session/RLS), so it is
+ *  callable from crons and event handlers. Same scoring brain as before —
+ *  calculateCompatibility / computeMatchScores / playbook — no second engine.
+ *  Writes match_intelligence_profiles + child tables for this org only. */
+export async function generateMatchesForOrgId(orgId: string, opts?: { db?: SupabaseLike }): Promise<number> {
+  const supabase: SupabaseLike = opts?.db ?? createServiceRoleClient();
   const [bpRes, buyersRes, propsRes, ppRes, spRes, existingRes, visitsRes] = await Promise.all([
-    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_readiness_score,buyer_engagement_score,buyer_trust_score,buyer_financing_score,buyer_conversion_probability,days_since_activity").limit(200),
-    supabase.from("buyers").select("id,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,preferred_types,must_have_parking,must_have_elevator,must_have_safe_room").limit(500),
-    supabase.from("properties").select("id,price,rooms,city,neighborhood,type,has_parking,has_elevator,has_safe_room,seller_id,status").in("status", ["active", "published", "ready"]).limit(300),
-    supabase.from("property_intelligence_profiles").select("property_id,success_score,market_position_score,momentum_score"),
-    supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_confidence_score"),
-    supabase.from("match_intelligence_profiles").select("buyer_id,property_id,match_stage"),
-    supabase.from("entity_relationships").select("source_entity_id,target_entity_id").eq("relationship_type", "buyer_visited_property").eq("status", "active"),
+    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_readiness_score,buyer_engagement_score,buyer_trust_score,buyer_financing_score,buyer_conversion_probability,days_since_activity").eq("org_id", orgId).limit(200),
+    supabase.from("buyers").select("id,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,preferred_types,must_have_parking,must_have_elevator,must_have_safe_room").eq("org_id", orgId).limit(500),
+    supabase.from("properties").select("id,price,rooms,city,neighborhood,type,has_parking,has_elevator,has_safe_room,seller_id,status").eq("org_id", orgId).in("status", ["active", "published", "ready"]).limit(300),
+    supabase.from("property_intelligence_profiles").select("property_id,success_score,market_position_score,momentum_score").eq("org_id", orgId),
+    supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_confidence_score").eq("org_id", orgId),
+    supabase.from("match_intelligence_profiles").select("buyer_id,property_id,match_stage").eq("org_id", orgId),
+    supabase.from("entity_relationships").select("source_entity_id,target_entity_id").eq("org_id", orgId).eq("relationship_type", "buyer_visited_property").eq("status", "active"),
   ]);
 
   const buyerIntel = bpRes.data ?? [];
@@ -133,14 +159,21 @@ export async function generateMatchesForOrg(): Promise<number> {
     };
   });
 
-  await matchIntelligenceRepository.upsertMany(profileRows);
+  if (profileRows.length) {
+    const { error } = await supabase.from("match_intelligence_profiles").upsert(profileRows as never, { onConflict: "org_id,buyer_id,property_id" });
+    if (error) throw new Error(error.message);
+  }
 
-  // Map pair → id (re-read current org matches).
-  const all = await matchIntelligenceRepository.listForOrg();
-  const idByPair = new Map(all.map((m) => [`${m.buyer_id}|${m.property_id}`, m.id]));
+  // Map pair → id (re-read THIS org's matches).
+  const { data: allRows } = await supabase.from("match_intelligence_profiles").select("id,buyer_id,property_id").eq("org_id", orgId);
+  const idByPair = new Map(((allRows ?? []) as Array<{ id: string; buyer_id: string; property_id: string }>).map((m) => [`${m.buyer_id}|${m.property_id}`, m.id]));
 
-  // Regenerate child tables for the org.
-  await Promise.all([matchRiskRepository.clearForOrg(orgId), matchOpportunityRepository.clearForOrg(orgId), revenueSignalRepository.clearForOrg(orgId)]);
+  // Regenerate child tables for THIS org (explicit org delete — service-role safe).
+  await Promise.all([
+    supabase.from("match_risks").delete().eq("org_id", orgId),
+    supabase.from("match_opportunities").delete().eq("org_id", orgId),
+    supabase.from("revenue_signals").delete().eq("org_id", orgId),
+  ]);
 
   const riskRows: Database["public"]["Tables"]["match_risks"]["Insert"][] = [];
   const oppRows: Database["public"]["Tables"]["match_opportunities"]["Insert"][] = [];
@@ -154,11 +187,17 @@ export async function generateMatchesForOrg(): Promise<number> {
     oppRows.push({ org_id: orgId, match_id: matchId, opportunity_score: clamp(c.scores.closing * 0.6 + revenue * 0.4), revenue_score: revenue, urgency_score: clamp(c.scores.timing * 0.5 + c.scores.closing * 0.5), estimated_deal_value: dealValue(c.price), estimated_commission: commission, recommended_action: nextBestMatchActions(c.input, c.stage)[0]?.title ?? null, status: "open" });
     revRows.push({ org_id: orgId, match_id: matchId, estimated_commission: commission, expected_revenue: commission, confidence: c.scores.closing, probability_weighted_revenue: Math.round((commission * c.scores.closing) / 100) });
   }
-  await matchRiskRepository.insertMany(riskRows);
-  await matchOpportunityRepository.insertMany(oppRows);
-  await revenueSignalRepository.insertMany(revRows);
+  if (riskRows.length) await supabase.from("match_risks").insert(riskRows as never);
+  if (oppRows.length) await supabase.from("match_opportunities").insert(oppRows as never);
+  if (revRows.length) await supabase.from("revenue_signals").insert(revRows as never);
 
-  await logActivityEvent({ eventType: "match.score_changed", entityType: "organization", entityId: orgId, title: `חושבו ${kept.length} התאמות`, description: `${kept.length} עסקאות פוטנציאליות עודכנו` });
+  try {
+    await supabase.from("activity_events").insert({
+      org_id: orgId, actor_user_id: null, actor_type: "system", event_type: "match.score_changed",
+      entity_type: "organization", entity_id: orgId, title: `חושבו ${kept.length} התאמות`,
+      description: `${kept.length} עסקאות פוטנציאליות עודכנו`, occurred_at: new Date().toISOString(),
+    } as never);
+  } catch { /* activity is best-effort */ }
   return kept.length;
 }
 

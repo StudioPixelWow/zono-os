@@ -10,6 +10,12 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import type { ContactType } from "./consent";
+import { setShortlistState, type ShortlistState } from "@/lib/buyer-shortlist/service";
+
+// Portal feedback → curated-shortlist state (so the broker's selection reflects it).
+const SHORTLIST_STATE_FOR: Partial<Record<FeedbackAction, ShortlistState>> = {
+  viewed: "viewed", interested: "liked", rejected: "rejected", viewing_requested: "visit_requested",
+};
 
 export type FeedbackAction = "viewed" | "interested" | "rejected" | "viewing_requested" | "talk_to_agent";
 
@@ -49,6 +55,12 @@ export async function applyRecommendationFeedback(
   } else if (action === "talk_to_agent") {
     // Record the response timestamp without changing the preference status.
     await db.from("customer_property_recommendations").update({ responded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", (rec as any).id);
+  }
+
+  // 2b) Mirror onto the broker-curated shortlist state (if this property is on it).
+  if (contactType === "buyer" && SHORTLIST_STATE_FOR[action]) {
+    try { await setShortlistState(orgId, contactId, propertyId, SHORTLIST_STATE_FOR[action] as ShortlistState, db); }
+    catch { /* shortlist mirror is best-effort */ }
   }
 
   // 3) Canonical property-interest edge (only for buyers — the edge vocabulary is
