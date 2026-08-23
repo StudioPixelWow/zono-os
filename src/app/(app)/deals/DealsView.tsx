@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn, formatShekels } from "@/lib/utils";
 import { Icon } from "@/components/dashboard/Icon";
 import { IconSurface } from "@/components/ui/action-surfaces";
@@ -171,14 +172,102 @@ export function DealsView({ board }: { board: DealsBoard }) {
             </Panel>
           </div>
 
-          {/* All deals */}
-          <div>
-            <p className="text-ink mb-3 text-sm font-extrabold">כל העסקאות ({deals.length})</p>
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              {deals.slice(0, 60).map((d) => <DealCard key={d.id} d={d} pending={pending} run={run} />)}
-            </div>
-          </div>
+          {/* All deals — URL-driven search / stage filter / sort / pagination */}
+          <AllDealsSection deals={deals} pending={pending} run={run} />
         </>
+      )}
+    </div>
+  );
+}
+
+const DEAL_SORTS: { value: string; label: string }[] = [
+  { value: "value", label: "שווי (גבוה→נמוך)" }, { value: "probability", label: "סבירות סגירה" },
+  { value: "risk", label: "סיכון (גבוה→נמוך)" }, { value: "closing", label: "סגירה קרובה" },
+];
+const DEAL_PAGE_SIZE = 24;
+
+function AllDealsSection({ deals, pending, run }: { deals: DealRow[]; pending: boolean; run: (fn: () => Promise<unknown>) => void }) {
+  const router = useRouter();
+  const sp = useSearchParams();
+
+  const setParam = useCallback((patch: Record<string, string | null>, resetPage = true) => {
+    const next = new URLSearchParams(sp.toString());
+    for (const [k, v] of Object.entries(patch)) { if (v == null || v === "") next.delete(k); else next.set(k, v); }
+    if (resetPage && !("page" in patch)) next.delete("page");
+    router.push(`/deals?${next.toString()}`, { scroll: false });
+  }, [router, sp]);
+
+  const q = sp.get("q") ?? "";
+  const stage = sp.get("stage") ?? "";
+  const sort = sp.get("sort") ?? "value";
+  const page = Math.max(1, Number(sp.get("page")) || 1);
+
+  const stageOptions = useMemo(() => {
+    const present = new Set(deals.map((d) => d.deal_stage));
+    return DEAL_STAGE_ORDER.filter((s) => present.has(s)).map((s) => ({ value: s, label: DEAL_STAGE_LABEL[s] ?? s }));
+  }, [deals]);
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    const arr = deals.filter((d) => {
+      if (stage && d.deal_stage !== stage) return false;
+      if (!s) return true;
+      return dealTitle(d).toLowerCase().includes(s) || (d.agentName ?? "").toLowerCase().includes(s) || (d.locality ?? "").toLowerCase().includes(s);
+    });
+    arr.sort((a, b) => {
+      switch (sort) {
+        case "probability": return b.deal_probability - a.deal_probability;
+        case "risk": return b.deal_risk - a.deal_risk;
+        case "closing": return (a.expected_close_date ?? "9999").localeCompare(b.expected_close_date ?? "9999");
+        case "value":
+        default: return b.deal_value - a.deal_value;
+      }
+    });
+    return arr;
+  }, [deals, q, stage, sort]);
+
+  const total = filtered.length;
+  const pageCount = Math.max(1, Math.ceil(total / DEAL_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const rows = filtered.slice((safePage - 1) * DEAL_PAGE_SIZE, (safePage - 1) * DEAL_PAGE_SIZE + DEAL_PAGE_SIZE);
+  const from = total === 0 ? 0 : (safePage - 1) * DEAL_PAGE_SIZE + 1;
+  const to = Math.min(safePage * DEAL_PAGE_SIZE, total);
+  const selectCls = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-2.5 text-[12.5px] font-semibold outline-none";
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-ink text-sm font-extrabold">כל העסקאות ({total})</p>
+        <div className="relative ms-auto min-w-[180px] flex-1 sm:max-w-xs">
+          <span className="text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"><Icon name="Search" size={15} /></span>
+          <input defaultValue={q} onChange={(e) => setParam({ q: e.target.value.trim() || null })} placeholder="חיפוש לפי קונה, נכס, סוכן או אזור" className="bg-surface border-line text-ink focus:border-brand-light h-9 w-full rounded-xl border pr-9 pl-3 text-[13px] outline-none" />
+        </div>
+        <select value={stage} onChange={(e) => setParam({ stage: e.target.value || null })} className={selectCls} aria-label="שלב">
+          <option value="">כל השלבים</option>
+          {stageOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select value={sort} onChange={(e) => setParam({ sort: e.target.value }, false)} className={selectCls} aria-label="מיון">
+          {DEAL_SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="border-line bg-card text-muted rounded-2xl border p-8 text-center text-[13px] font-semibold">אין עסקאות התואמות לסינון</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {rows.map((d) => <DealCard key={d.id} d={d} pending={pending} run={run} />)}
+        </div>
+      )}
+
+      {total > DEAL_PAGE_SIZE && (
+        <div className="text-muted flex flex-wrap items-center justify-between gap-2 px-1 text-[12px]">
+          <span>מציג {from}–{to} מתוך {total}</span>
+          <div className="flex items-center gap-1.5">
+            <button disabled={safePage <= 1} onClick={() => setParam({ page: String(safePage - 1) }, false)} className="border-line bg-surface text-ink grid h-8 w-8 place-items-center rounded-lg border transition disabled:opacity-40"><Icon name="ChevronRight" size={15} /></button>
+            <span className="min-w-[60px] text-center font-bold">{safePage} / {pageCount}</span>
+            <button disabled={safePage >= pageCount} onClick={() => setParam({ page: String(safePage + 1) }, false)} className="border-line bg-surface text-ink grid h-8 w-8 place-items-center rounded-lg border transition disabled:opacity-40"><Icon name="ChevronLeft" size={15} /></button>
+          </div>
+        </div>
       )}
     </div>
   );
