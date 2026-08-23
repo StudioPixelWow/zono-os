@@ -58,19 +58,23 @@ interface JourneyData {
   context: JourneyContext;
 }
 
-// ── Property WORKSPACE 5.0 — six focused tabs (was nine "admin pages"). "מרכז
-// שליטה" + "מרכז ניהול" → סקירה; "ציר זמן" and "פרטים ונתונים" are no longer
-// primary tabs — activity + full facts fold into סקירה, and editing lives in the
-// dedicated /edit route. The full visual hero shows on סקירה only; other tabs get
-// a compact sticky property header so a viewport isn't lost on every switch. ──
-type Tab = "overview" | "marketing" | "buyers" | "sellers" | "calendar" | "documents";
-const TABS: { id: Tab; label: string; icon: string }[] = [
+// ── Property WORKSPACE 6.0 — decision-oriented IA. Six CORE tabs the deal is run
+// from (סקירה / קונים מתאימים / בעלים / ביקורים / מסמכים / פעילות) + three SECONDARY
+// tabs behind a divider (שיווק / משימות / מידע נוסף). סקירה is lean and action-first;
+// the heavy activity/details/market folds moved out to their own tabs so no single
+// screen is a dense wall. The full hero shows on סקירה; other tabs get a compact
+// sticky property header so a viewport isn't lost on every switch. ──
+type Tab = "overview" | "buyers" | "sellers" | "calendar" | "documents" | "activity" | "marketing" | "tasks" | "more";
+const TABS: { id: Tab; label: string; icon: string; secondary?: boolean }[] = [
   { id: "overview", label: "סקירה", icon: "LayoutDashboard" },
-  { id: "marketing", label: "שיווק", icon: "Megaphone" },
-  { id: "buyers", label: "קונים ולידים", icon: "Users" },
-  { id: "sellers", label: "בעל הנכס", icon: "UserCheck" },
-  { id: "calendar", label: "יומן", icon: "Calendar" },
+  { id: "buyers", label: "קונים מתאימים", icon: "Users" },
+  { id: "sellers", label: "בעלים", icon: "UserCheck" },
+  { id: "calendar", label: "ביקורים", icon: "Calendar" },
   { id: "documents", label: "מסמכים", icon: "FileText" },
+  { id: "activity", label: "פעילות", icon: "Activity" },
+  { id: "marketing", label: "שיווק", icon: "Megaphone", secondary: true },
+  { id: "tasks", label: "משימות", icon: "ListChecks", secondary: true },
+  { id: "more", label: "מידע נוסף", icon: "Info", secondary: true },
 ];
 
 const SCORE_TEXT: Record<ScoreTone, string> = { good: "text-success", medium: "text-brand-strong", risk: "text-danger" };
@@ -292,92 +296,105 @@ export function PropertyDetailView({
         </div>
       )}
 
-      {/* ── Workspace nav (sticky) ──────────────────────────────────────────── */}
-      <div className="bg-background/80 border-line sticky top-0 z-10 flex gap-1 overflow-x-auto border-b backdrop-blur">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" onClick={() => setTab(t.id)} aria-current={tab === t.id ? "page" : undefined}
-            className={cn("relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-bold transition", tab === t.id ? "text-brand-strong" : "text-muted hover:text-ink")}>
-            <Icon name={t.icon} size={16} />{t.label}
-            {tab === t.id && <span className="bg-brand absolute inset-x-2 -bottom-px h-0.5 rounded-full" />}
-          </button>
+      {/* ── Workspace nav (sticky) — core tabs, a divider, then secondary tabs ── */}
+      <div className="bg-background/80 border-line sticky top-0 z-10 flex items-stretch gap-1 overflow-x-auto border-b backdrop-blur" role="tablist">
+        {TABS.map((t, i) => (
+          <span key={t.id} className="flex items-stretch">
+            {t.secondary && !TABS[i - 1]?.secondary && <span className="bg-line/70 mx-1.5 my-2.5 w-px shrink-0 self-stretch" aria-hidden />}
+            <button type="button" role="tab" onClick={() => setTab(t.id)} aria-selected={tab === t.id} aria-current={tab === t.id ? "page" : undefined}
+              className={cn("relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-bold transition", tab === t.id ? "text-brand-strong" : t.secondary ? "text-muted/80 hover:text-ink" : "text-muted hover:text-ink")}>
+              <Icon name={t.icon} size={16} />{t.label}
+              {tab === t.id && <span className="bg-brand absolute inset-x-2 -bottom-px h-0.5 rounded-full" />}
+            </button>
+          </span>
         ))}
       </div>
 
       {/* ── Panels ──────────────────────────────────────────────────────────── */}
       <div>
+        {/* ── סקירה — lean + action-first (heavy detail/activity moved to their tabs) ── */}
         {tab === "overview" && (
           <div className="flex flex-col gap-5">
             {controlSlot}
             <CommandCenter propertyId={p.id} propertyTitle={p.title} addressLine={propertyAddressLine(p)} data={commandCenter} tasks={tasks} recommendedBuyers={recommendedBuyers} />
             {approvalSlot}
+          </div>
+        )}
 
-            <Fold title="מחיר ושוק" icon="BarChart3">
+        {/* ── פעילות — clean chronological timeline + relationships + notes ── */}
+        {tab === "activity" && (
+          <div className="flex flex-col gap-5">
+            <ActivitySummaryCard summary={activitySummary} extra={{ openTasks, openRisks }} />
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.6fr_1fr]">
+              <div><EntityTimeline items={timeline} title="ציר זמן הנכס" emptyStateText="אין פעילות מתועדת עדיין — פעולות יירשמו כאן אוטומטית." /></div>
+              <div className="flex flex-col gap-5">
+                <div className="bg-card border-line rounded-[20px] border p-5"><p className="text-ink mb-3 text-sm font-extrabold">קשרים</p><RelationshipGraphMini relationships={relationships} selfType="property" /></div>
+                <div className="bg-card border-line rounded-[20px] border p-5">
+                  <p className="text-ink mb-3 text-sm font-extrabold">הערות</p>
+                  {notes.length === 0 ? <p className="text-muted text-sm">אין הערות לנכס זה.</p> : (
+                    <ul className="flex flex-col gap-2.5">{notes.slice(0, 6).map((n) => <li key={n.id} className="bg-surface rounded-xl p-3"><p className="text-ink text-sm">{n.body}</p><p className="text-muted mt-1 text-[11px]">{fmtDate(n.created_at)}</p></li>)}</ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── משימות — open tasks (completed behind disclosure in the panel) ── */}
+        {tab === "tasks" && (
+          <div className="bg-card border-line rounded-[20px] border p-5">
+            <TasksPanel propertyId={p.id} tasks={tasks} />
+          </div>
+        )}
+
+        {/* ── מידע נוסף — full facts, media, journey, market research ── */}
+        {tab === "more" && (
+          <div className="flex flex-col gap-5">
+            <div className="bg-card border-line rounded-[20px] border p-5">
+              <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                <div>
+                  <Row k="סוג נכס" v={PROPERTY_TYPE_LABELS[p.type]} />
+                  <Row k="סוג עסקה" v={LISTING_KIND_LABELS[p.listing_kind]} />
+                  <Row k="מחיר" v={formatShekels(p.price)} />
+                  {p.monthly_rent != null && <Row k="שכ״ד חודשי" v={formatShekels(p.monthly_rent)} />}
+                  <Row k="חדרים" v={p.rooms ?? no} />
+                  <Row k="שטח" v={p.size_sqm ? `${p.size_sqm} מ״ר` : no} />
+                  <Row k="קומה" v={p.floor ?? no} />
+                  <Row k="עיר" v={p.city ?? no} />
+                </div>
+                <div>
+                  <Row k="בלעדיות" v={p.has_exclusivity ? yes : no} />
+                  {p.has_exclusivity && <Row k="בלעדיות עד" v={fmtDate(p.exclusivity_ends_at)} />}
+                  <Row k="חניה" v={p.has_parking ? yes : no} />
+                  <Row k="מעלית" v={p.has_elevator ? yes : no} />
+                  <Row k="מרפסת" v={p.has_balcony ? yes : no} />
+                  <Row k='ממ"ד' v={p.has_safe_room ? yes : no} />
+                  <Row k="מחסן" v={p.has_storage ? yes : no} />
+                  <Row k="נוצר" v={fmtDate(p.created_at)} />
+                </div>
+                {p.description && <p className="text-muted mt-4 text-sm leading-relaxed sm:col-span-2">{p.description}</p>}
+              </div>
+              <div className="mt-5">
+                <p className="text-ink mb-3 text-sm font-extrabold">תמונות הנכס</p>
+                {media.length === 0 ? (
+                  <EmptyState icon="Building2" text="אין תמונות עדיין. ניתן להוסיף תמונות דרך עריכת הנכס." action={<Link href={`/properties/${p.id}/edit`}><Button variant="secondary" size="sm">הוסף תמונות</Button></Link>} />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {media.map((m) => (
+                      <div key={m.id} className="border-line bg-surface relative aspect-[4/3] overflow-hidden rounded-2xl border">
+                        <Image src={m.url} alt={m.alt_text ?? p.title} fill sizes="(max-width: 640px) 50vw, 33vw" className="object-cover" />
+                        {m.is_primary && <span className="bg-brand absolute end-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">ראשית</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <JourneyPanel propertyId={p.id} journey={journey.journey} context={journey.context} activities={activities} />
+            <Fold title="מחיר ושוק — מחקר עסקאות" icon="BarChart3">
               <div className="flex flex-col gap-5">
                 <TransactionResearchPanel propertyListingId={p.id} cityName={p.city} address={propertyAddressLine(p)} rooms={p.rooms} area={p.size_sqm} askingPrice={p.price} />
                 {contextSlot}
-              </div>
-            </Fold>
-
-            <Fold title="פעילות הנכס" icon="Activity">
-              <div className="flex flex-col gap-5">
-                <ActivitySummaryCard summary={activitySummary} extra={{ openTasks, openRisks }} />
-                <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.6fr_1fr]">
-                  <div><EntityTimeline items={timeline} title="ציר זמן הנכס" emptyStateText="אין פעילות מתועדת עדיין — פעולות יירשמו כאן אוטומטית." /></div>
-                  <div className="flex flex-col gap-5">
-                    <div><p className="text-ink mb-3 text-sm font-extrabold">קשרים</p><RelationshipGraphMini relationships={relationships} selfType="property" /></div>
-                    <div>
-                      <p className="text-ink mb-3 text-sm font-extrabold">הערות</p>
-                      {notes.length === 0 ? <p className="text-muted text-sm">אין הערות לנכס זה.</p> : (
-                        <ul className="flex flex-col gap-2.5">{notes.slice(0, 6).map((n) => <li key={n.id} className="bg-surface rounded-xl p-3"><p className="text-ink text-sm">{n.body}</p><p className="text-muted mt-1 text-[11px]">{fmtDate(n.created_at)}</p></li>)}</ul>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Fold>
-
-            <Fold title="פרטים מלאים ותמונות" icon="ListChecks">
-              <div className="flex flex-col gap-5">
-                <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-                  <div>
-                    <Row k="סוג נכס" v={PROPERTY_TYPE_LABELS[p.type]} />
-                    <Row k="סוג עסקה" v={LISTING_KIND_LABELS[p.listing_kind]} />
-                    <Row k="מחיר" v={formatShekels(p.price)} />
-                    {p.monthly_rent != null && <Row k="שכ״ד חודשי" v={formatShekels(p.monthly_rent)} />}
-                    <Row k="חדרים" v={p.rooms ?? no} />
-                    <Row k="שטח" v={p.size_sqm ? `${p.size_sqm} מ״ר` : no} />
-                    <Row k="קומה" v={p.floor ?? no} />
-                    <Row k="עיר" v={p.city ?? no} />
-                  </div>
-                  <div>
-                    <Row k="בלעדיות" v={p.has_exclusivity ? yes : no} />
-                    {p.has_exclusivity && <Row k="בלעדיות עד" v={fmtDate(p.exclusivity_ends_at)} />}
-                    <Row k="חניה" v={p.has_parking ? yes : no} />
-                    <Row k="מעלית" v={p.has_elevator ? yes : no} />
-                    <Row k="מרפסת" v={p.has_balcony ? yes : no} />
-                    <Row k='ממ"ד' v={p.has_safe_room ? yes : no} />
-                    <Row k="מחסן" v={p.has_storage ? yes : no} />
-                    <Row k="נוצר" v={fmtDate(p.created_at)} />
-                  </div>
-                  {p.description && <p className="text-muted mt-4 text-sm leading-relaxed sm:col-span-2">{p.description}</p>}
-                </div>
-                <div>
-                  <p className="text-ink mb-3 text-sm font-extrabold">תמונות הנכס</p>
-                  {media.length === 0 ? (
-                    <EmptyState icon="Building2" text="אין תמונות עדיין. ניתן להוסיף תמונות דרך עריכת הנכס." action={<Link href={`/properties/${p.id}/edit`}><Button variant="secondary" size="sm">הוסף תמונות</Button></Link>} />
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {media.map((m) => (
-                        <div key={m.id} className="border-line bg-surface relative aspect-[4/3] overflow-hidden rounded-2xl border">
-                          <Image src={m.url} alt={m.alt_text ?? p.title} fill sizes="(max-width: 640px) 50vw, 33vw" className="object-cover" />
-                          {m.is_primary && <span className="bg-brand absolute end-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">ראשית</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <JourneyPanel propertyId={p.id} journey={journey.journey} context={journey.context} activities={activities} />
-                <TasksPanel propertyId={p.id} tasks={tasks} />
               </div>
             </Fold>
           </div>
