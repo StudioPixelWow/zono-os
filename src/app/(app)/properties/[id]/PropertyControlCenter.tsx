@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPropertyLifecycleControlCenter } from "@/lib/properties/control-center";
 import { DEAL_STAGE_HE } from "@/lib/i18n/labels";
 import { MarketingAutopilotBlock } from "./MarketingAutopilotBlock";
+import { MatchedBuyersOutreach } from "./MatchedBuyersOutreach";
 
 const ils = (n: number | null) => (n == null ? "" : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : `₪${Math.round(n).toLocaleString("he-IL")}`);
 const dt = (iso: string | null) => { if (!iso) return ""; try { return new Date(iso).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }); } catch { return ""; } };
@@ -128,26 +129,10 @@ export async function PropertyControlCenter(
           {/* Marketing Autopilot — state + one recommended action + prepared plan */}
           <MarketingAutopilotBlock propertyId={id} />
 
-          {/* Matching */}
-          <Card title={`קונים מתאימים · ${cc.matching.total}`} cta={{ label: "כל ההתאמות", href: `/properties/${id}` }}>
-            {cc.matching.top.length === 0 ? (
-              <Empty text="אין עדיין התאמות. ניתן לעדכן דרישות קונים כדי לשפר התאמה." />
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {cc.matching.top.map((m) => (
-                  <li key={m.buyerId} className="border-line flex items-center justify-between gap-2 rounded-2xl border p-3">
-                    <div className="min-w-0">
-                      <p className="text-ink truncate text-sm font-bold">{m.name}</p>
-                      {m.reason && <p className="text-muted truncate text-xs">{m.reason}</p>}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {m.compatibility != null && <span className="text-brand text-sm font-black">{m.compatibility}%</span>}
-                      <Chip tone={m.status === "interested" || m.status === "viewing_requested" ? "success" : m.status === "rejected" ? "muted" : "brand"}>{m.statusLabel}</Chip>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+          {/* Matching — now an ACTION CENTER: select matched buyers and send them
+              this property over WhatsApp / email in one action. */}
+          <Card title={`קונים מתאימים · ${cc.matching.total}`}>
+            <MatchedBuyersOutreach propertyId={id} />
             {/* Funnel */}
             <div className="text-muted mt-3 flex flex-wrap items-center gap-1 text-xs">
               <FunnelStep label="התאמות" v={cc.funnel.matched} />→<FunnelStep label="נשלחו" v={cc.funnel.sent} />→<FunnelStep label="הגיבו" v={cc.funnel.responded} />→<FunnelStep label="מעוניינים" v={cc.funnel.interested} />→<FunnelStep label="ביקשו ביקור" v={cc.funnel.viewingRequested} />
