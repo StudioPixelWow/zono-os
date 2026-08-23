@@ -90,6 +90,22 @@ check("unmapped entity column → null", notificationEntityColumn("widget") === 
 check("lead.created notifies", projectEventToNotification(base)?.category === "new_lead");
 check("lead FK column", notificationEntityColumn("lead") === "lead_id");
 
+// ── Stage 3 · notification CATEGORY INTEGRITY (contract) ─────────────────────
+// Every rule's category MUST be a valid notification_category enum value — an
+// invalid one throws at INSERT and (pre-fix) was silently swallowed. This block
+// makes that regression visible offline too (the CI fence is the fd-closure test).
+import { NOTIFICATION_RULES, decideNotificationDelivery } from "./notification-subscriber";
+import { isValidNotificationCategory } from "./notification-categories";
+check("EVERY notification rule uses a valid category", Object.values(NOTIFICATION_RULES).every((r) => isValidNotificationCategory(r.category)));
+check("deal.won/lost + property.sold → deal_update (valid)", NOTIFICATION_RULES["deal.won"].category === "deal_update" && NOTIFICATION_RULES["deal.lost"].category === "deal_update" && NOTIFICATION_RULES["property.sold"].category === "deal_update");
+check("meeting.no_show/cancelled → meeting_reminder (valid)", NOTIFICATION_RULES["meeting.no_show"].category === "meeting_reminder" && NOTIFICATION_RULES["meeting.cancelled"].category === "meeting_reminder");
+check("deal.won deep-links to the exact deal", projectEventToNotification({ ...base, event_type: "deal.won", entity_type: "deal", entity_id: "D1" })?.href === "/deals/D1");
+check("lead.created deep-links to the exact lead", projectEventToNotification(base)?.href === "/leads/L1");
+// delivery decision never swallows a genuine failure
+check("delivery: success → done (delivered, not failure)", (() => { const d = decideNotificationDelivery(null); return d.status === "done" && d.notified && !d.hardFailure; })());
+check("delivery: duplicate → idempotent no-op (not hard failure)", decideNotificationDelivery({ code: "23505", message: "duplicate key" }).hardFailure === false);
+check("delivery: invalid-enum/other error → hardFailure (re-drive, not swallowed)", decideNotificationDelivery({ code: "22P02", message: "invalid input value for enum" }).hardFailure === true);
+
 // ── Stage 4A · graph subscriber (pure) ──────────────────────────────────────
 import { projectEventToGraphEdges } from "./graph-subscriber";
 

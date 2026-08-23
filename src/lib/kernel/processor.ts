@@ -20,7 +20,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { invalidateCache } from "@/lib/platform-persistence/compute-cache";
 import { projectEventToTimeline, type DomainEventLike } from "./subscriber";
-import { projectEventToNotification, notificationEntityColumn } from "./notification-subscriber";
+import { projectEventToNotification, notificationEntityColumn, decideNotificationDelivery } from "./notification-subscriber";
 import { projectEventToGraphEdges } from "./graph-subscriber";
 import { projectEventToMemory } from "./memory-subscriber";
 import { projectEventToAutomation } from "./automation-subscriber";
@@ -33,6 +33,19 @@ import { projectEventToJourney } from "./journey-subscriber";
 import { applyJourneyIntent, type JourneyOutcome } from "./journey-applier";
 
 const MAX_RETRIES = 5;
+
+/**
+ * A GENUINE notification-delivery failure (not a duplicate). Thrown out of the
+ * secondary-subscriber pass so the per-row catch re-drives the event instead of
+ * marking it consumed. Every OTHER subscriber still runs first (they are truly
+ * best-effort); only a real notification insert failure blocks completion — which
+ * is exactly the silent-loss bug this closes. Retry is idempotent (notifications
+ * dedupe on org_id+event_id; timeline/graph/memory/journey are all idempotent),
+ * and bounded by MAX_RETRIES → dead-letter 'failed'.
+ */
+class NotificationDeliveryError extends Error {
+  constructor(reason: string) { super(reason); this.name = "NotificationDeliveryError"; }
+}
 
 export interface DrainResult {
   scanned: number;
@@ -163,10 +176,16 @@ export async function drainDomainEvents(limit = 200): Promise<DrainResult> {
  * (org_id,event_id); cache invalidation + delivery inserts are safe on reprocess.
  */
 async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: number): Promise<void> {
+  // A GENUINE notification failure is recorded here and RE-THROWN at the very end
+  // (after every other subscriber has run) so the event is NOT marked consumed.
+  let notificationHardFailure: string | null = null;
+
   // ── Notification — idempotent via notifications(org_id, event_id). ──────────
   //    ALWAYS records a delivery (see the graph subscriber below for why silence
-  //    is unacceptable): `skipped` + reason when the event is not notifiable, or
-  //    when the insert errored for a non-duplicate reason.
+  //    is unacceptable): `skipped` + reason when the event is not notifiable,
+  //    `duplicate` on an idempotent replay, `done` on success, and `failed` +
+  //    reason on a GENUINE insert error — which then re-drives the event rather
+  //    than being swallowed while the event is marked done (the silent-loss bug).
   try {
     const note = projectEventToNotification(row);
     if (!note) {
@@ -183,11 +202,31 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       };
       if (fkCol) noteRow[fkCol] = note.entityId;
       const { error: nErr } = await db.from("notifications").insert(noteRow as never);
-      if (!nErr) { out.notified++; await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "done", latencyMs: Date.now() - t0 }); }
-      else if (isDuplicate(nErr)) await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "duplicate", latencyMs: Date.now() - t0 });
-      else await recordDelivery(db, { orgId: row.organization_id, eventId: row.id, subscriber: "notification", status: "failed", latencyMs: Date.now() - t0, error: nErr.message });
+      const decision = decideNotificationDelivery(nErr);
+      if (decision.notified) out.notified++;
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "notification",
+        status: decision.status, latencyMs: Date.now() - t0,
+        error: decision.status === "failed" ? (decision.reason ?? undefined) : undefined,
+      });
+      if (decision.hardFailure) {
+        // Genuine failure — observable (delivery ledger + log) and NOT swallowed.
+        notificationHardFailure = decision.reason ?? "notification_insert_failed";
+        console.error(`[kernel] notification insert failed for event ${row.id} (${row.event_type}): ${notificationHardFailure}`);
+      }
     }
-  } catch { /* notification is non-critical */ }
+  } catch (e) {
+    // A throw here means the pure projection or the delivery-ledger write itself
+    // failed. Record it and re-drive — never silently continue as if notified.
+    notificationHardFailure = e instanceof Error ? e.message : "notification subscriber crashed";
+    console.error(`[kernel] notification subscriber crashed for event ${row.id} (${row.event_type}):`, e);
+    try {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "notification",
+        status: "failed", latencyMs: Date.now() - t0, error: notificationHardFailure,
+      });
+    } catch { /* ledger write failed too — the re-drive below is the safety net */ }
+  }
 
   // ── Graph — incremental edges on the canonical entity_relationships substrate.
   //    upsert = create/refresh (idempotent on the 6-part key; reactivates a retired
@@ -376,6 +415,13 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       });
     }
   } catch { /* recommendation refresh is non-critical */ }
+
+  // ── Re-drive on a GENUINE notification failure ──────────────────────────────
+  // Every other subscriber has now run (they are best-effort). But a real
+  // notification insert failure must NOT let the event be marked consumed — throw
+  // so the per-row catch increments retry_count and keeps it 'pending' (then
+  // dead-letters at MAX_RETRIES). Idempotent on replay; bounded; observable.
+  if (notificationHardFailure) throw new NotificationDeliveryError(notificationHardFailure);
 }
 
 /** Postgres unique-violation (idempotent no-op), not a real failure. */
