@@ -36,8 +36,12 @@ const RULES: Record<string, Rule> = {
   "property.sold":     { title: "נכס נמכר", level: "success",  category: "property", href: (id) => `/properties/${id}` },
   "meeting.no_show":   { title: "אי-הגעה לפגישה", level: "warning",  category: "meeting",  href: () => "/calendar" },
   "meeting.cancelled": { title: "פגישה בוטלה", level: "info",     category: "meeting",  href: () => "/calendar" },
-  "document.signed":   { title: "מסמך נחתם", level: "success",  category: "document", href: (id) => `/legal-templates/${id}` },
-  "document.completed":{ title: "מסמך הושלם", level: "success",  category: "document", href: (id) => `/legal-templates/${id}` },
+  // category MUST be a valid notification_category enum value; "document" is not one
+  // (the document bucket is "document_pending"). With an invalid category the insert
+  // throws and the notification is silently dropped — which is exactly what hid the
+  // signed-document notification. Use the valid document category.
+  "document.signed":   { title: "מסמך נחתם", level: "success",  category: "document_pending", href: (id) => `/legal-templates/${id}` },
+  "document.completed":{ title: "מסמך הושלם", level: "success",  category: "document_pending", href: (id) => `/legal-templates/${id}` },
 };
 
 /**
