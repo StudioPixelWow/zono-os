@@ -106,7 +106,7 @@ export function DailyPlanBoard({ plan, rail }: { plan: DailyPlan; rail: RailData
       : null;
 
   return (
-    <div dir="rtl" className="mx-auto flex max-w-6xl flex-col gap-4 pb-24">
+    <div dir="rtl" className="flex w-full flex-col gap-4 pb-24">
       <SurfaceTabs active="today" isManager={rail.isManager} />
 
       {/* ── Compact header + daily progress ─────────────────────────────────── */}
