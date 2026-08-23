@@ -15,8 +15,11 @@ export interface UpsertScoreInput {
 }
 
 export async function getScore(agencyId: string): Promise<AgencyScore | null> {
+  const org = await currentOrgId();
   const db = await createClient();
-  const { data } = await db.from("agency_scores").select(COLS).eq("agency_id", agencyId).maybeSingle();
+  // Org-scoped read (defense in depth beyond RLS) — never surface another tenant's score.
+  const { data } = await db.from("agency_scores").select(COLS)
+    .eq("organization_id", org).eq("agency_id", agencyId).maybeSingle();
   return data ? toScore(data as Record<string, unknown>) : null;
 }
 
@@ -29,7 +32,7 @@ export async function upsertScore(input: UpsertScoreInput): Promise<AgencyScore>
     luxury: input.luxury ?? null, inventory: input.inventory ?? null, coverage: input.coverage ?? null,
     projects: input.projects ?? null, reputation: input.reputation ?? null, momentum: input.momentum ?? null,
     overall: input.overall ?? null,
-  }, { onConflict: "agency_id" }).select(COLS).single();
+  }, { onConflict: "organization_id,agency_id" }).select(COLS).single();
   if (error) throw new Error(error.message);
   return toScore(data as Record<string, unknown>);
 }

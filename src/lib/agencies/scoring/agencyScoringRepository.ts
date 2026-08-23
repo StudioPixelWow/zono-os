@@ -1,6 +1,6 @@
 // ============================================================================
 // ZONO — Agency Scoring repository (Phase 26.5, SERVER-ONLY). Org-scoped.
-// Idempotent 1:1 upsert (onConflict agency_id) writing the full score set +
+// Idempotent 1:1 upsert (onConflict organization_id,agency_id) writing the full score set +
 // competition_threat, data_confidence, score_breakdown and the period covered.
 // Reuses the existing agency_scores mapper for reads.
 // ============================================================================
@@ -21,8 +21,11 @@ const SCORE_COLUMN: Record<string, string> = {
 };
 
 export async function getScore(agencyId: string): Promise<AgencyScore | null> {
+  const org = await currentOrgId();
   const db = await createClient();
-  const { data } = await db.from("agency_scores").select(COLS).eq("agency_id", agencyId).maybeSingle();
+  // Org-scoped read (defense in depth beyond RLS) — never surface another tenant's score.
+  const { data } = await db.from("agency_scores").select(COLS)
+    .eq("organization_id", org).eq("agency_id", agencyId).maybeSingle();
   return data ? toScore(data as unknown as Record<string, unknown>) : null;
 }
 
@@ -46,7 +49,7 @@ export async function upsertFullScore(input: UpsertFullScoreInput): Promise<Agen
     data_confidence: r.dataConfidence,
     score_breakdown: { breakdown: r.breakdown, missing: r.missing },
     period_start: input.periodStart, period_end: input.periodEnd, calculated_at: input.calculatedAt,
-  } as never, { onConflict: "agency_id" }).select(COLS).single();
+  } as never, { onConflict: "organization_id,agency_id" }).select(COLS).single();
   if (error) throw new Error(error.message);
   return toScore(data as unknown as Record<string, unknown>);
 }

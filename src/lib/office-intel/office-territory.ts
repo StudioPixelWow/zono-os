@@ -2,17 +2,17 @@
 // ZONO — Office Intelligence TERRITORY scoping (pure, dependency-free, tested).
 // P0: the office universe must be the CURRENT org's territory, never the global
 // detected-office graph. An office is in-territory when its city matches one of
-// the org's specialization areas (canonical territory_profiles), OR the org has
-// its OWN observed activity linked to it (a linked listing ⇒ it operates in the
-// org's market). Loose city match (both-way contains, normalized) tolerates the
-// "קריית ביאליק"/"קרית ביאליק" spelling drift. Shared graph, org-scoped presentation.
+// the org's specialization areas (canonical territory), OR the org has its OWN
+// observed activity linked to it. Matching uses the ONE canonical locality
+// resolver (canonicalLocality) so קרית ביאליק == קריית ביאליק == "Kiryat Bialik"
+// — EQUALITY of canonical keys only, never substring. Shared graph, org-scoped view.
 // ============================================================================
+import { canonicalLocality } from "../geo/locality.ts";
 
-// Normalize for loose city matching: strip punctuation, collapse whitespace, and
-// fold Hebrew male/haser spelling drift (doubled yod/vav → single) so
-// "קריית ביאליק" and "קרית ביאליק" compare equal.
-const norm = (s: string | null | undefined): string =>
-  (s ?? "").trim().toLowerCase().replace(/["'’`.]/g, "").replace(/\s+/g, " ").replace(/י{2,}/g, "י").replace(/ו{2,}/g, "ו");
+// Canonical locality key — the single shared resolver (Hebrew ktiv male/haser,
+// finals, quotes, AND Hebrew⇄English transliteration). Same-locality variants
+// collapse; different localities stay distinct (no fabricated match, no substring).
+const norm = (s: string | null | undefined): string => canonicalLocality(s);
 
 /** Distinct, non-empty specialization area names from the org's territory_profiles. */
 export function deriveTerritoryAreas(rows: { city_name?: string | null; neighborhood_name?: string | null }[]): string[] {

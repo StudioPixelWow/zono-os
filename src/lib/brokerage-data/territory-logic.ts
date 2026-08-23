@@ -3,6 +3,7 @@
 // The canonical predicate that scopes office/broker intelligence to an org's
 // operating market. Kept separate from the DB resolver so it is unit-testable.
 // ============================================================================
+import { canonicalLocality } from "../geo/locality.ts";
 
 export interface OrgTerritory {
   orgId: string;
@@ -15,14 +16,16 @@ export interface OrgTerritory {
   empty: boolean;
 }
 
-/** Normalize a city string for cross-source matching. Script-preserving — never
- *  collapses different-language names of DIFFERENT cities. Folds ONLY casing,
- *  whitespace, and Hebrew ktiv male/haser spelling drift (doubled yod/vav → single)
- *  so the SAME city written "קריית ביאליק" and "קרית ביאליק" compares equal. This
- *  fold is required: org territories and the detected-office graph routinely differ
- *  by exactly this drift, and without it a strict match hides every real office. */
+/** Normalize a city string to its CANONICAL locality key — the ONE resolver
+ *  (canonicalLocality, geo/locality.ts) shared by territory, offices, agents,
+ *  discovery and scores. It folds Hebrew ktiv male/haser drift (קריית⇄קרית),
+ *  final letters and quotes AND resolves Hebrew⇄English transliteration
+ *  ("Kiryat Bialik" ⇒ "קרית ביאליק") so every spelling of the SAME locality
+ *  compares equal — while genuinely different localities keep distinct keys
+ *  (unknown names fall back to their own folded form; never a fabricated match,
+ *  never substring). This closes the "English office vanished by spelling" gap. */
 export function normalizeCityKey(v: string | null | undefined): string {
-  return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ").replace(/י{2,}/g, "י").replace(/ו{2,}/g, "ו");
+  return canonicalLocality(v);
 }
 
 /**
