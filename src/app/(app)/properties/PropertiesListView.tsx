@@ -30,18 +30,22 @@ interface Filters { city?: string; type?: string; status?: string; minPrice?: nu
 const field = "bg-surface border-line text-ink focus:border-brand-light h-10 w-full rounded-xl border px-3 text-sm outline-none transition";
 const ATT_TONE: Record<string, string> = { warning: "bg-warning-soft text-warning", danger: "bg-danger-soft text-danger", neutral: "bg-surface text-muted" };
 
-type QuickChip = "all" | "sale" | "rent" | "exclusive" | "draft" | "attention";
+type QuickChip = "all" | "sale" | "rent" | "exclusive" | "draft" | "matches" | "attention";
 const CHIPS: { id: QuickChip; label: string }[] = [
   { id: "all", label: "הכל" }, { id: "sale", label: "למכירה" }, { id: "rent", label: "להשכרה" },
-  { id: "exclusive", label: "בלעדיות" }, { id: "draft", label: "טיוטה / לא פורסם" }, { id: "attention", label: "דורשים טיפול" },
+  { id: "exclusive", label: "בלעדיות" }, { id: "matches", label: "עם קונים מתאימים" },
+  { id: "draft", label: "טיוטה / לא פורסם" }, { id: "attention", label: "דורשים טיפול" },
 ];
 
+type AgentInfo = { name: string; avatarUrl: string | null };
+
 export function PropertiesListView({
-  properties, filters, error, currentUserId = null, covers = {},
+  properties, filters, error, currentUserId = null, covers = {}, agents = {}, matchCounts = {},
   eyebrow = "CRM נכסים", title = "כל הנכסים", initialAttention = null,
 }: {
   properties: PropertyRow[]; filters: Filters; error?: boolean; currentUserId?: string | null;
-  covers?: Record<string, string>; eyebrow?: string; title?: string;
+  covers?: Record<string, string>; agents?: Record<string, AgentInfo>; matchCounts?: Record<string, number>;
+  eyebrow?: string; title?: string;
   /** deep-linked attention key from the ZONO brief (e.g. ?attention=no_image). */
   initialAttention?: AttentionKey | null;
 }) {
@@ -70,6 +74,7 @@ export function PropertiesListView({
         case "sale": if (kind !== "sale") return false; break;
         case "rent": if (kind !== "rent") return false; break;
         case "exclusive": if (!p.has_exclusivity) return false; break;
+        case "matches": if ((matchCounts[p.id] ?? 0) <= 0) return false; break;
         case "draft": if (p.status !== "draft") return false; break;
         case "attention": {
           const a = attentionFor(p, hasCover(p.id), now);
@@ -82,7 +87,7 @@ export function PropertiesListView({
     });
     rows = sortRows(rows, sort, hasCover, now);
     return rows;
-  }, [properties, q, chip, sort, hasCover, now, initialAttention]);
+  }, [properties, q, chip, sort, hasCover, now, initialAttention, matchCounts]);
 
   const paged = paginate(filtered, page);
 
@@ -151,6 +156,8 @@ export function PropertiesListView({
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {paged.items.map((p) => {
               const att = attentionFor(p, hasCover(p.id), now);
+              const mc = matchCounts[p.id] ?? 0;
+              const agent = agents[p.id];
               return (
                 <div key={p.id} className="relative">
                   {att && <span className={cn("absolute end-3 top-3 z-10 rounded-full px-2.5 py-1 text-[10.5px] font-black shadow-sm", ATT_TONE[att.tone])}>דורש טיפול · {att.reason}</span>}
@@ -162,6 +169,8 @@ export function PropertiesListView({
                     priceLabel: formatPropertyPrice({ kind: normalizeListingKind(p.listing_kind), price: p.price, monthlyRent: p.monthly_rent }),
                     addressLine: `${PROPERTY_TYPE_LABELS[p.type]} · ${propertyAddressLine(p)}`,
                     rooms: p.rooms, sqm: p.size_sqm, floor: p.floor, parking: p.parking_count,
+                    tags: mc > 0 ? [`${mc} קונים מתאימים`] : undefined,
+                    agentName: agent?.name ?? null, agentAvatarUrl: agent?.avatarUrl ?? null,
                   }} />
                 </div>
               );
@@ -179,19 +188,30 @@ export function PropertiesListView({
         <>
           <div className="bg-card border-line overflow-x-auto rounded-[20px] border">
             <table className="w-full min-w-[720px] text-start text-sm">
-              <thead className="text-muted border-line border-b text-xs"><tr>{["נכס", "סוג", "סטטוס", "מחיר", "חד׳", "מ״ר", "טיפול"].map((h) => <th key={h} className="px-4 py-3 text-start font-bold">{h}</th>)}</tr></thead>
+              <thead className="text-muted border-line border-b text-xs"><tr>{["נכס", "סוכן", "סוג", "סטטוס", "מחיר", "חד׳", "מ״ר", "קונים", "טיפול"].map((h) => <th key={h} className="px-4 py-3 text-start font-bold">{h}</th>)}</tr></thead>
               <tbody>
                 {paged.items.map((p) => {
                   const att = attentionFor(p, hasCover(p.id), now);
                   const k = normalizeListingKind(p.listing_kind); const b = transactionBadge(k);
+                  const agent = agents[p.id]; const mc = matchCounts[p.id] ?? 0;
                   return (
                     <tr key={p.id} className="border-line hover:bg-surface border-b last:border-0">
                       <td className="px-4 py-3"><Link href={`/properties/${p.id}`} className="text-ink font-bold hover:text-brand">{p.title}</Link><p className="text-muted text-xs">{propertyAddressLine(p)}</p></td>
+                      <td className="px-4 py-3">{agent ? (
+                        <span className="flex items-center gap-2">
+                          {agent.avatarUrl
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img src={agent.avatarUrl} alt={agent.name} className="h-6 w-6 shrink-0 rounded-full object-cover" />
+                            : <span className="bg-brand-soft text-brand-strong grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-black">{agent.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("")}</span>}
+                          <span className="text-ink truncate text-xs font-semibold">{agent.name}</span>
+                        </span>
+                      ) : <span className="text-muted text-xs">—</span>}</td>
                       <td className="text-muted px-4 py-3">{PROPERTY_TYPE_LABELS[p.type]}</td>
                       <td className="px-4 py-3"><Badge tone={PROPERTY_STATUS_TONES[p.status]} size="sm">{PROPERTY_STATUS_LABELS[p.status]}</Badge></td>
                       <td className="px-4 py-3"><span className="flex flex-col gap-0.5">{b && <span className={`inline-block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${b.tone === "success" ? "bg-success-soft text-success" : "bg-brand-soft text-brand-strong"}`}>{b.label}</span>}<span className="text-ink font-bold">{formatPropertyPrice({ kind: k, price: p.price, monthlyRent: p.monthly_rent })}</span></span></td>
                       <td className="text-muted px-4 py-3">{p.rooms ?? "—"}</td>
                       <td className="text-muted px-4 py-3">{p.size_sqm ?? "—"}</td>
+                      <td className="px-4 py-3">{mc > 0 ? <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-[11px] font-black">{mc}</span> : <span className="text-muted text-xs">—</span>}</td>
                       <td className="px-4 py-3">{att ? <span className={cn("rounded-full px-2 py-0.5 text-[10.5px] font-black", ATT_TONE[att.tone])}>{att.reason}</span> : <span className="text-success text-xs">✓</span>}</td>
                     </tr>
                   );

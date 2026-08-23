@@ -25,12 +25,12 @@ import {
 const coverFor = (p: PropertyRow, covers: Record<string, string>): string | null => covers[p.id] ?? p.primary_image_url ?? null;
 const ils = (n: number) => (n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `₪${Math.round(n / 1000)}K` : `₪${Math.round(n).toLocaleString("he-IL")}`);
 
-const KPI_ACCENT: Record<string, Accent> = { Building2: "brand", Handshake: "success", Home: "brand", AlertTriangle: "danger" };
+const KPI_ACCENT: Record<string, Accent> = { Building2: "brand", Handshake: "success", Home: "brand", AlertTriangle: "danger", Users: "brand" };
 
 interface Kpi { label: string; value: string; icon: string; highlight?: boolean }
 function KpiStrip({ kpis }: { kpis: Kpi[] }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       {kpis.map((k) => (
         <div key={k.label} className={cn("relative flex h-full flex-col gap-1 rounded-[22px] border p-4 shadow-[var(--shadow-card)]", k.highlight ? "zono-gradient-glow border-transparent text-white" : "bg-card border-line")}>
           <span className="absolute end-4 top-4">
@@ -64,7 +64,10 @@ function ZonoBrief({ items }: { items: { key: string; text: string; href: string
   );
 }
 
-function AttentionCard({ p, cover, att }: { p: PropertyRow; cover: string | null; att: Attention }) {
+type AgentInfo = { name: string; avatarUrl: string | null };
+const initialsOf = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("");
+
+function AttentionCard({ p, cover, att, agent }: { p: PropertyRow; cover: string | null; att: Attention; agent?: AgentInfo }) {
   const statusTone = (PROPERTY_STATUS_TONES[p.status] ?? "neutral") as BadgeTone;
   const toneText: Record<string, string> = { warning: "text-warning", danger: "text-danger", neutral: "text-muted" };
   return (
@@ -84,6 +87,15 @@ function AttentionCard({ p, cover, att }: { p: PropertyRow; cover: string | null
           <p className="text-ink mt-0.5 line-clamp-1 text-[13.5px] font-black">{p.title}</p>
           <p className="text-muted line-clamp-1 text-[11.5px]">{propertyAddressLine(p)}</p>
           <p className={cn("mt-0.5 line-clamp-1 text-[11.5px] font-bold", toneText[att.tone])}>דורש טיפול: {att.reason}</p>
+          {agent && (
+            <span className="mt-1 flex items-center gap-1.5">
+              {agent.avatarUrl
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={agent.avatarUrl} alt={agent.name} className="h-5 w-5 shrink-0 rounded-full object-cover" />
+                : <span className="bg-brand-soft text-brand-strong grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-black">{initialsOf(agent.name)}</span>}
+              <span className="text-muted truncate text-[11px] font-semibold">{agent.name}</span>
+            </span>
+          )}
         </div>
       </div>
       <Link href={att.href} className="bg-brand-soft text-brand-strong m-3 mt-0 rounded-lg py-2 text-center text-[13px] font-bold">{att.cta}</Link>
@@ -110,8 +122,9 @@ function QuickOps() {
   );
 }
 
-export function PropertiesOSView({ properties, agentName, covers = {}, children }: {
-  properties: PropertyRow[]; agentName: string; covers?: Record<string, string>; children: ReactNode;
+export function PropertiesOSView({ properties, agentName, covers = {}, agents = {}, matchCounts = {}, children }: {
+  properties: PropertyRow[]; agentName: string; covers?: Record<string, string>;
+  agents?: Record<string, AgentInfo>; matchCounts?: Record<string, number>; children: ReactNode;
 }) {
   const [now] = useState(() => Date.now());
   const hasCover = useMemo(() => {
@@ -133,8 +146,10 @@ export function PropertiesOSView({ properties, agentName, covers = {}, children 
     return out;
   }, [properties, hasCover, now]);
 
+  const withMatches = useMemo(() => properties.filter((p) => (matchCounts[p.id] ?? 0) > 0).length, [properties, matchCounts]);
   const kpis: Kpi[] = [
     { label: "נכסים פעילים", value: String(kpisData.active), icon: "Building2", highlight: true },
+    { label: "עם קונים מתאימים", value: String(withMatches), icon: "Users" },
     { label: "בבלעדיות", value: String(kpisData.exclusive), icon: "Handshake" },
     { label: "למכירה", value: String(kpisData.forSale), icon: "Home" },
     { label: "דורשים טיפול", value: String(kpisData.needsAttention), icon: "AlertTriangle" },
@@ -166,7 +181,7 @@ export function PropertiesOSView({ properties, agentName, covers = {}, children 
             <Link href="/my-properties?attention=no_image" className="text-brand-strong inline-flex items-center gap-1 text-sm font-bold">כל הדורשים טיפול <Icon name="ChevronLeft" size={15} /></Link>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {attention.map(({ p, att }) => <AttentionCard key={p.id} p={p} cover={coverFor(p, covers)} att={att} />)}
+            {attention.map(({ p, att }) => <AttentionCard key={p.id} p={p} cover={coverFor(p, covers)} att={att} agent={agents[p.id]} />)}
           </div>
         </section>
       )}

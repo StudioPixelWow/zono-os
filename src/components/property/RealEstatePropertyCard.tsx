@@ -27,9 +27,14 @@ export interface RealEstateCardData {
   parking?: number | null;
   tags?: string[]; // חדש / בלעדי / בהזדמנות
   ctaLabel?: string;
+  /** OPT-IN responsible-agent attribution (internal inventory only; omitted for
+   *  external listings / project units so no CRM concept leaks into those views). */
+  agentName?: string | null;
+  agentAvatarUrl?: string | null;
 }
 
 const ils = (n: number) => `₪${Math.round(n).toLocaleString("he-IL")}`;
+const initialsOf = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("");
 
 export function RealEstatePropertyCard({ d }: { d: RealEstateCardData }) {
   const price = d.priceLabel ?? (d.price != null && d.price > 0 ? ils(d.price) : "—");
@@ -67,6 +72,17 @@ export function RealEstatePropertyCard({ d }: { d: RealEstateCardData }) {
           <span>קומה {d.floor ?? "—"}</span>
           {d.parking != null && d.parking > 0 && (<><span className="bg-line h-3 w-px" /><span>{d.parking} חניה</span></>)}
         </div>
+        {d.agentName && (
+          <div className="border-line mt-1 flex items-center gap-2 border-t pt-2.5">
+            {d.agentAvatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={d.agentAvatarUrl} alt={d.agentName} className="h-7 w-7 shrink-0 rounded-full object-cover" />
+            ) : (
+              <span className="bg-brand-soft text-brand-strong grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-black">{initialsOf(d.agentName)}</span>
+            )}
+            <span className="text-muted min-w-0 flex-1 truncate text-[12.5px] font-semibold">{d.agentName}</span>
+          </div>
+        )}
         <span className={cn("text-brand-strong mt-1 inline-flex items-center gap-1 text-[13px] font-bold")}>
           {d.ctaLabel ?? "לפרטים נוספים"} <Icon name="ChevronLeft" size={14} />
         </span>
