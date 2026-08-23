@@ -24,7 +24,7 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
   ].filter(Boolean) as { v: string; l: string }[];
 
   return (
-    <div id="top" dir="rtl" style={{ ...(d.brand.tokens as Record<string, string>) }} className="min-h-screen bg-[var(--brand-background)] pb-[84px] text-[var(--brand-text)] antialiased sm:pb-[76px]">
+    <div id="top" dir="rtl" style={{ ...(d.brand.tokens as Record<string, string>) }} className="min-h-screen overflow-x-hidden bg-[var(--brand-background)] pb-[84px] text-[var(--brand-text)] antialiased sm:pb-[76px]">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[var(--brand-border)] bg-[var(--brand-background)]/90 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-5 sm:px-8">

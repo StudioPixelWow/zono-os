@@ -39,7 +39,7 @@ export async function toggleWebsiteSectionAction(section: string, enabled: boole
 }
 
 // ── Public action (NO auth — service-role; called from the public site form) ──
-export async function submitWebsiteLeadAction(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; message?: string; intent?: string }): Promise<OfficeSiteActionState> {
+export async function submitWebsiteLeadAction(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; message?: string; intent?: string; company?: string }): Promise<OfficeSiteActionState> {
   try {
     const r = await submitWebsiteLead(slug, input);
     if (!r.ok) return { error: r.error ?? "השליחה נכשלה" };

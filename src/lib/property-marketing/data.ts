@@ -20,9 +20,12 @@ const PUBLIC_STATUSES = ["active", "published", "under_offer"] as const;
 export interface PropertyMedia { images: string[]; video: string | null; floorPlan: string | null; tour360: string | null }
 export interface PropertyFeature { label: string; icon: string }
 
+// Public-safe listing agent. Deliberately carries NO agent email and NO internal
+// agent UUID — the public property page needs only display + contact CTAs, so
+// those private/internal fields never enter the server→client payload.
 export interface ListingAgent {
-  id: string; name: string; title: string | null; photo: string | null;
-  phone: string | null; tel: string | null; whatsapp: string | null; email: string | null;
+  name: string; title: string | null; photo: string | null;
+  phone: string | null; tel: string | null; whatsapp: string | null;
   areas: string[]; href: string | null; // /agent/[slug]
 }
 
@@ -146,14 +149,12 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
   const agentSlug = site && site.status === "published" && site.slug ? site.slug : null;
   const agentPhone = site?.phone ?? owner?.phone ?? null;
   const agent: ListingAgent | null = (owner || site) ? {
-    id: agentId as string,
     name: site?.display_name || owner?.full_name || "סוכן/ת",
     title: site?.title_hebrew || owner?.title || 'יועץ נדל"ן',
     photo: agentBrandPhoto ?? site?.profile_image_url ?? owner?.avatar_url ?? null,
     phone: agentPhone,
     tel: agentPhone ? `tel:${agentPhone.replace(/[^0-9+]/g, "")}` : null,
     whatsapp: waLink(site?.whatsapp ?? null, agentPhone),
-    email: site?.email ?? owner?.email ?? null,
     areas: (site?.service_areas ?? []).filter(Boolean).slice(0, 3),
     href: agentSlug ? `/agent/${agentSlug}` : null,
   } : null;
@@ -175,14 +176,12 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
       const memberPhone = m.phone ?? agentPhone ?? null;
       const officeSlug = officeSite?.slug ?? null;
       finalAgent = {
-        id: m.id,
         name: m.full_name,
         title: m.specialty || (m.role === "owner" ? "מנהל/ת המשרד" : 'יועץ/ת נדל"ן'),
         photo: resolveAgentAvatar({ avatarUrl: m.avatar_url, linkedUserAvatarUrl: linkedAvatar }) ?? agent?.photo ?? null,
         phone: memberPhone,
         tel: memberPhone ? `tel:${memberPhone.replace(/[^0-9+]/g, "")}` : null,
         whatsapp: waLink(null, memberPhone),
-        email: null, // never expose a roster member's email publicly
         areas: agent?.areas ?? [],
         href: officeSlug && m.show_on_website ? `/site/${officeSlug}/agents/${m.public_slug ?? m.id}` : null,
       };
@@ -199,7 +198,7 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
   interface RawRel { id: string; title: string | null; price: number | null; monthly_rent: number | null; listing_kind: string | null; city: string | null; neighborhood: string | null; rooms: number | null; size_sqm: number | null; floor: number | null; type: string; status: string; primary_image_url: string | null; listing_tag: string | null; has_exclusivity: boolean | null; owner_id: string | null }
   const relRows = (relatedR.data ?? []) as RawRel[];
   const scoreRel = (r: RawRel) => (r.neighborhood && r.neighborhood === p.neighborhood ? 3 : 0) + (r.city === p.city ? 2 : 0) + (r.type === p.type ? 1 : 0);
-  const agentRef = (uid: string | null): OfficeAgentRef | null => uid && uid === agentId && agent ? { id: agent.id, name: agent.name, photo: agent.photo, href: agent.href } : null;
+  const agentRef = (uid: string | null): OfficeAgentRef | null => uid && uid === agentId && agent ? { id: uid, name: agent.name, photo: agent.photo, href: agent.href } : null;
   const related: OfficeProperty[] = relRows.sort((a, b) => scoreRel(b) - scoreRel(a)).slice(0, 4).map((r) => ({
     id: r.id, title: r.title || [r.neighborhood, r.city].filter(Boolean).join(" · ") || "נכס",
     price: r.price, monthlyRent: r.monthly_rent, listingKind: r.listing_kind, city: r.city, neighborhood: r.neighborhood,

@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { getPropertyMarketing } from "@/lib/property-marketing/data";
 import { PropertyMarketingPage } from "@/components/property-marketing/PropertyMarketingPage";
+import { resolvePropertyTypeLabel } from "@/lib/property-marketing/presentation";
 
 export const dynamic = "force-dynamic";
 
-const TYPE_LABEL: Record<string, string> = { apartment: "דירה", house: "בית פרטי", penthouse: "פנטהאוז", garden_apartment: "דירת גן", duplex: "דופלקס", cottage: "קוטג׳", lot: "מגרש", commercial: "מסחרי", office: "משרד", studio: "סטודיו" };
 const money = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? `₪${n.toLocaleString("he-IL")}` : "");
 
 async function origin(): Promise<string | null> {
@@ -19,7 +19,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const d = await getPropertyMarketing(id).catch(() => null);
   if (!d || d === "unavailable") return { title: "נכס · ZONO", robots: { index: false } };
-  const type = TYPE_LABEL[d.type] ?? d.type;
+  // Canonical Hebrew resolver — never leaks a raw enum into the title/OG/Twitter.
+  const type = resolvePropertyTypeLabel(d.type);
   const priceStr = d.listingKind === "rent" ? (money(d.price) ? `${money(d.price)}/חודש` : "") : money(d.price);
   const title = `${type}${d.rooms ? ` · ${d.rooms} חדרים` : ""}${d.address.area ? ` · ${d.address.area}` : ""}`;
   const description = [priceStr, d.description?.slice(0, 120)].filter(Boolean).join(" · ") || title;

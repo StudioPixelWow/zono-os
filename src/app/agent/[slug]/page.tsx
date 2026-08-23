@@ -14,7 +14,8 @@ async function baseUrl(): Promise<string | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const site = await getAgentSite(slug).catch(() => null);
-  if (!site || site === "disabled") return { title: "אתר סוכן · ZONO" };
+  // Unpublished/unknown site: keep it out of the index (no indexable soft-404).
+  if (!site || site === "disabled") return { title: "אתר סוכן · ZONO", robots: { index: false } };
   const A = site.agent;
   const title = `${A.name}${A.title ? " · " + A.title : ""}${A.officeName ? " | " + A.officeName : ""}`;
   const description = A.bio || A.valueProp || A.headline || `יועץ נדל"ן${A.areas.length ? " ב" + A.areas.slice(0, 3).join(", ") : ""}`;

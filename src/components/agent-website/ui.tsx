@@ -8,6 +8,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { SiteProperty, SiteStat, SiteArea } from "@/lib/agent-website/site-data";
+import { statStripGridClass } from "@/lib/agent-website/stat-strip-layout";
 import { FavoriteButton } from "./FavoriteButton";
 
 export const money = (n: number | null | undefined): string | null =>
@@ -99,14 +100,16 @@ export function AgentPropertyCard({ property }: { property: SiteProperty }) {
 }
 
 /** Centered proof composition of real trust-numbers — large numbers, clear
- *  labels, a vertical divider between metrics (deliberately balanced for the
- *  common 2-metric case). Only real values; never fabricated. */
+ *  labels. Responsive by REAL count (see statStripGridClass): 0 hides, 1 is a
+ *  centered single-stat composition, 2 a balanced pair, 3–4 a responsive grid
+ *  that wraps cleanly (no stray dividers). Only real values; never fabricated. */
 export function StatStrip({ stats }: { stats: SiteStat[] }) {
+  if (stats.length < 1) return null;
   return (
-    <div className="mx-auto flex max-w-3xl flex-wrap items-stretch justify-center divide-x divide-[var(--brand-border)] rtl:divide-x-reverse">
+    <div className={`mx-auto grid ${statStripGridClass(stats.length)} gap-x-4 gap-y-8 sm:gap-x-8`}>
       {stats.map((s, i) => (
-        <div key={i} className="flex min-w-[150px] flex-1 flex-col items-center px-8 py-2 text-center sm:px-12">
-          <div className="text-[52px] font-black leading-none tracking-tight text-[color:var(--brand-link)] sm:text-[68px]">{s.value}</div>
+        <div key={i} className="flex flex-col items-center px-2 text-center">
+          <div className="text-[44px] font-black leading-none tracking-tight text-[color:var(--brand-link)] sm:text-[64px]">{s.value}</div>
           <div className="mt-3 text-[15px] font-bold text-[var(--brand-muted)] sm:text-[16px]">{s.label}</div>
         </div>
       ))}

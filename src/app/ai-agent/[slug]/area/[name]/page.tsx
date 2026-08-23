@@ -1,41 +1,7 @@
-// ============================================================================
-// 👤 ZONO — AI Agent Website — AREA AI page. 32.2. Scoped to the broker.
-// REUSES the 32.1 framework neighborhood view model; broker-scoped listings.
-// Evidence-only, public-safe.
-// ============================================================================
-import type { CSSProperties } from "react";
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { getAgentAreaAi, seoForAgentArea } from "@/lib/agent-site";
-import { themeVars } from "@/lib/brokerage-site";
-import { JsonLd } from "@/components/brokerage-site/ui";
-import { AreaGuide } from "@/components/brokerage-site/AreaGuide";
+// LEGACY ROUTE — RETIRED → canonical `/agent/[slug]`. 308 permanent redirect.
+import { permanentRedirect } from "next/navigation";
 
-export const revalidate = 600;
-
-export async function generateMetadata({ params }: { params: Promise<{ slug: string; name: string }> }): Promise<Metadata> {
-  const { slug, name } = await params;
-  const r = await getAgentAreaAi(slug, decodeURIComponent(name));
-  if (r === "disabled" || r === null) return { title: "אזור לא נמצא" };
-  const seo = seoForAgentArea(r.neighborhood, r.branding, "", slug);
-  return { title: seo.title, description: seo.description, alternates: { canonical: seo.canonical } };
-}
-
-export default async function AgentAreaPage({ params }: { params: Promise<{ slug: string; name: string }> }) {
-  const { slug, name } = await params;
-  const r = await getAgentAreaAi(slug, decodeURIComponent(name));
-  if (r === "disabled") return <div className="p-16 text-center text-slate-500">האתר אינו פעיל כרגע.</div>;
-  if (!r) notFound();
-  const { branding, neighborhood: n } = r;
-  const seo = seoForAgentArea(n, branding, "", slug);
-
-  return (
-    <div style={themeVars(branding) as CSSProperties}>
-      <JsonLd data={seo.jsonLd} />
-      <AreaGuide neighborhood={n} slug={slug} base="ai-agent" cover={branding.cover}
-        contactName={branding.brokerName} whatsapp={branding.whatsapp} phone={branding.phone}
-        attribution={`עם ${branding.brokerName}`} askApiBase="agent-site" askTitle={`שאל את ${branding.brokerName}`}
-        allAreasHref={`/ai-agent/${slug}/areas`} />
-    </div>
-  );
+export default async function LegacyAgentAreaRedirect({ params }: { params: Promise<{ slug: string; name: string }> }) {
+  const { slug } = await params;
+  permanentRedirect(`/agent/${slug}`);
 }

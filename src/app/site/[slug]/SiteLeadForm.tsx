@@ -10,7 +10,7 @@ export function SiteLeadForm({ slug, variant, cta }: { slug: string; variant: Va
   const [pending, start] = useTransition();
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [f, setF] = useState({ fullName: "", phone: "", city: "", propertyType: "", rooms: "", message: "", experience: "" });
+  const [f, setF] = useState({ fullName: "", phone: "", city: "", propertyType: "", rooms: "", message: "", experience: "", company: "" });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,6 +21,7 @@ export function SiteLeadForm({ slug, variant, cta }: { slug: string; variant: Va
         fullName: f.fullName || undefined, phone: f.phone || undefined, city: f.city || undefined,
         propertyType: f.propertyType || undefined, rooms: f.rooms || undefined,
         message: variant === "recruitment" ? `ניסיון: ${f.experience}` : f.message || undefined,
+        company: f.company || undefined,
       });
       if (r.error) setError(r.error); else setDone(true);
     });
@@ -31,6 +32,13 @@ export function SiteLeadForm({ slug, variant, cta }: { slug: string; variant: Va
   const input = "w-full rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm outline-none focus:border-[color:var(--brand-primary)]";
   return (
     <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Honeypot — hidden from humans (off-screen, not focusable, not announced).
+          Bots that fill every field trip it and are silently dropped server-side. */}
+      <input
+        type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden="true"
+        className="absolute -left-[9999px] h-0 w-0 opacity-0" value={f.company}
+        onChange={(e) => setF({ ...f, company: e.target.value })}
+      />
       {variant === "valuation" && <>
         <input className={input} placeholder="עיר" value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} />
         <input className={input} placeholder="סוג נכס (דירה/בית...)" value={f.propertyType} onChange={(e) => setF({ ...f, propertyType: e.target.value })} />

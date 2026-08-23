@@ -1,12 +1,14 @@
 "use client";
 // Premium property gallery (spec §9/§38) — editorial grid + full-screen lightbox.
 // Property photography leads; brand is accents only. Lazy images; keyboard nav.
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 export function PropertyGallery({ images, title }: { images: string[]; title: string }) {
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);
   const n = images.length;
+  // Touch-swipe tracking for the mobile lightbox (no external carousel dep).
+  const touchX = useRef<number | null>(null);
 
   const go = useCallback((d: number) => setI((v) => (v + d + n) % n), [n]);
   useEffect(() => {
@@ -19,6 +21,17 @@ export function PropertyGallery({ images, title }: { images: string[]; title: st
 
   if (n === 0) return null;
   const openAt = (idx: number) => { setI(idx); setOpen(true); };
+  // Horizontal swipe → prev/next (RTL-consistent with ArrowLeft=next). A short
+  // vertical/tiny drag is ignored so taps and scroll intent aren't hijacked.
+  const onTouchStart = (e: React.TouchEvent) => { touchX.current = e.changedTouches[0].clientX; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchX.current == null || n < 2) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    touchX.current = null;
+    if (Math.abs(dx) < 45) return;
+    go(dx < 0 ? 1 : -1);
+  };
+  const adj = (d: number) => images[(i + d + n) % n];
 
   return (
     <>
@@ -42,12 +55,14 @@ export function PropertyGallery({ images, title }: { images: string[]; title: st
 
       {/* Lightbox */}
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/92" role="dialog" aria-modal="true" onClick={() => setOpen(false)}>
-          <button type="button" aria-label="סגירה" className="absolute end-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-2xl text-white" onClick={() => setOpen(false)}>✕</button>
+        <div className="fixed inset-0 z-[60] flex touch-pan-y items-center justify-center overflow-hidden bg-black/92" role="dialog" aria-modal="true" onClick={() => setOpen(false)} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <button type="button" aria-label="סגירה" className="absolute end-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-2xl text-white" onClick={() => setOpen(false)}>✕</button>
           <span className="absolute start-1/2 top-5 -translate-x-1/2 text-[13px] font-semibold text-white/80">{i + 1} / {n}</span>
           {n > 1 && <button type="button" aria-label="הבא" className="absolute end-4 grid h-12 w-12 place-items-center rounded-full bg-white/10 text-2xl text-white" onClick={(e) => { e.stopPropagation(); go(1); }}>›</button>}
-          <img src={images[i]} alt={`${title} ${i + 1}`} className="max-h-[86vh] max-w-[92vw] object-contain" onClick={(e) => e.stopPropagation()} />
+          <img src={images[i]} alt={`${title} ${i + 1}`} className="max-h-[86vh] max-w-[92vw] select-none object-contain" draggable={false} onClick={(e) => e.stopPropagation()} />
           {n > 1 && <button type="button" aria-label="הקודם" className="absolute start-4 grid h-12 w-12 place-items-center rounded-full bg-white/10 text-2xl text-white" onClick={(e) => { e.stopPropagation(); go(-1); }}>‹</button>}
+          {/* Preload the adjacent frames so a swipe doesn't flash blank on mobile. */}
+          {n > 1 && <div className="hidden"><img src={adj(1)} alt="" aria-hidden /><img src={adj(-1)} alt="" aria-hidden /></div>}
         </div>
       )}
     </>

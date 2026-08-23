@@ -212,13 +212,34 @@ export async function getPublicOfficeProperties(slug: string, filters?: { city?:
 }
 
 // ── Lead engine (service-role; public form → CRM lead + event + activity) ─────
-export async function submitWebsiteLead(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; message?: string; intent?: string }) {
+export async function submitWebsiteLead(slug: string, input: { sourceSection: string; fullName?: string; phone?: string; email?: string; city?: string; propertyType?: string; rooms?: string; message?: string; intent?: string; company?: string }) {
+  // Honeypot: a real (human) user never sees or fills the `company` field. A bot
+  // that auto-fills every input trips it → we silently accept (no error signal,
+  // no write). Return success so the bot gets no feedback to adapt to.
+  if (input.company && input.company.trim()) return { ok: true };
   if (!slug || (!input.phone && !input.email)) return { ok: false, error: "חסר טלפון או אימייל" };
   const admin = createServiceRoleClient();
   const { data: site } = await admin.from("office_websites").select("id,organization_id,status").eq("slug", slug).maybeSingle();
   if (!site || (site as { status: string }).status !== "published") return { ok: false, error: "האתר אינו זמין" };
   const siteRow = site as { id: string; organization_id: string };
   const orgId = siteRow.organization_id;
+
+  // Duplicate-submit protection (accidental double-tap / refresh-resubmit). Reuses
+  // the existing office_website_leads surface — same org + section + contact within
+  // a short window is treated as the SAME submission: return success (the user
+  // already succeeded), write nothing, avoid a duplicate CRM lead. No schema change.
+  const DEDUPE_WINDOW_MS = 2 * 60 * 1000;
+  const contact = (input.phone ?? input.email ?? "").trim();
+  if (contact) {
+    try {
+      const since = new Date(Date.now() - DEDUPE_WINDOW_MS).toISOString();
+      const col = input.phone ? "phone" : "email";
+      const { data: dup } = await admin.from("office_website_leads").select("id")
+        .eq("organization_id", orgId).eq("source_section", input.sourceSection)
+        .eq(col, contact).gte("created_at", since).limit(1);
+      if (Array.isArray(dup) && dup.length > 0) return { ok: true };
+    } catch { /* dedupe is best-effort — never block a real submission on it */ }
+  }
 
   // Create a CRM lead (source = website). Best-effort intent mapping.
   const intent = input.sourceSection === "valuation" ? "seller" : input.sourceSection === "recruitment" ? "unknown" : input.intent ?? "buyer";

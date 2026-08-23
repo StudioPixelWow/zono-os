@@ -5,12 +5,11 @@
 // area + type choices come from the agent's real inventory).
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { resolvePropertyType } from "@/lib/property-marketing/presentation";
 
-const TYPE_LABELS: Record<string, string> = {
-  apartment: "דירה", house: "בית פרטי", penthouse: "פנטהאוז", garden_apartment: "דירת גן",
-  duplex: "דופלקס", cottage: "קוטג׳", lot: "מגרש", commercial: "מסחרי", office: "משרד", studio: "סטודיו",
-};
-const label = (t: string) => TYPE_LABELS[t] ?? t;
+// Canonical Hebrew label; null for an unknown internal/English token so it is
+// dropped from the dropdown instead of leaking a raw enum to the public UI.
+const label = (t: string): string | null => resolvePropertyType(t);
 
 const ROOMS = ["1", "2", "3", "4", "5", "6"];
 const PRICES = [500_000, 1_000_000, 1_500_000, 2_000_000, 3_000_000, 5_000_000];
@@ -20,6 +19,8 @@ export function PropertySearch({ slug, areas, types, basePath = "/agent" }: { sl
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ q: "", area: "", type: "", min: "", max: "", rooms: "" });
+  // Only offer types that resolve to a Hebrew label — unknown/internal enums drop.
+  const typeOptions = types.map((t) => ({ value: t, he: label(t) })).filter((o): o is { value: string; he: string } => !!o.he);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,9 +44,9 @@ export function PropertySearch({ slug, areas, types, basePath = "/agent" }: { sl
                 <option value="">אזור</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             )}
-            {types.length > 0 && (
+            {typeOptions.length > 0 && (
               <select aria-label="סוג נכס" className={sel} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
-                <option value="">סוג נכס</option>{types.map((t) => <option key={t} value={t}>{label(t)}</option>)}
+                <option value="">סוג נכס</option>{typeOptions.map((o) => <option key={o.value} value={o.value}>{o.he}</option>)}
               </select>
             )}
             <select aria-label="מחיר" className={sel} value={f.max} onChange={(e) => setF({ ...f, max: e.target.value })}>
@@ -71,7 +72,7 @@ export function PropertySearch({ slug, areas, types, basePath = "/agent" }: { sl
         {open && (
           <div className="mt-2 grid grid-cols-2 gap-2 lg:hidden">
             {areas.length > 0 && <select aria-label="אזור" className={sel} value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}><option value="">אזור</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>}
-            {types.length > 0 && <select aria-label="סוג נכס" className={sel} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}><option value="">סוג נכס</option>{types.map((t) => <option key={t} value={t}>{label(t)}</option>)}</select>}
+            {typeOptions.length > 0 && <select aria-label="סוג נכס" className={sel} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}><option value="">סוג נכס</option>{typeOptions.map((o) => <option key={o.value} value={o.value}>{o.he}</option>)}</select>}
             <select aria-label="מחיר" className={sel} value={f.max} onChange={(e) => setF({ ...f, max: e.target.value })}><option value="">טווח מחיר</option>{PRICES.map((p) => <option key={p} value={p}>עד {fmtPrice(p)}</option>)}</select>
             <select aria-label="חדרים" className={sel} value={f.rooms} onChange={(e) => setF({ ...f, rooms: e.target.value })}><option value="">חדרים</option>{ROOMS.map((r) => <option key={r} value={r}>{r}+ חדרים</option>)}</select>
           </div>

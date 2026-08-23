@@ -104,7 +104,8 @@ export async function getMyProfile(): Promise<MyProfile | null> {
     officeLogo: sn((offR.data as { logo_url?: string } | null)?.logo_url),
     userName: s(me.full_name), userTitle: sn(me.title), userAvatar: sn(me.avatar_url),
     roleLabel: roleRow?.name ?? "סוכן", isManager,
-    publicUrl: status === "published" && slug ? `/ai-agent/${slug}` : null,
+    // Canonical public agent URL (the legacy /ai-agent/[slug] now 308-redirects here).
+    publicUrl: status === "published" && slug ? `/agent/${slug}` : null,
   };
   return { ...base, completion: completion(base) };
 }

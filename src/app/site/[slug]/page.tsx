@@ -14,7 +14,8 @@ async function origin(): Promise<string | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const site = await getOfficeSite(slug).catch(() => null);
-  if (!site || site === "disabled") return { title: "אתר משרד · ZONO" };
+  // Unpublished/unknown site: keep it out of the index (no indexable soft-404).
+  if (!site || site === "disabled") return { title: "אתר משרד · ZONO", robots: { index: false } };
   const O = site.office;
   const title = `${O.name}${O.tagline ? " · " + O.tagline : ""}`;
   const description = O.description || O.tagline || `משרד תיווך${site.areas.length ? " ב" + site.areas.slice(0, 3).map((a) => a.name).join(", ") : ""}`;
