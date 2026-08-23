@@ -15,10 +15,14 @@ export interface OrgTerritory {
   empty: boolean;
 }
 
-/** Normalize a city string for cross-source matching (script-preserving — never
- *  collapses different-language names of DIFFERENT cities, only casing/space). */
+/** Normalize a city string for cross-source matching. Script-preserving — never
+ *  collapses different-language names of DIFFERENT cities. Folds ONLY casing,
+ *  whitespace, and Hebrew ktiv male/haser spelling drift (doubled yod/vav → single)
+ *  so the SAME city written "קריית ביאליק" and "קרית ביאליק" compares equal. This
+ *  fold is required: org territories and the detected-office graph routinely differ
+ *  by exactly this drift, and without it a strict match hides every real office. */
 export function normalizeCityKey(v: string | null | undefined): string {
-  return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ").replace(/י{2,}/g, "י").replace(/ו{2,}/g, "ו");
 }
 
 /**

@@ -16,7 +16,8 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { externalListingRepository } from "@/lib/external-listings/repository";
 import { buildOfficeCockpit, type OfficeCockpit, type OfficeRecord, type OfficeFilters } from "./cockpit";
-import { deriveTerritoryAreas, officeInTerritory } from "./office-territory";
+import { officeInTerritory } from "./office-territory";
+import { getOrgIntelligenceTerritory } from "@/lib/brokerage-data/territory";
 
 const DAY = 86_400_000;
 const num = (v: unknown): number | null => { const n = Number(v); return Number.isFinite(n) ? n : null; };
@@ -50,15 +51,17 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
   let orgId: string | null = null;
   try { orgId = (await getSessionContext()).profile?.org_id ?? null; } catch { /* ignore */ }
 
-  // ── P0: the office universe is THIS org's territory (canonical territory_profiles),
-  // never the global detected-office graph. Cross-customer mixing is impossible:
-  // an office appears only when its city is a specialization area OR the org has its
-  // own observed activity linked to it. Empty territory ⇒ activity-only (see filter). ──
+  // ── P0: the office universe is THIS org's territory, resolved from the ONE
+  // canonical source (organization_operating_localities → israel_localities), never
+  // the global detected-office graph and never the looser territory_profiles. An
+  // office appears only when its CITY exactly matches (male/haser-folded) one of the
+  // org's operating cities OR the org has its own observed activity linked to it.
+  // Cross-customer mixing is impossible. Empty territory ⇒ activity-only. ──
   const territoryAreas: string[] = [];
   if (orgId) {
     try {
-      const { data } = await db.from("territory_profiles").select("city_name,neighborhood_name").eq("organization_id", orgId).limit(2000);
-      territoryAreas.push(...deriveTerritoryAreas((data ?? []) as unknown as { city_name?: string | null; neighborhood_name?: string | null }[]));
+      const t = await getOrgIntelligenceTerritory(orgId);
+      territoryAreas.push(...t.canonicalNames);
     } catch (e) { console.error("[office-cockpit] territory failed:", e instanceof Error ? e.message : e); }
   }
 

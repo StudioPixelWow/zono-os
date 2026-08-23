@@ -17,6 +17,8 @@ import { buildOfficeDna, buildBrokerDna, type BrokerageDna } from "./dna";
 import { normalizeHebrewName, normalizePhoneNumber } from "./normalize";
 import { resolveBrokerOfficesForOrg } from "./office-resolution";
 import { getBrokerageDataOverview, type BrokerageDataOverview } from "./overview";
+import { getOrgIntelligenceTerritory } from "./territory";
+import { cityInTerritory } from "@/lib/office-intel/office-territory";
 import type {
   BrokerageAccess, BrokerageOffice, BrokerageAgent, BrokerageDataConflict, BrokerageIdentityMatch,
   BrokerageExternalListingLink, BrokerageRefreshRun, BrokerageDataSource, BrokerageDataStats, LinkStatus,
@@ -58,8 +60,34 @@ export async function getBrokerageCommandCenter(opts: { city?: string | null; se
     brokerageRepository.linkCounts(),
     getBrokerageDataOverview(orgId),
   ]);
+
+  // ── P0 territory scoping: brokerage_offices/agents are a NATIONAL graph (no org_id).
+  // The customer-visible directory + roster must be THIS org's territory only — its
+  // canonical operating cities (organization_operating_localities, strict + male/haser
+  // folded) OR offices the org has its own observed listing activity linked to. This
+  // closes the cross-customer leak where every org saw every org's offices. ──
+  let scopedOffices = offices;
+  let scopedAgents = agents;
+  if (orgId) {
+    const territory = await getOrgIntelligenceTerritory(orgId);
+    const cities = territory.canonicalNames;
+    const db = createServiceRoleClient() as unknown as {
+      from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { not: (k: string, o: string, v: unknown) => { limit: (n: number) => Promise<{ data: { office_id: string | null }[] | null }> } } } };
+    };
+    const orgOfficeIds = new Set<string>();
+    try {
+      const { data } = await db.from("brokerage_external_listing_links").select("office_id").eq("organization_id", orgId).not("office_id", "is", null).limit(50000);
+      for (const l of data ?? []) if (l.office_id) orgOfficeIds.add(l.office_id);
+    } catch { /* bridge best-effort */ }
+
+    const inScope = (o: BrokerageOffice) => orgOfficeIds.has(o.id) || cityInTerritory(o.city, cities);
+    scopedOffices = offices.filter(inScope);
+    const scopedOfficeIds = new Set(scopedOffices.map((o) => o.id));
+    scopedAgents = agents.filter((a) => (a.officeId ? scopedOfficeIds.has(a.officeId) : false) || cityInTerritory(a.city, cities));
+  }
+
   return {
-    access, stats, offices, agents, links, conflicts, matches, runs, sources, overview,
+    access, stats, offices: scopedOffices, agents: scopedAgents, links, conflicts, matches, runs, sources, overview,
     agentListingCounts: Object.fromEntries(counts.byAgent),
     officeListingCounts: Object.fromEntries(counts.byOffice),
   };

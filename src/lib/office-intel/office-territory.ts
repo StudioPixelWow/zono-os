@@ -29,14 +29,19 @@ export function deriveTerritoryAreas(rows: { city_name?: string | null; neighbor
   return out;
 }
 
-/** Loose membership of a place in the territory area set (both-way contains). */
+/** STRICT membership of a place in the territory area set. Equality only, AFTER
+ *  male/haser spelling folding (so קריית ביאליק == קרית ביאליק) — but NEVER
+ *  substring containment. Substring matching leaked unrelated cities (a short
+ *  area/neighborhood token substring-matched offices in other cities), which is
+ *  the P0 cross-territory bug. Exact-with-fold keeps spelling drift tolerant
+ *  without ever admitting a different city. */
 export function cityInTerritory(city: string | null | undefined, areas: string[]): boolean {
   const c = norm(city);
   if (!c) return false;
   for (const a of areas) {
     const n = norm(a);
     if (!n) continue;
-    if (c === n || c.includes(n) || n.includes(c)) return true;
+    if (c === n) return true;
   }
   return false;
 }
