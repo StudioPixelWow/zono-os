@@ -7,6 +7,7 @@
 // duplicate, and an audit-trail timeline. Two view modes: "edit" and "preview".
 // ============================================================================
 import { useState } from "react";
+import { RemoteSignaturePanel } from "./RemoteSignaturePanel";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -184,11 +185,14 @@ export function LegalDocumentView({
             )}
           </Panel>
 
+          {/* Remote e-signature (distinct from manual) */}
+          {!locked && <RemoteSignaturePanel documentId={document.id} />}
+
           {/* Manual signature */}
           {!locked && (
-            <Panel title="חתימה ידנית" icon="PenLine">
+            <Panel title="רישום חתימה ידנית" icon="PenLine">
               <p className="text-muted mb-2 text-[11px] leading-relaxed">
-                אין ספק חתימה אלקטרונית — פעולה זו רושמת חתימה ידנית ונועלת את המסמך.
+                חתימה במקום/על נייר — פעולה זו רושמת חתימה ידנית ונועלת את המסמך (נבדל מ״שלח לחתימה מרחוק״).
               </p>
               <div className="flex flex-col gap-2">
                 <SignField label="שם החותם *" value={signerName} onChange={setSignerName} />
