@@ -215,10 +215,14 @@ export async function completeSignature(input: CompleteSignatureInput, db: any =
   await db.from("legal_documents").update({ status: "signed", updated_at: nowIso }).eq("id", doc.id).eq("organization_id", req.org_id);
 
   // Notify the broker (document.signed → in-app; deep-links to /legal-templates/[id]).
+  // The signer is a public recipient with no user account, so we set the actor to the
+  // document's AGENT — otherwise the notification projector (which needs an actor to
+  // notify) would skip it and the broker would never learn the client signed.
   try {
     const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
     await emitBusinessEvent({
       type: DOMAIN_EVENTS.documentSigned, entityType: "document", entityId: doc.id, orgId: req.org_id,
+      actorUserId: (doc.agent_id as string | null) ?? (req.created_by as string | null) ?? null,
       idempotencyKey: `document.signed:remote:${req.id}`,
       payload: { recipientName: req.recipient_name, documentTitle: doc.title, propertyId: doc.property_id },
     });
