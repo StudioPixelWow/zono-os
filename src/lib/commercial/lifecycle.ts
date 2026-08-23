@@ -12,8 +12,8 @@
 // Decision A (next-cycle, no proration) and Decision B (custom→standard needs
 // approval) are encoded.
 // ============================================================================
-import { BILLING_STATES, canTransition, type BillingState } from "./billing-state";
-import { decideRecurringUpdate } from "./recurring-decision";
+import { BILLING_STATES, canTransition, type BillingState } from "./billing-state.ts";
+import { decideRecurringUpdate } from "./recurring-decision.ts";
 
 // ── Per-state lifecycle contract (extends the P8.0 STATE_CONTRACT) ───────────
 export interface LifecycleStateMeta {

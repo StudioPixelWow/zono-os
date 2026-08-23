@@ -50,7 +50,7 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
           <h3 className="text-ink text-sm font-black">המנוי</h3>
           <div className="flex items-center justify-between rounded-[12px] border border-[var(--line)] p-3">
             <span className="text-ink text-[13px] font-bold">{CARDS.find((c) => c.tier === planTier)?.label ?? planTier}</span>
-            <span className="text-brand text-[12px] font-black">{STATUS_HE[subscriptionStatus] ?? subscriptionStatus}</span>
+            <span className="text-brand text-[12px] font-black">{STATUS_HE[(subscriptionStatus ?? "").toLowerCase()] ?? "סטטוס מנוי"}</span>
           </div>
           {subscription?.cancelAtPeriodEnd ? <div className="flex flex-wrap items-center gap-2"><p className="text-warning text-[11px]">החידוש בוטל — הגישה תישאר עד סוף התקופה.</p><button type="button" disabled={pending} onClick={reactivate} className="text-brand text-[11px] font-bold disabled:opacity-50">חידוש המנוי</button></div> : null}
           <div className="flex flex-wrap gap-2">
