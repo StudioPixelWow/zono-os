@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
@@ -12,7 +12,8 @@ import {
   rejectOfferAction, withdrawOfferAction, expireOfferAction, convertOfferToDealAction, getOfferDetailAction,
   offerFormOptionsAction, type OfferFormOptions,
 } from "@/lib/offers/actions";
-import type { OffersCommandCenter, OfferSummary, OfferDetail, OfferStatus } from "@/lib/offers/service";
+import type { OfferDetail, OfferStatus } from "@/lib/offers/service";
+import { OFFER_FILTER_TABS, OFFER_SORT_OPTIONS, type HydratedOffer, type OffersBoardPage } from "@/lib/offers/board";
 
 const STATUS_LABEL: Record<OfferStatus, string> = {
   draft: "טיוטה", submitted: "הוגשה", countered: "הצעה נגדית", accepted: "אושרה",
@@ -25,20 +26,35 @@ const STATUS_TONE: Record<OfferStatus, string> = {
 const ils = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 w-full rounded-xl border px-3 text-sm outline-none";
 
-type Filter = "all" | "open" | "accepted";
-
-export function OffersView({ cc }: { cc: OffersCommandCenter }) {
+export function OffersView({ board, lockBuyerId, lockPropertyId }: { board: OffersBoardPage; lockBuyerId: string | null; lockPropertyId: string | null }) {
   const r = useActionRunner();
   const router = useRouter();
-  const params = useSearchParams();
-  // Prefill+lock a buyer/property when arriving from a buyer/property workspace.
-  const lockBuyerId = params.get("buyerId");
-  const lockPropertyId = params.get("propertyId");
-  const [filter, setFilter] = useState<Filter>("all");
+  const sp = useSearchParams();
   const [showNew, setShowNew] = useState(Boolean(lockBuyerId || lockPropertyId));
 
-  const offers = cc.offers.filter((o) =>
-    filter === "all" ? true : filter === "accepted" ? o.status === "accepted" : ["draft", "submitted", "countered"].includes(o.status));
+  const setParam = useCallback((patch: Record<string, string | null>, resetPage = true) => {
+    const next = new URLSearchParams(sp.toString());
+    for (const [k, v] of Object.entries(patch)) { if (v == null || v === "") next.delete(k); else next.set(k, v); }
+    if (resetPage && !("page" in patch)) next.delete("page");
+    router.push(`/offers?${next.toString()}`, { scroll: false });
+  }, [router, sp]);
+
+  const filter = sp.get("filter") ?? "all";
+  const sort = sp.get("sort") ?? "recent";
+  const urlQ = sp.get("q") ?? "";
+  const [qLocal, setQLocal] = useState(urlQ);
+  const [prevUrlQ, setPrevUrlQ] = useState(urlQ);
+  if (urlQ !== prevUrlQ) { setPrevUrlQ(urlQ); setQLocal(urlQ); }
+  const qTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSearch = (v: string) => {
+    setQLocal(v);
+    if (qTimer.current) clearTimeout(qTimer.current);
+    qTimer.current = setTimeout(() => setParam({ q: v.trim() || null }), 350);
+  };
+
+  const from = board.total === 0 ? 0 : (board.page - 1) * board.pageSize + 1;
+  const to = Math.min(board.page * board.pageSize, board.total);
+  const selectCls = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-2.5 text-[12.5px] font-semibold outline-none";
 
   return (
     <main dir="rtl" className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6">
@@ -54,25 +70,50 @@ export function OffersView({ cc }: { cc: OffersCommandCenter }) {
       </header>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="פתוחות" value={cc.open} tone="text-brand-strong" />
-        <Stat label="ממתין למוכר" value={cc.awaitingSeller} tone="text-warning" />
-        <Stat label="ממתין לקונה" value={cc.awaitingBuyer} tone="text-warning" />
-        <Stat label="אושרו" value={cc.accepted} tone="text-success" />
+        <Stat label="פתוחות" value={board.kpis.open} tone="text-brand-strong" />
+        <Stat label="ממתין למוכר" value={board.kpis.awaitingSeller} tone="text-warning" />
+        <Stat label="ממתין לקונה" value={board.kpis.awaitingBuyer} tone="text-warning" />
+        <Stat label="אושרו" value={board.kpis.accepted} tone="text-success" />
       </div>
 
       <ActionFeedback runner={r} />
       {showNew && <NewOfferForm r={r} lockBuyerId={lockBuyerId} lockPropertyId={lockPropertyId} onDone={() => { setShowNew(false); router.refresh(); }} />}
 
-      <nav className="border-line flex gap-1 border-b">
-        {([["all", "הכל"], ["open", "פתוחות"], ["accepted", "אושרו"]] as [Filter, string][]).map(([id, label]) => (
-          <button key={id} onClick={() => setFilter(id)} className={`px-3 py-2 text-sm font-bold ${filter === id ? "text-brand-strong border-brand border-b-2" : "text-muted"}`}>{label}</button>
+      {/* Search + sort */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] flex-1">
+          <span className="text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"><Icon name="Search" size={15} /></span>
+          <input value={qLocal} onChange={(e) => onSearch(e.target.value)} placeholder="חיפוש לפי נכס, קונה או סכום" className="bg-surface border-line text-ink focus:border-brand-light h-9 w-full rounded-xl border pr-9 pl-3 text-[13px] outline-none" />
+        </div>
+        <select value={sort} onChange={(e) => setParam({ sort: e.target.value }, false)} className={selectCls} aria-label="מיון">
+          {OFFER_SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      <nav className="border-line flex flex-wrap gap-1 border-b">
+        {OFFER_FILTER_TABS.map((t) => (
+          <button key={t.value} onClick={() => setParam({ filter: t.value === "all" ? null : t.value })} className={`px-3 py-2 text-sm font-bold ${filter === t.value ? "text-brand-strong border-brand border-b-2" : "text-muted"}`}>{t.label}</button>
         ))}
       </nav>
 
-      {offers.length === 0 ? (
+      {board.truncated && <div className="bg-warning-soft text-warning rounded-xl px-3 py-2 text-[12.5px] font-bold">מוצגות ההצעות העדכניות ביותר. צמצם עם סינון או חיפוש כדי לראות אחרות.</div>}
+
+      {board.rows.length === 0 ? (
         <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין הצעות להצגה</div>
       ) : (
-        <div className="flex flex-col gap-2">{offers.map((o) => <OfferCard key={o.id} o={o} r={r} onChanged={() => router.refresh()} />)}</div>
+        <>
+          <div className="flex flex-col gap-2">{board.rows.map((o) => <OfferCard key={o.id} o={o} r={r} onChanged={() => router.refresh()} />)}</div>
+          {board.total > board.pageSize && (
+            <div className="text-muted flex flex-wrap items-center justify-between gap-2 px-1 text-[12px]">
+              <span>מציג {from}–{to} מתוך {board.total}</span>
+              <div className="flex items-center gap-1.5">
+                <button disabled={board.page <= 1} onClick={() => setParam({ page: String(board.page - 1) }, false)} className="border-line bg-surface text-ink grid h-8 w-8 place-items-center rounded-lg border transition disabled:opacity-40"><Icon name="ChevronRight" size={15} /></button>
+                <span className="min-w-[60px] text-center font-bold">{board.page} / {board.pageCount}</span>
+                <button disabled={board.page >= board.pageCount} onClick={() => setParam({ page: String(board.page + 1) }, false)} className="border-line bg-surface text-ink grid h-8 w-8 place-items-center rounded-lg border transition disabled:opacity-40"><Icon name="ChevronLeft" size={15} /></button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </main>
   );
@@ -144,7 +185,7 @@ function NewOfferForm({ r, onDone, lockBuyerId, lockPropertyId }: { r: Runner; o
   );
 }
 
-function OfferCard({ o, r, onChanged }: { o: OfferSummary; r: Runner; onChanged: () => void }) {
+function OfferCard({ o, r, onChanged }: { o: HydratedOffer; r: Runner; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<OfferDetail | null>(null);
   const [counter, setCounter] = useState("");
@@ -163,7 +204,8 @@ function OfferCard({ o, r, onChanged }: { o: OfferSummary; r: Runner; onChanged:
     <div className="bg-card border-line rounded-2xl border p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <p className="text-ink truncate text-[13px] font-bold">{o.propertyTitle || "נכס ללא כותרת"}{o.buyerName ? ` · ${o.buyerName}` : ""}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
             <p className="text-ink text-lg font-black">{ils(o.amount)}</p>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS_TONE[o.status]}`}>{STATUS_LABEL[o.status]}</span>
             {o.original_amount != null && o.original_amount !== o.amount && <span className="text-muted text-[11px]">מקורי {ils(o.original_amount)}</span>}
