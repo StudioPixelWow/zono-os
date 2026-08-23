@@ -24,7 +24,7 @@ export async function submitPropertyLeadAction(
   if (!p || !["active", "published", "under_offer"].includes(p.status)) return { error: "הנכס אינו זמין" };
 
   const agentId = p.owner_id ?? p.assigned_agent_id ?? null;
-  const intent = p.listing_kind === "rent" ? "buyer" : "buyer";
+  const intent = p.listing_kind === "rent" ? "renter" : "buyer";
   const area = [p.neighborhood, p.city].filter(Boolean).join(", ");
 
   let leadId: string | null = null;

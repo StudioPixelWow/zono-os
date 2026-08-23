@@ -31,7 +31,7 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
           {d.brand.logo ? <img src={d.brand.logo} alt={d.office.name} className="h-9 w-auto max-w-[150px] object-contain" /> : <span className="text-lg font-black text-[var(--brand-text)]">{d.office.name}</span>}
           <div className="flex items-center gap-2">
             <PropertyShare title={d.title} />
-            {A?.whatsapp && <a href={A.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-[13px] font-bold text-[var(--brand-on-primary)]">WhatsApp</a>}
+            {A?.whatsapp && <a href={A.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-[13px] font-bold text-[var(--brand-on-primary)]">וואטסאפ</a>}
           </div>
         </div>
       </header>
@@ -162,7 +162,7 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
           <div>
             <h2 className="text-[32px] font-black leading-[1.05] tracking-tight sm:text-[46px]">מעוניינים לראות את הנכס?</h2>
             <p className="mt-4 text-[18px] opacity-90">השאירו פרטים ו{A ? A.name.split(" ")[0] : "הסוכן"} יחזור אליכם לתיאום ביקור.</p>
-            {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="mt-7 inline-block rounded-xl bg-[var(--brand-background)] px-7 py-4 text-[16px] font-black text-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
+            {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="mt-7 inline-block rounded-xl bg-[var(--brand-background)] px-7 py-4 text-[16px] font-black text-[color:var(--brand-primary)]">שלחו הודעת וואטסאפ</a>}
           </div>
           <div className="rounded-[24px] bg-[var(--brand-background)] p-7 text-[var(--brand-text)] shadow-2xl sm:p-8">
             <h3 className="mb-4 text-[20px] font-black">השאירו פרטים</h3>
