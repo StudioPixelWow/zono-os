@@ -209,10 +209,9 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
 
       {/* ── ZI action center — the single highest-weight area ────────────────── */}
       <div className="border-brand-light relative shrink-0 overflow-hidden rounded-[24px] border bg-gradient-to-l from-[var(--color-brand-soft)] via-card to-card p-4 shadow-[var(--shadow-card)] sm:p-5">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(220px,1fr)_1.4fr]">
-          {/* right: heading + subtitle + start button, with a large centered ZI
-              filling the empty space below (the intelligence layer, front and center) */}
-          <div className="flex min-w-0 flex-col">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(200px,auto)_1fr_minmax(0,1.35fr)] lg:items-center">
+          {/* right: heading + subtitle + start button */}
+          <div className="flex min-w-0 flex-col justify-center">
             <div className="mb-1 flex items-center gap-2">
               <span className="zono-ai-gradient grid h-8 w-8 place-items-center rounded-xl text-white"><Icon name="Sparkles" size={17} /></span>
               <h2 className="text-ink text-lg font-black leading-tight">ZI הכין לך את היום</h2>
@@ -225,9 +224,11 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
                 <Icon name="Sparkles" size={16} />התחל את היום
               </Link>
             )}
-            <div className="pointer-events-none mt-2 hidden flex-1 items-center justify-center lg:flex">
-              <ZICharacter state={ziRows.length > 0 ? "pointing" : "celebrate"} size="xl" decorative animate={false} />
-            </div>
+          </div>
+          {/* center: ZI fills the gap BETWEEN the heading and the action rows — its
+              own column, so it never overlaps or hides content, and no extra height */}
+          <div className="hidden items-center justify-center lg:flex">
+            <ZICharacter state={ziRows.length > 0 ? "pointing" : "celebrate"} size="lg" decorative animate={false} />
           </div>
           {/* left: prioritized action rows */}
           <div className="flex min-w-0 flex-col gap-2">
