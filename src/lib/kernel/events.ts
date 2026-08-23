@@ -20,6 +20,12 @@ export const DOMAIN_EVENTS = {
   buyerUpdated: "buyer.updated",
   buyerStageChanged: "buyer.stage_changed",
   buyerArchived: "buyer.archived",
+  // Buyer intent from the personal portal (Buyer Command Center 5.1). Emitted with
+  // the buyer's OWNER as actor so the notification projector routes the alert to the
+  // responsible broker. High-signal only (no rejections) to avoid notification spam.
+  buyerLikedProperty: "buyer.liked_property",
+  buyerRequestedViewing: "buyer.requested_viewing",
+  buyerOpenedPortal: "buyer.opened_portal",
   // Seller
   sellerCreated: "seller.created",
   sellerUpdated: "seller.updated",

@@ -191,6 +191,18 @@ export async function getBuyerPortalData(token: string, db?: any): Promise<Buyer
           entity_type: "buyer", entity_id: p.c, title: "הקונה פתח את הבחירה האישית",
           channel: "portal", direction: "inbound", occurred_at: new Date().toISOString(),
         });
+        // Broker NOTIFICATION via the kernel, routed to the buyer's owner. Bucketed
+        // per day so a burst of refreshes never spams the broker. (Best-effort.)
+        try {
+          const { data: owner } = await client.from("buyers").select("owner_id").eq("id", p.c).eq("org_id", p.o).maybeSingle();
+          const dayBucket = new Date().toISOString().slice(0, 10);
+          const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+          await emitBusinessEvent({
+            type: DOMAIN_EVENTS.buyerOpenedPortal, entityType: "buyer", entityId: p.c, orgId: p.o,
+            actorUserId: (owner as { owner_id?: string | null } | null)?.owner_id ?? null,
+            payload: { source: "portal" }, idempotencyKey: `buyer.opened_portal:${p.c}:${dayBucket}`,
+          });
+        } catch { /* notification emit is best-effort */ }
       }
     } catch { /* tracking is best-effort */ }
   }

@@ -27,22 +27,29 @@ import { RecommendedMatches, type RecoItemView } from "@/components/activity/Rec
 import type { BuyerPropertyMatch } from "@/lib/matching-intelligence/service";
 import { recalcMatchesAction } from "@/lib/matching-intelligence/actions";
 import { MEETING_STATUS_HE } from "@/lib/i18n/labels";
+import { BuyerOverviewPanel } from "./BuyerOverviewPanel";
+import type { BuyerMatchOverview } from "@/lib/matching-intelligence/buyer-matches-overview";
+import { markBuyerMatchesReviewedAction } from "@/lib/matching-intelligence/buyer-overview-actions";
 
 type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
 type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
 type MeetingRow = Database["public"]["Tables"]["meetings"]["Row"];
 
-type Tab = "command" | "matching" | "communication" | "memory" | "calendar" | "documents" | "timeline" | "graph";
+type Tab = "overview" | "matching" | "shortlist" | "communication" | "calendar" | "command" | "memory" | "documents" | "timeline" | "graph";
+// Primary IA first (סקירה / נכסים מתאימים / בחירה אישית / תקשורת / יומן); the
+// power-user intelligence surfaces follow as secondary.
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "command", label: "מרכז ניהול", icon: "Sparkles" },
-  { id: "matching", label: "התאמות", icon: "Building2" },
+  { id: "overview", label: "סקירה", icon: "Sparkles" },
+  { id: "matching", label: "נכסים מתאימים", icon: "Building2" },
+  { id: "shortlist", label: "בחירה אישית", icon: "ListChecks" },
   { id: "communication", label: "תקשורת", icon: "MessageCircle" },
-  { id: "memory", label: "זיכרון קונה", icon: "Database" },
-  { id: "calendar", label: "יומן ופגישות", icon: "Calendar" },
+  { id: "calendar", label: "יומן", icon: "Calendar" },
+  { id: "command", label: "מרכז ניהול", icon: "Database" },
+  { id: "memory", label: "זיכרון קונה", icon: "Layers" },
   { id: "documents", label: "מסמכים", icon: "FileText" },
   { id: "timeline", label: "ציר זמן", icon: "Activity" },
-  { id: "graph", label: "גרף קשרים", icon: "Layers" },
+  { id: "graph", label: "גרף קשרים", icon: "GitCompareArrows" },
 ];
 
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
@@ -80,6 +87,8 @@ export function BuyerDetailView({
   commandCenter,
   recommendations,
   buyerMatches,
+  matchOverview,
+  nowIso,
   communicationSlot,
   calendarSlot,
   documentsSlot,
@@ -97,6 +106,8 @@ export function BuyerDetailView({
   commandCenter: BuyerCCData | null;
   recommendations: RecoItemView[];
   buyerMatches: BuyerPropertyMatch[];
+  matchOverview: BuyerMatchOverview | null;
+  nowIso: string;
   communicationSlot?: ReactNode;
   calendarSlot?: ReactNode;
   documentsSlot?: ReactNode;
@@ -106,7 +117,7 @@ export function BuyerDetailView({
   journeySlot?: ReactNode;
   shortlistSlot?: ReactNode;
 }) {
-  const [tab, setTab] = useState<Tab>("command");
+  const [tab, setTab] = useState<Tab>("overview");
   const prefs = buyerPreferences(b);
   const yes = "כן";
   const no = "—";
@@ -226,6 +237,14 @@ export function BuyerDetailView({
 
       {/* ── Panels ──────────────────────────────────────────────────────────── */}
       <div>
+        {tab === "overview" && (
+          <BuyerOverviewPanel
+            buyerId={b.id} overview={matchOverview} activities={activities} meetings={meetings}
+            waHref={waLink(b.phone)} phone={b.phone} nowIso={nowIso}
+            onNavigate={(t) => setTab(t)}
+          />
+        )}
+
         {/* Batch 5.5 (Part 7) — the CANONICAL buyer journey, from the spine. It sits
             ABOVE the command center, which is now intelligence only: the scores inform,
             they do not decide the lifecycle. */}
@@ -238,9 +257,13 @@ export function BuyerDetailView({
           </div>
         )}
 
+        {tab === "shortlist" && (
+          <div className="flex flex-col gap-5">{shortlistSlot ?? <EmptyState icon="ListChecks" text="אין עדיין בחירה אישית לקונה זה." />}</div>
+        )}
+
         {tab === "matching" && (
           <div className="flex flex-col gap-5">
-            {shortlistSlot}
+            <MatchReviewBar buyerId={b.id} overview={matchOverview} />
             <div className="bg-card border-line rounded-[20px] border p-5">
               <RecommendedMatches title="נכסים מומלצים לקונה" emptyText="אין התאמות עדיין — חשב התאמות במסך 'התאמות'." items={recommendations} />
             </div>
@@ -357,6 +380,27 @@ export function BuyerDetailView({
 
 const fmtShekels = (n: number | null) => (n && n > 0 ? `₪${Math.round(n).toLocaleString("he-IL")}` : null);
 const scoreTone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-danger");
+
+/** "חדש מאז הבדיקה האחרונה" bar + mark-reviewed, above the matches list. */
+function MatchReviewBar({ buyerId, overview }: { buyerId: string; overview: BuyerMatchOverview | null }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const label = overview?.newSinceLabel;
+  if (!label) return null;
+  return (
+    <div className="bg-brand-soft border-brand/20 flex items-center justify-between gap-3 rounded-2xl border p-3.5">
+      <div className="flex items-center gap-2">
+        <span className="bg-brand text-white grid h-7 w-7 place-items-center rounded-lg"><Icon name="Sparkles" size={14} /></span>
+        <p className="text-brand-strong text-[13px] font-black">{label}</p>
+      </div>
+      <button type="button" disabled={pending}
+        onClick={() => start(async () => { await markBuyerMatchesReviewedAction(buyerId); router.refresh(); })}
+        className="bg-card text-brand-strong border-brand/30 shrink-0 rounded-lg border px-3 py-1.5 text-[12px] font-bold transition hover:opacity-90 disabled:opacity-60">
+        סמן כנבדק
+      </button>
+    </div>
+  );
+}
 
 /**
  * Buyer detail "התאמות" tab — real matched properties from the matching engine

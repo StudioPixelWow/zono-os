@@ -96,6 +96,24 @@ export async function applyRecommendationFeedback(
     } catch { /* timeline entry is best-effort */ }
   }
 
+  // 3d) High-signal buyer intent → a broker NOTIFICATION via the kernel, routed to
+  //     the buyer's OWNER (the event's actor). Only interested / viewing_requested
+  //     (never rejected) to avoid notification spam. Idempotent per (buyer,property)
+  //     so repeated taps never re-notify. Uses the canonical notification-category
+  //     contract (buyer.liked_property / buyer.requested_viewing rules).
+  if (contactType === "buyer" && (action === "interested" || action === "viewing_requested")) {
+    try {
+      const { data: owner } = await db.from("buyers").select("owner_id").eq("id", contactId).eq("org_id", orgId).maybeSingle();
+      const ownerId = (owner as any)?.owner_id ?? null;
+      const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+      const type = action === "interested" ? DOMAIN_EVENTS.buyerLikedProperty : DOMAIN_EVENTS.buyerRequestedViewing;
+      await emitBusinessEvent({
+        type, entityType: "buyer", entityId: contactId, orgId, actorUserId: ownerId,
+        payload: { propertyId, action }, idempotencyKey: `${type}:${contactId}:${propertyId}`,
+      });
+    } catch { /* notification emit is best-effort */ }
+  }
+
   // 3b) Talk-to-agent → an idempotent high-priority callback task for the owner.
   if (action === "talk_to_agent") {
     try {

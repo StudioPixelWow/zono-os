@@ -25,6 +25,8 @@ import { projectEventToGraphEdges } from "./graph-subscriber";
 import { projectEventToMemory } from "./memory-subscriber";
 import { projectEventToAutomation } from "./automation-subscriber";
 import { projectEventToRecommendationRefresh } from "./recommendation-subscriber";
+import { projectEventToMatchRecompute } from "./matching-subscriber";
+import { generateMatchesForBuyerId, generateMatchesForPropertyId } from "@/lib/matching-intelligence/recompute";
 import { recordDelivery } from "./subscriber-deliveries";
 import { classifyEventForSearch } from "@/lib/search-projection/subscriber";
 import { indexEntity, softDeleteEntity } from "@/lib/search-projection/indexer";
@@ -415,6 +417,35 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       });
     }
   } catch { /* recommendation refresh is non-critical */ }
+
+  // ── Matching — BOUNDED, event-driven recompute (buyer 1×P / property 1×B). ───
+  //    Keeps a buyer's match set fresh the instant criteria or inventory change,
+  //    without the org-wide daily scan. Best-effort: the daily reconcile cron is
+  //    the safety net, so a failure here never fails the event. Idempotent
+  //    (upsert on (org,buyer,property); child rows regenerated per match_id).
+  try {
+    const intent = projectEventToMatchRecompute(row);
+    if (!intent) {
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "matching",
+        status: "skipped", latencyMs: Date.now() - t0, metadata: { reason: "no_match_recompute_for_event" },
+      });
+    } else {
+      const n = intent.scope === "buyer"
+        ? await generateMatchesForBuyerId(row.organization_id, intent.id, { db })
+        : await generateMatchesForPropertyId(row.organization_id, intent.id, { db });
+      await recordDelivery(db, {
+        orgId: row.organization_id, eventId: row.id, subscriber: "matching", status: "done",
+        latencyMs: Date.now() - t0, metadata: { scope: intent.scope, id: intent.id, reason: intent.reason, matches: n },
+      });
+    }
+  } catch (e) {
+    await recordDelivery(db, {
+      orgId: row.organization_id, eventId: row.id, subscriber: "matching",
+      status: "failed", latencyMs: Date.now() - t0, error: e instanceof Error ? e.message : "match recompute failed",
+    });
+    // Non-critical to the event — the daily reconcile cron will heal it.
+  }
 
   // ── Re-drive on a GENUINE notification failure ──────────────────────────────
   // Every other subscriber has now run (they are best-effort). But a real

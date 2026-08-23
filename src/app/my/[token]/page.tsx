@@ -57,6 +57,10 @@ function Card({ token, c }: { token: string; c: PortalCard }) {
         {c.reason && <p style={{ margin: "10px 0 0", padding: "8px 11px", background: "#f5f3ff", borderRadius: 10, color: "#5b21b6", fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>למה זה מתאים לך: {c.reason}</p>}
         {c.viewingAt && (c.status === "viewing_scheduled") && <p style={{ margin: "8px 0 0", color: "#1d4ed8", fontSize: 13, fontWeight: 700 }}>🗓️ ביקור: {dtime(c.viewingAt)}</p>}
 
+        {c.available && (
+          <a href={`/api/my/${token}/view/${c.propertyId}`} style={{ display: "block", textAlign: "center", marginTop: 12, background: "#0f172a", color: "#fff", borderRadius: 12, padding: "11px 16px", fontSize: 14, fontWeight: 800, textDecoration: "none" }}>לצפייה בנכס</a>
+        )}
+
         {!c.available ? (
           <p style={{ margin: "12px 0 0", color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>הנכס אינו זמין יותר</p>
         ) : c.feedbackGiven ? (

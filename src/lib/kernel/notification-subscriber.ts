@@ -56,6 +56,12 @@ export const NOTIFICATION_RULES: Record<string, Rule> = {
   // Documents — the signed/completed legal document; deep-link to that document.
   "document.signed":   { title: "מסמך נחתם",            level: "success", category: "document_pending",  href: (id) => `/legal-templates/${id}` },
   "document.completed":{ title: "מסמך הושלם",           level: "success", category: "document_pending",  href: (id) => `/legal-templates/${id}` },
+  // Buyer intent (Buyer Command Center 5.1) — routed to the owner; deep-link to the
+  // buyer page. High-signal only. Categories are valid enum values (new_match for
+  // match engagement, meeting_reminder for a viewing request).
+  "buyer.liked_property":    { title: "הקונה אהב נכס מהבחירה",  level: "success", category: "new_match",        href: (id) => `/buyers/${id}` },
+  "buyer.requested_viewing": { title: "הקונה ביקש לראות נכס",   level: "success", category: "meeting_reminder", href: (id) => `/buyers/${id}` },
+  "buyer.opened_portal":     { title: "הקונה פתח את הבחירה",    level: "info",    category: "new_match",        href: (id) => `/buyers/${id}` },
 };
 
 /**

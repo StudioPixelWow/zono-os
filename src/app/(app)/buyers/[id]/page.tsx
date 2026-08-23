@@ -10,6 +10,7 @@ import {
 } from "@/lib/buyers/repository";
 import { getBuyerCommandCenter } from "@/lib/buyer-intelligence/service";
 import { recommendedPropertiesForBuyer, getBuyerPropertyMatches } from "@/lib/matching-intelligence/service";
+import { getBuyerMatchOverview } from "@/lib/matching-intelligence/buyer-matches-overview";
 import { BuyerDetailView } from "./BuyerDetailView";
 import { BuyerPortalLinkCard } from "./BuyerPortalLinkCard";
 import { CommunicationSection } from "@/components/communication/CommunicationSection";
@@ -35,7 +36,7 @@ export default async function BuyerDetailsPage({
   const buyer = await getBuyerById(id);
   if (!buyer) notFound();
 
-  const [activities, tasks, notes, meetings, commandCenter, recommendations, buyerMatches] = await Promise.all([
+  const [activities, tasks, notes, meetings, commandCenter, recommendations, buyerMatches, matchOverview] = await Promise.all([
     getBuyerActivities(id),
     getBuyerTasks(id),
     getBuyerNotes(id),
@@ -43,6 +44,7 @@ export default async function BuyerDetailsPage({
     getBuyerCommandCenter(id),
     recommendedPropertiesForBuyer(id),
     getBuyerPropertyMatches(id).catch(() => []),
+    getBuyerMatchOverview(buyer.org_id, id).catch(() => null),
   ]);
 
   // Server-rendered sections are passed as SLOTS into the buyer cockpit tabs
@@ -90,6 +92,8 @@ export default async function BuyerDetailsPage({
       commandCenter={commandCenter}
       recommendations={recommendations}
       buyerMatches={buyerMatches}
+      matchOverview={matchOverview}
+      nowIso={new Date().toISOString()}
       communicationSlot={communicationSlot}
       calendarSlot={calendarSlot}
       documentsSlot={documentsSlot}
