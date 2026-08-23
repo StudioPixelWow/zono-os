@@ -36,8 +36,6 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "עסקאות", href: "/deals", icon: "Handshake" },
     { label: "עמלות וגבייה", href: "/commissions", icon: "TrendingDown" },
     { label: "מסמכים", href: "/documents", icon: "FileText" },
-    { label: "הערות", href: "/notes", icon: "FilePlus2" },
-    { label: "צפיות", href: "/viewings", icon: "Calendar" },
     { label: "פגישות", href: "/calendar", icon: "Calendar" },
   ]},
   { key: "marketing", title: "תקשורת ושיווק", desc: "WhatsApp • Facebook • קמפיינים", icon: "Megaphone", accent: "green", items: [
