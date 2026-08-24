@@ -96,7 +96,10 @@ export default async function MyPropertiesPage({ searchParams }: { searchParams:
         <div className="border-line bg-card text-danger rounded-2xl border p-8 text-center text-[13px] font-bold">שגיאה בטעינת הנכסים — נסה לרענן</div>
       ) : (
         <>
-          {/* KPI status strip (clickable filters) */}
+          {/* KPI status strip (clickable filters) — hidden for a brand-new (0-property)
+              office so the first-run "add your first property" state is the focus, not
+              a dominant row of 0s. */}
+          {data.total > 0 && (
           <div className="border-line bg-card shadow-[var(--shadow-soft)] flex flex-wrap items-stretch divide-x divide-x-reverse divide-[var(--line)] overflow-hidden rounded-2xl max-md:overflow-x-auto md:flex-nowrap">
             {data.kpis.map((k) => (
               <Link key={k.key} href={kpiHref(k.key)} className={`hover:bg-brand-soft/30 flex min-w-[130px] flex-1 items-center gap-2.5 px-4 py-2.5 transition ${k.value === 0 && k.key !== "all" && k.key !== "active" ? "opacity-60" : ""}`}>
@@ -107,6 +110,7 @@ export default async function MyPropertiesPage({ searchParams }: { searchParams:
               </Link>
             ))}
           </div>
+          )}
 
           {/* One ZI/attention insight — evidence-gated (real counts only) */}
           {data.brief[0] && (

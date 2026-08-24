@@ -15,6 +15,7 @@ import {
 import { uploadDocumentFile } from "@/lib/documents/upload";
 import { offerFormOptionsAction, type OfferFormOptions } from "@/lib/offers/actions";
 import { useCurrentOrganization } from "@/components/dashboard/DashboardDataProvider";
+import { ZonoEmptyState } from "@/components/zono/ZonoEmptyState";
 import type { DocCommandCenter, DocumentSummary, DocumentDetail } from "@/lib/documents/service";
 
 type Tab = "all" | "pending" | "expiring" | "new" | "templates";
@@ -22,6 +23,12 @@ type Tab = "all" | "pending" | "expiring" | "new" | "templates";
 export function DocumentsView({ cc }: { cc: DocCommandCenter }) {
   const [tab, setTab] = useState<Tab>("all");
   const r = useActionRunner();
+  // §9 — the first-run empty state's "יצירת מסמך" CTA switches to the create tab.
+  useEffect(() => {
+    const go = () => setTab("new");
+    window.addEventListener("zono:documents-new", go);
+    return () => window.removeEventListener("zono:documents-new", go);
+  }, []);
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: "all", label: "כל המסמכים", icon: "Presentation" },
@@ -61,7 +68,7 @@ export function DocumentsView({ cc }: { cc: DocCommandCenter }) {
 
       {tab === "templates" ? <TemplatesTab cc={cc} r={r} />
         : tab === "new" ? <NewDocumentForm r={r} />
-        : <DocList docs={tab === "pending" ? cc.pending : tab === "expiring" ? cc.expiring : cc.documents} r={r} />}
+        : <DocList docs={tab === "pending" ? cc.pending : tab === "expiring" ? cc.expiring : cc.documents} r={r} emptyKind={tab === "pending" ? "pending" : tab === "expiring" ? "expiring" : "all"} />}
     </main>
   );
 }
@@ -188,7 +195,7 @@ function NewDocumentForm({ r }: { r: Runner }) {
   );
 }
 
-function DocList({ docs, r }: { docs: DocumentSummary[]; r: Runner }) {
+function DocList({ docs, r, emptyKind = "all" }: { docs: DocumentSummary[]; r: Runner; emptyKind?: "all" | "pending" | "expiring" }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -206,7 +213,21 @@ function DocList({ docs, r }: { docs: DocumentSummary[]; r: Runner }) {
   const to = Math.min(safePage * PAGE_SIZE, total);
   const onSearch = (v: string) => { setQ(v); setPage(1); };
 
-  if (docs.length === 0) return <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">אין מסמכים להצגה</div>;
+  if (docs.length === 0) {
+    // §9 — the main list empty explains the entity-attachment model + a real CTA to
+    // the create-document tab (fired via CustomEvent the view handles). Sub-lists
+    // (pending / expiring) get a calm, specific message.
+    if (emptyKind === "all") {
+      return (
+        <ZonoEmptyState
+          title="עוד לא נוצרו מסמכים"
+          description="מסמכים ב-ZONO מתחברים לנכס, לקונה, למוכר או לעסקה — וניתן להכין מהם בקשת חתימה ולעקוב עד לחתימה. צרו את המסמך הראשון כדי להתחיל."
+          actions={[{ label: "יצירת מסמך", event: "zono:documents-new", primary: true }]}
+        />
+      );
+    }
+    return <div className="bg-surface text-muted rounded-2xl px-4 py-8 text-center text-sm">{emptyKind === "pending" ? "אין מסמכים שממתינים לחתימה" : "אין מסמכים שפגים בקרוב"}</div>;
+  }
   return (
     <div className="flex flex-col gap-2">
       <div className="relative">

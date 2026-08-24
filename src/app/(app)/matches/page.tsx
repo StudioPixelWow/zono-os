@@ -13,6 +13,8 @@ export default async function MatchesPage() {
   let rows: MatchRow[] = [];
   let boardRows: MatchBoardRow[] = [];
   let board: MatchBoard = EMPTY;
+  let buyerCount = 0;
+  let propertyCount = 0;
   try {
     const supabase = await createClient();
     const [matches, b, buyersRes, propsRes] = await Promise.all([
@@ -22,6 +24,8 @@ export default async function MatchesPage() {
       supabase.from("properties").select("id,title"),
     ]);
     board = b;
+    buyerCount = buyersRes.data?.length ?? 0;
+    propertyCount = propsRes.data?.length ?? 0;
     const bn = new Map((buyersRes.data ?? []).map((x) => [x.id, x.full_name]));
     const pn = new Map((propsRes.data ?? []).map((x) => [x.id, x.title]));
     rows = matches.slice(0, 50).map((m) => ({
@@ -47,7 +51,7 @@ export default async function MatchesPage() {
   return (
     <div className="flex flex-col gap-6">
       <MatchesBoard rows={boardRows} />
-      <MatchesView rows={rows} board={board} />
+      <MatchesView rows={rows} board={board} buyerCount={buyerCount} propertyCount={propertyCount} />
     </div>
   );
 }

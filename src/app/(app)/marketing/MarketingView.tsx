@@ -53,15 +53,21 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
             <h1 className="text-ink mt-0.5 text-2xl font-black sm:text-3xl">מרכז השיווק והקמפיינים</h1>
             <p className="text-muted mt-1 max-w-xl text-sm">מה לקדם היום, באילו ערוצים, למי ולמה — פרסום מפוקח אנושית. שום דבר לא מתפרסם או נשלח אוטומטית.</p>
           </div>
+          {/* Health score + stat row only once there's real marketing data — a
+              brand-new office never sees a 0-filled score badge or a 0/0/0 row. */}
+          {!empty && (
           <div className="bg-card grid h-24 w-24 shrink-0 place-items-center rounded-full text-center shadow-[var(--shadow-soft)]">
             <div><div className={`text-4xl font-black leading-none ${tone(health)}`}>{health}</div><div className="text-muted mt-1 text-[10px] font-bold">בריאות שיווק</div></div>
           </div>
+          )}
         </div>
+        {!empty && (
         <div className="grid grid-cols-3 sm:grid-cols-3">
           <HeroStat label="נכסים לקידום" value={propertyDna.length} tone="text-brand-strong" />
           <HeroStat label="הזדמנויות שיווק" value={opportunities.length} tone="text-warning" border />
           <HeroStat label="קהילות פעילות" value={communities.filter((c) => c.status === "active").length} tone="text-ink" border />
         </div>
+        )}
       </div>
 
       {/* Action bar */}
@@ -92,9 +98,12 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
       {empty ? (
         <div className="bg-card border-line flex flex-col items-center gap-3 rounded-[24px] border px-6 py-16 text-center">
           <ZonoMark size="standard" state="welcome" />
-          <p className="text-ink text-lg font-extrabold">זונו מוכנה לבנות לכם מודיעין שיווקי</p>
-          <p className="text-muted max-w-sm text-sm">הוסיפו קהילות ולחצו ״חשב מודיעין שיווק״ — וזונו תבנה DNA שיווקי לכל נכס, דירוג ערוצים והזדמנויות קידום.</p>
-          <Button onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={16} />} className="mt-1">חשב מודיעין שיווק</Button>
+          <p className="text-ink text-lg font-extrabold">השיווק מתחיל מנכס</p>
+          <p className="text-muted max-w-sm text-sm">הוסיפו את הנכס הראשון — וזונו תבנה לו DNA שיווקי: אילו ערוצים וקהילות מתאימים, למי לפנות ולמה. אפשר גם להוסיף קהילות ולחשב מודיעין שיווק.</p>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+            <Link href="/properties/new"><Button leadingIcon={<Icon name="Plus" size={15} />}>הוספת נכס</Button></Link>
+            <Button variant="secondary" onClick={() => run(recomputeMarketingAction)} disabled={pending} leadingIcon={<Icon name="Megaphone" size={16} />}>חשב מודיעין שיווק</Button>
+          </div>
         </div>
       ) : (
         <>

@@ -19,6 +19,7 @@ import { SORT_OPTIONS } from "@/lib/properties/inventory-center";
 import { setPropertyStatusInlineAction, archivePropertyInlineAction, assignPropertyAgentAction, bulkPropertyAction } from "@/lib/properties/inventory-actions";
 import type { InventoryPage, InventoryRow } from "@/lib/properties/inventory-query";
 import type { PropertyStatus } from "@/lib/supabase/types";
+import { ZonoEmptyState } from "@/components/zono/ZonoEmptyState";
 
 type AgentOption = { id: string; name: string; avatarUrl: string | null };
 const TONE_TXT: Record<string, string> = { warning: "text-warning", danger: "text-danger", neutral: "text-muted" };
@@ -98,6 +99,21 @@ export function PropertiesCommandTable({ data, view, canManage, agentOptions }: 
   }, [sp]);
 
   const selCls = "border-line bg-card text-ink rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold outline-none focus:border-brand-light";
+
+  // §4 FIRST-RUN — a truly empty inventory (0 rows AND no active filter/search) is a
+  // brand-new office, NOT a filtered-to-empty result. Show a real first-property CTA
+  // instead of the misleading "no match / clear filters" box + filter chrome.
+  if (data.rows.length === 0 && activeChips.length === 0) {
+    return (
+      <div dir="rtl">
+        <ZonoEmptyState
+          title="הנכס הראשון שלך עוד לא כאן"
+          description="ברגע שתוסיפו נכס, ZONO תתחיל לבנות סביבו התאמות לקונים, שיווק בקבוצות, משימות ומעקב — הכול במקום אחד."
+          actions={[{ label: "הוספת נכס", href: "/properties/new", primary: true }]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3" dir="rtl">

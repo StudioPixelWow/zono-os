@@ -23,6 +23,7 @@ import { OfficeGoalsPanel } from "./OfficeGoalsPanel";
 import { OfficeReportsPanel } from "./OfficeReportsPanel";
 import { OfficeCopilotPanel } from "./OfficeCopilotPanel";
 import { OfficeCompetitorWidget } from "./OfficeCompetitorWidget";
+import { IntelligenceEmptyState, IntelligenceActionLink } from "@/components/intelligence/framework";
 
 type TabKey = "overview" | "team" | "opportunities" | "growth" | "reports";
 const TABS: { key: TabKey; label: string }[] = [
@@ -54,6 +55,27 @@ export function OfficeIntelligencePage({ initial }: { initial: OfficeDashboard }
 
   const runSnapshot = () => start(async () => { await runOfficeSnapshotAction(); await refresh(); });
   const updatedAt = new Date(data.generatedAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+
+  // §12 FIRST-RUN — a brand-new office has no operational KPIs. Show an honest
+  // "not enough activity yet" state with the real launch path instead of a dashboard
+  // full of 0-filled KPI/forecast tiles (no fabricated charts or estimates).
+  const isEmpty = data.kpiCards.length > 0 && data.kpiCards.every((c) => c.value === 0);
+  if (isEmpty) {
+    return (
+      <div dir="rtl" className="flex flex-col gap-4 p-4">
+        <ExecutivePulse managerName={data.managerName} pulse={data.pulse} />
+        <IntelligenceEmptyState
+          title="עדיין אין מספיק פעילות כדי להציג את מודיעין המשרד"
+          steps={["הוסיפו נכס וקונה ראשונים", "הזמינו את הצוות למערכת", "עם צבירת הפעילות — כאן תיבנה התמונה הניהולית של המשרד"]}
+          actions={<>
+            <IntelligenceActionLink href="/properties/new" primary>הוספת נכס</IntelligenceActionLink>
+            <IntelligenceActionLink href="/buyers/new">הוספת קונה</IntelligenceActionLink>
+            <IntelligenceActionLink href="/team">הזמנת סוכן</IntelligenceActionLink>
+          </>}
+        />
+      </div>
+    );
+  }
 
   return (
     <div dir="rtl" className="flex flex-col gap-4 p-4">
