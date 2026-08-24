@@ -62,16 +62,22 @@ export async function acceptInvitationAction(token: string): Promise<TeamActionS
       onboarding_completed: true,
     });
     await db.from("org_invitations").update({ status: "accepted", accepted_by: user.id, accepted_at: new Date().toISOString() }).eq("id", inv.id);
-    // Link the roster person to the freshly-provisioned Auth user so /team shows
-    // the correct ACTIVE access state (office_members is the canonical person; a
-    // seat = the linked active user). Email-matched, org-scoped, and ONLY when the
-    // roster row is still unlinked — never reassigns an already-linked member.
+    // 9.2 TEAM-TRUTH — ENSURE the accepted user has a linked ACTIVE roster row.
+    // Previously this was an insert-less email UPDATE: if no roster row pre-existed
+    // (the common case — invites live in org_invitations, they don't seed a roster
+    // row) the accepted, active user ended up with NO office_members row and was
+    // invisible on the office board + public roster. ensureOfficeMemberForUser links
+    // an existing email-matched row OR creates one — idempotent, org-scoped, no
+    // duplicate, real fields only, not public by default.
     try {
-      const linkEmail = (user.email ?? inv.email).toLowerCase();
-      await db.from("office_members" as never)
-        .update({ user_id: user.id } as never)
-        .eq("org_id", inv.org_id).is("user_id", null).ilike("email", linkEmail);
-    } catch (linkErr) { console.error("[invite] roster link (non-fatal):", linkErr); }
+      const { ensureOfficeMemberForUser } = await import("@/lib/office/membership-sync");
+      await ensureOfficeMemberForUser(db, {
+        orgId: inv.org_id, userId: user.id,
+        email: user.email ?? inv.email,
+        fullName: (user.user_metadata?.full_name as string) || inv.email.split("@")[0],
+        roleKey: inv.role_key || "agent",
+      });
+    } catch (linkErr) { console.error("[invite] roster ensure (non-fatal):", linkErr); }
     // The accepted user is now an active seat → stage the billing quantity so the
     // boundary cron converges the provider next cycle (no charge here).
     await stageOrgSeatQuantity(inv.org_id);
@@ -109,4 +115,25 @@ export async function setUserStatusAction(userId: string, active: boolean): Prom
 export async function setUserRoleAction(userId: string, roleKey: string): Promise<TeamActionState> {
   try { await setUserRole(userId, roleKey); revalidate(); return { ok: true, message: "התפקיד עודכן" }; }
   catch (e) { return { error: e instanceof Error ? e.message : "עדכון התפקיד נכשל" }; }
+}
+
+/**
+ * 9.2 TEAM-TRUTH — one-time / on-demand roster reconciliation for THIS org. Repairs
+ * existing drift (active users missing a member; suspended users still public) at the
+ * canonical seam, not via a cron. Org is session-derived (NEVER from the client) and
+ * the action is manager+ only → no cross-tenant mutation.
+ */
+export async function reconcileOfficeMembershipAction(): Promise<TeamActionState> {
+  try {
+    const { profile } = await getSessionContext();
+    if (!profile?.org_id) return { error: "אין הרשאה" };
+    const { createClient } = await import("@/lib/supabase/server");
+    const sb = await createClient();
+    const { data: ok } = await sb.rpc("has_min_role", { p_min: "manager" });
+    if (ok !== true) return { error: "נדרשת הרשאת מנהל/בעלים" };
+    const { reconcileOfficeMembershipForOrg } = await import("@/lib/office/membership-sync");
+    const r = await reconcileOfficeMembershipForOrg(profile.org_id);
+    revalidate();
+    return { ok: true, message: `הרוסטר סונכרן — נוצרו ${r.created}, קושרו ${r.linked}, הוסתרו ${r.hidden}` };
+  } catch (e) { return { error: e instanceof Error ? e.message : "הסנכרון נכשל" }; }
 }

@@ -127,6 +127,19 @@ export async function completeOnboarding(
       onboarding_completed: true,
     });
 
+    // 9.2 TEAM-TRUTH — the founding owner is an ACTIVE access user who belongs to the
+    // office, so ensure the canonical roster row exists (owner card on the board /
+    // public site). Idempotent, org-scoped, real fields only, not public by default.
+    try {
+      const { createServiceRoleClient } = await import("@/lib/supabase/server");
+      const { ensureOfficeMemberForUser } = await import("@/lib/office/membership-sync");
+      await ensureOfficeMemberForUser(createServiceRoleClient(), {
+        orgId: org.id, userId: user.id,
+        email: user.email ?? payload.organizationEmail ?? null,
+        fullName: payload.fullName.trim(), roleKey,
+      });
+    } catch (e) { console.error("[onboarding] owner roster ensure (non-fatal):", e); }
+
     // P8.1 — every new office automatically enters a real 14-day trial. Idempotent:
     // a retry never resets or duplicates it (subscriptions.PK = org_id). Trial is the
     // canonical billing state; commercial/enforcement stay separate + unchanged.

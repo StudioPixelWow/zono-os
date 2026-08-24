@@ -254,6 +254,11 @@ export async function setPlatformUserStatus(orgId: string, userId: string, actio
   const nextStatus = action === "activate" ? "active" : "suspended";
   const { error } = await db.from("users" as never).update({ status: nextStatus } as never).eq("id" as never, userId as never).eq("org_id" as never, orgId as never);
   if (error) throw new UserAdminError("עדכון הסטטוס נכשל");
+  // 9.2 TEAM-TRUTH — propagate access status to the linked roster row so the public
+  // roster + office board follow access truth (suspend→inactive, activate→active).
+  // Org+user scoped, non-destructive, best-effort. Billing seat truth stays users.status.
+  try { const { propagateAccessStatusToMember } = await import("@/lib/office/membership-sync"); await propagateAccessStatusToMember(db, orgId, userId, action === "activate"); }
+  catch (e) { console.error("[platform] roster status propagate (non-fatal):", e); }
   await writePlatformAudit({ operator, capability: MANAGE, action: action === "activate" ? "user.activate" : "user.suspend", resourceType: "user", resourceId: userId, targetOrgId: orgId, metadata: { reason: reason?.slice(0, 300) ?? null, status: nextStatus } });
 }
 

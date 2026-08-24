@@ -116,10 +116,16 @@ export async function cancelInvitation(id: string): Promise<void> {
 }
 
 export async function setUserStatus(userId: string, active: boolean): Promise<void> {
-  const { orgId, isManager, supabase } = await ctx();
+  const { orgId, isManager, supabase, svc } = await ctx();
   if (!isManager) throw new Error("נדרשת הרשאת מנהל/בעלים");
   const { error } = await supabase.from("users").update({ status: active ? "active" : "disabled" }).eq("org_id", orgId).eq("id", userId);
   if (error) throw new Error(error.message);
+  // 9.2 TEAM-TRUTH — access status drives roster visibility. Propagate to the linked
+  // office_members row (suspend→inactive hides from public roster + board active list;
+  // reactivate→active restores it). Org+user scoped, non-destructive, best-effort.
+  // Billing is untouched: the billable seat stays users.status='active'.
+  try { const { propagateAccessStatusToMember } = await import("@/lib/office/membership-sync"); await propagateAccessStatusToMember(svc, orgId, userId, active); }
+  catch (e) { console.error("[team] roster status propagate (non-fatal):", e); }
   // A seat change moves the billable count → STAGE the new quantity so the
   // billing-boundary cron converges the provider at the next cycle (no direct
   // GROW call here, no charge, no Morning doc — payment truth stays separate).
@@ -127,8 +133,20 @@ export async function setUserStatus(userId: string, active: boolean): Promise<vo
 }
 
 export async function setUserRole(userId: string, roleKey: string): Promise<void> {
-  const { orgId, isManager, supabase } = await ctx();
+  const { orgId, isManager, supabase, userId: callerId } = await ctx();
   if (!isManager) throw new Error("נדרשת הרשאת מנהל/בעלים");
+  // 9.2 §11 ROLE INTEGRITY — a caller may only assign a role AT OR BELOW their own
+  // rank, so a manager can never mint an owner/admin (and a non-owner admin can never
+  // mint an owner). Closes the escalation gap left by the coarse manager-only guard.
+  const { canAssignRole } = await import("@/lib/office/membership-rules");
+  const { data: callerRow } = await supabase.from("users").select("role_id").eq("org_id", orgId).eq("id", callerId).maybeSingle();
+  const callerRoleId = (callerRow as { role_id: string | null } | null)?.role_id ?? null;
+  let callerRoleKey: string | null = null;
+  if (callerRoleId) {
+    const { data: cr } = await supabase.from("roles").select("key").eq("id", callerRoleId).maybeSingle();
+    callerRoleKey = (cr as { key: string } | null)?.key ?? null;
+  }
+  if (!canAssignRole(callerRoleKey, roleKey)) throw new Error("אי אפשר להעניק תפקיד גבוה מהתפקיד שלך");
   const { data: role } = await supabase.from("roles").select("id").eq("org_id", orgId).eq("key", roleKey).maybeSingle();
   if (!role) throw new Error("תפקיד לא נמצא");
   const { error } = await supabase.from("users").update({ role_id: (role as { id: string }).id }).eq("org_id", orgId).eq("id", userId);

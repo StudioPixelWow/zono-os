@@ -18,6 +18,7 @@ import { deriveBrandColorFromLogo } from "./logo-brand-color";
 import { isSiteTheme, type SiteTheme } from "@/lib/brokerage-site/branding";
 import { resolveAgentAvatar } from "@/lib/office/avatar";
 import { resolveResponsibleMemberId, memberHandle } from "./attribution";
+import { isMemberPubliclyEligible } from "@/lib/office/membership-rules";
 
 const ROLE_TITLE_HE: Record<string, string> = { owner: "מנהל/ת המשרד", manager: "מנהל/ת", agent: 'יועץ/ת נדל"ן' };
 
@@ -125,7 +126,7 @@ interface RawProp {
 }
 
 // A public roster member (office_members). NON-auth members are first-class here.
-interface RawMember { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null; public_slug: string | null }
+interface RawMember { id: string; full_name: string; role: string; specialty: string | null; avatar_url: string | null; user_id: string | null; phone: string | null; public_slug: string | null; status?: string | null }
 
 const propTag = (p: RawProp): string | null =>
   p.has_exclusivity ? "בלעדיות"
@@ -217,7 +218,18 @@ export async function getOfficeSite(
   const users = (usersR.data ?? []) as RawUser[];
   const userAvatar = new Map(users.map((u) => [u.id, u.avatar_url ?? null]));  // linked-user avatar fallback
 
-  const members = (membersR.data ?? []) as RawMember[];
+  // 9.2 TEAM-TRUTH — belt-and-suspenders via the canonical pure eligibility rule:
+  // never publish a roster member whose LINKED access user is not active
+  // (suspended/disabled), even if a status propagation was missed. Orphan
+  // (user_id=null) roster members are first-class. `users` above already fetched only
+  // status='active' rows, and the SQL already filtered status='active' + show_on_website.
+  const activeUserIds = new Set(users.map((u) => u.id));
+  const members = ((membersR.data ?? []) as RawMember[]).filter((m) =>
+    isMemberPubliclyEligible({
+      memberStatus: m.status ?? "active",
+      showOnWebsite: true,
+      linkedUserStatus: m.user_id ? (activeUserIds.has(m.user_id) ? "active" : "suspended") : null,
+    }));
   const memberById = new Map(members.map((m) => [m.id, m]));
   const publicMemberIds = new Set(members.map((m) => m.id));
   const memberIdByUserId = new Map(members.filter((m) => m.user_id).map((m) => [m.user_id as string, m.id]));
