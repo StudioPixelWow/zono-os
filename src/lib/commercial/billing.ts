@@ -16,6 +16,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getOrgCommercialState } from "./state";
 import { canonicalFromSubscriptionStatus } from "./billing-state";
+import { growCreds } from "./grow-client";
 import { computeOrgBillingQuantity, type OrgBillingQuantity } from "./quantity";
 import { reconcilePlan, type ReconcileDecision, type ReconcileSyncStatus, type ReconcileOldRow, type OrgProviderQuantityRow } from "./reconcile";
 import {
@@ -50,7 +51,7 @@ export async function getOrgBillingState(orgId: string): Promise<OrgBillingState
     sub: subRow.data ?? null,
     pays: payRows.data ?? [],
     nowMs: Date.now(),
-    providerConfigured: !!process.env.GROW_CHECKOUT_URL,
+    providerConfigured: growCreds().configured,
     generatedAt: new Date().toISOString(),
   });
 }
@@ -94,7 +95,7 @@ export async function getOrgBillingQuantity(orgId: string): Promise<OrgBillingQu
     pendingInvitations: commercial.reservedSeats,     // commercial.reservedSeats = pending invites
     isTrial: commercial.trial.isTrial,
     billingState,
-    providerConfigured: !!process.env.GROW_CHECKOUT_URL,
+    providerConfigured: growCreds().configured,
     subscriptionIdPresent: !!sub?.grow_subscription_id,
     lastSyncedQuantity: null,                         // no real sync in P8.2 → NOT_SYNCED
     source: "counts:users.active+org_invitations.pending",
@@ -160,7 +161,7 @@ export async function reconcileOrgBillingQuantity(orgId: string): Promise<Reconc
       organizationId: orgId,
       billingState,
       customPricingRequired: q.customPricingRequired,
-      providerConfigured: !!process.env.GROW_CHECKOUT_URL,
+      providerConfigured: growCreds().configured,
       hasSubscription,
       expectedQuantity: q.billableAgents,
       providerQuantity: sub?.provider_quantity ?? null,

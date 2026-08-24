@@ -11,6 +11,7 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { canonicalFromSubscriptionStatus, type BillingState } from "./billing-state";
+import { growCreds } from "./grow-client";
 import { getOrgBillingQuantity } from "./billing";
 import { reconcileBillingLifecycleDecision, computeGraceWindow, graceEndsAtFrom, type LifecycleAction, type LifecycleDecision, type OrgLifecycleStatus, type GraceWindow } from "./lifecycle";
 import { notifyOrgBilling } from "./billing-notify";
@@ -54,7 +55,7 @@ async function readLifecycle(orgId: string): Promise<{ sub: SubRow | null; decis
     billableAgents: q.billableAgents, customPricingRequired: q.customPricingRequired,
     providerQuantity: sub?.provider_quantity ?? null, quantitySyncStatus: sub?.quantity_sync_status ?? null,
     cancelRequested: !!sub?.cancel_at_period_end, periodEnd: sub?.period_end ?? null,
-    providerConfigured: !!process.env.GROW_CHECKOUT_URL, hasRecurringIdentifiers: !!(sub?.grow_transaction_id && sub?.grow_transaction_token && sub?.grow_asmachta),
+    providerConfigured: !!growCreds().configured, hasRecurringIdentifiers: !!(sub?.grow_transaction_id && sub?.grow_transaction_token && sub?.grow_asmachta),
     unitPriceIls: q.unitPriceIls,
   });
   const grace = computeGraceWindow(billingState, sub?.grace_until ?? null, nowMs);
@@ -65,7 +66,7 @@ async function readLifecycle(orgId: string): Promise<{ sub: SubRow | null; decis
  *  pure engine over authoritative DB state WITHOUT executing any transition. */
 export async function getOrgLifecycleStatus(orgId: string): Promise<OrgLifecycleStatus> {
   const { decision, grace } = await readLifecycle(orgId);
-  const pending = decision.providerDependent && !process.env.GROW_CHECKOUT_URL ? "PENDING_SANDBOX_CREDENTIALS" as const : null;
+  const pending = decision.providerDependent && !growCreds().configured ? "PENDING_SANDBOX_CREDENTIALS" as const : null;
   return { organizationId: orgId, ...decision, pending, grace };
 }
 
@@ -169,7 +170,7 @@ export async function reconcileBillingLifecycle(orgId: string): Promise<Lifecycl
     }
   } else if (decision.providerDependent && (decision.action === "PROVIDER_SYNC_PENDING" || decision.action === "QUANTITY_UPDATE_OWED" || decision.action === "CANCELLATION_OWED")) {
     // Provider-dependent → cannot complete without Grow. Never fake it.
-    if (!process.env.GROW_CHECKOUT_URL) pending = "PENDING_SANDBOX_CREDENTIALS";
+    if (!growCreds().configured) pending = "PENDING_SANDBOX_CREDENTIALS";
   }
 
   return { organizationId: orgId, ...decision, executed, pending, generatedAt: nowIso };
