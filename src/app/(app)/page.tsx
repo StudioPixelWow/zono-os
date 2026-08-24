@@ -18,6 +18,7 @@ import { OnboardingNextStep } from "@/components/onboarding/OnboardingNextStep";
 import { getMyDayCockpit } from "@/lib/my-day/service";
 import { MyDayCockpit } from "@/components/my-day/MyDayCockpit";
 import { HomeHeatmapSection } from "@/components/dashboard-home/components/HomeHeatmapSection";
+import { HomeQuickActions } from "@/components/home-control/HomeQuickActions";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,11 @@ export default async function Home() {
     <>
       <OnboardingNextStep />
       <MyDayCockpit data={data} />
+      {/* Quick-actions row — a big-button separator between the cockpit and the map.
+          Every tile links to a real create/act surface (no dead buttons). */}
+      <div className="mt-3">
+        <HomeQuickActions columns={6} />
+      </div>
       {/* Live property heat-map — REAL internal + external listings in the agent's
           operating area. Placed below the cockpit (the cockpit is a fixed-height
           zero-scroll panel on xl, so this appears on scroll, right below it). */}

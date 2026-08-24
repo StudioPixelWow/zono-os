@@ -45,7 +45,7 @@ export function Sidebar() {
     .sort((a, b) => b.length - a.length)[0] ?? null;
   const itemActive = (href: string) => !href.includes("#") && href === activeHref;
   const activeGroupKey = groups.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
-  // Derived (no effect): by default ONLY the first group ("היום שלי ומרכז הבקרה")
+  // Derived (no effect): by default ONLY the first group ("היום שלי")
   // is open; every other group stays closed/compact until the user opens it.
   const openGroupKey = openOverride === undefined ? "command" : openOverride;
 

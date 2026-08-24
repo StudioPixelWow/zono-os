@@ -17,9 +17,9 @@ export const ACCENTS: Record<Accent, { iconBg: string; ring: string; activeItem:
 };
 
 export const NAV_GROUPS: NavGroup[] = [
-  { key: "command", title: "היום שלי ומרכז הבקרה", desc: "מה לעשות עכשיו • מה קורה בעסק", icon: "Sun", accent: "purple", items: [
+  { key: "command", title: "היום שלי", desc: "מה לעשות עכשיו • הפגישות והמשימות שלך", icon: "Sun", accent: "purple", items: [
     { label: "היום שלי", href: "/", icon: "Sun" },
-    { label: "מרכז הבקרה", href: "/control-center", icon: "LayoutGrid" },
+    { label: "פגישות", href: "/calendar", icon: "Calendar" },
     { label: "היום · מרכז יומי", href: "/today", icon: "CalendarClock" },
     { label: "מוח הברוקר", href: "/brain", icon: "Sparkles" },
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
@@ -36,7 +36,6 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "עסקאות", href: "/deals", icon: "Handshake" },
     { label: "עמלות וגבייה", href: "/commissions", icon: "TrendingDown" },
     { label: "מסמכים", href: "/documents", icon: "FileText" },
-    { label: "פגישות", href: "/calendar", icon: "Calendar" },
   ]},
   { key: "marketing", title: "תקשורת ושיווק", desc: "WhatsApp • Facebook • קמפיינים", icon: "Megaphone", accent: "green", items: [
     { label: "WhatsApp", href: "/whatsapp", icon: "MessageCircle" },
