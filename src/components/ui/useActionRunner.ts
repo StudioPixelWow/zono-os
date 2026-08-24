@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { normalizeCanonicalError } from "@/lib/errors/user-error";
 
 export interface RunOptions<T> {
   /** Optional id so a specific row/button can show its own spinner. */
@@ -64,7 +65,10 @@ export function useActionRunner(): ActionRunner {
           if (msg) setNote(msg);
           if (opts.refresh !== false) router.refresh();
         } catch (e) {
-          setError(e instanceof Error ? e.message : "אירעה שגיאה. נסה שוב.");
+          // 9.4 — NEVER render a raw e.message. Funnel through the canonical Hebrew
+          // boundary (technical detail stays in logs, which the action already writes).
+          if (process.env.NODE_ENV !== "production") console.error("[action] failed:", e);
+          setError(normalizeCanonicalError(e).messageHe);
         } finally {
           setBusyId(null);
           setRunningNote(null);

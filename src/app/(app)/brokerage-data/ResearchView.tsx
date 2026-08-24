@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { toUserMessageHe } from "@/lib/errors/user-error";
 import { getResearchSnapshotAction, researchSingleBrokerAction, runBrokerResearchAction } from "@/lib/brokerage-data/actions";
 import type { ResearchSnapshot } from "@/lib/brokerage-data/broker-research/engine";
 import type { ResearchReport } from "@/lib/brokerage-data/broker-research/engine";
@@ -66,7 +67,7 @@ export function ResearchView() {
       }
       router.refresh();
     } catch (e) {
-      setMsg(e instanceof Error ? `הסריקה נעצרה: ${e.message} — אפשר להמשיך שוב.` : "הסריקה נעצרה (שגיאת רשת/שרת). אפשר להמשיך שוב — מתווכים שכבר נסרקו לא יעובדו מחדש.");
+      setMsg(`הסריקה נעצרה — ${toUserMessageHe(e)} אפשר להמשיך שוב; מתווכים שכבר נסרקו לא יעובדו מחדש.`);
     } finally { setScanning(false); }
   };
 
@@ -79,7 +80,7 @@ export function ResearchView() {
       if (apply) { const v = await getResearchSnapshotAction(); setSnap(v); router.refresh(); }
     } catch (e) {
       // Never let the "חוקר…" spinner hang: surface any thrown/rejected error.
-      setTestErr(e instanceof Error ? `המחקר נכשל: ${e.message}` : "המחקר נכשל (שגיאת רשת/שרת — נסה שוב).");
+      setTestErr(`המחקר נכשל — ${toUserMessageHe(e)}`);
     }
   });
 

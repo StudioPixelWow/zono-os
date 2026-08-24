@@ -20,10 +20,13 @@ export function ActionFeedback({ runner, className }: { runner: ActionRunner; cl
         </p>
       )}
       {!pending && note && (
-        <p className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{note}</p>
+        <p role="status" aria-live="polite" className="bg-success-soft text-success rounded-xl px-3 py-2 text-sm font-semibold">{note}</p>
       )}
       {!pending && error && (
-        <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-semibold">{error}</p>
+        // 9.4 §13 — a11y: announced to assistive tech, never color-only (icon + role).
+        <p role="alert" aria-live="assertive" className="bg-danger-soft text-danger flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold">
+          <span aria-hidden="true">⚠</span>{error}
+        </p>
       )}
     </div>
   );

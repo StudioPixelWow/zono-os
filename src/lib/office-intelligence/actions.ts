@@ -11,9 +11,15 @@ import { createOfficeRepository } from "./repository";
 import { runCopilot } from "@/lib/ai-copilot/context";
 import { buildMessages, buildCacheKey, computeDataHash } from "@/lib/ai-copilot/prompts";
 import type { GoalType, OfficeDashboard } from "./types";
+import { normalizeCanonicalError, type UserErrorCode } from "@/lib/errors/user-error";
 
-type Result<T> = { ok: true; data: T } | { ok: false; error: string };
-function fail(e: unknown): { ok: false; error: string } { return { ok: false, error: e instanceof Error ? e.message : "אירעה שגיאה." }; }
+type Result<T> = { ok: true; data: T } | { ok: false; error: string; code: UserErrorCode };
+// 9.4 — canonical boundary: sanitized Hebrew message + a CODE so the caller can tell
+// a permission failure apart from a data/network failure (no blanket "אין הרשאה").
+function fail(e: unknown): { ok: false; error: string; code: UserErrorCode } {
+  const u = normalizeCanonicalError(e);
+  return { ok: false, error: u.messageHe, code: u.code };
+}
 
 export async function getOfficeDashboardAction(): Promise<Result<OfficeDashboard>> {
   try { return { ok: true, data: await composeOfficeDashboard() }; } catch (e) { return fail(e); }

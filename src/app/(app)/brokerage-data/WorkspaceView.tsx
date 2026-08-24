@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { toUserMessageHe } from "@/lib/errors/user-error";
 import type { BrokerageCommandCenter } from "@/lib/brokerage-data/service";
 import type { OfficesIndex, OfficeIndexItem } from "@/lib/brokerage-data/office-profile";
 import type { ResearchSnapshot } from "@/lib/brokerage-data/broker-research/engine";
@@ -149,7 +150,7 @@ export function WorkspaceView({ cc }: { cc: BrokerageCommandCenter }) {
       }
       await reload().catch(() => {});
     } catch (e) {
-      setScanMsg(e instanceof Error ? `המחקר נעצר: ${e.message} — ימשיך בהרצה הבאה.` : "המחקר נעצר זמנית.");
+      setScanMsg(`המחקר נעצר — ${toUserMessageHe(e)} הריצה תמשיך בפעם הבאה.`);
     } finally { setScanning(false); }
   };
 
@@ -773,7 +774,7 @@ function CityDiscoveryPanel({ cities, onChanged }: { cities: string[]; onChanged
           {job.logs.length > 0 && (
             <div className="text-muted text-[11px]"><b>יומן שלבים:</b> {job.logs.slice(-6).map((l) => `${JOB_STAGE_HE[l.stage]} (${fmt(l.itemsProcessed)}, ${fmt(l.durationMs)}ms)`).join(" ← ")}</div>
           )}
-          {job.errors.length > 0 && <div className="rounded-lg border border-rose-200 bg-rose-50/50 px-3 py-2 text-rose-700"><b>שגיאות:</b> {job.errors.slice(-4).map((e) => `${JOB_STAGE_HE[e.stage]}: ${e.message}`).join(" · ")}</div>}
+          {job.errors.length > 0 && <div className="rounded-lg border border-rose-200 bg-rose-50/50 px-3 py-2 text-rose-700"><b>שגיאות:</b> {job.errors.slice(-4).map((e) => `${JOB_STAGE_HE[e.stage]}: ${toUserMessageHe(e.message)}`).join(" · ")}</div>}
         </div>
       )}
       <p className="text-muted mt-1 text-[11px]">זריעת AI: ה-AI מציע <b>שמות מועמדים בלבד</b>. כל מועמד נחקר במקורות ציבוריים — ומקבל סטטוס &quot;מאומת&quot; <b>רק</b> עם ראיה ציבורית אמיתית. ללא ראיה הוא נשאר &quot;במחקר&quot;. ה-AI לעולם אינו מאמת בעצמו.</p>
