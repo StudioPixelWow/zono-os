@@ -12,7 +12,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { ZICharacter } from "@/components/characters/ZICharacter";
 import type {
   MyDayCockpit as Cockpit, CockpitAction, CockpitTimelineItem, CockpitDeal,
-  CockpitClient, CockpitRecruit, CockpitMatchProperty, CockpitOpportunity,
+  CockpitClient, CockpitRecruit, CockpitOpportunity,
 } from "@/lib/my-day/service";
 import { transactionBadge } from "@/lib/property/transaction";
 
@@ -162,10 +162,6 @@ function PropertyCard({ imageUrl, title, sub, details, price, kind, badge, badge
     </div>
   );
 }
-function MatchPropertyCard({ p }: { p: CockpitMatchProperty }) {
-  return <PropertyCard imageUrl={p.imageUrl} title={p.title} sub={p.sub} details={p.details} price={p.price} kind={p.kind}
-    badge={`${p.matchCount} ${p.matchCount === 1 ? "לקוח מתאים" : "לקוחות מתאימים"}`} badgeTone="brand" href={p.href} ctaLabel="צפה בנכס" ctaIcon="Building" />;
-}
 function RecruitCard({ r }: { r: CockpitRecruit }) {
   return <PropertyCard imageUrl={r.imageUrl} title={r.title} sub={r.sub} details={r.details} price={r.price} kind={r.kind}
     badge={r.badge} badgeTone="black" href={r.href} ctaLabel="צפה בנכס" ctaIcon="Building" whatsappUrl={r.whatsappUrl} whatsappLabel="גיוס מהיר" />;
@@ -177,8 +173,6 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
   const ziRows = toZiRows(data.actions, data.opportunities);
   const actionCount = data.urgentTotal || ziRows.length;
   const startHref = data.ziBrief?.ctaHref ?? ziRows[0]?.href ?? "/action-center";
-  const showMatches = data.matchedProperties.length > 0;
-  const bottomTitle = showMatches ? "נכסים שמתאימים ללקוחות הפעילים שלך" : "הזדמנויות באזור שלך";
 
   return (
     <div dir="rtl" className="flex flex-col gap-3 xl:h-[calc(100vh-108px)] xl:overflow-hidden">
@@ -288,14 +282,14 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
         </section>
       </div>
 
-      {/* ── Matched properties (real client↔property matches) — recruitment fallback ─ */}
-      {(showMatches || data.recruitment.length > 0) && (
+      {/* ── נכסים חמים לגיוס בלעדיות — private-owner, no-broker, SALE-only listings the
+          agent can recruit for an exclusivity mandate (never rentals; source =
+          listPrivateOwnerListings, which enforces has_agent≠true + deal_type≠rent). ─ */}
+      {data.recruitment.length > 0 && (
         <section className={`${CARD} shrink-0`}>
-          <PanelHead title={bottomTitle} count={showMatches ? data.matchedProperties.length : data.recruitmentTotal} icon={showMatches ? "Sparkles" : "Target"} href={showMatches ? "/properties" : "/external-listings"} hrefLabel="לכל הנכסים" />
+          <PanelHead title="נכסים חמים לגיוס בלעדיות" count={data.recruitmentTotal} icon="Target" href="/external-listings" hrefLabel="לכל הנכסים" />
           <div className="zono-scroll flex gap-3 overflow-x-auto p-3">
-            {showMatches
-              ? data.matchedProperties.map((p) => <MatchPropertyCard key={p.id} p={p} />)
-              : data.recruitment.map((r) => <RecruitCard key={r.id} r={r} />)}
+            {data.recruitment.map((r) => <RecruitCard key={r.id} r={r} />)}
           </div>
         </section>
       )}
