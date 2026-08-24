@@ -15,6 +15,7 @@ import type { TeamSeats, TeamSeatMember } from "@/lib/team-admin/team-seats";
 import { ACCESS_LABEL_HE, seatBillingPreview, ilsMonthly, type AccessState } from "@/lib/team-admin/seats";
 import { createOfficeMemberAction } from "@/lib/office/roster-actions";
 import { createInvitationAction, setUserStatusAction } from "@/lib/team-admin/actions";
+import type { BillingAccessDecision } from "@/lib/commercial/billing-access";
 
 const ROLE_HE: Record<string, string> = { owner: "מנהל/ת המשרד", manager: "מנהל/ת", agent: "מתווך/ת" };
 const ACCESS_TONE: Record<AccessState, string> = {
@@ -27,7 +28,7 @@ const FILTERS: { k: Filter; label: string }[] = [
   { k: "INVITED", label: "מוזמנים" }, { k: "SUSPENDED", label: "מושהים" },
 ];
 
-export function TeamSeatsView({ seats, board }: { seats: TeamSeats; board: TeamBoard }) {
+export function TeamSeatsView({ seats, board, billing }: { seats: TeamSeats; board: TeamBoard; billing?: BillingAccessDecision | null }) {
   const [tab, setTab] = useState<"team" | "insights">("team");
   const [filter, setFilter] = useState<Filter>("all");
   const [adding, setAdding] = useState(false);
@@ -46,6 +47,11 @@ export function TeamSeatsView({ seats, board }: { seats: TeamSeats; board: TeamB
         </div>
         <button type="button" onClick={() => setAdding(true)} className="bg-brand inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[14px] font-bold text-white transition hover:opacity-90"><Icon name="UserPlus" size={16} />הוספת איש צוות</button>
       </header>
+
+      <BillingBanner billing={billing} />
+      {billing?.restricted && (
+        <p className="text-warning bg-warning-soft rounded-xl px-3 py-2 text-[12.5px] font-bold">בזמן שהמנוי ממתין להסדרה — צפייה בנתונים נשמרת, אך הוספת/הפעלת אנשי צוות בתשלום זמינה שוב רק לאחר הסדרת התשלום.</p>
+      )}
 
       {/* Tabs */}
       <div className="border-line flex gap-1 border-b">
@@ -94,6 +100,36 @@ export function TeamSeatsView({ seats, board }: { seats: TeamSeats; board: TeamB
       {access && <AccessModal state={access} unitPriceIls={seats.billing.unitPriceIls} currentSeats={seats.billing.seats} onClose={() => setAccess(null)} />}
     </div>
   );
+}
+
+function BillingBanner({ billing }: { billing?: BillingAccessDecision | null }) {
+  if (!billing) return null;
+  const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }) : null);
+
+  if (billing.restricted) {
+    return (
+      <div className="border-danger/40 bg-danger-soft flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+        <div className="min-w-0">
+          <p className="text-danger flex items-center gap-1.5 text-[15px] font-black"><Icon name="AlertTriangle" size={16} />המנוי ממתין להסדרת תשלום</p>
+          <p className="text-ink mt-0.5 text-[13px] font-semibold">הנתונים שלכם נשמרים במלואם. הסדירו את התשלום כדי להסיר את ההגבלה ולהמשיך לעבוד.</p>
+        </div>
+        <a href="/account" className="bg-danger inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-[14px] font-black text-white transition hover:opacity-90"><Icon name="Banknote" size={16} />הסדרת תשלום</a>
+      </div>
+    );
+  }
+  if (billing.inGrace) {
+    const until = fmt(billing.graceUntil);
+    return (
+      <div className="border-warning/40 bg-warning-soft flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+        <div className="min-w-0">
+          <p className="text-warning flex items-center gap-1.5 text-[15px] font-black"><Icon name="AlertTriangle" size={16} />לא הצלחנו לחייב את אמצעי התשלום</p>
+          <p className="text-ink mt-0.5 text-[13px] font-semibold">{until ? `ניתן להמשיך להשתמש ב-ZONO עד ${until}. ` : "ניתן להמשיך להשתמש ב-ZONO בתקופת החסד. "}הסדירו את התשלום כדי למנוע הגבלה.</p>
+        </div>
+        <a href="/account" className="bg-warning inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-[14px] font-black text-white transition hover:opacity-90"><Icon name="Banknote" size={16} />הסדרת תשלום</a>
+      </div>
+    );
+  }
+  return null;
 }
 
 function Stat({ label, value, text, tone = "text-ink" }: { label: string; value?: number; text?: string; tone?: string }) {

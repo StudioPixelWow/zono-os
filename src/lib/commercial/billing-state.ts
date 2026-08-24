@@ -78,8 +78,8 @@ export const STATE_CONTRACT: Record<BillingState, StateContract> = {
   },
   payment_failed: {
     entry: "a payment attempt failed (recorded failure)", exit: "retry succeeds → active; enters grace window → grace",
-    customerAccess: "full", billable: true, nextBillingAction: "dunning / retry",
-    enforcementConsequence: "PRODUCT DECISION — fail-OPEN during grace, never delete data",
+    customerAccess: "restricted", billable: true, nextBillingAction: "dunning / retry",
+    enforcementConsequence: "8.2 WIRED — post-grace BILLING_RESTRICTED: reads stay open, premium/cost-generating mutations blocked, data never deleted",
     adminVisibility: "PAYMENT_FAILED + failure count", recoveryPath: "successful retry → active",
   },
   grace: {
@@ -126,6 +126,27 @@ export function canTransition(from: BillingState, to: BillingState): boolean {
 /** Access-granting states (used only for FUTURE enforcement design; not wired). */
 export function grantsFullAccess(s: BillingState): boolean {
   return STATE_CONTRACT[s].customerAccess === "full";
+}
+
+// ── 8.2 canonical access decision (PURE) ─────────────────────────────────────
+// The SINGLE mapping from a billing state to the customer's access level. The
+// server resolver (billing-access.ts) is the ONLY caller that reads the DB; every
+// gate derives its decision from these two pure functions so access is never
+// re-derived from a scattered `if (status === ...)`.
+
+/** Canonical access level for a billing state (reused from STATE_CONTRACT). */
+export function billingAccessForState(s: BillingState): CustomerAccess {
+  return STATE_CONTRACT[s].customerAccess;
+}
+
+/**
+ * May a premium / cost-generating mutation proceed under this access level?
+ * ONLY `full` permits it. `restricted` (post-grace) and `read_only` (cancelled)
+ * both block new value/cost-generating actions while keeping the office's data
+ * fully viewable. Data READS are ALWAYS allowed — callers never gate reads.
+ */
+export function mutationAllowedForAccess(access: CustomerAccess): boolean {
+  return access === "full";
 }
 
 // ── Webhook idempotency model (design constants) ─────────────────────────────

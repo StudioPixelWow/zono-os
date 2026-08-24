@@ -13,6 +13,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { canonicalFromSubscriptionStatus, type BillingState } from "./billing-state";
 import { getOrgBillingQuantity } from "./billing";
 import { reconcileBillingLifecycleDecision, computeGraceWindow, graceEndsAtFrom, type LifecycleAction, type LifecycleDecision, type OrgLifecycleStatus, type GraceWindow } from "./lifecycle";
+import { notifyOrgBilling } from "./billing-notify";
 
 // canonical BillingState → legacy subscriptions.status (the column's vocabulary).
 const CANON_TO_LEGACY: Partial<Record<BillingState, string>> = {
@@ -93,8 +94,41 @@ export async function beginGraceWindow(orgId: string): Promise<{ ok: boolean; st
       action: "billing.grace.started", category: "configuration", entity_type: "subscription", entity_id: orgId,
       summary: `billing.grace.started: grace_until ${graceUntil}`, metadata: { graceUntil, graceDays: 7 } as never,
     } as never).then(() => undefined, () => undefined);
+    await notifyOrgBilling(orgId, "grace_started");
   }
   return { ok: true, started };
+}
+
+/**
+ * 8.2 — Apply BILLING_RESTRICTED after the grace window expires. Atomic +
+ * idempotent: flips grace_period → suspended ONLY when grace_until has passed
+ * (a conditional update; a second call once already suspended, or before expiry,
+ * matches 0 rows and is a no-op). NEVER deletes or touches office data — this is
+ * purely a subscription-status transition that the canonical entitlement gate
+ * (billing-access.ts) reads to block premium mutations while keeping all data
+ * viewable. A verified payment reverses it via activation (grace_until cleared).
+ */
+export async function restrictAfterGraceWindow(orgId: string): Promise<{ ok: boolean; restricted: boolean }> {
+  const db = createServiceRoleClient();
+  const nowIso = new Date().toISOString();
+  const { data } = await (db.from("subscriptions" as never)
+    .update({ status: "suspended", updated_at: nowIso } as never)
+    .eq("org_id", orgId)
+    .eq("status", "grace_period")
+    .not("grace_until", "is", null)
+    .lte("grace_until", nowIso)
+    .select("org_id")
+    .maybeSingle() as unknown as Promise<{ data: { org_id: string } | null }>);
+  const restricted = !!data;
+  if (restricted) {
+    await db.from("audit_log").insert({
+      organization_id: orgId, actor_id: null, actor_name: "system:lifecycle",
+      action: "billing.restricted", category: "configuration", entity_type: "subscription", entity_id: orgId,
+      summary: "billing.restricted: grace expired → suspended (data preserved, premium mutations blocked)", metadata: { at: nowIso } as never,
+    } as never).then(() => undefined, () => undefined);
+    await notifyOrgBilling(orgId, "restricted");
+  }
+  return { ok: true, restricted };
 }
 
 /**
@@ -127,6 +161,10 @@ export async function reconcileBillingLifecycle(orgId: string): Promise<Lifecycl
           action, category: "configuration", entity_type: "subscription", entity_id: orgId,
           summary: `${action}: ${fromLegacy}→${toLegacy}`, metadata: { from: fromLegacy, to: toLegacy } as never,
         } as never).then(() => undefined, () => undefined);
+        // 8.2 — recovery from grace/suspended back to active → notify owners.
+        if (decision.action === "RECOVERY_AVAILABLE" && (fromLegacy === "grace_period" || fromLegacy === "suspended")) {
+          await notifyOrgBilling(orgId, "recovered");
+        }
       }
     }
   } else if (decision.providerDependent && (decision.action === "PROVIDER_SYNC_PENDING" || decision.action === "QUANTITY_UPDATE_OWED" || decision.action === "CANCELLATION_OWED")) {

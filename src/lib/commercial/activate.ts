@@ -36,6 +36,7 @@ export async function activateOrgSubscriptionFromVerifiedPayment(input: Activate
   const { data, error } = await db.from("subscriptions" as never)
     .update({
       status: "active",
+      grace_until: null,                       // 8.2 — verified payment clears any grace/restriction
       grow_subscription_id: input.recurringDebitId,
       grow_transaction_id: input.transactionId ?? null,
       grow_transaction_token: input.transactionToken ?? null,

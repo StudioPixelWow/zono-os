@@ -104,6 +104,16 @@ export async function POST(req: NextRequest) {
             type: DOMAIN_EVENTS.billingPaymentFailed, entityType: "billing", entityId: payment.orgId, orgId: payment.orgId,
             payload: { status: "failed", reference: paymentId }, idempotencyKey: `billing.failed:${paymentId}`,
           });
+          // 8.2 — authoritative payment failure → begin the 7-day grace window
+          // (idempotent: a repeat failure while already in grace never resets
+          // grace_until) and notify owners. Access stays FULL during grace; the
+          // billing-boundary cron flips to BILLING_RESTRICTED only at expiry.
+          try {
+            const { beginGraceWindow } = await import("@/lib/commercial/lifecycle-server");
+            const { notifyOrgBilling } = await import("@/lib/commercial/billing-notify");
+            const g = await beginGraceWindow(payment.orgId);
+            if (!g.started) await notifyOrgBilling(payment.orgId, "payment_failed");
+          } catch (e) { console.error("[grow-webhook] grace start failed (non-fatal):", e); }
         }
       }
       return NextResponse.json({ ok: false, reason: "not_verified_paid" }, { status: 200 });

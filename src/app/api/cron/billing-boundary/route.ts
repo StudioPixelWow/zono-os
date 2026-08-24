@@ -101,12 +101,36 @@ export async function GET(req: NextRequest) {
   try { activation = await reconcileVerifiedGrowActivations(); }
   catch (err) { activationError = err instanceof Error ? err.message : "activation_reconcile_failed"; console.error("[billing-boundary] activation reconcile failed:", activationError); }
 
-  // Both sub-jobs failing looks like infra failure (non-2xx); a single sub-job
+  // ── Sub-job C: grace-expiry → BILLING_RESTRICTED (8.2; independent) ────────
+  // Flip orgs whose 7-day grace window has passed to 'suspended' (restricted).
+  // Provider-independent, idempotent, data-preserving; the entitlement gate
+  // (billing-access.ts) reads the resulting state to block premium mutations.
+  const restriction = { checked: 0, restricted: 0, failed: 0 };
+  let restrictionError: string | null = null;
+  try {
+    const { data: graceRows } = await db.from("subscriptions" as never)
+      .select("org_id,grace_until")
+      .eq("status", "grace_period")
+      .not("grace_until", "is", null)
+      .lte("grace_until", now)
+      .limit(500) as unknown as { data: Array<{ org_id: string; grace_until: string | null }> | null };
+    const { restrictAfterGraceWindow } = await import("@/lib/commercial/lifecycle-server");
+    for (const g of (graceRows ?? [])) {
+      restriction.checked++;
+      try { const r = await restrictAfterGraceWindow(g.org_id); if (r.restricted) restriction.restricted++; }
+      catch (err) { restriction.failed++; console.error(`[billing-boundary] restrict ${g.org_id} failed:`, err instanceof Error ? err.message : err); }
+    }
+  } catch (err) {
+    restrictionError = err instanceof Error ? err.message : "restriction_sub_job_failed";
+    console.error("[billing-boundary] restriction sub-job failed:", restrictionError);
+  }
+
+  // All sub-jobs failing looks like infra failure (non-2xx); a single sub-job
   // failure is a partial outcome reported honestly with ok:false + 200.
-  const ok = boundaryError === null && activationError === null;
-  const status = boundaryError !== null && activationError !== null ? 500 : 200;
+  const ok = boundaryError === null && activationError === null && restrictionError === null;
+  const status = boundaryError !== null && activationError !== null && restrictionError !== null ? 500 : 200;
   return NextResponse.json(
-    { ok, processed, cancelled, synced, failed, inert, boundaryError, activation, activationError, durationMs: Date.now() - startedMs },
+    { ok, processed, cancelled, synced, failed, inert, boundaryError, activation, activationError, restriction, restrictionError, durationMs: Date.now() - startedMs },
     { status },
   );
 }

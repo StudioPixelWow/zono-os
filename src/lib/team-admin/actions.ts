@@ -2,15 +2,29 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createInvitation, cancelInvitation, setUserStatus, setUserRole } from "./service";
-import { getAuthUser } from "@/lib/auth/session";
+import { getAuthUser, getSessionContext } from "@/lib/auth/session";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { provisionUserProfile } from "@/lib/repositories/userRepository";
 import { getRoleIdByKey } from "@/lib/repositories/organizationRepository";
 import { stageOrgSeatQuantity } from "./seats-server";
+import { assertBillingAllowsMutation, BillingRestrictedError } from "@/lib/commercial/billing-access";
 
 export interface TeamActionState { ok?: boolean; error?: string; message?: string; token?: string }
 
 function revalidate() { try { revalidatePath("/admin/agents"); } catch { /* noop */ } }
+
+/** 8.2 — canonical billing gate for a cost-generating seat mutation. Returns a
+ *  clean Hebrew error state when the org is billing-restricted; null when allowed. */
+async function guardSeatMutation(): Promise<TeamActionState | null> {
+  try {
+    const { profile } = await getSessionContext();
+    if (profile?.org_id) await assertBillingAllowsMutation(profile.org_id);
+    return null;
+  } catch (e) {
+    if (e instanceof BillingRestrictedError) return { error: e.message };
+    return null; // never block on an unrelated lookup failure (fail-open)
+  }
+}
 
 /**
  * Accept an invitation as the currently-authenticated user. Security: the
@@ -71,6 +85,7 @@ export async function acceptInvitationAction(token: string): Promise<TeamActionS
 
 export async function createInvitationAction(input: { email: string; fullName?: string; roleKey?: string }): Promise<TeamActionState> {
   if (!input.email?.trim()) return { error: "נא להזין כתובת אימייל" };
+  const blocked = await guardSeatMutation(); if (blocked) return blocked;
   try { const r = await createInvitation(input); revalidate(); return { ok: true, token: r.token, message: "ההזמנה נוצרה — העתק את הקישור ושלח לסוכן" }; }
   catch (e) {
     const raw = e instanceof Error ? e.message : "יצירת ההזמנה נכשלה";
@@ -85,6 +100,9 @@ export async function cancelInvitationAction(id: string): Promise<TeamActionStat
   catch (e) { return { error: e instanceof Error ? e.message : "ביטול ההזמנה נכשל" }; }
 }
 export async function setUserStatusAction(userId: string, active: boolean): Promise<TeamActionState> {
+  // Activating a seat is cost-generating → billing-gated. Deactivation reduces
+  // cost and stays allowed even while restricted.
+  if (active) { const blocked = await guardSeatMutation(); if (blocked) return blocked; }
   try { await setUserStatus(userId, active); revalidate(); return { ok: true, message: active ? "הסוכן הופעל" : "הסוכן הושבת" }; }
   catch (e) { return { error: e instanceof Error ? e.message : "עדכון הסטטוס נכשל" }; }
 }
