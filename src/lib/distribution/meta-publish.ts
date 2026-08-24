@@ -18,7 +18,7 @@ import { distributionPostsRepository } from "./distribution-posts-repository";
 
 export type PublishResult =
   | { ok: true; externalPostId: string; externalPostUrl: string | null; message: string }
-  | { ok: false; reason: "not_connected" | "no_token" | "expired" | "permission" | "graph_error" | "config"; message: string };
+  | { ok: false; reason: "not_connected" | "no_token" | "expired" | "permission" | "graph_error" | "config" | "billing_restricted"; message: string };
 
 export const metaPublishService = {
   /**

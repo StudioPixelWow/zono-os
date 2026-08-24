@@ -10,6 +10,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { assertProviderSpendAllowed } from "@/lib/commercial/billing-access";
 import type { Json } from "@/lib/supabase/types";
 import { produceCreativeVariants, outputTypeForAsset, type ProductionContext } from "./production-engine";
 import { scoreCreative, reviewCreative } from "./creative-scoring";
@@ -49,6 +50,7 @@ export async function listEntityOutputs(entityType: string, entityId: string): P
 
 export async function generateOutputsForAsset(creativeAssetId: string): Promise<{ created: number }> {
   const { orgId, supabase } = await ctx();
+  await assertProviderSpendAllowed(orgId); // 8.3 — block AI generation BEFORE any provider call when billing-restricted
   const { data: asset } = await supabase.from("zono_creative_assets").select("*").eq("org_id", orgId).eq("id", creativeAssetId).maybeSingle();
   const a = asset as Record<string, unknown> | null;
   if (!a) throw new Error("הנכס לא נמצא");

@@ -21,6 +21,7 @@ import {
   type GroupDestination, type GroupTaskStatus, type GroupCreativeOption,
 } from "./extension-service";
 import { getSessionContext } from "@/lib/auth/session";
+import { assertProviderSpendAllowed } from "@/lib/commercial/billing-access";
 import { resolveRoleKey } from "@/lib/auth/role";
 import { canManageConnections } from "@/lib/auth/connection-roles";
 
@@ -158,6 +159,8 @@ export async function sendGroupPublishTasksAction(input: {
   if (!input.destinationIds?.length) return { ok: false, message: "בחר לפחות קבוצה אחת." };
   if (!input.text?.trim()) return { ok: false, message: "כתוב טקסט לפוסט." };
   const res = await createGroupPublishTasks(input);
+  // 8.3 — billing restriction surfaces the canonical recovery message.
+  if (res.created === 0 && res.blocked === "billing_restricted") return { ok: false, message: "המנוי ממתין להסדרת תשלום" };
   // Honest block: an unapproved/absent creative derivative must not silently drop
   // the image — surface it so the user can approve the creative or post text-only.
   if (res.created === 0 && res.blocked) return { ok: false, message: `התמונה לא מוכנה לפרסום (${res.blocked}). אפשר לאשר את הקריאייטיב או לשלוח טקסט בלבד.` };
@@ -183,6 +186,9 @@ export async function listGroupCreativesAction(): Promise<GroupCreativeOption[]>
 export async function publishToFacebookPageAction(input: {
   destinationExternalId: string; text: string; imageUrl?: string | null; postId?: string | null;
 }): Promise<PublishResult> {
+  // 8.3 — external Graph publish is paid distribution activity → gated (fail-closed).
+  try { const { profile } = await getSessionContext(); if (profile?.org_id) await assertProviderSpendAllowed(profile.org_id); }
+  catch { return { ok: false, reason: "billing_restricted", message: "המנוי ממתין להסדרת תשלום" }; }
   const res = await metaPublishService.publishToFacebookPage(input);
   revalidate();
   return res;

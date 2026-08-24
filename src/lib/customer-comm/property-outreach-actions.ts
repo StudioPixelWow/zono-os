@@ -7,6 +7,7 @@
 // property timeline (one grouped event) and each buyer's history.
 // ============================================================================
 import { getSessionContext } from "@/lib/auth/session";
+import { assertProviderSpendAllowed } from "@/lib/commercial/billing-access";
 import { logActivityEvent } from "@/lib/activity/service";
 import { EVENT_TYPES } from "@/lib/activity/types";
 import {
@@ -46,6 +47,9 @@ export async function sendPropertyOutreachAction(input: SendOutreachActionInput)
   const { user, profile } = await getSessionContext();
   if (!user || !profile?.org_id) return { ok: false, error: "אין הרשאה — התחבר מחדש." };
   const orgId = profile.org_id;
+  // 8.3 — outbound send is a paid provider action → billing-gated (fail-closed).
+  try { await assertProviderSpendAllowed(orgId); }
+  catch { return { ok: false, error: "המנוי ממתין להסדרת תשלום" }; }
   if (!input.propertyId) return { ok: false, error: "חסר מזהה נכס." };
   if (!input.recipientIds?.length) return { ok: false, error: "לא נבחרו קונים." };
   if (!input.channels?.whatsapp && !input.channels?.email) return { ok: false, error: "לא נבחר ערוץ שליחה." };

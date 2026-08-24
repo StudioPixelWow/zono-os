@@ -24,6 +24,7 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { isProviderSpendBlocked } from "@/lib/commercial/billing-access";
 import { emitBusinessEvent } from "@/lib/kernel/emit";
 import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 import { sendCustomerEmail } from "./send";
@@ -243,6 +244,9 @@ export async function sendPropertyToSelectedBuyers(
     deferred: 0, skipped: 0, recipients: [], sentBuyerIds: [],
   };
   if (!recipientIds.length || (!channels.whatsapp && !channels.email)) return empty;
+  // 8.3 — canonical provider-spend gate (defense-in-depth for UI + cron callers).
+  // Restricted / unknown billing → skip cleanly, NO provider send, no partial batch.
+  if (await isProviderSpendBlocked(orgId)) return { ...empty, skipped: recipientIds.length };
 
   const { data: prop } = await db.from("properties")
     .select("id,title,city,price,status").eq("id", propertyId).eq("org_id", orgId).maybeSingle();

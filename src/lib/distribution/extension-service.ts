@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { isServiceRoleConfigured } from "@/lib/supabase/env";
 import { getSessionContext } from "@/lib/auth/session";
+import { isProviderSpendBlocked } from "@/lib/commercial/billing-access";
 import type { ExtensionPathStatus } from "./facebook-connection-paths";
 import { DIST } from "./db-types";
 import { promoteForChannel, resolveJobDerivative } from "@/lib/creative-studio/promotion/creative-promotion-service";
@@ -470,6 +471,9 @@ export interface GroupTaskInput { destinationIds: string[]; text: string; imageU
 /** Create one prepared distribution_post per selected group. No server publish. */
 export async function createGroupPublishTasks(input: GroupTaskInput): Promise<{ created: number; blocked?: string; deduped?: number }> {
   const s = await userScope(); if (!s) return { created: 0 };
+  // 8.3 — launching new paid distribution activity is gated (fail-closed). No task
+  // is queued to the extension when the office is billing-restricted.
+  if (await isProviderSpendBlocked(s.orgId)) return { created: 0, blocked: "billing_restricted" };
   const dests = await listGroupDestinations();
   const chosen = dests.filter((d) => input.destinationIds.includes(d.id));
   if (chosen.length === 0) return { created: 0 };

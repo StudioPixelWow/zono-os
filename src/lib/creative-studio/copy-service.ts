@@ -9,6 +9,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { assertProviderSpendAllowed } from "@/lib/commercial/billing-access";
 import type { Json } from "@/lib/supabase/types";
 import { generateCopy as runGenerator } from "./copy-ai";
 import { reviewCopy } from "./copy-review";
@@ -43,6 +44,7 @@ export async function listEntityCopy(entityType: string, entityId: string): Prom
 
 export async function generateCopyForAsset(creativeAssetId: string): Promise<{ created: number; provider: string }> {
   const { orgId, supabase } = await ctx();
+  await assertProviderSpendAllowed(orgId); // 8.3 — block LLM copy generation BEFORE provider call when billing-restricted
   const { data: asset } = await supabase.from("zono_creative_assets").select("*").eq("org_id", orgId).eq("id", creativeAssetId).maybeSingle();
   const a = asset as Record<string, unknown> | null;
   if (!a) throw new Error("הנכס לא נמצא");
@@ -106,6 +108,7 @@ export async function rejectCopy(copyId: string): Promise<void> {
 }
 export async function regenerateCopy(copyId: string): Promise<{ created: number; provider: string }> {
   const { orgId, supabase } = await ctx();
+  await assertProviderSpendAllowed(orgId); // 8.3 — regeneration is a paid provider call too
   const { data } = await supabase.from("zono_copy_assets").select("creative_asset_id").eq("org_id", orgId).eq("id", copyId).maybeSingle();
   const cid = (data as { creative_asset_id?: string } | null)?.creative_asset_id;
   if (!cid) throw new Error("לא נמצא נכס מקור");

@@ -12,6 +12,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { isProviderSpendBlocked } from "@/lib/commercial/billing-access";
 import { emitBusinessEvent } from "@/lib/kernel/emit";
 import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 import { sendCustomerEmail } from "./send";
@@ -253,6 +254,10 @@ export async function sendPropertyMatchesForOrg(
 ): Promise<PropertySendResult> {
   const db: any = opts?.db ?? createServiceRoleClient();
   const restrict = opts?.recipientIds && opts.recipientIds.length ? new Set(opts.recipientIds) : null;
+
+  // 8.3 — provider-spend gate (covers UI + cron callers). Restricted/unknown
+  // billing → skip cleanly with an honest blocked count, NO provider send.
+  if (await isProviderSpendBlocked(orgId)) return { property: propertyId, recipients: 0, sent: 0, skipped: 0, viaWhatsapp: 0, viaEmail: 0, deferred: 0, sentBuyerIds: [] };
 
   // Property must still be available.
   const { data: prop } = await db.from("properties")

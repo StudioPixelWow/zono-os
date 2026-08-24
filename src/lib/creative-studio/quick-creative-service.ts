@@ -8,6 +8,7 @@
 import "server-only";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { assertProviderSpendAllowed } from "@/lib/commercial/billing-access";
 import { isUuid } from "@/lib/utils";
 import type { Json } from "@/lib/supabase/types";
 import { toCreativeCardView, clampPageLimit, clampRecent, pageInfo, CREATIVE_PAGE_SIZE, RECENT_MAX, type CreativeCardView, type OrgCreativePage } from "./library-model";
@@ -393,6 +394,7 @@ export async function buildConceptBriefs(g: GenerateQuickInput): Promise<{ brief
 }
 export async function generateQuickCreative(g: GenerateQuickInput): Promise<{ requestId: string; created: number; warning?: string }> {
   const { orgId, userId, supabase } = await ctx();
+  await assertProviderSpendAllowed(orgId); // 8.3 — block BEFORE provider call when billing-restricted
   const missing = validateRequired(g.requestType, g.input);
   if (missing.length) throw new Error(`חסרים שדות חובה: ${missing.join(", ")}`);
   // RULE 1/5/6 — asset gate: a property ad must use a REAL property image; never
@@ -931,6 +933,7 @@ export async function replaceQuickImage(outputId: string, imageUrl: string): Pro
 }
 export async function regenerateQuickRequest(requestId: string): Promise<{ created: number }> {
   const { orgId, supabase } = await ctx();
+  await assertProviderSpendAllowed(orgId); // 8.3 — regeneration is a paid provider call too
   const { data: req } = await supabase.from("zono_quick_creative_requests").select("*").eq("org_id", orgId).eq("id", requestId).maybeSingle();
   const rq = req as Record<string, unknown> | null;
   if (!rq) throw new Error("הבקשה לא נמצאה");
@@ -999,6 +1002,7 @@ async function resolveCreativePreview(sb: DB, row: Record<string, unknown>): Pro
  */
 export async function generateQuickCreativeImage(outputId: string): Promise<{ imageUrl: string; provider: string }> {
   const { orgId, supabase } = await ctx();
+  await assertProviderSpendAllowed(orgId); // 8.3 — block final image gen BEFORE provider call when billing-restricted
   return genImageForOutput(supabase, orgId, outputId);
 }
 
