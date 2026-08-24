@@ -117,6 +117,12 @@ export function createJourneyRepository(db: Db) {
       return (data ?? []) as never;
     },
 
+    /** Head-count of still-due delayed actions (for the delay-queue's honest `remaining`). */
+    async countDueDelays(nowIso: string): Promise<number> {
+      const { count } = await db.from(DELAY as never).select("id", { count: "exact", head: true }).eq("status", "pending").lte("run_at", nowIso);
+      return count ?? 0;
+    },
+
     async markDelay(id: string, status: string): Promise<void> {
       await db.from(DELAY as never).update({ status, claimed_at: new Date().toISOString() } as never).eq("id", id);
     },

@@ -7,7 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { getJourneyAccess, assertManage } from "./permissions";
 import { createJourneyRepository } from "./repository";
-import { dispatchForOrg, simulate, runJourneyDelayQueue } from "./orchestrator";
+import { dispatchForOrg, simulate, runJourneyDelayQueue, type DelayQueueResult } from "./orchestrator";
 import { validateGraph } from "./engine";
 import { computeMetrics } from "./metrics";
 import { tallyActionsFromCounts, buildDashboard } from "./dashboard";
@@ -107,7 +107,7 @@ export async function seedDefaultJourneysAction(): Promise<Result<{ created: num
   } catch (e) { return fail(e); }
 }
 
-export async function runJourneyQueueAction(): Promise<Result<{ processed: number }>> {
+export async function runJourneyQueueAction(): Promise<Result<DelayQueueResult>> {
   try {
     await getJourneyAccess();
     const r = await runJourneyDelayQueue();

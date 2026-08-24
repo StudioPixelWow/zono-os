@@ -43,7 +43,7 @@ export function JourneyAutomationView({ initial, workflows }: { initial: Automat
     setWfs((cur) => cur.map((w) => (w.id === id ? { ...w, status: status === "active" ? "paused" : "active" } : w)));
   });
   const seed = () => start(async () => { const r = await seedDefaultJourneysAction(); setNote(r.ok ? `נוצרו ${r.data.created} מסעות ברירת מחדל.` : r.error); await refresh(); });
-  const runQueue = () => start(async () => { const r = await runJourneyQueueAction(); setNote(r.ok ? `עובדו ${r.data.processed} פעולות מושהות.` : r.error); await refresh(); });
+  const runQueue = () => start(async () => { const r = await runJourneyQueueAction(); setNote(r.ok ? `עובדו ${r.data.executed} פעולות מושהות · דילג ${r.data.skipped} · נכשל ${r.data.failed}${r.data.remaining ? ` · נותרו ${r.data.remaining}` : ""}.` : r.error); await refresh(); });
   const cancel = (id: string) => start(async () => { await cancelExecutionAction(id); await refresh(); });
 
   const c = data.counts;

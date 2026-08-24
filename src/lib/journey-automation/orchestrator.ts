@@ -114,14 +114,17 @@ async function persistResult(
   void graph; void event;
 }
 
-/** Resume a single delayed branch (durable queue worker). Idempotent per row. */
-export async function resumeDelay(db: Db, orgId: string, executionId: string, delayNodeId: string, delayRowId: string): Promise<void> {
+/** Resume a single delayed branch (durable queue worker). Idempotent per row.
+ *  Returns "resumed" when the branch actually ran, or "skipped" when the row was a
+ *  no-op (execution cancelled/missing, or its version graph is gone) — the queue
+ *  runner uses this to report an HONEST executed/skipped split. */
+export async function resumeDelay(db: Db, orgId: string, executionId: string, delayNodeId: string, delayRowId: string): Promise<"resumed" | "skipped"> {
   const repo = createJourneyRepository(db);
   await repo.markDelay(delayRowId, "claimed");
   const exec = await repo.getExecution(orgId, executionId);
-  if (!exec || exec.status === "cancelled" || !exec.workflow_id) { await repo.markDelay(delayRowId, "cancelled"); return; }
+  if (!exec || exec.status === "cancelled" || !exec.workflow_id) { await repo.markDelay(delayRowId, "cancelled"); return "skipped"; }
   const graph = await repo.getVersionGraph(exec.workflow_id, exec.version);
-  if (!graph) { await repo.markDelay(delayRowId, "done"); return; }
+  if (!graph) { await repo.markDelay(delayRowId, "done"); return "skipped"; }
 
   const event: TriggerEvent = {
     triggerType: (exec.trigger_type ?? "manual") as TriggerType, entityType: exec.entity_type, entityId: exec.entity_id,
@@ -136,19 +139,42 @@ export async function resumeDelay(db: Db, orgId: string, executionId: string, de
   const status = result.pendingDelays.length > 0 ? "delayed" : result.status === "failed" ? "failed" : "completed";
   await repo.finishExecution(orgId, executionId, { status, stepsDone: result.stepsDone, durationMs: status === "delayed" ? null : Date.now() - startedAt, error: result.error ?? null });
   await repo.markDelay(delayRowId, "done");
+  return "resumed";
 }
 
-/** Durable-queue runner: process all due delayed actions (idempotent, batched). */
-export async function runJourneyDelayQueue(): Promise<{ processed: number }> {
+/** Honest per-run accounting for the durable delay queue (fed to the cron JSON). */
+export interface DelayQueueResult {
+  scanned: number;   // rows fetched from the due-delays query (bounded by `limit`)
+  due: number;       // rows that were actually due+pending at scan time (== scanned)
+  executed: number;  // delayed branches that actually resumed and ran
+  skipped: number;   // due rows that were a no-op (execution cancelled / graph gone)
+  failed: number;    // rows whose resume threw → re-queued 'pending' for the next tick
+  remaining: number; // still-due rows after this run (failed re-queues + overflow)
+}
+
+/**
+ * Durable-queue runner: process due delayed actions in a BOUNDED batch (idempotent,
+ * org-isolated per row, safe-retry). One poisoned row is re-queued 'pending' and never
+ * blocks the batch; it never double-executes (resumeDelay claims + finalises each row).
+ * Returns an honest scanned/due/executed/skipped/failed/remaining tally.
+ */
+export async function runJourneyDelayQueue(limit = 200): Promise<DelayQueueResult> {
   const db: Db = createServiceRoleClient();
   const repo = createJourneyRepository(db);
-  const due = await repo.dueDelays(new Date().toISOString(), 200);
-  let processed = 0;
+  const nowIso = new Date().toISOString();
+  const due = await repo.dueDelays(nowIso, limit);
+  let executed = 0, skipped = 0, failed = 0;
   for (const row of due) {
-    try { await resumeDelay(db, row.org_id, row.execution_id, row.node_id, row.id); processed++; }
-    catch { await repo.markDelay(row.id, "pending"); /* retry next tick */ }
+    try {
+      const outcome = await resumeDelay(db, row.org_id, row.execution_id, row.node_id, row.id);
+      if (outcome === "resumed") executed++; else skipped++;
+    } catch { await repo.markDelay(row.id, "pending"); failed++; /* retry next tick */ }
   }
-  return { processed };
+  // Honest 'remaining': re-count what is still due now. Executed/skipped rows were
+  // finalised (done/cancelled) so they drop out; failed rows were re-queued 'pending'
+  // and reappear here — plus any rows beyond this batch's `limit`.
+  const remaining = await repo.countDueDelays(nowIso);
+  return { scanned: due.length, due: due.length, executed, skipped, failed, remaining };
 }
 
 /** Simulation Mode preview — exactly what WOULD happen, no side effects. */

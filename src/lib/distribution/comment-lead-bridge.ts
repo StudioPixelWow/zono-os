@@ -76,6 +76,29 @@ export async function promoteCommentToCrmLead(
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "יצירת הליד נכשלה." }; }
   if (!crmLeadId) return { ok: false, error: "יצירת הליד נכשלה." };
 
+  // ── Canonical kernel event (§5) — emit the SAME lead.created the website lead
+  //    paths emit, at the correct canonical writer seam (right after the leads
+  //    write succeeds). An FB-comment lead now reaches the identical downstream
+  //    (timeline / notification / journey / matching / automation classifier)
+  //    instead of being written silently. org comes from the session-resolved
+  //    orgId (NEVER the client), and org_id / lead_id / source / attribution are
+  //    preserved. Idempotent: the alreadyPromoted guard above prevents a second
+  //    lead+emit, and the idempotencyKey dedupes at the outbox so a retry/replay
+  //    never produces a duplicate event. `source:"facebook"` is already the
+  //    canonical LeadSource enum value (no ad-hoc source string invented).
+  try {
+    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
+    await emitBusinessEvent({
+      type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: crmLeadId,
+      orgId, actorUserId: userId, idempotencyKey: `lead.created:${crmLeadId}`,
+      payload: {
+        source: "facebook", intent: "buyer",
+        distributionLeadId: distLeadId ?? null, commentId,
+        propertyId: fields.property_id ?? null,
+      },
+    });
+  } catch { /* best-effort — emitBusinessEvent itself never throws; this only guards the dynamic import */ }
+
   // Journey-once guard: start the EXISTING approval-gated lead workflow only if
   // one was never started for this suggestion.
   let workflowId: string | null = s(meta.workflow_id);

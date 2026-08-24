@@ -33,8 +33,25 @@ import { indexEntity, softDeleteEntity } from "@/lib/search-projection/indexer";
 import { ingestMemoryForEvent } from "@/lib/memory-canonical/ingest";
 import { projectEventToJourney } from "./journey-subscriber";
 import { applyJourneyIntent, type JourneyOutcome } from "./journey-applier";
+import { dispatchForOrg } from "@/lib/journey-automation/orchestrator";
+import type { TriggerContext, TriggerEvent, TriggerType } from "@/lib/journey-automation/types";
 
 const MAX_RETRIES = 5;
+
+/**
+ * Flatten a domain event's payload into a journey TriggerContext (primitives only).
+ * The journey engine evaluates conditions against these fields; anything non-scalar
+ * is dropped (never stringified) so a workflow condition sees an honest value or
+ * undefined. Org is NEVER taken from here — it comes from the outbox row.
+ */
+function toTriggerContext(payload: Record<string, unknown> | null): TriggerContext {
+  const out: TriggerContext = {};
+  if (!payload) return out;
+  for (const [k, v] of Object.entries(payload)) {
+    if (v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = v;
+  }
+  return out;
+}
 
 /**
  * A GENUINE notification-delivery failure (not a duplicate). Thrown out of the
@@ -354,8 +371,21 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
     // Journey is non-critical to the rest of the drain — other subscribers ran.
   }
 
-  // ── Automation — CLASSIFY ONLY (never execute). The candidate surfaces via the
-  //    stateless approval-bundle inbox on next read; here we just record it. ────
+  // ── Automation — the ONE canonical seam between the event kernel and the
+  //    journey-automation engine. The pure classifier decides the intent; here we
+  //    (a) DISPATCH to the event-driven journey workflows when the event maps to a
+  //    journey TriggerType, and (b) leave the approval-bundle candidate to surface
+  //    via the stateless inbox on next read (nothing is auto-sent).
+  //
+  //    Dispatch is org-isolated (org comes from the outbox row, NEVER the payload),
+  //    idempotent across retries/replay (the execution's unique (workflow_id,
+  //    dedup_key=event id) guard drops a duplicate dispatch), and provider-free:
+  //    the journey action handler only creates tasks/reminders and records
+  //    deterministic instructions — it performs NO external send / provider spend,
+  //    so there is nothing for the Billing 8.3 gate to block here (§9), and no live
+  //    WhatsApp/Facebook/paid-AI side effect (§13). Best-effort: a dispatch failure
+  //    is recorded (never silent) but does not fail the event — the outbox's
+  //    at-least-once redrive re-dispatches idempotently on a later reprocess.
   try {
     const intent = projectEventToAutomation(row);
     if (!intent) {
@@ -366,10 +396,31 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
       });
     } else {
       out.automationCandidates++;
+      let journeyDispatched: number | null = null;
+      let journeyError: string | null = null;
+      if (intent.journeyTrigger) {
+        try {
+          const ev: TriggerEvent = {
+            triggerType: intent.journeyTrigger as TriggerType,
+            entityType: row.entity_type, entityId: row.entity_id, entityLabel: null,
+            context: toTriggerContext(row.payload), dedupKey: intent.dedupKey,
+          };
+          const r = await dispatchForOrg(db, row.organization_id, row.actor_user_id ?? null, ev, "execution");
+          journeyDispatched = r.started;
+        } catch (e) {
+          journeyError = e instanceof Error ? e.message : "journey dispatch failed";
+          console.error(`[kernel] journey dispatch failed for event ${row.id} (${row.event_type}): ${journeyError}`);
+        }
+      }
       await recordDelivery(db, {
-        orgId: row.organization_id, eventId: row.id, subscriber: "automation", status: "done",
+        orgId: row.organization_id, eventId: row.id, subscriber: "automation",
+        status: journeyError ? "failed" : "done",
         latencyMs: Date.now() - t0,
-        metadata: { journeyTrigger: intent.journeyTrigger, bundleEventType: intent.bundleEventType, requiresApproval: intent.requiresApproval },
+        error: journeyError ?? undefined,
+        metadata: {
+          journeyTrigger: intent.journeyTrigger, bundleEventType: intent.bundleEventType,
+          requiresApproval: intent.requiresApproval, journeyDispatched,
+        },
       });
     }
   } catch { /* automation classification is non-critical */ }
