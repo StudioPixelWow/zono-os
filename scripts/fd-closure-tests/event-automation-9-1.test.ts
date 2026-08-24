@@ -133,10 +133,14 @@ test("zono-agents cron is registered daily and performs no provider spend", () =
 // ── 10. Facebook comment → canonical lead.created (idempotent) ────────────────
 test("FB-comment lead emits the canonical lead.created with attribution + idempotency", () => {
   const b = src("lib/distribution/comment-lead-bridge.ts");
-  assert.match(b, /DOMAIN_EVENTS\.leadCreated/, "emits the canonical lead.created (not a FB-specific parallel path)");
-  assert.match(b, /idempotencyKey:\s*`lead\.created:\$\{crmLeadId\}`/, "outbox dedupe → replay never duplicates the event");
-  assert.match(b, /orgId,\s*actorUserId:\s*userId/, "org/actor preserved (org from session, never the client)");
-  assert.match(b, /source:\s*"facebook"/, "source is the canonical LeadSource value (no invented source)");
+  // 9.3 refactor: the FB path now emits via the shared OBSERVED helper (still the
+  // canonical lead.created — not a FB-specific parallel path), with the trusted org,
+  // actor, and canonical source. The idempotency key + the DOMAIN_EVENTS.leadCreated
+  // emit now live inside emitLeadCreatedObserved (asserted in the 9.3 suite).
+  assert.match(b, /emitLeadCreatedObserved\(\{[\s\S]*orgId, leadId: crmLeadId, source: "facebook", actorUserId: userId/, "emits the canonical lead.created via the shared observed helper (org/actor/source preserved)");
+  const obs = src("lib/lead-intake/observability.ts");
+  assert.match(obs, /DOMAIN_EVENTS\.leadCreated/, "the observed helper emits the canonical DOMAIN_EVENTS.leadCreated");
+  assert.match(obs, /idempotencyKey:\s*`lead\.created:\$\{e\.leadId\}`/, "outbox dedupe → replay never duplicates the event");
   // Lead-once guard already prevents a second lead + emit on re-promotion.
   assert.match(b, /alreadyPromoted:\s*true/, "re-promotion returns the existing lead (one ingestion → one lead → one event)");
 });

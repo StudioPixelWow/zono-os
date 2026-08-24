@@ -52,8 +52,10 @@ export async function createLeadAction(input: NewLeadInput): Promise<{ ok: boole
   try {
     const { logActivityEvent } = await import("@/lib/activity/service");
     await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: `ליד חדש: ${name}` });
-    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
-    await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: input.source, intent: input.intent ?? "unknown" } });
+    // 9.3 — OBSERVED emit: explicit org + idempotency key; a failed lead.created is
+    // recorded in audit_log instead of ignored (the insert itself is already checked above).
+    const { emitLeadCreatedObserved } = await import("@/lib/lead-intake/observability");
+    await emitLeadCreatedObserved({ orgId: profile.org_id, leadId, source: input.source, actorUserId: user.id, payload: { intent: input.intent ?? "unknown" } });
   } catch (e) { console.error("[leads] activity log failed:", e); }
   return { ok: true, id: leadId };
 }

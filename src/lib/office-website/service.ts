@@ -241,28 +241,39 @@ export async function submitWebsiteLead(slug: string, input: { sourceSection: st
     } catch { /* dedupe is best-effort — never block a real submission on it */ }
   }
 
-  // Create a CRM lead (source = website). Best-effort intent mapping.
+  // Create the CANONICAL CRM lead (source = website). Best-effort intent mapping.
   const intent = input.sourceSection === "valuation" ? "seller" : input.sourceSection === "recruitment" ? "unknown" : input.intent ?? "buyer";
-  let leadId: string | null = null;
+  const { recordLeadIntakeFailure, emitLeadCreatedObserved, LEAD_INTAKE_RETRY } = await import("@/lib/lead-intake/observability");
+  let leadId: string | null = null; let crmError: unknown = null;
   try {
-    const { data: lead } = await admin.from("leads").insert({
+    const { data: lead, error } = await admin.from("leads").insert({
       org_id: orgId, full_name: input.fullName ?? "פנייה מהאתר", phone: input.phone ?? null, email: input.email ?? null,
       source: "website", intent: intent as never, stage: "new", message: input.message ?? `פנייה מאתר המשרד · ${input.sourceSection}`,
-    } as never).select("id").single();
-    leadId = (lead as { id: string } | null)?.id ?? null;
-  } catch { /* lead enum/constraint — still record the raw website lead below */ }
+    } as never).select("id").maybeSingle();
+    if (error) crmError = error; else leadId = (lead as { id: string } | null)?.id ?? null;
+  } catch (e) { crmError = e; }
+  if (!leadId && !crmError) crmError = new Error("no lead id returned");
 
-  await admin.from("office_website_leads").insert({
+  // Mirror the raw capture (analytics + operator-recovery record) even on CRM failure,
+  // so the contact is never lost. A mirror error is BEST-EFFORT but recorded observably.
+  const { error: mirrorErr } = await admin.from("office_website_leads").insert({
     organization_id: orgId, website_id: siteRow.id, lead_id: leadId, source_section: input.sourceSection,
     full_name: input.fullName ?? null, phone: input.phone ?? null, email: input.email ?? null, city: input.city ?? null,
     property_type: input.propertyType ?? null, rooms: input.rooms ?? null, message: input.message ?? null, intent,
   } as never);
+  if (mirrorErr) await recordLeadIntakeFailure({ orgId, source: "website", sourceSection: input.sourceSection, stage: "mirror_write", leadId, retryable: false, error: mirrorErr, primaryWriteOk: !!leadId });
   await admin.from("office_website_events").insert({ organization_id: orgId, website_id: siteRow.id, event_type: "lead", path: input.sourceSection } as never);
-  if (leadId) {
-    try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר המשרד" }); } catch { /* best-effort */ }
-    // Emit the canonical kernel event so downstream subscribers react to website leads too.
-    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "website", intent } }); } catch { /* best-effort */ }
+
+  // CANONICAL CONTRACT: the CRM lead IS success. If it failed → honest retryable
+  // failure (no fake success), audited, and NO lead.created event.
+  if (!leadId) {
+    await recordLeadIntakeFailure({ orgId, source: "website", sourceSection: input.sourceSection, stage: "crm_write", retryable: true, error: crmError, primaryWriteOk: false, eventEmitted: false });
+    return { ok: false as const, error: LEAD_INTAKE_RETRY };
   }
+  // Success → activity (best-effort) + OBSERVED canonical emit (explicit org so it
+  // actually persists for this unauthenticated path; idempotent; ok:false is recorded).
+  try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר המשרד" }); } catch { /* best-effort */ }
+  await emitLeadCreatedObserved({ orgId, leadId, source: "website", sourceSection: input.sourceSection, payload: { intent } });
   return { ok: true };
 }
 

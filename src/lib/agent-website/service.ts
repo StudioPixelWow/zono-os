@@ -179,28 +179,52 @@ export async function submitAgentLead(slug: string, input: { sourceSection: stri
   const { data: agentUser } = await admin.from("users").select("status").eq("id", s.user_id).eq("org_id", s.organization_id).maybeSingle();
   if ((agentUser as { status: string } | null)?.status !== "active") return { ok: false, error: "האתר אינו זמין" };
   const intent = input.sourceSection === "valuation" ? "seller" : "buyer";
+  const { recordLeadIntakeFailure, emitLeadCreatedObserved, LEAD_INTAKE_RETRY } = await import("@/lib/lead-intake/observability");
 
-  let leadId: string | null = null;
+  // Duplicate-submit protection (double-tap / refresh / network retry): same org +
+  // section + contact within a short window is the SAME submission → success, no write,
+  // no duplicate CRM lead. Reuses the agent_website_leads mirror (no new table).
+  const contact = (input.phone ?? input.email ?? "").trim();
+  if (contact) {
+    try {
+      const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const col = input.phone ? "phone" : "email";
+      const { data: dup } = await admin.from("agent_website_leads" as never).select("id")
+        .eq("organization_id", s.organization_id).eq("agent_website_id", s.id).eq("source_section", input.sourceSection)
+        .eq(col, contact).gte("created_at", since).limit(1);
+      if (Array.isArray(dup) && dup.length > 0) return { ok: true };
+    } catch { /* dedupe is best-effort */ }
+  }
+
+  let leadId: string | null = null; let crmError: unknown = null;
   try {
-    const { data: lead } = await admin.from("leads").insert({
+    const { data: lead, error } = await admin.from("leads").insert({
       org_id: s.organization_id, owner_id: s.user_id, full_name: input.fullName ?? "פנייה מאתר הסוכן", phone: input.phone ?? null,
       email: input.email ?? null, source: "website", intent: intent as never, stage: "new", message: input.message ?? `פנייה מאתר אישי · ${input.sourceSection}`,
-    } as never).select("id").single();
-    leadId = (lead as { id: string } | null)?.id ?? null;
-  } catch { /* enum/constraint — keep raw lead below */ }
+    } as never).select("id").maybeSingle();
+    if (error) crmError = error; else leadId = (lead as { id: string } | null)?.id ?? null;
+  } catch (e) { crmError = e; }
+  if (!leadId && !crmError) crmError = new Error("no lead id returned");
 
-  await admin.from("agent_website_leads").insert({
+  // Mirror the raw capture (operator-recovery record) even on CRM failure so the
+  // contact is never lost; a mirror error is best-effort but recorded observably.
+  const { error: mirrorErr } = await admin.from("agent_website_leads").insert({
     organization_id: s.organization_id, agent_website_id: s.id, agent_user_id: s.user_id, lead_id: leadId,
     source_section: input.sourceSection, full_name: input.fullName ?? null, phone: input.phone ?? null, email: input.email ?? null,
     city: input.city ?? null, property_type: input.propertyType ?? null, rooms: input.rooms ?? null, budget: input.budget ?? null,
     timeline: input.timeline ?? null, message: input.message ?? null, intent,
   } as never);
+  if (mirrorErr) await recordLeadIntakeFailure({ orgId: s.organization_id, source: "agent_website", sourceSection: input.sourceSection, stage: "mirror_write", leadId, retryable: false, error: mirrorErr, primaryWriteOk: !!leadId });
   await admin.from("agent_website_events").insert({ organization_id: s.organization_id, agent_website_id: s.id, event_type: "lead", path: input.sourceSection } as never);
-  if (leadId) {
-    try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר הסוכן" }); } catch { /* best-effort */ }
-    // Emit the canonical kernel event so downstream subscribers react to agent-site leads too.
-    try { const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel"); await emitBusinessEvent({ type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: leadId, payload: { source: "agent_website", intent, ...(suppressExternal ? { suppressExternal: true, qa: true } : {}) } }); } catch { /* best-effort */ }
+
+  // CANONICAL CONTRACT: no fake success. CRM insert failed → honest retryable failure,
+  // audited, and NO lead.created event.
+  if (!leadId) {
+    await recordLeadIntakeFailure({ orgId: s.organization_id, source: "agent_website", sourceSection: input.sourceSection, stage: "crm_write", retryable: true, error: crmError, primaryWriteOk: false, eventEmitted: false });
+    return { ok: false as const, error: LEAD_INTAKE_RETRY };
   }
+  try { await logActivityEvent({ eventType: "lead.created", entityType: "lead", entityId: leadId, title: "ליד חדש מאתר הסוכן" }); } catch { /* best-effort */ }
+  await emitLeadCreatedObserved({ orgId: s.organization_id, leadId, source: "agent_website", sourceSection: input.sourceSection, payload: { intent, ...(suppressExternal ? { suppressExternal: true, qa: true } : {}) } });
   return { ok: true };
 }
 

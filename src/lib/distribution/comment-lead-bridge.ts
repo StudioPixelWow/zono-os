@@ -86,18 +86,17 @@ export async function promoteCommentToCrmLead(
   //    lead+emit, and the idempotencyKey dedupes at the outbox so a retry/replay
   //    never produces a duplicate event. `source:"facebook"` is already the
   //    canonical LeadSource enum value (no ad-hoc source string invented).
+  // 9.3 — route through the OBSERVED emit so a failed lead.created (ok:false) is
+  // recorded in audit_log instead of silently ignored. Same canonical event, same
+  // idempotencyKey (`lead.created:{id}`) and explicit org as 9.1 — no behavior change,
+  // just observability. The alreadyPromoted guard above still makes replay a no-op.
   try {
-    const { emitBusinessEvent, DOMAIN_EVENTS } = await import("@/lib/kernel");
-    await emitBusinessEvent({
-      type: DOMAIN_EVENTS.leadCreated, entityType: "lead", entityId: crmLeadId,
-      orgId, actorUserId: userId, idempotencyKey: `lead.created:${crmLeadId}`,
-      payload: {
-        source: "facebook", intent: "buyer",
-        distributionLeadId: distLeadId ?? null, commentId,
-        propertyId: fields.property_id ?? null,
-      },
+    const { emitLeadCreatedObserved } = await import("@/lib/lead-intake/observability");
+    await emitLeadCreatedObserved({
+      orgId, leadId: crmLeadId, source: "facebook", actorUserId: userId,
+      payload: { intent: "buyer", distributionLeadId: distLeadId ?? null, commentId, propertyId: fields.property_id ?? null },
     });
-  } catch { /* best-effort — emitBusinessEvent itself never throws; this only guards the dynamic import */ }
+  } catch { /* best-effort — the helper never throws; this only guards the dynamic import */ }
 
   // Journey-once guard: start the EXISTING approval-gated lead workflow only if
   // one was never started for this suggestion.
