@@ -190,15 +190,37 @@ export async function getAgentListing(slug: string, filters: PropertyFilters = {
  * Canonical public payload for the agent site. Returns "disabled" for an
  * unpublished site and null when the slug resolves to nothing.
  */
+/**
+ * 9.2B — the standalone agent site is UNAVAILABLE (not deleted, not redirected) when
+ * the linked access user is suspended/disabled. The page renders a Hebrew inactive
+ * state, noindex, no CTA/lead form; the canonical URL is preserved so reactivation
+ * restores the same site automatically. `officeUrl` is populated ONLY when the office
+ * has a real published public site.
+ */
+export interface AgentSiteUnavailable { unavailable: true; officeUrl: string | null }
+
 export async function getAgentSite(
   slug: string,
   opts: { previewForOwner?: boolean } = {},
-): Promise<AgentSitePayload | "disabled" | null> {
+): Promise<AgentSitePayload | AgentSiteUnavailable | "disabled" | null> {
   if (!slug) return null;
   const admin = createServiceRoleClient();
   const { data: siteRow } = await admin.from("agent_websites").select("*").eq("slug", slug).maybeSingle();
   if (!siteRow) return null;
   const s = siteRow as Record<string, unknown> & { id: string; organization_id: string; user_id: string; status: string };
+  // 9.2B SUSPENDED-AGENT POLICY — when the linked access user is not active, the site
+  // stays reachable but UNAVAILABLE (inactive state + noindex + no CTA), never an
+  // active lead-gen page. Takes priority over the publish gate. URL preserved;
+  // reactivation restores automatically (this resolver is dynamic per request).
+  {
+    const { data: linkedUser } = await admin.from("users").select("status").eq("id", s.user_id).eq("org_id", s.organization_id).maybeSingle();
+    const userStatus = (linkedUser as { status: string } | null)?.status ?? null;
+    if (userStatus && userStatus !== "active") {
+      const { data: officeRow } = await admin.from("office_websites").select("slug").eq("organization_id", s.organization_id).eq("status", "published").maybeSingle();
+      const officeSlug = (officeRow as { slug: string } | null)?.slug ?? null;
+      return { unavailable: true, officeUrl: officeSlug ? `/site/${officeSlug}` : null };
+    }
+  }
   // Owner draft preview (via ?preview): a signed-in viewer from this agent's org
   // can see the unpublished draft; everyone else gets the "not active" page.
   if (s.status !== "published") {

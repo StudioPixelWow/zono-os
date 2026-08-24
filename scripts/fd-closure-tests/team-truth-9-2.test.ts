@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  canAssignRole, rosterRole, memberStatusForAccess, isMemberPubliclyEligible, roleRank,
+  canAssignRole, rosterRole, memberStatusForAccess, isMemberPubliclyEligible, roleRank, planOfficeReconcile,
 } from "../../src/lib/office/membership-rules.ts";
 
 const src = (rel: string) => readFileSync(new URL(`../../src/${rel}`, import.meta.url), "utf8");
@@ -116,7 +116,9 @@ test("canAssignRole forbids granting a role above the caller's rank", () => {
 test("reconcile repairs missing/leaking members but never deletes; reports orphans + dups", () => {
   const s = src("lib/office/membership-sync.ts");
   assert.match(s, /\.limit\(5000\)/, "reconcile is bounded (no unbounded scan)");
-  assert.match(s, /orphanMembers = members\.filter[\s\S]*duplicateLinks =/, "orphans + duplicate links are COUNTED");
+  assert.match(s, /orphanMembers: plan\.orphanMembers, duplicateLinks: plan\.duplicateLinks/, "orphans + duplicate links are reported (from the pure planner)");
+  const rules = src("lib/office/membership-rules.ts");
+  assert.match(rules, /orphanMembers = members\.filter[\s\S]*duplicateLinks =/, "orphans + duplicate links are COUNTED (never deleted)");
   assert.doesNotMatch(s, /\.delete\(\)/, "reconcile never deletes (orphans/dups are reported, not purged)");
   assert.match(s, /crossOrgMismatch: 0/, "cross-org mismatch is 0 by construction (per-org queries)");
 });
@@ -128,4 +130,85 @@ test("rosterRole maps access roles to roster role text (owner/manager/agent)", (
   assert.equal(rosterRole("agent"), "agent");
   assert.equal(rosterRole("viewer"), "agent");
   assert.equal(rosterRole(null), "agent");
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 9.2B — FINAL ACCEPTANCE (production reconcile convergence + suspended agent site)
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── 9.2B-1. Production-style reconcile 2→0 convergence (behavioral) ────────────
+test("reconcile plans exactly the drifted active users, then converges to zero", () => {
+  // Two active users with NO member (the real prod drift), plus one already-linked
+  // active user and nine login-less roster members (first-class, ignored).
+  const users = [
+    { id: "u-owner-A", status: "active" }, { id: "u-owner-B", status: "active" },
+    { id: "u-linked", status: "active" },
+  ];
+  const members = [
+    { user_id: "u-linked", status: "active" },
+    ...Array.from({ length: 9 }, () => ({ user_id: null, status: "active" })),
+  ];
+  const p1 = planOfficeReconcile(users, members);
+  assert.deepEqual(p1.toEnsure.sort(), ["u-owner-A", "u-owner-B"], "plans exactly the 2 drifted users");
+  assert.equal(p1.toHide.length, 0);
+  assert.equal(p1.activeWithMember, 1, "the already-linked active user is not re-ensured");
+  // Simulate the reconcile creating those two members, then re-plan.
+  const after = [...members, { user_id: "u-owner-A", status: "active" }, { user_id: "u-owner-B", status: "active" }];
+  const p2 = planOfficeReconcile(users, after);
+  assert.equal(p2.toEnsure.length, 0, "after creation the plan is empty — converged to zero");
+});
+
+// ── 9.2B-2. Second reconcile is idempotent (behavioral) ───────────────────────
+test("re-running reconcile on a healed org plans nothing (no create/link/hide)", () => {
+  const users = [{ id: "a", status: "active" }, { id: "b", status: "suspended" }];
+  const members = [{ user_id: "a", status: "active" }, { user_id: "b", status: "inactive" }];
+  const p = planOfficeReconcile(users, members);
+  assert.equal(p.toEnsure.length, 0, "no missing members");
+  assert.equal(p.toHide.length, 0, "the suspended user's member is already inactive → nothing to hide");
+});
+
+// ── 9.2B-3/4. Suspended standalone agent page = unavailable + noindex ──────────
+test("getAgentSite returns an unavailable state for a suspended-linked agent; page noindexes it", () => {
+  const sd = src("lib/agent-website/site-data.ts");
+  assert.match(sd, /if \(userStatus && userStatus !== "active"\)[\s\S]*return \{ unavailable: true/, "a non-active linked user → unavailable state (URL preserved, not deleted/redirected)");
+  const page = src("app/agent/[slug]/page.tsx");
+  assert.match(page, /if \("unavailable" in site\) return \{ title: "הפרופיל אינו פעיל כרגע · ZONO", robots: \{ index: false \} \}/, "metadata noindexes the unavailable state");
+  assert.match(page, /if \("unavailable" in site\) return <Unavailable/, "the page renders the Hebrew unavailable state");
+  assert.match(page, /הפרופיל אינו פעיל כרגע/, "canonical suspended copy");
+  assert.doesNotMatch(page, /redirect\(/, "no redirect to another agent");
+});
+
+// ── 9.2B-5. Suspended agent cannot receive a public lead (server fail-closed) ──
+test("submitAgentLead fails CLOSED when the linked agent is not active", () => {
+  const svc = src("lib/agent-website/service.ts");
+  assert.match(svc, /select\("status"\)\.eq\("id", s\.user_id\)\.eq\("org_id", s\.organization_id\)[\s\S]*if \(\(agentUser[\s\S]*\)\?\.status !== "active"\) return \{ ok: false/, "the lead endpoint re-checks the agent's access status before inserting a lead");
+});
+
+// ── 9.2B-6. Reactivation restores the SAME canonical URL (no second identity) ──
+test("the suspended state is derived, not destructive — reactivation restores the same site/URL", () => {
+  const sd = src("lib/agent-website/site-data.ts");
+  // The unavailable branch never deletes the agent_websites row and never mints a new
+  // slug — it is a per-request read of users.status, so flipping the user back to
+  // active restores the original published site at the same /agent/[slug].
+  assert.doesNotMatch(sd, /\.delete\(\)/, "getAgentSite never deletes the site");
+  assert.doesNotMatch(sd, /\.update\(\{ slug/, "getAgentSite never rewrites the slug");
+  assert.equal(memberStatusForAccess(true), "active", "reactivate flips roster + access back to active (same identity)");
+});
+
+// ── 9.2B-7. Cross-org / cross-agent safety ────────────────────────────────────
+test("suspending agent A cannot affect agent B or another org", () => {
+  // The reconcile planner only ever considers the users+members it is handed (one org's
+  // rows), and the agent-site guards key strictly on THIS slug's org + user.
+  const p = planOfficeReconcile([{ id: "A", status: "suspended" }], [{ user_id: "A", status: "active" }, { user_id: "B", status: "active" }]);
+  assert.deepEqual(p.toHide, ["A"], "only the suspended user's member is hidden — B untouched");
+  const svc = src("lib/agent-website/service.ts");
+  assert.match(svc, /\.eq\("id", s\.user_id\)\.eq\("org_id", s\.organization_id\)/, "lead guard is scoped to this site's own agent + org");
+});
+
+// ── 9.2B-8. Billing seat count is untouched by the roster reconcile ───────────
+test("the reconcile planner + sync never compute or mutate a billing seat", () => {
+  const rules = src("lib/office/membership-rules.ts");
+  assert.doesNotMatch(rules, /seat|billing|subscription|quantity/i, "the pure rules never mention seats/billing");
+  const sync = src("lib/office/membership-sync.ts");
+  assert.doesNotMatch(sync, /stageOrgSeatQuantity|from\(["']subscriptions["']\)/, "reconcile issues no billing write");
 });

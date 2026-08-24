@@ -15,7 +15,7 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { rosterRole, memberStatusForAccess } from "./membership-rules";
+import { rosterRole, memberStatusForAccess, planOfficeReconcile } from "./membership-rules";
 
 type Db = ReturnType<typeof createServiceRoleClient>;
 const MEMBER = "office_members";
@@ -112,41 +112,32 @@ export async function reconcileOfficeMembershipForOrg(orgId: string): Promise<Re
   const users = (uRows ?? []) as { id: string; status: string; email: string | null; full_name: string | null; role_id: string | null }[];
   const members = (mRows ?? []) as { id: string; user_id: string | null; status: string }[];
   const roleKeyById = new Map(((roleRows ?? []) as { id: string; key: string }[]).map((r) => [r.id, r.key]));
+  const userById = new Map(users.map((u) => [u.id, u]));
 
-  const membersByUser = new Map<string, { id: string; status: string }[]>();
-  for (const m of members) if (m.user_id) { const a = membersByUser.get(m.user_id) ?? []; a.push({ id: m.id, status: m.status }); membersByUser.set(m.user_id, a); }
-  const userIds = new Set(users.map((u) => u.id));
+  // PURE classification (convergence + idempotency are provable on this).
+  const plan = planOfficeReconcile(users, members);
 
-  const activeUsers = users.filter((u) => u.status === "active");
-  const suspendedUsers = users.filter((u) => u.status !== "active");
-  const activeWithMember = activeUsers.filter((u) => (membersByUser.get(u.id) ?? []).length > 0).length;
+  let created = 0, linked = 0, hidden = 0;
 
-  let created = 0, linked = 0, hidden = 0, suspendedPublicMember = 0;
-
-  // ACTIVE user with no member → ensure one.
-  for (const u of activeUsers) {
-    if ((membersByUser.get(u.id) ?? []).length > 0) continue;
+  // ACTIVE user with no member → ensure one (link an email-matched row or create).
+  for (const uid of plan.toEnsure) {
+    const u = userById.get(uid); if (!u) continue;
     const r = await ensureOfficeMemberForUser(db, { orgId, userId: u.id, email: u.email, fullName: u.full_name, roleKey: u.role_id ? roleKeyById.get(u.role_id) ?? null : null });
     if (r === "created") created++; else if (r === "linked") linked++;
   }
 
   // SUSPENDED user with a still-active member → hide it (non-destructive).
-  for (const u of suspendedUsers) {
-    const active = (membersByUser.get(u.id) ?? []).some((m) => m.status === "active");
-    if (active) { suspendedPublicMember++; await propagateAccessStatusToMember(db, orgId, u.id, false); hidden++; }
-  }
+  for (const uid of plan.toHide) { await propagateAccessStatusToMember(db, orgId, uid, false); hidden++; }
 
-  const orphanMembers = members.filter((m) => m.user_id && !userIds.has(m.user_id)).length;
-  const duplicateLinks = [...membersByUser.values()].filter((a) => a.length > 1).length;
-
+  const activeUsersTotal = users.filter((u) => u.status === "active").length;
   return {
     orgId,
-    activeUsersTotal: activeUsers.length,
-    activeWithMember,
+    activeUsersTotal,
+    activeWithMember: plan.activeWithMember,
     activeWithoutMember: created + linked,
     created, linked,
-    suspendedUsers: suspendedUsers.length,
-    suspendedPublicMember, hidden,
-    orphanMembers, duplicateLinks, crossOrgMismatch: 0,
+    suspendedUsers: users.length - activeUsersTotal,
+    suspendedPublicMember: plan.toHide.length, hidden,
+    orphanMembers: plan.orphanMembers, duplicateLinks: plan.duplicateLinks, crossOrgMismatch: 0,
   };
 }

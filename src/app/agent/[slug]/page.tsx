@@ -14,8 +14,9 @@ async function baseUrl(): Promise<string | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const site = await getAgentSite(slug).catch(() => null);
-  // Unpublished/unknown site: keep it out of the index (no indexable soft-404).
+  // Unpublished/unknown/suspended site: keep it out of the index (no indexable soft-404).
   if (!site || site === "disabled") return { title: "אתר סוכן · ZONO", robots: { index: false } };
+  if ("unavailable" in site) return { title: "הפרופיל אינו פעיל כרגע · ZONO", robots: { index: false } };
   const A = site.agent;
   const title = `${A.name}${A.title ? " · " + A.title : ""}${A.officeName ? " | " + A.officeName : ""}`;
   const description = A.bio || A.valueProp || A.headline || `יועץ נדל"ן${A.areas.length ? " ב" + A.areas.slice(0, 3).join(", ") : ""}`;
@@ -35,15 +36,16 @@ export default async function AgentSitePage({ params, searchParams }: { params: 
   const { preview } = await searchParams;
   const site = await getAgentSite(slug, { previewForOwner: preview != null }).catch(() => null);
 
-  if (site && site !== "disabled") {
-    try {
-      const h = await headers();
-      await logAgentSiteEvent(slug, "page_view", { path: "/", userAgent: h.get("user-agent") ?? undefined, ip: (h.get("x-forwarded-for") ?? "").split(",")[0] || undefined });
-    } catch { /* never block render */ }
-  }
-
   if (!site) return <Inactive title="האתר לא נמצא" />;
   if (site === "disabled") return <Inactive title="האתר אינו פעיל כרגע" />;
+  // 9.2B — suspended/disabled agent: inactive/unavailable state, no CTA, no lead form,
+  // canonical URL preserved. NOT logged as an active page_view.
+  if ("unavailable" in site) return <Unavailable officeUrl={site.officeUrl} />;
+
+  try {
+    const h = await headers();
+    await logAgentSiteEvent(slug, "page_view", { path: "/", userAgent: h.get("user-agent") ?? undefined, ip: (h.get("x-forwarded-for") ?? "").split(",")[0] || undefined });
+  } catch { /* never block render */ }
 
   const origin = await baseUrl();
   const url = origin ? `${origin}/agent/${slug}` : undefined;
@@ -89,6 +91,26 @@ function Inactive({ title }: { title: string }) {
       <div className="rounded-3xl border border-[#e8eaf0] p-10 text-center">
         <div className="mb-3 text-4xl">🏠</div>
         <h1 className="text-xl font-black text-[#0f172a]">{title}</h1>
+      </div>
+    </main>
+  );
+}
+
+// 9.2B — suspended-agent unavailable state. Hebrew inactive copy, NO contact/WhatsApp/
+// lead CTA, no internal status/UUID exposed; links to the office only when a real
+// published public office site exists.
+function Unavailable({ officeUrl }: { officeUrl: string | null }) {
+  return (
+    <main dir="rtl" className="grid min-h-screen place-items-center bg-white px-4">
+      <div className="max-w-md rounded-3xl border border-[#e8eaf0] p-10 text-center">
+        <div className="mb-3 text-4xl">🏠</div>
+        <h1 className="text-xl font-black text-[#0f172a]">הפרופיל אינו פעיל כרגע</h1>
+        <p className="mt-2 text-sm text-[#64748b]">לפרטים נוספים ניתן לפנות למשרד.</p>
+        {officeUrl && (
+          <a href={officeUrl} className="mt-5 inline-block rounded-xl bg-[#0f172a] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#1e293b]">
+            לאתר המשרד
+          </a>
+        )}
       </div>
     </main>
   );

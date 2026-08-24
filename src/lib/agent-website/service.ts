@@ -173,6 +173,11 @@ export async function submitAgentLead(slug: string, input: { sourceSection: stri
   const { data: site } = await admin.from("agent_websites").select("id,organization_id,user_id,status").eq("slug", slug).maybeSingle();
   if (!site || (site as { status: string }).status !== "published") return { ok: false, error: "האתר אינו זמין" };
   const s = site as { id: string; organization_id: string; user_id: string };
+  // 9.2B §8 PUBLIC LEAD SAFETY — a SUSPENDED/disabled agent's page must NEVER create a
+  // lead assigned to them. Fail CLOSED server-side (never rely on the React form being
+  // hidden). Same eligibility truth the render uses: the linked access user is active.
+  const { data: agentUser } = await admin.from("users").select("status").eq("id", s.user_id).eq("org_id", s.organization_id).maybeSingle();
+  if ((agentUser as { status: string } | null)?.status !== "active") return { ok: false, error: "האתר אינו זמין" };
   const intent = input.sourceSection === "valuation" ? "seller" : "buyer";
 
   let leadId: string | null = null;

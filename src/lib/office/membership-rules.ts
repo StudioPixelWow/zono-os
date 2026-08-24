@@ -36,6 +36,42 @@ export function memberStatusForAccess(active: boolean): "active" | "inactive" {
   return active ? "active" : "inactive";
 }
 
+export interface ReconcilePlan {
+  toEnsure: string[];      // active user ids with NO linked member → ensure one
+  toHide: string[];        // suspended user ids WITH a still-active member → hide it
+  activeWithMember: number;
+  orphanMembers: number;   // linked members whose user no longer exists (report only)
+  duplicateLinks: number;  // >1 member per user_id (report only)
+}
+
+/**
+ * PURE classification of the reconcile work from in-memory access + roster state.
+ * Deterministic + offline-testable — this is the decision core the DB reconcile runs,
+ * so convergence and idempotency are provable without a database.
+ */
+export function planOfficeReconcile(
+  users: { id: string; status: string }[],
+  members: { user_id: string | null; status: string }[],
+): ReconcilePlan {
+  const byUser = new Map<string, { status: string }[]>();
+  const userIds = new Set(users.map((u) => u.id));
+  for (const m of members) if (m.user_id) { const a = byUser.get(m.user_id) ?? []; a.push({ status: m.status }); byUser.set(m.user_id, a); }
+  const toEnsure: string[] = [];
+  const toHide: string[] = [];
+  let activeWithMember = 0;
+  for (const u of users) {
+    const mine = byUser.get(u.id) ?? [];
+    if (u.status === "active") {
+      if (mine.length > 0) activeWithMember++; else toEnsure.push(u.id);
+    } else if (mine.some((m) => m.status === "active")) {
+      toHide.push(u.id);
+    }
+  }
+  const orphanMembers = members.filter((m) => m.user_id && !userIds.has(m.user_id)).length;
+  const duplicateLinks = [...byUser.values()].filter((a) => a.length > 1).length;
+  return { toEnsure, toHide, activeWithMember, orphanMembers, duplicateLinks };
+}
+
 /**
  * §7 PUBLIC ROSTER eligibility. A roster member is publicly shown iff it is active,
  * opted into the website, AND — when linked to an access user — that user is active.
