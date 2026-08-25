@@ -12,6 +12,7 @@ import {
   type MatchFreshness, type ShortlistState,
 } from "./freshness";
 import { computeBuyerNextAction, type BuyerNextAction } from "./buyer-next-action";
+import { MATCH_SCAN, pageCompleteness } from "./scan";
 
 type SupabaseLike = ReturnType<typeof createServiceRoleClient>;
 const MARKETABLE = new Set(["active", "published", "ready", "under_offer"]);
@@ -49,6 +50,11 @@ export interface BuyerMatchOverview {
   newSinceLabel: string | null;   // "4 התאמות חדשות מאז 21.8" (or null)
   nextAction: BuyerNextAction | null;
   matches: BuyerMatchRow[];
+  /** 9.7 UI HONESTY — false when there are MORE matches than the page shows, so the
+   *  UI must NOT claim it is displaying the buyer's complete match universe. */
+  matchesComplete: boolean;
+  /** Subtle Hebrew note when incomplete (null when complete). No fake progress %. */
+  partialLabel: string | null;
 }
 
 function firstNameOf(full: string | null | undefined): string {
@@ -72,7 +78,9 @@ export async function getBuyerMatchOverview(orgId: string, buyerId: string, db?:
     supabase.from("buyers").select("full_name,matches_last_reviewed_at").eq("org_id", orgId).eq("id", buyerId).maybeSingle(),
     supabase.from("match_intelligence_profiles")
       .select("property_id,match_status,compatibility_score,closing_probability,strongest_advantage,primary_blocker,last_calculated_at,properties(id,title,city,neighborhood,rooms,size_sqm,price,status,primary_image_url)")
-      .eq("org_id", orgId).eq("buyer_id", buyerId).order("closing_probability", { ascending: false }).limit(80),
+      // 9.7 — fetch SHOWN+1 so we can tell there are MORE matches than the page shows
+      // (honest "not the complete universe") without a second query.
+      .eq("org_id", orgId).eq("buyer_id", buyerId).order("closing_probability", { ascending: false }).limit(MATCH_SCAN.OVERVIEW_SHOWN + 1),
     supabase.from("buyer_property_shortlist").select("property_id,state").eq("org_id", orgId).eq("buyer_id", buyerId),
     supabase.from("meetings").select("id").eq("org_id", orgId).eq("buyer_id", buyerId).gte("start_at", new Date().toISOString()).in("status", ["scheduled", "confirmed"]).limit(1),
   ]);
@@ -88,7 +96,10 @@ export async function getBuyerMatchOverview(orgId: string, buyerId: string, db?:
     last_calculated_at: string | null;
     properties: { id: string; title: string; city: string | null; neighborhood: string | null; rooms: number | null; size_sqm: number | null; price: number | null; status: string | null; primary_image_url: string | null } | null;
   };
-  const rows = (matchesRes.data ?? []) as unknown as Raw[];
+  const fetched = (matchesRes.data ?? []) as unknown as Raw[];
+  // 9.7 — clamp to SHOWN, remember whether the +1 probe found more (honest UI).
+  const { hasMore, shown } = pageCompleteness(fetched.length, MATCH_SCAN.OVERVIEW_SHOWN);
+  const rows = fetched.slice(0, shown);
 
   const matches: BuyerMatchRow[] = rows.map((r) => {
     const prop = r.properties;
@@ -140,7 +151,11 @@ export async function getBuyerMatchOverview(orgId: string, buyerId: string, db?:
     hasUpcomingViewing,
   });
 
-  return { buyerId, firstName, reviewedAt, counts, newSinceLabel, nextAction, matches };
+  return {
+    buyerId, firstName, reviewedAt, counts, newSinceLabel, nextAction, matches,
+    matchesComplete: !hasMore,
+    partialLabel: hasMore ? "מוצגות ההתאמות המובילות — ייתכנו התאמות נוספות" : null,
+  };
 }
 
 /** Mark this buyer's matches as reviewed now (clears "new since last review"). */

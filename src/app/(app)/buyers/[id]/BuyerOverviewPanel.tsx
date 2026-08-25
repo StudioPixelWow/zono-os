@@ -91,6 +91,12 @@ export function BuyerOverviewPanel({
           <Icon name="Sparkles" size={13} />{overview.newSinceLabel} · בדוק התאמות
         </button>
       )}
+      {/* 9.7 UI HONESTY — never imply this is the complete match universe when it isn't. */}
+      {overview?.partialLabel && (
+        <p className="text-muted inline-flex items-center gap-1 self-start text-[12px]">
+          <Icon name="Info" size={12} />{overview.partialLabel}
+        </p>
+      )}
 
       {/* ── Next appointment + last communication ─────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

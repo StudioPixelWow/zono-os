@@ -34,6 +34,7 @@ import {
   type MatchRiskRow,
   type RevenueSignalRow,
 } from "./repository";
+import { MATCH_SCAN } from "./scan";
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 const COMPAT_THRESHOLD = 40;
@@ -67,17 +68,26 @@ export async function generateMatchesForOrg(): Promise<number> {
 
 /** Scheduled safety reconciliation across orgs (cron). Bounded — recomputes each
  *  org's matches so the buyer's set never goes stale between page opens. Uses the
- *  service-role engine; failures per-org are isolated. Returns a summary. */
-export async function reconcileAllOrgMatches(opts?: { orgLimit?: number }): Promise<{ orgs: number; matches: number; failed: number }> {
+ *  service-role engine; failures per-org are isolated. Returns a summary.
+ *  9.7 — org selection is DETERMINISTIC (ordered by id) and OBSERVABLE: the org
+ *  ceiling is reported against the true org count so an overflow (more orgs than a
+ *  single run reconciles) is surfaced (`orgsTruncated`) instead of silently leaving
+ *  org #N+1 unreconciled forever. */
+export async function reconcileAllOrgMatches(opts?: { orgLimit?: number }): Promise<{ orgs: number; orgsTotal: number; orgsTruncated: boolean; matches: number; failed: number }> {
   const db = createServiceRoleClient();
-  const { data } = await db.from("organizations").select("id").limit(opts?.orgLimit ?? 100);
+  const ceiling = opts?.orgLimit ?? MATCH_SCAN.RECONCILE_ORG_CEILING;
+  const [{ data }, { count: orgsTotal }] = await Promise.all([
+    db.from("organizations").select("id").order("id", { ascending: true }).limit(ceiling),
+    db.from("organizations").select("id", { count: "exact", head: true }),
+  ]);
   const orgIds = ((data ?? []) as Array<{ id: string }>).map((o) => o.id).filter(Boolean);
   let matches = 0, failed = 0;
   for (const id of orgIds) {
     try { matches += await generateMatchesForOrgId(id, { db }); }
     catch { failed++; }
   }
-  return { orgs: orgIds.length, matches, failed };
+  const total = orgsTotal ?? orgIds.length;
+  return { orgs: orgIds.length, orgsTotal: total, orgsTruncated: total > orgIds.length, matches, failed };
 }
 
 /** Canonical, background-safe matcher for ONE org. Runs under a service-role
@@ -88,9 +98,12 @@ export async function reconcileAllOrgMatches(opts?: { orgLimit?: number }): Prom
 export async function generateMatchesForOrgId(orgId: string, opts?: { db?: SupabaseLike }): Promise<number> {
   const supabase: SupabaseLike = opts?.db ?? createServiceRoleClient();
   const [bpRes, buyersRes, propsRes, ppRes, spRes, existingRes, visitsRes] = await Promise.all([
-    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_readiness_score,buyer_engagement_score,buyer_trust_score,buyer_financing_score,buyer_conversion_probability,days_since_activity").eq("org_id", orgId).limit(200),
-    supabase.from("buyers").select("id,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,preferred_types,must_have_parking,must_have_elevator,must_have_safe_room").eq("org_id", orgId).limit(500),
-    supabase.from("properties").select("id,price,rooms,city,neighborhood,type,has_parking,has_elevator,has_safe_room,seller_id,status").eq("org_id", orgId).in("status", ["active", "published", "ready"]).limit(300),
+    // 9.7 — deterministic ordering so the bounded safety-net window is STABLE across
+    // runs (not an arbitrary set). The event path (generateMatchesForBuyerId/PropertyId)
+    // is the complete-coverage mechanism; this org scan stays a bounded daily net.
+    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_readiness_score,buyer_engagement_score,buyer_trust_score,buyer_financing_score,buyer_conversion_probability,days_since_activity").eq("org_id", orgId).order("buyer_id", { ascending: true }).limit(200),
+    supabase.from("buyers").select("id,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,preferred_types,must_have_parking,must_have_elevator,must_have_safe_room").eq("org_id", orgId).order("id", { ascending: true }).limit(500),
+    supabase.from("properties").select("id,price,rooms,city,neighborhood,type,has_parking,has_elevator,has_safe_room,seller_id,status").eq("org_id", orgId).in("status", ["active", "published", "ready"]).order("id", { ascending: true }).limit(300),
     supabase.from("property_intelligence_profiles").select("property_id,success_score,market_position_score,momentum_score").eq("org_id", orgId),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_confidence_score").eq("org_id", orgId),
     supabase.from("match_intelligence_profiles").select("buyer_id,property_id,match_stage").eq("org_id", orgId),

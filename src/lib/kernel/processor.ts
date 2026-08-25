@@ -482,12 +482,18 @@ async function runDownstreamSubscribers(db: Db, row: Row, out: DrainResult, t0: 
         status: "skipped", latencyMs: Date.now() - t0, metadata: { reason: "no_match_recompute_for_event" },
       });
     } else {
-      const n = intent.scope === "buyer"
+      const r = intent.scope === "buyer"
         ? await generateMatchesForBuyerId(row.organization_id, intent.id, { db })
         : await generateMatchesForPropertyId(row.organization_id, intent.id, { db });
+      // 9.7 OBSERVABILITY — never silently label an incomplete scan complete. When the
+      // candidate universe exceeded the scan ceiling, `truncated` + the resume cursor
+      // ride the delivery metadata (and a warn log) so operators can see continuation
+      // is pending; the daily reconcile is the safety net.
+      if (r.truncated) console.warn(`[matching] recompute TRUNCATED scope=${r.scope} id=${r.id} scanned=${r.scanned} total=${r.total} nextCursor=${r.nextCursor ?? "-"}`);
       await recordDelivery(db, {
         orgId: row.organization_id, eventId: row.id, subscriber: "matching", status: "done",
-        latencyMs: Date.now() - t0, metadata: { scope: intent.scope, id: intent.id, reason: intent.reason, matches: n },
+        latencyMs: Date.now() - t0,
+        metadata: { scope: intent.scope, id: intent.id, reason: intent.reason, matches: r.kept, scanned: r.scanned, total: r.total, truncated: r.truncated, continuationPending: r.truncated },
       });
     }
   } catch (e) {

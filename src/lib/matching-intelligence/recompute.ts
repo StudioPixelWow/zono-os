@@ -35,8 +35,26 @@ import {
   matchStageIndex,
   nextBestMatchActions,
 } from "./playbook";
+import { boundedScan, MATCH_SCAN } from "./scan";
 
 type SupabaseLike = ReturnType<typeof createServiceRoleClient>;
+
+/**
+ * 9.7 — the result of a bounded recompute. `kept` = active matches persisted;
+ * `scanned` = candidates actually scored; `total` = candidates that exist; when
+ * `truncated` the recompute did NOT see the whole candidate universe (org beyond
+ * the scan ceiling) and MUST NOT be treated as complete — the caller records this
+ * for observability and the daily reconcile is the safety net. `nextCursor` resumes.
+ */
+export interface RecomputeResult {
+  scope: "buyer" | "property";
+  id: string;
+  kept: number;
+  scanned: number;
+  total: number;
+  truncated: boolean;
+  nextCursor: string | null;
+}
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 const COMPAT_THRESHOLD = 40;
 const BUYER_KEEP = 60;      // max active matches surfaced per buyer
@@ -164,13 +182,17 @@ async function persistScoped(
   return kept.length;
 }
 
-/** Recompute matches for ONE buyer (criteria change / new buyer). Bounded: 1×P. */
-export async function generateMatchesForBuyerId(orgId: string, buyerId: string, opts?: { db?: SupabaseLike }): Promise<number> {
+/** Recompute matches for ONE buyer (criteria change / new buyer). Bounded: 1×P.
+ *  9.7 — the candidate PROPERTIES are scanned deterministically (ordered by id) in
+ *  bounded pages up to MAX_SCAN_PROPERTIES with an exact total count, so a large
+ *  inventory is scored COMPLETELY within the launch target and any overflow is
+ *  reported (truncated) instead of silently dropped. Same scoring brain. */
+export async function generateMatchesForBuyerId(orgId: string, buyerId: string, opts?: { db?: SupabaseLike }): Promise<RecomputeResult> {
   const supabase: SupabaseLike = opts?.db ?? createServiceRoleClient();
-  const [biRes, prefsRes, propsRes, ppRes, spRes, existingRes, visitsRes] = await Promise.all([
+  const empty = (kept: number, scanned = 0, total = 0): RecomputeResult => ({ scope: "buyer", id: buyerId, kept, scanned, total, truncated: false, nextCursor: null });
+  const [biRes, prefsRes, ppRes, spRes, existingRes, visitsRes] = await Promise.all([
     supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_readiness_score,buyer_engagement_score,buyer_trust_score,buyer_financing_score,buyer_conversion_probability,days_since_activity").eq("org_id", orgId).eq("buyer_id", buyerId).maybeSingle(),
     supabase.from("buyers").select("id,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,preferred_types,must_have_parking,must_have_elevator,must_have_safe_room").eq("org_id", orgId).eq("id", buyerId).maybeSingle(),
-    supabase.from("properties").select("id,price,rooms,city,neighborhood,type,has_parking,has_elevator,has_safe_room,seller_id,status").eq("org_id", orgId).in("status", [...ACTIVE_PROPERTY_STATUSES]).limit(400),
     supabase.from("property_intelligence_profiles").select("property_id,success_score,market_position_score,momentum_score").eq("org_id", orgId),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_confidence_score").eq("org_id", orgId),
     supabase.from("match_intelligence_profiles").select("buyer_id,property_id,match_stage").eq("org_id", orgId).eq("buyer_id", buyerId),
@@ -179,52 +201,101 @@ export async function generateMatchesForBuyerId(orgId: string, buyerId: string, 
   const bi = biRes.data as BuyerIntelRow | null;
   const prefs = prefsRes.data as BuyerPrefRow | null;
   // No intelligence profile or no prefs → nothing to score. Deactivate any leftovers.
-  if (!bi || !prefs) { await persistScoped(supabase, orgId, [], "buyer_id", buyerId); return 0; }
+  if (!bi || !prefs) { await persistScoped(supabase, orgId, [], "buyer_id", buyerId); return empty(0); }
   const propIntel = new Map((ppRes.data ?? []).map((p) => [p.property_id, p]));
   const sellerIntel = new Map((spRes.data ?? []).map((s) => [s.seller_id, s]));
   const existing = new Map(((existingRes.data ?? []) as Array<{ buyer_id: string; property_id: string; match_stage: string }>).map((m) => [`${m.buyer_id}|${m.property_id}`, m.match_stage]));
   const visited = new Set(((visitsRes.data ?? []) as Array<{ source_entity_id: string; target_entity_id: string }>).map((r) => `${r.source_entity_id}|${r.target_entity_id}`));
 
+  // Bounded, deterministic, resumable candidate scan (never a silent first-400).
+  const scan = await boundedScan<PropRow>(
+    async (cursor, limit) => {
+      let q = supabase.from("properties")
+        .select("id,price,rooms,city,neighborhood,type,has_parking,has_elevator,has_safe_room,seller_id,status")
+        .eq("org_id", orgId).in("status", [...ACTIVE_PROPERTY_STATUSES]).order("id", { ascending: true }).limit(limit);
+      if (cursor) q = q.gt("id", cursor);
+      const { data } = await q;
+      return (data ?? []) as PropRow[];
+    },
+    (p) => p.id,
+    async () => {
+      const { count } = await supabase.from("properties").select("id", { count: "exact", head: true }).eq("org_id", orgId).in("status", [...ACTIVE_PROPERTY_STATUSES]);
+      return count ?? 0;
+    },
+    MATCH_SCAN.MAX_SCAN_PROPERTIES,
+  );
+
   const candidates: ScopedCandidate[] = [];
-  for (const p of (propsRes.data ?? []) as PropRow[]) {
+  for (const p of scan.rows) {
     const c = scoreCandidate(prefs, bi, p, propIntel, sellerIntel, visited, existing);
     if (c) candidates.push(c);
   }
   candidates.sort((a, b) => b.scores.closing - a.scores.closing);
-  return persistScoped(supabase, orgId, candidates.slice(0, BUYER_KEEP), "buyer_id", buyerId);
+  const kept = await persistScoped(supabase, orgId, candidates.slice(0, BUYER_KEEP), "buyer_id", buyerId);
+  return { scope: "buyer", id: buyerId, kept, scanned: scan.scanned, total: scan.total, truncated: scan.truncated, nextCursor: scan.nextCursor };
 }
 
-/** Recompute matches for ONE property (created / price / status / core attrs). Bounded: 1×B. */
-export async function generateMatchesForPropertyId(orgId: string, propertyId: string, opts?: { db?: SupabaseLike }): Promise<number> {
+/** Recompute matches for ONE property (created / price / status / core attrs). Bounded: 1×B.
+ *  9.7 — the candidate BUYERS are scanned deterministically (by buyer_id) in bounded
+ *  pages up to MAX_SCAN_BUYERS with an exact total count, so a large buyer book is
+ *  scored COMPLETELY within the launch target and overflow is reported, never dropped
+ *  silently. A now-unavailable property still soft-deactivates its matches. */
+export async function generateMatchesForPropertyId(orgId: string, propertyId: string, opts?: { db?: SupabaseLike }): Promise<RecomputeResult> {
   const supabase: SupabaseLike = opts?.db ?? createServiceRoleClient();
+  const done = (kept: number, scanned = 0, total = 0, truncated = false, nextCursor: string | null = null): RecomputeResult => ({ scope: "property", id: propertyId, kept, scanned, total, truncated, nextCursor });
   const { data: prop } = await supabase.from("properties").select("id,price,rooms,city,neighborhood,type,has_parking,has_elevator,has_safe_room,seller_id,status").eq("org_id", orgId).eq("id", propertyId).maybeSingle();
   // Unavailable / missing property → remove it from ACTIVE recommendations (soft).
   if (!prop || !ACTIVE_PROPERTY_STATUSES.includes((prop.status ?? "") as (typeof ACTIVE_PROPERTY_STATUSES)[number])) {
     await persistScoped(supabase, orgId, [], "property_id", propertyId);
-    return 0;
+    return done(0);
   }
   const p = prop as PropRow;
-  const [biRes, buyersRes, ppRes, spRes, existingRes, visitsRes] = await Promise.all([
-    supabase.from("buyer_intelligence_profiles").select("buyer_id,buyer_readiness_score,buyer_engagement_score,buyer_trust_score,buyer_financing_score,buyer_conversion_probability,days_since_activity").eq("org_id", orgId).limit(500),
-    supabase.from("buyers").select("id,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,preferred_types,must_have_parking,must_have_elevator,must_have_safe_room").eq("org_id", orgId).limit(500),
+  const [ppRes, spRes, existingRes, visitsRes] = await Promise.all([
     supabase.from("property_intelligence_profiles").select("property_id,success_score,market_position_score,momentum_score").eq("org_id", orgId).eq("property_id", propertyId),
     supabase.from("seller_intelligence_profiles").select("seller_id,seller_trust_score,seller_churn_risk_score,seller_confidence_score").eq("org_id", orgId),
     supabase.from("match_intelligence_profiles").select("buyer_id,property_id,match_stage").eq("org_id", orgId).eq("property_id", propertyId),
     supabase.from("entity_relationships").select("source_entity_id,target_entity_id").eq("org_id", orgId).eq("relationship_type", "buyer_visited_property").eq("status", "active").eq("target_entity_id", propertyId),
   ]);
-  const buyerPrefs = new Map(((buyersRes.data ?? []) as BuyerPrefRow[]).map((b) => [b.id, b]));
   const propIntel = new Map((ppRes.data ?? []).map((pp) => [pp.property_id, pp]));
   const sellerIntel = new Map((spRes.data ?? []).map((s) => [s.seller_id, s]));
   const existing = new Map(((existingRes.data ?? []) as Array<{ buyer_id: string; property_id: string; match_stage: string }>).map((m) => [`${m.buyer_id}|${m.property_id}`, m.match_stage]));
   const visited = new Set(((visitsRes.data ?? []) as Array<{ source_entity_id: string; target_entity_id: string }>).map((r) => `${r.source_entity_id}|${r.target_entity_id}`));
 
+  // Bounded, deterministic, resumable buyer scan (buyer_intelligence_profiles gates
+  // scoring); prefs for the scanned buyers are loaded in chunks.
+  const scan = await boundedScan<BuyerIntelRow>(
+    async (cursor, limit) => {
+      let q = supabase.from("buyer_intelligence_profiles")
+        .select("buyer_id,buyer_readiness_score,buyer_engagement_score,buyer_trust_score,buyer_financing_score,buyer_conversion_probability,days_since_activity")
+        .eq("org_id", orgId).order("buyer_id", { ascending: true }).limit(limit);
+      if (cursor) q = q.gt("buyer_id", cursor);
+      const { data } = await q;
+      return (data ?? []) as BuyerIntelRow[];
+    },
+    (b) => b.buyer_id,
+    async () => {
+      const { count } = await supabase.from("buyer_intelligence_profiles").select("buyer_id", { count: "exact", head: true }).eq("org_id", orgId);
+      return count ?? 0;
+    },
+    MATCH_SCAN.MAX_SCAN_BUYERS,
+  );
+
+  const buyerPrefs = new Map<string, BuyerPrefRow>();
+  const scannedIds = scan.rows.map((b) => b.buyer_id);
+  for (let i = 0; i < scannedIds.length; i += 500) {
+    const chunk = scannedIds.slice(i, i + 500);
+    const { data } = await supabase.from("buyers").select("id,budget_min,budget_max,rooms_min,rooms_max,preferred_areas,preferred_types,must_have_parking,must_have_elevator,must_have_safe_room").eq("org_id", orgId).in("id", chunk as never);
+    for (const b of (data ?? []) as BuyerPrefRow[]) buyerPrefs.set(b.id, b);
+  }
+
   const candidates: ScopedCandidate[] = [];
-  for (const bi of (biRes.data ?? []) as BuyerIntelRow[]) {
+  for (const bi of scan.rows) {
     const prefs = buyerPrefs.get(bi.buyer_id);
     if (!prefs) continue;
     const c = scoreCandidate(prefs, bi, p, propIntel, sellerIntel, visited, existing);
     if (c) candidates.push(c);
   }
   candidates.sort((a, b) => b.scores.closing - a.scores.closing);
-  return persistScoped(supabase, orgId, candidates.slice(0, PROPERTY_KEEP), "property_id", propertyId);
+  const kept = await persistScoped(supabase, orgId, candidates.slice(0, PROPERTY_KEEP), "property_id", propertyId);
+  return done(kept, scan.scanned, scan.total, scan.truncated, scan.nextCursor);
 }
