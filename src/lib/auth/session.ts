@@ -7,12 +7,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceRoleOrgContext } from "@/lib/supabase/server-context";
 import { getCurrentUserProfile, type UserProfile } from "@/lib/repositories/userRepository";
 import { isBlockedAccountStatus } from "@/lib/auth/account-status";
+import { resolveOnboardingState, type OnboardingState } from "@/lib/auth/onboarding-routing";
 import {
   getOrganizationById,
   type Organization,
 } from "@/lib/repositories/organizationRepository";
 
-export type OnboardingState = "unauthenticated" | "onboarding" | "ready" | "suspended";
+export type { OnboardingState };
 
 export interface SessionContext {
   user: User | null;
@@ -53,18 +54,22 @@ export async function getSessionContext(): Promise<SessionContext> {
   }
 
   const profile = await getCurrentUserProfile();
-  // P5.3: a suspended/disabled account is blocked at the runtime session guard —
-  // suspension is enforced, not cosmetic. Checked BEFORE onboarding so a blocked
-  // user can neither use the app nor (re)onboard.
-  if (profile && isBlockedAccountStatus((profile as { status?: string | null }).status)) {
-    return { user, profile, organization: null, state: "suspended" };
-  }
-  if (!profile || !profile.onboarding_completed) {
-    return { user, profile: profile ?? null, organization: null, state: "onboarding" };
-  }
+  // 9.8 — the canonical routing decision lives in ONE pure function. It reads only
+  // auth + blocked-status + onboarding_completed — NEVER subscription/billing state.
+  // (P5.3: a suspended/disabled account is blocked BEFORE onboarding, so a blocked
+  // user can neither use the app nor (re)onboard.)
+  const blocked = !!profile && isBlockedAccountStatus((profile as { status?: string | null }).status);
+  const state = resolveOnboardingState({
+    hasUser: true,
+    blocked,
+    hasProfile: !!profile,
+    onboardingCompleted: !!profile?.onboarding_completed,
+  });
+  if (state === "suspended") return { user, profile, organization: null, state };
+  if (state === "onboarding") return { user, profile: profile ?? null, organization: null, state };
 
-  const organization = await getOrganizationById(profile.org_id);
-  return { user, profile, organization, state: "ready" };
+  const organization = await getOrganizationById(profile!.org_id);
+  return { user, profile, organization, state };
 }
 
 /** Convenience: just the onboarding state. */

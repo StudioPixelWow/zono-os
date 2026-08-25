@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth/session";
+import { destinationForState } from "@/lib/auth/onboarding-routing";
 import { getDashboardContext } from "@/lib/dashboard/context";
 import { DashboardDataProvider } from "@/components/dashboard/DashboardDataProvider";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
@@ -26,9 +27,10 @@ export const dynamic = "force-dynamic";
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const { state } = await getSessionContext();
-  if (state === "unauthenticated") redirect("/login");
-  if (state === "suspended") return <AccountSuspended />;
-  if (state === "onboarding") redirect("/onboarding");
+  // 9.8 — single loop-free routing matrix (never branches on billing).
+  const action = destinationForState(state, "app");
+  if (action === "suspended-screen") return <AccountSuspended />;
+  if (action !== "render") redirect(action);
 
   const dashboardData = await getDashboardContext();
 

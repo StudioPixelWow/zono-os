@@ -59,6 +59,15 @@ export async function provisionFromVerifiedPayment(payment: Payment, draft: Regi
   }
 
   // 1. Create Organization (+ seed default roles)
+  // 9.8 — this post-payment path provisions the SAME canonical stack the self-serve
+  // wizard (completeOnboarding) creates from registration input: org name, contact,
+  // city and operating_cities (workingAreas) are all captured at registration. There
+  // is no separate existing-office wizard, so leaving onboarding_completed=false here
+  // routed a fully-provisioned paid owner back to the org-CREATION wizard — a loop
+  // (the wizard's fast-path redirected to "/", the app layout bounced them back to
+  // /onboarding). The office IS configured, so onboarding_completed=true is the honest
+  // truth; the remaining optional setup (invite team, add properties) is the in-app
+  // getting-started checklist, which is display-only and never gates login routing.
   const org = await createOrganizationWithRoles({
     name: (d.officeName || d.companyName || "Organization").trim(),
     phone: d.phone ?? null,
@@ -67,15 +76,16 @@ export async function provisionFromVerifiedPayment(payment: Payment, draft: Regi
     logo_url: d.logoUrl ?? null,
     operating_cities: d.workingAreas ?? [],
     operating_neighborhoods: [],
-    onboarding_completed: false,          // first-login checklist still to do
+    onboarding_completed: true,
   });
 
-  // 2. Create Owner User (link the auth identity → owner role)
+  // 2. Create Owner User (link the auth identity → owner role). Onboarding is complete:
+  //    the owner + office were fully provisioned above from verified registration input.
   const roleId = await getRoleIdByKey(org.id, "owner");
   await provisionUserProfile({
     id: authUserId, org_id: org.id, role_id: roleId,
     email: ownerEmail, full_name: (d.ownerFullName || "בעלים").trim(),
-    phone: d.ownerMobile ?? null, status: "active", onboarding_completed: false,
+    phone: d.ownerMobile ?? null, status: "active", onboarding_completed: true,
   });
 
   // 3. Assign License (reuse the launch plan record — org_plans)

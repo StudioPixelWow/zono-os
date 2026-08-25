@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth/session";
+import { destinationForState } from "@/lib/auth/onboarding-routing";
 import { ZonoLogo } from "@/components/brand/ZonoLogo";
+import { AccountSuspended } from "@/components/auth/AccountSuspended";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +14,12 @@ export default async function OnboardingLayout({
   children: ReactNode;
 }) {
   const { state } = await getSessionContext();
-  if (state === "unauthenticated") redirect("/login");
-  if (state === "ready") redirect("/");
+  // 9.8 — single loop-free routing matrix. A suspended/blocked account must not reach
+  // the wizard either (mirror the app layout); a ready user is bounced to the app so a
+  // configured office never sees first-run onboarding again.
+  const action = destinationForState(state, "onboarding");
+  if (action === "suspended-screen") return <AccountSuspended />;
+  if (action !== "render") redirect(action);
 
   return (
     <div dir="rtl" className="bg-surface min-h-screen px-4 py-8 sm:py-12">

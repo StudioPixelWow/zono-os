@@ -72,14 +72,33 @@ export async function completeOnboarding(
   // This covers refresh / back-button / re-submit; the DB partial-unique index on
   // organizations.created_by_user_id covers the true concurrent race. (The read is
   // isolated so the NEXT_REDIRECT throw is NOT swallowed by a catch.)
-  let alreadyOnboarded = false;
+  //
+  // 9.8 SELF-HEALING — an already-provisioned user MUST NOT loop through the org-
+  // creation wizard. If they already belong to an org, org-creation onboarding is
+  // done by definition; idempotently repair onboarding_completed=true (user + org)
+  // before redirecting, so a paid-provisioned owner (or any historical row left at
+  // false) is not bounced /onboarding ⇄ / forever. Provable-fact repair (the office
+  // exists), org-scoped to THIS user's own org — never a cross-tenant write.
+  let existingOrgId: string | null = null;
+  let existingComplete = false;
   try {
     const { createServiceRoleClient } = await import("@/lib/supabase/server");
     const { data: existingProfile } = await createServiceRoleClient()
-      .from("users").select("org_id").eq("id", user.id).maybeSingle();
-    alreadyOnboarded = !!existingProfile?.org_id;
+      .from("users").select("org_id,onboarding_completed").eq("id", user.id).maybeSingle();
+    existingOrgId = (existingProfile as { org_id?: string | null } | null)?.org_id ?? null;
+    existingComplete = !!(existingProfile as { onboarding_completed?: boolean } | null)?.onboarding_completed;
   } catch { /* fall through to normal creation */ }
-  if (alreadyOnboarded) { revalidatePath("/", "layout"); redirect("/"); }
+  if (existingOrgId) {
+    if (!existingComplete) {
+      try {
+        const { createServiceRoleClient } = await import("@/lib/supabase/server");
+        const svc = createServiceRoleClient();
+        await svc.from("users").update({ onboarding_completed: true }).eq("id", user.id).eq("org_id", existingOrgId);
+        await svc.from("organizations").update({ onboarding_completed: true } as never).eq("id", existingOrgId);
+      } catch { /* best-effort repair; routing truth is the user flag set above */ }
+    }
+    revalidatePath("/", "layout"); redirect("/");
+  }
 
   if (!payload.organizationName?.trim()) return { error: "נא להזין שם ארגון." };
   if (!payload.fullName?.trim()) return { error: "נא להזין שם מלא." };
