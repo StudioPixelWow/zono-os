@@ -100,9 +100,15 @@ export async function getAgentAreas(slug: string): Promise<{ branding: AgentBran
   const site = await resolveAgentSite(slug); if (site === "disabled" || site === null) return site;
   const input = await buildInput(site); return { branding: site.branding, areas: buildAgentAreas(input) };
 }
-export async function getAgentProperties(slug: string): Promise<{ branding: AgentBranding; listings: SiteListingInput[] } | "disabled" | null> {
+export async function getAgentProperties(slug: string): Promise<{ branding: AgentBranding; listings: PropertyAI[] } | "disabled" | null> {
   const site = await resolveAgentSite(slug); if (site === "disabled" || site === null) return site;
-  const input = await buildInput(site); return { branding: site.branding, listings: input.listings };
+  const input = await buildInput(site);
+  // 10.0 §18 PUBLIC PRIVACY — return REDACTED public property cards through the SAME
+  // builder the single-property endpoint uses. The raw SiteListingInput carries
+  // internal fields (truthScore, marketScore, buyerDemandScore, competitionPressure,
+  // priceGapPct, the internal `strategy` code) that must NEVER be served publicly;
+  // buildProperty projects each listing to the public-safe PropertyAI (badges only).
+  return { branding: site.branding, listings: input.listings.map((l) => buildProperty(l, input.listings)) };
 }
 export async function getAgentPropertyAi(slug: string, propertyId: string): Promise<{ branding: AgentBranding; property: PropertyAI } | "disabled" | null> {
   const site = await resolveAgentSite(slug); if (site === "disabled" || site === null) return site;
