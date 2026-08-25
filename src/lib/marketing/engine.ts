@@ -59,6 +59,13 @@ export function communityLevel(s: CommunityScores, status: string): CommunityLev
   return "weak";
 }
 
+// Canonical Hebrew label for a recommended budget LEVEL. Human-facing summaries
+// (property marketing DNA, dashboards) MUST use this — never the raw enum, which
+// would leak "low/medium/high" into the broker-facing Hebrew UI.
+export const BUDGET_LEVEL_LABEL: Record<"low" | "medium" | "high", string> = {
+  low: "נמוך", medium: "בינוני", high: "גבוה",
+};
+
 // ── Buyer Segmentation ───────────────────────────────────────────────────────
 export type SegmentKey = "young_families" | "luxury" | "investors" | "first_home" | "downsizers" | "commercial";
 export const SEGMENT_LABEL: Record<SegmentKey, string> = {

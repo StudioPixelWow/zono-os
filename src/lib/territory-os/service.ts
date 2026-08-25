@@ -95,7 +95,11 @@ export async function getPropertyTerritory(propertyId: string): Promise<Property
   const db = await createClient();
   let prop: Row | null = null;
   try {
-    const { data } = await db.from("properties").select("city,neighborhood,street").eq("org_id", org).eq("id", propertyId).limit(1).maybeSingle();
+    // `properties` has no `street` column (address lives in neighborhood /
+    // building_number / formatted_address). Selecting it threw and silently
+    // nulled the whole territory panel for every property; drop it. street stays
+    // null (no source column) — neighborhood-based scoring is unaffected.
+    const { data } = await db.from("properties").select("city,neighborhood").eq("org_id", org).eq("id", propertyId).limit(1).maybeSingle();
     prop = (data as Row | null) ?? null;
   } catch { prop = null; }
   if (!prop) return null;

@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import type { Database } from "@/lib/supabase/types";
 import {
-  buildMarketingDNA, classifyBuyerSegment, communityLevel, COMMUNITY_LEVEL_LABEL, computeCommunityScores,
+  buildMarketingDNA, BUDGET_LEVEL_LABEL, classifyBuyerSegment, communityLevel, COMMUNITY_LEVEL_LABEL, computeCommunityScores,
   marketingHealthScore, rankCommunitiesForProperty, SEGMENT_LABEL,
   type CommunityForMatch, type SegmentKey,
 } from "./engine";
@@ -108,7 +108,7 @@ export async function recomputeMarketingIntelligence(): Promise<MarketingRecompu
       recommended_communities: matches.slice(0, 20) as never, recommended_content_types: dna.recommendedContentTypes as never,
       recommended_publishing_times: dna.recommendedPublishingTimes as never, recommended_budget_level: dna.recommendedBudgetLevel,
       expected_lead_volume: dna.expectedLeadVolume, expected_conversion: dna.expectedConversion, marketing_score: dna.marketingScore,
-      ai_summary: `קהל יעד: ${dna.buyerPersonas.join(", ")} · תקציב ${dna.recommendedBudgetLevel} · ${matches.length ? `קהילה מובילה: ${matches[0].name}` : "אין קהילות מתאימות"} · ציון שיווק ${dna.marketingScore}.`,
+      ai_summary: `קהל יעד: ${dna.buyerPersonas.join(", ")} · תקציב ${BUDGET_LEVEL_LABEL[dna.recommendedBudgetLevel] ?? dna.recommendedBudgetLevel} · ${matches.length ? `קהילה מובילה: ${matches[0].name}` : "אין קהילות מתאימות"} · ציון שיווק ${dna.marketingScore}.`,
       last_calculated_at: new Date().toISOString(),
     });
   }
