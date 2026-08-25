@@ -61,19 +61,26 @@ export function seoForAgentArea(n: NeighborhoodAI, b: AgentBranding, origin: str
   return { title, description, canonical: url, openGraph: { title, description, image: b.photo ?? b.cover, type: "website", url }, twitter: { card: "summary_large_image", title, description, image: b.photo ?? b.cover }, jsonLd: [placeLd] };
 }
 
-export function buildAgentSitemap(origin: string, slug: string, propertyIds: string[], areas: string[]): SitemapEntry[] {
-  const bse = base(origin, slug);
+// 9.6 ROUTE CONSOLIDATION — the crawlable agent sitemap/robots MUST advertise the
+// CANONICAL public surface, not the retired one. The public agent site is
+// /agent/[slug] (the legacy /ai-agent/* pages are retired → 308 permanent redirect
+// to /agent and /p), and each listing's canonical microsite is /p/[id]. The retired
+// /about, /areas and /area/[name] sub-pages were collapsed into the agent root and
+// have NO canonical equivalent under /agent, so they are no longer advertised.
+// (The seoForAgent* meta builders above are not rendered by any live page — the
+// canonical /agent/[slug] page emits its own metadata — and are left untouched.)
+export function buildAgentSitemap(origin: string, slug: string, propertyIds: string[]): SitemapEntry[] {
+  const cbase = `${origin}/agent/${slug}`;
   const out: SitemapEntry[] = [
-    { loc: bse, changefreq: "daily", priority: 1 },
-    { loc: `${bse}/properties`, changefreq: "hourly", priority: 0.9 },
-    { loc: `${bse}/areas`, changefreq: "weekly", priority: 0.7 },
-    { loc: `${bse}/about`, changefreq: "monthly", priority: 0.6 },
+    { loc: cbase, changefreq: "daily", priority: 1 },
+    { loc: `${cbase}/properties`, changefreq: "hourly", priority: 0.9 },
   ];
-  for (const id of propertyIds) out.push({ loc: `${bse}/property/${id}`, changefreq: "daily", priority: 0.8 });
-  for (const a of areas) out.push({ loc: `${bse}/area/${encodeURIComponent(a)}`, changefreq: "weekly", priority: 0.6 });
+  for (const id of propertyIds) out.push({ loc: `${origin}/p/${id}`, changefreq: "daily", priority: 0.8 });
   return out;
 }
 export function agentRobotsTxt(origin: string, slug: string): string {
-  return `User-agent: *\nAllow: /ai-agent/${slug}\nSitemap: ${base(origin, slug)}/sitemap.xml\n`;
+  // Advertise the canonical /agent path and point crawlers at the REAL sitemap
+  // endpoint (/api/agent-site/[slug]/sitemap.xml — the served location).
+  return `User-agent: *\nAllow: /agent/${slug}\nSitemap: ${origin}/api/agent-site/${slug}/sitemap.xml\n`;
 }
 export { sitemapXml };

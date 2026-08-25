@@ -129,6 +129,6 @@ export async function askAgent(slug: string, query: string): Promise<PublicAskAn
 export async function getAgentSitemap(slug: string, origin: string): Promise<SitemapEntry[]> {
   const site = await resolveAgentSite(slug); if (site === "disabled" || site === null) return [];
   const input = await buildInput(site);
-  const areas = [...new Set(input.listings.map((l) => l.neighborhood ?? l.city).filter((x): x is string => !!x))];
-  return buildAgentSitemap(origin, slug, input.listings.slice(0, 200).map((l) => l.id), areas);
+  // 9.6 — canonical /agent + /p sitemap; retired /ai-agent area URLs no longer emitted.
+  return buildAgentSitemap(origin, slug, input.listings.slice(0, 200).map((l) => l.id));
 }

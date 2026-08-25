@@ -46,10 +46,14 @@ export function runSelfCheck(): ASSelfCheck {
   const seoAb = seoForAgentAbout(branding(), "https://app.zono", "dana");
   add("about SEO complete", !!seoAb.title && seoAb.canonical.endsWith("/about"), "");
 
-  // Sitemap + robots.
-  const sm = buildAgentSitemap("https://app.zono", "dana", ["P1", "P2"], ["לב העיר"]);
-  add("agent sitemap + xml", sm.length >= 6 && sitemapXml(sm).includes("/ai-agent/dana/property/P1"), "");
-  add("agent robots references sitemap", agentRobotsTxt("https://app.zono", "dana").includes("/ai-agent/dana"), "");
+  // Sitemap + robots — 9.6: MUST advertise the CANONICAL /agent + /p surface, and
+  // must NOT emit any retired /ai-agent URL to crawlers.
+  const sm = buildAgentSitemap("https://app.zono", "dana", ["P1", "P2"]);
+  const smXml = sitemapXml(sm);
+  add("agent sitemap canonical (/agent home + /properties + /p/{id}, no /ai-agent)",
+    sm.length >= 3 && smXml.includes("https://app.zono/agent/dana") && smXml.includes("/agent/dana/properties") && smXml.includes("/p/P1") && !smXml.includes("/ai-agent/"), "");
+  add("agent robots advertises canonical /agent path + real sitemap endpoint",
+    agentRobotsTxt("https://app.zono", "dana").includes("Allow: /agent/dana") && agentRobotsTxt("https://app.zono", "dana").includes("/api/agent-site/dana/sitemap.xml") && !agentRobotsTxt("https://app.zono", "dana").includes("/ai-agent/"), "");
 
   // Edge cases.
   const noListings = buildAgentHome(input({ listings: [] }));
