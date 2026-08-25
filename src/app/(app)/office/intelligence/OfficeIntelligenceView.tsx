@@ -129,7 +129,7 @@ export function OfficeIntelligenceView({ intel }: { intel: OfficeIntelligence })
 
             {/* Deal stage durations */}
             {intel.dealStages.length > 0 && (
-              <Module title="זמן שהייה בשלבי עסקה" hint="חציון ימים בכל שלב (deal_journeys)">
+              <Module title="זמן שהייה בשלבי עסקה" hint="חציון ימים בכל שלב">
                 <div className="flex flex-col gap-2">
                   {intel.dealStages.filter((s) => s.medianDays != null).slice(0, 8).map((s) => <Bar key={s.stage} label={s.label} value={s.medianDays ?? 0} max={stageMax} sub={`${s.medianDays} ימים`} />)}
                 </div>

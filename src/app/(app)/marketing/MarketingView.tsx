@@ -23,6 +23,11 @@ const LEVEL: Record<string, { t: string; c: string }> = {
 };
 const PLATFORM: Record<string, string> = { facebook: "פייסבוק", whatsapp: "וואטסאפ", telegram: "טלגרם", linkedin: "לינקדאין", investors: "משקיעים", neighborhood: "שכונתי", local: "מקומי" };
 const AUDIENCE: Record<string, string> = { buyers: "קונים", sellers: "מוכרים", investors: "משקיעים", luxury: "יוקרה", families: "משפחות", young: "צעירים", commercial: "מסחרי" };
+// 10.2B — the property-DNA audience/budget tags must never leak a raw English segment
+// key or budget enum into the Hebrew UI. BUDGET_HE labels the tier; SEGMENT_HE is the
+// DISPLAY superset (AUDIENCE above powers the create-community select and stays lean).
+const BUDGET_HE: Record<string, string> = { low: "נמוך", medium: "בינוני", high: "גבוה" };
+const SEGMENT_HE: Record<string, string> = { ...AUDIENCE, first_home: "דירה ראשונה", young_couples: "זוגות צעירים", young_families: "משפחות צעירות", downsizers: "מקטינים", mixed: "מעורב", sellers: "מוכרים" };
 const SIGNAL: Record<string, string> = { high_demand_locality: "ביקוש גבוה", low_inventory_locality: "מלאי נמוך", investor_hotspot: "מוקד משקיעים", luxury_hotspot: "מוקד יוקרה", family_hotspot: "מוקד משפחות", seller_acquisition_hotspot: "גיוס מוכרים", promotion_opportunity: "קידום נכס" };
 const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-warning");
 
@@ -122,8 +127,8 @@ export function MarketingView({ board }: { board: MarketingBoard }) {
                     {d.summary && <p className="text-muted mt-1 line-clamp-2 text-[12px] leading-relaxed">{d.summary}</p>}
                     <div className="text-muted mt-1.5 flex flex-wrap gap-x-3 text-[11px] font-semibold">
                       {d.topCommunity && <span>ערוץ: {d.topCommunity}</span>}
-                      {d.budget && <span>תקציב: {d.budget}</span>}
-                      {d.audience.length > 0 && <span>{d.audience.map((a) => AUDIENCE[a] ?? a).join(", ")}</span>}
+                      {d.budget && <span>תקציב: {BUDGET_HE[d.budget] ?? d.budget}</span>}
+                      {d.audience.length > 0 && <span>{d.audience.map((a) => SEGMENT_HE[a] ?? a).join(", ")}</span>}
                     </div>
                     <div className="mt-2.5 flex flex-wrap gap-2">
                       <Link href={`/creative/new?type=property_sale_post&propertyId=${d.propertyId}`}><Button size="sm" leadingIcon={<Icon name="Sparkles" size={13} />}>צור קריאייטיב</Button></Link>

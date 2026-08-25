@@ -12,6 +12,18 @@ import { groundEntityContext, type CanonicalFact } from "@/lib/ai-context";
 
 const PROV_HE: Record<string, string> = { explicit: "מפורש", derived: "מחושב", inferred: "משוער" };
 
+// 10.2B — the AI-context mode is internal plumbing (a ContextMode enum). Never leak
+// the raw English token into the Hebrew UI — show a Hebrew label for every mode.
+const MODE_HE: Record<string, string> = {
+  internal_entity: "הקשר ישות",
+  internal_global: "הקשר כללי",
+  executive: "מנהלים",
+  broker_private: "פרטי למתווך",
+  public_site: "אתר ציבורי",
+  document_scoped: "מסמך",
+  recommendation_explanation: "הסבר המלצה",
+};
+
 export async function EntityAIContextSection({
   entityType, entityId, canonicalTruth = [], title = "הקשר ZONO — למה?",
 }: {
@@ -35,7 +47,7 @@ export async function EntityAIContextSection({
     <div className="bg-card border-line flex flex-col gap-3 rounded-[16px] border p-4" dir="rtl">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <span className="text-muted text-xs">מצב · {ctx.mode}</span>
+        <span className="text-muted text-xs">מצב · {MODE_HE[ctx.mode] ?? "הקשר פנימי"}</span>
       </div>
 
       {ctx.truthLine && (
