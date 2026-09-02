@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.supabase.in" },
     ],
   },
+  // Clean URL for the standalone marketing / signup landing page.
+  // The page itself is a self-contained static file at public/start.html
+  // (its own fonts + styles; intentionally bypasses the app's root layout).
+  // /start        → the landing (email capture, "stage 1")
+  // /start.html   → also works directly
+  async rewrites() {
+    return [{ source: "/start", destination: "/start.html" }];
+  },
 };
 
 export default nextConfig;
