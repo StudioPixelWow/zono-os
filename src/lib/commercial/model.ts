@@ -18,9 +18,20 @@
 import { UNLIMITED } from "@/lib/limits/model";
 import type { PlanLimitsLike } from "@/lib/limits/model";
 
+// Unit price is env-overridable ONLY for billing QA/test (e.g. a ₪1 end-to-end
+// run) and is fully reversible without a code deploy: set BILLING_UNIT_PRICE_ILS
+// to override, remove it to restore ₪197. An invalid/≤0 value falls back to 197,
+// so a bad env can never zero-out or break billing.
+function resolveUnitPriceIls(): number {
+  const raw = process.env.BILLING_UNIT_PRICE_ILS;
+  if (!raw) return 197;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 ? Math.round(n) : 197;
+}
+
 export const COMMERCIAL_MODEL = {
   kind: "per_agent" as const,
-  pricePerAgentIls: 197,
+  pricePerAgentIls: resolveUnitPriceIls(),
   currency: "ILS" as const,
   trialDays: 14,
   /** Offices strictly ABOVE this agent count are custom-priced (sales). */
