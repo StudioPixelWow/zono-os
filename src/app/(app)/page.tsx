@@ -12,6 +12,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { runOrchestratorForSession } from "@/lib/orchestrator";
 import { getOfficeActivation } from "@/lib/activation/activation-server";
 import { getCityDiscovery } from "@/lib/activation/city-discovery-server";
+import { getZoneSnapshot } from "@/lib/activation/zone-snapshot";
 import { buildOfficeTheme, OFFICE_THEME_DEFAULTS } from "@/lib/brand-identity/office-theme";
 import { NewOfficeCommandCenter } from "@/components/home-control/NewOfficeCommandCenter";
 import { OnboardingNextStep } from "@/components/onboarding/OnboardingNextStep";
@@ -33,13 +34,15 @@ export default async function Home() {
     if (act && act.activation.phase === "new") {
       const theme = buildOfficeTheme(act.brand.primary, act.brand.secondary, act.brand.accent);
       const discovery = await getCityDiscovery(act.identity.orgId, act.identity.city, act.identity.localityCode);
+      // WOW zone intelligence — real, composed from existing sources; degrades safely.
+      const zone = await getZoneSnapshot(act.identity.orgId, act.identity.city, discovery).catch(() => null);
       after(async () => {
         try { await runOrchestratorForSession("dashboard_load", { skipRevalidation: true, source: "dashboard_load" }); }
         catch { /* best-effort */ }
       });
       newOffice = {
         identity: act.identity, activation: act.activation, trial: act.trial,
-        discovery, themeVars: { ...OFFICE_THEME_DEFAULTS, ...theme.vars }, hasBrand: theme.hasBrand,
+        discovery, zone: zone ?? undefined, themeVars: { ...OFFICE_THEME_DEFAULTS, ...theme.vars }, hasBrand: theme.hasBrand,
       };
     }
   } catch (e) {
