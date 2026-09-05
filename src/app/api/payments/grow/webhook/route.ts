@@ -19,7 +19,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { growGetTransactionInfo, growApproveTransaction, growCreds } from "@/lib/commercial/grow-client";
 import { growOutcomeFromStatusCode, growPaymentStatus, clientIpFromForwardedFor, isGrowSourceIp, safeStringEqual } from "@/lib/commercial/grow-mapping";
-import { getPayment, markPaymentVerified, setPaymentStatus } from "@/lib/commercial/store";
+import { getPayment, getDraftById, markPaymentVerified, setPaymentStatus } from "@/lib/commercial/store";
 import { activateOrgSubscriptionFromVerifiedPayment } from "@/lib/commercial/activate";
 import { emitBusinessEvent } from "@/lib/kernel/emit";
 import { DOMAIN_EVENTS } from "@/lib/kernel/events";
@@ -123,6 +123,36 @@ export async function POST(req: NextRequest) {
     // enforces exactly-once. verified revenue = the PROVIDER-CONFIRMED sum.
     const verified = await markPaymentVerified(paymentId, transactionId, "", { verifiedVia: "getTransactionInfo" });
     if (!verified) return NextResponse.json({ ok: false, reason: "persist_failed" }, { status: 200 });
+
+    // ── SELF-SERVE REGISTRATION (draft) → PROVISION THE PAID ACCOUNT NOW ─────────
+    // A /register payment carries a draft_id but no org_id yet: the auth user + org
+    // are created ONLY here, strictly after a verified payment. Without this call a
+    // verified Grow payment would charge the card and create NOTHING (the previously
+    // orphaned provisioning path). provisionFromVerifiedPayment is idempotent
+    // (draft.orgId short-circuits) and fails CLOSED. On success it stamps the org id
+    // onto the payment row (linkPaymentToOrg), so the downstream activation +
+    // accounting block below runs for this brand-new org too.
+    if (!payment.orgId && verified.draftId) {
+      try {
+        const draft = await getDraftById(verified.draftId);
+        if (!draft) {
+          console.error("[grow-webhook] verified draft payment but draft missing:", verified.id);
+        } else {
+          const { provisionFromVerifiedPayment } = await import("@/lib/commercial/provisioning");
+          const prov = await provisionFromVerifiedPayment(verified, draft);
+          if (prov.ok && prov.orgId) {
+            payment.orgId = prov.orgId; // route the accounting/activation block below
+          } else {
+            // Payment is verified (card charged) but provisioning failed. Do NOT
+            // swallow silently — this needs operator attention / reconciliation.
+            // provisioning is idempotent, so a webhook re-fire can complete it.
+            console.error("[grow-webhook] PROVISIONING FAILED after verified payment", verified.id, prov.reason);
+          }
+        }
+      } catch (e) {
+        console.error("[grow-webhook] provisioning error after verified payment (non-fatal):", e);
+      }
+    }
 
     const recurringId = info.data?.recurringDebitId ?? d.recurringDebitId ?? info.data?.directDebitId ?? d.directDebitId ?? null;
     // Acknowledged quantity = the current server-derived billable quantity for the

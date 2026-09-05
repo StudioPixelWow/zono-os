@@ -179,6 +179,19 @@ section.blk{padding:88px 0;position:relative;overflow:hidden}
 .legal a{color:var(--brand);text-decoration:underline}
 .have{text-align:center;margin-top:11px;font-weight:600;font-size:14px;color:var(--muted)}
 .have a{color:var(--brand);font-family:"Heebo";font-weight:800}
+.start-err{color:#c0245a;background:#fdf0f4;border:1px solid #f6cdda;border-radius:11px;padding:9px 12px;font-size:13.5px;font-weight:600;margin:0 0 10px}
+.btn[aria-busy="true"]{opacity:.75;pointer-events:none}
+/* success / email-sent card */
+.sent-card{text-align:center}
+.sent-ic{width:64px;height:64px;border-radius:50%;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;margin:4px auto 16px}
+.sent-ic svg{width:30px;height:30px}
+.sent-lead{color:var(--muted);font-size:15.5px;font-weight:600;line-height:1.5;margin:6px 0 18px}
+.sent-lead b{color:var(--brand-deep);font-family:"Heebo"}
+.sent-steps{list-style:none;padding:0;margin:0 0 16px;display:flex;flex-direction:column;gap:9px;text-align:right}
+.sent-steps li{display:flex;align-items:center;gap:11px;background:var(--card-2);border:1px solid var(--line);border-radius:13px;padding:11px 14px;font-size:14.5px;font-weight:600}
+.sent-steps .sn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--grad);color:#fff;font-family:"Heebo";font-weight:800;font-size:13px;display:grid;place-items:center}
+.sent-hint{font-size:13px;color:var(--faint);font-weight:600;margin:0}
+.sent-hint a{color:var(--brand);font-family:"Heebo";font-weight:800}
 .signup-aside{position:relative}
 .signup-aside .eyebrow{margin-bottom:7px;display:block}
 .signup-aside h2{font-size:clamp(23px,2.5vw,29px);font-weight:900;line-height:1.12}
@@ -403,16 +416,16 @@ footer .logo{font-size:19px}
     <a class="su-back" href="#" onclick="backToLanding(event)">→ חזרה לדף הבית</a>
   </div>
   <div class="wrap">
-    <div class="form-card">
+    <div class="form-card" id="startCard">
       <h2>עוד צעד אחד — והמשרד באוויר</h2>
-      <p class="fsub">14 יום ניסיון · ללא כרטיס אשראי</p>
-      <form onsubmit="return false">
-        <div class="field2"><label for="suEmail">מייל</label><input id="suEmail" type="email" placeholder="name@office.co.il"></div>
+      <p class="fsub">14 יום ניסיון · ללא כרטיס אשראי · בלי סיסמה עכשיו</p>
+      <form id="startForm" onsubmit="return submitStart(event)">
+        <div class="field2"><label for="suEmail">מייל</label><input id="suEmail" name="email" type="email" autocomplete="email" placeholder="name@office.co.il" required></div>
         <div class="two">
-          <div class="field2"><label for="suFirst">שם פרטי</label><input id="suFirst" type="text" placeholder="השם הפרטי שלכם"></div>
-          <div class="field2"><label for="suLast">שם משפחה</label><input id="suLast" type="text" placeholder="שם המשפחה"></div>
+          <div class="field2"><label for="suFirst">שם פרטי</label><input id="suFirst" name="firstName" type="text" placeholder="השם הפרטי שלכם"></div>
+          <div class="field2"><label for="suLast">שם משפחה</label><input id="suLast" name="lastName" type="text" placeholder="שם המשפחה"></div>
         </div>
-        <div class="field2"><label for="suOffice">שם המשרד</label><input id="suOffice" type="text" placeholder="שם משרד התיווך"></div>
+        <div class="field2"><label for="suOffice">שם המשרד</label><input id="suOffice" name="officeName" type="text" placeholder="שם משרד התיווך"></div>
         <div class="field2">
           <label>ערי התמחות</label>
           <div class="chips" id="cityChips"></div>
@@ -427,11 +440,25 @@ footer .logo{font-size:19px}
           </div>
           <p class="hint">בחרו כמה ערים שתרצו מהרשימה — נמשוך עבורכם את <span class="b">מודיעין השוק ומאגרי הנכסים</span> של כל אזורי הפעילות כבר ביום הראשון.</p>
         </div>
-        <div class="field2"><label for="suPass">סיסמה</label><input id="suPass" type="password" placeholder="בחרו סיסמה"></div>
-        <button class="btn btn-primary" type="submit">צרו חשבון והתחילו</button>
+        <p class="start-err" id="startErr" hidden></p>
+        <button class="btn btn-primary" id="startBtn" type="submit">שלחו לי קישור להתחלה</button>
       </form>
-      <p class="legal">בהרשמה אתם מאשרים את <a href="#">תנאי השימוש ומדיניות הפרטיות</a>.</p>
-      <p class="have">כבר רשומים? <a href="#">התחברו</a></p>
+      <p class="legal">לא צריך לבחור סיסמה כאן — נשלח אליכם מייל עם קישור מאובטח לקביעת סיסמה וכניסה. בהרשמה אתם מאשרים את <a href="/privacy">תנאי השימוש ומדיניות הפרטיות</a>.</p>
+      <p class="have">כבר רשומים? <a href="/login">התחברו</a></p>
+    </div>
+    <!-- success: email sent -->
+    <div class="form-card sent-card" id="sentCard" hidden>
+      <div class="sent-ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M4 7l8 6 8-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>שלחנו לכם מייל 📩</h2>
+      <p class="sent-lead">שלחנו קישור מאובטח ל‑<b id="sentEmail">המייל שלכם</b>.<br>לחצו עליו כדי לקבוע סיסמה ולהיכנס למערכת — הזון שלכם כבר מחכה.</p>
+      <ul class="sent-steps">
+        <li><span class="sn">1</span> פתחו את המייל מ‑ZONO</li>
+        <li><span class="sn">2</span> לחצו על "כניסה ל‑ZONO" וקבעו סיסמה</li>
+        <li><span class="sn">3</span> נכנסים ישר למשרד שלכם</li>
+      </ul>
+      <p class="sent-hint">לא רואים את המייל? בדקו בספאם/קידומים, או <a href="#" id="resendLink">שלחו שוב</a>.</p>
     </div>
     <div class="signup-aside">
       <span class="eyebrow">מה מקבלים ברגע ההרשמה</span>
@@ -592,4 +619,42 @@ document.addEventListener('DOMContentLoaded',function(){
     showQuote(0); restartQuoteTimer();
   }
 });
+
+// ── real signup: POST to the API → "check your email" (no password here) ──
+function showStartErr(m){ var e=document.getElementById('startErr'); if(e){ e.textContent=m; e.hidden=false; } }
+function showSent(email){
+  var s=document.getElementById('sentEmail'); if(s) s.textContent=email;
+  var card=document.getElementById('startCard'); if(card) card.hidden=true;
+  var sent=document.getElementById('sentCard'); if(sent) sent.hidden=false;
+  window.scrollTo(0,0);
+  var rl=document.getElementById('resendLink');
+  if(rl && !rl._wired){ rl._wired=true; rl.onclick=function(ev){ ev.preventDefault(); resendStart(email); }; }
+}
+function resendStart(email){
+  var rl=document.getElementById('resendLink'); if(rl){ rl.textContent='נשלח שוב ✓'; rl.style.pointerEvents='none'; }
+  try{ fetch('/api/start/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email})}); }catch(e){}
+}
+function submitStart(e){
+  if(e) e.preventDefault();
+  var btn=document.getElementById('startBtn');
+  var email=(document.getElementById('suEmail').value||'').trim();
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showStartErr('נא להזין כתובת מייל תקינה.'); return false; }
+  document.getElementById('startErr').hidden=true;
+  var old=btn.textContent; btn.setAttribute('aria-busy','true'); btn.textContent='שולח…';
+  var payload={
+    email:email,
+    firstName:(document.getElementById('suFirst').value||'').trim(),
+    lastName:(document.getElementById('suLast').value||'').trim(),
+    officeName:(document.getElementById('suOffice').value||'').trim(),
+    cities:(typeof CITIES!=='undefined'?CITIES.slice():[])
+  };
+  fetch('/api/start/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){ return r.json().catch(function(){ return {ok:r.ok}; }); })
+    .then(function(res){
+      if(res && res.ok){ showSent(email); }
+      else { showStartErr('משהו השתבש. נסו שוב בעוד רגע.'); btn.setAttribute('aria-busy','false'); btn.textContent=old; }
+    })
+    .catch(function(){ showStartErr('בעיית תקשורת. בדקו את החיבור ונסו שוב.'); btn.setAttribute('aria-busy','false'); btn.textContent=old; });
+  return false;
+}
 </script>

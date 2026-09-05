@@ -77,16 +77,22 @@ function Chip({
 export function OnboardingWizard({
   email,
   defaultFullName,
+  defaultOrgName = "",
+  defaultLocalities = [],
 }: {
   email: string;
   defaultFullName: string;
+  // Prefilled from the /start landing (stashed in user metadata at signup) so a
+  // user who signed up there lands near-complete and reaches the dashboard fast.
+  defaultOrgName?: string;
+  defaultLocalities?: SelectedLocality[];
 }) {
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const [form, setForm] = useState<WizardForm>({
-    organizationName: "",
+    organizationName: defaultOrgName,
     organizationLogoUrl: "",
     organizationPhone: "",
     organizationEmail: email,
@@ -94,7 +100,7 @@ export function OnboardingWizard({
     phone: "",
     jobTitle: "",
     roleKey: "owner",
-    localities: [],
+    localities: defaultLocalities,
     propertyTypes: [],
     dealTypes: [],
     minPrice: null,
