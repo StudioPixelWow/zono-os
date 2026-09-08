@@ -22,7 +22,7 @@ import { createAcquisitionTaskAction, recomputeAcquisitionAction, type Acquisiti
 import { ContactButtons } from "@/components/listings/ContactButtons";
 import type { AcquisitionCard, AcquisitionCommandCenter } from "@/lib/acquisition/service";
 
-const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", instagram: "אינסטגרם", manual_external: "ידני", partner_api: "שותף", website: "אתר", referral: "המלצה", unknown: "אחר" };
+const SOURCE_LABELS: Record<string, string> = { yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", facebook: "פייסבוק", instagram: "אינסטגרם", manual_external: "ידני", partner_api: "שותף", website: "אתר", referral: "המלצה", unknown: "אחר" };
 const ilsM = (n: number) => (n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `₪${Math.round(n / 1000)}K` : `₪${Math.round(n)}`);
 const scoreTone = (n: number) => (n >= 80 ? { ring: "text-success", bg: "bg-success-soft" } : n >= 60 ? { ring: "text-warning", bg: "bg-warning-soft" } : { ring: "text-danger", bg: "bg-danger-soft" });
 

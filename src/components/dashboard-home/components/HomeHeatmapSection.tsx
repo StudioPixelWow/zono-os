@@ -14,7 +14,7 @@ import { DEFAULT_HOME_MAP_FILTERS, type HomeMapData, type HomeMapFilters, type M
 
 const SCOPES: { v: MapScope; label: string }[] = [{ v: "all", label: "הכל" }, { v: "internal", label: "פנימיים" }, { v: "external", label: "חיצוניים" }];
 const DEALS: { v: MapDeal; label: string }[] = [{ v: "all", label: "הכל" }, { v: "sale", label: "למכירה" }, { v: "rent", label: "להשכרה" }];
-const SOURCES: { v: MapSource; label: string }[] = [{ v: "all", label: "כל המקורות" }, { v: "yad2", label: "יד2" }, { v: "madlan", label: "מדלן" }, { v: "manual", label: "ידני" }];
+const SOURCES: { v: MapSource; label: string }[] = [{ v: "all", label: "כל המקורות" }, { v: "yad2", label: "מודעה חיצונית" }, { v: "madlan", label: "מודעה חיצונית" }, { v: "manual", label: "ידני" }];
 const TYPES: { v: MapPropertyType; label: string }[] = [{ v: "all", label: "כל הסוגים" }, { v: "apartment", label: "דירה" }, { v: "house", label: "בית" }, { v: "commercial", label: "מסחרי" }, { v: "land", label: "מגרש" }];
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -123,10 +123,10 @@ export function HomeHeatmapSection({ heightClass = "h-[380px] lg:h-[460px]" }: {
         {data && data.externalCount === 0 && (() => {
           const d = data.externalDiag;
           // Pinpoint EXACTLY where external listings are lost so "חיצוני 0" is never a mystery.
-          if (d.rawActive === 0) return <span className="text-amber-300/80">אין נכסים חיצוניים שמורים — הרץ סנכרון (Yad2 / Madlan) במסך הנכסים החיצוניים.</span>;
+          if (d.rawActive === 0) return <span className="text-amber-300/80">אין נכסים חיצוניים שמורים — הרץ סנכרון (מודעות חיצוניות) במסך הנכסים החיצוניים.</span>;
           if (d.withCoords === 0) return <span className="text-amber-300/80">{d.rawActive} נכסים חיצוניים נסרקו אך אף אחד לא עבר גיאוקודינג (אין קואורדינטות) — יושלם בסנכרון הבא.</span>;
           if (d.cityDropped > 0) return <span className="text-amber-300/80">{d.withCoords} נכסים חיצוניים עם מיקום קיימים, אך מחוץ לאזור ההתמחות ({d.cityDropped} סוננו){d.droppedCitySamples.length ? ` · ערים שנמצאו: ${d.droppedCitySamples.join(" · ")}` : ""} — הוסף את הערים שלהם באזורי ההתמחות.</span>;
-          return <span>נכסים חיצוניים יוצגו לאחר סנכרון מקורות כמו Yad2 / Madlan.</span>;
+          return <span>נכסים חיצוניים יוצגו לאחר סנכרון מקורות חיצוניים.</span>;
         })()}
         {/* Backlog note — shown even when some external listings ARE on the map, so a
             large ungeocoded backlog (often Yad2) is never silently hidden. */}

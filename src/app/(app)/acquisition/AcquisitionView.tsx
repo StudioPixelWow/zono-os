@@ -15,7 +15,7 @@ import {
 } from "@/lib/acquisition/actions";
 import type { AcquisitionCard, AcquisitionCommandCenter, AcquisitionDetail } from "@/lib/acquisition/service";
 
-const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
+const SOURCE_LABELS: Record<string, string> = { yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
 const field = "bg-surface border-line text-ink focus:border-brand-light h-9 rounded-xl border px-3 text-sm outline-none transition";
 const scoreTone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 
@@ -86,7 +86,7 @@ export function AcquisitionView({ cards, cc, embedded = false }: { cards: Acquis
       {/* Filters */}
       <div className="bg-card border-line flex flex-wrap items-center gap-2 rounded-[20px] border p-3">
         <input className={field} placeholder="עיר" value={city} onChange={(e) => setCity(e.target.value)} />
-        <select className={field} value={source} onChange={(e) => setSource(e.target.value)}><option value="">כל המקורות</option><option value="yad2">יד2</option><option value="madlan">מדלן</option></select>
+        <select className={field} value={source} onChange={(e) => setSource(e.target.value)}><option value="">כל המקורות</option><option value="yad2">מודעה חיצונית</option><option value="madlan">מודעה חיצונית</option></select>
         <input className={field} type="number" placeholder="ציון גיוס מ-" value={minScore} onChange={(e) => setMinScore(e.target.value)} />
         <label className="text-muted flex items-center gap-1 text-xs"><input type="checkbox" checked={privateOnly} onChange={(e) => setPrivateOnly(e.target.checked)} /> בעלים פרטי בלבד</label>
         <label className="text-muted flex items-center gap-1 text-xs"><input type="checkbox" checked={excludeBrokers} onChange={(e) => setExcludeBrokers(e.target.checked)} /> ללא מתווכים</label>

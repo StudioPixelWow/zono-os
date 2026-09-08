@@ -10,8 +10,8 @@ const R = (key: string, label: string, compliance: SourceCompliance, allowed: bo
   ({ key, label, compliance, allowed, scrapeForbidden: true, note });
 
 export const SOURCE_REGISTRY: SourceInfo[] = [
-  R("yad2", "יד2", "manual_assisted", true, "ייבוא דרך הזרימה הקיימת בלבד — ללא גרידה."),
-  R("madlan", "מדלן", "manual_assisted", true, "ייבוא דרך הזרימה הקיימת בלבד — ללא גרידה."),
+  R("yad2", "מודעה חיצונית", "manual_assisted", true, "ייבוא דרך הזרימה הקיימת בלבד — ללא גרידה."),
+  R("madlan", "מודעה חיצונית", "manual_assisted", true, "ייבוא דרך הזרימה הקיימת בלבד — ללא גרידה."),
   R("homeless", "הומלס", "manual_assisted", true, "מקור משלים — היכן שמותר, ללא גרידה."),
   R("komo", "קומו", "manual_assisted", true, "מקור משלים — היכן שמותר, ללא גרידה."),
   R("facebook_marketplace", "Facebook Marketplace", "planning_only", false, "תכנון והבנת שוק בלבד — אין ייבוא/גרידה, בכפוף למדיניות Meta."),

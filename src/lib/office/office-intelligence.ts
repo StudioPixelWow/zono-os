@@ -27,7 +27,7 @@ const REACHED_CONTACTED = new Set(["contacted", "qualified", "nurturing", "conve
 const REACHED_QUALIFIED = new Set(["qualified", "nurturing", "converted"]);
 
 const SOURCE_LABEL: Record<string, string> = {
-  yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", instagram: "אינסטגרם", website: "אתר",
+  yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", facebook: "פייסבוק", instagram: "אינסטגרם", website: "אתר",
   referral: "המלצה", sign_call: "שלט", open_house: "בית פתוח", cold_outreach: "פנייה יזומה",
   portal: "פורטל", partner: "שותף", other: "אחר",
 };

@@ -222,7 +222,7 @@ function buildSellerTips(intel: ValuationIntelligence | undefined): string[] {
 
 function buildMarketing(intel: ValuationIntelligence | undefined): string[] {
   const out = [
-    "פרסום בפורטלים המובילים (יד2, Madlan) עם צילום מקצועי וסרטון.",
+    "פרסום בפורטלים המובילים (מודעות חיצוניות) עם צילום מקצועי וסרטון.",
     "קמפיין ממוקד ברשתות החברתיות לקהל הרלוונטי באזור.",
     "פנייה יזומה למאגר הקונים והמתעניינים הקיים.",
   ];

@@ -543,7 +543,7 @@ export function buildMissingData(input: ValuationInput, hasPricedComparables: bo
 /** Hebrew next-step recommendation when a valuation cannot be produced. */
 export function recommendedActionFor(missingData: string[]): string {
   if (missingData.includes("עסקאות/מודעות להשוואה באזור")) {
-    return "להריץ סריקת עסקאות ומודעות לאזור (GovMap / Madlan / יד2) ולאחר מכן לחשב מחדש.";
+    return "להריץ סריקת עסקאות ומודעות לאזור (GovMap ומודעות חיצוניות) ולאחר מכן לחשב מחדש.";
   }
   if (missingData.some((m) => m.includes("שטח בנוי") || m === "עיר")) {
     return "להשלים את פרטי הנכס החסרים (עיר ושטח בנוי) ולחשב מחדש.";

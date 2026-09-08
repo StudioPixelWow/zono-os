@@ -21,8 +21,8 @@ type Row = Database["public"]["Tables"]["external_listings"]["Row"];
 export interface MatchSummary { count: number; top: number }
 
 const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
-  yad2: { label: "Yad2", cls: "bg-orange-50 text-orange-600" },
-  madlan: { label: "madlan", cls: "bg-indigo-50 text-indigo-600" },
+  yad2: { label: "מודעה חיצונית", cls: "bg-orange-50 text-orange-600" },
+  madlan: { label: "מודעה חיצונית", cls: "bg-indigo-50 text-indigo-600" },
   homeless: { label: "Homeless", cls: "bg-sky-50 text-sky-600" },
   govmap: { label: "GovMap", cls: "bg-emerald-50 text-emerald-600" },
   facebook: { label: "Facebook", cls: "bg-blue-50 text-blue-600" },

@@ -26,7 +26,7 @@ function timeAgo(iso?: string | null): string | null {
   return `לפני ${days} ימים`;
 }
 
-const PROVIDER_LABEL: Record<string, string> = { mock: "בדיקה", yad2: "יד2", madlan: "מדלן" };
+const PROVIDER_LABEL: Record<string, string> = { mock: "בדיקה", yad2: "מודעה חיצונית", madlan: "מודעה חיצונית" };
 
 export function PropertyRadarAlertCard({ alert }: { alert: PropertyRadarAlertDTO }) {
   const m = alert.metadata ?? {};

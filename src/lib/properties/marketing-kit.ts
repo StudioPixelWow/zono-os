@@ -55,7 +55,7 @@ export const KIT_CHANNELS: { value: KitChannel; label: string }[] = [
   { value: "website", label: "אתר" },
   { value: "portal", label: "פורטל לקוח" },
   { value: "property_page", label: "עמוד נכס" },
-  { value: "yad2_madlan", label: "יד2 / מדלן" },
+  { value: "yad2_madlan", label: "מודעה חיצונית" },
 ];
 
 export interface MarketingKitInput {

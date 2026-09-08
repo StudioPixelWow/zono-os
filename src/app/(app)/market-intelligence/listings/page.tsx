@@ -41,7 +41,7 @@ export default async function MarketListingsPage({ searchParams }: { searchParam
         emoji="🌍"
         eyebrow="נכסי שוק"
         title="נכסי השוק"
-        subtitle="כל הנכסים החיצוניים שנסרקו מיד2, מדלן ומקורות שוק נוספים."
+        subtitle="כל הנכסים החיצוניים שנסרקו ממודעות חיצוניות ומקורות שוק נוספים."
         actions={
           <IntelligenceActionBar>
             <IntelligenceActionLink href="/market-intelligence/map">🗺️ פתח מפה</IntelligenceActionLink>
@@ -65,7 +65,7 @@ export default async function MarketListingsPage({ searchParams }: { searchParam
         ) : (
           <IntelligenceEmptyState
             title="ZONO סורקת את הערים שלך"
-            steps={["המערכת סורקת אוטומטית את יד2 ומדלן לפי הערים שבחרת", "נכסי השוק יופיעו כאן ברגע שהסריקה תושלם", "אין צורך בפעולה — הכול קורה מאחורי הקלעים"]}
+            steps={["המערכת סורקת אוטומטית מודעות חיצוניות לפי הערים שבחרת", "נכסי השוק יופיעו כאן ברגע שהסריקה תושלם", "אין צורך בפעולה — הכול קורה מאחורי הקלעים"]}
           />
         )
       )}

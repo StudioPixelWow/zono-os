@@ -60,7 +60,7 @@ function ListingContactCTA({ contact }: { contact: ResolvedPropertyContact }) {
   );
 }
 
-const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
+const SOURCE_LABELS: Record<string, string> = { yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
 const tone = (n: number) => (n >= 70 ? "text-success" : n >= 45 ? "text-brand-strong" : "text-muted");
 

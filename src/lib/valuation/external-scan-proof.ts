@@ -113,7 +113,7 @@ async function timeProvider(name: string, table: string, run: () => Promise<Prov
 }
 
 const REASON_HE: Record<ExternalScanClassification, string> = {
-  NO_EXTERNAL_LISTINGS_IMPORTED: "לא יובאו מודעות חיצוניות כלל לארגון — יש להריץ סנכרון מקורות (יד2/מדלן).",
+  NO_EXTERNAL_LISTINGS_IMPORTED: "לא יובאו מודעות חיצוניות כלל לארגון — יש להריץ סנכרון מקורות חיצוניים.",
   EXTERNAL_PROVIDER_NOT_READING_TABLE: "קיימות שורות ב-external_listings אך הספק לא קרא אף שורה — תקלת חיווט/סכמה בספק.",
   EXTERNAL_CITY_FILTER_MISMATCH: "קיימות מודעות אך אף אחת אינה בעיר/רדיוס של הנכס — פער איות עיר או פער גיאוגרפי.",
   EXTERNAL_MISSING_PRICE_OR_SQM: "קיימות מודעות בעיר אך ללא מחיר+שטח — לא ניתן לחשב מחיר למ״ר.",
@@ -142,8 +142,8 @@ export async function buildValuationScanProof(valuationId: string): Promise<Valu
   const [govmap, tax, yad2, madlan, zono] = await Promise.all([
     timeProvider("GovMap (property_transactions)", "property_transactions", () => govmapProvider(ctx)),
     timeProvider("רשות המסים (stub)", "tax_authority", () => taxAuthorityProvider(ctx)),
-    timeProvider("Yad2 (external_listings)", "external_listings", () => yad2Provider(ctx)),
-    timeProvider("Madlan (external_listings)", "external_listings", () => madlanProvider(ctx)),
+    timeProvider("מקור חיצוני א׳ (external_listings)", "external_listings", () => yad2Provider(ctx)),
+    timeProvider("מקור חיצוני ב׳ (external_listings)", "external_listings", () => madlanProvider(ctx)),
     timeProvider("מלאי פנימי (properties)", "properties", () => zonoInternalProvider(ctx)),
   ]);
   const brokerTiming = await timeProvider("עסקאות המתווך (deals)", "deals", async () => {

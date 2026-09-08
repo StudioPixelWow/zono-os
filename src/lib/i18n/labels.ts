@@ -130,7 +130,7 @@ export const LEAD_STAGE_HE: Record<string, string> = {
  *  of the buyer SOURCE_LABELS (leads carry finer provenance like FB comments). */
 export const LEAD_SOURCE_HE: Record<string, string> = {
   facebook: "פייסבוק", facebook_group_comment: "תגובת קבוצת פייסבוק", facebook_comment: "תגובת פייסבוק",
-  instagram: "אינסטגרם", yad2: "יד2", madlan: "מדלן", website: "אתר", landing_page: "דף נחיתה",
+  instagram: "אינסטגרם", yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", website: "אתר", landing_page: "דף נחיתה",
   property_page: "עמוד נכס", referral: "המלצה", whatsapp: "וואטסאפ", sign_call: "שלט",
   open_house: "בית פתוח", cold_outreach: "פנייה יזומה", portal: "פורטל", partner: "שותף",
   manual: "ידני", import: "ייבוא", other: "אחר",

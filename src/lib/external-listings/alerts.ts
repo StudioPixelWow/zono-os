@@ -16,7 +16,7 @@ export interface AlertListing {
 export interface AlertBuyerMatch { name: string; reasons: string[]; closingProbability: number; commissionOpportunity: number }
 
 const nis = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("he-IL")}`);
-const SOURCE_HE: Record<string, string> = { yad2: "יד2", madlan: "מדלן" };
+const SOURCE_HE: Record<string, string> = { yad2: "מודעה חיצונית", madlan: "מודעה חיצונית" };
 const sourceLabel = (s: string | null) => (s ? SOURCE_HE[s.toLowerCase()] ?? s : "מקור חיצוני");
 const locationLine = (l: AlertListing) => [l.street, l.neighborhood, l.city].filter(Boolean).join(", ") || (l.city ?? "—");
 const factsLine = (l: AlertListing) => [l.rooms ? `${l.rooms} חד'` : null, l.sqm ? `${l.sqm} מ״ר` : null, l.price != null ? nis(l.price) : null].filter(Boolean).join(" · ");
@@ -69,7 +69,7 @@ export function runSelfCheck(): ASelfCheck {
 
   const l: AlertListing = { id: "x1", source: "yad2", city: "חיפה", neighborhood: "כרמל", street: "הרצל", price: 2400000, rooms: 4, sqm: 110, reason: "בבעלות פרטית" };
   const acq = buildAcquisitionDraft(l);
-  add("acquisition: headline + location + source + internal link", acq.includes("לגייס") && acq.includes("כרמל") && acq.includes("יד2") && acq.includes("/external-listings/x1"));
+  add("acquisition: headline + location + source + internal link", acq.includes("לגייס") && acq.includes("כרמל") && acq.includes("מודעה חיצונית") && acq.includes("/external-listings/x1"));
   add("acquisition: facts + price", acq.includes("4 חד'") && acq.includes("₪2,400,000"));
   add("acquisition: no external URL", !/yad2\.co\.il|madlan|http/.test(acq));
 

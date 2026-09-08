@@ -100,7 +100,7 @@ export const journeys: PropertyJourney[] = [
         id: "jtk_03",
         journeyId: "jrn_01",
         stage: "marketing",
-        title: "לפרסם ביד2 ובמדלן",
+        title: "לפרסם במודעות חיצוניות",
         done: true,
         automatable: true,
       },

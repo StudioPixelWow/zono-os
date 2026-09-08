@@ -84,8 +84,8 @@ export function renderReportHtml(payload: ReportPayload): string {
     const key = c.source === "zono"
       ? (c.comparableType === "sold" ? "עסקאות פנימיות (ZONO)" : "נכסים פנימיים (ZONO)")
       : c.source === "govmap" ? "GovMap (עסקאות רשמיות)"
-      : c.source === "madlan" ? "Madlan"
-      : c.source === "yad2" ? "יד2"
+      : c.source === "madlan" ? "מודעה חיצונית"
+      : c.source === "yad2" ? "מודעה חיצונית"
       : c.source === "tax_authority" ? "רשות המסים"
       : "ייבוא חיצוני";
     sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
@@ -210,7 +210,7 @@ th{color:#6b6385;font-weight:700;font-size:12px}
   ${!available ? section("מדוע לא הופקה הערכת שווי", `
     <p style="font-size:14px">${esc(r?.unavailableReason || "לא נמצאו מספיק עסקאות ומודעות עם מחיר להשוואה אמינה באזור.")}</p>
     ${(r?.missingData?.length) ? `<div style="margin-top:6px"><b>נתונים חסרים:</b> ${r!.missingData!.map(esc).join(" · ")}</div>` : ""}
-    ${sourceList.length ? `<div style="margin-top:6px"><b>מקורות שנבדקו:</b> ${sourceList.map(([s, n]) => `${esc(s)} (${n})`).join(" · ")}</div>` : `<div style="margin-top:6px"><b>מקורות שנבדקו:</b> פנימי, GovMap, Madlan, יד2 — ללא תוצאות מספיקות.</div>`}
+    ${sourceList.length ? `<div style="margin-top:6px"><b>מקורות שנבדקו:</b> ${sourceList.map(([s, n]) => `${esc(s)} (${n})`).join(" · ")}</div>` : `<div style="margin-top:6px"><b>מקורות שנבדקו:</b> פנימי, GovMap, מודעות חיצוניות — ללא תוצאות מספיקות.</div>`}
     ${r?.recommendedAction ? `<div class="rec-action">המלצה: ${esc(r.recommendedAction)}</div>` : ""}
   `) : ""}
 

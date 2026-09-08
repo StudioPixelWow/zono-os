@@ -136,8 +136,8 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
         <Toggle label="הפעל סנכרון אוטומטי" desc="מנוע הרדאר ירוץ אוטומטית כל שעה" checked={form.sync_enabled} onChange={(v) => set("sync_enabled", v)} />
         <Toggle label="מצב חכם מומלץ" desc="קצב סריקה משתנה לפי חום האזור — חוסך קרדיטים" checked={form.smart_sync_enabled} onChange={(v) => set("smart_sync_enabled", v)} />
         <div className="grid grid-cols-2 gap-2">
-          <ProviderToggle label="יד2" available={initial.health.find((h) => h.provider === "yad2")} checked={form.provider_yad2_enabled} onChange={(v) => set("provider_yad2_enabled", v)} />
-          <ProviderToggle label="מדלן" available={initial.health.find((h) => h.provider === "madlan")} checked={form.provider_madlan_enabled} onChange={(v) => set("provider_madlan_enabled", v)} />
+          <ProviderToggle label="מודעה חיצונית" available={initial.health.find((h) => h.provider === "yad2")} checked={form.provider_yad2_enabled} onChange={(v) => set("provider_yad2_enabled", v)} />
+          <ProviderToggle label="מודעה חיצונית" available={initial.health.find((h) => h.provider === "madlan")} checked={form.provider_madlan_enabled} onChange={(v) => set("provider_madlan_enabled", v)} />
         </div>
 
         {/* Provider health badges */}
@@ -151,7 +151,7 @@ export function PropertyRadarSettingsView({ initial }: { initial: PropertyRadarP
             </div>
           ))}
           <p className="mt-1 border-t border-black/5 pt-1.5 text-[11px] text-ink/50">
-            מצב ספק: <b>{initial.env.providerMode}</b> · טוקן Apify: {initial.env.apifyTokenExists ? "מוגדר" : "חסר"} · Actor יד2: {initial.env.yad2ActorConfigured ? "מוגדר" : "חסר"} · Actor מדלן: {initial.env.madlanActorConfigured ? "מוגדר" : "חסר"}
+            מצב ספק: <b>{initial.env.providerMode}</b> · טוקן Apify: {initial.env.apifyTokenExists ? "מוגדר" : "חסר"} · Actor מודעה חיצונית: {initial.env.yad2ActorConfigured ? "מוגדר" : "חסר"} · Actor מודעה חיצונית: {initial.env.madlanActorConfigured ? "מוגדר" : "חסר"}
           </p>
         </div>
       </Section>

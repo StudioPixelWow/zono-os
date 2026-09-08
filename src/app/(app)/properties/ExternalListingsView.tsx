@@ -29,7 +29,7 @@ import type { ImportDiagnostics } from "@/lib/external-listings/service";
 import type { Database } from "@/lib/supabase/types";
 
 type Row = Database["public"]["Tables"]["external_listings"]["Row"];
-const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
+const SOURCE_LABELS: Record<string, string> = { yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", facebook: "פייסבוק", manual_external: "ידני", partner_api: "שותף" };
 const DETECTION_STATUS: Record<string, { label: string; cls: string }> = {
   auto: { label: "זוהה אוטומטית", cls: "text-success" },
   needs_review: { label: "דורש בדיקה", cls: "text-warning" },
@@ -476,7 +476,7 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
 
       {/* Filters */}
       <div className="bg-card border-line flex flex-wrap gap-2 rounded-[20px] border p-3">
-        <select className={field} value={source} onChange={(e) => setSource(e.target.value)}><option value="">כל המקורות</option><option value="yad2">יד2</option><option value="madlan">מדלן</option></select>
+        <select className={field} value={source} onChange={(e) => setSource(e.target.value)}><option value="">כל המקורות</option><option value="yad2">מודעה חיצונית</option><option value="madlan">מודעה חיצונית</option></select>
         <select className={field} value={sourceType} onChange={(e) => setSourceType(e.target.value)}><option value="">כל סוגי הפרסום</option><option value="private_seller">מוכר פרטי</option><option value="broker">פרסום מתווך</option><option value="agency">משרד תיווך</option><option value="unknown">לא ידוע</option></select>
         <input className={field} type="number" placeholder="חדרים מ-" value={minRooms} onChange={(e) => setMinRooms(e.target.value)} />
         <input className={field} type="number" placeholder="מחיר מ-" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />

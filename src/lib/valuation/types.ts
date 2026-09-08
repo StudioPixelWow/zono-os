@@ -295,8 +295,8 @@ export interface ValuationRecord {
 export const SOURCE_LABEL: Record<ComparableSource, string> = {
   govmap: "GovMap",
   tax_authority: "רשות המסים",
-  madlan: "Madlan",
-  yad2: "יד2",
+  madlan: "מודעה חיצונית",
+  yad2: "מודעה חיצונית",
   zono: "ZONO",
 };
 

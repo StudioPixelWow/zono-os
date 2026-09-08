@@ -178,8 +178,8 @@ async function readStatus(
   }));
 
   const providersEnabled: string[] = [];
-  if (settings.provider_yad2_enabled) providersEnabled.push("יד2");
-  if (settings.provider_madlan_enabled) providersEnabled.push("מדלן");
+  if (settings.provider_yad2_enabled) providersEnabled.push("מודעה חיצונית");
+  if (settings.provider_madlan_enabled) providersEnabled.push("מודעה חיצונית");
 
   // Daily market events stats (Phase 11) — scoped to the org's active cities.
   const cityList = [...cities];
@@ -280,8 +280,8 @@ async function readProviderHealth(db: Db, orgId: string): Promise<ProviderHealth
 
   const out: ProviderHealth[] = [];
   if (isDev) out.push(build("mock", "בדיקה (Mock)", true, true));
-  out.push(build("yad2", "יד2", env.providerMode === "apify" && env.apifyTokenExists && !!env.yad2ActorId, env.yad2Enabled));
-  out.push(build("madlan", "מדלן", env.providerMode === "apify" && env.apifyTokenExists && !!env.madlanActorId, env.madlanEnabled));
+  out.push(build("yad2", "מודעה חיצונית", env.providerMode === "apify" && env.apifyTokenExists && !!env.yad2ActorId, env.yad2Enabled));
+  out.push(build("madlan", "מודעה חיצונית", env.providerMode === "apify" && env.apifyTokenExists && !!env.madlanActorId, env.madlanEnabled));
   return out;
 }
 
@@ -360,9 +360,9 @@ export async function runManualMarketSync(input: ManualSyncInput = {}): Promise<
   if (!provider) return { ...empty, skippedReason: "לא נבחר ספק" };
   if (provider === "mock" && !isDev) return { ...empty, skippedReason: "Mock זמין רק בפיתוח" };
   if (provider === "yad2" && (!settings.provider_yad2_enabled || env.providerMode !== "apify" || !env.apifyTokenExists || !env.yad2ActorId))
-    return { ...empty, skippedReason: "יד2 מושבת/לא מוגדר" };
+    return { ...empty, skippedReason: "מודעה חיצונית מושבתת/לא מוגדרת" };
   if (provider === "madlan" && (!settings.provider_madlan_enabled || env.providerMode !== "apify" || !env.apifyTokenExists || !env.madlanActorId))
-    return { ...empty, skippedReason: "מדלן מושבת/לא מוגדר" };
+    return { ...empty, skippedReason: "מודעה חיצונית מושבתת/לא מוגדרת" };
 
   const cities = await getOrgActiveCities(db, orgId);
   if (cities.length === 0) return { ...empty, skippedReason: "לא הוגדרו אזורי התמחות" };
@@ -443,12 +443,12 @@ export async function runManualPropertyRadarSync(
   if (!provider) return { ...empty, skippedReason: "לא נבחר ספק" };
   if (provider === "mock" && !isDev) return { ...empty, skippedReason: "Mock זמין רק בפיתוח" };
   if (provider === "yad2") {
-    if (!settings.provider_yad2_enabled || !env.yad2Enabled) return { ...empty, skippedReason: "יד2 מושבת" };
-    if (env.providerMode !== "apify" || !env.apifyTokenExists || !env.yad2ActorId) return { ...empty, skippedReason: "יד2 לא מוגדר (חסר טוקן/Actor)" };
+    if (!settings.provider_yad2_enabled || !env.yad2Enabled) return { ...empty, skippedReason: "מודעה חיצונית מושבתת" };
+    if (env.providerMode !== "apify" || !env.apifyTokenExists || !env.yad2ActorId) return { ...empty, skippedReason: "מודעה חיצונית לא מוגדרת (חסר טוקן/Actor)" };
   }
   if (provider === "madlan") {
-    if (!settings.provider_madlan_enabled || !env.madlanEnabled) return { ...empty, skippedReason: "מדלן מושבת" };
-    if (env.providerMode !== "apify" || !env.apifyTokenExists || !env.madlanActorId) return { ...empty, skippedReason: "מדלן לא מוגדר (חסר טוקן/Actor)" };
+    if (!settings.provider_madlan_enabled || !env.madlanEnabled) return { ...empty, skippedReason: "מודעה חיצונית מושבתת" };
+    if (env.providerMode !== "apify" || !env.apifyTokenExists || !env.madlanActorId) return { ...empty, skippedReason: "מודעה חיצונית לא מוגדרת (חסר טוקן/Actor)" };
   }
 
   const startedAtIso = new Date().toISOString();

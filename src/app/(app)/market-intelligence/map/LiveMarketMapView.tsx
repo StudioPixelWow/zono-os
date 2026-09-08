@@ -407,7 +407,7 @@ export function LiveMarketMapView({ data }: { data: MapIntelligenceDTO }) {
               </div>
               {selected.href && <Link href={selected.href} prefetch={false} className="text-muted text-center text-[11px] font-semibold hover:underline">התאמות קונים, לוח זמנים ומצב שיווק — בעמוד הנכס ←</Link>}
             </div>
-            <p className="text-muted text-[11px] leading-relaxed">מקורות חיצוניים (יד2/מדלן) משמשים כמידע בלבד — הצפייה והפעולה נשארות בתוך ZONO.</p>
+            <p className="text-muted text-[11px] leading-relaxed">מקורות חיצוניים משמשים כמידע בלבד — הצפייה והפעולה נשארות בתוך ZONO.</p>
           </div>
         )}
       </IntelligenceDrawer>

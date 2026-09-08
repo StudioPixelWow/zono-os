@@ -29,7 +29,7 @@ const GROUPS: Group[] = [
       { label: "מותג וזהות", href: "/settings/brand", icon: "Presentation", desc: "פרופיל, לוגו, צבעי מותג וסגנון — מקור האמת לכל העיצובים" },
       { label: "הצוות", href: "/team", icon: "Users", desc: "ניהול הסוכנים וההרשאות במשרד" },
       { label: "אזורי פעילות", href: "/settings/operating-areas", icon: "MapPin", desc: "ניהול ערי ושכונות הפעילות שלך" },
-      { label: "סנכרון נכסים אוטומטי", href: "/settings/property-radar", icon: "Locate", desc: "סריקת יד2/מדלן, התראות וקרדיטים" },
+      { label: "סנכרון נכסים אוטומטי", href: "/settings/property-radar", icon: "Locate", desc: "סריקת מודעות חיצוניות, התראות וקרדיטים" },
     ],
   },
   {

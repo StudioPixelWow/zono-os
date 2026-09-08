@@ -31,7 +31,7 @@ const SECTIONS: { key: keyof MarketingKit; label: string }[] = [
   { key: "whatsapp", label: "הודעת WhatsApp" },
   { key: "facebook", label: "פוסט פייסבוק" },
   { key: "instagram", label: "כיתוב אינסטגרם" },
-  { key: "portal", label: "תיאור יד2/מדלן" },
+  { key: "portal", label: "תיאור מודעה חיצונית" },
   { key: "seoTitle", label: "כותרת SEO" },
   { key: "seoMeta", label: "תיאור מטא SEO" },
   { key: "audienceFit", label: "התאמת קהל יעד" },

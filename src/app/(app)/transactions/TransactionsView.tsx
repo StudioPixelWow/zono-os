@@ -58,7 +58,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
       try {
         const s = await startMadlanSyncAction();
         if (s.needsConfig) { setError("הגדר עיר/שכונות פעילות בפרופיל כדי לסנכרן עסקאות."); return; }
-        if (s.error || !s.runId) { setError(s.error ?? "כשל בהתחלת ריצת מדלן"); return; }
+        if (s.error || !s.runId) { setError(s.error ?? "כשל בהתחלת ריצת עסקאות שוק"); return; }
         const t0 = Date.now();
         let datasetId = s.datasetId; let status = "RUNNING";
         const TERMINAL = ["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"];
@@ -71,7 +71,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
           setProgress({ status, elapsed: Math.round((Date.now() - t0) / 1000) });
           if (TERMINAL.includes(status)) break;
         }
-        if (status !== "SUCCEEDED") { setProgress(null); setError(`ריצת מדלן הסתיימה בסטטוס ${status}`); return; }
+        if (status !== "SUCCEEDED") { setProgress(null); setError(`ריצת עסקאות שוק הסתיימה בסטטוס ${status}`); return; }
         setProgress({ status: "SAVING", elapsed: Math.round((Date.now() - t0) / 1000) });
         const r = await finishMadlanSyncAction(datasetId!);
         setProgress(null);
@@ -94,7 +94,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/transactions/coverage" className="text-brand-strong inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold"><Icon name="Map" size={15} />כיסוי דאטה</Link>
-          <Button size="sm" variant="secondary" onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Radar" size={15} />}>מדלן (ניסיוני)</Button>
+          <Button size="sm" variant="secondary" onClick={runMadlan} disabled={pending} leadingIcon={<Icon name="Radar" size={15} />}>עסקאות שוק (ניסיוני)</Button>
           <Button onClick={runGovmap} disabled={pending} leadingIcon={<Icon name="Landmark" size={16} />}>{pending ? "מסנכרן…" : "סנכרן עסקאות"}</Button>
         </div>
       </div>
@@ -148,7 +148,7 @@ export function TransactionsView({ board }: { board: TransactionsBoard }) {
                     <td className="text-muted px-3 py-2">{t.building_year ?? "—"}</td>
                     <td className="text-muted px-3 py-2 whitespace-nowrap text-[11px]">{t.mediation ?? "—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-[11px]">
-                      <span className={cn("rounded-md px-1.5 py-0.5 font-bold", t.source_platform === "madlan_transactions" ? "bg-brand-soft text-brand-strong" : "bg-surface text-muted")}>{t.source_platform === "madlan_transactions" ? "מדלן" : (t.raw_payload as { _mock?: boolean })?._mock ? "הדגמה" : "GovMap"}</span>
+                      <span className={cn("rounded-md px-1.5 py-0.5 font-bold", t.source_platform === "madlan_transactions" ? "bg-brand-soft text-brand-strong" : "bg-surface text-muted")}>{t.source_platform === "madlan_transactions" ? "עסקאות שוק" : (t.raw_payload as { _mock?: boolean })?._mock ? "הדגמה" : "GovMap"}</span>
                       {t.duplicate_of && <span className="text-warning mr-1">⚠</span>}
                     </td>
                   </tr>

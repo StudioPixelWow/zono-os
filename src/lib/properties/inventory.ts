@@ -59,8 +59,8 @@ export function inventoryBadges(p: InventoryShape, currentUserId: string | null)
   if (p.is_agent_exclusive) b.push({ label: "בלעדיות שלי", tone: "success" });
   if (p.is_office_exclusive) b.push({ label: "בלעדיות משרד", tone: "success" });
   if (p.is_external_inventory || p.source_type === "external") b.push({ label: "חיצוני", tone: "warning" });
-  if (p.external_source === "yad2") b.push({ label: "יד2", tone: "neutral" });
-  if (p.external_source === "madlan") b.push({ label: "מדלן", tone: "neutral" });
+  if (p.external_source === "yad2") b.push({ label: "מודעה חיצונית", tone: "neutral" });
+  if (p.external_source === "madlan") b.push({ label: "מודעה חיצונית", tone: "neutral" });
   if (p.internal_double_side_priority) b.push({ label: "דו״צ פוטנציאלי", tone: "brand" });
   return b;
 }

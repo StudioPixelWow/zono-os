@@ -8,7 +8,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   { term: "Buyer Match", slug: "buyer-match", definition: "התאמה מחושבת בין קונה לנכס לפי תקציב, אזור, חדרים, סוג ועוד — עם ציון התאמה והסבר.", whereUsed: "התאמות, קונים, נכסים", related: ["opportunity-score"] },
   { term: "Hot Deal", slug: "hot-deal", definition: "נכס/מודעה עם Opportunity Score גבוה במיוחד — שווה פעולה מהירה.", whereUsed: "רדאר נכסים, דשבורד", related: ["opportunity-score"] },
   { term: "Journey", slug: "journey", definition: "מסע הלקוח/הנכס — רצף שלבים אוטומטי (טריגרים, פעולות, השהיות) שמלווה עסקה מקצה לקצה.", whereUsed: "מסעות, Journey Builder", related: ["queue"] },
-  { term: "Provider", slug: "provider", definition: "מקור נתונים חיצוני (Yad2, Madlan, GovMap) שממנו ZONO מושכת מודעות/עסקאות בסנכרון.", whereUsed: "מודעות חיצוניות, הגדרות", related: ["market-cache", "snapshot"] },
+  { term: "Provider", slug: "provider", definition: "מקור נתונים חיצוני (למשל GovMap) שממנו ZONO מושכת מודעות/עסקאות בסנכרון.", whereUsed: "מודעות חיצוניות, הגדרות", related: ["market-cache", "snapshot"] },
   { term: "Snapshot", slug: "snapshot", definition: "צילום נתונים בנקודת זמן (שוק/משרד/מודיעין) שעליו מחושבים מגמות והשוואות.", whereUsed: "מודיעין שוק, מודיעין משרד", related: ["market-cache"] },
   { term: "Feature Flag", slug: "feature-flag", definition: "מתג שמפעיל/מכבה יכולת בפלטפורמה לכל ארגון — בלי לפרוס קוד חדש.", whereUsed: "ניהול פלטפורמה", related: ["health-check"] },
   { term: "Queue", slug: "queue", definition: "תור עבודות ברקע (סנכרון, מסעות, חישובים). „תקוע” = יש עבודה שלא הושלמה.", whereUsed: "בריאות מערכת, מסעות", related: ["circuit-breaker", "journey"] },

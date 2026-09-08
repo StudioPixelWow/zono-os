@@ -111,14 +111,14 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
         const mode = (count ?? 0) < 800 ? "full" : "quick";
         const s = await syncExternalListingsForOrganization(organizationId, { mode });
         externalSyncRan = true;
-        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (${mode}): ${s.inserted} חדשים · ${s.updated} עודכנו` };
+        return { status: s.success ? "success" : "partial", summary: `מודעות חיצוניות (${mode}): ${s.inserted} חדשים · ${s.updated} עודכנו` };
       }));
     } else if (passiveEntry && process.env.APIFY_TOKEN) {
       steps.push(await runStep("external_sync", false, async () => {
         // Lightweight maintenance only — bounded "quick" top-up. Depth is cron's job.
         const s = await syncExternalListingsForOrganization(organizationId, { mode: "quick" });
         externalSyncRan = true;
-        return { status: s.success ? "success" : "partial", summary: `יד2/מדלן (רענון קל): ${s.inserted} חדשים · ${s.updated} עודכנו` };
+        return { status: s.success ? "success" : "partial", summary: `מודעות חיצוניות (רענון קל): ${s.inserted} חדשים · ${s.updated} עודכנו` };
       }));
     } else {
       steps.push(skippedStep("external_sync", "סריקה מתבצעת ידנית או ב-cron"));

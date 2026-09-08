@@ -436,7 +436,7 @@ function ActionCard({ item, onOpen }: { item: ActionItem; onOpen: () => void }) 
   );
 }
 
-const PROVIDER_LABEL: Record<string, string> = { mock: "בדיקה", yad2: "יד2", madlan: "מדלן" };
+const PROVIDER_LABEL: Record<string, string> = { mock: "בדיקה", yad2: "מודעה חיצונית", madlan: "מודעה חיצונית" };
 const HEALTH_TONE: Record<string, string> = { online: "bg-emerald-100 text-emerald-700", not_configured: "bg-black/5 text-ink/50", disabled: "bg-black/5 text-ink/50", error: "bg-red-100 text-red-700", unknown: "bg-amber-100 text-amber-700" };
 function ProviderHealthWidget({ data }: { data: PropertyRadarLiveData }) {
   const providers = data.providerHealth.filter((p) => p.provider !== "mock");

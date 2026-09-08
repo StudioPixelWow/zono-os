@@ -311,5 +311,5 @@ function DataQuality({ d }: { d: MarketCockpit }) {
     </div>
   );
 }
-const SOURCE_LABELS: Record<string, string> = { yad2: "יד2", madlan: "מדלן", homeless: "הומלס", komo: "קומו" };
+const SOURCE_LABELS: Record<string, string> = { yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", homeless: "הומלס", komo: "קומו" };
 function sourceLabel(s: string): string { return SOURCE_LABELS[s.toLowerCase()] ?? s; }

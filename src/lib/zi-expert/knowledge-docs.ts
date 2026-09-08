@@ -44,7 +44,7 @@ const DEFS: ArticleDef[] = [
     slug: "property-radar", title: "Property Radar — רדאר נכסים", category: "מודיעין שוק",
     module: "property-radar-live", routes: ["/property-radar", "/exclusive-opportunities"], role: "agent",
     summary: "רדאר הנכסים סורק את השוק בזמן אמת ומציף נכסים חדשים, ירידות מחיר, עסקאות חמות ונכסים פרטיים — מדורגים לפי ציון הזדמנות.",
-    whatItDoes: "סורק מקורות שוק (יד2/מדלן) באזורי ההתמחות שלך, מזהה שינויים, ומדרג כל נכס לפי Opportunity Score וכמות קונים מתאימים.",
+    whatItDoes: "סורק מקורות שוק חיצוניים באזורי ההתמחות שלך, מזהה שינויים, ומדרג כל נכס לפי Opportunity Score וכמות קונים מתאימים.",
     whoCanUse: "כל סוכן עם אזור התמחות מוגדר. ככל שמוגדרים יותר אזורים — הרדאר מנטר רחב יותר.",
     whereToFind: "תפריט ראשי → 'רדאר נכסים — חי' (/property-radar). נכסים פרטיים בלעדיים גם תחת 'הזדמנויות בלעדיות'.",
     keyTerms: [

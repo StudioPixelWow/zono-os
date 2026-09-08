@@ -41,7 +41,7 @@ export function MarketIntelligenceDashboardView({ data }: { data: IntelligenceDa
           primaryHref="/market-intelligence/listings"
           secondary={[{ label: "🗺️ מפת שוק חיה", href: "/market-intelligence/map" }, { label: "⚙️ רענן מערכת", href: "/admin/system-health" }]}
           whatNext={[
-            "מודעות חיצוניות מיד2, מדלן ומקורות נוספים ייאספו",
+            "מודעות חיצוניות ממקורות נוספים ייאספו",
             "הזדמנויות וירידות מחיר יזוהו אוטומטית",
             "שכונות וערים מובילות ידורגו לפי נפח",
             "מגמות שוק ומומנטום יחושבו",

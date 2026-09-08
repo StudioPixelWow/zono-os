@@ -30,8 +30,8 @@ export const TEMPERATURE_OPTIONS = (
 
 // ── Source (reuses lead_source enum) ─────────────────────────────────────────
 export const SOURCE_LABELS: Record<LeadSource, string> = {
-  yad2: "יד2",
-  madlan: "מדלן",
+  yad2: "מודעה חיצונית",
+  madlan: "מודעה חיצונית",
   facebook: "פייסבוק",
   instagram: "אינסטגרם",
   website: "אתר",

@@ -17,7 +17,7 @@ interface ProvenanceLike {
   created_at?: string | null;
 }
 
-const SOURCE_LABEL: Record<string, string> = { yad2: "יד2", madlan: "מדלן", manual: "ידני" };
+const SOURCE_LABEL: Record<string, string> = { yad2: "מודעה חיצונית", madlan: "מודעה חיצונית", manual: "ידני" };
 
 export function PropertyProvenance({ property }: { property: ProvenanceLike }) {
   const isImported = property.property_origin === "external_imported" || property.source_type === "external";
