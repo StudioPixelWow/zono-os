@@ -2,7 +2,7 @@
 // 🌐 Brokerage research providers (Phase 26.13b, PART 2). Server-safe.
 // Provider abstraction with a strict structured contract. Web/Google/Facebook/
 // LinkedIn require live access we don't have → they report not_configured and
-// return nothing (never fabricated). Yad2/Madlan return REAL evidence derived
+// return nothing (never fabricated). external-listing sources return REAL evidence derived
 // from the external_listings rows we ALREADY own (no scraping, no bypass).
 // STEP-7 applies: an extracted name equal to the broker's own name is NOT an
 // office name.

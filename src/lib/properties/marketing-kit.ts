@@ -92,7 +92,7 @@ export interface MarketingKit {
   whatsapp: string;
   facebook: string;
   instagram: string;
-  portal: string; // Yad2/Madlan-style
+  portal: string; // external-listing sources-style
   luxury: string;
   seoTitle: string;
   seoMeta: string;

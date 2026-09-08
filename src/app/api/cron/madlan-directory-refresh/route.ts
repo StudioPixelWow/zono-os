@@ -26,7 +26,7 @@ const s = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : 
  *     cities with active listings → all active israel_localities.
  *   • stalest-first within priority, so nothing starves.
  *   • learns + skips: a locality that returned 0 offices is deprioritized for
- *     NO_DIRECTORY_TTL (avoids re-hitting villages with no Madlan directory).
+ *     NO_DIRECTORY_TTL (avoids re-hitting villages with no external listing source directory).
  *   • hard per-city budget gate: a city is only STARTED when enough budget
  *     remains to finish it; otherwise it is left for the next run (still stalest)
  *     — deferred, NOT failed. Every invocation exits cleanly by application logic.

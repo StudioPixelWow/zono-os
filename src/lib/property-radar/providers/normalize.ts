@@ -2,7 +2,7 @@
 // ZONO Property Radar™ — raw → normalized mapping (pure, client-safe).
 // Maps a scraper's raw listing item into the radar's NormalizedListing shapes.
 // Reuses the battle-tested key aliases from the External Listings importer so
-// Yad2 / Madlan payload variations are handled. Crucially derives listingType
+// external-listing sources payload variations are handled. Crucially derives listingType
 // (private / broker) — the signal the private-property alert depends on.
 // ============================================================================
 import type { ListingType, PropertyProviderName } from "../types";

@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-// Real Apify (Yad2). Uses the authenticated org; never trusts a client org id.
+// Real Apify (external listing source). Uses the authenticated org; never trusts a client org id.
 export async function POST(req: NextRequest) {
   const { profile } = await getSessionContext();
   if (!profile) return NextResponse.json({ error: "unauthorized" }, { status: 401 });

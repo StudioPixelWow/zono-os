@@ -8,7 +8,7 @@
 //   STEP 2  collect PUBLIC evidence — primarily the observed listing evidence we
 //           already hold (external_listings.detected_broker_name / contact_name /
 //           source / domain), plus shared phone/email/domain. External web
-//           providers (Google Business/Maps/Facebook/LinkedIn/Yad2/Madlan/site)
+//           providers (Google Business/Maps/Facebook/LinkedIn/external-listing sources/site)
 //           are pluggable but currently NOT configured → counted as skipped,
 //           never fabricated.
 //   STEP 3  build an evidence package
@@ -100,7 +100,7 @@ export async function runNationalOfficeRegistry(
     brokersResolved: 0, brokersPendingReview: 0, brokersUnresolved: 0, edgesCreated: 0,
     agentsProcessed: 0, agentsWithPublicEvidence: 0, agentsWithOfficeHint: 0, noPublicEvidence: 0,
     personNameCandidatesBlocked: 0, aiConfigured: aiReady, aiRequests: 0, aiCandidatesCreated: 0, verifiedCandidates: 0, rejectedCandidates: 0,
-    // external web providers (Google/FB/LinkedIn/Yad2/Madlan/site) are all unconfigured here.
+    // external web providers (Google/FB/LinkedIn/external-listing sources/site) are all unconfigured here.
     publicSourcesSkipped: readiness.providers.filter((p) => p.kind === "public_search" && !p.enabled).length || 1,
     errors: [],
   };

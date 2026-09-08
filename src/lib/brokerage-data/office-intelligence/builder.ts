@@ -28,7 +28,7 @@ function searchPlan(name: string, brand: string | null, branch: string | null, c
   const q = [
     `${name} ${city}`, `${name} תיווך`, `${name} נדל"ן`, `${name} משרד תיווך`,
     `${name} טלפון`, `${name} כתובת`, `${name} אתר`, `${name} Facebook`,
-    `${name} Instagram`, `${name} LinkedIn`, `${name} יד2`, `${name} מדלן`, `${name} B144`, `${name} Easy`,
+    `${name} Instagram`, `${name} LinkedIn`, `${name} B144`, `${name} Easy`,
   ];
   if (brand) { q.push(`${brand} ${city}`); if (branch) q.push(`${brand} ${branch}`); q.push(`${brand} סניף ${city}`); }
   return q;

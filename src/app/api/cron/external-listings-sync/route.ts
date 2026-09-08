@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
 
   const startedAt = Date.now();
   const isNightly = new Date().getUTCHours() === NIGHTLY_HOUR_UTC;
-  // The Apify actors return as many as we request (verified: 500/city on Yad2),
+  // The Apify actors return as many as we request (verified: 500/city on external listing source),
   // so per-city depth is OUR cap, not the source. Nightly uses "full" (500/city)
   // for real coverage; the wall-clock budget + stalest-first ordering defer any
   // remaining cities to the next run, so no single run is starved. A secret-authed

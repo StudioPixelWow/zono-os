@@ -1,7 +1,7 @@
 // ============================================================================
 // ZONO — Agency brand/franchise detector (Phase 26.2, PURE).
 // Detects known real-estate franchises in raw text (HE + EN spellings) and
-// returns the canonical brand. Also flags listing PLATFORMS (Yad2/Madlan) which
+// returns the canonical brand. Also flags listing PLATFORMS (external-listing sources) which
 // are NOT agencies. Deterministic.
 // ============================================================================
 import type { BrandDetection } from "./agencyIdentityTypes";

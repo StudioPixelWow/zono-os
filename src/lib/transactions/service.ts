@@ -21,7 +21,7 @@ import {
 import { fetchMadlanDealsFromDataset, getMadlanRun, isMadlanConfigured, MADLAN_ACTOR_NAME, MADLAN_SOURCE, madlanActorId, madlanDocId, normalizeMadlanTransaction, runMadlanDeals, startMadlanRun, type NormalizedMadlanTransaction } from "./madlan";
 
 const MADLAN_MAX_ROWS = 1000;
-/** Newest-first, capped to the most recent N — matches Madlan's city page. */
+/** Newest-first, capped to the most recent N — matches external listing source's city page. */
 function topRecent(rows: NormalizedMadlanTransaction[]): NormalizedMadlanTransaction[] {
   return [...rows].sort((a, b) => (b.dealDate ?? "").localeCompare(a.dealDate ?? "")).slice(0, MADLAN_MAX_ROWS);
 }
@@ -37,7 +37,7 @@ async function ctx() {
 
 // ── Agent market coverage resolution ─────────────────────────────────────────
 // `city` is the canonical GovMap spelling (קריית…) used for storage + filtering.
-// `rawCity` is the agent's original spelling (קרית…) — what Madlan expects.
+// `rawCity` is the agent's original spelling (קרית…) — what external listing source expects.
 interface AgentMarket { city: string | null; rawCity: string | null; neighborhoods: string[] }
 
 function resolveAgentMarket(profile: DB["users"]["Row"], org: DB["organizations"]["Row"] | null): AgentMarket {
@@ -222,22 +222,22 @@ async function persistTransactions(orgId: string, normalized: (NormalizedTransac
   return { imported, duplicates };
 }
 
-// ── Madlan (PRIMARY city-coverage source) ───────────────────────────────────
+// ── external listing source (PRIMARY city-coverage source) ───────────────────────────────────
 export interface MadlanSyncResult { imported: number; duplicates: number; crossSource: number; deals: number; needsConfig: boolean; error: string | null }
 
-/** Pull the full Madlan city transaction list for the agent's city (primary). */
+/** Pull the full external listing source city transaction list for the agent's city (primary). */
 export async function syncMadlanForAgent(): Promise<MadlanSyncResult> {
   const { orgId, userId, profile, organization } = await ctx();
   const market = resolveAgentMarket(profile, organization);
   if (!market.city) return { imported: 0, duplicates: 0, crossSource: 0, deals: 0, needsConfig: true, error: null };
   if (!isMadlanConfigured()) {
-    return { imported: 0, duplicates: 0, crossSource: 0, deals: 0, needsConfig: false, error: "APIFY_TOKEN missing — Madlan sync unavailable" };
+    return { imported: 0, duplicates: 0, crossSource: 0, deals: 0, needsConfig: false, error: "APIFY_TOKEN missing — external-source sync unavailable" };
   }
   const supabase = await createClient();
   const startedAt = new Date().toISOString();
   let deals = 0, imported = 0, duplicates = 0, crossSource = 0, error: string | null = null;
   try {
-    // Madlan needs the precise area docId (קרית-ביאליק-ישראל), not a free name.
+    // external listing source needs the precise area docId (קרית-ביאליק-ישראל), not a free name.
     const madlanCity = madlanDocId(market.rawCity ?? market.city!);
     const raws = await runMadlanDeals(madlanCity, null);
     deals = raws.length;
@@ -255,10 +255,10 @@ export async function syncMadlanForAgent(): Promise<MadlanSyncResult> {
   return { imported, duplicates, crossSource, deals, needsConfig: false, error };
 }
 
-// ── Non-blocking Madlan sync (client-polled live progress) ───────────────────
+// ── Non-blocking external listing source sync (client-polled live progress) ───────────────────
 export interface MadlanStart { runId: string | null; datasetId: string | null; city: string | null; needsConfig: boolean; error: string | null }
 
-/** Kick off the Madlan run (returns immediately) so the UI can poll progress. */
+/** Kick off the external listing source run (returns immediately) so the UI can poll progress. */
 export async function startMadlanSync(): Promise<MadlanStart> {
   const { profile, organization } = await ctx();
   const market = resolveAgentMarket(profile, organization);
@@ -306,7 +306,7 @@ export async function finishMadlanSync(datasetId: string): Promise<MadlanSyncRes
   return { imported, duplicates, crossSource, deals, needsConfig: false, error };
 }
 
-/** Insert new Madlan rows; dedup by madlan id + composite; mark cross-source dups vs GovMap. */
+/** Insert new external listing source rows; dedup by madlan id + composite; mark cross-source dups vs GovMap. */
 async function persistMadlanTransactions(orgId: string, rows: NormalizedMadlanTransaction[]): Promise<{ imported: number; duplicates: number; crossSource: number }> {
   if (!rows.length) return { imported: 0, duplicates: 0, crossSource: 0 };
   const supabase = await createClient();

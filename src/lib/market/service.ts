@@ -56,7 +56,7 @@ async function buildSnapshots(db: DB, orgId: string): Promise<MarketSnapshotSumm
   const today = new Date().toISOString().slice(0, 10);
   const tx90Since = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
   const tx180Since = new Date(Date.now() - 180 * DAY).toISOString().slice(0, 10);
-  // Real closed transactions (GovMap/Madlan) + the most recent PRIOR snapshot per
+  // Real closed transactions (GovMap/external listing source) + the most recent PRIOR snapshot per
   // locality (for momentum). Both org-scoped; no fabricated data.
   const [txRes, priorSnapRes] = await Promise.all([
     db.from("property_transactions").select("city_name,deal_date").eq("organization_id", orgId).limit(8000),

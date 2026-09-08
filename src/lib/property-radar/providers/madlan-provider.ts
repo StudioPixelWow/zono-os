@@ -1,5 +1,5 @@
 // ============================================================================
-// ZONO Property Radar™ — Madlan provider (connector-backed, real).
+// ZONO Property Radar™ — external listing source provider (connector-backed, real).
 // Fetches via the generic Apify connector, configured purely via env
 // (APIFY_MADLAN_ACTOR_ID + token). Fails with ProviderNotConfiguredError when
 // not configured — never crashes the build.

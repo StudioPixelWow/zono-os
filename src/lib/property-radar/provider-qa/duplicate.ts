@@ -1,6 +1,6 @@
 // ============================================================================
 // ZONO Property Radar™ — cross-provider duplicate detection (pure).
-// Same physical property listed on Yad2 AND Madlan should resolve to ONE market
+// Same physical property listed on external listing source AND external listing source should resolve to ONE market
 // property while keeping BOTH provider references. Signals: phone, address,
 // price+rooms, image overlap, title similarity. Detection only — no destructive
 // merge here (the caller decides); we return groups + a confidence score.

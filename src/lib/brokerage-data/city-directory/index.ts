@@ -1,5 +1,5 @@
 // ============================================================================
-// 🗂️ Madlan City Directory — public surface. Directory answers WHO EXISTS and
+// 🗂️ external listing source City Directory — public surface. Directory answers WHO EXISTS and
 // WHO MADLAN ASSOCIATES WITH WHOM; ZONO scans answer WHO IS ACTIVE. Never
 // collapse the layers.
 // ============================================================================

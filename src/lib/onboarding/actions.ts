@@ -236,11 +236,11 @@ export async function completeOnboarding(
           const { syncExternalListingsForOrganization } = await import("@/lib/external-listings/service");
           // The ONE-TIME signup scan uses "full" (≤500/city PER SOURCE) so a new
           // office opens to a DEEP picture of its registration city — up to ~1000
-          // real listings (Yad2 + Madlan) instead of a thin sample. Still bounded
+          // real listings (external-listing sources) instead of a thin sample. Still bounded
           // (only the office's own operating cities, one pass; the sync self-checkpoints
           // under its wall-clock budget and the nightly cron backstops any tail).
           // The per-login refresh-on-entry stays "quick" for cost. NO fabrication —
-          // real Yad2/Madlan via the provider only.
+          // real external-listing sources via the provider only.
           void syncExternalListingsForOrganization(bootstrapOrgId, { mode: "full" })
             .catch((e) => console.error("[onboarding] bootstrap scan skipped:", e));
         }

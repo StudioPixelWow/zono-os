@@ -1,7 +1,7 @@
 // ============================================================================
 // 📊 Directory ≠ Activity — MANDATORY separation (server-only, read-only).
 // ----------------------------------------------------------------------------
-// DIRECTORY presence (who EXISTS per Madlan) and ZONO-observed ACTIVITY (who is
+// DIRECTORY presence (who EXISTS per external listing source) and ZONO-observed ACTIVITY (who is
 // currently marketing in our external_listings scans) are DIFFERENT metrics and
 // are computed separately. An office can exist in the directory with 0 observed
 // listings — that is honest, not an error. "Active" is DERIVED (a join), never a

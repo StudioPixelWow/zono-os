@@ -1,6 +1,6 @@
 // ============================================================================
 // ZONO Property Radar™ — Phase 12 provider QA types (client-safe, no I/O).
-// Validates REAL provider data (Yad2 / Madlan via Apify) before it reaches the
+// Validates REAL provider data (external-listing sources via Apify) before it reaches the
 // sync engine, measures normalization quality, detects schema drift + duplicates,
 // and records daily provider metrics. Pure layer — never throws, never blocks.
 // ============================================================================

@@ -1,7 +1,7 @@
 /**
- * Madlan City Transactions provider — PRIMARY city-coverage source. Uses the
+ * external listing source City Transactions provider — PRIMARY city-coverage source. Uses the
  * Apify actor `swerve/madlan-analytics` with dataTypes:["deals"], which queries
- * Madlan.co.il's public GraphQL API directly and returns the full city
+ * external listing source.co.il's public GraphQL API directly and returns the full city
  * transaction list (the ~1000 rows shown on madlan.co.il/area-info/<city>).
  * SERVER-ONLY: APIFY_TOKEN never exposed. Defensive mapping + full raw payload.
  */
@@ -88,15 +88,15 @@ export function buildMadlanInput(city: string, neighbourhood: string | null): Re
 }
 
 /**
- * Build Madlan's precise area docId (e.g. "קרית-ביאליק-ישראל") so the actor
+ * Build external listing source's precise area docId (e.g. "קרית-ביאליק-ישראל") so the actor
  * returns ONLY that city — not the whole metro. Normalizes common spellings:
- * "ק.ביאליק" / "ק ביאליק" → "קרית …", "קריית" → "קרית" (Madlan's spelling).
+ * "ק.ביאליק" / "ק ביאליק" → "קרית …", "קריית" → "קרית" (external listing source's spelling).
  */
 export function madlanDocId(city: string): string {
   let s = String(city).trim().replace(/["'׳״]/g, "");
   // Expand the "ק." / "ק'" / "ק " abbreviation to "קרית " (but not when already "קרית…").
   if (/^ק[.'׳״]\s*\S/.test(s) || /^ק\s+\S/.test(s)) s = s.replace(/^ק[.'׳״]?\s*/, "קרית ");
-  s = s.replace(/קריית/g, "קרית");          // Madlan uses one-yud קרית
+  s = s.replace(/קריית/g, "קרית");          // external listing source uses one-yud קרית
   s = s.replace(/\s+ישראל$/, "").trim();      // avoid double suffix
   s = s.replace(/\s+/g, "-");
   return `${s}-ישראל`;

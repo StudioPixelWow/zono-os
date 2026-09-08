@@ -166,7 +166,7 @@ export async function autoDiscoverNeighborhoodsAction() {
   return r;
 }
 
-// ── Non-blocking Madlan sync (live progress) ─────────────────────────────────
+// ── Non-blocking external listing source sync (live progress) ─────────────────────────────────
 export async function startMadlanSyncAction() {
   const { startMadlanSync } = await import("./service");
   return startMadlanSync();

@@ -2,8 +2,8 @@
 // ZONO Price Intelligence — provider layer contract (server-only).
 // ----------------------------------------------------------------------------
 // A provider returns comparable evidence for a subject property from ONE source.
-// "Real" providers read data the org already imported (GovMap transactions, Yad2/
-// Madlan listings, ZONO internal inventory, the broker's own closed deals).
+// "Real" providers read data the org already imported (GovMap transactions, external listing source/
+// external listing source listings, ZONO internal inventory, the broker's own closed deals).
 // "Stub" providers (direct Tax Authority / direct portal APIs) are NOT connected
 // in this module — they return status 'not_connected' and never invent records.
 // No illegal scraping is performed here; nothing fabricates official data.

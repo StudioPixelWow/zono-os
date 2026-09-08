@@ -1,5 +1,5 @@
 // ============================================================================
-// 🌱 discoverCityDirectory — seed System-B from the Madlan city directory.
+// 🌱 discoverCityDirectory — seed System-B from the external listing source city directory.
 // ----------------------------------------------------------------------------
 // Directory answers WHO EXISTS and WHO MADLAN ASSOCIATES WITH WHOM. This seeds
 // the EXISTING System-B tables (brokerage_offices / brokerage_agents /
@@ -12,7 +12,7 @@
 //   agents  : resolution_method='madlan_directory', resolution_sources=['madlan'],
 //             first/last_seen_at, last_verified_at
 //   identity: providers=['madlan'], evidence=[…]
-// A source-stated relationship is stored as "Madlan CURRENTLY associates X→Y"
+// A source-stated relationship is stored as "external listing source CURRENTLY associates X→Y"
 // (fresh, not eternal). If the source exposes no office for an agent we leave it
 // UNRESOLVED — never inferred here.
 // ============================================================================
@@ -240,7 +240,7 @@ async function lookupOfficeName(db: DB, officeId: string): Promise<string | null
 }
 
 /** Persist the source-stated agent→office relationship into the identity graph
- *  (idempotent by agent_id). Semantics: "Madlan CURRENTLY associates X→Y". */
+ *  (idempotent by agent_id). Semantics: "external listing source CURRENTLY associates X→Y". */
 async function upsertBrokerIdentity(db: DB, agentId: string, officeId: string, officeNm: string | null, a: DirectoryAgent, result: CityDirectorySeedResult): Promise<void> {
   const nowStamp = nowIso();
   const evidence = [{ source: DIRECTORY_SOURCE, observed_at: nowStamp, agent_source_id: a.sourceEntityId, office_source_id: a.officeSourceEntityId, semantics: "current_association_not_eternal" }];

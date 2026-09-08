@@ -34,7 +34,7 @@ export function stageQueries(city: string, o: AgentOptions): { stage: ResearchSt
   ] });
   // Stage 5 — listing portals.
   if (o.includePortals !== false) plan.push({ stage: "portals", queries: [
-    `יד2 תיווך ${city}`, `מדלן משרד תיווך ${city}`, `nadlan תיווך ${city}`,
+    `nadlan תיווך ${city}`,
   ] });
   // Stage 6 — social.
   if (o.includeSocial !== false) plan.push({ stage: "social", queries: [

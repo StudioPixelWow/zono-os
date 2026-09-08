@@ -1,5 +1,5 @@
 /**
- * External listing providers — real Apify-powered Yad2 / Madlan scrapers.
+ * External listing providers — real Apify-powered external-listing sources scrapers.
  * SERVER-ONLY: APIFY_TOKEN is read from the environment and never exposed.
  *
  * Env:
@@ -130,7 +130,7 @@ class ApifyProvider implements PropertyProvider {
 
   /**
    * INPUT ADAPTER — the single place to adapt to a real actor's schema.
-   * Defaults send the common Yad2/Madlan-style keys plus location/maxItems
+   * Defaults send the common external-listing sources-style keys plus location/maxItems
    * aliases. If an actor rejects city/dealType/maxListingsPerCity, edit here
    * (or override in the subclass) to match its actual required fields.
    */
@@ -150,7 +150,7 @@ class ApifyProvider implements PropertyProvider {
       q: city,
       text: city,
       keywords: city,
-      // The swerve Yad2/Madlan actors require dealType ∈ {"buy","rent","commercial"}.
+      // The swerve external-listing sources actors require dealType ∈ {"buy","rent","commercial"}.
       // "for sale" maps to "buy". searchListings runs BOTH buy + rent.
       dealType,
       dealTypes: [dealType],
@@ -227,7 +227,7 @@ class ApifyProvider implements PropertyProvider {
     })();
     const address = str(pick(raw, ["address", "fullAddress", "addressText"]));
     const description = str(pick(raw, ["listingDescription", "description", "text", "body"]));
-    // Yad2/Madlan listings often have no standalone title — derive one.
+    // external-listing sources listings often have no standalone title — derive one.
     const title = str(pick(raw, ["title", "name", "headline", "listingTitle"]))
       ?? address
       ?? (description ? description.replace(/\s+/g, " ").trim().slice(0, 80) : null);
@@ -255,7 +255,7 @@ class ApifyProvider implements PropertyProvider {
       balconies: num(pick(raw, ["balconies", "balconiesCount"])),
       floor: num(pick(raw, ["floor", "floorNumber"])),
       totalFloors: num(pick(raw, ["totalFloors", "floors", "buildingFloors"])),
-      // Yad2 exposes the numeric size only as `areaSqm`; fall back to it for sqm.
+      // external listing source exposes the numeric size only as `areaSqm`; fall back to it for sqm.
       sqm: num(pick(raw, ["sqm", "size", "squareMeters", "squareMeter", "square_meters", "area_sqm", "builtSqm", "squareMeterage", "meterage", "houseSize", "areaSqm"])),
       areaSqm: num(pick(raw, ["areaSqm", "builtArea", "gardenSize", "lotSize"])),
       // Prefer the has* boolean over numeric counts like `parking: 2`.
@@ -284,13 +284,13 @@ export class Yad2Provider extends ApifyProvider {
   constructor() {
     super("yad2", "APIFY_YAD2_ACTOR_ID", "swerve/yad2-scraper");
   }
-  // Yad2 input adapter — override buildInput here if the actor needs other keys.
+  // external listing source input adapter — override buildInput here if the actor needs other keys.
 }
 export class MadlanProvider extends ApifyProvider {
   constructor() {
     super("madlan", "APIFY_MADLAN_ACTOR_ID", "swerve/madlan-scraper");
   }
-  // Madlan input adapter — override buildInput here if the actor needs other keys.
+  // external listing source input adapter — override buildInput here if the actor needs other keys.
 }
 
 export function getProvider(source: string): PropertyProvider {

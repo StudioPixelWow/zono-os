@@ -34,7 +34,7 @@ export function buildAgencyIdentityFromRawText(input: AutoBuildInput): AgencyIde
   const brand = detectAgencyBrand(rawText);
   const cleaned = cleanAgencyName(rawText);
 
-  // Guard: platform names (Yad2/Madlan/WinWin) are not agencies unless clearly
+  // Guard: platform names (external-listing sources/WinWin) are not agencies unless clearly
   // combined with a real agency name (i.e. there's more than just the platform).
   if (isListingPlatform(rawText) && (!brand.brandName || brand.confidence < 0.9)) {
     const residual = normalizeAgencyName(cleaned).split(" ").filter(Boolean);

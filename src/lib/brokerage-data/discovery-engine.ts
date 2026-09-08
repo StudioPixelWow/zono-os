@@ -5,7 +5,7 @@
 //   Tier 1 — observed listing evidence (links → external_listings: publisher,
 //            broker name, phone, email, source).
 //   Tier 2 — shared-contact evidence (shared phone / email / domain clusters).
-//   Tier 3 — public-web evidence (Google Business / websites / FB / Yad2 / Madlan)
+//   Tier 3 — public-web evidence (Google Business / websites / FB / external-listing sources)
 //            — PROVIDER STUB: skipped unless configured. Never fabricated.
 //   Tier 4 — AI reasoning evidence (via the existing AI Reasoning Gateway only).
 //            The model receives ONLY structured evidence; it may NEVER invent an

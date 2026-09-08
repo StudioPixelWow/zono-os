@@ -129,7 +129,7 @@ export function HomeHeatmapSection({ heightClass = "h-[380px] lg:h-[460px]" }: {
           return <span>נכסים חיצוניים יוצגו לאחר סנכרון מקורות חיצוניים.</span>;
         })()}
         {/* Backlog note — shown even when some external listings ARE on the map, so a
-            large ungeocoded backlog (often Yad2) is never silently hidden. */}
+            large ungeocoded backlog is never silently hidden. */}
         {data && data.externalDiag.missingCoords > 0 && (
           <span className="text-amber-300/70">{data.externalDiag.missingCoords} נכסים חיצוניים נוספים ממתינים לגיאוקודינג — יתווספו למפה אוטומטית (או לחץ &quot;גאוקד עכשיו&quot; במסך הנכסים החיצוניים).</span>
         )}

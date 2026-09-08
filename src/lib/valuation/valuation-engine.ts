@@ -111,7 +111,7 @@ export function computeSimilarity(input: ValuationInput, c: Comparable): number 
 /**
  * Per-source confidence weight. SOLD evidence beats ACTIVE; official + internal
  * sources beat portals. Mirrors the product spec: Internal SOLD 1.00, GovMap
- * SOLD 0.95, Madlan SOLD 0.90, Madlan ACTIVE 0.80, Yad2 ACTIVE 0.70, Internal
+ * SOLD 0.95, external listing source SOLD 0.90, external listing source ACTIVE 0.80, external listing source ACTIVE 0.70, Internal
  * ACTIVE 0.65.
  */
 export function sourceWeight(c: Comparable): number {

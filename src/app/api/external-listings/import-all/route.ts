@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-// Real Apify (Yad2 + Madlan) for all active org localities.
+// Real Apify (external-listing sources) for all active org localities.
 export async function POST(req: NextRequest) {
   const { profile } = await getSessionContext();
   if (!profile) return NextResponse.json({ error: "unauthorized" }, { status: 401 });

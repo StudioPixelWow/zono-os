@@ -7,7 +7,7 @@ import "server-only";
 
 export type DiscoveryProviderId =
   | "manual_csv"
-  | "listing_publishers" // names already present on imported Yad2/Madlan listings
+  | "listing_publishers" // names already present on imported external-listing sources listings
   | "crm_contacts"
   | "public_registry" // future: official public broker registry (if/when API available)
   | "google_business" // future: only if legally/API accessible

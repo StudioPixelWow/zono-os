@@ -2,8 +2,8 @@ import type { ISODateString, UUID } from "./common";
 
 /** Where a lead originated. */
 export type LeadSource =
-  | "yad2" // יד2
-  | "madlan" // מדלן
+  | "yad2" // מקור חיצוני
+  | "madlan" // מקור חיצוני
   | "facebook"
   | "instagram"
   | "website"

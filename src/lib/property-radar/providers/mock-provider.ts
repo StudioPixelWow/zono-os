@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 // ⚠️  DEV / TEST ONLY. This provider returns FABRICATED listings so the sync
 // engine, change-detection, scoring and alerts can be exercised locally WITHOUT
-// spending credits and WITHOUT connecting to Yad2 / Madlan. The data here is NOT
+// spending credits and WITHOUT connecting to external-listing sources. The data here is NOT
 // real market data and must NEVER be presented to users as such, nor seeded into
 // production. Production code paths must use real providers only.
 //

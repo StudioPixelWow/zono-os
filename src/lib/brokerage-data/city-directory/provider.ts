@@ -1,15 +1,15 @@
 // ============================================================================
-// 🛰️ Madlan City Directory provider — SANCTIONED Apify adapter (server-only).
+// 🛰️ external listing source City Directory provider — SANCTIONED Apify adapter (server-only).
 // ----------------------------------------------------------------------------
 // This is the ONE place that talks to a directory source. It follows the exact
 // external-listings provider pattern (ApifyClient + bounded runActor). It reads
 // a DEDICATED directory actor id from APIFY_MADLAN_DIRECTORY_ACTOR_ID.
 //
-// PROVIDER REALITY (P9.2 audit): the existing Madlan actors are listings-only
+// PROVIDER REALITY (P9.2 audit): the existing external listing source actors are listings-only
 // (`swerve/madlan-scraper`) and market-analytics-only (`swerve/madlan-analytics`).
 // NEITHER exposes the office/agent directory. Until a sanctioned DIRECTORY actor
 // is provisioned and its id set here, this provider reports
-// `provider_not_configured` and returns ZERO entities — it NEVER scrapes Madlan
+// `provider_not_configured` and returns ZERO entities — it NEVER scrapes external listing source
 // directly, NEVER bypasses anti-bot, and NEVER fabricates directory records.
 //
 // When the actor is wired, the normalizer below is the single adaptation point
@@ -189,7 +189,7 @@ class MadlanDirectoryProvider implements CityDirectoryProvider {
     if (!actorId) {
       return empty(
         "provider_not_configured",
-        `${ACTOR_ENV} not set — no sanctioned Madlan DIRECTORY actor wired (listings/analytics actors do not expose the office/agent directory).`,
+        `${ACTOR_ENV} not set — no sanctioned external-source DIRECTORY actor wired (listings/analytics actors do not expose the office/agent directory).`,
       );
     }
 

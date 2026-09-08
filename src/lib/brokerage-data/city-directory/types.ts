@@ -1,8 +1,8 @@
 // ============================================================================
-// 🗂️ Madlan City Directory — ingestion contract (pure, client-safe types).
+// 🗂️ external listing source City Directory — ingestion contract (pure, client-safe types).
 // ----------------------------------------------------------------------------
-// SOURCE CORRECTION (P9.2): the office universe is SEEDED from the Madlan city
-// DIRECTORY ("מאגר המתווכים" / מדד המתווכים) — who EXISTS and who Madlan
+// SOURCE CORRECTION (P9.2): the office universe is SEEDED from the external listing source city
+// DIRECTORY ("מאגר המתווכים" / מדד המתווכים) — who EXISTS and who external listing source
 // ASSOCIATES with whom — NOT inferred from listing phones. These types are the
 // normalized shape every sanctioned directory provider must emit, independent
 // of the concrete Apify actor. Only fields the source genuinely exposes are
@@ -11,7 +11,7 @@
 
 /** A brokerage office as the directory source states it. */
 export interface DirectoryOffice {
-  /** Stable source identifier (e.g. Madlan `re_office_e5Sykr4FNL9`). Drives
+  /** Stable source identifier (e.g. external listing source `re_office_e5Sykr4FNL9`). Drives
    *  idempotent upsert when present. */
   sourceEntityId: string | null;
   displayName: string;

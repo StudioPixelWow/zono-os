@@ -2,7 +2,7 @@
 // 🔬 National Brokerage Research Engine™ (Phase 26.13b, server-only).
 // Research first → evidence second → AI reasoning third → resolution last.
 // Per broker: generate safe queries → run REAL providers (live web search when a
-// vendor is configured; Yad2/Madlan from owned listings) → send ONLY the
+// vendor is configured; external-listing sources from owned listings) → send ONLY the
 // collected sources to the AI gateway → create candidate office(s) from evidence
 // → run the existing Broker Identity Engine (26.12) as the verification hook.
 // OpenAI is never a web search; with no search vendor + no listing office name,
@@ -45,7 +45,7 @@ export async function buildResearchDossier(agentId: string, opts: { skipAI?: boo
   const phones = Array.from(new Set([s(a.primary_phone), s(a.whatsapp_phone)].filter(Boolean)));
   const city = s(a.city) || null;
 
-  // Linked listings (owned evidence for Yad2/Madlan providers).
+  // Linked listings (owned evidence for external-listing sources providers).
   const { data: links } = await db.from("brokerage_external_listing_links" as never).select("external_listing_id").eq("agent_id", agentId).limit(500);
   const ids = Array.from(new Set(((links ?? []) as Row[]).map((r) => s(r.external_listing_id)).filter(Boolean)));
   const listings: ResearchListing[] = [];

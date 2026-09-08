@@ -2,7 +2,7 @@
 // ZONO — Home live-property map service (server-only). Builds the Home Dashboard
 // heatmap from REAL data only:
 //   • Internal: public.properties (org_id, real latitude/longitude).
-//   • External: public.external_listings (Yad2/Madlan/…, real lat/lng), scoped
+//   • External: public.external_listings (external-listing sources/…, real lat/lng), scoped
 //     to the agent's operating-area cities.
 // No invented coordinates, no mock heat. Rows without real coords are excluded.
 // ============================================================================
@@ -149,7 +149,7 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
     } catch { /* internal best-effort */ }
   }
 
-  // ── External listings (Yad2 / Madlan / …) scoped to operating area ──────────-
+  // ── External listings (external-listing sources / …) scoped to operating area ──────────-
   if (wantExternal) {
     try {
       let q = db.from("external_listings" as never)

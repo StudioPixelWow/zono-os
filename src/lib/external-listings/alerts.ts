@@ -1,7 +1,7 @@
 // ============================================================================
 // 📣 ZONO — External Listing Acquisition & Buyer-Match Alerts · pure. 41.2.
 // Builds the approval-gated WhatsApp DRAFT text for the two broker alerts on a
-// new external (Yad2/Madlan) listing: (A) acquisition — "try to recruit this
+// new external (external-listing sources) listing: (A) acquisition — "try to recruit this
 // listing", (B) buyer-match — "this fits your buyers". Pure text builders,
 // evidence-only. NEVER auto-sent (the service creates a draft the broker approves).
 // ============================================================================

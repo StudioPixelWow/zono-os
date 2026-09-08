@@ -79,7 +79,7 @@ export async function runZonoOrchestrator(input: RunZonoOrchestratorInput): Prom
 
     runId = await createRunRow({ organizationId, userId, trigger, source });
 
-    // STEP 1 — External Listings Sync (Yad2/Madlan).
+    // STEP 1 — External Listings Sync (external-listing sources).
     // P9.0D: refresh listings on ENTRY too (login/dashboard_load), not just cron,
     // so the office's data updates every time they come in. Cost stays bounded:
     // gated on APIFY_TOKEN, BOUNDED quick mode on passive triggers, and the whole

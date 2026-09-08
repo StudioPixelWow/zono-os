@@ -1,6 +1,6 @@
 // ============================================================================
 // ZONO Property Radar™ — provider foundation contracts.
-// Defines the shape every future provider (Mock / Yad2 / Madlan) must implement
+// Defines the shape every future provider (Mock / external-listing sources) must implement
 // and the normalized listing shapes the radar engine consumes. NO scraping here —
 // this is the interface only. Two-tier fetch model: cheap `metadata` (list scan,
 // used for change detection) vs expensive `details` (full fetch, only for

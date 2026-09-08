@@ -24,7 +24,7 @@ function baseInput(area: PropertyRadarArea, options?: PropertyProviderScanOption
   };
 }
 
-/** TODO: confirm the exact Yad2 actor input schema and tighten fields. */
+/** TODO: confirm the exact external listing source actor input schema and tighten fields. */
 export function buildYad2ActorInput(
   area: PropertyRadarArea,
   options?: PropertyProviderScanOptions,
@@ -32,7 +32,7 @@ export function buildYad2ActorInput(
   return { ...baseInput(area, options), source: "yad2" };
 }
 
-/** TODO: confirm the exact Madlan actor input schema and tighten fields. */
+/** TODO: confirm the exact external listing source actor input schema and tighten fields. */
 export function buildMadlanActorInput(
   area: PropertyRadarArea,
   options?: PropertyProviderScanOptions,

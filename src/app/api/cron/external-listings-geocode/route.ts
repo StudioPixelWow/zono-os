@@ -9,7 +9,7 @@ export const maxDuration = 300;
  * batch per run (serverless time + Nominatim's ~1 req/sec policy), so a large
  * first scrape leaves listings without coordinates — and those don't appear on
  * the live map. This drains the backlog in time-boxed batches so EVERY source
- * (Yad2, Madlan, …) gets real coordinates. Secured by CRON_SECRET. Real
+ * (external-listing sources, …) gets real coordinates. Secured by CRON_SECRET. Real
  * coordinates only — failures are marked, never invented.
  */
 export async function GET(req: NextRequest) {

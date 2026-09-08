@@ -1,5 +1,5 @@
 // ============================================================================
-// Shared reader for active-listing portals (Yad2 / Madlan). Surfaces REAL
+// Shared reader for active-listing portals (external-listing sources). Surfaces REAL
 // external_listings the org already imported via the external-listings module.
 // Does NOT scrape live — only reads previously-imported, stored rows. If a portal
 // has no imported rows, the provider returns 'not_connected' (never demo unless
