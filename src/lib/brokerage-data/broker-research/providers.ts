@@ -165,8 +165,8 @@ function listingSourceProvider(id: string, label: string, sourceMatch: RegExp): 
     },
   };
 }
-const yad2Provider = listingSourceProvider("yad2", "יד2", /yad2/i);
-const madlanProvider = listingSourceProvider("madlan", "מדלן", /madlan/i);
+const yad2Provider = listingSourceProvider("yad2", "מקור חיצוני א׳", /yad2/i);
+const madlanProvider = listingSourceProvider("madlan", "מקור חיצוני ב׳", /madlan/i);
 
 export const RESEARCH_PROVIDERS: BrokerageResearchProvider[] = [
   webSearchProvider, googleBusinessProvider, facebookProvider, linkedinProvider, yad2Provider, madlanProvider,

@@ -362,8 +362,8 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
             here resolves to a platform operator, NOT an office manager. */}
         {isAdmin && (
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onClick={() => run(importYad2Action)} disabled={pending}>יד2</Button>
-            <Button size="sm" variant="secondary" onClick={() => run(importMadlanAction)} disabled={pending}>מדלן</Button>
+            <Button size="sm" variant="secondary" onClick={() => run(importYad2Action)} disabled={pending}>מקור חיצוני א׳</Button>
+            <Button size="sm" variant="secondary" onClick={() => run(importMadlanAction)} disabled={pending}>מקור חיצוני ב׳</Button>
             <select
               value={syncMode}
               onChange={(e) => setSyncMode(e.target.value as typeof syncMode)}
@@ -418,8 +418,8 @@ export function ExternalListingsView({ listings, marketStats, isAdmin = false, m
           <p className="text-muted mb-3 text-xs">בדיקת actor בודד · עיר אחת · עד 5 מודעות. לא מריץ סנכרון מלא.</p>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <input className={field} placeholder="עיר לבדיקה (למשל קרית ביאליק)" value={dbgCity} onChange={(e) => setDbgCity(e.target.value)} />
-            <Button size="sm" variant="secondary" onClick={() => runDebug("yad2")} disabled={dbgBusy}>בדוק יד2</Button>
-            <Button size="sm" variant="secondary" onClick={() => runDebug("madlan")} disabled={dbgBusy}>בדוק מדלן</Button>
+            <Button size="sm" variant="secondary" onClick={() => runDebug("yad2")} disabled={dbgBusy}>בדוק מקור חיצוני א׳</Button>
+            <Button size="sm" variant="secondary" onClick={() => runDebug("madlan")} disabled={dbgBusy}>בדוק מקור חיצוני ב׳</Button>
             <label className="text-muted flex items-center gap-1 text-xs"><input type="checkbox" checked={dbgSave} onChange={(e) => setDbgSave(e.target.checked)} /> שמור דגימה</label>
             {dbgBusy && <span className="text-muted text-xs">בודק…</span>}
           </div>

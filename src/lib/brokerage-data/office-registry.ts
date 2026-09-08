@@ -353,7 +353,7 @@ function buildMessage(m: RegistryMetrics, useAI: boolean): string {
   if (m.agentsWithPublicEvidence === 0) why.push(`לאף אחד מ-${m.agentsProcessed} המתווכים אין ראיה ציבורית (מודעות מקושרות/טלפון משותף)`);
   else if (m.agentsWithOfficeHint === 0) why.push(`ל-${m.agentsWithPublicEvidence} מתווכים יש מודעות אך ללא שם משרד שזוהה (detected_broker_name ריק)`);
   if (!useAI) why.push("OpenAI אינו מוגדר — שלב ה‑AI דילג");
-  if (m.publicSourcesSkipped > 0) why.push("מקורות אינטרנט ציבוריים (Google/FB/LinkedIn/Yad2/Madlan) אינם מחוברים");
+  if (m.publicSourcesSkipped > 0) why.push("מקורות אינטרנט ציבוריים (Google/FB/LinkedIn/מקורות חיצוניים) אינם מחוברים");
   return `מרשם הסתיים — 0 מועמדים. סיבה: ${why.join(" · ") || "אין ראיות מספיקות"}.`;
 }
 

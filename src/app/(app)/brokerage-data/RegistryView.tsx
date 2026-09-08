@@ -158,7 +158,7 @@ export function RegistryView() {
             <Stat label="בקשות AI" value={rm.aiRequests} />
             <Stat label="מועמדי AI" value={rm.aiCandidatesCreated} />
           </div>
-          {!rm.aiConfigured && <p className="text-amber-700 text-[11px] font-bold">⚠ OpenAI אינו מוגדר (OPENAI_API_KEY) — שלב הסקת ה‑AI דילג. מקורות אינטרנט ציבוריים (Google/Facebook/LinkedIn/Yad2/Madlan) אינם מחוברים.</p>}
+          {!rm.aiConfigured && <p className="text-amber-700 text-[11px] font-bold">⚠ OpenAI אינו מוגדר (OPENAI_API_KEY) — שלב הסקת ה‑AI דילג. מקורות אינטרנט ציבוריים (Google/Facebook/LinkedIn/מקורות חיצוניים) אינם מחוברים.</p>}
         </div>
       )}
 

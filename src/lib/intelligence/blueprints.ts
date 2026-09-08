@@ -123,8 +123,8 @@ export function defaultCalendar(p: PropertyShape): CalendarSeed[] {
 // Exposure channels every property should track (status starts not_published).
 export const exposureChannels = [
   "אתר משרד",
-  "יד2",
-  "מדלן",
+  "מודעה חיצונית א׳",
+  "מודעה חיצונית ב׳",
   "פייסבוק",
   "אינסטגרם",
   "וואטסאפ",

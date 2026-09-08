@@ -16,7 +16,7 @@ const STATUS_HE: Record<string, { label: string; tone: string }> = {
 };
 const SOURCE_HE: Record<string, string> = {
   google_business: "Google Business", google_maps: "Google Maps", facebook: "Facebook", linkedin: "LinkedIn",
-  yad2: "יד2", madlan: "מדלן", official_website: "אתר רשמי", observed_listing: "מודעה שנצפתה",
+  yad2: "מקור חיצוני א׳", madlan: "מקור חיצוני ב׳", official_website: "אתר רשמי", observed_listing: "מודעה שנצפתה",
   shared_phone: "טלפון משותף", shared_domain: "דומיין משותף", ai_reasoning: "הסקת AI",
 };
 

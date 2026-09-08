@@ -117,7 +117,7 @@ export function ResearchView() {
       {!snap.searchConfigured && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-4 text-sm font-bold text-amber-900">
           ⚠ Public web search is not configured, so broker-office research cannot run.<br />
-          <span className="text-[12px] font-normal">הגדר ספק חיפוש אחד: <code>SERPAPI_API_KEY</code> / <code>TAVILY_API_KEY</code> / <code>EXA_API_KEY</code> / <code>BING_SEARCH_KEY</code> / (<code>GOOGLE_CSE_KEY</code>+<code>GOOGLE_CSE_CX</code>), וגם <code>ZONO_PUBLIC_SEARCH_ENABLED=1</code>. כרגע פעיל רק מקור המודעות (Yad2/Madlan).</span>
+          <span className="text-[12px] font-normal">הגדר ספק חיפוש אחד: <code>SERPAPI_API_KEY</code> / <code>TAVILY_API_KEY</code> / <code>EXA_API_KEY</code> / <code>BING_SEARCH_KEY</code> / (<code>GOOGLE_CSE_KEY</code>+<code>GOOGLE_CSE_CX</code>), וגם <code>ZONO_PUBLIC_SEARCH_ENABLED=1</code>. כרגע פעיל רק מקור המודעות (מקורות חיצוניים).</span>
         </div>
       )}
       {msg && <p className="text-sm font-bold text-emerald-700">{msg}</p>}

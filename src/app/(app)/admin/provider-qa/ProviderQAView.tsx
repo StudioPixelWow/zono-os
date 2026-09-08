@@ -14,7 +14,7 @@ import {
 } from "@/lib/property-radar/provider-qa/actions";
 import type { PropertyProviderName } from "@/lib/property-radar/types";
 
-const PROVIDER_LABEL: Record<string, string> = { mock: "בדיקה (Mock)", yad2: "יד2", madlan: "מדלן" };
+const PROVIDER_LABEL: Record<string, string> = { mock: "בדיקה (Mock)", yad2: "מקור חיצוני א׳", madlan: "מקור חיצוני ב׳" };
 const STATUS_LABEL: Record<string, string> = { ok: "תקין", warning: "אזהרה", degraded: "ירוד" };
 const STATUS_TONE: Record<string, string> = {
   ok: "bg-emerald-100 text-emerald-700",
@@ -48,7 +48,7 @@ export function ProviderQAView({ initial }: { initial: ProviderQADashboard }) {
         <span className="grid h-10 w-10 place-items-center rounded-2xl bg-brand-soft text-brand-strong"><ShieldCheck size={20} /></span>
         <div>
           <h1 className="text-xl font-black text-ink">בקרת איכות ספקים</h1>
-          <p className="text-sm text-ink/60">תקינות נתוני Yad2 / Madlan, זיהוי שינויי מבנה, ואיכות נורמליזציה.</p>
+          <p className="text-sm text-ink/60">תקינות נתוני מקורות חיצוניים, זיהוי שינויי מבנה, ואיכות נורמליזציה.</p>
         </div>
       </header>
 
@@ -110,8 +110,8 @@ export function ProviderQAView({ initial }: { initial: ProviderQADashboard }) {
           <label className="flex flex-col gap-1 text-xs font-bold text-ink/60">ספק
             <select value={provider} onChange={(e) => setProvider(e.target.value as PropertyProviderName)} className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm font-semibold text-ink">
               <option value="mock">בדיקה (Mock)</option>
-              <option value="yad2">יד2</option>
-              <option value="madlan">מדלן</option>
+              <option value="yad2">מקור חיצוני א׳</option>
+              <option value="madlan">מקור חיצוני ב׳</option>
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-bold text-ink/60">עיר

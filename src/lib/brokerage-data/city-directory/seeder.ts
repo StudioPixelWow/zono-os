@@ -182,7 +182,7 @@ async function upsertAgent(db: DB, a: DirectoryAgent, locality: string, resolved
   const provenance = resolvedOfficeId
     ? {
         resolution_method: DIRECTORY_SOURCE, resolution_sources: ["madlan"], resolution_confidence: 85,
-        resolution_explanation: "מדלן משייך את המתווך למשרד זה במאגר הנוכחי", resolved_at: nowStamp,
+        resolution_explanation: "מקור חיצוני משייך את המתווך למשרד זה במאגר הנוכחי", resolved_at: nowStamp,
       }
     : {};
   if (existing) {
@@ -212,7 +212,7 @@ async function upsertAgent(db: DB, a: DirectoryAgent, locality: string, resolved
     resolution_method: resolvedOfficeId ? DIRECTORY_SOURCE : null,
     resolution_sources: resolvedOfficeId ? ["madlan"] : null,
     resolution_confidence: resolvedOfficeId ? 85 : null,
-    resolution_explanation: resolvedOfficeId ? "מדלן משייך את המתווך למשרד זה במאגר הנוכחי" : null,
+    resolution_explanation: resolvedOfficeId ? "מקור חיצוני משייך את המתווך למשרד זה במאגר הנוכחי" : null,
     resolved_at: resolvedOfficeId ? nowStamp : null,
   } as never);
   if (error) { result.errors.push(`agent insert: ${error.message}`); return null; }
@@ -249,7 +249,7 @@ async function upsertBrokerIdentity(db: DB, agentId: string, officeId: string, o
   if (hit) {
     const { error } = await db.from("brokerage_broker_identity" as never).update({
       resolved_office_id: officeId, resolved_office_name: officeNm, status: "directory_stated",
-      confidence: 85, why: "שיוך מוצהר במאגר מדלן", providers: ["madlan"], evidence, resolved_at: nowStamp,
+      confidence: 85, why: "שיוך מוצהר במאגר מקור חיצוני", providers: ["madlan"], evidence, resolved_at: nowStamp,
     } as never).eq("id", s(hit.id));
     if (error) { result.errors.push(`identity update: ${error.message}`); return; }
     result.relationshipsPersisted++;
@@ -257,7 +257,7 @@ async function upsertBrokerIdentity(db: DB, agentId: string, officeId: string, o
   }
   const { error } = await db.from("brokerage_broker_identity" as never).insert({
     agent_id: agentId, resolved_office_id: officeId, resolved_office_name: officeNm, status: "directory_stated",
-    confidence: 85, why: "שיוך מוצהר במאגר מדלן", providers: ["madlan"], evidence, resolved_at: nowStamp,
+    confidence: 85, why: "שיוך מוצהר במאגר מקור חיצוני", providers: ["madlan"], evidence, resolved_at: nowStamp,
   } as never);
   if (error) { result.errors.push(`identity insert: ${error.message}`); return; }
   result.relationshipsPersisted++;

@@ -34,8 +34,8 @@ export const PUBLIC_PROVIDERS: PublicBrokerProvider[] = [
   stub("google_maps", "Google Maps", "ZONO_GOOGLE_MAPS_KEY"),
   stub("facebook", "Facebook", "ZONO_FACEBOOK_KEY"),
   stub("linkedin", "LinkedIn", "ZONO_LINKEDIN_KEY"),
-  stub("yad2", "Yad2", "ZONO_YAD2_KEY"),
-  stub("madlan", "Madlan", "ZONO_MADLAN_KEY"),
+  stub("yad2", "מקור חיצוני א׳", "ZONO_YAD2_KEY"),
+  stub("madlan", "מקור חיצוני ב׳", "ZONO_MADLAN_KEY"),
   stub("official_website", "Official website", "ZONO_WEB_DISCOVERY_KEY"),
 ];
 

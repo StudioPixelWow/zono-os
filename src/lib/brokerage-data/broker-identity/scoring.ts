@@ -32,8 +32,8 @@ const KEY_SOURCES: { source: EvidenceSource; label: string }[] = [
   { source: "official_website", label: "אתר משרד רשמי" },
   { source: "facebook", label: "עמוד עסקי בפייסבוק" },
   { source: "linkedin", label: "פרופיל LinkedIn" },
-  { source: "yad2", label: "פרופיל יד2" },
-  { source: "madlan", label: "פרופיל מדלן" },
+  { source: "yad2", label: "פרופיל מקור חיצוני א׳" },
+  { source: "madlan", label: "פרופיל מקור חיצוני ב׳" },
 ];
 
 const norm = (s: string) => normalizeHebrewName(s);

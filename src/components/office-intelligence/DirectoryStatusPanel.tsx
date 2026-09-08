@@ -128,7 +128,7 @@ export function DirectoryStatusPanel({ city }: { city: string }) {
       {blocked && (
         <div className="rounded-xl border border-slate-300 bg-slate-50 p-3 text-[12px] text-slate-700">
           <p className="font-bold">מקור המדריך אינו מחובר עדיין</p>
-          <p className="mt-1 leading-relaxed">{run?.error ?? "actor המדריך המאומת של מדלן טרם הוגדר. המערכת לא ממציאה נתונים — היא ממתינה למקור מאומת. אינטליגנציית המודעות (Property Radar) ממשיכה לפעול כרגיל."}</p>
+          <p className="mt-1 leading-relaxed">{run?.error ?? "actor המדריך המאומת של מקור חיצוני טרם הוגדר. המערכת לא ממציאה נתונים — היא ממתינה למקור מאומת. אינטליגנציית המודעות (Property Radar) ממשיכה לפעול כרגיל."}</p>
         </div>
       )}
 

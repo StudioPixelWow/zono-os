@@ -106,7 +106,7 @@ export async function researchBroker(agentId: string, opts: { apply?: boolean; s
   const dossier = await buildResearchDossier(agentId, { skipAI: opts.skipAI });
   if (!dossier) return null;
   const searchConfigured = !!activeSearchVendor() && !!process.env.ZONO_PUBLIC_SEARCH_ENABLED;
-  const note = !searchConfigured ? "חיפוש ציבורי אינו מוגדר — מחקר מתווך←משרד מבוסס-אינטרנט אינו פעיל. מוגדר רק מקור המודעות (Yad2/Madlan)." : null;
+  const note = !searchConfigured ? "חיפוש ציבורי אינו מוגדר — מחקר מתווך←משרד מבוסס-אינטרנט אינו פעיל. מוגדר רק מקור המודעות (מקורות חיצוניים)." : null;
 
   let applied = false;
   let autoLinked = false;
