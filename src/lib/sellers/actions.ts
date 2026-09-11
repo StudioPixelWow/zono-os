@@ -90,8 +90,19 @@ export async function updateSeller360Action(id: string, input: Seller360Input): 
 export async function linkSellerToPropertyAction(input: LinkSellerInput): Promise<SellerCrudState> {
   const { profile } = await getSessionContext();
   if (!profile) return { error: "לא מחובר/ת." };
+  // The LINK is the ONLY operation that may fail the action. Everything after it
+  // (timeline, kernel event, intelligence recompute) is a best-effort side effect:
+  // a throw there must NOT report the link as failed — the row is already written,
+  // so the UI would otherwise show "קישור נכשל" (and never advance) on a link that
+  // actually succeeded. LIVE SYMPTOM: the "קשר" button reported failure though
+  // property_sellers rows were being written.
   try {
     await propertySellerRepository.link(profile.org_id, input);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
+    return { error: `קישור המוכר נכשל: ${msg}` };
+  }
+  try {
     await logActivityEvent({ eventType: "seller.linked_to_property", entityType: "property", entityId: input.propertyId, relatedEntityType: "seller", relatedEntityId: input.sellerId, title: "מוכר קושר לנכס" });
     // BATCH 5.3 LIVE FINDING: this is the ONLY UI path that links an EXISTING
     // seller to a property (the property cockpit's "קשר מוכר קיים"), and it never
@@ -114,8 +125,7 @@ export async function linkSellerToPropertyAction(input: LinkSellerInput): Promis
     const { recalculatePropertyIntelligence } = await import("@/lib/intelligence/service");
     await recalculatePropertyIntelligence(input.propertyId).catch(() => {});
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "שגיאה לא ידועה";
-    return { error: `קישור המוכר נכשל: ${msg}` };
+    console.error("[seller] link side-effects failed (non-fatal):", e);
   }
   revalidatePath(`/properties/${input.propertyId}`);
   return {};
