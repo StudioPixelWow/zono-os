@@ -74,6 +74,55 @@ function Chip({
   );
 }
 
+// ── Price / rooms range bounds ──────────────────────────────────────────────
+const PRICE_MIN = 1_000_000;
+const PRICE_MAX = 6_000_000;
+const PRICE_STEP = 50_000;
+const ROOMS_MIN = 1;
+const ROOMS_MAX = 10;
+const ROOMS_STEP = 0.5;
+const ilsFmt = new Intl.NumberFormat("he-IL");
+const fmtPrice = (v: number): string => {
+  if (v >= 1_000_000) return `₪${(v / 1_000_000).toFixed(v % 1_000_000 === 0 ? 0 : 1)}M`;
+  return `₪${ilsFmt.format(v)}`;
+};
+
+/** Draggable dual-handle range slider (RTL-safe: the track runs LTR — low on the
+ *  left, high on the right — with the value labels above in the page's RTL flow). */
+function DualRange({
+  min, max, step, valueMin, valueMax, onChange, format, atMaxSuffix,
+}: {
+  min: number; max: number; step: number;
+  valueMin: number | null; valueMax: number | null;
+  onChange: (lo: number, hi: number) => void;
+  format: (v: number) => string;
+  atMaxSuffix?: string;
+}) {
+  const lo = Math.min(Math.max(valueMin ?? min, min), max);
+  const hi = Math.min(Math.max(valueMax ?? max, min), max);
+  const pct = (v: number) => ((v - min) / (max - min)) * 100;
+  const setLo = (v: number) => onChange(Math.min(v, hi), hi);
+  const setHi = (v: number) => onChange(lo, Math.max(v, lo));
+  return (
+    <div>
+      {/* labels LTR so the low value sits above the left handle and high above the right */}
+      <div dir="ltr" className="mb-2 flex items-center justify-between text-sm font-bold text-ink">
+        <span>{format(lo)}</span>
+        <span>{format(hi)}{atMaxSuffix && hi >= max ? atMaxSuffix : ""}</span>
+      </div>
+      <div dir="ltr" className="dr-wrap relative h-8 select-none">
+        <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-surface">
+          <div className="bg-brand absolute h-2 rounded-full" style={{ left: `${pct(lo)}%`, right: `${100 - pct(hi)}%` }} />
+        </div>
+        <input type="range" min={min} max={max} step={step} value={lo}
+          onChange={(e) => setLo(Number(e.target.value))} className="dr-input" aria-label="מינימום" />
+        <input type="range" min={min} max={max} step={step} value={hi}
+          onChange={(e) => setHi(Number(e.target.value))} className="dr-input" aria-label="מקסימום" />
+      </div>
+    </div>
+  );
+}
+
 export function OnboardingWizard({
   email,
   defaultFullName,
@@ -103,10 +152,10 @@ export function OnboardingWizard({
     localities: defaultLocalities,
     propertyTypes: [],
     dealTypes: [],
-    minPrice: null,
-    maxPrice: null,
-    minRooms: null,
-    maxRooms: null,
+    minPrice: PRICE_MIN,
+    maxPrice: PRICE_MAX,
+    minRooms: ROOMS_MIN,
+    maxRooms: ROOMS_MAX,
   });
 
   const set = <K extends keyof WizardForm>(key: K, value: WizardForm[K]) =>
@@ -177,6 +226,15 @@ export function OnboardingWizard({
 
   return (
     <div className="bg-card border-line rounded-[28px] border p-6 shadow-[var(--shadow-card)] sm:p-8">
+      <style>{`
+        .dr-input{position:absolute;top:0;left:0;width:100%;height:2rem;margin:0;background:transparent;-webkit-appearance:none;appearance:none;pointer-events:none}
+        .dr-input:focus{outline:none}
+        .dr-input::-webkit-slider-runnable-track{background:transparent;height:2rem}
+        .dr-input::-moz-range-track{background:transparent}
+        .dr-input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;height:22px;width:22px;border-radius:9999px;background:#fff;border:3px solid var(--brand,#7c3aed);box-shadow:0 2px 8px rgba(76,29,149,.35);cursor:grab;margin-top:5px}
+        .dr-input::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.08)}
+        .dr-input::-moz-range-thumb{pointer-events:auto;height:22px;width:22px;border-radius:9999px;background:#fff;border:3px solid var(--brand,#7c3aed);box-shadow:0 2px 8px rgba(76,29,149,.35);cursor:grab}
+      `}</style>
       {/* Progress */}
       <div className="mb-6">
         <div className="text-muted mb-2 flex items-center justify-between text-xs font-semibold">
@@ -348,53 +406,30 @@ export function OnboardingWizard({
         {step === 6 && (
           <>
             <h2 className="text-ink text-lg font-extrabold">טווחי מחיר וחדרים</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className={label}>מחיר מינ׳ (₪)</span>
-                <input
-                  type="number"
-                  className={`${input} mt-1`}
-                  value={form.minPrice ?? ""}
-                  onChange={(e) =>
-                    set("minPrice", e.target.value ? Number(e.target.value) : null)
-                  }
+            <p className="text-muted -mt-2 text-xs">גררו את הידיות כדי להגדיר את הטווח שמעניין אתכם.</p>
+            <div className="mt-2">
+              <span className={label}>טווח מחיר (₪)</span>
+              <div className="mt-3">
+                <DualRange
+                  min={PRICE_MIN} max={PRICE_MAX} step={PRICE_STEP}
+                  valueMin={form.minPrice} valueMax={form.maxPrice}
+                  onChange={(lo, hi) => setForm((f) => ({ ...f, minPrice: lo, maxPrice: hi }))}
+                  format={fmtPrice}
+                  atMaxSuffix="+"
                 />
-              </label>
-              <label className="block">
-                <span className={label}>מחיר מקס׳ (₪)</span>
-                <input
-                  type="number"
-                  className={`${input} mt-1`}
-                  value={form.maxPrice ?? ""}
-                  onChange={(e) =>
-                    set("maxPrice", e.target.value ? Number(e.target.value) : null)
-                  }
+              </div>
+            </div>
+            <div className="mt-5">
+              <span className={label}>טווח חדרים</span>
+              <div className="mt-3">
+                <DualRange
+                  min={ROOMS_MIN} max={ROOMS_MAX} step={ROOMS_STEP}
+                  valueMin={form.minRooms} valueMax={form.maxRooms}
+                  onChange={(lo, hi) => setForm((f) => ({ ...f, minRooms: lo, maxRooms: hi }))}
+                  format={(v) => `${v}`}
+                  atMaxSuffix="+"
                 />
-              </label>
-              <label className="block">
-                <span className={label}>חדרים מינ׳</span>
-                <input
-                  type="number"
-                  step="0.5"
-                  className={`${input} mt-1`}
-                  value={form.minRooms ?? ""}
-                  onChange={(e) =>
-                    set("minRooms", e.target.value ? Number(e.target.value) : null)
-                  }
-                />
-              </label>
-              <label className="block">
-                <span className={label}>חדרים מקס׳</span>
-                <input
-                  type="number"
-                  step="0.5"
-                  className={`${input} mt-1`}
-                  value={form.maxRooms ?? ""}
-                  onChange={(e) =>
-                    set("maxRooms", e.target.value ? Number(e.target.value) : null)
-                  }
-                />
-              </label>
+              </div>
             </div>
           </>
         )}
