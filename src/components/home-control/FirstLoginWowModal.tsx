@@ -6,21 +6,26 @@
 // numbers, a stylized hot-map, and real recruitment opportunities (no-broker
 // listings) — everything ZONO already knows about the city they chose.
 //
+// LIVE: a fresh office usually lands while the onboarding scan (+ its full
+// intelligence chain) is still running, so the reveal POLLS /api/activation/
+// zone-live and animates the real numbers UP as they arrive — turning a cold,
+// never-scanned city into a "watch ZONO discover your zone in real time" moment
+// instead of an empty screen.
+//
 // TRUTH GUARANTEE: every number shown is a REAL count from the zone snapshot /
-// city discovery already computed on the server. The scan labels and the hot-map
-// dots are visual staging only — they never assert a value. A metric with 0 is
-// omitted; when the zone is still empty the reveal shows an honest "scanning in
-// the background" state instead of a fabricated figure.
+// city discovery. The scan labels and the hot-map dots are visual staging only —
+// they never assert a value. A metric with 0 is omitted; while the zone is still
+// empty the reveal shows an honest "scanning right now" state (never demo data).
 //
 // Plays ONCE (localStorage-gated per org), fully skippable, and collapses to a
 // static reveal under prefers-reduced-motion. Portal → <body>, RTL, premium.
 // ============================================================================
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { ZICharacter } from "@/components/characters/ZICharacter";
-import type { ZoneSnapshot } from "@/lib/activation/zone-snapshot";
+import type { ZoneSnapshot, ZonePrivateListing } from "@/lib/activation/zone-snapshot";
 import type { CityDiscovery } from "@/lib/activation/activation";
 
 const ILS = new Intl.NumberFormat("he-IL");
@@ -33,12 +38,23 @@ const priceShort = (p: number | null): string | null => {
 
 type Phase = "greet" | "scan" | "reveal";
 
+interface LiveStats {
+  discoveredListings: number; noBrokerCount: number; neighborhoods: number;
+  mapPoints: number; brokersTotal: number; verifiedOffices: number; listingsTotal: number;
+}
+interface LiveState {
+  stats: LiveStats;
+  privateOwners: ZonePrivateListing[];
+  insight: string | null;
+  scanRunning: boolean;
+}
+
 const SCAN_STEPS: { icon: string; label: string }[] = [
   { icon: "Radar", label: "סורק את הזון שלך" },
   { icon: "Map", label: "מזהה שכונות" },
   { icon: "Building2", label: "ממפה נכסים באזור" },
   { icon: "Sparkles", label: "מאתר נכסים ללא מתווך" },
-  { icon: "Users", label: "ממפה מתווכים פעילים" },
+  { icon: "Users", label: "ממפה מתווכים ומשרדים פעילים" },
   { icon: "TrendingUp", label: "מנתח את השוק המקומי" },
 ];
 
@@ -57,26 +73,30 @@ function seeded(seed: number): () => number {
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
 }
 
-/** Count-up: animates 0→target once `active`, or lands on target instantly when
- *  reduced motion is requested. */
-function useCountUp(target: number, active: boolean, reduce: boolean): number {
+/** Count-up that animates from the PREVIOUS value to the new target (so live
+ *  updates tick up smoothly instead of snapping back to 0), or lands instantly
+ *  under reduced motion. */
+function useCountUp(target: number, reduce: boolean): number {
   const [val, setVal] = useState(0);
+  const fromRef = useRef(0);
   useEffect(() => {
-    if (!active) return;
-    if (reduce || target <= 0) { setVal(target); return; }
+    if (reduce) { fromRef.current = target; setVal(target); return; }
+    const from = fromRef.current;
+    if (target === from) return;
     const start = performance.now();
-    const dur = 900;
+    const dur = 750;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
-      // easeOutCubic
       const eased = 1 - Math.pow(1 - t, 3);
-      setVal(Math.round(target * eased));
+      const cur = Math.round(from + (target - from) * eased);
+      setVal(cur);
       if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = target;
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, active, reduce]);
+  }, [target, reduce]);
   return val;
 }
 
@@ -89,25 +109,56 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
   const timers = useRef<number[]>([]);
   const storeKey = `zono_wow_intro_v1_${orgId}`;
 
-  // Real, honest numbers (0 → omitted downstream).
-  const stats = {
-    discoveredListings: discovery?.discoveredListings ?? 0,
-    noBrokerCount: discovery?.noBrokerCount ?? 0,
-    neighborhoods: discovery?.neighborhoods ?? 0,
-    mapPoints: discovery?.mapPoints ?? 0,
-    brokersTotal: zone?.census?.brokersTotal ?? 0,
-    verifiedOffices: zone?.census?.verifiedOffices ?? 0,
-    listingsTotal: zone?.census?.listingsTotal ?? 0,
+  // Live state — seeded from the server-rendered props, then kept fresh by polling.
+  const [live, setLive] = useState<LiveState>(() => ({
+    stats: {
+      discoveredListings: discovery?.discoveredListings ?? 0,
+      noBrokerCount: discovery?.noBrokerCount ?? 0,
+      neighborhoods: discovery?.neighborhoods ?? 0,
+      mapPoints: discovery?.mapPoints ?? 0,
+      brokersTotal: zone?.census?.brokersTotal ?? 0,
+      verifiedOffices: zone?.census?.verifiedOffices ?? 0,
+      listingsTotal: zone?.census?.listingsTotal ?? 0,
+    },
+    privateOwners: zone?.privateOwners ?? [],
+    insight: zone?.insights?.[0] ?? null,
     scanRunning: discovery?.scanRunning ?? false,
-  };
-  const privateOwners = zone?.privateOwners ?? [];
-  const insight = zone?.insights?.[0] ?? null;
+  }));
+
+  const stats = live.stats;
+  const privateOwners = live.privateOwners;
+  const insight = live.insight;
   const hasAnyData =
     stats.discoveredListings > 0 || stats.noBrokerCount > 0 || stats.brokersTotal > 0 ||
     stats.verifiedOffices > 0 || stats.neighborhoods > 0 || stats.listingsTotal > 0 ||
     privateOwners.length > 0;
 
-  // Mount + one-time gate + reduced-motion detection.
+  // Merge a poll result into live state — counts only ever move UP (a transient
+  // empty read never wipes numbers we already showed); non-empty owners/insight win.
+  const mergeLive = useCallback((next: {
+    stats?: Partial<LiveStats>; privateOwners?: ZonePrivateListing[]; insight?: string | null; scanRunning?: boolean;
+  }) => {
+    setLive((prev) => {
+      const s = prev.stats;
+      const n: Partial<LiveStats> = next.stats ?? {};
+      return {
+        stats: {
+          discoveredListings: Math.max(s.discoveredListings, n.discoveredListings ?? 0),
+          noBrokerCount: Math.max(s.noBrokerCount, n.noBrokerCount ?? 0),
+          neighborhoods: Math.max(s.neighborhoods, n.neighborhoods ?? 0),
+          mapPoints: Math.max(s.mapPoints, n.mapPoints ?? 0),
+          brokersTotal: Math.max(s.brokersTotal, n.brokersTotal ?? 0),
+          verifiedOffices: Math.max(s.verifiedOffices, n.verifiedOffices ?? 0),
+          listingsTotal: Math.max(s.listingsTotal, n.listingsTotal ?? 0),
+        },
+        privateOwners: (next.privateOwners && next.privateOwners.length) ? next.privateOwners : prev.privateOwners,
+        insight: next.insight ?? prev.insight,
+        scanRunning: next.scanRunning ?? prev.scanRunning,
+      };
+    });
+  }, []);
+
+  // Mount + one-time gate + reduced-motion detection + phase timeline.
   useEffect(() => {
     setMounted(true);
     let seen = false;
@@ -118,8 +169,7 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
     setOpen(true);
     try { document.body.style.overflow = "hidden"; } catch { /* ignore */ }
     // This dramatic modal IS the first-run scan experience, so suppress the inline
-    // ZoneScanReveal's own animation (it shows its static revealed state instead) —
-    // no double scan plays behind the takeover.
+    // ZoneScanReveal's own animation (it shows its static revealed state instead).
     try { window.localStorage.setItem(`zono_zone_revealed_v1_${orgId}`, "1"); } catch { /* ignore */ }
 
     if (reduce) {
@@ -127,7 +177,6 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
       setStep(SCAN_STEPS.length);
     } else {
       const push = (fn: () => void, ms: number) => timers.current.push(window.setTimeout(fn, ms));
-      // greet → scan → (stepped) → reveal
       push(() => setPhase("scan"), 2200);
       SCAN_STEPS.forEach((_, i) => push(() => setStep(i + 1), 2600 + i * 520));
       push(() => setPhase("reveal"), 2600 + SCAN_STEPS.length * 520 + 350);
@@ -139,6 +188,36 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeKey]);
+
+  // LIVE POLLING — while the modal is open, refresh the real zone snapshot so the
+  // numbers fill in as the onboarding scan + intelligence chain complete. Stops
+  // when the scan has settled with data, or after a bounded window.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 40;   // ~40 × 4s ≈ up to ~2.5 min of live catch-up
+    let timer = 0;
+
+    const tick = async () => {
+      attempts += 1;
+      try {
+        const res = await fetch("/api/activation/zone-live", { cache: "no-store" });
+        if (res.ok) {
+          const j = await res.json();
+          if (!cancelled && j && j.stats) {
+            mergeLive({ stats: j.stats, privateOwners: j.privateOwners, insight: j.insight, scanRunning: !!j.scanRunning });
+          }
+          // Settled: scan finished AND we have listings → stop polling.
+          if (!cancelled && j && j.scanRunning === false && j.stats && j.stats.discoveredListings > 0) return;
+        }
+      } catch { /* transient — keep trying */ }
+      if (!cancelled && attempts < MAX_ATTEMPTS) timer = window.setTimeout(tick, 4000);
+    };
+    // First poll shortly after open, so the scan has a beat to write initial rows.
+    timer = window.setTimeout(tick, 2500);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [open, mergeLive]);
 
   const close = () => {
     timers.current.forEach((t) => window.clearTimeout(t));
@@ -162,21 +241,21 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
   // Hot-map dots scaled to the REAL density we found (never more than we have).
   const density = Math.max(stats.mapPoints, stats.noBrokerCount, stats.discoveredListings);
   const dotCount = Math.min(density, 26);
-  const rnd = seeded((orgId ? orgId.length * 7919 : 101) + density * 31 + 17);
-  const dots = Array.from({ length: dotCount }, (_, i) => ({
+  const rnd = seeded((orgId ? orgId.length * 7919 : 101) + 517);
+  const dots = Array.from({ length: Math.max(dotCount, 8) }, (_, i) => ({
     x: 6 + rnd() * 88,
     y: 10 + rnd() * 80,
-    hot: i % 4 === 0, // a quarter are "hot" (no-broker-style) accents
+    hot: i % 4 === 0,
     delay: rnd() * 2,
   }));
 
   const revealTiles = [
-    { v: stats.discoveredListings, label: "נכסים באזור", icon: "Building2", hot: false },
-    { v: stats.noBrokerCount, label: "ללא מתווך — הזדמנות גיוס", icon: "Sparkles", hot: true },
-    { v: stats.brokersTotal, label: "מתווכים פעילים", icon: "Users", hot: false },
-    { v: stats.verifiedOffices, label: "משרדים מזוהים", icon: "Landmark", hot: false },
-    { v: stats.neighborhoods, label: "שכונות שמופו", icon: "Map", hot: false },
-    { v: stats.mapPoints, label: "כבר על המפה", icon: "MapPin", hot: false },
+    { key: "listings", v: stats.discoveredListings, label: "נכסים באזור", icon: "Building2", hot: false },
+    { key: "nobroker", v: stats.noBrokerCount, label: "ללא מתווך — הזדמנות גיוס", icon: "Sparkles", hot: true },
+    { key: "brokers", v: stats.brokersTotal, label: "מתווכים פעילים", icon: "Users", hot: false },
+    { key: "offices", v: stats.verifiedOffices, label: "משרדים מזוהים", icon: "Landmark", hot: false },
+    { key: "hoods", v: stats.neighborhoods, label: "שכונות שמופו", icon: "Map", hot: false },
+    { key: "onmap", v: stats.mapPoints, label: "כבר על המפה", icon: "MapPin", hot: false },
   ].filter((t) => t.v > 0);
 
   return createPortal(
@@ -228,6 +307,8 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
         .zwow-opps{margin-top:16px;border-radius:18px;padding:14px;background:linear-gradient(160deg,rgba(52,211,153,.16),rgba(16,185,129,.06));box-shadow:inset 0 0 0 1px rgba(52,211,153,.32);}
         .zwow-opp{display:flex;align-items:center;justify-content:space-between;gap:10px;border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.06);}
         .zwow-insight{margin-top:16px;display:flex;gap:10px;align-items:flex-start;border-radius:16px;padding:12px 14px;font-size:13.5px;line-height:1.55;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}
+        .zwow-live{margin-top:14px;display:inline-flex;align-items:center;gap:8px;border-radius:9999px;padding:6px 12px;font-size:12px;font-weight:700;color:#c7f9e5;background:rgba(52,211,153,.12);box-shadow:inset 0 0 0 1px rgba(52,211,153,.35);}
+        .zwow-live .pulse{width:8px;height:8px;border-radius:9999px;background:#34d399;animation:zwowBlink 1.2s ease-in-out infinite;}
         .zwow-cta{margin-top:22px;display:flex;flex-wrap:wrap;gap:10px;}
         .zwow-cta .primary{flex:1;min-width:180px;display:flex;align-items:center;justify-content:center;gap:8px;border:0;cursor:pointer;
           border-radius:16px;padding:14px 18px;font-size:15px;font-weight:800;background:var(--office-accent,#8b5cf6);color:var(--office-accent-ink,#fff);}
@@ -237,10 +318,11 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
         @keyframes zwowFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
         @keyframes zwowSweep{to{transform:rotate(360deg)}}
         @keyframes zwowPing{0%{box-shadow:0 0 0 0 rgba(255,255,255,.4)}70%{box-shadow:0 0 0 14px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
+        @keyframes zwowBlink{0%,100%{opacity:1}50%{opacity:.3}}
         .zwow-pop{animation:zwowPop .5s cubic-bezier(.22,.61,.36,1) both;}
         @media(prefers-reduced-motion:reduce){
           .zwow-overlay,.zwow-card,.zwow-pop{animation:none;}
-          .zwow-float{animation:none;}.zwow-sweep,.zwow-dot{animation:none;}
+          .zwow-float{animation:none;}.zwow-sweep,.zwow-dot,.zwow-live .pulse{animation:none;}
         }
       `}</style>
 
@@ -313,12 +395,12 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
             <div className="zwow-pop">
               <div className="flex items-center gap-4">
                 <span className="zwow-float shrink-0">
-                  <ZICharacter state={hasAnyData ? "celebrate" : "working"} size="md" animate={!reduce} />
+                  <ZICharacter state={hasAnyData ? "celebrate" : "scanning"} size="md" animate={!reduce} />
                 </span>
                 <div>
-                  <p className="zwow-eyebrow">הזון שלך מוכן</p>
+                  <p className="zwow-eyebrow">{hasAnyData ? "הזון שלך מוכן" : "בונה את הזון שלך"}</p>
                   <h1 className="zwow-h1">
-                    {hasAnyData ? `${where} — זה מה שכבר מצאתי בשבילך` : `מתחיל לבנות את ${where} בשבילך`}
+                    {hasAnyData ? `${where} — זה מה שכבר מצאתי בשבילך` : `סורק עכשיו את ${where} בשבילך…`}
                   </h1>
                 </div>
               </div>
@@ -328,7 +410,7 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
                   {revealTiles.length > 0 && (
                     <div className="zwow-tiles">
                       {revealTiles.map((t, i) => (
-                        <RevealTile key={t.label} value={t.v} label={t.label} icon={t.icon} hot={t.hot} reduce={reduce} delay={i * 90} />
+                        <RevealTile key={t.key} value={t.v} label={t.label} icon={t.icon} hot={t.hot} reduce={reduce} delay={i * 90} />
                       ))}
                     </div>
                   )}
@@ -337,7 +419,7 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
                   {dotCount > 0 && (
                     <div className="zwow-scan-wrap" style={{ marginTop: 16, height: 150 }}>
                       <div className="zwow-grid" />
-                      {dots.map((d, i) => (
+                      {dots.slice(0, dotCount).map((d, i) => (
                         <span key={i} className={`zwow-dot${d.hot ? " hot" : ""}`}
                           style={{ left: `${d.x}%`, top: `${d.y}%`, animationDelay: `${d.delay}s` }} />
                       ))}
@@ -381,16 +463,25 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
                       <span>{insight}</span>
                     </div>
                   )}
+
+                  {live.scanRunning && (
+                    <div className="zwow-live"><span className="pulse" />ZONO ממשיכה לסרוק — עוד נכסים והזדמנויות ייכנסו כאן בזמן אמת</div>
+                  )}
                 </>
               ) : (
-                <div className="zwow-insight" style={{ marginTop: 20 }}>
-                  <span className="mt-0.5 shrink-0" style={{ color: "var(--office-accent,#8b5cf6)", display: "inline-flex" }}><Icon name="Radar" className="h-4 w-4" /></span>
-                  <span>
-                    {stats.scanRunning
-                      ? `הסריקה של ${where} רצה ברגע זה ברקע — הנכסים, ההזדמנויות ומפת האזור ימלאו כאן וברחבי המערכת אוטומטית.`
-                      : `הסריקה של ${where} תרוץ אוטומטית ותתחיל למלא את הזירה בנתונים אמיתיים — נעדכן אותך ברגע שיהיו תוצאות.`}
-                  </span>
-                </div>
+                <>
+                  <div className="zwow-scan-wrap" style={{ marginTop: 20 }}>
+                    <div className="zwow-grid" />
+                    <div className="zwow-sweep" />
+                    {dots.map((d, i) => (
+                      <span key={i} className={`zwow-dot${d.hot ? " hot" : ""}`}
+                        style={{ left: `${d.x}%`, top: `${d.y}%`, animationDelay: `${d.delay}s` }} />
+                    ))}
+                  </div>
+                  <div className="zwow-live"><span className="pulse" />
+                    סורק את {where} ברגע זה — הנכסים, ההזדמנויות ומפת האזור יופיעו כאן בזמן אמת
+                  </div>
+                </>
               )}
 
               <div className="zwow-cta">
@@ -412,11 +503,12 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
   );
 }
 
-/** A single reveal tile whose number counts up from 0 → real value. */
+/** A single reveal tile whose number counts up (from its previous value) to the
+ *  current real value — so live poll updates tick up smoothly. */
 function RevealTile({ value, label, icon, hot, reduce, delay }: {
   value: number; label: string; icon: string; hot: boolean; reduce: boolean; delay: number;
 }) {
-  const shown = useCountUp(value, true, reduce);
+  const shown = useCountUp(value, reduce);
   return (
     <div className={`zwow-tile${hot ? " hot" : ""} zwow-pop`} style={{ animationDelay: `${delay}ms` }}>
       <div className="flex items-center justify-center gap-1.5">
