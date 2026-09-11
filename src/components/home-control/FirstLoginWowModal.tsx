@@ -49,6 +49,14 @@ interface LiveState {
   scanRunning: boolean;
 }
 
+interface LiveFeedItem {
+  id: string;
+  kind: "property" | "agent";
+  title: string;
+  sub: string | null;
+  tag: string | null;
+}
+
 const SCAN_STEPS: { icon: string; label: string }[] = [
   { icon: "Radar", label: "סורק את הזון שלך" },
   { icon: "Map", label: "מזהה שכונות" },
@@ -108,6 +116,23 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
   const reduceRef = useRef(false);
   const timers = useRef<number[]>([]);
   const storeKey = `zono_wow_intro_v1_${orgId}`;
+
+  // Live "discovery feed": each freshly scanned item is dripped onto the screen
+  // one at a time (a real item pops up for a few seconds, then the next), so it
+  // feels like watching ZI live-scan the zone. Queue + seen-set are refs (no
+  // re-render); only the small shown-stack is state.
+  const seenFeed = useRef<Set<string>>(new Set());
+  const feedQueue = useRef<LiveFeedItem[]>([]);
+  const [feedShown, setFeedShown] = useState<LiveFeedItem[]>([]);
+  const enqueueFeed = useCallback((items: LiveFeedItem[] | undefined) => {
+    if (!items || !items.length) return;
+    for (const it of items) {
+      if (it && it.id && !seenFeed.current.has(it.id)) {
+        seenFeed.current.add(it.id);
+        feedQueue.current.push(it);
+      }
+    }
+  }, []);
 
   // Live state — seeded from the server-rendered props, then kept fresh by polling.
   const [live, setLive] = useState<LiveState>(() => ({
@@ -207,6 +232,7 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
           const j = await res.json();
           if (!cancelled && j && j.stats) {
             mergeLive({ stats: j.stats, privateOwners: j.privateOwners, insight: j.insight, scanRunning: !!j.scanRunning });
+            enqueueFeed(j.feed as LiveFeedItem[] | undefined);
           }
           // Settled: scan finished AND we have listings → stop polling.
           if (!cancelled && j && j.scanRunning === false && j.stats && j.stats.discoveredListings > 0) return;
@@ -217,7 +243,20 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
     // First poll shortly after open, so the scan has a beat to write initial rows.
     timer = window.setTimeout(tick, 2500);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [open, mergeLive]);
+  }, [open, mergeLive, enqueueFeed]);
+
+  // DRIP the discovery feed — reveal one queued item at a time so each freshly
+  // scanned property/agent gets its ~4.5s moment on screen before the next.
+  useEffect(() => {
+    if (!open) return;
+    const stepMs = reduceRef.current ? 1200 : 4500;
+    const id = window.setInterval(() => {
+      if (feedQueue.current.length === 0) return;
+      const next = feedQueue.current.shift();
+      if (next) setFeedShown((prev) => [next, ...prev].slice(0, 4));
+    }, stepMs);
+    return () => window.clearInterval(id);
+  }, [open]);
 
   const close = () => {
     timers.current.forEach((t) => window.clearTimeout(t));
@@ -309,6 +348,20 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
         .zwow-insight{margin-top:16px;display:flex;gap:10px;align-items:flex-start;border-radius:16px;padding:12px 14px;font-size:13.5px;line-height:1.55;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}
         .zwow-live{margin-top:14px;display:inline-flex;align-items:center;gap:8px;border-radius:9999px;padding:6px 12px;font-size:12px;font-weight:700;color:#c7f9e5;background:rgba(52,211,153,.12);box-shadow:inset 0 0 0 1px rgba(52,211,153,.35);}
         .zwow-live .pulse{width:8px;height:8px;border-radius:9999px;background:#34d399;animation:zwowBlink 1.2s ease-in-out infinite;}
+        .zwow-feed{margin-top:18px;display:flex;flex-direction:column;gap:8px;}
+        .zwow-feed-head{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:rgba(255,255,255,.72);letter-spacing:.04em;}
+        .zwow-feed-head .pulse{width:8px;height:8px;border-radius:9999px;background:#34d399;animation:zwowBlink 1.2s ease-in-out infinite;}
+        .zwow-fitem{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);transition:opacity .4s,transform .4s;}
+        .zwow-fitem.fresh{background:linear-gradient(160deg,rgba(139,92,246,.28),rgba(255,255,255,.05));box-shadow:inset 0 0 0 1px rgba(167,139,250,.55),0 8px 24px rgba(76,29,149,.35);animation:zwowFitem .5s cubic-bezier(.22,.61,.36,1) both;}
+        .zwow-fitem .fic{display:flex;height:38px;width:38px;flex:none;align-items:center;justify-content:center;border-radius:12px;background:rgba(255,255,255,.1);}
+        .zwow-fitem.agent .fic{background:linear-gradient(160deg,rgba(52,211,153,.3),rgba(16,185,129,.12));}
+        .zwow-fitem .fbody{min-width:0;flex:1;}
+        .zwow-fitem .ftitle{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .zwow-fitem .fsub{font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .zwow-ftag{flex:none;font-size:10px;font-weight:800;padding:3px 8px;border-radius:9999px;}
+        .zwow-ftag.now{background:#34d399;color:#0f2a20;}
+        .zwow-ftag.plain{background:rgba(255,255,255,.12);color:rgba(255,255,255,.8);}
+        @keyframes zwowFitem{from{opacity:0;transform:translateY(-10px) scale(.98)}to{opacity:1;transform:none}}
         .zwow-cta{margin-top:22px;display:flex;flex-wrap:wrap;gap:10px;}
         .zwow-cta .primary{flex:1;min-width:180px;display:flex;align-items:center;justify-content:center;gap:8px;border:0;cursor:pointer;
           border-radius:16px;padding:14px 18px;font-size:15px;font-weight:800;background:var(--office-accent,#8b5cf6);color:var(--office-accent-ink,#fff);}
@@ -322,7 +375,8 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
         .zwow-pop{animation:zwowPop .5s cubic-bezier(.22,.61,.36,1) both;}
         @media(prefers-reduced-motion:reduce){
           .zwow-overlay,.zwow-card,.zwow-pop{animation:none;}
-          .zwow-float{animation:none;}.zwow-sweep,.zwow-dot,.zwow-live .pulse{animation:none;}
+          .zwow-float{animation:none;}.zwow-sweep,.zwow-dot,.zwow-live .pulse,.zwow-feed-head .pulse{animation:none;}
+          .zwow-fitem.fresh{animation:none;}
         }
       `}</style>
 
@@ -405,6 +459,29 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
                 </div>
               </div>
 
+              {/* LIVE DISCOVERY FEED — each freshly scanned item pops in, holds, next. */}
+              {feedShown.length > 0 && (
+                <div className="zwow-feed">
+                  <div className="zwow-feed-head"><span className="pulse" />ZI מגלה עכשיו בזון שלך</div>
+                  {feedShown.map((it, i) => (
+                    <div key={it.id} className={`zwow-fitem ${it.kind === "agent" ? "agent" : ""} ${i === 0 ? "fresh" : ""}`}>
+                      <span className="fic">
+                        <Icon name={it.kind === "agent" ? "UserRound" : "Building2"} className="h-5 w-5" />
+                      </span>
+                      <div className="fbody">
+                        <div className="ftitle">{it.title}</div>
+                        {it.sub && <div className="fsub">{it.sub}</div>}
+                      </div>
+                      {i === 0 ? (
+                        <span className="zwow-ftag now">נסרק עכשיו</span>
+                      ) : it.tag ? (
+                        <span className="zwow-ftag plain">{it.tag}</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {hasAnyData ? (
                 <>
                   {revealTiles.length > 0 && (
@@ -470,14 +547,16 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
                 </>
               ) : (
                 <>
-                  <div className="zwow-scan-wrap" style={{ marginTop: 20 }}>
-                    <div className="zwow-grid" />
-                    <div className="zwow-sweep" />
-                    {dots.map((d, i) => (
-                      <span key={i} className={`zwow-dot${d.hot ? " hot" : ""}`}
-                        style={{ left: `${d.x}%`, top: `${d.y}%`, animationDelay: `${d.delay}s` }} />
-                    ))}
-                  </div>
+                  {feedShown.length === 0 && (
+                    <div className="zwow-scan-wrap" style={{ marginTop: 20 }}>
+                      <div className="zwow-grid" />
+                      <div className="zwow-sweep" />
+                      {dots.map((d, i) => (
+                        <span key={i} className={`zwow-dot${d.hot ? " hot" : ""}`}
+                          style={{ left: `${d.x}%`, top: `${d.y}%`, animationDelay: `${d.delay}s` }} />
+                      ))}
+                    </div>
+                  )}
                   <div className="zwow-live"><span className="pulse" />
                     סורק את {where} ברגע זה — הנכסים, ההזדמנויות ומפת האזור יופיעו כאן בזמן אמת
                   </div>
