@@ -16,6 +16,7 @@ import { Icon } from "@/components/dashboard/Icon";
 import { CAPABILITIES, CAPABILITY_STATE_LABEL, type CapabilityState } from "@/lib/activation/capabilities";
 import type { ActivationState, OfficeIdentity, OfficeTrial, CityDiscovery } from "@/lib/activation/activation";
 import type { ZoneSnapshot } from "@/lib/activation/zone-snapshot";
+import { FirstLoginWowModal } from "./FirstLoginWowModal";
 
 export interface NewOfficeCommandCenterProps {
   identity: OfficeIdentity;
@@ -71,6 +72,15 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
         .zono-reveal { animation: zonoReveal .5s cubic-bezier(.22,.61,.36,1) both; }
         @media (prefers-reduced-motion: reduce) { .zono-reveal { animation: none; } }
       `}</style>
+
+      {/* ── FIRST-LOGIN WOW MODAL (dramatic full-screen takeover; plays once) ── */}
+      <FirstLoginWowModal
+        orgId={identity.orgId}
+        ownerFirstName={identity.ownerFirstName}
+        city={identity.city}
+        zone={zone}
+        discovery={discovery}
+      />
 
       {/* ── ZONE SCAN → REVEAL (first-run WOW; plays once, real numbers only) ── */}
       <ZoneScanReveal

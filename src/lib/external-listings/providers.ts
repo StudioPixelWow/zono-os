@@ -178,12 +178,26 @@ class ApifyProvider implements PropertyProvider {
     // its rows with __zonoDeal so normalizeListing records the correct deal_type. The
     // passes run concurrently (same wall-clock); a failing pass degrades to the other,
     // never both. NOTE: two actor runs per city ⇒ ~2× Apify usage per sync.
+    // Capture the real Apify error per pass instead of swallowing it. A failing
+    // pass still degrades to the other deal type, but if BOTH passes yield nothing
+    // AND at least one threw, we RE-THROW the real error so the caller (syncOrg /
+    // runSyncChunk) records WHY the city returned 0 — actor rental lapsed, token
+    // out of credits, or a non-SUCCEEDED status — in import_jobs.error + the job
+    // log, instead of masking a total failure as a silent "0 items".
+    let lastErr: Error | null = null;
     const passFor = async (dt: "buy" | "rent", tag: "sale" | "rent"): Promise<RawListing[]> => {
-      const rows = await runActor(this.actorId, this.buildInput(locality, limit, dt), limit).catch(() => [] as RawListing[]);
-      return rows.map((r) => ({ ...r, __zonoDeal: tag }));
+      try {
+        const rows = await runActor(this.actorId, this.buildInput(locality, limit, dt), limit);
+        return rows.map((r) => ({ ...r, __zonoDeal: tag }));
+      } catch (e) {
+        lastErr = e instanceof Error ? e : new Error(String(e));
+        return [] as RawListing[];
+      }
     };
     const [sale, rent] = await Promise.all([passFor("buy", "sale"), passFor("rent", "rent")]);
-    return [...sale, ...rent];
+    const all = [...sale, ...rent];
+    if (all.length === 0 && lastErr) throw lastErr;
+    return all;
   }
 
   /** Non-destructive test run: returns status + first item + error, never throws. */
