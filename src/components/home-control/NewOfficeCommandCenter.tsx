@@ -69,6 +69,19 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
   // to-do list. The owner expands it when they want to work the steps.
   const [journeyOpen, setJourneyOpen] = useState(false);
 
+  // Merged-hero zone tiles — the real numbers shown inside the ONE welcome hero
+  // (the separate scan-reveal card was folded in; the dramatic scan lives in the
+  // first-login modal). A 0 metric is omitted, never fabricated.
+  const heroTiles = [
+    { v: discovery?.discoveredListings ?? 0, label: "נכסים באזור", icon: "Building2", hot: false },
+    { v: discovery?.noBrokerCount ?? 0, label: "ללא מתווך", icon: "Sparkles", hot: true },
+    { v: zone?.census?.brokersTotal ?? 0, label: "מתווכים פעילים", icon: "Users", hot: false },
+    { v: zone?.census?.verifiedOffices ?? 0, label: "משרדים מזוהים", icon: "Landmark", hot: false },
+    { v: discovery?.neighborhoods ?? 0, label: "שכונות שמופו", icon: "Map", hot: false },
+    { v: discovery?.mapPoints ?? 0, label: "על המפה", icon: "MapPin", hot: false },
+  ].filter((t) => t.v > 0);
+  const heroInsight = zone?.insights?.[0] ?? null;
+
   return (
     <div dir="rtl" data-office-brand={hasBrand ? "true" : undefined} style={themeVars as React.CSSProperties}
       className="mx-auto flex max-w-[1180px] flex-col px-4 pb-16 pt-4 sm:px-6">
@@ -87,21 +100,6 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
         discovery={discovery}
       />
 
-      {/* ── ZONE SCAN → REVEAL (first-run WOW; plays once, real numbers only) ── */}
-      <ZoneScanReveal
-        orgId={identity.orgId}
-        city={identity.city}
-        insights={zone?.insights ?? []}
-        stats={{
-          discoveredListings: discovery?.discoveredListings ?? 0,
-          noBrokerCount: discovery?.noBrokerCount ?? 0,
-          neighborhoods: discovery?.neighborhoods ?? 0,
-          mapPoints: discovery?.mapPoints ?? 0,
-          brokersTotal: zone?.census?.brokersTotal ?? 0,
-          verifiedOffices: zone?.census?.verifiedOffices ?? 0,
-          scanRunning: discovery?.scanRunning ?? false,
-        }}
-      />
 
       {/* ── FIRST LOGIN HERO ─────────────────────────────────────────────── */}
       <Reveal i={0} className="order-1">
@@ -168,6 +166,31 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
               </span>
             )}
           </div>
+
+          {/* Real zone numbers — folded into the ONE hero (was a separate card) */}
+          {heroTiles.length > 0 && (
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {heroTiles.map((t) => (
+                <div key={t.label}
+                  className={cn("group relative overflow-hidden rounded-2xl px-3 py-4 text-center ring-1 transition hover:-translate-y-0.5",
+                    t.hot ? "bg-gradient-to-b from-emerald-400/25 to-emerald-500/[.06] ring-emerald-300/40 shadow-[0_10px_30px_-12px_rgba(16,185,129,0.5)]"
+                          : "bg-white/[.08] ring-white/15 hover:bg-white/[.12]")}>
+                  <span className={cn("mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl",
+                    t.hot ? "bg-emerald-400/25 text-emerald-100" : "bg-white/10 text-white/70")}>
+                    <Icon name={t.icon} className="h-4 w-4" />
+                  </span>
+                  <p className={cn("text-2xl font-extrabold leading-none tabular-nums sm:text-[26px]", t.hot ? "text-emerald-50" : "text-white")}>{ILS.format(t.v)}</p>
+                  <p className={cn("mt-1.5 text-[11px] font-semibold", t.hot ? "text-emerald-200/90" : "text-white/70")}>{t.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {heroInsight && (
+            <p className="mt-4 flex items-start gap-2 text-sm leading-relaxed text-white/85">
+              <span className="mt-0.5 shrink-0" style={{ color: "var(--office-accent)" }}><Icon name="Sparkles" className="h-4 w-4" /></span>
+              <span>{heroInsight}</span>
+            </p>
+          )}
         </section>
       </Reveal>
 
@@ -462,165 +485,3 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
   );
 }
 
-// ============================================================================
-// ZONE SCAN → REVEAL — the first-run "ZONO is building your zone" moment.
-// Plays a short scan animation ONCE (localStorage-gated, respects reduced motion),
-// then reveals the REAL zone numbers. The animated steps are action labels only —
-// they never assert a number; the reveal shows the genuine counts (a metric with
-// 0 is simply omitted), so nothing is fabricated. RTL, premium, on-brand.
-// ============================================================================
-const SCAN_STEPS: { icon: string; label: string }[] = [
-  { icon: "Radar", label: "סורקים את הזון שלך" },
-  { icon: "Map", label: "מזהים שכונות" },
-  { icon: "Building2", label: "ממפים נכסים באזור" },
-  { icon: "Sparkles", label: "מאתרים נכסים ללא מתווך" },
-  { icon: "Users", label: "ממפים מתווכים פעילים באזור" },
-  { icon: "TrendingUp", label: "מנתחים את השוק המקומי" },
-  { icon: "Check", label: "בונים את תמונת המצב שלך" },
-];
-
-interface ZoneStats {
-  discoveredListings: number; noBrokerCount: number; neighborhoods: number;
-  mapPoints: number; brokersTotal: number; verifiedOffices: number; scanRunning: boolean;
-}
-
-function ZoneScanReveal({ orgId, city, insights, stats }: {
-  orgId: string; city: string | null; insights: string[]; stats: ZoneStats;
-}) {
-  const [revealed, setRevealed] = useState(false);
-  const [step, setStep] = useState(0);
-  const storeKey = `zono_zone_revealed_v1_${orgId}`;
-
-  useEffect(() => {
-    let seen = false;
-    try { seen = !!window.localStorage.getItem(storeKey); } catch { /* private mode */ }
-    const reduce = typeof window !== "undefined" && !!window.matchMedia
-      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (seen || reduce) { setStep(SCAN_STEPS.length); setRevealed(true); return; }
-    let i = 0;
-    const id = window.setInterval(() => {
-      i += 1; setStep(i);
-      if (i >= SCAN_STEPS.length) {
-        window.clearInterval(id);
-        window.setTimeout(() => {
-          setRevealed(true);
-          try { window.localStorage.setItem(storeKey, "1"); } catch { /* ignore */ }
-        }, 480);
-      }
-    }, 560);
-    return () => window.clearInterval(id);
-  }, [storeKey]);
-
-  const tiles = [
-    { v: stats.discoveredListings, label: "נכסים באזור", icon: "Building2", hot: false },
-    { v: stats.noBrokerCount, label: "ללא מתווך", icon: "Sparkles", hot: true },
-    { v: stats.brokersTotal, label: "מתווכים פעילים", icon: "Users", hot: false },
-    { v: stats.verifiedOffices, label: "משרדים מזוהים", icon: "Landmark", hot: false },
-    { v: stats.neighborhoods, label: "שכונות שמופו", icon: "Map", hot: false },
-    { v: stats.mapPoints, label: "על המפה", icon: "MapPin", hot: false },
-  ].filter((t) => t.v > 0);
-
-  return (
-    <section dir="rtl"
-      className="relative mb-4 overflow-hidden rounded-[28px] px-6 py-7 text-white shadow-[0_20px_48px_rgba(76,29,149,0.22)] sm:px-9 sm:py-9"
-      style={{ background: "linear-gradient(140deg,#140f2b 0%,#241653 55%,#3a2470 100%)" }}>
-      <style>{`
-        @keyframes zsPulse { 0%,100%{transform:scale(1);opacity:.55} 50%{transform:scale(1.35);opacity:0} }
-        @keyframes zsPop { from{opacity:0;transform:translateY(8px) scale(.96)} to{opacity:1;transform:none} }
-        @keyframes zsCount { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
-        .zs-radar::before{content:"";position:absolute;inset:0;border-radius:9999px;background:var(--office-accent);animation:zsPulse 1.8s ease-out infinite}
-        .zs-pop{animation:zsPop .5s cubic-bezier(.22,.61,.36,1) both}
-        .zs-tile{animation:zsCount .5s ease both}
-        @media (prefers-reduced-motion: reduce){.zs-radar::before{animation:none}.zs-pop,.zs-tile{animation:none}}
-      `}</style>
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: "var(--office-accent)" }} />
-
-      {!revealed ? (
-        // ── SCANNING ──────────────────────────────────────────────────────
-        <div>
-          <div className="flex items-center gap-4">
-            <span className="relative flex h-14 w-14 shrink-0 items-center justify-center">
-              <span className="zs-radar absolute inset-0 rounded-full opacity-40" />
-              <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
-                <Icon name="Radar" className="h-7 w-7 text-white" />
-              </span>
-            </span>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-white/60">ZONO בונה את הזון שלך</p>
-              <h1 className="mt-1 text-2xl font-extrabold leading-tight sm:text-3xl">
-                מכירים את {city ?? "האזור"} שלך…
-              </h1>
-            </div>
-          </div>
-          <ul className="mt-6 grid gap-2 sm:grid-cols-2">
-            {SCAN_STEPS.map((s, i) => {
-              const done = i < step;
-              const active = i === step;
-              return (
-                <li key={i}
-                  className={cn("flex items-center gap-3 rounded-2xl px-3.5 py-2.5 ring-1 transition",
-                    done ? "bg-white/10 ring-white/15" : active ? "bg-white/[.06] ring-white/10" : "opacity-40 ring-transparent")}>
-                  <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                    done ? "bg-emerald-400 text-[#10231a]" : "bg-white/10 text-white/70")}>
-                    <Icon name={done ? "Check" : s.icon} className="h-4 w-4" />
-                  </span>
-                  <span className="text-sm font-semibold text-white/90">{s.label}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : (
-        // ── REVEAL ────────────────────────────────────────────────────────
-        <div className="zs-pop">
-          <div className="flex items-center gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl"
-              style={{ background: "var(--office-accent)", color: "var(--office-accent-ink)" }}>
-              <Icon name="Sparkles" className="h-7 w-7" />
-            </span>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-white/60">הזון שלך מוכן</p>
-              <h1 className="mt-1 text-2xl font-extrabold leading-tight sm:text-3xl">
-                {city ?? "האזור שלך"} — ZONO כבר עובדת בשבילך
-              </h1>
-            </div>
-          </div>
-
-          {tiles.length > 0 ? (
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              {tiles.map((t, i) => (
-                <div key={t.label}
-                  className={cn("zs-tile group relative overflow-hidden rounded-2xl px-3 py-4 text-center ring-1 transition hover:-translate-y-0.5",
-                    t.hot ? "bg-gradient-to-b from-emerald-400/25 to-emerald-500/[.06] ring-emerald-300/40 shadow-[0_10px_30px_-12px_rgba(16,185,129,0.5)]"
-                          : "bg-white/[.08] ring-white/15 hover:bg-white/[.12]")}
-                  style={{ animationDelay: `${i * 70}ms` }}>
-                  <span className={cn("mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl",
-                    t.hot ? "bg-emerald-400/25 text-emerald-100" : "bg-white/10 text-white/70")}>
-                    <Icon name={t.icon} className="h-4 w-4" />
-                  </span>
-                  <p className={cn("text-2xl font-extrabold leading-none tabular-nums sm:text-[26px]", t.hot ? "text-emerald-50" : "text-white")}>{ILS.format(t.v)}</p>
-                  <p className={cn("mt-1.5 text-[11px] font-semibold", t.hot ? "text-emerald-200/90" : "text-white/70")}>{t.label}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-5 max-w-xl text-sm leading-relaxed text-white/75">
-              {stats.scanRunning
-                ? `הסריקה של ${city ?? "האזור"} רצה ברגע זה ברקע — הנתונים האמיתיים יופיעו כאן וברחבי המערכת אוטומטית.`
-                : `מתחילים לבנות את מודיעין השוק של ${city ?? "האזור"} — נמשיך לנטר ולעדכן אותך אוטומטית.`}
-            </p>
-          )}
-
-          {insights.length > 0 && (
-            <p className="mt-4 flex items-start gap-2 text-sm leading-relaxed text-white/85">
-              <span className="mt-0.5 shrink-0" style={{ color: "var(--office-accent)" }}>
-                <Icon name="Sparkles" className="h-4 w-4" />
-              </span>
-              <span>{insights[0]}</span>
-            </p>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}

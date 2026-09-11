@@ -1,0 +1,1038 @@
+From f4429822d9a53e662f23d5239b12e03e3ea60d13 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 13:40:11 +0000
+Subject: [PATCH] feat(geo): add automatic cached geocoding pipeline
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Internal-first enrichment (cache → exact → street → neighborhood → city →
+provider) with dedup, cost caps, metrics, lifecycle triggers, ops status endpoint,
+and the one canonical cron rewired to it. Reuses the single canonical geocoder;
+no second provider, no second cron. See AUTOMATIC_GEOCODING_PIPELINE_REPORT.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Cm5NAh92cekdimerQbEsCW
+---
+ .../geo-cache-pipeline.test.ts                | 124 ++++++++
+ .../properties-transactions-geocode/route.ts  |  25 +-
+ src/app/api/ops/geo-pipeline/route.ts         |  25 ++
+ src/lib/geo/geo-cache-key.ts                  | 105 +++++++
+ src/lib/geo/geo-enrichment.ts                 |   9 +-
+ src/lib/geo/geo-evidence-index.ts             | 138 +++++++++
+ src/lib/geo/geo-pipeline-status.ts            |  75 +++++
+ src/lib/geo/geo-pipeline.ts                   | 275 ++++++++++++++++++
+ .../20280801120000_geo_pipeline_cache.sql     | 135 +++++++++
+ vercel.json                                   |   2 +-
+ 10 files changed, 895 insertions(+), 18 deletions(-)
+ create mode 100644 scripts/avm-engine-tests/geo-cache-pipeline.test.ts
+ create mode 100644 src/app/api/ops/geo-pipeline/route.ts
+ create mode 100644 src/lib/geo/geo-cache-key.ts
+ create mode 100644 src/lib/geo/geo-evidence-index.ts
+ create mode 100644 src/lib/geo/geo-pipeline-status.ts
+ create mode 100644 src/lib/geo/geo-pipeline.ts
+ create mode 100644 supabase/migrations/20280801120000_geo_pipeline_cache.sql
+
+diff --git a/scripts/avm-engine-tests/geo-cache-pipeline.test.ts b/scripts/avm-engine-tests/geo-cache-pipeline.test.ts
+new file mode 100644
+index 00000000..9d7ac7c4
+--- /dev/null
++++ b/scripts/avm-engine-tests/geo-cache-pipeline.test.ts
+@@ -0,0 +1,124 @@
++// ============================================================================
++// ZONO GEO — automatic fast pipeline: canonical cache keys + internal-first
++// resolution (tsx; pure logic, offline). Proves the cost-saving core is correct
++// AND honest:
++//   • the SAME real location keys the same way across Hebrew⇄English spelling,
++//   • a city/neighborhood coordinate can never be served as a precise one,
++//   • identical addresses collapse to one lookup (dedup),
++//   • a coarse coordinate never overwrites a precise one (no-promote).
++// Run: node --import tsx --test scripts/avm-engine-tests/geo-cache-pipeline.test.ts
++// ============================================================================
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import {
++  buildCacheKeyCandidates, writeKeyForResolution, foldStreet, resolutionForKeyType,
++} from "@/lib/geo/geo-cache-key";
++import {
++  createEvidenceIndex, addEvidencePoint, resolveFromEvidence, resolveFromCache,
++  resolveInternal, outranks, type CachedCoord,
++} from "@/lib/geo/geo-evidence-index";
++import { isPreciseResolution } from "@/lib/geo/address";
++
++const KB_HE = "קרית ביאליק";
++const KB_HE2 = "קריית ביאליק";   // male spelling
++const KB_EN = "Kiryat Bialik";
++
++test("canonical city key is identical across Hebrew spelling AND English transliteration", () => {
++  const cityKey = (cs: ReturnType<typeof buildCacheKeyCandidates>) => cs.find((c) => c.keyType === "city")!.key;
++  assert.equal(cityKey(buildCacheKeyCandidates({ city: KB_HE, neighborhood: "גבעת הרקפות" })),
++               cityKey(buildCacheKeyCandidates({ city: KB_HE2, neighborhood: "גבעת הרקפות" })));
++  assert.equal(cityKey(buildCacheKeyCandidates({ city: KB_HE })),
++               cityKey(buildCacheKeyCandidates({ city: KB_EN }))); // EN listings ≡ HE transactions
++});
++
++test("candidate granularities are finest→coarsest with honest resolutions", () => {
++  const cs = buildCacheKeyCandidates({ city: KB_EN, neighborhood: "צור שלום", street: "לוטם", streetNumber: "2" });
++  assert.deepEqual(cs.map((c) => c.keyType), ["exact", "street", "neighborhood", "city"]);
++  assert.deepEqual(cs.map((c) => c.resolution), ["ROOFTOP", "STREET", "NEIGHBORHOOD", "CITY"]);
++});
++
++test("street fold drops the house number (same street, different numbers → one key)", () => {
++  assert.equal(foldStreet("לוטם 2"), foldStreet("לוטם 5"));
++  const a = buildCacheKeyCandidates({ city: KB_EN, street: "לוטם 2" }).find((c) => c.keyType === "street")!.key;
++  const b = buildCacheKeyCandidates({ city: KB_EN, street: "לוטם 5" }).find((c) => c.keyType === "street")!.key;
++  assert.equal(a, b);
++});
++
++test("a city-only address yields a city key; a street-less one stops at neighborhood; no city → nothing", () => {
++  assert.deepEqual(buildCacheKeyCandidates({ city: KB_EN }).map((c) => c.keyType), ["city"]);
++  assert.deepEqual(buildCacheKeyCandidates({ city: KB_EN, neighborhood: "אפק" }).map((c) => c.keyType), ["neighborhood", "city"]);
++  assert.deepEqual(buildCacheKeyCandidates({}), []);
++});
++
++test("writeKeyForResolution never stores a coarse result under a precise key", () => {
++  const parts = { city: KB_EN, neighborhood: "אפק", street: "לוטם", streetNumber: "2" };
++  assert.equal(writeKeyForResolution(parts, "CITY")!.keyType, "city");
++  assert.equal(writeKeyForResolution(parts, "NEIGHBORHOOD")!.keyType, "neighborhood");
++  assert.equal(writeKeyForResolution(parts, "STREET")!.keyType, "street");
++  assert.equal(writeKeyForResolution(parts, "ROOFTOP")!.keyType, "exact");
++});
++
++test("evidence: same-street match is STREET-precise centroid; neighborhood/city stay coarse", () => {
++  const idx = createEvidenceIndex();
++  addEvidencePoint(idx, { city: KB_EN, neighborhood: "אפק", street: "לוטם", streetNumber: "2" }, { lat: 32.84, lng: 35.08 });
++  addEvidencePoint(idx, { city: KB_EN, neighborhood: "אפק", street: "לוטם", streetNumber: "8" }, { lat: 32.86, lng: 35.10 });
++
++  const street = resolveFromEvidence(idx, { city: KB_HE, street: "לוטם 4" });
++  assert.ok(street);
++  assert.equal(street!.source, "internal_street");
++  assert.equal(street!.resolution, "STREET");
++  assert.ok(isPreciseResolution(street!.resolution));
++  assert.ok(Math.abs(street!.lat - 32.85) < 1e-9);
++
++  const hood = resolveFromEvidence(idx, { city: KB_HE, neighborhood: "אפק" });
++  assert.equal(hood!.source, "internal_neighborhood");
++  assert.equal(hood!.resolution, "NEIGHBORHOOD");
++  assert.ok(!isPreciseResolution(hood!.resolution));
++
++  const city = resolveFromEvidence(idx, { city: KB_EN });
++  assert.equal(city!.source, "internal_city");
++  assert.equal(city!.resolution, "CITY");
++  assert.ok(!isPreciseResolution(city!.resolution));
++});
++
++test("exact same-address evidence returns the building point (STREET-precise, never fake ROOFTOP)", () => {
++  const idx = createEvidenceIndex();
++  addEvidencePoint(idx, { city: KB_EN, street: "יקינתון", streetNumber: "5" }, { lat: 32.81, lng: 35.07 });
++  const m = resolveFromEvidence(idx, { city: KB_HE2, street: "יקינתון", streetNumber: "5" });
++  assert.equal(m!.source, "internal_exact");
++  assert.equal(m!.resolution, "STREET");
++  assert.equal(m!.lat, 32.81);
++});
++
++test("cache beats evidence and reports as a cache hit", () => {
++  const idx = createEvidenceIndex();
++  addEvidencePoint(idx, { city: KB_EN, street: "לוטם", streetNumber: "2" }, { lat: 32.84, lng: 35.08 });
++  const cache = new Map<string, CachedCoord>();
++  const streetKey = buildCacheKeyCandidates({ city: KB_EN, street: "לוטם" }).find((c) => c.keyType === "street")!.key;
++  cache.set(streetKey, { lat: 1.23, lng: 4.56, resolution: "STREET", provider: "google" });
++  const m = resolveInternal(idx, cache, { city: KB_HE, street: "לוטם 9" });
++  assert.equal(m!.source, "internal_cache");
++  assert.equal(m!.lat, 1.23);
++});
++
++test("no internal evidence at all → null (caller must pay the provider)", () => {
++  const idx = createEvidenceIndex();
++  const cache = new Map<string, CachedCoord>();
++  assert.equal(resolveInternal(idx, cache, { city: "אילת", neighborhood: "שחמון" }), null);
++  assert.equal(resolveFromCache(cache, { city: "אילת" }), null);
++});
++
++test("dedup: identical street-less addresses collapse to one group key", () => {
++  const a = buildCacheKeyCandidates({ city: KB_EN, neighborhood: "צור שלום" })[0].key;
++  const b = buildCacheKeyCandidates({ city: KB_HE, neighborhood: "צור שלום" })[0].key;
++  assert.equal(a, b);
++});
++
++test("no-promote: a coarse resolution never outranks a precise one", () => {
++  assert.ok(!outranks("CITY", "STREET"));
++  assert.ok(!outranks("NEIGHBORHOOD", "ROOFTOP"));
++  assert.ok(outranks("STREET", "CITY"));
++  assert.ok(outranks("STREET", null));
++  assert.equal(resolutionForKeyType("city"), "CITY");
++  assert.equal(resolutionForKeyType("exact"), "ROOFTOP");
++});
+diff --git a/src/app/api/cron/properties-transactions-geocode/route.ts b/src/app/api/cron/properties-transactions-geocode/route.ts
+index 5b87eb7a..8be0e22f 100644
+--- a/src/app/api/cron/properties-transactions-geocode/route.ts
++++ b/src/app/api/cron/properties-transactions-geocode/route.ts
+@@ -1,15 +1,16 @@
+ import { NextResponse, type NextRequest } from "next/server";
+-import { geocodeGeoBacklogForAllOrganizations } from "@/lib/geo/geo-enrichment";
++import { runGeoBackfill } from "@/lib/geo/geo-pipeline";
+ 
+ export const runtime = "nodejs";
+ export const maxDuration = 300;
+ 
+ /**
+- * AVM 3.2 §17 — nightly geo backlog for SUBJECT properties + SOLD transactions.
+- * The valuation AVM compares a property to nearby real evidence, which needs
+- * coordinates; this drains the un-geocoded backlog in bounded, org-scoped batches
+- * using the ONE canonical geocoder (Google→OSM). Real coordinates only — failures
+- * are marked, never invented. Secured by CRON_SECRET.
++ * ZONO GEO — the ONE canonical geocoding cron for SUBJECT properties + SOLD
++ * transactions. Runs the automatic fast pipeline (internal-first: cache → exact →
++ * street → neighborhood → city → provider), which resolves most rows from real
++ * evidence we already have and only calls the paid provider for genuine gaps —
++ * bounded by a per-run provider ceiling + time budget. Real coordinates only;
++ * failures are marked, never invented. Secured by CRON_SECRET.
+  */
+ export async function GET(req: NextRequest) {
+   const secret = process.env.CRON_SECRET;
+@@ -18,16 +19,8 @@ export async function GET(req: NextRequest) {
+     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+   }
+   try {
+-    const results = await geocodeGeoBacklogForAllOrganizations();
+-    const totals = results.reduce(
+-      (a, r) => ({
+-        properties: a.properties + r.properties.resolved,
+-        transactions: a.transactions + r.transactions.resolved,
+-        failed: a.failed + r.properties.failed + r.transactions.failed,
+-      }),
+-      { properties: 0, transactions: 0, failed: 0 },
+-    );
+-    return NextResponse.json({ ok: true, organizations: results.length, totals });
++    const metrics = await runGeoBackfill();
++    return NextResponse.json({ ok: true, ...metrics });
+   } catch (e) {
+     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "cron failed" }, { status: 500 });
+   }
+diff --git a/src/app/api/ops/geo-pipeline/route.ts b/src/app/api/ops/geo-pipeline/route.ts
+new file mode 100644
+index 00000000..21740f08
+--- /dev/null
++++ b/src/app/api/ops/geo-pipeline/route.ts
+@@ -0,0 +1,25 @@
++import { NextResponse } from "next/server";
++import { getSessionContext } from "@/lib/auth/session";
++import { resolveRoleKey } from "@/lib/auth/role";
++import { isManagerRole } from "@/lib/auth/office-roles";
++import { getGeoPipelineStatus } from "@/lib/geo/geo-pipeline-status";
++
++export const runtime = "nodejs";
++
++/**
++ * ZONO GEO — ops/admin status for the automatic geocoding pipeline (§12).
++ * Manager/owner only — never exposed to brokers. Returns coverage, cache size,
++ * last run, provider calls today and the recent cache-hit rate as JSON.
++ */
++export async function GET() {
++  const { profile, state } = await getSessionContext();
++  if (state !== "ready" || !profile?.org_id) {
++    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
++  }
++  const role = await resolveRoleKey(profile);
++  if (!isManagerRole(role)) {
++    return NextResponse.json({ error: "forbidden" }, { status: 403 });
++  }
++  const status = await getGeoPipelineStatus(profile.org_id);
++  return NextResponse.json(status);
++}
+diff --git a/src/lib/geo/geo-cache-key.ts b/src/lib/geo/geo-cache-key.ts
+new file mode 100644
+index 00000000..1e6c03c6
+--- /dev/null
++++ b/src/lib/geo/geo-cache-key.ts
+@@ -0,0 +1,105 @@
++// ============================================================================
++// ZONO GEO — Canonical CACHE KEY derivation (PURE, LEAF, dependency-light).
++// ----------------------------------------------------------------------------
++// Turns an address into the normalized keys under which a coordinate is cached /
++// looked up, so the SAME real location resolves to the SAME key regardless of how
++// it was written. Reuses the canonical locality engine (Hebrew⇄English:
++// "קרית ביאליק" ≡ "Kiryat Bialik") — proven necessary by live data where sold
++// transactions were Hebrew and asking listings English. No provider calls here;
++// unit-testable.
++//
++// Four granularities, finest → coarsest, each with the FINEST resolution it can
++// justify. A city/neighborhood key can never carry a STREET/ROOFTOP resolution
++// (§2 — a centroid must never unlock R300/R700/same-street).
++// ============================================================================
++import { canonicalLocality, canonicalNeighborhood, foldLocality } from "./locality";
++import type { GeoResolution } from "./address";
++import { resolutionRank } from "./address";
++
++export type CacheKeyType = "exact" | "street" | "neighborhood" | "city";
++
++export interface CacheKeyParts {
++  city?: string | null;
++  street?: string | null;
++  streetNumber?: string | null;
++  neighborhood?: string | null;
++}
++
++export interface CacheKeyCandidate {
++  key: string;
++  keyType: CacheKeyType;
++  /** The finest resolution this key granularity can justify. */
++  resolution: GeoResolution;
++}
++
++/** The finest resolution each key granularity is ALLOWED to represent. */
++const RESOLUTION_FOR_TYPE: Record<CacheKeyType, GeoResolution> = {
++  exact: "ROOFTOP",
++  street: "STREET",
++  neighborhood: "NEIGHBORHOOD",
++  city: "CITY",
++};
++
++export function resolutionForKeyType(t: CacheKeyType): GeoResolution {
++  return RESOLUTION_FOR_TYPE[t];
++}
++
++/** Fold a street name to a comparison form: drop a trailing house number
++ *  ("לוטם 2" and "לוטם 5" fold to the same street) and canonicalize spelling. */
++export function foldStreet(street: string | null | undefined): string | null {
++  const raw = (street ?? "").trim();
++  if (!raw) return null;
++  // strip a trailing number (and any decimal/letter suffix): "לוטם 2.0 א" → "לוטם"
++  const nameOnly = raw.replace(/[0-9].*$/, "").trim();
++  const folded = foldLocality(nameOnly || raw);
++  return folded || null;
++}
++
++/** Extract a bare house number from a street/number field ("לוטם 2.0" → "2"). */
++export function houseNumber(streetNumber: string | null | undefined, street?: string | null): string | null {
++  const fromNum = (streetNumber ?? "").match(/\d+/)?.[0] ?? null;
++  if (fromNum) return fromNum;
++  const fromStreet = (street ?? "").match(/(\d+)/)?.[1] ?? null;
++  return fromStreet;
++}
++
++/**
++ * All cache-key candidates for an address, FINEST → COARSEST. A lookup should try
++ * them in order and take the first cache hit; a write should use the candidate
++ * matching the resolution actually obtained (see writeKeyForResolution). Returns
++ * [] when there is not even a city to key on (nothing to cache honestly).
++ */
++export function buildCacheKeyCandidates(parts: CacheKeyParts): CacheKeyCandidate[] {
++  const city = canonicalLocality(parts.city);
++  if (!city) return []; // without a city we cannot form a stable key
++  const street = foldStreet(parts.street);
++  const num = street ? houseNumber(parts.streetNumber, parts.street) : null;
++  const nbhd = canonicalNeighborhood(parts.neighborhood);
++
++  const out: CacheKeyCandidate[] = [];
++  if (street && num) out.push({ key: `exact:${city}|${street}|${num}`, keyType: "exact", resolution: "ROOFTOP" });
++  if (street) out.push({ key: `street:${city}|${street}`, keyType: "street", resolution: "STREET" });
++  if (nbhd) out.push({ key: `neighborhood:${city}|${nbhd}`, keyType: "neighborhood", resolution: "NEIGHBORHOOD" });
++  out.push({ key: `city:${city}`, keyType: "city", resolution: "CITY" });
++  return out;
++}
++
++/**
++ * The key under which a coordinate obtained at `resolution` should be STORED:
++ * the finest candidate whose granularity does not over-claim the resolution.
++ * A CITY-resolution result is never stored under a street/exact key, so it can
++ * never later be served as a precise coordinate. Returns null if the parts can't
++ * form any key.
++ */
++export function writeKeyForResolution(parts: CacheKeyParts, resolution: GeoResolution): CacheKeyCandidate | null {
++  const candidates = buildCacheKeyCandidates(parts);
++  if (candidates.length === 0) return null;
++  const cap = resolutionRank(resolution);
++  // finest candidate whose implied resolution is not finer than what we actually got
++  for (const c of candidates) {
++    if (resolutionRank(c.resolution) <= cap) return c;
++  }
++  // everything is finer than the result (e.g. CITY result but only an exact key
++  // was built — impossible since candidates always include city) → coarsest.
++  return candidates[candidates.length - 1];
++}
+diff --git a/src/lib/geo/geo-enrichment.ts b/src/lib/geo/geo-enrichment.ts
+index 889d11f3..0035f5a6 100644
+--- a/src/lib/geo/geo-enrichment.ts
++++ b/src/lib/geo/geo-enrichment.ts
+@@ -96,9 +96,16 @@ export async function geocodeOrgTransactions(db: DB, orgId: string, opts: { limi
+ }
+ 
+ /**
++ * @deprecated Superseded by runGeoBackfill() in ./geo-pipeline, which resolves
++ * most rows internally (cache → exact → street → neighborhood → city) before ever
++ * calling the paid provider. The canonical cron now calls runGeoBackfill. These
++ * per-org helpers above remain valid provider-only building blocks; this all-orgs
++ * drainer (provider-for-every-row) is kept only for backward compatibility and is
++ * no longer wired to any cron. Do NOT add a second cron for it.
++ *
+  * Nightly all-orgs drainer (AVM 3.2 §17) — bounded per-org enrichment of subject
+  * properties + sold transactions that still lack coordinates. Reuses the canonical
+- * geocoder; org-scoped; idempotent (only NULL-coordinate rows). Called by the cron.
++ * geocoder; org-scoped; idempotent (only NULL-coordinate rows).
+  */
+ export async function geocodeGeoBacklogForAllOrganizations(opts: { perOrg?: number } = {}): Promise<Array<{ orgId: string; properties: GeoEnrichStats; transactions: GeoEnrichStats }>> {
+   const perOrg = opts.perOrg ?? DEFAULT_BATCH;
+diff --git a/src/lib/geo/geo-evidence-index.ts b/src/lib/geo/geo-evidence-index.ts
+new file mode 100644
+index 00000000..439e2a71
+--- /dev/null
++++ b/src/lib/geo/geo-evidence-index.ts
+@@ -0,0 +1,138 @@
++// ============================================================================
++// ZONO GEO — Internal-first resolution (PURE, LEAF).
++// ----------------------------------------------------------------------------
++// The core of "don't pay a provider for what we already know": an in-memory index
++// of REAL geocoded evidence (external_listings + geocoded transactions/properties)
++// plus the persisted cache, resolved by canonical key. Resolution order matches
++// the spec: cache → exact address → same street → same neighborhood → same city →
++// (only then) external provider. Coordinates are never invented — a bucket only
++// exists because a real geocoded row fed it. City/neighborhood matches carry a
++// coarse resolution and so can never unlock a precise (R300/R700/street) tier.
++//
++// PURE: operates on plain data (index + cache map). The DB scan that fills the
++// index and the provider fallback live in the server pipeline; keeping resolution
++// here makes it unit-testable and offline.
++// ============================================================================
++import type { GeoResolution } from "./address";
++import { resolutionRank } from "./address";
++import {
++  buildCacheKeyCandidates, writeKeyForResolution,
++  type CacheKeyParts, type CacheKeyType,
++} from "./geo-cache-key";
++
++export interface Coord { lat: number; lng: number }
++
++interface Centroid { sumLat: number; sumLng: number; n: number }
++
++export interface EvidenceIndex {
++  exact: Map<string, Coord>;        // one representative building point
++  street: Map<string, Centroid>;
++  neighborhood: Map<string, Centroid>;
++  city: Map<string, Centroid>;
++}
++
++export function createEvidenceIndex(): EvidenceIndex {
++  return { exact: new Map(), street: new Map(), neighborhood: new Map(), city: new Map() };
++}
++
++function addCentroid(m: Map<string, Centroid>, key: string, c: Coord): void {
++  const cur = m.get(key);
++  if (cur) { cur.sumLat += c.lat; cur.sumLng += c.lng; cur.n += 1; }
++  else m.set(key, { sumLat: c.lat, sumLng: c.lng, n: 1 });
++}
++
++/** Feed one real geocoded evidence point into every bucket its address supports.
++ *  A street-level point contributes to its street, neighborhood and city centroids. */
++export function addEvidencePoint(index: EvidenceIndex, parts: CacheKeyParts, coord: Coord): void {
++  if (!Number.isFinite(coord.lat) || !Number.isFinite(coord.lng)) return;
++  for (const cand of buildCacheKeyCandidates(parts)) {
++    if (cand.keyType === "exact") { if (!index.exact.has(cand.key)) index.exact.set(cand.key, coord); }
++    else if (cand.keyType === "street") addCentroid(index.street, cand.key, coord);
++    else if (cand.keyType === "neighborhood") addCentroid(index.neighborhood, cand.key, coord);
++    else addCentroid(index.city, cand.key, coord);
++  }
++}
++
++function centroidOf(m: Map<string, Centroid>, key: string): Coord | null {
++  const c = m.get(key);
++  if (!c || c.n <= 0) return null;
++  return { lat: c.sumLat / c.n, lng: c.sumLng / c.n };
++}
++
++export type InternalSource =
++  | "internal_cache" | "internal_exact" | "internal_street"
++  | "internal_neighborhood" | "internal_city";
++
++export interface InternalMatch {
++  lat: number;
++  lng: number;
++  resolution: GeoResolution;
++  source: InternalSource;
++  /** The key + granularity this coordinate should be CACHED under (never finer
++   *  than its resolution). */
++  writeKey: string;
++  writeKeyType: CacheKeyType;
++}
++
++export interface CachedCoord { lat: number; lng: number; resolution: GeoResolution; provider: string }
++
++/** Try the persisted cache first — finest candidate key that is present wins. */
++export function resolveFromCache(cache: Map<string, CachedCoord>, parts: CacheKeyParts): InternalMatch | null {
++  for (const cand of buildCacheKeyCandidates(parts)) {
++    const hit = cache.get(cand.key);
++    if (hit) {
++      return {
++        lat: hit.lat, lng: hit.lng, resolution: hit.resolution,
++        source: "internal_cache", writeKey: cand.key, writeKeyType: cand.keyType,
++      };
++    }
++  }
++  return null;
++}
++
++/** Resolve from the in-memory evidence index (no cache, no provider). Finest
++ *  granularity that has evidence wins; exact address uses the building point, the
++ *  rest use the centroid of the real points in that bucket. Exact/street matches
++ *  are STREET-precise (never claim ROOFTOP from a copied point); neighborhood and
++ *  city stay coarse. */
++export function resolveFromEvidence(index: EvidenceIndex, parts: CacheKeyParts): InternalMatch | null {
++  for (const cand of buildCacheKeyCandidates(parts)) {
++    if (cand.keyType === "exact") {
++      const p = index.exact.get(cand.key);
++      if (p) return mk(p, "STREET", "internal_exact", parts);
++    } else if (cand.keyType === "street") {
++      const p = centroidOf(index.street, cand.key);
++      if (p) return mk(p, "STREET", "internal_street", parts);
++    } else if (cand.keyType === "neighborhood") {
++      const p = centroidOf(index.neighborhood, cand.key);
++      if (p) return mk(p, "NEIGHBORHOOD", "internal_neighborhood", parts);
++    } else {
++      const p = centroidOf(index.city, cand.key);
++      if (p) return mk(p, "CITY", "internal_city", parts);
++    }
++  }
++  return null;
++}
++
++function mk(coord: Coord, resolution: GeoResolution, source: InternalSource, parts: CacheKeyParts): InternalMatch {
++  const wk = writeKeyForResolution(parts, resolution);
++  return {
++    lat: coord.lat, lng: coord.lng, resolution, source,
++    writeKey: wk?.key ?? "", writeKeyType: wk?.keyType ?? "city",
++  };
++}
++
++/** Full internal resolution: cache first, then real evidence. null → the caller
++ *  must fall back to the external provider (the only path that costs money). */
++export function resolveInternal(
++  index: EvidenceIndex, cache: Map<string, CachedCoord>, parts: CacheKeyParts,
++): InternalMatch | null {
++  return resolveFromCache(cache, parts) ?? resolveFromEvidence(index, parts);
++}
++
++/** True when an incoming resolution should replace an existing one (never
++ *  downgrade a precise coordinate). Mirrors address.shouldReplaceCoordinate but
++ *  on plain resolutions for cache/evidence bookkeeping. */
++export function outranks(incoming: GeoResolution, existing: GeoResolution | null | undefined): boolean {
++  return resolutionRank(incoming) > resolutionRank(existing);
++}
+diff --git a/src/lib/geo/geo-pipeline-status.ts b/src/lib/geo/geo-pipeline-status.ts
+new file mode 100644
+index 00000000..42e7f08f
+--- /dev/null
++++ b/src/lib/geo/geo-pipeline-status.ts
+@@ -0,0 +1,75 @@
++// ============================================================================
++// ZONO GEO — Pipeline ops status (server-only). §12 observability.
++// ----------------------------------------------------------------------------
++// A small operational snapshot for admins/ops: geocode coverage for the org's
++// properties + transactions, the shared cache size (by resolution), the last run,
++// provider calls used today, and the recent cache-hit rate. Reads the service-role
++// cache/runs tables (RLS-closed to brokers) + org-scoped entity counts. Never
++// exposed to brokers — the route guards on manager/owner role.
++// ============================================================================
++import "server-only";
++import { createServiceRoleClient } from "@/lib/supabase/server";
++
++type DB = ReturnType<typeof createServiceRoleClient>;
++
++export interface GeoEntityStatus { total: number; geocoded: number; pending: number; failed: number }
++export interface GeoLastRun {
++  startedAt: string | null; finishedAt: string | null; ok: boolean;
++  resolved: number; cacheHits: number; internalStreet: number; internalNeighborhood: number;
++  googleCalls: number; osmCalls: number;
++}
++export interface GeoPipelineStatus {
++  orgId: string;
++  properties: GeoEntityStatus;
++  transactions: GeoEntityStatus;
++  cacheEntries: number;
++  cacheByResolution: Record<string, number>;
++  lastRun: GeoLastRun | null;
++  providerCallsToday: number;
++  cacheHitRatePct: number;
++}
++
++async function entityStatus(db: DB, table: string, orgCol: string, latCol: string, orgId: string): Promise<GeoEntityStatus> {
++  const totalRes = (await db.from(table as never).select("*", { count: "exact", head: true }).eq(orgCol, orgId)) as { count: number | null };
++  const geoRes = (await db.from(table as never).select("*", { count: "exact", head: true }).eq(orgCol, orgId).not(latCol, "is", null)) as { count: number | null };
++  const failRes = (await db.from(table as never).select("*", { count: "exact", head: true }).eq(orgCol, orgId).eq("geocode_status", "failed")) as { count: number | null };
++  const total = totalRes.count ?? 0;
++  const geocoded = geoRes.count ?? 0;
++  return { total, geocoded, pending: Math.max(0, total - geocoded), failed: failRes.count ?? 0 };
++}
++
++export async function getGeoPipelineStatus(orgId: string): Promise<GeoPipelineStatus> {
++  const db = createServiceRoleClient() as unknown as DB;
++
++  const properties = await entityStatus(db, "properties", "org_id", "latitude", orgId);
++  const transactions = await entityStatus(db, "property_transactions", "organization_id", "lat", orgId);
++
++  // Cache size + resolution breakdown (small table → fetch resolutions and tally).
++  const cacheByResolution: Record<string, number> = {};
++  let cacheEntries = 0;
++  const { data: cacheRows } = await db.from("geocoding_cache" as never).select("resolution").limit(50_000);
++  for (const r of (cacheRows ?? []) as unknown as { resolution: string }[]) {
++    cacheEntries++;
++    cacheByResolution[r.resolution] = (cacheByResolution[r.resolution] ?? 0) + 1;
++  }
++
++  // Last run + today's provider calls + recent cache-hit rate.
++  const { data: runs } = await db.from("geocoding_runs" as never)
++    .select("started_at,finished_at,ok,resolved,cache_hits,internal_street,internal_neighborhood,google_calls,osm_calls,rows_considered")
++    .order("started_at", { ascending: false }).limit(50);
++  const runRows = (runs ?? []) as unknown as Array<{ started_at: string; finished_at: string | null; ok: boolean; resolved: number; cache_hits: number; internal_street: number; internal_neighborhood: number; google_calls: number; osm_calls: number; rows_considered: number }>;
++
++  const lastRun: GeoLastRun | null = runRows[0]
++    ? { startedAt: runRows[0].started_at, finishedAt: runRows[0].finished_at, ok: runRows[0].ok, resolved: runRows[0].resolved, cacheHits: runRows[0].cache_hits, internalStreet: runRows[0].internal_street, internalNeighborhood: runRows[0].internal_neighborhood, googleCalls: runRows[0].google_calls, osmCalls: runRows[0].osm_calls }
++    : null;
++
++  const todayPrefix = new Date().toISOString().slice(0, 10);
++  let providerCallsToday = 0;
++  for (const r of runRows) if ((r.started_at ?? "").slice(0, 10) === todayPrefix) providerCallsToday += (r.google_calls ?? 0) + (r.osm_calls ?? 0);
++
++  let hits = 0, considered = 0;
++  for (const r of runRows) { hits += r.cache_hits ?? 0; considered += r.rows_considered ?? 0; }
++  const cacheHitRatePct = considered > 0 ? Math.round((hits / considered) * 100) : 0;
++
++  return { orgId, properties, transactions, cacheEntries, cacheByResolution, lastRun, providerCallsToday, cacheHitRatePct };
++}
+diff --git a/src/lib/geo/geo-pipeline.ts b/src/lib/geo/geo-pipeline.ts
+new file mode 100644
+index 00000000..c27ff87f
+--- /dev/null
++++ b/src/lib/geo/geo-pipeline.ts
+@@ -0,0 +1,275 @@
++// ============================================================================
++// ZONO GEO — Automatic fast geocoding pipeline (server-only orchestrator).
++// ----------------------------------------------------------------------------
++// One canonical, bounded, background pipeline that enriches un-located properties
++// and transactions WITHOUT paying a provider for what we already know:
++//   1. build the org's real geocoded evidence index + load the shared cache,
++//   2. dedupe pending rows by canonical address (N identical addresses → 1 lookup),
++//   3. resolve each group: cache → exact → street → neighborhood → city → provider,
++//   4. fan the one coordinate out to every row in the group, honouring no-promote
++//      (a coarse coordinate never overwrites a precise one),
++//   5. record cost/rate metrics and a run row for ops.
++// It NEVER geocodes on render and NEVER invents coordinates (provider failure →
++// the row is marked failed for a later bounded retry). Reuses the ONE canonical
++// geocoder (geocodeAddress → Google→OSM); no second geocoder.
++// ============================================================================
++import "server-only";
++import { createServiceRoleClient } from "@/lib/supabase/server";
++import { geocodeAddress } from "@/lib/maps/geocoding";
++import { buildGeoQuery, resolveGeoResolution, resolutionRank, type GeoResolution } from "./address";
++import { buildCacheKeyCandidates, writeKeyForResolution, type CacheKeyParts } from "./geo-cache-key";
++import {
++  createEvidenceIndex, addEvidencePoint, resolveInternal, outranks,
++  type EvidenceIndex, type CachedCoord, type InternalMatch,
++} from "./geo-evidence-index";
++
++type DB = ReturnType<typeof createServiceRoleClient>;
++
++// ── Cost / rate protection (§10) ────────────────────────────────────────────
++export interface GeoPipelineOptions {
++  orgId?: string;              // acceptance / targeted run; omit = all orgs with backlog
++  maxRowsPerOrg?: number;      // rows considered per org per run
++  maxProviderCalls?: number;   // hard provider-call ceiling for the whole run
++  timeBudgetMs?: number;       // wall-clock budget for the whole run
++  evidenceScanCap?: number;    // max evidence rows scanned per source per org
++}
++const DEFAULTS = { maxRowsPerOrg: 100, maxProviderCalls: 40, timeBudgetMs: 60_000, evidenceScanCap: 5_000 };
++
++export interface GeoPipelineMetrics {
++  orgs: number;
++  rowsConsidered: number;
++  cacheHits: number;
++  internalExact: number;
++  internalStreet: number;
++  internalNeighborhood: number;
++  internalCity: number;
++  googleCalls: number;
++  osmCalls: number;
++  providerFailures: number;
++  resolved: number;
++  skipped: number;   // no city / gush-helka only, or already-better (no-promote)
++  failed: number;    // provider attempted and failed
++}
++function emptyMetrics(): GeoPipelineMetrics {
++  return { orgs: 0, rowsConsidered: 0, cacheHits: 0, internalExact: 0, internalStreet: 0, internalNeighborhood: 0, internalCity: 0, googleCalls: 0, osmCalls: 0, providerFailures: 0, resolved: 0, skipped: 0, failed: 0 };
++}
++
++const CONFIDENCE_FOR_RES: Record<GeoResolution, number> = { ROOFTOP: 0.9, STREET: 0.75, NEIGHBORHOOD: 0.5, CITY: 0.3, UNRESOLVED: 0 };
++
++interface PendingRow {
++  table: "properties" | "property_transactions";
++  id: string;
++  orgId: string;
++  parts: CacheKeyParts;
++  existingResolution: GeoResolution | null;
++}
++
++// ── Evidence + cache loading ────────────────────────────────────────────────
++async function loadCache(db: DB): Promise<Map<string, CachedCoord>> {
++  const map = new Map<string, CachedCoord>();
++  const { data } = await db.from("geocoding_cache" as never).select("cache_key,lat,lng,resolution,provider").limit(50_000);
++  for (const r of (data ?? []) as unknown as { cache_key: string; lat: number; lng: number; resolution: GeoResolution; provider: string }[]) {
++    map.set(r.cache_key, { lat: Number(r.lat), lng: Number(r.lng), resolution: r.resolution, provider: r.provider });
++  }
++  return map;
++}
++
++async function buildEvidenceIndex(db: DB, orgId: string, cap: number): Promise<EvidenceIndex> {
++  const index = createEvidenceIndex();
++  const { data: listings } = await db.from("external_listings" as never)
++    .select("city,neighborhood,street,street_number,lat,lng").eq("org_id", orgId).not("lat", "is", null).limit(cap);
++  for (const r of (listings ?? []) as unknown as { city: string | null; neighborhood: string | null; street: string | null; street_number: string | null; lat: number; lng: number }[]) {
++    addEvidencePoint(index, { city: r.city, neighborhood: r.neighborhood, street: r.street, streetNumber: r.street_number }, { lat: Number(r.lat), lng: Number(r.lng) });
++  }
++  const { data: txs } = await db.from("property_transactions" as never)
++    .select("city_name,neighborhood_name,street,street_number,lat,lng").eq("organization_id", orgId).not("lat", "is", null).limit(cap);
++  for (const r of (txs ?? []) as unknown as { city_name: string | null; neighborhood_name: string | null; street: string | null; street_number: string | null; lat: number; lng: number }[]) {
++    addEvidencePoint(index, { city: r.city_name, neighborhood: r.neighborhood_name, street: r.street, streetNumber: r.street_number }, { lat: Number(r.lat), lng: Number(r.lng) });
++  }
++  const { data: props } = await db.from("properties" as never)
++    .select("city,neighborhood,latitude,longitude").eq("org_id", orgId).not("latitude", "is", null).limit(cap);
++  for (const r of (props ?? []) as unknown as { city: string | null; neighborhood: string | null; latitude: number; longitude: number }[]) {
++    addEvidencePoint(index, { city: r.city, neighborhood: r.neighborhood }, { lat: Number(r.latitude), lng: Number(r.longitude) });
++  }
++  return index;
++}
++
++async function loadPending(db: DB, orgId: string, limit: number): Promise<PendingRow[]> {
++  const rows: PendingRow[] = [];
++  // Priority 1: properties (active inventory the broker actually values).
++  const { data: props } = await db.from("properties" as never)
++    .select("id,city,neighborhood,geocode_resolution").eq("org_id", orgId).is("latitude", null)
++    .order("updated_at", { ascending: false }).limit(limit);
++  for (const r of (props ?? []) as unknown as { id: string; city: string | null; neighborhood: string | null; geocode_resolution: GeoResolution | null }[]) {
++    rows.push({ table: "properties", id: r.id, orgId, parts: { city: r.city, neighborhood: r.neighborhood }, existingResolution: r.geocode_resolution });
++  }
++  // Priority 2/3: transactions, most recent deals first.
++  const remaining = Math.max(0, limit - rows.length);
++  if (remaining > 0) {
++    const { data: txs } = await db.from("property_transactions" as never)
++      .select("id,city_name,neighborhood_name,street,street_number,geocode_resolution,deal_date").eq("organization_id", orgId).is("lat", null)
++      .order("deal_date", { ascending: false, nullsFirst: false }).limit(remaining);
++    for (const r of (txs ?? []) as unknown as { id: string; city_name: string | null; neighborhood_name: string | null; street: string | null; street_number: string | null; geocode_resolution: GeoResolution | null }[]) {
++      rows.push({ table: "property_transactions", id: r.id, orgId, parts: { city: r.city_name, neighborhood: r.neighborhood_name, street: r.street, streetNumber: r.street_number }, existingResolution: r.geocode_resolution });
++    }
++  }
++  return rows;
++}
++
++// ── Persist helpers (no-promote) ────────────────────────────────────────────
++async function persistRow(db: DB, row: PendingRow, lat: number, lng: number, resolution: GeoResolution, provider: string, confidence: number, formattedAddress: string | null): Promise<"resolved" | "skipped"> {
++  if (!outranks(resolution, row.existingResolution)) return "skipped"; // never downgrade a precise coord
++  const now = new Date().toISOString();
++  if (row.table === "properties") {
++    await db.from("properties" as never).update({
++      latitude: lat, longitude: lng, geocode_resolution: resolution, geocode_provider: provider,
++      geocode_confidence: confidence, geocode_status: "geocoded", geocoded_at: now,
++      ...(formattedAddress ? { formatted_address: formattedAddress } : {}),
++    } as never).eq("id", row.id).eq("org_id", row.orgId);
++  } else {
++    await db.from("property_transactions" as never).update({
++      lat, lng, geocode_resolution: resolution, geocode_provider: provider,
++      geocode_confidence: confidence, geocode_status: "geocoded", geocoded_at: now,
++      ...(formattedAddress ? { formatted_address: formattedAddress } : {}),
++    } as never).eq("id", row.id).eq("organization_id", row.orgId);
++  }
++  return "resolved";
++}
++
++async function markFailed(db: DB, row: PendingRow, message: string): Promise<void> {
++  if (row.table === "properties") {
++    await db.from("properties" as never).update({ geocode_status: "failed", geocode_error: message } as never).eq("id", row.id).eq("org_id", row.orgId);
++  } else {
++    await db.from("property_transactions" as never).update({ geocode_status: "failed", geocode_error: message } as never).eq("id", row.id).eq("organization_id", row.orgId);
++  }
++}
++
++async function upsertCache(db: DB, cache: Map<string, CachedCoord>, writeKey: string, keyType: string, parts: CacheKeyParts, lat: number, lng: number, resolution: GeoResolution, provider: string, formattedAddress: string | null, confidence: number): Promise<void> {
++  if (!writeKey) return;
++  const existing = cache.get(writeKey);
++  if (existing && !outranks(resolution, existing.resolution)) return; // no downgrade
++  await db.from("geocoding_cache" as never).upsert({
++    cache_key: writeKey, key_type: keyType, city: parts.city ?? null, street: parts.street ?? null,
++    street_number: parts.streetNumber ?? null, neighborhood: parts.neighborhood ?? null,
++    lat, lng, resolution, provider, formatted_address: formattedAddress, confidence, updated_at: new Date().toISOString(),
++  } as never, { onConflict: "cache_key" } as never);
++  cache.set(writeKey, { lat, lng, resolution, provider });
++}
++
++function classifyInternal(m: InternalMatch, metrics: GeoPipelineMetrics): void {
++  if (m.source === "internal_cache") metrics.cacheHits++;
++  else if (m.source === "internal_exact") metrics.internalExact++;
++  else if (m.source === "internal_street") metrics.internalStreet++;
++  else if (m.source === "internal_neighborhood") metrics.internalNeighborhood++;
++  else if (m.source === "internal_city") metrics.internalCity++;
++}
++
++// ── Per-org run ─────────────────────────────────────────────────────────────
++async function runForOrg(db: DB, orgId: string, opts: Required<GeoPipelineOptions>, metrics: GeoPipelineMetrics, deadline: number, providerBudget: { left: number }): Promise<void> {
++  const cache = await loadCache(db);
++  const index = await buildEvidenceIndex(db, orgId, opts.evidenceScanCap);
++  const pending = await loadPending(db, orgId, opts.maxRowsPerOrg);
++  metrics.rowsConsidered += pending.length;
++
++  // Dedupe: group rows by their finest canonical key (identical addresses collapse).
++  const groups = new Map<string, PendingRow[]>();
++  for (const row of pending) {
++    const cands = buildCacheKeyCandidates(row.parts);
++    if (cands.length === 0) { metrics.skipped++; continue; } // no city → cannot key (gush/helka only)
++    const k = cands[0].key;
++    (groups.get(k) ?? groups.set(k, []).get(k)!).push(row);
++  }
++
++  for (const [, rowsInGroup] of groups) {
++    if (Date.now() > deadline) break;
++    const rep = rowsInGroup[0];
++
++    // 1. Internal-first (free): cache → evidence.
++    const match = resolveInternal(index, cache, rep.parts);
++    if (match) {
++      classifyInternal(match, metrics);
++      const conf = CONFIDENCE_FOR_RES[match.resolution] ?? 0.3;
++      for (const row of rowsInGroup) {
++        const r = await persistRow(db, row, match.lat, match.lng, match.resolution, match.source, conf, null);
++        if (r === "resolved") metrics.resolved++; else metrics.skipped++;
++      }
++      if (match.source !== "internal_cache") {
++        await upsertCache(db, cache, match.writeKey, match.writeKeyType, rep.parts, match.lat, match.lng, match.resolution, match.source, null, conf);
++      }
++      continue;
++    }
++
++    // 2. Provider fallback (costs money) — only within the run budget.
++    if (providerBudget.left <= 0) { metrics.skipped += rowsInGroup.length; continue; }
++    providerBudget.left--;
++    const out = await geocodeAddress({ street: rep.parts.street, streetNumber: rep.parts.streetNumber, neighborhood: rep.parts.neighborhood, city: rep.parts.city, region: "il" });
++    if (!out.ok) {
++      metrics.providerFailures++;
++      for (const row of rowsInGroup) { await markFailed(db, row, out.message); metrics.failed++; }
++      continue;
++    }
++    if (out.result.provider === "google") metrics.googleCalls++; else metrics.osmCalls++;
++    const maxRes = buildGeoQuery({ street: rep.parts.street, streetNumber: rep.parts.streetNumber, neighborhood: rep.parts.neighborhood, city: rep.parts.city }).maxResolution;
++    const resolution = resolveGeoResolution(maxRes, out.result.confidence);
++    const wk = writeKeyForResolution(rep.parts, resolution);
++    for (const row of rowsInGroup) {
++      const r = await persistRow(db, row, out.result.lat, out.result.lng, resolution, out.result.provider, out.result.confidence, out.result.formattedAddress);
++      if (r === "resolved") metrics.resolved++; else metrics.skipped++;
++    }
++    if (wk) await upsertCache(db, cache, wk.key, wk.keyType, rep.parts, out.result.lat, out.result.lng, resolution, out.result.provider, out.result.formattedAddress, out.result.confidence);
++    // Feed the fresh coordinate back into the index so later groups can reuse it.
++    if (resolutionRank(resolution) >= resolutionRank("STREET")) addEvidencePoint(index, rep.parts, { lat: out.result.lat, lng: out.result.lng });
++  }
++}
++
++/** Which orgs still have un-located rows (bounded discovery). */
++async function orgsWithBacklog(db: DB): Promise<string[]> {
++  const orgs = new Set<string>();
++  const { data: p } = await db.from("properties" as never).select("org_id").is("latitude", null).limit(5000);
++  for (const r of (p ?? []) as unknown as { org_id: string | null }[]) if (r.org_id) orgs.add(r.org_id);
++  const { data: t } = await db.from("property_transactions" as never).select("organization_id").is("lat", null).limit(5000);
++  for (const r of (t ?? []) as unknown as { organization_id: string | null }[]) if (r.organization_id) orgs.add(r.organization_id);
++  return [...orgs];
++}
++
++/**
++ * Run the bounded backfill (one org or every org with backlog), then record a
++ * run row for ops. Reuses the one canonical geocoder; internal-first keeps
++ * provider calls (and cost) low.
++ */
++export async function runGeoBackfill(options: GeoPipelineOptions = {}): Promise<GeoPipelineMetrics> {
++  const opts: Required<GeoPipelineOptions> = {
++    orgId: options.orgId ?? "",
++    maxRowsPerOrg: options.maxRowsPerOrg ?? DEFAULTS.maxRowsPerOrg,
++    maxProviderCalls: options.maxProviderCalls ?? DEFAULTS.maxProviderCalls,
++    timeBudgetMs: options.timeBudgetMs ?? DEFAULTS.timeBudgetMs,
++    evidenceScanCap: options.evidenceScanCap ?? DEFAULTS.evidenceScanCap,
++  };
++  const db = createServiceRoleClient() as unknown as DB;
++  const startedAt = new Date().toISOString();
++  const deadline = Date.now() + opts.timeBudgetMs;
++  const providerBudget = { left: opts.maxProviderCalls };
++  const metrics = emptyMetrics();
++
++  const orgIds = opts.orgId ? [opts.orgId] : await orgsWithBacklog(db);
++  for (const orgId of orgIds) {
++    if (Date.now() > deadline) break;
++    await runForOrg(db, orgId, opts, metrics, deadline, providerBudget);
++    metrics.orgs++;
++  }
++
++  // Record the run (ops observability). Best-effort — never fail the pipeline on logging.
++  try {
++    await db.from("geocoding_runs" as never).insert({
++      started_at: startedAt, finished_at: new Date().toISOString(), ok: true, orgs: metrics.orgs,
++      rows_considered: metrics.rowsConsidered, cache_hits: metrics.cacheHits,
++      internal_exact: metrics.internalExact, internal_street: metrics.internalStreet,
++      internal_neighborhood: metrics.internalNeighborhood + metrics.internalCity,
++      google_calls: metrics.googleCalls, osm_calls: metrics.osmCalls, resolved: metrics.resolved,
++      skipped: metrics.skipped, failed: metrics.failed,
++      detail: { internalCity: metrics.internalCity, providerFailures: metrics.providerFailures, providerCallsUsed: opts.maxProviderCalls - providerBudget.left },
++    } as never);
++  } catch { /* logging is best-effort */ }
++
++  return metrics;
++}
+diff --git a/supabase/migrations/20280801120000_geo_pipeline_cache.sql b/supabase/migrations/20280801120000_geo_pipeline_cache.sql
+new file mode 100644
+index 00000000..8e3208a4
+--- /dev/null
++++ b/supabase/migrations/20280801120000_geo_pipeline_cache.sql
+@@ -0,0 +1,135 @@
++-- ============================================================================
++-- ZONO GEO — Automatic fast geocoding pipeline foundation.
++-- ----------------------------------------------------------------------------
++-- Adds the persistence the internal-first enrichment pipeline needs so we stop
++-- paying for repeated provider calls:
++--   1. geocoding_cache  — ONE canonical, org-independent coordinate per normalized
++--      location key (exact / street / neighborhood / city). A lower-resolution
++--      result may NEVER overwrite a higher-resolution one (enforced in code via
++--      shouldReplaceCoordinate; the row also records its resolution honestly).
++--   2. geocoding_runs   — bounded run metrics (cache hits, internal matches,
++--      provider calls, skipped/failed) so ops can see cost + "last successful run".
++--   3. lifecycle triggers — a new property/transaction starts geocode_status
++--      'pending'; changing its address invalidates the stale coordinate → 'pending'
++--      (a pipeline coordinate write, which does not touch the address, is left
++--      alone, so we never re-geocode an unchanged address).
++-- Both new tables are service-role only (RLS on, no anon/broker policy): they hold
++-- operational geo data, never exposed to brokers.
++-- ============================================================================
++
++-- 1. Canonical geocoding cache -------------------------------------------------
++create table if not exists public.geocoding_cache (
++  id                uuid primary key default gen_random_uuid(),
++  cache_key         text not null unique,                 -- e.g. 'street:קרית ביאליק|לוטם'
++  key_type          text not null check (key_type in ('exact','street','neighborhood','city')),
++  city              text,
++  street            text,
++  street_number     text,
++  neighborhood      text,
++  lat               numeric not null,
++  lng               numeric not null,
++  resolution        text not null check (resolution in ('ROOFTOP','STREET','NEIGHBORHOOD','CITY')),
++  provider          text not null,                        -- google | nominatim | internal_listing | internal_transaction | internal_cache
++  formatted_address text,
++  confidence        numeric,
++  hit_count         integer not null default 0,
++  created_at        timestamptz not null default now(),
++  updated_at        timestamptz not null default now()
++);
++create index if not exists geocoding_cache_key_type_idx on public.geocoding_cache(key_type);
++alter table public.geocoding_cache enable row level security;
++-- No anon/authenticated policy on purpose → only the service role (pipeline/ops)
++-- can read or write it. Brokers never see raw cache rows.
++
++-- 2. Pipeline run metrics ------------------------------------------------------
++create table if not exists public.geocoding_runs (
++  id                    uuid primary key default gen_random_uuid(),
++  started_at            timestamptz not null default now(),
++  finished_at           timestamptz,
++  ok                    boolean not null default false,
++  orgs                  integer not null default 0,
++  rows_considered       integer not null default 0,
++  cache_hits            integer not null default 0,
++  internal_exact        integer not null default 0,
++  internal_street       integer not null default 0,
++  internal_neighborhood integer not null default 0,
++  google_calls          integer not null default 0,
++  osm_calls             integer not null default 0,
++  resolved              integer not null default 0,
++  skipped               integer not null default 0,
++  failed                integer not null default 0,
++  detail                jsonb
++);
++create index if not exists geocoding_runs_started_idx on public.geocoding_runs(started_at desc);
++alter table public.geocoding_runs enable row level security;
++
++-- 3. Property lifecycle: pending-on-create, invalidate-on-address-change --------
++create or replace function public.geo_properties_lifecycle()
++returns trigger language plpgsql as $$
++begin
++  if (tg_op = 'INSERT') then
++    if new.latitude is null and new.geocode_status is null then
++      new.geocode_status := 'pending';
++    end if;
++    return new;
++  end if;
++  -- UPDATE: the address changed AND this update is not itself writing coordinates
++  -- (the pipeline writes lat/lng and leaves the address columns untouched, so its
++  -- writes never trip this). Invalidate the stale coordinate → re-geocode later.
++  if (new.city is distinct from old.city
++       or new.neighborhood is distinct from old.neighborhood
++       or new.building_number is distinct from old.building_number)
++     and new.latitude is not distinct from old.latitude
++     and new.longitude is not distinct from old.longitude then
++    new.latitude          := null;
++    new.longitude         := null;
++    new.geocode_resolution := null;
++    new.geocode_provider  := null;
++    new.geocode_confidence := null;
++    new.geocoded_at       := null;
++    new.geocode_error     := null;
++    new.geocode_status    := 'pending';
++  end if;
++  return new;
++end
++$$;
++
++drop trigger if exists geo_properties_lifecycle on public.properties;
++create trigger geo_properties_lifecycle
++  before insert or update on public.properties
++  for each row execute function public.geo_properties_lifecycle();
++
++-- 4. Transaction lifecycle: same contract (address-driven invalidation) ---------
++create or replace function public.geo_transactions_lifecycle()
++returns trigger language plpgsql as $$
++begin
++  if (tg_op = 'INSERT') then
++    if new.lat is null and new.geocode_status is null then
++      new.geocode_status := 'pending';
++    end if;
++    return new;
++  end if;
++  if (new.city_name is distinct from old.city_name
++       or new.neighborhood_name is distinct from old.neighborhood_name
++       or new.street is distinct from old.street
++       or new.street_number is distinct from old.street_number
++       or new.address is distinct from old.address)
++     and new.lat is not distinct from old.lat
++     and new.lng is not distinct from old.lng then
++    new.lat               := null;
++    new.lng               := null;
++    new.geocode_resolution := null;
++    new.geocode_provider  := null;
++    new.geocode_confidence := null;
++    new.geocoded_at       := null;
++    new.geocode_error     := null;
++    new.geocode_status    := 'pending';
++  end if;
++  return new;
++end
++$$;
++
++drop trigger if exists geo_transactions_lifecycle on public.property_transactions;
++create trigger geo_transactions_lifecycle
++  before insert or update on public.property_transactions
++  for each row execute function public.geo_transactions_lifecycle();
+diff --git a/vercel.json b/vercel.json
+index b62fdde7..a91b9a4b 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -22,7 +22,7 @@
+     },
+     {
+       "path": "/api/cron/properties-transactions-geocode",
+-      "schedule": "45 * * * *"
++      "schedule": "*/15 * * * *"
+     },
+     {
+       "path": "/api/cron/madlan-directory-refresh",
+-- 
+2.43.0
+

@@ -1,0 +1,305 @@
+From e48ca83483bb8410f80a81d9405a9c733ecd36c2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 11:37:33 +0000
+Subject: [PATCH] =?UTF-8?q?feat(avm):=203.3=20closure=20=E2=80=94=20subjec?=
+ =?UTF-8?q?t=20precision=20safety=20+=20broker=20evidence=20UI=20+=20selle?=
+ =?UTF-8?q?r=20wording?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Production-acceptance follow-through (no algorithm redesign):
+
+Subject-side precision safety (was a proven gap): a distance tier now requires the
+SUBJECT's own coordinate to be precise enough too, not only the comparable's. A
+subject with a CITY/NEIGHBORHOOD/unknown-precision coordinate can no longer reach
+≤300m/≤700m/street/building — its own distance would be meaningless. This also
+removes the asking-only radius path at its source (a geocoded-but-imprecise subject
+falls to city/sold-anchored instead of an asking-only radius subset). ValuationInput
+carries locationResolution; the service passes the subject property's geocode
+resolution. Regression tests added; existing tier tests updated for the new rule.
+
+Broker evidence UI (previously deferred): a plain-Hebrew evidence module on the
+result screen — "הערכת שווי מבוססת/ראשונית", what it's based on (sold vs asking vs
+office), confidence label, and an honest asking-only / city-only disclosure. No
+engine internals (no UUID/sourceTable/reason codes).
+
+Seller report: natural low-evidence wording ("הערכת השווי ראשונית…") when the
+estimate leans on asking prices or confidence is low; standard wording otherwise.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Cm5NAh92cekdimerQbEsCW
+---
+ scripts/avm-engine-tests/avm-geo-tier.test.ts |  2 +-
+ .../avm-engine-tests/avm-proximity.test.ts    |  2 +-
+ .../avm-subject-precision.test.ts             | 40 +++++++++++++++++++
+ .../valuation/[id]/ValuationResultView.tsx    | 31 +++++++++++++-
+ src/lib/valuation/evidence-quality.ts         | 38 ++++++++++++++++++
+ src/lib/valuation/presentation.ts             |  7 ++++
+ src/lib/valuation/service.ts                  | 14 +++++++
+ src/lib/valuation/types.ts                    |  3 ++
+ src/lib/valuation/valuation-engine.ts         | 17 +++++---
+ 9 files changed, 146 insertions(+), 8 deletions(-)
+ create mode 100644 scripts/avm-engine-tests/avm-subject-precision.test.ts
+
+diff --git a/scripts/avm-engine-tests/avm-geo-tier.test.ts b/scripts/avm-engine-tests/avm-geo-tier.test.ts
+index 4e30dc03..c21b5525 100644
+--- a/scripts/avm-engine-tests/avm-geo-tier.test.ts
++++ b/scripts/avm-engine-tests/avm-geo-tier.test.ts
+@@ -10,7 +10,7 @@ import { test } from "node:test";
+ import assert from "node:assert/strict";
+ import { proximityTier } from "@/lib/valuation/valuation-engine";
+ 
+-const subj: any = { city: "קרית ביאליק", neighborhood: "גבעת הרקפות", street: "יקינתון", latitude: 32.8333, longitude: 35.1039 };
++const subj: any = { city: "קרית ביאליק", neighborhood: "גבעת הרקפות", street: "יקינתון", latitude: 32.8333, longitude: 35.1039, locationResolution: "ROOFTOP" };
+ const c = (over: Record<string, unknown>) => ({ source: "govmap", comparableType: "sold", city: "קרית ביאליק", neighborhood: "גבעת הרקפות", pricePerSqm: 15000, sqm: 95, ...over } as any);
+ 
+ test("STREET-resolution coordinate at 0m → STREET tier, never building", () => {
+diff --git a/scripts/avm-engine-tests/avm-proximity.test.ts b/scripts/avm-engine-tests/avm-proximity.test.ts
+index c02a05c0..bd6a6452 100644
+--- a/scripts/avm-engine-tests/avm-proximity.test.ts
++++ b/scripts/avm-engine-tests/avm-proximity.test.ts
+@@ -11,7 +11,7 @@ import { test } from "node:test";
+ import assert from "node:assert/strict";
+ import { proximityTier, selectByProximityLadder } from "@/lib/valuation/valuation-engine";
+ 
+-const subj: any = { city: "קרית ביאליק", neighborhood: "רמות", street: "הרצל", propertyType: "apartment", rooms: 4, builtSqm: 95, floor: 3, latitude: 32.83, longitude: 35.08 };
++const subj: any = { city: "קרית ביאליק", neighborhood: "רמות", street: "הרצל", propertyType: "apartment", rooms: 4, builtSqm: 95, floor: 3, latitude: 32.83, longitude: 35.08, locationResolution: "ROOFTOP" };
+ // Default ROOFTOP precision so distance tiers apply (AVM 3.2 caps tiers by precision).
+ const comp = (over: Record<string, unknown>) => ({ source: "govmap", comparableType: "sold", city: "קרית ביאליק", pricePerSqm: 15000, sqm: 95, geocodeResolution: "ROOFTOP", ...over } as any);
+ 
+diff --git a/scripts/avm-engine-tests/avm-subject-precision.test.ts b/scripts/avm-engine-tests/avm-subject-precision.test.ts
+new file mode 100644
+index 00000000..cb04c871
+--- /dev/null
++++ b/scripts/avm-engine-tests/avm-subject-precision.test.ts
+@@ -0,0 +1,40 @@
++/* eslint-disable @typescript-eslint/no-explicit-any */
++// ============================================================================
++// ZONO AVM 3.3 — SUBJECT-side precision safety (tsx). A subject with a coarse or
++// unknown-precision coordinate must never unlock distance tiers, even against a
++// perfectly precise comparable — its own distance would be meaningless.
++// Run: node --import tsx --test scripts/avm-engine-tests/avm-subject-precision.test.ts
++// ============================================================================
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import { proximityTier } from "@/lib/valuation/valuation-engine";
++
++const rooftopComp = (over: Record<string, unknown>) => ({
++  source: "govmap", comparableType: "sold", city: "קרית ביאליק", neighborhood: "אחר", street: "אחר",
++  pricePerSqm: 15000, sqm: 95, distanceMeters: 20, geocodeResolution: "ROOFTOP", ...over,
++} as any);
++const subj = (res: string | null) => ({ city: "קרית ביאליק", neighborhood: "רמות", street: "שדרות", latitude: 32.83, longitude: 35.08, locationResolution: res } as any);
++
++test("CITY-resolution subject → distance tiers blocked (falls to city)", () => {
++  assert.equal(proximityTier(subj("CITY"), rooftopComp({ distanceMeters: 20 })), "city");
++  assert.equal(proximityTier(subj("CITY"), rooftopComp({ distanceMeters: 250 })), "city");
++});
++
++test("NEIGHBORHOOD-resolution subject → no ≤300m/≤700m (text neighborhood still ok)", () => {
++  assert.equal(proximityTier(subj("NEIGHBORHOOD"), rooftopComp({ distanceMeters: 250, neighborhood: "אחר" })), "city");
++  assert.equal(proximityTier(subj("NEIGHBORHOOD"), rooftopComp({ distanceMeters: 250, neighborhood: "רמות" })), "neighborhood");
++});
++
++test("unknown-precision subject (null resolution) → distance tiers blocked", () => {
++  assert.equal(proximityTier(subj(null), rooftopComp({ distanceMeters: 20 })), "city");
++});
++
++test("STREET subject → street/≤300m/≤700m allowed, but never building", () => {
++  assert.equal(proximityTier(subj("STREET"), rooftopComp({ distanceMeters: 20 })), "street"); // capped below building
++  assert.equal(proximityTier(subj("STREET"), rooftopComp({ distanceMeters: 250 })), "r300");
++  assert.equal(proximityTier(subj("STREET"), rooftopComp({ distanceMeters: 600 })), "r700");
++});
++
++test("ROOFTOP subject + ROOFTOP comp → building", () => {
++  assert.equal(proximityTier(subj("ROOFTOP"), rooftopComp({ distanceMeters: 20 })), "building");
++});
+diff --git a/src/app/(app)/valuation/[id]/ValuationResultView.tsx b/src/app/(app)/valuation/[id]/ValuationResultView.tsx
+index c6ba2f28..3a28eb3c 100644
+--- a/src/app/(app)/valuation/[id]/ValuationResultView.tsx
++++ b/src/app/(app)/valuation/[id]/ValuationResultView.tsx
+@@ -32,7 +32,7 @@ import {
+   type ValuationRecord, type StrategyKey, SOURCE_LABEL, DEMAND_LABEL, CONFIDENCE_LABEL,
+   STRATEGY_LABEL, VALUATION_DISCLAIMER,
+ } from "@/lib/valuation/types";
+-import { evidenceQualityLine } from "@/lib/valuation/evidence-quality";
++import { evidenceQualityLine, evidenceModule } from "@/lib/valuation/evidence-quality";
+ 
+ const fmt = (n: number) => n.toLocaleString("he-IL");
+ function Mini({ label, value, tone }: { label: string; value: string; tone?: "green" | "amber" | "red" }) {
+@@ -177,6 +177,35 @@ export function ValuationResultView({ record, initialReportToken }: { record: Va
+         </div>
+       )}
+ 
++      {/* Broker evidence module (AVM 3.3) — what the estimate is based on, in plain
++          Hebrew, with an honest asking-only disclosure. No engine internals. */}
++      {!noData && (() => {
++        const em = evidenceModule({
++          tier: (r.debug?.evidenceTier ?? "city") as never,
++          sold: r.debug?.sourceMix?.sold ?? 0,
++          asking: r.debug?.sourceMix?.asking ?? 0,
++          internal: r.debug?.sourceMix?.internal ?? 0,
++          soldWithin700: 0,
++          medianAgeDays: r.debug?.medianComparableAgeDays ?? null,
++          confidence: conf,
++          askingOnly: (r.debug?.reasonCodes ?? []).includes("asking_only_no_sold_anchor"),
++        });
++        return (
++          <div dir="rtl" className="mt-5 rounded-2xl border border-line bg-card p-4">
++            <div className="flex items-center justify-between gap-2">
++              <h3 className="text-ink text-sm font-black">{em.headline}</h3>
++              <span className="bg-surface text-muted rounded-full px-2.5 py-0.5 text-[11px] font-bold">רמת ודאות: {em.confidenceLabel}</span>
++            </div>
++            {em.lines.length > 0 && (
++              <p className="text-muted mt-1.5 text-[13px] leading-relaxed">ההערכה מבוססת על {em.lines.join(" · ")}.</p>
++            )}
++            {em.disclosure && (
++              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] font-semibold leading-relaxed text-amber-800">{em.disclosure}</p>
++            )}
++          </div>
++        );
++      })()}
++
+       {/* KPI cards — only when a real value exists (never render ₪0 prices). */}
+       {!noData && (
+         <div className="mt-6 grid gap-3 sm:grid-cols-3">
+diff --git a/src/lib/valuation/evidence-quality.ts b/src/lib/valuation/evidence-quality.ts
+index 2543f670..abf41f03 100644
+--- a/src/lib/valuation/evidence-quality.ts
++++ b/src/lib/valuation/evidence-quality.ts
+@@ -137,6 +137,44 @@ export function evidenceQualityLine(f: {
+   return `${parts.join(" ")} · רמת ודאות ${confidenceLabelHe(f.confidence)}`;
+ }
+ 
++/**
++ * Broker-facing valuation headline (AVM 3.3). A sold-anchored, non-trivial-confidence
++ * estimate is "מבוססת"; an asking-only or low-confidence estimate is honestly framed
++ * as "ראשונית" (preliminary).
++ */
++export function valuationHeadline(f: { confidence: number; soldUsed: number; askingOnly: boolean }): string {
++  if (f.askingOnly || f.soldUsed === 0 || f.confidence < 50) return "הערכת שווי ראשונית";
++  return "הערכת שווי מבוססת";
++}
++
++/**
++ * Structured broker evidence module (AVM 3.3) — the facts a broker needs to trust
++ * (or distrust) the number, in plain Hebrew. `askingOnly` drives the honest
++ * disclosure that no nearby closed deals backed the estimate.
++ */
++export function evidenceModule(f: {
++  tier: EvidenceTier; sold: number; asking: number; internal: number;
++  soldWithin700: number; medianAgeDays: number | null; confidence: number; askingOnly: boolean;
++}): { headline: string; confidenceLabel: string; lines: string[]; disclosure: string | null } {
++  const lines: string[] = [];
++  if (f.sold) lines.push(`${f.sold.toLocaleString("he-IL")} עסקאות מכר`);
++  if (f.asking) lines.push(`${f.asking.toLocaleString("he-IL")} נכסים מוצעים למכירה`);
++  if (f.internal) lines.push(`${f.internal.toLocaleString("he-IL")} נכסי המשרד`);
++  if (f.soldWithin700 > 0) lines.push(`${f.soldWithin700.toLocaleString("he-IL")} עסקאות עד 700 מטר`);
++  if (f.medianAgeDays != null) lines.push(`חציון גיל הנתונים: ${Math.round(f.medianAgeDays).toLocaleString("he-IL")} ימים`);
++  const disclosure = f.askingOnly
++    ? "לא נמצאו מספיק עסקאות מכר קרובות. ההערכה נשענת גם על מחירי פרסום, ולכן טווח השווי רחב יותר."
++    : f.tier === "city"
++      ? "המידע המקומי באזור הנכס עדיין מוגבל, ולכן ההערכה מבוססת על נתונים רחבים יותר ברמת העיר."
++      : null;
++  return {
++    headline: valuationHeadline({ confidence: f.confidence, soldUsed: f.sold, askingOnly: f.askingOnly }),
++    confidenceLabel: confidenceLabelHe(f.confidence),
++    lines,
++    disclosure,
++  };
++}
++
+ /** Evidence-quality summary persisted/reported for fallback honesty (§13). */
+ export interface EvidenceQuality {
+   tier: EvidenceTier;
+diff --git a/src/lib/valuation/presentation.ts b/src/lib/valuation/presentation.ts
+index a9172131..c452aed5 100644
+--- a/src/lib/valuation/presentation.ts
++++ b/src/lib/valuation/presentation.ts
+@@ -111,7 +111,14 @@ export function renderPresentationHtml(payload: ReportPayload): string {
+   const weaknesses = (intel?.weaknesses ?? []).map((x) => `<b>${esc(x.label)}</b> — ${esc(x.detail)}`);
+   const sellerTips = buildSellerTips(intel);
+ 
++  // Seller-facing wording (AVM 3.3) — natural, no technical internals; honest when
++  // the evidence is thin.
++  const sellerAskingOnly = (r?.debug?.reasonCodes ?? []).includes("asking_only_no_sold_anchor");
++  const sellerLede = (sellerAskingOnly || (r?.confidenceScore ?? 0) < 50)
++    ? "הערכת השווי ראשונית וקיים טווח רחב יותר בשל היקף מוגבל של עסקאות דומות באזור."
++    : "הערכת השווי מבוססת על עסקאות ונכסים דומים באזור, תוך שקלול מאפייני הנכס, מיקום ועדכניות הנתונים.";
+   const trustItems = [
++    sellerLede,
+     `ההערכה מבוססת על ${r?.debug?.comparableCount ?? v.comparables.length} השוואות${sourceList.length ? ` ממקורות: ${sourceList.join(", ")}` : ""}.`,
+     "עדיפות ניתנה לעסקאות שנסגרו על פני מודעות פעילות.",
+     `הוסרו ${r?.debug?.outliersRemoved ?? 0} ערכים חריגים כדי למנוע הטיית מחיר.`,
+diff --git a/src/lib/valuation/service.ts b/src/lib/valuation/service.ts
+index 639dd446..b7aa1c53 100644
+--- a/src/lib/valuation/service.ts
++++ b/src/lib/valuation/service.ts
+@@ -109,6 +109,20 @@ export async function runValuationById(id: string): Promise<RunOutput> {
+   await db.from(TABLE as never).update({ status: "computing" } as never).eq("id", id).eq("organization_id", orgId);
+ 
+   const subjectPropertyId = (valRow as { property_id?: string | null }).property_id ?? null;
++  // AVM 3.3 subject precision safety — carry the subject property's coordinate
++  // precision so the engine only unlocks distance tiers from a precise subject
++  // coordinate (a coarse/unknown one stays at text/city tiers). Best-effort.
++  if (subjectPropertyId) {
++    try {
++      const { data: p } = await db.from("properties" as never)
++        .select("latitude,longitude,geocode_resolution").eq("id", subjectPropertyId).eq("org_id", orgId).maybeSingle();
++      const pr = p as { latitude?: number | null; longitude?: number | null; geocode_resolution?: string | null } | null;
++      if (pr?.latitude != null && pr?.longitude != null) {
++        input.latitude = Number(pr.latitude); input.longitude = Number(pr.longitude);
++        input.locationResolution = pr.geocode_resolution ?? null; // null → treated as imprecise (safe)
++      }
++    } catch { /* keep whatever the valuation row provided */ }
++  }
+   const providerCtx = { db, orgId, input, limit: PROVIDER_LIMIT, subjectPropertyId };
+   const [evidenceBundle, brokerSoldRaw] = await Promise.all([
+     gatherEvidence(providerCtx),
+diff --git a/src/lib/valuation/types.ts b/src/lib/valuation/types.ts
+index 77483fc4..bec6a024 100644
+--- a/src/lib/valuation/types.ts
++++ b/src/lib/valuation/types.ts
+@@ -42,6 +42,9 @@ export interface ValuationInput {
+   apartmentNumber?: string | null;
+   latitude?: number | null;
+   longitude?: number | null;
++  /** Precision of the SUBJECT's own coordinate (AVM 3.3). A coarse/unknown-precision
++   *  subject coordinate must not unlock building/street/≤300m/≤700m tiers. */
++  locationResolution?: string | null; // ROOFTOP | STREET | NEIGHBORHOOD | CITY | UNRESOLVED
+   propertyType?: string | null;
+   rooms?: number | null;
+   builtSqm?: number | null;
+diff --git a/src/lib/valuation/valuation-engine.ts b/src/lib/valuation/valuation-engine.ts
+index 9a27f632..9735f7a7 100644
+--- a/src/lib/valuation/valuation-engine.ts
++++ b/src/lib/valuation/valuation-engine.ts
+@@ -480,13 +480,20 @@ const eqText = (a?: string | null, b?: string | null) =>
+  *  prevents a street-centroid or city-centroid from being read as "same building". */
+ export function proximityTier(input: ValuationInput, c: Comparable): ProximityTier {
+   const d = c.distanceMeters;
+-  const rooftop = resolutionRank(c.geocodeResolution as GeoResolution | null) >= resolutionRank("ROOFTOP");
+-  if (d != null && d <= 30 && rooftop) return "building";
+-  if (eqText(input.street, c.street) || (d != null && d <= 120)) return "street";
++  // AVM 3.3 — a distance tier requires BOTH the subject AND the comparable to have a
++  // sufficiently precise coordinate. A subject with a city/neighborhood/unknown
++  // coordinate can NOT reach ≤300m/≤700m/street/building (its own distance would be
++  // meaningless), regardless of the comparable's precision. Text tiers stay open.
++  const subjRank = resolutionRank(input.locationResolution as GeoResolution | null);
++  const subjPreciseStreet = subjRank >= resolutionRank("STREET");
++  const subjRooftop = subjRank >= resolutionRank("ROOFTOP");
++  const compRooftop = resolutionRank(c.geocodeResolution as GeoResolution | null) >= resolutionRank("ROOFTOP");
++  if (d != null && d <= 30 && compRooftop && subjRooftop) return "building";
++  if (eqText(input.street, c.street) || (d != null && d <= 120 && subjPreciseStreet)) return "street";
+   const sn = canonicalNeighborhood(input.neighborhood), cn = canonicalNeighborhood(c.neighborhood);
+   if (sn && cn && (sn === cn || sn.includes(cn) || cn.includes(sn))) return "neighborhood";
+-  if (d != null && d <= 300) return "r300";
+-  if (d != null && d <= 700) return "r700";
++  if (d != null && d <= 300 && subjPreciseStreet) return "r300";
++  if (d != null && d <= 700 && subjPreciseStreet) return "r700";
+   return "city";
+ }
+ 
+-- 
+2.43.0
+

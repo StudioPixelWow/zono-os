@@ -48,6 +48,7 @@ export function MobileDrawer() {
   const activeHref = groups.flatMap((g) => g.items.map((it) => it.href)).filter((h) => matches(h)).sort((a, b) => b.length - a.length)[0] ?? null;
   const activeGroupKey = groups.find((g) => g.items.some((it) => it.href === activeHref))?.key ?? null;
   const openGroupKey = openGroup === undefined ? (activeGroupKey ?? "command") : openGroup;
+  const onOffice = pathname === "/office" || pathname.startsWith("/office/agents");
 
   return (
     <div className={cn("fixed inset-0 z-[60] lg:hidden", open ? "" : "pointer-events-none")} aria-hidden={!open}>
@@ -66,6 +67,33 @@ export function MobileDrawer() {
             <Icon name="Search" size={18} /> <span className="flex-1 text-right">חיפוש מהיר</span> <span className="text-[10px] font-black opacity-60">⌘K</span>
           </button>
         </div>
+
+        {/* Pinned owner/manager CTA — ניהול המשרד. The single most prominent entry
+            so this critical screen never gets lost in a group. Managers/owners only. */}
+        {isManager && (
+          <div className="px-4 pt-3">
+            <Link
+              href="/office"
+              prefetch={false}
+              onClick={() => setOpen(false)}
+              className={cn(
+                "group/pin flex items-center gap-3 rounded-2xl px-3.5 py-3 text-white ring-1 transition",
+                onOffice
+                  ? "bg-brand-strong ring-brand-strong"
+                  : "bg-gradient-to-l from-brand to-brand-strong ring-white/10 shadow-[0_10px_24px_-10px_rgba(109,40,217,0.7)]",
+              )}
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/20 backdrop-blur-sm">
+                <Icon name="Building2" size={22} strokeWidth={2.2} />
+              </span>
+              <span className="min-w-0 flex-1 text-right">
+                <span className="block text-[15px] font-black leading-tight">ניהול המשרד</span>
+                <span className="block truncate text-[11px] font-semibold text-white/85">הוספת מתווכים · צוות · נכסים</span>
+              </span>
+              <Icon name="ChevronLeft" size={18} className="shrink-0 text-white/75" />
+            </Link>
+          </div>
+        )}
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {groups.map((g) => {

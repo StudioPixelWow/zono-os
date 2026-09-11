@@ -48,6 +48,10 @@ export function Sidebar() {
   // Derived (no effect): by default ONLY the first group ("היום שלי")
   // is open; every other group stays closed/compact until the user opens it.
   const openGroupKey = openOverride === undefined ? "command" : openOverride;
+  // The office-management screen is the owner's mission control (add agents,
+  // manage the team, properties & deals). It's a critical action, so it gets a
+  // PINNED launcher above the groups instead of hiding inside "המשרד שלי".
+  const onOffice = pathname === "/office" || pathname.startsWith("/office/agents");
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -83,6 +87,52 @@ export function Sidebar() {
           </button>
         )}
       </div>
+
+      {/* Pinned owner/manager CTA — ניהול המשרד. Deliberately the single most
+          prominent, always-visible item so this critical entry never gets lost
+          inside a collapsed group. Managers/owners only. */}
+      {isManager && (
+        collapsed ? (
+          <div className="mb-3 flex justify-center">
+            <Link
+              href="/office"
+              prefetch={false}
+              title="ניהול המשרד — הוספת מתווכים · צוות · נכסים"
+              aria-label="ניהול המשרד"
+              className={cn(
+                "relative grid h-12 w-12 place-items-center rounded-2xl text-white ring-1 transition",
+                onOffice
+                  ? "bg-brand-strong ring-brand-strong"
+                  : "bg-gradient-to-br from-brand to-brand-strong ring-white/10 shadow-[0_8px_20px_-8px_rgba(109,40,217,0.65)] hover:brightness-110",
+              )}
+            >
+              <Icon name="Building2" size={22} strokeWidth={2.2} />
+            </Link>
+          </div>
+        ) : (
+          <div className="mb-3 px-3">
+            <Link
+              href="/office"
+              prefetch={false}
+              className={cn(
+                "group/pin relative flex items-center gap-3 overflow-hidden rounded-2xl px-3.5 py-3 text-white ring-1 transition",
+                onOffice
+                  ? "bg-brand-strong ring-brand-strong"
+                  : "bg-gradient-to-l from-brand to-brand-strong ring-white/10 shadow-[0_10px_24px_-10px_rgba(109,40,217,0.7)] hover:brightness-[1.06]",
+              )}
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/20 backdrop-blur-sm">
+                <Icon name="Building2" size={22} strokeWidth={2.2} />
+              </span>
+              <span className="min-w-0 flex-1 text-right">
+                <span className="block text-[14px] font-black leading-tight">ניהול המשרד</span>
+                <span className="block truncate text-[11px] font-semibold text-white/85">הוספת מתווכים · צוות · נכסים</span>
+              </span>
+              <Icon name="ChevronLeft" size={16} className="shrink-0 text-white/75 transition group-hover/pin:-translate-x-0.5" />
+            </Link>
+          </div>
+        )
+      )}
 
       {/* Launcher groups (only this area scrolls) */}
       <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

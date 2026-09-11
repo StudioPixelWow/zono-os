@@ -1,0 +1,515 @@
+From ceb99dac3ff4e7d55c81481f4978197e972c1d87 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 05:06:48 +0000
+Subject: [PATCH] fix(property-site): rebuild premium property experience and
+ enforce Hebrew UI
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Public property-detail page (PropertyMarketingPage) — presentation + a HARD
+Hebrew-only P0. No new queries, no business-logic changes, dynamic brand tokens.
+
+P0 HEBREW-ONLY:
+- New canonical resolver src/lib/property-marketing/presentation.ts (pure,
+  dependency-free): resolvePropertyFeature(s)/Type/Status map raw enums →
+  Hebrew. Human QA showed raw English leaking from the free-form features
+  column (air_conditioning, renovated, upgraded_kitchen, solar_heater,
+  pandor_doors, bars). The resolver maps the canonical PROPERTY_FEATURE_KEYS +
+  common import aliases/spelling variants; an UNKNOWN internal/English
+  (snake_case / ASCII-only) token is NEVER exposed — features drop it, type/
+  status fall back to a safe Hebrew value. Wired into data.ts featureList and
+  the page's type label (removed the partial inline TYPE_LABEL).
+- Test scripts/fd-closure-tests/property-presentation.test.ts (10 cases)
+  guards the presentation boundary: known enums → Hebrew; raw tokens can never
+  leak (no ASCII-only label survives). Not a brittle whole-bundle grep.
+
+VISUAL:
+- Hero: title 34/52, price 44/56, spec numbers 30px, larger CTAs.
+- על הנכס: editorial 18px story column + facts as large numbers (22px) rather
+  than a tiny table.
+- Features: 48px icon tiles, 26px glyphs (expanded FeatIcon with ac/renovated/
+  bars/door/kitchen/bed/view/eye/building/sun), 16px labels.
+- Agent: trust moment — 128/144px portrait, 24px name, role/office, actions.
+- Viewing CTA: "מעוניינים לראות את הנכס?" 32/46, elevated form card.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Cm5NAh92cekdimerQbEsCW
+---
+ .../property-presentation.test.ts             | 104 +++++++++++
+ .../PropertyMarketingPage.tsx                 |  91 +++++-----
+ src/lib/property-marketing/data.ts            |   7 +-
+ src/lib/property-marketing/presentation.ts    | 166 ++++++++++++++++++
+ 4 files changed, 326 insertions(+), 42 deletions(-)
+ create mode 100644 scripts/fd-closure-tests/property-presentation.test.ts
+ create mode 100644 src/lib/property-marketing/presentation.ts
+
+diff --git a/scripts/fd-closure-tests/property-presentation.test.ts b/scripts/fd-closure-tests/property-presentation.test.ts
+new file mode 100644
+index 00000000..1225af9e
+--- /dev/null
++++ b/scripts/fd-closure-tests/property-presentation.test.ts
+@@ -0,0 +1,104 @@
++// ============================================================================
++// ZONO — Property PUBLIC presentation resolver: the HEBREW_ONLY_PUBLIC_UI boundary.
++// Guarantees known property-feature/type/status enums resolve to Hebrew, and that
++// UNKNOWN internal/English (snake_case / ASCII-only) tokens can NEVER leak into
++// the public UI (features dropped; type/status fall back to a safe Hebrew value).
++// This tests the presentation boundary — NOT a brittle whole-bundle English grep.
++// Run: node --experimental-strip-types --test scripts/fd-closure-tests/property-presentation.test.ts
++// ============================================================================
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import {
++  resolvePropertyFeature, resolvePropertyFeatures,
++  resolvePropertyType, resolvePropertyTypeLabel, resolvePropertyStatus,
++  isInternalToken,
++} from "../../src/lib/property-marketing/presentation.ts";
++
++const hasHebrew = (s: string) => /[֐-׿]/.test(s);
++const asciiOnly = (s: string) => /^[\x00-\x7F]+$/.test(s);
++
++test("known feature enums resolve to Hebrew (the six flagged in QA + more)", () => {
++  const cases: Record<string, string> = {
++    air_conditioning: "מיזוג אוויר",
++    renovated: "משופצת",
++    upgraded_kitchen: "מטבח משודרג",
++    solar_heater: "דוד שמש",
++    pandor_doors: "דלתות פנדור",
++    bars: "סורגים",
++  };
++  for (const [raw, he] of Object.entries(cases)) {
++    const r = resolvePropertyFeature(raw);
++    assert.ok(r, `expected a resolution for ${raw}`);
++    assert.equal(r!.label, he);
++    assert.ok(hasHebrew(r!.label));
++    assert.ok(r!.icon && r!.icon.length > 0);
++  }
++});
++
++test("free-text variants (spaces / caps) still resolve", () => {
++  assert.equal(resolvePropertyFeature("solar heater")?.label, "דוד שמש");
++  assert.equal(resolvePropertyFeature("Upgraded Kitchen")?.label, "מטבח משודרג");
++  assert.equal(resolvePropertyFeature("PANDOR DOORS")?.label, "דלתות פנדור");
++});
++
++test("unknown internal/English tokens are NEVER exposed (returns null)", () => {
++  for (const raw of ["legacy_backfill", "internal_entity", "has_journey", "some_random_key", "air_condition_v2", "xyz"]) {
++    assert.equal(resolvePropertyFeature(raw), null, `${raw} must not resolve`);
++  }
++});
++
++test("already-Hebrew free text passes through with an icon", () => {
++  const r = resolvePropertyFeature("חדר כביסה");
++  assert.ok(r);
++  assert.equal(r!.label, "חדר כביסה");
++  assert.ok(r!.icon);
++});
++
++test("resolvePropertyFeatures drops raw tokens, keeps Hebrew, de-dupes", () => {
++  const out = resolvePropertyFeatures([
++    "air_conditioning", "renovated", "legacy_backfill", "renovated", // dup
++    "internal_entity", "solar heater", "מרפסת שמש",
++  ]);
++  // NO label may be ASCII-only (i.e. raw English/internal must never survive).
++  for (const f of out) assert.ok(hasHebrew(f.label) && !asciiOnly(f.label), `leaked: ${f.label}`);
++  const labels = out.map((f) => f.label);
++  assert.ok(labels.includes("מיזוג אוויר"));
++  assert.ok(labels.includes("משופצת"));
++  assert.ok(labels.includes("דוד שמש"));
++  assert.equal(labels.filter((l) => l === "משופצת").length, 1); // de-duped
++  assert.ok(!labels.some((l) => l.includes("legacy") || l.includes("internal")));
++});
++
++test("non-string / empty inputs are safe", () => {
++  assert.equal(resolvePropertyFeature(null), null);
++  assert.equal(resolvePropertyFeature(123), null);
++  assert.equal(resolvePropertyFeature("   "), null);
++  assert.deepEqual(resolvePropertyFeatures(null), []);
++  assert.deepEqual(resolvePropertyFeatures("nope"), []);
++});
++
++test("property type enums resolve to Hebrew incl. importer spelling variants", () => {
++  assert.equal(resolvePropertyType("apartment"), "דירה");
++  assert.equal(resolvePropertyType("flat"), "דירה");
++  assert.equal(resolvePropertyType("penthouseapp"), "פנטהאוז");
++  assert.equal(resolvePropertyType("gardenapartment"), "דירת גן");
++  assert.equal(resolvePropertyType("dualcottage"), "קוטג׳ דו-משפחתי");
++});
++
++test("unknown internal type → null, but label helper never leaks it", () => {
++  assert.equal(resolvePropertyType("weird_internal_type"), null);
++  assert.equal(resolvePropertyTypeLabel("weird_internal_type"), "נכס");
++  assert.ok(hasHebrew(resolvePropertyTypeLabel("anything_unknown")));
++});
++
++test("status enums resolve to Hebrew", () => {
++  assert.equal(resolvePropertyStatus("active"), "למכירה");
++  assert.equal(resolvePropertyStatus("under_offer"), "בהצעה");
++  assert.equal(resolvePropertyStatus("sold"), "נמכר");
++  assert.equal(resolvePropertyStatus("weird_status"), null);
++});
++
++test("isInternalToken flags ASCII-only strings", () => {
++  assert.equal(isInternalToken("air_conditioning"), true);
++  assert.equal(isInternalToken("מיזוג אוויר"), false);
++});
+diff --git a/src/components/property-marketing/PropertyMarketingPage.tsx b/src/components/property-marketing/PropertyMarketingPage.tsx
+index 76800707..a0822685 100644
+--- a/src/components/property-marketing/PropertyMarketingPage.tsx
++++ b/src/components/property-marketing/PropertyMarketingPage.tsx
+@@ -12,8 +12,7 @@ import { PropertyGallery } from "./PropertyGallery";
+ import { PropertyLeadForm } from "./PropertyLeadForm";
+ import { PropertyShare } from "./PropertyShare";
+ import { PropertyMap } from "./PropertyMap";
+-
+-const TYPE_LABEL: Record<string, string> = { apartment: "דירה", house: "בית פרטי", penthouse: "פנטהאוז", garden_apartment: "דירת גן", duplex: "דופלקס", cottage: "קוטג׳", lot: "מגרש", commercial: "מסחרי", office: "משרד", studio: "סטודיו" };
++import { resolvePropertyTypeLabel } from "@/lib/property-marketing/presentation";
+ 
+ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload }) {
+   const d = data; const A = d.agent;
+@@ -45,23 +44,23 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
+         </div>
+         <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
+           <div className="relative z-10 mx-auto -mt-28 w-full max-w-3xl overflow-hidden rounded-[28px] border border-[var(--brand-border)] bg-[var(--brand-background)]/95 p-7 text-center shadow-[0_40px_90px_-40px_rgba(15,23,42,0.6)] backdrop-blur-xl sm:-mt-32 sm:p-10">
+-            {d.statusLabel && <span className="inline-block rounded-full bg-[var(--brand-primary)] px-4 py-1.5 text-[12px] font-bold tracking-wide text-[var(--brand-on-primary)]">{d.statusLabel}</span>}
+-            <h1 className="mt-4 text-3xl font-black leading-[1.1] text-[var(--brand-text)] sm:text-[40px]">{d.title}</h1>
+-            <p className="mt-2.5 text-[15px] text-[var(--brand-muted)]">{d.address.display}{!d.address.exact && " (אזור)"}</p>
++            {d.statusLabel && <span className="inline-block rounded-full bg-[var(--brand-primary)] px-4 py-1.5 text-[13px] font-bold tracking-wide text-[var(--brand-on-primary)]">{d.statusLabel}</span>}
++            <h1 className="mt-4 text-[34px] font-black leading-[1.05] tracking-tight text-[var(--brand-text)] sm:text-[52px]">{d.title}</h1>
++            <p className="mt-3 text-[16px] text-[var(--brand-muted)]">{d.address.display}{!d.address.exact && " (אזור)"}</p>
+             {priceLabel && (
+               <div className="mt-5 flex items-baseline justify-center gap-3">
+-                <span className="text-4xl font-black text-[color:var(--brand-link)] sm:text-5xl">{priceLabel}</span>
+-                {d.priceBefore && d.price && d.priceBefore > d.price && <span className="text-[16px] text-[var(--brand-muted)] line-through">{money(d.priceBefore)}</span>}
++                <span className="text-[44px] font-black leading-none text-[color:var(--brand-link)] sm:text-[56px]">{priceLabel}</span>
++                {d.priceBefore && d.price && d.priceBefore > d.price && <span className="text-[17px] text-[var(--brand-muted)] line-through">{money(d.priceBefore)}</span>}
+               </div>
+             )}
+             {specs.length > 0 && (
+-              <div className="mx-auto mt-6 flex max-w-lg flex-wrap items-stretch justify-center divide-x divide-x-reverse divide-[var(--brand-border)] border-t border-[var(--brand-border)] pt-5">
+-                {specs.map((s, i) => <div key={i} className="px-6 first:pr-0"><div className="text-2xl font-black text-[var(--brand-text)]">{s.v}</div><div className="mt-0.5 text-[12px] font-semibold text-[var(--brand-muted)]">{s.l}</div></div>)}
++              <div className="mx-auto mt-7 flex max-w-lg flex-wrap items-stretch justify-center divide-x divide-x-reverse divide-[var(--brand-border)] border-t border-[var(--brand-border)] pt-6">
++                {specs.map((s, i) => <div key={i} className="px-7 first:pr-0"><div className="text-[30px] font-black leading-none text-[var(--brand-text)]">{s.v}</div><div className="mt-1.5 text-[13px] font-semibold text-[var(--brand-muted)]">{s.l}</div></div>)}
+               </div>
+             )}
+-            <div className="mt-7 flex flex-wrap justify-center gap-3">
+-              <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] px-7 py-3.5 text-[15px] font-bold text-[var(--brand-on-primary)] shadow-lg shadow-[color:var(--brand-primary)]/20 transition hover:bg-[color:var(--brand-primary-hover)]">לתיאום ביקור בנכס</a>
+-              {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] px-7 py-3.5 text-[15px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">שלחו הודעה</a>}
++            <div className="mt-8 flex flex-wrap justify-center gap-3">
++              <a href="#contact" className="rounded-xl bg-[var(--brand-primary)] px-8 py-4 text-[16px] font-black text-[var(--brand-on-primary)] shadow-lg shadow-[color:var(--brand-primary)]/20 transition hover:bg-[color:var(--brand-primary-hover)]">לתיאום ביקור בנכס</a>
++              {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--brand-border)] px-8 py-4 text-[16px] font-bold text-[var(--brand-text)] transition hover:border-[color:var(--brand-primary)]">שלחו הודעה</a>}
+             </div>
+           </div>
+         </div>
+@@ -70,23 +69,23 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
+       {/* GALLERY */}
+       {d.media.images.length > 1 && <div className="py-12"><PropertyGallery images={d.media.images} title={d.title} /></div>}
+ 
+-      {/* OVERVIEW */}
++      {/* OVERVIEW — editorial story + high-impact facts (large numbers, not a table) */}
+       <SectionShell id="about" title="על הנכס">
+-        <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr]">
+-          <div className="text-[16px] leading-relaxed text-[var(--brand-text)] whitespace-pre-line">{d.description || `${TYPE_LABEL[d.type] ?? d.type}${d.rooms ? ` · ${d.rooms} חדרים` : ""}${d.address.area ? ` · ${d.address.area}` : ""}.`}</div>
+-          <div className="rounded-2xl border border-[var(--brand-border)] p-5">
+-            <h3 className="mb-3 text-[15px] font-black text-[var(--brand-text)]">פרטי הנכס</h3>
+-            <dl className="grid grid-cols-2 gap-y-3 text-[14px]">
++        <div className="grid gap-12 lg:grid-cols-[1.35fr_1fr]">
++          <div className="text-[18px] leading-[1.85] text-[var(--brand-text)] whitespace-pre-line">{d.description || `${resolvePropertyTypeLabel(d.type)}${d.rooms ? ` · ${d.rooms} חדרים` : ""}${d.address.area ? ` · ${d.address.area}` : ""}.`}</div>
++          <div className="rounded-[24px] border border-[var(--brand-border)] bg-[var(--brand-surface)] p-7 shadow-[0_18px_50px_-32px_rgba(15,23,42,0.3)]">
++            <h3 className="mb-5 text-[16px] font-black text-[var(--brand-text)]">פרטי הנכס</h3>
++            <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+               {[
+-                ["סוג נכס", TYPE_LABEL[d.type] ?? d.type],
++                ["סוג נכס", resolvePropertyTypeLabel(d.type)],
+                 d.rooms != null ? ["חדרים", `${d.rooms}`] : null,
+                 d.sizeSqm != null ? ["שטח", `${d.sizeSqm} מ״ר`] : null,
+                 d.outdoorSqm ? ["שטח חוץ", `${d.outdoorSqm} מ״ר`] : null,
+                 d.floor != null ? ["קומה", `${d.floor}${d.totalFloors ? ` מתוך ${d.totalFloors}` : ""}`] : null,
+                 d.availabilityDate ? ["כניסה", d.availabilityDate] : null,
+-                d.pricePerSqm ? ["מחיר למ״ר", money(d.pricePerSqm)] : null,
+-              ].filter(Boolean).map((r, i) => { const [k, v] = r as [string, string]; return <div key={i} className="contents"><dt className="text-[var(--brand-muted)]">{k}</dt><dd className="font-bold text-[var(--brand-text)]">{v}</dd></div>; })}
+-            </dl>
++                d.pricePerSqm ? ["מחיר למ״ר", money(d.pricePerSqm) ?? "—"] : null,
++              ].filter(Boolean).map((r, i) => { const [k, v] = r as [string, string]; return <div key={i}><div className="text-[22px] font-black leading-tight text-[var(--brand-text)]">{v}</div><div className="mt-0.5 text-[13px] font-semibold text-[var(--brand-muted)]">{k}</div></div>; })}
++            </div>
+           </div>
+         </div>
+       </SectionShell>
+@@ -96,9 +95,9 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
+         <SectionShell title="מאפייני הנכס" tone="surface">
+           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+             {d.features.map((f, i) => (
+-              <div key={i} className="flex items-center gap-3 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-4 py-3">
+-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><FeatIcon name={f.icon} /></span>
+-                <span className="text-[14px] font-semibold text-[var(--brand-text)]">{f.label}</span>
++              <div key={i} className="flex items-center gap-3.5 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] px-5 py-4">
++                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[color:var(--brand-primary)]"><FeatIcon name={f.icon} /></span>
++                <span className="text-[16px] font-bold text-[var(--brand-text)]">{f.label}</span>
+               </div>
+             ))}
+           </div>
+@@ -125,16 +124,17 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
+       {A && (
+         <SectionShell tone="surface">
+           <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
+-            <div className="flex items-center gap-5 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-background)] p-6">
+-              {A.photo ? <img src={A.photo} alt={A.name} className="h-28 w-28 shrink-0 rounded-2xl object-cover" /> : <div className="grid h-28 w-28 shrink-0 place-items-center rounded-2xl bg-[var(--brand-soft)] text-4xl font-black text-[color:var(--brand-primary)]">{A.name.slice(0, 1)}</div>}
++            <div className="flex items-center gap-6 rounded-[24px] border border-[var(--brand-border)] bg-[var(--brand-background)] p-7 shadow-[0_18px_50px_-32px_rgba(15,23,42,0.3)]">
++              {A.photo ? <img src={A.photo} alt={A.name} className="h-32 w-32 shrink-0 rounded-[22px] object-cover object-top sm:h-36 sm:w-36" /> : <div className="grid h-32 w-32 shrink-0 place-items-center rounded-[22px] bg-[var(--brand-soft)] text-5xl font-black text-[color:var(--brand-primary)] sm:h-36 sm:w-36">{A.name.slice(0, 1)}</div>}
+               <div>
+-                <div className="text-[19px] font-black text-[var(--brand-text)]">{A.name}</div>
+-                {A.title && <div className="text-[14px] font-semibold text-[color:var(--brand-link)]">{A.title}</div>}
+-                <div className="mt-1 text-[13px] text-[var(--brand-muted)]">{d.office.name}</div>
+-                <div className="mt-3 flex flex-wrap gap-2">
+-                  {A.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-[var(--brand-primary)] px-4 py-2 text-[13px] font-bold text-[var(--brand-on-primary)]">דברו איתי</a>}
+-                  {A.tel && <a href={A.tel} className="rounded-lg border border-[var(--brand-border)] px-4 py-2 text-[13px] font-bold text-[var(--brand-text)]">התקשרו</a>}
+-                  {A.href && <Link href={A.href} className="rounded-lg border border-[var(--brand-border)] px-4 py-2 text-[13px] font-bold text-[var(--brand-text)]">לכל הנכסים שלי</Link>}
++                <div className="text-[13px] font-bold text-[color:var(--brand-link)]">הסוכן שמלווה את הנכס</div>
++                <div className="mt-1 text-[24px] font-black leading-tight text-[var(--brand-text)]">{A.name}</div>
++                {A.title && <div className="text-[15px] font-semibold text-[color:var(--brand-link)]">{A.title}</div>}
++                <div className="mt-0.5 text-[14px] text-[var(--brand-muted)]">{d.office.name}</div>
++                <div className="mt-4 flex flex-wrap gap-2">
++                  {A.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-[14px] font-black text-[var(--brand-on-primary)]">דברו איתי</a>}
++                  {A.tel && <a href={A.tel} className="rounded-xl border border-[var(--brand-border)] px-5 py-2.5 text-[14px] font-bold text-[var(--brand-text)]">התקשרו</a>}
++                  {A.href && <Link href={A.href} className="rounded-xl border border-[var(--brand-border)] px-5 py-2.5 text-[14px] font-bold text-[var(--brand-text)]">לכל הנכסים שלי</Link>}
+                 </div>
+               </div>
+             </div>
+@@ -160,12 +160,12 @@ export function PropertyMarketingPage({ data }: { data: PropertyMarketingPayload
+       <section id="contact" className="bg-[var(--brand-primary)] text-[var(--brand-on-primary)]">
+         <div className="mx-auto grid w-full max-w-7xl items-center gap-8 px-5 py-16 sm:px-8 lg:grid-cols-2 lg:py-20">
+           <div>
+-            <h2 className="text-3xl font-black leading-tight sm:text-4xl">מעוניינים בנכס הזה?</h2>
+-            <p className="mt-3 text-[16px] opacity-90">השאירו פרטים ו{A ? A.name.split(" ")[0] : "הסוכן"} יחזור אליכם עם כל המידע.</p>
+-            {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="mt-6 inline-block rounded-xl bg-[var(--brand-background)] px-6 py-3.5 text-[15px] font-bold text-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
++            <h2 className="text-[32px] font-black leading-[1.05] tracking-tight sm:text-[46px]">מעוניינים לראות את הנכס?</h2>
++            <p className="mt-4 text-[18px] opacity-90">השאירו פרטים ו{A ? A.name.split(" ")[0] : "הסוכן"} יחזור אליכם לתיאום ביקור.</p>
++            {A?.whatsapp && <a href={`${A.whatsapp}?text=${encodeURIComponent(d.shareText)}`} target="_blank" rel="noopener noreferrer" className="mt-7 inline-block rounded-xl bg-[var(--brand-background)] px-7 py-4 text-[16px] font-black text-[color:var(--brand-primary)]">שלחו הודעת WhatsApp</a>}
+           </div>
+-          <div className="rounded-2xl bg-[var(--brand-background)] p-6 text-[var(--brand-text)]">
+-            <h3 className="mb-4 text-[17px] font-black">השאירו פרטים</h3>
++          <div className="rounded-[24px] bg-[var(--brand-background)] p-7 text-[var(--brand-text)] shadow-2xl sm:p-8">
++            <h3 className="mb-4 text-[20px] font-black">השאירו פרטים</h3>
+             <PropertyLeadForm propertyId={d.id} />
+           </div>
+         </div>
+@@ -234,6 +234,17 @@ function FeatIcon({ name }: { name: string }) {
+     box: "M3 8l9-5 9 5-9 5zM3 8v8l9 5 9-5V8",
+     access: "M12 6a2 2 0 100-4 2 2 0 000 4zm-3 3l3-1 3 1M9 21l3-6 3 6",
+     check: "M4 12l5 5L20 6",
++    // resolver icons (property features)
++    ac: "M4 8h16M4 12h16M7 16c0 1.5 1 2.5 2 3M12 16c0 2-1 3-2 4M17 16c0 1.5-1 2.5-2 3",
++    renovated: "M14 6l4 4-9 9-4 1 1-4zM13 7l4 4",
++    bars: "M4 4v16M9 4v16M14 4v16M19 4v16",
++    door: "M6 21V4a1 1 0 011-1h10a1 1 0 011 1v17M6 21h12M14 12h.5",
++    kitchen: "M4 3h16v7H4zM4 10v11M20 10v11M8 6h.5M8 14v4M14 14v4",
++    bed: "M3 18v-6h18v6M3 12V8a2 2 0 012-2h5v6M21 12v-2a2 2 0 00-2-2h-4",
++    view: "M2 20s4-9 10-9 10 9 10 9M12 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z",
++    eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zm10 3a3 3 0 100-6 3 3 0 000 6z",
++    building: "M4 21V4a1 1 0 011-1h9a1 1 0 011 1v17M15 21V9h4a1 1 0 011 1v11M8 7h3M8 11h3M8 15h3",
++    sun: "M12 4V2M12 22v-2M4 12H2M22 12h-2M6 6L4.5 4.5M19.5 19.5L18 18M6 18l-1.5 1.5M19.5 4.5L18 6M12 8a4 4 0 100 8 4 4 0 000-8z",
+   };
+-  return <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden><path d={p[name] ?? p.check} strokeLinecap="round" strokeLinejoin="round" /></svg>;
++  return <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden><path d={p[name] ?? p.check} strokeLinecap="round" strokeLinejoin="round" /></svg>;
+ }
+diff --git a/src/lib/property-marketing/data.ts b/src/lib/property-marketing/data.ts
+index 33034bc6..2db6d6c1 100644
+--- a/src/lib/property-marketing/data.ts
++++ b/src/lib/property-marketing/data.ts
+@@ -12,6 +12,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
+ import { resolveEffectiveBrand } from "@/lib/brand-identity/engine";
+ import { buildBrandTokens, waLink } from "@/lib/agent-website/brand-tokens";
+ import { resolveAgentAvatar } from "@/lib/office/avatar";
++import { resolvePropertyFeatures } from "./presentation";
+ import type { OfficeProperty, OfficeAgentRef } from "@/lib/office-website/site-data";
+ 
+ const PUBLIC_STATUSES = ["active", "published", "under_offer"] as const;
+@@ -67,8 +68,10 @@ function featureList(p: Record<string, unknown>): PropertyFeature[] {
+   if (p.has_safe_room) f.push({ label: 'ממ"ד', icon: "shield" });
+   if (p.has_storage) f.push({ label: n("storage_count") > 1 ? `${n("storage_count")} מחסנים` : "מחסן", icon: "box" });
+   if (p.is_accessible) f.push({ label: "נגישות", icon: "access" });
+-  const extra = Array.isArray(p.features) ? (p.features as unknown[]).filter((x) => typeof x === "string") as string[] : [];
+-  for (const e of extra) if (!f.some((x) => x.label === e)) f.push({ label: e, icon: "check" });
++  // Free-form features array → Hebrew-only via the canonical resolver. Unknown
++  // internal/English tokens are dropped, never rendered (HEBREW_ONLY_PUBLIC_UI).
++  for (const res of resolvePropertyFeatures(p.features))
++    if (!f.some((x) => x.label === res.label)) f.push(res);
+   return f;
+ }
+ 
+diff --git a/src/lib/property-marketing/presentation.ts b/src/lib/property-marketing/presentation.ts
+new file mode 100644
+index 00000000..6b256dd1
+--- /dev/null
++++ b/src/lib/property-marketing/presentation.ts
+@@ -0,0 +1,166 @@
++// ============================================================================
++// ZONO — Property PUBLIC presentation resolver (pure, dependency-free).
++// ----------------------------------------------------------------------------
++// The ONE canonical boundary that turns raw property enums/keys into HEBREW,
++// public-safe presentation. HEBREW_ONLY_PUBLIC_UI is a hard requirement: a known
++// enum maps to its Hebrew label; a value that is already Hebrew passes through;
++// an UNKNOWN internal/English token (snake_case / ASCII-only) is NEVER exposed
++// publicly — it is omitted (features) or replaced by a safe Hebrew fallback
++// (type/status). Pure & side-effect-free so it is unit-tested directly.
++// ============================================================================
++
++export interface ResolvedFeature { label: string; icon: string }
++
++/** true when a string carries NO Hebrew letters ⇒ an internal/English token
++ *  (e.g. "air_conditioning", "renovated", "Upgraded Kitchen"). */
++export function isInternalToken(s: string): boolean {
++  return !/[֐-׿]/.test(s);
++}
++
++/** Canonicalize a raw key: trim, lowercase, spaces/dashes → underscore. Handles
++ *  both stored keys ("solar_heater") and free text ("solar heater"). */
++function normKey(s: string): string {
++  return s.trim().toLowerCase().replace(/[\s\-]+/g, "_");
++}
++
++// ── Feature enum → Hebrew label + icon (mirrors PROPERTY_FEATURE_KEYS + the
++//    boolean flags surfaced by the marketing payload, plus common import aliases). ──
++const FEATURE_HE: Record<string, ResolvedFeature> = {
++  // canonical PROPERTY_FEATURE_KEYS
++  renovated: { label: "משופצת", icon: "renovated" },
++  air_conditioning: { label: "מיזוג אוויר", icon: "ac" },
++  bars: { label: "סורגים", icon: "bars" },
++  pandor_doors: { label: "דלתות פנדור", icon: "door" },
++  upgraded_kitchen: { label: "מטבח משודרג", icon: "kitchen" },
++  master_unit: { label: "יחידת הורים", icon: "bed" },
++  open_view: { label: "נוף פתוח", icon: "view" },
++  front_facing: { label: "חזית", icon: "eye" },
++  rear_facing: { label: "עורפית", icon: "building" },
++  solar_heater: { label: "דוד שמש", icon: "sun" },
++  // boolean-flag features + common aliases seen in imported/legacy data
++  elevator: { label: "מעלית", icon: "elevator" },
++  parking: { label: "חניה", icon: "car" },
++  balcony: { label: "מרפסת", icon: "balcony" },
++  storage: { label: "מחסן", icon: "box" },
++  safe_room: { label: 'ממ"ד', icon: "shield" },
++  mamad: { label: 'ממ"ד', icon: "shield" },
++  shelter: { label: 'ממ"ד', icon: "shield" },
++  accessible: { label: "נגישות", icon: "access" },
++  accessibility: { label: "נגישות", icon: "access" },
++  furnished: { label: "מרוהט", icon: "check" },
++  air_condition: { label: "מיזוג אוויר", icon: "ac" },
++  ac: { label: "מיזוג אוויר", icon: "ac" },
++  central_ac: { label: "מיזוג מרכזי", icon: "ac" },
++  sun_terrace: { label: "מרפסת שמש", icon: "balcony" },
++  garden: { label: "גינה", icon: "view" },
++  pool: { label: "בריכה", icon: "check" },
++  new: { label: "חדש מקבלן", icon: "renovated" },
++  quiet: { label: "שקט", icon: "check" },
++};
++
++/** Hebrew label → best-effort icon, so a wizard-stored Hebrew value still gets a
++ *  meaningful icon instead of the generic fallback. Derived from FEATURE_HE. */
++const ICON_BY_HE_LABEL: Record<string, string> = (() => {
++  const m: Record<string, string> = {};
++  for (const k of Object.keys(FEATURE_HE)) { const v = FEATURE_HE[k]; if (!(v.label in m)) m[v.label] = v.icon; }
++  // a couple of common wizard label variants (label text differs from FEATURE_HE)
++  m["מיזוג"] = "ac";
++  return m;
++})();
++
++/** Resolve ONE raw feature value to Hebrew presentation, or null when it is an
++ *  unknown internal/English token that must not leak into the public UI. */
++export function resolvePropertyFeature(raw: unknown): ResolvedFeature | null {
++  if (typeof raw !== "string") return null;
++  const s = raw.trim();
++  if (!s) return null;
++  // 1) known enum key (also matches "solar heater" / "Upgraded Kitchen")
++  const hit = FEATURE_HE[normKey(s)];
++  if (hit) return hit;
++  // 2) already Hebrew (wizard-stored label / hand-entered) → keep, map an icon
++  if (!isInternalToken(s)) return { label: s, icon: ICON_BY_HE_LABEL[s] ?? "check" };
++  // 3) unknown internal/English token → NEVER expose the raw value publicly
++  return null;
++}
++
++/** Resolve a raw feature list → de-duped Hebrew features. Raw English/internal
++ *  tokens are dropped, never rendered. Preserves input order. */
++export function resolvePropertyFeatures(raw: unknown): ResolvedFeature[] {
++  if (!Array.isArray(raw)) return [];
++  const out: ResolvedFeature[] = [];
++  const seen = new Set<string>();
++  for (const r of raw) {
++    const res = resolvePropertyFeature(r);
++    if (res && !seen.has(res.label)) { seen.add(res.label); out.push(res); }
++  }
++  return out;
++}
++
++// ── Property type enum → Hebrew (covers canonical + common spelling variants
++//    seen across importers, e.g. flat / penthouseapp / gardenapartment). ──
++const TYPE_HE: Record<string, string> = {
++  apartment: "דירה",
++  flat: "דירה",
++  house: "בית פרטי",
++  private_house: "בית פרטי",
++  penthouse: "פנטהאוז",
++  penthouseapp: "פנטהאוז",
++  mini_penthouse: "מיני פנטהאוז",
++  garden_apartment: "דירת גן",
++  gardenapartment: "דירת גן",
++  duplex: "דופלקס",
++  triplex: "טריפלקס",
++  cottage: "קוטג׳",
++  dualcottage: "קוטג׳ דו-משפחתי",
++  two_family: "קוטג׳ דו-משפחתי",
++  semi_detached: "קוטג׳ דו-משפחתי",
++  lot: "מגרש",
++  land: "מגרש",
++  plot: "מגרש",
++  commercial: "נכס מסחרי",
++  office: "משרד",
++  store: "חנות",
++  studio: "סטודיו",
++  building: "בניין",
++  warehouse: "מחסן / לוגיסטיקה",
++  farm: "משק / נחלה",
++};
++
++/** Resolve a raw property type → Hebrew, null when unknown+internal. */
++export function resolvePropertyType(raw: unknown): string | null {
++  if (typeof raw !== "string") return null;
++  const s = raw.trim();
++  if (!s) return null;
++  const hit = TYPE_HE[normKey(s)];
++  if (hit) return hit;
++  if (!isInternalToken(s)) return s; // already Hebrew
++  return null; // unknown internal token → do not leak
++}
++
++/** Display-safe Hebrew type label — never leaks a raw enum (falls back to נכס). */
++export function resolvePropertyTypeLabel(raw: unknown): string {
++  return resolvePropertyType(raw) ?? "נכס";
++}
++
++// ── Status enum → Hebrew (public-safe). ──
++const STATUS_HE: Record<string, string> = {
++  active: "למכירה",
++  published: "למכירה",
++  under_offer: "בהצעה",
++  reserved: "בהמתנה",
++  sold: "נמכר",
++  rented: "הושכר",
++  draft: "בהכנה",
++  archived: "לא פעיל",
++};
++
++/** Resolve a raw status → Hebrew, or null when unknown+internal (omit). */
++export function resolvePropertyStatus(raw: unknown): string | null {
++  if (typeof raw !== "string") return null;
++  const s = raw.trim();
++  if (!s) return null;
++  const hit = STATUS_HE[normKey(s)];
++  if (hit) return hit;
++  if (!isInternalToken(s)) return s;
++  return null;
++}
+-- 
+2.43.0
+

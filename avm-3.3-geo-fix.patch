@@ -1,0 +1,76 @@
+From f9c25d4c1fc8d46b07b25a2aef107f94fa60ca83 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 11:59:15 +0000
+Subject: [PATCH] fix(geo): don't use property title as a geocode address
+ (street-less subjects failed)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Runtime evidence from the production cron: the backlog ran (HTTP 200) and geocoded
+transactions via Google, but 0 subject properties — because street-less properties
+fell back to using the property TITLE as the geocoding address. A marketing title
+("דירת 4 חדרים משופצת …") makes Google return ZERO_RESULTS, so those subjects failed
+silently and were never located. Fix: never use the title as an address; a
+street-less property geocodes by neighborhood+city (honestly coarse — NEIGHBORHOOD/
+CITY resolution, which the subject-precision gate already keeps out of fine tiers),
+and a bare building number without a street is dropped. Test added.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Cm5NAh92cekdimerQbEsCW
+---
+ scripts/fd-closure-tests/avm-geo-address.test.ts | 8 ++++++++
+ src/lib/geo/address.ts                           | 9 +++++++--
+ 2 files changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/fd-closure-tests/avm-geo-address.test.ts b/scripts/fd-closure-tests/avm-geo-address.test.ts
+index 5952d4c0..926f957d 100644
+--- a/scripts/fd-closure-tests/avm-geo-address.test.ts
++++ b/scripts/fd-closure-tests/avm-geo-address.test.ts
+@@ -23,6 +23,14 @@ test("street parsing splits 'לוטם 2.0' into name + number", () => {
+   assert.equal(q.streetNumber, "2");
+ });
+ 
++test("property title is NEVER used as a geocoding address (caused ZERO_RESULTS)", () => {
++  const q = buildGeoQuery({ city: "קרית ביאליק", neighborhood: "רמות", buildingNumber: "5", title: "דירת 4 חדרים משופצת" });
++  assert.equal(q.address, null);            // title ignored
++  assert.equal(q.street, null);
++  assert.equal(q.streetNumber, null);       // bare building number without a street is dropped
++  assert.equal(q.maxResolution, "NEIGHBORHOOD"); // geocodes by neighborhood+city, honestly coarse
++});
++
+ test("resolution never exceeds what the address supports", () => {
+   // provider says ROOFTOP but address is only city → capped at CITY
+   assert.equal(resolveGeoResolution("CITY", 1.0), "CITY");
+diff --git a/src/lib/geo/address.ts b/src/lib/geo/address.ts
+index 566ce225..dd5f3d13 100644
+--- a/src/lib/geo/address.ts
++++ b/src/lib/geo/address.ts
+@@ -42,9 +42,14 @@ export function buildGeoQuery(p: GeoAddressParts): { street: string | null; stre
+   const rawStreet = clean(p.street);
+   const streetName = rawStreet ? rawStreet.replace(/\s*\d[\d.]*\s*$/, "").trim() || null : null;
+   const numFromStreet = rawStreet ? (rawStreet.match(/(\d+)/)?.[1] ?? null) : null;
+-  const streetNumber = clean(p.streetNumber) || clean(p.buildingNumber) || numFromStreet;
++  // A building number is only meaningful WITH a street name — a bare number geocodes
++  // to nothing useful.
++  const streetNumber = streetName ? (clean(p.streetNumber) || clean(p.buildingNumber) || numFromStreet) : null;
+   const neighborhood = clean(p.neighborhood);
+   const city = clean(p.city);
++  // Only a real free-form ADDRESS is used as the query address — NEVER the property
++  // title (a marketing string like "דירה 4 חדרים משופצת" makes Google return
++  // ZERO_RESULTS, which is why street-less subjects were failing to geocode).
+   const address = clean(p.address);
+ 
+   let maxResolution: GeoResolution;
+@@ -54,7 +59,7 @@ export function buildGeoQuery(p: GeoAddressParts): { street: string | null; stre
+   else if (city) maxResolution = "CITY";
+   else maxResolution = "UNRESOLVED";
+ 
+-  return { street: streetName, streetNumber, neighborhood, city, address: address || (p.title ? clean(p.title) : null), maxResolution };
++  return { street: streetName, streetNumber, neighborhood, city, address, maxResolution };
+ }
+ 
+ /** Final resolution = the coarser of what the address supports and what the
+-- 
+2.43.0
+
