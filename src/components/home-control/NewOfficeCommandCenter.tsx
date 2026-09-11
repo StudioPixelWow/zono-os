@@ -64,6 +64,10 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
   }, [identity.city, identity.subdistrict]);
 
   const doneKeys = new Set(activation.milestones.filter((m) => m.done).map((m) => m.milestone.key));
+  // The activation checklist starts COLLAPSED (a slim progress strip) so the zone
+  // goldmine — map, opportunities, brokers — leads the screen instead of a 13-step
+  // to-do list. The owner expands it when they want to work the steps.
+  const [journeyOpen, setJourneyOpen] = useState(false);
 
   return (
     <div dir="rtl" data-office-brand={hasBrand ? "true" : undefined} style={themeVars as React.CSSProperties}
@@ -187,17 +191,26 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
       {/* ── OFFICE ACTIVATION JOURNEY ────────────────────────────────────── */}
       <Reveal i={2} className="order-5 mt-4">
         <section className="rounded-3xl border border-line bg-card p-6 shadow-card">
-          <div className="flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setJourneyOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 text-right">
             <div>
               <h2 className="text-lg font-bold text-ink">בוא נהפוך את {identity.officeName} למשרד הכי חזק בזון שלו</h2>
               <p className="mt-0.5 text-sm text-muted">{activation.completedCount} מתוך {activation.total} שלבי הפעלה הושלמו</p>
             </div>
-            <span className="rounded-full bg-[var(--office-badge)] px-3 py-1 text-sm font-bold text-[var(--office-badge-ink)]">{activation.percent}%</span>
-          </div>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="rounded-full bg-[var(--office-badge)] px-3 py-1 text-sm font-bold text-[var(--office-badge-ink)]">{activation.percent}%</span>
+              <Icon name={journeyOpen ? "ChevronUp" : "ChevronDown"} className="h-5 w-5 text-muted" />
+            </span>
+          </button>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full transition-all" style={{ width: `${activation.percent}%`, background: "var(--office-accent)" }} />
           </div>
+          {!journeyOpen && (
+            <button type="button" onClick={() => setJourneyOpen(true)} className="mt-3 text-sm font-bold text-[var(--office-accent-strong)]">
+              הצג את {activation.total - activation.completedCount} השלבים הנותרים ←
+            </button>
+          )}
 
+          {journeyOpen && (
           <ol className="mt-5 grid gap-2.5 sm:grid-cols-2">
             {activation.milestones.map((m) => (
               <li key={m.milestone.key}
@@ -221,6 +234,7 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
               </li>
             ))}
           </ol>
+          )}
         </section>
       </Reveal>
 
