@@ -70,6 +70,7 @@ const LOCALITY_ALIASES: Record<string, string[]> = {
   "אשדוד": ["אשדוד", "Ashdod"],
   "אשקלון": ["אשקלון", "Ashkelon", "Ashqelon"],
   "נתניה": ["נתניה", "Netanya", "Nathanya"],
+  "אבן יהודה": ["אבן יהודה", "אבן יהודא", "Even Yehuda", "Even Yehudah", "Evan Yehuda"],
   "חדרה": ["חדרה", "Hadera", "Khadera"],
   "מודיעין": ["מודיעין", "מודיעין מכבים רעות", "Modiin", "Modi'in", "Modiin Maccabim Reut"],
   "בת ים": ["בת ים", "Bat Yam"],

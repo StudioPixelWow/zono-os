@@ -418,35 +418,50 @@ async function geocodeOrgExternalListings(db: DB, orgId: string, limit = 80): Pr
   const stats: GeocodeBatchStats = { attempted: 0, success: 0, failed: 0, skipped: 0 };
   const { data } = await db
     .from("external_listings" as never)
-    .select("id,address,street,street_number,neighborhood,city")
+    .select("id,address,street,street_number,neighborhood,city,lat")
     .eq("org_id", orgId)
     .eq("status", "active")
-    .is("lat", null)
+    // Rows needing coordinates: never-geocoded (lat null) OR a low-confidence row
+    // that has a street we can retry now that the query builder drops junk
+    // neighborhoods — those were pinned to the city centre and never re-tried
+    // (retry-once, gated by geocode_error='retry_done' so it can't loop).
+    .or("lat.is.null,and(geocode_status.eq.low_confidence,street.not.is.null,geocode_error.is.null)")
     // Never-attempted rows (geocode_status null) first, so the backlog drainer
     // makes forward progress before re-trying previously-failed addresses.
     .order("geocode_status", { ascending: true, nullsFirst: true })
     .limit(limit);
-  const rows = (data ?? []) as unknown as { id: string; address: string | null; street: string | null; street_number: string | null; neighborhood: string | null; city: string | null }[];
+  const rows = (data ?? []) as unknown as { id: string; address: string | null; street: string | null; street_number: string | null; neighborhood: string | null; city: string | null; lat: number | null }[];
 
   for (const r of rows) {
     const input = { address: r.address, street: r.street, streetNumber: r.street_number, neighborhood: r.neighborhood, city: r.city };
     if (!buildQuery(input)) { stats.skipped++; continue; }
+    const isRetry = r.lat != null;   // already on the map (city centre) — this pass is a precision retry
     stats.attempted++;
     const out = await geocodeAddress(input);
     const now = new Date().toISOString();
     if (!out.ok) {
-      stats.failed++;
-      try { await db.from("external_listings" as never).update({ geocode_status: "failed", geocode_error: out.message } as never).eq("id", r.id); } catch { /* best-effort */ }
+      // On a retry, keep the existing (approximate) coordinates and stop retrying
+      // it; only a first-time attempt is a genuine failure.
+      if (isRetry) { stats.skipped++; try { await db.from("external_listings" as never).update({ geocode_error: "retry_done" } as never).eq("id", r.id); } catch { /* best-effort */ } }
+      else { stats.failed++; try { await db.from("external_listings" as never).update({ geocode_status: "failed", geocode_error: out.message } as never).eq("id", r.id); } catch { /* best-effort */ } }
       continue;
     }
     const low = out.result.confidence < 0.5;
+    if (isRetry && low) {
+      // Retry didn't beat the city-centre hit → keep current coords, don't loop.
+      stats.skipped++;
+      try { await db.from("external_listings" as never).update({ geocode_error: "retry_done" } as never).eq("id", r.id); } catch { /* best-effort */ }
+      continue;
+    }
     try {
       await db.from("external_listings" as never).update({
         lat: out.result.lat, lng: out.result.lng,
         geocode_confidence: out.result.confidence,
         formatted_address: out.result.formattedAddress,
         geocoded_at: now, geocode_provider: out.result.provider,
-        geocode_status: low ? "low_confidence" : "geocoded", geocode_error: null,
+        // First-time low hit stays eligible for exactly ONE future street retry;
+        // an improved hit is 'geocoded' and needs no sentinel.
+        geocode_status: low ? "low_confidence" : "geocoded", geocode_error: low ? "retry_done" : null,
       } as never).eq("id", r.id);
       stats.success++;
     } catch { stats.failed++; }

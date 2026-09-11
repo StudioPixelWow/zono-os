@@ -200,6 +200,12 @@ function Hero({ data }: { data: AgentSitePayload }) {
         <div className="absolute inset-0 opacity-60" style={{ backgroundImage: "linear-gradient(var(--brand-border) 1px, transparent 1px), linear-gradient(90deg, var(--brand-border) 1px, transparent 1px)", backgroundSize: "58px 58px", WebkitMaskImage: "radial-gradient(120% 85% at 82% 0%, #000 28%, transparent 74%)", maskImage: "radial-gradient(120% 85% at 82% 0%, #000 28%, transparent 74%)" }} />
         <div className="absolute -top-32 start-[-8rem] h-[36rem] w-[36rem] rounded-full bg-[var(--brand-primary)] opacity-10 blur-3xl" />
         <svg aria-hidden viewBox="0 0 200 200" fill="none" stroke="currentColor" strokeWidth="1.4" className="absolute -bottom-2 end-2 h-64 w-64 text-[color:var(--brand-primary)] opacity-15"><path d="M6 194h64v-64M6 194V78M70 130h64V66M134 130V6h60" strokeLinecap="round" /></svg>
+        {/* City skyline — a subtle "your city" backdrop across the hero base
+            (brand-tinted, very low opacity). SVG silhouette: no asset, no license. */}
+        <svg aria-hidden viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" className="absolute inset-x-0 bottom-0 h-[52%] w-full text-[color:var(--brand-primary)] opacity-[0.09]" fill="currentColor">
+          <path d="M0 220 L0 152 L40 152 L40 112 L70 112 L70 152 L110 152 L110 90 L120 78 L130 90 L130 152 L170 152 L170 120 L200 120 L200 60 L230 60 L230 120 L260 120 L260 152 L300 152 L300 100 L330 100 L330 70 L360 70 L360 152 L400 152 L400 130 L430 130 L430 95 L455 80 L480 95 L480 152 L520 152 L520 110 L560 110 L560 55 L590 55 L590 110 L620 152 L660 152 L660 120 L690 120 L690 85 L720 85 L720 152 L760 152 L760 100 L790 100 L790 152 L830 152 L830 70 L845 55 L860 70 L860 152 L900 152 L900 120 L930 120 L930 90 L965 90 L965 152 L1010 152 L1010 105 L1040 105 L1040 60 L1070 60 L1070 152 L1110 152 L1110 125 L1150 125 L1150 152 L1200 152 L1200 220 Z" />
+          <g opacity="0.55"><rect x="117" y="84" width="6" height="9" /><rect x="206" y="70" width="6" height="9" /><rect x="336" y="78" width="6" height="9" /><rect x="566" y="64" width="6" height="9" /><rect x="843" y="62" width="6" height="9" /><rect x="1046" y="70" width="6" height="9" /></g>
+        </svg>
       </div>
 
       <div className={`relative mx-auto grid w-full max-w-7xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 lg:pb-24 lg:pt-20 ${hasPhoto ? "lg:grid-cols-[1.1fr_0.9fr]" : ""}`}>

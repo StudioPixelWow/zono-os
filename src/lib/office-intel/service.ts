@@ -16,7 +16,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { externalListingRepository } from "@/lib/external-listings/repository";
 import { buildOfficeCockpit, type OfficeCockpit, type OfficeRecord, type OfficeFilters } from "./cockpit";
-import { officeInTerritory } from "./office-territory";
+import { officeInTerritory, cityInTerritory } from "./office-territory";
 import { getOrgIntelligenceTerritory } from "@/lib/brokerage-data/territory";
 
 const DAY = 86_400_000;
@@ -103,6 +103,18 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
     }
   } catch (e) { console.error("[office-cockpit] links failed:", e instanceof Error ? e.message : e); }
 
+  // City-scope display helpers. A national chain's office row carries its HQ city
+  // (e.g. RE/MAX → "Kiryat Bialik") even when every listing it owns for THIS org
+  // is in the org's own city (e.g. אבן יהודה). That made the cockpit look like it
+  // "shows offices outside the city". We relabel any in-territory office to the
+  // org's own (Hebrew) city so the locale reflects where it actually competes, and
+  // we no longer admit an office on raw activity alone — its activity must be IN
+  // the territory (kills the national-HQ leak while keeping true local competitors).
+  const hasTerritory = territoryAreas.length > 0;
+  const hebTerritory = territoryAreas.find((n) => /[֐-׿]/.test(n)) ?? territoryAreas[0] ?? null;
+  const inTerr = (place: string | null | undefined): boolean => cityInTerritory(place ?? null, territoryAreas);
+  const localize = (place: string | null): string | null => (place && hebTerritory && inTerr(place) ? hebTerritory : place);
+
   const period = filters.period * DAY;
   const offices: OfficeRecord[] = offRows.map((o) => {
     const ag = agentsByOffice.get(o.id) ?? { count: 0, sample: [] };
@@ -110,11 +122,16 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
     const lits = listingIds.map((id) => listingById.get(id)).filter((x): x is ListingLite => Boolean(x));
     const geo = lits.filter((l) => l.lat != null && l.lng != null);
     const seens = lits.map((l) => l.firstSeenMs).filter((t): t is number => t != null);
+    const rawAreas = topCounts(lits.map((l) => l.neighborhood || l.city), 3);
+    const activityInTerr = inTerr(o.city) || rawAreas.some((a) => inTerr(a.name));
+    // Locale shown to the user: the org's own city when this office is active here,
+    // otherwise its own HQ city (such offices are filtered out below anyway).
+    const displayCity = inTerr(o.city) ? localize(o.city) : activityInTerr && hebTerritory ? hebTerritory : (o.city ?? null);
     return {
       id: o.id, name: (o.name ?? "").trim() || "משרד ללא שם", brand: o.brand_network ?? null, officeType: o.office_type ?? null, hierarchy: o.hierarchy_level ?? null,
-      city: o.city ?? null, phone: o.primary_phone ?? null, rating: num(o.google_rating), reviews: num(o.google_reviews_count), status: o.status ?? "candidate",
+      city: displayCity, phone: o.primary_phone ?? null, rating: num(o.google_rating), reviews: num(o.google_reviews_count), status: o.status ?? "candidate",
       agents: ag.count, observedListings: listingIds.length,
-      areas: topCounts(lits.map((l) => l.neighborhood || l.city), 3),
+      areas: rawAreas.map((a) => ({ ...a, name: localize(a.name) ?? a.name })),
       propertyTypes: topCounts(lits.map((l) => l.propertyType), 4).map((t) => ({ type: t.name, count: t.count })),
       newInPeriod: lits.filter((l) => l.firstSeenMs != null && now - l.firstSeenMs < period).length,
       firstSeenMs: seens.length ? Math.min(...seens) : ms(o.first_seen_at),
@@ -125,11 +142,12 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
     };
   });
 
-  // Territory scope: keep only offices in the org's specialization areas (or with
-  // the org's own observed activity). This is the P0 fix — the directory + every
-  // downstream aggregation now uses the TERRITORY universe, not the global graph.
+  // Territory scope: keep only offices whose CITY or whose observed activity is in
+  // the org's territory. When the org has a known territory we DROP the raw
+  // activity-only shortcut (national HQ offices with no local listings no longer
+  // leak in); with no territory config we fall back to activity-only as before.
   const inTerritory = offices.filter((o) =>
-    officeInTerritory({ city: o.city, observedAreas: o.areas.map((a) => a.name) }, territoryAreas, o.observedListings > 0));
+    officeInTerritory({ city: o.city, observedAreas: o.areas.map((a) => a.name) }, territoryAreas, hasTerritory ? false : o.observedListings > 0));
 
   const cockpit = buildOfficeCockpit({
     // Territory-scoped unassigned pool: unassigned (no-office) agents live in the

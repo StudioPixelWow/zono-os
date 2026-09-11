@@ -94,7 +94,11 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
     admin.from("property_media").select("type,url,is_primary,sort_order").eq("property_id", id).order("sort_order", { ascending: true }),
     agentId ? admin.from("users").select("id,full_name,title,phone,email,avatar_url").eq("id", agentId).maybeSingle() : Promise.resolve({ data: null }),
     agentId ? admin.from("agent_websites").select("user_id,slug,status,display_name,title_hebrew,profile_image_url,whatsapp,phone,email,service_areas").eq("user_id", agentId).maybeSingle() : Promise.resolve({ data: null }),
-    admin.from("brand_identity_profiles").select("brand_primary,brand_secondary,brand_accent,logo_url").eq("org_id", orgId).eq("entity_id", orgId).maybeSingle(),
+    // The office brand profile is stored with entity_id = the OWNER's user id, not
+    // the org id, so the old `.eq("entity_id", orgId)` filter always missed → the
+    // public property page fell back to generic tokens (no brand colors, no logo).
+    // Take the org's brand profile regardless of entity_id.
+    admin.from("brand_identity_profiles").select("brand_primary,brand_secondary,brand_accent,logo_url").eq("org_id", orgId).limit(1),
     admin.from("office_websites").select("office_name,logo_url,phone,slug").eq("organization_id", orgId).maybeSingle(),
     agentId ? admin.from("client_reviews").select("reviewer_name,rating,review_text,city,neighborhood,is_featured,status").eq("agent_id", agentId).order("is_featured", { ascending: false }).limit(6) : Promise.resolve({ data: [] }),
     admin.from("properties").select("id,title,price,monthly_rent,listing_kind,city,neighborhood,rooms,size_sqm,floor,type,status,primary_image_url,listing_tag,has_exclusivity,owner_id").eq("org_id", orgId).in("status", [...PUBLIC_STATUSES] as never).neq("id", id).order("created_at", { ascending: false }).limit(12),
@@ -102,7 +106,7 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
   ]);
 
   // ── Brand (office) → tokens ─────────────────────────────────────────────────
-  const ob = (officeBrandR.data ?? null) as Record<string, unknown> | null;
+  const ob = ((officeBrandR.data as Record<string, unknown>[] | null)?.[0]) ?? null;
   const officeSite = (officeSiteR.data ?? null) as { office_name: string | null; logo_url: string | null; phone: string | null; slug: string | null } | null;
   const effective = resolveEffectiveBrand(null, ob);
   const tokens = buildBrandTokens({
@@ -154,7 +158,10 @@ export async function getPropertyMarketing(id: string): Promise<PropertyMarketin
     photo: agentBrandPhoto ?? site?.profile_image_url ?? owner?.avatar_url ?? null,
     phone: agentPhone,
     tel: agentPhone ? `tel:${agentPhone.replace(/[^0-9+]/g, "")}` : null,
-    whatsapp: waLink(site?.whatsapp ?? null, agentPhone),
+    // Fall back to the OFFICE phone so a WhatsApp button always appears for the
+    // agent, even when the agent has no personal phone on file (previously only
+    // the "התקשרו" call button showed, via the office phone).
+    whatsapp: waLink(site?.whatsapp ?? null, agentPhone ?? officeSite?.phone ?? null),
     areas: (site?.service_areas ?? []).filter(Boolean).slice(0, 3),
     href: agentSlug ? `/agent/${agentSlug}` : null,
   } : null;

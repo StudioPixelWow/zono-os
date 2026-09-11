@@ -73,9 +73,23 @@ export function geocodeKeyInfo(): GeocodeKeyInfo {
 }
 
 /** Build a single address query string from structured parts (Israeli-friendly). */
+// Placeholder "neighborhoods" that scrapers emit when the real neighborhood is
+// unknown ("rest of the city", "general", "other"…). They are NOT real places and,
+// injected into a geocode query, drag a resolvable street down to a city-center
+// APPROXIMATE hit. Stripped from the QUERY only (never from stored data).
+const JUNK_NEIGHBORHOODS = new Set([
+  "שאר העיר", "שאר הרובע", "שאר הישוב", "יתר העיר", "כללי", "אחר", "אזור אחר",
+  "לא ידוע", "ללא שכונה", "רחובות אחרים", "כל העיר", "עיר", "general", "other", "unknown", "n/a",
+]);
+const isJunkNeighborhood = (v: string | null | undefined): boolean => {
+  const s = (v ?? "").trim().replace(/[׳״"'`]/g, "").replace(/\s+/g, " ").toLowerCase();
+  return !s || JUNK_NEIGHBORHOODS.has(s);
+};
+
 export function buildQuery(input: GeocodeInput): string {
   const streetPart = [input.street, input.streetNumber].filter(Boolean).join(" ");
-  const parts = [input.address || streetPart, input.neighborhood, input.city]
+  const neighborhood = isJunkNeighborhood(input.neighborhood) ? null : input.neighborhood;
+  const parts = [input.address || streetPart, neighborhood, input.city]
     .map((s) => (s ?? "").trim().replace(/\s+/g, " ")) // collapse whitespace
     .filter(Boolean)
     // de-dupe consecutive identical parts (address often already contains city)
