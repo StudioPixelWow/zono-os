@@ -372,12 +372,12 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
                     className="group flex items-center gap-3 rounded-xl border border-emerald-100 bg-white p-2.5 transition hover:border-emerald-300 hover:shadow-card"
                   >
                     {p.imageUrl ? (
-                      <span className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100">
-                        <Image src={p.imageUrl} alt="" width={64} height={64} className="h-full w-full object-cover transition group-hover:scale-105" unoptimized />
+                      <span className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-100 ring-1 ring-emerald-100">
+                        <Image src={p.imageUrl} alt="" width={80} height={80} className="h-full w-full object-cover transition duration-300 group-hover:scale-110" unoptimized />
                       </span>
                     ) : (
-                      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
-                        <Icon name="Building2" className="h-7 w-7" />
+                      <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+                        <Icon name="Building2" className="h-8 w-8" />
                       </span>
                     )}
                     <div className="min-w-0 flex-1">
@@ -512,12 +512,12 @@ function ZoneScanReveal({ orgId, city, insights, stats }: {
   }, [storeKey]);
 
   const tiles = [
-    { v: stats.discoveredListings, label: "נכסים באזור", icon: "Building2" },
-    { v: stats.noBrokerCount, label: "ללא מתווך", icon: "Sparkles" },
-    { v: stats.brokersTotal, label: "מתווכים פעילים", icon: "Users" },
-    { v: stats.verifiedOffices, label: "משרדים מזוהים", icon: "Landmark" },
-    { v: stats.neighborhoods, label: "שכונות שמופו", icon: "Map" },
-    { v: stats.mapPoints, label: "על המפה", icon: "MapPin" },
+    { v: stats.discoveredListings, label: "נכסים באזור", icon: "Building2", hot: false },
+    { v: stats.noBrokerCount, label: "ללא מתווך", icon: "Sparkles", hot: true },
+    { v: stats.brokersTotal, label: "מתווכים פעילים", icon: "Users", hot: false },
+    { v: stats.verifiedOffices, label: "משרדים מזוהים", icon: "Landmark", hot: false },
+    { v: stats.neighborhoods, label: "שכונות שמופו", icon: "Map", hot: false },
+    { v: stats.mapPoints, label: "על המפה", icon: "MapPin", hot: false },
   ].filter((t) => t.v > 0);
 
   return (
@@ -587,12 +587,19 @@ function ZoneScanReveal({ orgId, city, insights, stats }: {
           </div>
 
           {tiles.length > 0 ? (
-            <div className="mt-6 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {tiles.map((t, i) => (
-                <div key={t.label} className="zs-tile rounded-2xl bg-white/10 px-3 py-4 text-center ring-1 ring-white/15"
+                <div key={t.label}
+                  className={cn("zs-tile group relative overflow-hidden rounded-2xl px-3 py-4 text-center ring-1 transition hover:-translate-y-0.5",
+                    t.hot ? "bg-gradient-to-b from-emerald-400/25 to-emerald-500/[.06] ring-emerald-300/40 shadow-[0_10px_30px_-12px_rgba(16,185,129,0.5)]"
+                          : "bg-white/[.08] ring-white/15 hover:bg-white/[.12]")}
                   style={{ animationDelay: `${i * 70}ms` }}>
-                  <p className="text-2xl font-extrabold leading-none">{ILS.format(t.v)}</p>
-                  <p className="mt-1.5 text-[11px] font-semibold text-white/70">{t.label}</p>
+                  <span className={cn("mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl",
+                    t.hot ? "bg-emerald-400/25 text-emerald-100" : "bg-white/10 text-white/70")}>
+                    <Icon name={t.icon} className="h-4 w-4" />
+                  </span>
+                  <p className={cn("text-2xl font-extrabold leading-none tabular-nums sm:text-[26px]", t.hot ? "text-emerald-50" : "text-white")}>{ILS.format(t.v)}</p>
+                  <p className={cn("mt-1.5 text-[11px] font-semibold", t.hot ? "text-emerald-200/90" : "text-white/70")}>{t.label}</p>
                 </div>
               ))}
             </div>
