@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { getOfficeActivation } from "@/lib/activation/activation-server";
 import { getCityDiscovery } from "@/lib/activation/city-discovery-server";
 import { getZoneSnapshot } from "@/lib/activation/zone-snapshot";
+import { propertyTypeHe } from "@/lib/valuation/property-type";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -57,7 +58,7 @@ async function recentFeed(orgId: string): Promise<LiveFeedItem[]> {
     const out: LiveFeedItem[] = [];
     for (const r of rows) {
       const bits = [
-        r.property_type || "נכס",
+        propertyTypeHe(r.property_type),
         r.rooms ? `${r.rooms} חד׳` : null,
         r.sqm ? `${r.sqm} מ״ר` : null,
       ].filter(Boolean).join(" · ");
@@ -112,8 +113,14 @@ export async function GET() {
     const discovery = await getCityDiscovery(orgId, city, localityCode);
 
     // Self-start: never-scanned city → kick a real quick scan in the background.
+    // ALSO re-scan a city stuck at "no_results" whose last scan is stale (>20 min):
+    // an org scanned empty during a provider outage (e.g. before Apify credits were
+    // topped up) would otherwise stay at 0 forever. The 20-minute floor stops a
+    // genuinely-empty city from re-scanning on every load.
+    const lastScanMs = discovery.lastScanAt ? new Date(discovery.lastScanAt).getTime() : 0;
+    const staleNoResults = discovery.phase === "no_results" && (Date.now() - lastScanMs > 20 * 60_000);
     let scanKicked = false;
-    if (discovery.phase === "not_started") {
+    if (discovery.phase === "not_started" || staleNoResults) {
       scanKicked = true;
       after(async () => {
         try {

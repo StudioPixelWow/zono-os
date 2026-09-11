@@ -16,6 +16,7 @@
 import "server-only";
 import { getCityBrokerageCensus } from "@/lib/brokerage-data/brokerage-knowledge";
 import { externalListingRepository } from "@/lib/external-listings/repository";
+import { propertyTypeHe } from "@/lib/valuation/property-type";
 import type { CityDiscovery } from "./activation";
 
 export interface ZonePrivateListing {
@@ -96,7 +97,7 @@ export async function getZoneSnapshot(
     price: num(l.price),
     rooms: num(l.rooms),
     sqm: num(l.sqm ?? l.area_sqm),
-    propertyType: (l.property_type as string | null) ?? null,
+    propertyType: propertyTypeHe(l.property_type as string | null),
     imageUrl: firstImage((l as { images?: unknown }).images),
   }));
 

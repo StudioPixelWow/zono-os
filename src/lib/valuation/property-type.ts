@@ -38,6 +38,35 @@ export function propertyTypeFamily(raw: string | null | undefined): PropertyFami
   return "other";
 }
 
+// ── Hebrew display label ─────────────────────────────────────────────────────
+// The external scraper stores property_type as English tokens (flat, penthouseapp,
+// gardenapartment, dualcottage, land, minipenthouse …). This maps any such token
+// to a clean Hebrew label for display, so NOTHING English leaks to the UI. A value
+// that is already Hebrew is returned untouched; an unknown token degrades via its
+// family, then to "נכס".
+const PROPERTY_TYPE_HE_EXACT: Record<string, string> = {
+  flat: "דירה", apartment: "דירה", gardenapartment: "דירת גן", roofflat: "דירת גג",
+  penthouse: "פנטהאוז", penthouseapp: "פנטהאוז", minipenthouse: "מיני פנטהאוז",
+  duplex: "דופלקס", triplex: "טריפלקס", cottage: "קוטג׳", dualcottage: "קוטג׳ דו-משפחתי",
+  serialcottage: "קוטג׳ טורי", villa: "וילה", house: "בית פרטי", privatehouse: "בית פרטי",
+  land: "מגרש", lot: "מגרש", plot: "מגרש", building: "בניין", residentialunit: "יחידת דיור",
+  studio: "סטודיו", commercial: "מסחרי", office: "משרד", store: "חנות", shop: "חנות",
+  warehouse: "מחסן", basement: "מרתף", other: "נכס",
+};
+const PROPERTY_FAMILY_HE: Record<PropertyFamily, string> = {
+  apartment: "דירה", penthouse: "פנטהאוז", garden: "דירת גן", duplex: "דופלקס",
+  house: "בית פרטי", cottage: "קוטג׳", commercial: "מסחרי", land: "מגרש", other: "נכס",
+};
+
+/** Any English enum/token or Hebrew string → a clean Hebrew display label. */
+export function propertyTypeHe(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "נכס";
+  if (/[֐-׿]/.test(s)) return s;                 // already Hebrew — keep
+  const key = s.toLowerCase().replace(/[\s_\-]/g, "");
+  return PROPERTY_TYPE_HE_EXACT[key] ?? PROPERTY_FAMILY_HE[propertyTypeFamily(s)] ?? "נכס";
+}
+
 /** Families that are close enough to substitute with only a mild penalty. */
 const NEIGHBOR_FAMILIES: Record<string, PropertyFamily[]> = {
   apartment: ["garden", "duplex", "penthouse"],

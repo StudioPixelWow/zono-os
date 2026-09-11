@@ -67,7 +67,7 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
 
   return (
     <div dir="rtl" data-office-brand={hasBrand ? "true" : undefined} style={themeVars as React.CSSProperties}
-      className="mx-auto max-w-[1180px] px-4 pb-16 pt-4 sm:px-6">
+      className="mx-auto flex max-w-[1180px] flex-col px-4 pb-16 pt-4 sm:px-6">
       <style>{`
         @keyframes zonoReveal { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .zono-reveal { animation: zonoReveal .5s cubic-bezier(.22,.61,.36,1) both; }
@@ -100,7 +100,7 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
       />
 
       {/* ── FIRST LOGIN HERO ─────────────────────────────────────────────── */}
-      <Reveal i={0}>
+      <Reveal i={0} className="order-1">
         <section
           className="relative overflow-hidden rounded-[28px] px-6 py-7 text-white shadow-[0_20px_48px_rgba(76,29,149,0.22)] sm:px-9 sm:py-9"
           style={{ background: "linear-gradient(140deg,#140f2b 0%,#241653 55%,#3a2470 100%)" }}
@@ -168,7 +168,7 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
       </Reveal>
 
       {/* ── MORNING BRIEF (seed mode) ────────────────────────────────────── */}
-      <Reveal i={1} className="mt-4">
+      <Reveal i={1} className="order-4 mt-4">
         <section className="rounded-3xl border border-line bg-card px-6 py-5 shadow-card">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--office-badge)] text-[var(--office-badge-ink)]">
@@ -185,7 +185,7 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
       </Reveal>
 
       {/* ── OFFICE ACTIVATION JOURNEY ────────────────────────────────────── */}
-      <Reveal i={2} className="mt-4">
+      <Reveal i={2} className="order-5 mt-4">
         <section className="rounded-3xl border border-line bg-card p-6 shadow-card">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -225,7 +225,7 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
       </Reveal>
 
       {/* ── CAPABILITY DISCOVERY ─────────────────────────────────────────── */}
-      <Reveal i={3} className="mt-4">
+      <Reveal i={3} className="order-6 mt-4">
         <section className="rounded-3xl border border-line bg-card p-6 shadow-card">
           <h2 className="text-lg font-bold text-ink">מה ZONO כבר הכינה עבורך</h2>
           <p className="mt-0.5 text-sm text-muted">כל הכלים שמחכים לך במשרד — לחץ כדי להתחיל</p>
@@ -255,8 +255,8 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
         </section>
       </Reveal>
 
-      {/* ── CITY COMMAND CENTER — "הזון שלי" ─────────────────────────────── */}
-      <Reveal i={4} className="mt-4">
+      {/* ── CITY COMMAND CENTER — "הזון שלי" (leads: map + opportunities) ─── */}
+      <Reveal i={4} className="order-2 mt-4">
         <section className="rounded-3xl border border-line bg-card p-6 shadow-card">
           <div className="flex items-center gap-2">
             <Icon name="Map" className="h-5 w-5 text-[var(--office-accent-strong)]" />

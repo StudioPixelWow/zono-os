@@ -28,7 +28,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 export function HomeHeatmapSection({ heightClass = "h-[380px] lg:h-[460px]" }: { heightClass?: string } = {}) {
   const [filters, setFilters] = useState<HomeMapFilters>(DEFAULT_HOME_MAP_FILTERS);
   const [data, setData] = useState<HomeMapData | null>(null);
-  const [view, setView] = useState<"heat" | "markers">("heat");
+  const [view, setView] = useState<"heat" | "markers">("markers");
   const [pending, start] = useTransition();
 
   function load(next: HomeMapFilters) {

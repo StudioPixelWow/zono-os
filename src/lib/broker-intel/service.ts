@@ -28,7 +28,12 @@ export async function getBrokerCockpit(filters: BrokerFilters): Promise<BrokerCo
     const rows = await externalListingRepository.listForOrg();
     listings = rows.map((r) => ({
       id: r.id,
-      broker: r.detected_broker_name ?? null,
+      // Fall back to the listing's own contact_name (the real advertiser/agent
+      // name) for AGENT listings when broker DETECTION hasn't stamped
+      // detected_broker_name yet — otherwise the whole cockpit reads empty even
+      // though every agent listing already names its broker. Trim to merge
+      // trailing-whitespace variants of the same name.
+      broker: ((r.detected_broker_name ?? (r.has_agent ? r.contact_name : null)) ?? "").toString().trim() || null,
       hasAgent: r.has_agent ?? null,
       neighborhood: r.neighborhood ?? null,
       city: r.city ?? null,
