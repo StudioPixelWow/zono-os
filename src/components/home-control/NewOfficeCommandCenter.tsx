@@ -17,6 +17,7 @@ import { CAPABILITIES, CAPABILITY_STATE_LABEL, type CapabilityState } from "@/li
 import type { ActivationState, OfficeIdentity, OfficeTrial, CityDiscovery } from "@/lib/activation/activation";
 import type { ZoneSnapshot } from "@/lib/activation/zone-snapshot";
 import { FirstLoginWowModal } from "./FirstLoginWowModal";
+import { HomeHeatmapSection } from "@/components/dashboard-home/components/HomeHeatmapSection";
 
 export interface NewOfficeCommandCenterProps {
   identity: OfficeIdentity;
@@ -351,18 +352,36 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {zone.privateOwners.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-white p-3">
-                    <div className="min-w-0">
+                  <Link
+                    key={p.id ?? i}
+                    href={p.id ? `/external-listings/${p.id}` : "/external-listings"}
+                    className="group flex items-center gap-3 rounded-xl border border-emerald-100 bg-white p-2.5 transition hover:border-emerald-300 hover:shadow-card"
+                  >
+                    {p.imageUrl ? (
+                      <span className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                        <Image src={p.imageUrl} alt="" width={64} height={64} className="h-full w-full object-cover transition group-hover:scale-105" unoptimized />
+                      </span>
+                    ) : (
+                      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                        <Icon name="Building2" className="h-7 w-7" />
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-ink">
                         {p.propertyType || "נכס"}{p.rooms ? ` · ${p.rooms} חד׳` : ""}{p.sqm ? ` · ${p.sqm} מ״ר` : ""}
                       </p>
                       <p className="truncate text-xs text-muted">{p.neighborhood || identity.city || "האזור שלך"}</p>
+                      <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700">
+                        <span className="rounded-full bg-emerald-100 px-1.5 py-0.5">ללא מתווך</span>
+                        <span className="text-emerald-600 opacity-0 transition group-hover:opacity-100">לצפייה בנכס ←</span>
+                      </span>
                     </div>
-                    <div className="shrink-0 text-left">
-                      {priceShort(p.price) && <p className="text-sm font-extrabold text-ink">{priceShort(p.price)}</p>}
-                      <span className="text-[10px] font-bold text-emerald-700">ללא מתווך</span>
-                    </div>
-                  </div>
+                    {priceShort(p.price) && (
+                      <div className="shrink-0 self-start text-left">
+                        <p className="text-sm font-extrabold text-ink">{priceShort(p.price)}</p>
+                      </div>
+                    )}
+                  </Link>
                 ))}
               </div>
             </div>
@@ -418,26 +437,10 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
             </div>
           )}
 
-          {/* honest map activate-state (no blank, no fake) */}
-          <div className="mt-3 overflow-hidden rounded-2xl border border-line">
-            <div className="relative flex min-h-[220px] flex-col items-center justify-center gap-3 p-8 text-center"
-              style={{ background: "linear-gradient(140deg,#f6f4ff 0%,#eef0ff 100%)" }}>
-              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-[var(--office-accent-strong)] shadow-card">
-                <Icon name="MapPin" className="h-7 w-7" />
-              </span>
-              <div>
-                <p className="text-base font-bold text-ink">הוסף את הנכס הראשון ונתחיל למפות את הזירה</p>
-                <p className="mt-1 text-sm text-muted">המפה החיה של {identity.city ?? "האזור"} תיפתח ברגע שיהיו נכסים או סריקת שוק פעילה — עם נתונים אמיתיים בלבד.</p>
-              </div>
-              <div className="mt-1 flex flex-wrap justify-center gap-2">
-                <Link href="/properties/new" className="rounded-xl px-4 py-2 text-sm font-bold" style={{ background: "var(--office-accent)", color: "var(--office-accent-ink)" }}>
-                  הוסף נכס ראשון
-                </Link>
-                <Link href="/settings/operating-areas" className="rounded-xl border border-line bg-white px-4 py-2 text-sm font-semibold text-ink">
-                  בחר שכונות לניטור
-                </Link>
-              </div>
-            </div>
+          {/* Live zone map — REAL scanned + internal listings plotted (no fake pins).
+              Degrades to its own honest empty/no-key states internally. */}
+          <div className="mt-3">
+            <HomeHeatmapSection heightClass="h-[380px] lg:h-[440px]" />
           </div>
         </section>
       </Reveal>

@@ -33,10 +33,24 @@ async function countScoped(db: Db, table: string, filters: [string, unknown][]):
 export async function getCityDiscovery(orgId: string, city: string | null, localityCode: string | null): Promise<CityDiscovery> {
   const db = createServiceRoleClient();
 
+  // "On the map" = rows that actually have coordinates. The geocoder writes
+  // status "geocoded" / "low_confidence" (never "success"), so counting by a
+  // "success" status silently returned 0 and the map/count looked empty even
+  // when every listing was geocoded — count real coordinates instead.
+  const countWithCoords = async (): Promise<number> => {
+    try {
+      const { count } = await db
+        .from("external_listings" as never)
+        .select("*", { count: "exact", head: true })
+        .eq("org_id" as never, orgId as never)
+        .not("lat" as never, "is", null as never);
+      return count ?? 0;
+    } catch { return 0; }
+  };
   const [discoveredListings, noBrokerCount, mapPoints, neighborhoods] = await Promise.all([
     countScoped(db, "external_listings", [["org_id", orgId]]),
     countScoped(db, "external_listings", [["org_id", orgId], ["has_agent", false]]),
-    countScoped(db, "external_listings", [["org_id", orgId], ["geocode_status", "success"]]),
+    countWithCoords(),
     localityCode ? countScoped(db, "israel_neighborhoods", [["locality_code", localityCode]]) : Promise.resolve(0),
   ]);
 

@@ -13,11 +13,22 @@ export const maxDuration = 300;
 
 interface LiveFeedItem {
   id: string;
+  listingId: string | null;
   kind: "property" | "agent";
   title: string;
   sub: string | null;
   tag: string | null;
+  imageUrl: string | null;
 }
+
+const firstImage = (imgs: unknown): string | null => {
+  if (!Array.isArray(imgs)) return null;
+  for (const v of imgs) {
+    if (typeof v === "string" && v.trim()) return v;
+    if (v && typeof v === "object" && typeof (v as { url?: string }).url === "string") return (v as { url: string }).url;
+  }
+  return null;
+};
 
 /** Newest scanned rows → a live "just discovered" feed the modal drips out one
  *  by one. A no-broker listing yields only a property card; an agency listing
@@ -27,14 +38,14 @@ async function recentFeed(orgId: string): Promise<LiveFeedItem[]> {
     const db = createServiceRoleClient();
     const { data } = await db
       .from("external_listings" as never)
-      .select("id,title,property_type,rooms,sqm,price,neighborhood,city,has_agent,contact_name,created_at")
+      .select("id,title,property_type,rooms,sqm,price,neighborhood,city,has_agent,contact_name,images,created_at")
       .eq("org_id" as never, orgId as never)
       .order("created_at" as never, { ascending: false })
       .limit(14);
     const rows = (data ?? []) as Array<{
       id: string; title: string | null; property_type: string | null; rooms: number | null;
       sqm: number | null; price: number | null; neighborhood: string | null; city: string | null;
-      has_agent: boolean | null; contact_name: string | null;
+      has_agent: boolean | null; contact_name: string | null; images: unknown;
     }>;
     const ILS = new Intl.NumberFormat("he-IL");
     const priceShort = (p: number | null): string | null => {
@@ -52,18 +63,22 @@ async function recentFeed(orgId: string): Promise<LiveFeedItem[]> {
       ].filter(Boolean).join(" · ");
       out.push({
         id: r.id,
+        listingId: r.id,
         kind: "property",
         title: bits || (r.title ?? "נכס"),
         sub: [r.neighborhood || r.city, priceShort(r.price)].filter(Boolean).join(" · ") || null,
         tag: r.has_agent === false ? "ללא מתווך" : null,
+        imageUrl: firstImage(r.images),
       });
       if (r.has_agent && r.contact_name) {
         out.push({
           id: `${r.id}-a`,
+          listingId: r.id,
           kind: "agent",
           title: r.contact_name,
           sub: r.neighborhood || r.city || null,
           tag: "מתווך פעיל",
+          imageUrl: null,
         });
       }
     }

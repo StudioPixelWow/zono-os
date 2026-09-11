@@ -19,11 +19,13 @@ import { externalListingRepository } from "@/lib/external-listings/repository";
 import type { CityDiscovery } from "./activation";
 
 export interface ZonePrivateListing {
+  id: string | null;
   neighborhood: string | null;
   price: number | null;
   rooms: number | null;
   sqm: number | null;
   propertyType: string | null;
+  imageUrl: string | null;
 }
 
 export interface ZoneCensus {
@@ -80,12 +82,22 @@ export async function getZoneSnapshot(
         }
       : null;
 
+  const firstImage = (imgs: unknown): string | null => {
+    if (!Array.isArray(imgs)) return null;
+    for (const v of imgs) {
+      if (typeof v === "string" && v.trim()) return v;
+      if (v && typeof v === "object" && typeof (v as { url?: string }).url === "string") return (v as { url: string }).url;
+    }
+    return null;
+  };
   const privateOwners: ZonePrivateListing[] = (privatesRaw ?? []).slice(0, 4).map((l) => ({
+    id: (l.id as string | null) ?? null,
     neighborhood: (l.neighborhood as string | null) ?? null,
     price: num(l.price),
     rooms: num(l.rooms),
     sqm: num(l.sqm ?? l.area_sqm),
     propertyType: (l.property_type as string | null) ?? null,
+    imageUrl: firstImage((l as { images?: unknown }).images),
   }));
 
   const insights = buildZoneInsights(discovery, census, city);

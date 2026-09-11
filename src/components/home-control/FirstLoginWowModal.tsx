@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import Image from "next/image";
 import { Icon } from "@/components/dashboard/Icon";
 import { ZICharacter } from "@/components/characters/ZICharacter";
 import type { ZoneSnapshot, ZonePrivateListing } from "@/lib/activation/zone-snapshot";
@@ -51,10 +52,12 @@ interface LiveState {
 
 interface LiveFeedItem {
   id: string;
+  listingId: string | null;
   kind: "property" | "agent";
   title: string;
   sub: string | null;
   tag: string | null;
+  imageUrl: string | null;
 }
 
 const SCAN_STEPS: { icon: string; label: string }[] = [
@@ -344,14 +347,15 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
         .zwow-tile .num{font-size:28px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;}
         .zwow-tile .lab{margin-top:6px;font-size:11px;font-weight:600;color:rgba(255,255,255,.72);line-height:1.25;}
         .zwow-opps{margin-top:16px;border-radius:18px;padding:14px;background:linear-gradient(160deg,rgba(52,211,153,.16),rgba(16,185,129,.06));box-shadow:inset 0 0 0 1px rgba(52,211,153,.32);}
-        .zwow-opp{display:flex;align-items:center;justify-content:space-between;gap:10px;border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.06);}
+        .zwow-opp{display:flex;align-items:center;gap:10px;border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.06);cursor:pointer;transition:box-shadow .2s;}
         .zwow-insight{margin-top:16px;display:flex;gap:10px;align-items:flex-start;border-radius:16px;padding:12px 14px;font-size:13.5px;line-height:1.55;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}
         .zwow-live{margin-top:14px;display:inline-flex;align-items:center;gap:8px;border-radius:9999px;padding:6px 12px;font-size:12px;font-weight:700;color:#c7f9e5;background:rgba(52,211,153,.12);box-shadow:inset 0 0 0 1px rgba(52,211,153,.35);}
         .zwow-live .pulse{width:8px;height:8px;border-radius:9999px;background:#34d399;animation:zwowBlink 1.2s ease-in-out infinite;}
         .zwow-feed{margin-top:18px;display:flex;flex-direction:column;gap:8px;}
         .zwow-feed-head{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:rgba(255,255,255,.72);letter-spacing:.04em;}
         .zwow-feed-head .pulse{width:8px;height:8px;border-radius:9999px;background:#34d399;animation:zwowBlink 1.2s ease-in-out infinite;}
-        .zwow-fitem{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);transition:opacity .4s,transform .4s;}
+        .zwow-fitem{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);transition:opacity .4s,transform .4s,box-shadow .2s;cursor:pointer;}
+        a.zwow-fitem:hover,a.zwow-opp:hover{box-shadow:inset 0 0 0 1px rgba(167,139,250,.6);}
         .zwow-fitem.fresh{background:linear-gradient(160deg,rgba(139,92,246,.28),rgba(255,255,255,.05));box-shadow:inset 0 0 0 1px rgba(167,139,250,.55),0 8px 24px rgba(76,29,149,.35);animation:zwowFitem .5s cubic-bezier(.22,.61,.36,1) both;}
         .zwow-fitem .fic{display:flex;height:38px;width:38px;flex:none;align-items:center;justify-content:center;border-radius:12px;background:rgba(255,255,255,.1);}
         .zwow-fitem.agent .fic{background:linear-gradient(160deg,rgba(52,211,153,.3),rgba(16,185,129,.12));}
@@ -463,22 +467,38 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
               {feedShown.length > 0 && (
                 <div className="zwow-feed">
                   <div className="zwow-feed-head"><span className="pulse" />ZI מגלה עכשיו בזון שלך</div>
-                  {feedShown.map((it, i) => (
-                    <div key={it.id} className={`zwow-fitem ${it.kind === "agent" ? "agent" : ""} ${i === 0 ? "fresh" : ""}`}>
-                      <span className="fic">
-                        <Icon name={it.kind === "agent" ? "UserRound" : "Building2"} className="h-5 w-5" />
-                      </span>
-                      <div className="fbody">
-                        <div className="ftitle">{it.title}</div>
-                        {it.sub && <div className="fsub">{it.sub}</div>}
-                      </div>
-                      {i === 0 ? (
-                        <span className="zwow-ftag now">נסרק עכשיו</span>
-                      ) : it.tag ? (
-                        <span className="zwow-ftag plain">{it.tag}</span>
-                      ) : null}
-                    </div>
-                  ))}
+                  {feedShown.map((it, i) => {
+                    const inner = (
+                      <>
+                        {it.imageUrl ? (
+                          <span className="fic" style={{ padding: 0, overflow: "hidden" }}>
+                            <Image src={it.imageUrl} alt="" width={38} height={38} className="h-full w-full object-cover" unoptimized />
+                          </span>
+                        ) : (
+                          <span className="fic">
+                            <Icon name={it.kind === "agent" ? "UserRound" : "Building2"} className="h-5 w-5" />
+                          </span>
+                        )}
+                        <div className="fbody">
+                          <div className="ftitle">{it.title}</div>
+                          {it.sub && <div className="fsub">{it.sub}</div>}
+                        </div>
+                        {i === 0 ? (
+                          <span className="zwow-ftag now">נסרק עכשיו</span>
+                        ) : it.tag ? (
+                          <span className="zwow-ftag plain">{it.tag}</span>
+                        ) : null}
+                      </>
+                    );
+                    const cls = `zwow-fitem ${it.kind === "agent" ? "agent" : ""} ${i === 0 ? "fresh" : ""}`;
+                    return it.listingId ? (
+                      <Link key={it.id} href={`/external-listings/${it.listingId}`} className={cls} onClick={close} style={{ textDecoration: "none", color: "inherit" }}>
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div key={it.id} className={cls}>{inner}</div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -516,20 +536,38 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
                         </span>
                       </div>
                       <div className="mt-2.5 grid gap-2">
-                        {privateOwners.slice(0, 3).map((p, i) => (
-                          <div key={i} className="zwow-opp">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-bold">
-                                {p.propertyType || "נכס"}{p.rooms ? ` · ${p.rooms} חד׳` : ""}{p.sqm ? ` · ${p.sqm} מ״ר` : ""}
-                              </p>
-                              <p className="truncate text-xs" style={{ color: "rgba(255,255,255,.6)" }}>{p.neighborhood || where}</p>
-                            </div>
-                            <div className="shrink-0 text-left">
-                              {priceShort(p.price) && <p className="text-sm font-extrabold">{priceShort(p.price)}</p>}
-                              <span className="text-[10px] font-bold" style={{ color: "#34d399" }}>ללא מתווך</span>
-                            </div>
-                          </div>
-                        ))}
+                        {privateOwners.slice(0, 3).map((p, i) => {
+                          const inner = (
+                            <>
+                              {p.imageUrl ? (
+                                <span style={{ width: 46, height: 46, flex: "none", borderRadius: 10, overflow: "hidden", background: "rgba(255,255,255,.1)" }}>
+                                  <Image src={p.imageUrl} alt="" width={46} height={46} className="h-full w-full object-cover" unoptimized />
+                                </span>
+                              ) : (
+                                <span style={{ width: 46, height: 46, flex: "none", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(52,211,153,.18)", color: "#34d399" }}>
+                                  <Icon name="Building2" className="h-5 w-5" />
+                                </span>
+                              )}
+                              <div className="min-w-0" style={{ flex: 1 }}>
+                                <p className="truncate text-sm font-bold">
+                                  {p.propertyType || "נכס"}{p.rooms ? ` · ${p.rooms} חד׳` : ""}{p.sqm ? ` · ${p.sqm} מ״ר` : ""}
+                                </p>
+                                <p className="truncate text-xs" style={{ color: "rgba(255,255,255,.6)" }}>{p.neighborhood || where}</p>
+                              </div>
+                              <div className="shrink-0 text-left">
+                                {priceShort(p.price) && <p className="text-sm font-extrabold">{priceShort(p.price)}</p>}
+                                <span className="text-[10px] font-bold" style={{ color: "#34d399" }}>ללא מתווך</span>
+                              </div>
+                            </>
+                          );
+                          return p.id ? (
+                            <Link key={p.id} href={`/external-listings/${p.id}`} className="zwow-opp" onClick={close} style={{ textDecoration: "none", color: "inherit" }}>
+                              {inner}
+                            </Link>
+                          ) : (
+                            <div key={i} className="zwow-opp">{inner}</div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
