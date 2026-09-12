@@ -53,7 +53,21 @@ export async function activateOrgSubscriptionFromVerifiedPayment(input: Activate
     .select("org_id")
     .maybeSingle();
   if (error) return { ok: false };
-  if (data) return { ok: true };
+
+  // ── SINGLE SOURCE OF TRUTH SYNC ──────────────────────────────────────────────
+  // getOrgCommercialState derives `isTrial` from org_plans (status / trial_ends_at),
+  // but activation writes `subscriptions`. Without syncing org_plans, an org that
+  // just PAID is still reported as "trial" while its subscription is "active" — the
+  // exact desync flagged in the audit. A verified paid activation clears the trial:
+  // status→active, trial_ends_at→null. Best-effort; never fails the activation.
+  const syncPlan = async () => {
+    await db.from("org_plans" as never)
+      .update({ status: "active", trial_ends_at: null, updated_at: now } as never)
+      .eq("org_id", input.orgId)
+      .then(() => undefined, () => undefined);
+  };
+
+  if (data) { await syncPlan(); return { ok: true }; }
   // No trial row existed (edge case) — insert a provider-backed one. period_start
   // = now; no trial_ends_at is fabricated.
   const { error: insErr } = await db.from("subscriptions" as never).insert({
@@ -64,5 +78,6 @@ export async function activateOrgSubscriptionFromVerifiedPayment(input: Activate
     subscription_quantity: input.quantity, provider_quantity: input.quantity,
     quantity_sync_status: "synced", quantity_synced_at: now, cancel_at_period_end: false,
   } as never);
+  if (!insErr) await syncPlan();
   return { ok: !insErr };
 }

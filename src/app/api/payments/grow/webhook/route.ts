@@ -21,6 +21,7 @@ import { growGetTransactionInfo, growApproveTransaction, growCreds } from "@/lib
 import { growOutcomeFromStatusCode, growPaymentStatus, clientIpFromForwardedFor, isGrowSourceIp, safeStringEqual } from "@/lib/commercial/grow-mapping";
 import { getPayment, getDraftById, markPaymentVerified, setPaymentStatus } from "@/lib/commercial/store";
 import { activateOrgSubscriptionFromVerifiedPayment } from "@/lib/commercial/activate";
+import { checkChargeAcceptable } from "@/lib/commercial/amount-verify";
 import { emitBusinessEvent } from "@/lib/kernel/emit";
 import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 
@@ -127,14 +128,10 @@ export async function POST(req: NextRequest) {
     // (e.g. a tampered checkout amount) — we must NOT activate. Currency must be ILS.
     const chargedSum = Number(info.data?.sum);
     const expectedSum = Number(payment.amountIls);
-    const currencyOk = !payment.currency || /^(ils|nis|₪|376)$/i.test(String(payment.currency).trim());
-    const amountOk =
-      Number.isFinite(chargedSum) && chargedSum > 0 &&
-      Number.isFinite(expectedSum) && expectedSum > 0 &&
-      Math.abs(chargedSum - expectedSum) <= 1; // ₪1 rounding tolerance
-    if (!amountOk || !currencyOk) {
-      console.error("[grow-webhook] REFUSING ACTIVATION — amount/currency mismatch", {
-        paymentId, expectedSum, chargedSum, currency: payment.currency, currencyOk,
+    const charge = checkChargeAcceptable({ expectedIls: expectedSum, chargedSum, currency: payment.currency });
+    if (!charge.ok) {
+      console.error("[grow-webhook] REFUSING ACTIVATION — charge integrity failed", {
+        paymentId, expectedSum, chargedSum, currency: payment.currency, reason: charge.reason,
       });
       await setPaymentStatus(paymentId, "failed").catch(() => undefined);
       if (payment.orgId) {

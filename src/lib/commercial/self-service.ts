@@ -82,6 +82,34 @@ export async function cancelRenewalAction(): Promise<{ ok: boolean; error?: stri
 }
 
 /**
+ * ACTIVATE a trial (or unpaid) org into a paid subscription. This is the primary
+ * trial→paid entry point — distinct from `reactivateAction` (which recovers a
+ * CANCELLED subscription and reads as "restore"). Server-authoritative end to end:
+ * the price/quantity are derived inside `createGrowCheckout` from the org's billable
+ * agents — the client supplies nothing but the intent. Returns the hosted Grow URL;
+ * activation happens ONLY later from the verified webhook (which re-checks amount).
+ */
+export async function activateSubscriptionAction(): Promise<{ ok: boolean; url?: string; simulated?: boolean; amountIls?: number; quantity?: number; customPricing?: boolean; error?: string }> {
+  const sc = await getSessionContext();
+  if (sc.state !== "ready" || !sc.profile?.org_id || !sc.user) return { ok: false, error: "אין הרשאה." };
+  const db = await createClient();
+  const { data: can } = await db.rpc("has_min_role", { p_min: "manager" });
+  if (can !== true) return { ok: false, error: "רק בעל/ת המשרד יכול/ה להפעיל את המנוי." };
+  const orgId = sc.profile.org_id;
+  const payer = {
+    fullName: (sc.profile as { full_name?: string | null }).full_name ?? null,
+    phone: (sc.profile as { phone?: string | null }).phone ?? null,
+    email: sc.user.email ?? (sc.profile as { email?: string | null }).email ?? null,
+  };
+  const co = await createGrowCheckout(orgId, { payer });
+  if (co.ok) return { ok: true, url: co.url, simulated: co.simulated, amountIls: co.amountIls, quantity: co.quantity };
+  if (co.reason === "CUSTOM_PRICING_REQUIRED") return { ok: false, customPricing: true, error: "מעל 10 סוכנים — נדרש תמחור מותאם. נציג/ה יחזור/תחזור אליך." };
+  if (co.reason === "NOT_CONFIGURED") return { ok: false, error: "ספק התשלומים טרם הוגדר במערכת. פנה/י לתמיכה." };
+  if (co.reason === "NO_BILLABLE_AGENTS") return { ok: false, error: "אין סוכנים פעילים לחיוב עדיין." };
+  return { ok: false, error: "לא ניתן להפעיל את המנוי כרגע. נסה/י שוב או פנה/י לתמיכה." };
+}
+
+/**
  * Reactivate after cancellation. A GROW recurring direct debit that was cancelled
  * (changeStatus=2) CANNOT be un-cancelled — the provider requires a NEW direct-debit
  * process. So we must NEVER locally flip a cancelled/expired subscription back to

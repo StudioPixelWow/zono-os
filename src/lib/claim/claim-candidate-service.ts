@@ -15,10 +15,13 @@ import { countMatchingApprovals } from "./claim-write-core";
 import { normalizeHebrewName } from "@/lib/broker/engine";
 import { canonicalLocality } from "@/lib/geo/locality";
 import { getOrgIntelligenceTerritory } from "@/lib/brokerage-data/territory";
+import { normalizePhoneIL } from "@/lib/util/identity";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const digits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "").replace(/^972/, "0");
+// Phone comparison uses the CENTRAL Israeli normalizer (bare national form), so the
+// claim anchor, dedup and directory matching all agree on what "same phone" means.
+const digits = (s: string | null | undefined) => normalizePhoneIL(s);
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 /** All normalized forms of a name (plain fold + Hebrew canonical fold), non-empty. */
 const nameForms = (s: string | null | undefined): string[] => {

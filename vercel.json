@@ -5,6 +5,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/listings-dedup",
+      "schedule": "20 2 * * *"
+    },
+    {
       "path": "/api/cron/journey-delay-queue",
       "schedule": "*/5 * * * *"
     },
