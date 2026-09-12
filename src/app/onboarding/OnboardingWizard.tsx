@@ -321,14 +321,6 @@ export function OnboardingWizard({
                 onChange={(e) => set("phone", e.target.value)}
               />
             </label>
-            <label className="block">
-              <span className={label}>תפקיד / כותרת</span>
-              <input
-                className={`${input} mt-1`}
-                value={form.jobTitle}
-                onChange={(e) => set("jobTitle", e.target.value)}
-              />
-            </label>
           </>
         )}
 

@@ -171,9 +171,16 @@ export async function completeOnboarding(
       const { data: existing } = await svc.from("broker_profiles").select("id")
         .eq("org_id", org.id).eq("created_by_user_id", user.id).limit(1);
       if (!existing?.length) {
+        const { normalizePhoneIL } = await import("@/lib/util/identity");
         const primaryLoc = localities.find((l) => l.isPrimary) ?? localities[0] ?? null;
         const phoneRaw = payload.phone ?? payload.organizationPhone ?? null;
-        const normPhone = phoneRaw ? phoneRaw.replace(/\D/g, "").replace(/^972/, "0") : null;
+        // Canonical bare-national key (matches canonical_brokers/claim matching);
+        // the old "^972→0" transform left a leading 0 and never matched.
+        const normPhone = normalizePhoneIL(phoneRaw) || null;
+        // broker_type + verification_status are DB ENUMS. "agent"/"verified" are NOT
+        // valid values, so the previous insert THREW and was silently swallowed —
+        // no self-profile was ever created, which is why the "we found your listings"
+        // claim moment never fired. A self signup identity is system-derived → "auto".
         await svc.from("broker_profiles").insert({
           org_id: org.id,
           display_name: payload.fullName.trim(),
@@ -182,11 +189,11 @@ export async function completeOnboarding(
           normalized_phone: normPhone,
           email: user.email ?? payload.organizationEmail ?? null,
           primary_city: primaryLoc?.nameHe ?? null,
-          broker_type: "agent",
-          verification_status: "verified",
+          broker_type: "independent_broker",
+          verification_status: "auto",
           created_by_user_id: user.id,
-          verified_by_user_id: user.id,
-          verified_at: new Date().toISOString(),
+          verified_by_user_id: null,
+          verified_at: null,
           metadata: { self: true, source: "onboarding" } as never,
         } as never);
       }
@@ -231,17 +238,6 @@ export async function completeOnboarding(
     await setOrgOperatingLocalities(org.id, rows);
     await setUserOperatingLocalities(user.id, rows);
 
-    // Mandatory early step: populate the shared national neighborhood reference
-    // (OSM + OpenAI) for the agent's operating cities, so neighborhoods are
-    // available system-wide from day one — coverage scans, external listings,
-    // internal properties, marketing. Best-effort: never blocks onboarding.
-    try {
-      const { ensureNationalNeighborhoods } = await import("@/lib/transactions/service");
-      await ensureNationalNeighborhoods(localities.map((l) => l.nameHe));
-    } catch (geoError) {
-      console.error("[onboarding] neighborhood discovery skipped:", geoError);
-    }
-
     // P9.0D — AUTOMATIC CITY BOOTSTRAP. Kick off the office's city intelligence
     // the moment onboarding succeeds, so a fresh office is never a cold system.
     // FREE/INTERNAL only: brokerage/city learning from data ZONO already owns
@@ -254,6 +250,17 @@ export async function completeOnboarding(
     const bootstrapOrgId = org.id;
     const bootstrapCities = localities.map((l) => l.nameHe);
     after(async () => {
+      // Populate the shared national neighborhood reference (OSM + OpenAI) for the
+      // agent's operating cities. Moved OUT of the blocking path — it is external-
+      // API-bound and was making "סיום" hang for many seconds; it now runs in the
+      // background right after redirect so the office lands on the dashboard fast,
+      // and neighborhoods fill in moments later. Runs BEFORE the scans that use them.
+      try {
+        const { ensureNationalNeighborhoods } = await import("@/lib/transactions/service");
+        await ensureNationalNeighborhoods(bootstrapCities);
+      } catch (geoError) {
+        console.error("[onboarding] neighborhood discovery skipped:", geoError);
+      }
       try {
         const { triggerCityLearning } = await import("@/lib/brokerage-data/city-learning-trigger");
         for (const city of bootstrapCities) {

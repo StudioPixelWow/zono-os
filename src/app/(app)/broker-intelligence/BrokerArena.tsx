@@ -8,7 +8,8 @@
 // the drawer is client state. All values come from the pure model; nothing here
 // computes market share or performance.
 // ============================================================================
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { resolvePropertyTypeLabel } from "@/lib/property-marketing/presentation";
 import { Icon } from "@/components/dashboard/Icon";
@@ -19,6 +20,16 @@ function dateHe(ms: number | null): string { return ms == null ? "—" : new Dat
 
 export function BrokerArena({ landscape, directory, detail, baseHref }: { landscape: LandscapeRow[]; directory: Directory; detail: Record<string, BrokerAgg>; baseHref: string }) {
   const [open, setOpen] = useState<string | null>(null);
+  // Lock the page behind the drawer + portal it to <body>, so the fixed overlay is
+  // viewport-anchored (a transformed ancestor was capturing it → it opened at the
+  // wrong scroll position until you scrolled). The portal only renders after a
+  // client click (open != null), so document.body always exists — no mount guard.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
   const maxInv = Math.max(1, ...landscape.map((r) => r.observedInventory));
   const agg = open ? detail[open] : null;
 
@@ -75,8 +86,8 @@ export function BrokerArena({ landscape, directory, detail, baseHref }: { landsc
         )}
       </section>
 
-      {/* Drawer */}
-      {open && agg && (
+      {/* Drawer — portaled to <body> so the fixed overlay escapes any transformed ancestor */}
+      {open && agg && createPortal(
         <div className="fixed inset-0 z-50 flex justify-start" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" onClick={() => setOpen(null)} aria-hidden />
           <div dir="rtl" className="bg-card relative ms-auto flex h-full w-full max-w-md flex-col overflow-y-auto shadow-2xl">
@@ -99,11 +110,12 @@ export function BrokerArena({ landscape, directory, detail, baseHref }: { landsc
               <DrawerBlock title="נצפה">
                 <div className="text-muted text-xs">ראשון: <span className="text-ink font-bold">{dateHe(agg.firstObservedMs)}</span> · אחרון: <span className="text-ink font-bold">{dateHe(agg.lastObservedMs)}</span></div>
               </DrawerBlock>
-              <Link href="/market-intelligence/listings" prefetch={false} className="border-line hover:border-brand-light bg-card text-ink block rounded-xl border px-4 py-2.5 text-center text-sm font-bold transition">צפה במודעות השוק ←</Link>
+              <Link href={`/market-intelligence/listings?broker=${encodeURIComponent(agg.name)}`} prefetch={false} className="border-line hover:border-brand-light bg-brand block rounded-xl border-transparent px-4 py-2.5 text-center text-sm font-bold text-white transition">הנכסים של {agg.name} ←</Link>
               <p className="text-muted/80 text-[10px]">מבוסס על המלאי הנצפה בלבד. אין מיזוג אוטומטי של וריאציות כתיב לשם המתווך.</p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
