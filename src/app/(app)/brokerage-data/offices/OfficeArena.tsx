@@ -98,7 +98,7 @@ export function OfficeArena({ landscape, directory, detail, baseHref }: { landsc
                 ) : <Muted />}
               </Block>
               <Block title="נצפה"><div className="text-muted text-xs">ראשון: <span className="text-ink font-bold">{dateHe(o.firstSeenMs)}</span> · אחרון: <span className="text-ink font-bold">{dateHe(o.lastSeenMs)}</span></div></Block>
-              <Link href={`/brokerage-data/office/${o.id}`} prefetch={false} className="border-line hover:border-brand-light bg-card text-ink block rounded-xl border px-4 py-2.5 text-center text-sm font-bold transition">פרופיל מלא ←</Link>
+              <Link href={`/brokerage-data/offices/${o.id}`} prefetch={false} className="border-line hover:border-brand-light bg-card text-ink block rounded-xl border px-4 py-2.5 text-center text-sm font-bold transition">מודיעין משרד מלא ←</Link>
               <p className="text-muted/80 text-[10px]">מבוסס על המלאי הנצפה. אין מיזוג אוטומטי של רשת/סניף או וריאציות כתיב.</p>
             </div>
           </div>
