@@ -14,7 +14,7 @@
 // ============================================================================
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { growCreds, growUpdateDirectDebit } from "./grow-client";
+import { growCreds, growUpdateDirectDebit, growCredsForOrg } from "./grow-client";
 import { getOrgBillingQuantity } from "./billing";
 import { decideRecurringUpdate, type RecurringUpdateAction } from "./recurring-decision";
 
@@ -65,7 +65,7 @@ export async function syncRecurringQuantityAtBoundary(orgId: string): Promise<Re
   const res = await growUpdateDirectDebit({
     transactionId: row.grow_transaction_id, transactionToken: row.grow_transaction_token, asmachta: row.grow_asmachta,
     sum: decision.targetSumIls, changeStatus: 1,
-  });
+  }, growCredsForOrg(orgId));
   if (!res.ok) return { ok: false, reason: "PROVIDER_ERROR" };
 
   // Verified provider ack → update provider_quantity + synced state (only now).
@@ -94,7 +94,7 @@ export async function cancelGrowRecurring(orgId: string): Promise<RecurringOpRes
   const res = await growUpdateDirectDebit({
     transactionId: row.grow_transaction_id, transactionToken: row.grow_transaction_token, asmachta: row.grow_asmachta,
     changeStatus: 2,
-  });
+  }, growCredsForOrg(orgId));
   if (!res.ok) return { ok: false, reason: "PROVIDER_ERROR" };
 
   const db = createServiceRoleClient();

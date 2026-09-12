@@ -11,6 +11,7 @@
 // ============================================================================
 import "server-only";
 import { growBaseUrl } from "./grow-mapping";
+import { isQaOrg } from "./qa-billing";
 
 export interface GrowCreds {
   userId: string;
@@ -39,6 +40,44 @@ export function growCreds(): GrowCreds {
   };
 }
 
+/**
+ * SANDBOX credentials for a QA transaction. Prefers dedicated GROW_SANDBOX_* vars
+ * (a separate sandbox merchant) and falls back to the main GROW_* vars on the
+ * sandbox endpoint — so a merchant whose sandbox shares the production credentials
+ * needs no extra config. env is forced to "sandbox" so growBaseUrl routes to
+ * sandbox.meshulam.co.il.
+ */
+export function growSandboxCreds(): GrowCreds {
+  const userId = process.env.GROW_SANDBOX_USER_ID || process.env.GROW_USER_ID || "";
+  const pageCode = process.env.GROW_SANDBOX_PAGE_CODE || process.env.GROW_PAGE_CODE || "";
+  const recurringPageCode = process.env.GROW_SANDBOX_RECURRING_PAGE_CODE || process.env.GROW_RECURRING_PAGE_CODE || null;
+  return {
+    userId, pageCode, recurringPageCode,
+    apiKey: process.env.GROW_SANDBOX_API_KEY || process.env.GROW_API_KEY || null,
+    env: "sandbox",
+    configured: !!userId && (!!pageCode || !!recurringPageCode),
+  };
+}
+
+/**
+ * Per-ORG credentials. A QA org (BILLING_QA_ORG_IDS) transacts against Grow
+ * SANDBOX; EVERY other org uses growCreds() UNCHANGED — no global behaviour is
+ * altered, so real customers keep transacting exactly as before. This is what
+ * makes a live-production ₪1 test zero-blast-radius.
+ */
+export function growCredsForOrg(orgId: string | null | undefined): GrowCreds {
+  return isQaOrg(orgId) ? growSandboxCreds() : growCreds();
+}
+
+/**
+ * Credentials to VERIFY a payment, chosen by the environment the payment was
+ * created under (stamped on the payment row). A sandbox payment must be re-queried
+ * on the sandbox endpoint; anything else uses the normal credentials unchanged.
+ */
+export function growCredsForPaymentEnv(env: string | null | undefined): GrowCreds {
+  return (env ?? "").toLowerCase() === "sandbox" ? growSandboxCreds() : growCreds();
+}
+
 export interface GrowResponse<T = Record<string, unknown>> {
   ok: boolean;               // wrapper status === "1"
   status: string;            // "1" | "0"
@@ -52,9 +91,9 @@ export interface GrowResponse<T = Record<string, unknown>> {
 async function growPost<T = Record<string, unknown>>(
   path: string,
   fields: Record<string, string | number | undefined | null>,
-  opts: { apiKeyHeader?: string | null } = {},
+  opts: { apiKeyHeader?: string | null; creds?: GrowCreds } = {},
 ): Promise<GrowResponse<T>> {
-  const creds = growCreds();
+  const creds = opts.creds ?? growCreds();
   const url = growBaseUrl(creds.env) + path;
   const body = new URLSearchParams();
   for (const [k, v] of Object.entries(fields)) {
@@ -93,8 +132,7 @@ export interface CreateProcessInput {
 }
 export interface CreateProcessData { processId: string; processToken: string; url: string }
 
-export async function growCreatePaymentProcess(input: CreateProcessInput): Promise<GrowResponse<CreateProcessData>> {
-  const creds = growCreds();
+export async function growCreatePaymentProcess(input: CreateProcessInput, creds: GrowCreds = growCreds()): Promise<GrowResponse<CreateProcessData>> {
   const pageCode = input.recurring ? (creds.recurringPageCode ?? creds.pageCode) : creds.pageCode;
   return growPost<CreateProcessData>("createPaymentProcess", {
     pageCode, userId: creds.userId,
@@ -106,7 +144,7 @@ export async function growCreatePaymentProcess(input: CreateProcessInput): Promi
     paymentNum: input.paymentNum ?? undefined,
     chargeType: input.chargeType ?? undefined,
     cField1: input.cField1 ?? undefined,
-  });
+  }, { creds });
 }
 
 // ── getTransactionInfo — AUTHORITATIVE verification (the security gate) ──────────
@@ -119,19 +157,17 @@ export interface TransactionInfoData {
   fullName?: string; payerEmail?: string; payerPhone?: string; paymentDate?: string;
   directDebitId?: string; recurringDebitId?: string;
 }
-export async function growGetTransactionInfo(transactionId: string, transactionToken: string): Promise<GrowResponse<TransactionInfoData>> {
-  const creds = growCreds();
+export async function growGetTransactionInfo(transactionId: string, transactionToken: string, creds: GrowCreds = growCreds()): Promise<GrowResponse<TransactionInfoData>> {
   return growPost<TransactionInfoData>("getTransactionInfo", {
     // Recurring processes are created under recurringPageCode; verify under the
     // same page (fall back so a recurring-only deployment still verifies).
     pageCode: creds.pageCode || creds.recurringPageCode || "", transactionId, transactionToken,
-  });
+  }, { creds });
 }
 
 // ── approveTransaction — acknowledgment only (NOT verification) ──────────────────
-export async function growApproveTransaction(callbackData: Record<string, string | number | undefined | null>): Promise<GrowResponse> {
-  const creds = growCreds();
-  return growPost("approveTransaction", { pageCode: creds.pageCode, ...callbackData });
+export async function growApproveTransaction(callbackData: Record<string, string | number | undefined | null>, creds: GrowCreds = growCreds()): Promise<GrowResponse> {
+  return growPost("approveTransaction", { pageCode: creds.pageCode, ...callbackData }, { creds });
 }
 
 // ── updateDirectDebit — change recurring amount / cancel (changeStatus=2) ────────
@@ -143,8 +179,7 @@ export interface UpdateDirectDebitInput {
   changeStatus?: 1 | 2;           // 1 = active, 2 = cancel
   updateCard?: 0 | 1;
 }
-export async function growUpdateDirectDebit(input: UpdateDirectDebitInput): Promise<GrowResponse> {
-  const creds = growCreds();
+export async function growUpdateDirectDebit(input: UpdateDirectDebitInput, creds: GrowCreds = growCreds()): Promise<GrowResponse> {
   return growPost("updateDirectDebit", {
     userId: creds.userId,
     transactionId: input.transactionId, transactionToken: input.transactionToken, asmachta: input.asmachta,

@@ -16,7 +16,7 @@ const num = (v: unknown): number | null => { const n = Number(v); return Number.
 const ms = (v: unknown): number | null => { if (!v) return null; const t = Date.parse(String(v)); return Number.isFinite(t) ? t : null; };
 
 export interface OfficeDetailAgent { id: string; name: string; listings: number; lastSeen: string | null }
-export interface OfficeDetailListing { id: string; title: string | null; neighborhood: string | null; city: string | null; rooms: number | null; sqm: number | null; price: number | null; source: string | null; firstSeen: string | null }
+export interface OfficeDetailListing { id: string; title: string | null; neighborhood: string | null; city: string | null; rooms: number | null; sqm: number | null; price: number | null; source: string | null; firstSeen: string | null; image: string | null; listingUrl: string | null; address: string | null; propertyType: string | null }
 export interface OfficeDetailArea { name: string; listings: number }
 export interface OfficeDetail {
   id: string; name: string; city: string | null; brand: string | null; phone: string | null; website: string | null;
@@ -50,10 +50,18 @@ export async function getOfficeDetail(officeId: string): Promise<OfficeDetail | 
   let listRows: Array<Record<string, unknown>> = [];
   if (listingIds.length) {
     const { data } = await (db.from("external_listings" as never)
-      .select("id,title,neighborhood,city,rooms,sqm,price,source,first_seen_at,contact_name,status")
+      .select("id,title,neighborhood,city,rooms,sqm,price,source,first_seen_at,contact_name,status,images,listing_url,address,street,property_type")
       .in("id", listingIds).neq("status", "removed").limit(5000) as unknown as Promise<{ data: Array<Record<string, unknown>> | null }>);
     listRows = data ?? [];
   }
+
+  // First usable photo URL from the images array (jsonb array or JSON string).
+  const firstImage = (v: unknown): string | null => {
+    let arr: unknown = v;
+    if (typeof v === "string") { try { arr = JSON.parse(v); } catch { return v.startsWith("http") ? v : null; } }
+    if (Array.isArray(arr)) { const u = arr.find((x) => typeof x === "string" && (x as string).startsWith("http")); return (u as string) ?? null; }
+    return null;
+  };
 
   const now = Date.now();
   const listings: OfficeDetailListing[] = listRows.map((r) => ({
@@ -61,6 +69,8 @@ export async function getOfficeDetail(officeId: string): Promise<OfficeDetail | 
     neighborhood: (r.neighborhood as string) ?? null, city: localityHe((r.city as string) ?? null),
     rooms: num(r.rooms), sqm: num(r.sqm), price: num(r.price), source: (r.source as string) ?? null,
     firstSeen: (r.first_seen_at as string) ?? null,
+    image: firstImage(r.images), listingUrl: (r.listing_url as string) ?? null,
+    address: ((r.address as string) || (r.street as string)) ?? null, propertyType: (r.property_type as string) ?? null,
   }));
   const new7d = listRows.filter((r) => { const t = ms(r.first_seen_at); return t != null && now - t < 7 * DAY; }).length;
   const new30d = listRows.filter((r) => { const t = ms(r.first_seen_at); return t != null && now - t < 30 * DAY; }).length;

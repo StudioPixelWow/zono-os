@@ -17,7 +17,7 @@
 // NO secrets / card data / raw payload are logged.
 // ============================================================================
 import { NextResponse, type NextRequest } from "next/server";
-import { growGetTransactionInfo, growApproveTransaction, growCreds } from "@/lib/commercial/grow-client";
+import { growGetTransactionInfo, growApproveTransaction, growCreds, growCredsForPaymentEnv } from "@/lib/commercial/grow-client";
 import { growOutcomeFromStatusCode, growPaymentStatus, clientIpFromForwardedFor, isGrowSourceIp, safeStringEqual } from "@/lib/commercial/grow-mapping";
 import { getPayment, getDraftById, markPaymentVerified, setPaymentStatus } from "@/lib/commercial/store";
 import { activateOrgSubscriptionFromVerifiedPayment } from "@/lib/commercial/activate";
@@ -86,13 +86,17 @@ export async function POST(req: NextRequest) {
   // Idempotent: an already-verified payment short-circuits (no double activation).
   if (payment.verified === true) return NextResponse.json({ ok: true, idempotent: true });
 
+  // Verify a payment against the SAME Grow environment it was created under (a QA
+  // sandbox payment is re-queried on the sandbox endpoint; production on production).
+  const verifyCreds = growCredsForPaymentEnv(payment.environment);
+
   try {
     // ── AUTHORITATIVE VERIFICATION: ask Grow directly. A forged callback fails. ──
-    if (!growCreds().configured || !transactionId || !transactionToken) {
+    if (!verifyCreds.configured || !transactionId || !transactionToken) {
       // Cannot verify → NEVER activate. Record nothing as paid.
       return NextResponse.json({ ok: false, reason: "unverifiable" }, { status: 200 });
     }
-    const info = await growGetTransactionInfo(transactionId, transactionToken);
+    const info = await growGetTransactionInfo(transactionId, transactionToken, verifyCreds);
     const outcome = info.ok ? growOutcomeFromStatusCode(info.data?.statusCode) : "unknown";
 
     if (outcome !== "paid") {
@@ -220,7 +224,7 @@ export async function POST(req: NextRequest) {
 
     // approveTransaction — acknowledgment only (docs: transaction processes even if
     // this fails). Best-effort; never blocks activation.
-    await growApproveTransaction({ transactionId, transactionToken, asmachta: d.asmachta, sum: d.sum })
+    await growApproveTransaction({ transactionId, transactionToken, asmachta: d.asmachta, sum: d.sum }, verifyCreds)
       .then(() => undefined, () => undefined);
 
     return NextResponse.json({ ok: true });

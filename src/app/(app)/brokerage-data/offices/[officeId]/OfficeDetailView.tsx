@@ -7,10 +7,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
-import type { OfficeDetail } from "@/lib/office-intel/office-detail";
+import { resolvePropertyTypeLabel } from "@/lib/property-marketing/presentation";
+import type { OfficeDetail, OfficeDetailAgent, OfficeDetailListing } from "@/lib/office-intel/office-detail";
 import type { OfficeCompetitorReport, CompetitorView } from "@/lib/office-intel/competitor";
 
-const ils = (n: number | null) => (n == null ? "—" : `₪${Number(n).toLocaleString("he-IL")}`);
 const priceShort = (p: number | null) => (p == null ? "—" : p >= 1_000_000 ? `₪${(p / 1_000_000).toFixed(1)}M` : p >= 1000 ? `₪${Math.round(p / 1000)}K` : `₪${p}`);
 const dateHe = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
 
@@ -150,34 +150,21 @@ export function OfficeDetailView({ detail, competitors }: { detail: OfficeDetail
       )}
 
       {tab === "agents" && (
-        <Card title="מתווכי המשרד">
+        <Card title={`מתווכי המשרד (${detail.agents.length})`}>
           {detail.agents.length ? (
-            <div className="overflow-x-auto"><table className="w-full text-right text-[13.5px]">
-              <thead><tr className="text-muted text-[11px]"><th className="py-1.5 pl-3 font-semibold">מתווך</th><th className="py-1.5 pl-3 font-semibold">נכסים</th><th className="py-1.5 font-semibold">נראה לאחרונה</th></tr></thead>
-              <tbody>{detail.agents.map((a) => (
-                <tr key={a.id} className="border-line/60 border-t"><td className="py-2 pl-3 font-semibold">{a.name}</td><td className="py-2 pl-3 tabular-nums">{a.listings}</td><td className="text-muted py-2">{dateHe(a.lastSeen)}</td></tr>
-              ))}</tbody>
-            </table></div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {detail.agents.map((a) => <AgentCard key={a.id} a={a} />)}
+            </div>
           ) : <p className="text-muted text-sm">ZONO עדיין אוספת פעילות מתווכים עבור משרד זה.</p>}
         </Card>
       )}
 
       {tab === "listings" && (
-        <Card title="נכסי המשרד">
+        <Card title={`נכסי המשרד (${detail.listings.length})`}>
           {detail.listings.length ? (
-            <div className="overflow-x-auto"><table className="w-full text-right text-[13.5px]">
-              <thead><tr className="text-muted text-[11px]"><th className="py-1.5 pl-3 font-semibold">נכס</th><th className="py-1.5 pl-3 font-semibold">שכונה</th><th className="py-1.5 pl-3 font-semibold">חדרים</th><th className="py-1.5 pl-3 font-semibold">מ״ר</th><th className="py-1.5 pl-3 font-semibold">מחיר</th><th className="py-1.5 font-semibold">מקור</th></tr></thead>
-              <tbody>{detail.listings.map((l) => (
-                <tr key={l.id} className="border-line/60 border-t">
-                  <td className="py-2 pl-3 font-semibold">{l.title ?? "מודעה"}</td>
-                  <td className="text-muted py-2 pl-3">{l.neighborhood ?? l.city ?? "—"}</td>
-                  <td className="py-2 pl-3 tabular-nums">{l.rooms ?? "—"}</td>
-                  <td className="py-2 pl-3 tabular-nums">{l.sqm ?? "—"}</td>
-                  <td className="py-2 pl-3 tabular-nums">{ils(l.price)}</td>
-                  <td className="text-muted py-2">{l.source ?? "—"}</td>
-                </tr>
-              ))}</tbody>
-            </table></div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {detail.listings.map((l) => <ListingCard key={l.id} l={l} />)}
+            </div>
           ) : <Empty />}
         </Card>
       )}
@@ -221,6 +208,53 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 function Empty() { return <p className="text-muted text-sm">ZONO עדיין אוספת פעילות עבור משרד זה.</p>; }
+
+function AgentCard({ a }: { a: OfficeDetailAgent }) {
+  const initial = a.name.trim().charAt(0) || "מ";
+  return (
+    <div className="border-line bg-surface/40 hover:border-brand-light flex items-center gap-3 rounded-2xl border p-3.5 transition">
+      <span className="bg-brand-soft text-brand-strong grid h-11 w-11 shrink-0 place-items-center rounded-full text-base font-black">{initial}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-ink truncate text-sm font-black">{a.name}</div>
+        <div className="text-muted text-[11px]">נראה לאחרונה · {dateHe(a.lastSeen)}</div>
+      </div>
+      <div className="shrink-0 text-center">
+        <div className="text-brand-strong text-lg font-black leading-none tabular-nums">{a.listings}</div>
+        <div className="text-muted text-[9.5px] font-bold">נכסים</div>
+      </div>
+    </div>
+  );
+}
+
+function ListingCard({ l }: { l: OfficeDetailListing }) {
+  const cls = "group border-line bg-card hover:border-brand-light block overflow-hidden rounded-2xl border shadow-[var(--shadow-card)] transition hover:-translate-y-0.5";
+  const body = (
+    <>
+      <div className="bg-surface relative aspect-[4/3] w-full overflow-hidden">
+        {l.image ? (
+          // eslint-disable-next-line @next/next/no-img-element -- external scraped photo host; next/image domain allowlist not configured for it
+          <img src={l.image} alt={l.title ?? "נכס"} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]" />
+        ) : (
+          <div className="from-brand-soft to-surface text-brand-strong/40 grid h-full w-full place-items-center bg-gradient-to-br"><Icon name="Building2" size={40} /></div>
+        )}
+        {l.price != null && <span className="absolute bottom-2 right-2 rounded-lg bg-black/70 px-2.5 py-1 text-sm font-black text-white backdrop-blur-sm">{priceShort(l.price)}</span>}
+        {l.propertyType && <span className="bg-card/90 text-ink absolute left-2 top-2 rounded-md px-2 py-0.5 text-[10.5px] font-bold backdrop-blur-sm">{resolvePropertyTypeLabel(l.propertyType)}</span>}
+      </div>
+      <div className="p-3">
+        <div className="text-ink line-clamp-1 text-[13.5px] font-bold">{l.title ?? "מודעה"}</div>
+        <div className="text-muted mt-0.5 line-clamp-1 text-[12px]">{l.address ?? l.neighborhood ?? l.city ?? "—"}</div>
+        <div className="text-muted mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] tabular-nums">
+          {l.rooms != null && <span className="bg-surface rounded px-1.5 py-0.5">{l.rooms} חד׳</span>}
+          {l.sqm != null && <span className="bg-surface rounded px-1.5 py-0.5">{l.sqm} מ״ר</span>}
+          {l.neighborhood && <span className="text-muted truncate">{l.neighborhood}</span>}
+        </div>
+      </div>
+    </>
+  );
+  return l.listingUrl
+    ? <a href={l.listingUrl} target="_blank" rel="noopener noreferrer" className={cls}>{body}</a>
+    : <div className={cls}>{body}</div>;
+}
 
 function MomentumDial({ score }: { score: number }) {
   return (

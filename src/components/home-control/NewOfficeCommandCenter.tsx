@@ -132,22 +132,20 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
               </div>
             </div>
 
-            {/* activation ring — enlarged to own the hero's open space, big and prominent */}
-            <div className="flex flex-1 items-center justify-center py-2 sm:py-4">
-              <div className="relative h-[190px] w-[190px] shrink-0 sm:h-[230px] sm:w-[230px]"
-                style={{ background: `conic-gradient(var(--office-accent) ${activation.percent * 3.6}deg, rgba(255,255,255,0.14) 0deg)`, borderRadius: "9999px", boxShadow: "0 24px 70px -24px rgba(0,0,0,0.65)" }}>
-                <div className="absolute inset-[13px] flex flex-col items-center justify-center rounded-full bg-[#1a1140]/95 text-center sm:inset-[15px]">
-                  <span className="leading-none font-black tabular-nums text-[52px] sm:text-[64px]">
-                    {activation.percent}<span className="align-top text-2xl sm:text-3xl">%</span>
-                  </span>
-                  <span className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">הפעלה</span>
-                  {activation.total > 0 && (
-                    <span className="mt-2 text-[12.5px] font-medium text-white/70">
-                      {activation.completedCount} מתוך {activation.total} שלבים
-                    </span>
-                  )}
-                </div>
-              </div>
+          </div>
+
+          {/* activation — one clean, slim progress bar */}
+          <div className="mt-5">
+            <div className="mb-2 flex items-baseline justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest text-white/60">הפעלת המערכת</span>
+              <span className="text-sm font-bold tabular-nums text-white">
+                {activation.percent}%
+                {activation.total > 0 && <span className="ms-1.5 text-xs font-medium text-white/60">· {activation.completedCount}/{activation.total} שלבים</span>}
+              </span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+              <div className="h-full rounded-full transition-all duration-700 ease-out"
+                style={{ width: `${Math.max(activation.percent, 2)}%`, background: "var(--office-accent)", boxShadow: "0 0 12px -2px var(--office-accent)" }} />
             </div>
           </div>
 

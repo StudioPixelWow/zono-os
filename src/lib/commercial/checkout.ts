@@ -14,7 +14,7 @@
 import "server-only";
 import { getOrgBillingQuantity } from "./billing";
 import { createOrgPayment } from "./store";
-import { growCreds, growCreatePaymentProcess } from "./grow-client";
+import { growCreatePaymentProcess, growCredsForOrg } from "./grow-client";
 import type { PlanTier } from "@/lib/launch/types";
 
 export type CheckoutResult =
@@ -36,12 +36,15 @@ export async function createGrowCheckout(orgId: string, opts?: { payer?: { fullN
   const amountIls = q.expectedMonthlyIls;
   if (amountIls === null || q.billableAgents <= 0) return { ok: false, reason: "NO_BILLABLE_AGENTS" };
 
-  // Persist a pending, org-linked payment with the SERVER-DERIVED amount.
-  const planTier: PlanTier = "starter"; // legacy/compat; canonical model is per-agent
-  const payment = await createOrgPayment({ orgId, planTier, amountIls });
-  if (!payment) return { ok: false, reason: "PERSIST_ERROR" };
+  // Per-org Grow credentials: a QA org (BILLING_QA_ORG_IDS) → SANDBOX, every other
+  // org → production/unchanged. The payment is stamped with THIS env so the webhook
+  // re-queries the same endpoint and sandbox revenue is never counted as real.
+  const creds = growCredsForOrg(orgId);
 
-  const creds = growCreds();
+  // Persist a pending, org-linked payment with the SERVER-DERIVED amount + env.
+  const planTier: PlanTier = "starter"; // legacy/compat; canonical model is per-agent
+  const payment = await createOrgPayment({ orgId, planTier, amountIls, environment: creds.env === "sandbox" ? "sandbox" : "production" });
+  if (!payment) return { ok: false, reason: "PERSIST_ERROR" };
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const statusUrl = `${appUrl}/billing/status?payment=${encodeURIComponent(payment.id)}`;
   const notifyUrl = `${appUrl}/api/payments/grow/webhook`;
@@ -64,7 +67,7 @@ export async function createGrowCheckout(orgId: string, opts?: { payer?: { fullN
     cField1: payment.id,          // echoed back in the callback → correlates the payment
     recurring: true,              // monthly per-agent subscription
     chargeType: 1,
-  });
+  }, creds);
 
   if (!res.ok || !res.data?.url) return { ok: false, reason: "PROVIDER_ERROR" };
   return { ok: true, paymentId: payment.id, url: res.data.url, simulated: false, amountIls, quantity: q.billableAgents };

@@ -44,6 +44,9 @@ export interface Payment {
   planTier: PlanTier;
   amountIls: number;
   currency: string;
+  /** The Grow environment this payment was created under ("sandbox" | "production").
+   *  Verification re-queries the SAME environment; only "production" counts as revenue. */
+  environment: string | null;
   status: PaymentStatus;
   /** TRUE only after server-side signature verification inside the webhook. The
    *  activation gate reads THIS — never a browser redirect. */
