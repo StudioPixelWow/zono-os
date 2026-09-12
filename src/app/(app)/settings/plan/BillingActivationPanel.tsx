@@ -20,7 +20,6 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
   const [msg, setMsg] = useState<{ tone: "info" | "error"; text: string } | null>(null);
 
   const o = overview;
-  const trialEnded = o.isTrial && o.trialDaysLeft === 0;
 
   function activate() {
     setMsg(null);
@@ -41,15 +40,12 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
           <p className="mt-1 text-sm">חיוב חודשי {ils(o.monthlyIls)} · {o.billableAgents} משתמשים · החיוב הבא: {fmtDate(o.currentPeriodEnd)}</p>
         </div>
       ) : (
-        <div className={`rounded-2xl border p-4 ${trialEnded ? "border-amber-300 bg-amber-50 text-amber-900" : "border-brand-light bg-brand-soft text-ink"}`}>
+        <div className="rounded-2xl border border-brand-light bg-brand-soft p-4 text-ink">
           <div className="flex items-center gap-2 font-black">
-            <Icon name={trialEnded ? "AlertTriangle" : "Clock"} size={18} />
-            {trialEnded ? "תקופת הניסיון הסתיימה" : o.isTrial ? `תקופת ניסיון — נותרו ${o.trialDaysLeft ?? 0} ימים` : "המנוי אינו פעיל"}
+            <Icon name="Sparkles" size={18} /> נדרשת הפעלת מנוי
           </div>
           <p className="mt-1 text-sm">
-            {trialEnded
-              ? "כל המידע שלך שמור. אפשר להפעיל את ZONO ולהמשיך בדיוק מהמקום שבו עצרת."
-              : `בסיום הניסיון החיוב יהיה ${ils(o.monthlyIls)} לחודש (${o.billableAgents} משתמשים × ${ils(o.pricePerAgentIls)}).`}
+            כדי להשתמש ב-ZONO יש להפעיל את המנוי — {ils(o.monthlyIls)} לחודש ({o.billableAgents} משתמשים × {ils(o.pricePerAgentIls)}). כל המידע שכבר הוכן עבורך שמור וממתין.
           </p>
         </div>
       )}

@@ -9,7 +9,11 @@ import { isSupabaseConfigured, supabasePublicEnv } from "./env";
  * configured (so the app still boots without env vars).
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
-  let response = NextResponse.next({ request });
+  // Forward the current pathname so server layouts can make path-aware guards
+  // (e.g. the payment gate must still allow /payment-required, /settings/plan…).
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-zono-path", request.nextUrl.pathname);
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
 
   if (!isSupabaseConfigured()) return response;
 
@@ -23,7 +27,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
+          response = NextResponse.next({ request: { headers: requestHeaders } });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );

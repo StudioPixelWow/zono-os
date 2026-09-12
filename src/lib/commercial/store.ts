@@ -154,6 +154,23 @@ export async function getSubscription(): Promise<Subscription | null> {
  * a concurrent insert races safely to a single row. Service-role only.
  * `plan_tier` is legacy/compat (the canonical per-agent model ignores it).
  */
+/**
+ * NO-TRIAL model: a new office starts UNPAID (payment_due) — full access is granted
+ * only after a verified Grow payment activates the subscription. No trial_ends_at is
+ * set, so nothing later reads the org as "on trial". Idempotent (PK = org_id).
+ */
+export async function ensureUnpaidSubscription(orgId: string): Promise<{ created: boolean }> {
+  const db = createServiceRoleClient();
+  const { data: existing } = await db.from("subscriptions" as never).select("org_id").eq("org_id", orgId).maybeSingle();
+  if (existing) return { created: false };
+  const { error } = await db.from("subscriptions" as never).insert({
+    org_id: orgId, plan_tier: "starter", status: "payment_due",
+    period_start: new Date().toISOString(), trial_ends_at: null, cancel_at_period_end: false,
+  } as never);
+  if (error && !/duplicate key|unique|conflict/i.test(error.message)) throw new Error(error.message);
+  return { created: !error };
+}
+
 export async function ensureTrialSubscription(orgId: string, trialDays = 14): Promise<{ created: boolean }> {
   const db = createServiceRoleClient();
   const { data: existing } = await db.from("subscriptions" as never).select("org_id").eq("org_id", orgId).maybeSingle();
