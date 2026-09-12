@@ -18,6 +18,7 @@ import { getOrgCommercialState } from "./state";
 import { canonicalFromSubscriptionStatus } from "./billing-state";
 import { growCreds } from "./grow-client";
 import { computeOrgBillingQuantity, type OrgBillingQuantity } from "./quantity";
+import { isQaOrg, qaExpectedMonthlyIls } from "./qa-billing";
 import { reconcilePlan, type ReconcileDecision, type ReconcileSyncStatus, type ReconcileOldRow, type OrgProviderQuantityRow } from "./reconcile";
 import {
   composeOrgBillingState,
@@ -89,7 +90,7 @@ export async function getOrgBillingQuantity(orgId: string): Promise<OrgBillingQu
     customPricing: commercial.customPricingRequired,
     cancelAtPeriodEnd: !!sub?.cancel_at_period_end,
   });
-  return computeOrgBillingQuantity({
+  const quantity = computeOrgBillingQuantity({
     orgId,
     activeUsers: commercial.billableAgents,           // billableAgents = active users
     pendingInvitations: commercial.reservedSeats,     // commercial.reservedSeats = pending invites
@@ -101,6 +102,15 @@ export async function getOrgBillingQuantity(orgId: string): Promise<OrgBillingQu
     source: "counts:users.active+org_invitations.pending",
     calculatedAt: new Date().toISOString(),
   });
+
+  // QA-SCOPED ₪1 override: applies the QA unit price ONLY to an explicit QA org
+  // (BILLING_QA_ORG_IDS). Every other org keeps the canonical model price. This is
+  // the single authoritative amount — it flows to the Grow checkout AND is stored
+  // on the payment the webhook verifies, so the ₪1 charge stays self-consistent.
+  if (isQaOrg(orgId) && quantity.expectedMonthlyIls !== null && !quantity.customPricingRequired && quantity.billableAgents > 0) {
+    return { ...quantity, expectedMonthlyIls: qaExpectedMonthlyIls(quantity.billableAgents) };
+  }
+  return quantity;
 }
 
 // Re-export the canonical reconciler core + types (P8.3).

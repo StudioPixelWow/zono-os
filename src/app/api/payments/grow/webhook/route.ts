@@ -22,6 +22,7 @@ import { growOutcomeFromStatusCode, growPaymentStatus, clientIpFromForwardedFor,
 import { getPayment, getDraftById, markPaymentVerified, setPaymentStatus } from "@/lib/commercial/store";
 import { activateOrgSubscriptionFromVerifiedPayment } from "@/lib/commercial/activate";
 import { checkChargeAcceptable } from "@/lib/commercial/amount-verify";
+import { isQaOrg } from "@/lib/commercial/qa-billing";
 import { emitBusinessEvent } from "@/lib/kernel/emit";
 import { DOMAIN_EVENTS } from "@/lib/kernel/events";
 
@@ -204,9 +205,17 @@ export async function POST(req: NextRequest) {
       // the now-verified payment. Fully error-isolated — a Morning outage marks the
       // row retryable for the recovery cron and NEVER rolls back the payment /
       // subscription or fails the webhook. Idempotent + concurrency-safe internally.
-      await import("@/lib/accounting/document-service")
-        .then((m) => m.ensureAccountingDocumentForVerifiedPayment(paymentId))
-        .catch(() => undefined);
+      //
+      // QA GUARD: never issue a REAL tax document for an explicit QA org — a ₪1
+      // production test must not produce a real חשבונית מס. The payment, activation
+      // and access all still happen; only the legal accounting doc is skipped.
+      if (isQaOrg(payment.orgId)) {
+        console.info("[grow-webhook] QA org — skipping real accounting document", { paymentId, orgId: payment.orgId });
+      } else {
+        await import("@/lib/accounting/document-service")
+          .then((m) => m.ensureAccountingDocumentForVerifiedPayment(paymentId))
+          .catch(() => undefined);
+      }
     }
 
     // approveTransaction — acknowledgment only (docs: transaction processes even if

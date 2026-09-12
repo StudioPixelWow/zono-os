@@ -14,6 +14,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { isOrgEnforced, paymentGateDecision, isPathAllowedWhenUnpaid, billingEnforcementCutoff } from "./access-gate-core";
+import { qaEnforcementActive, isQaOrg } from "./qa-billing";
 
 export { isOrgEnforced, isPathAllowedWhenUnpaid, billingEnforcementCutoff };
 
@@ -31,7 +32,11 @@ export interface PaymentGateDecision { orgId: string; enforced: boolean; paid: b
 /** Resolve the payment gate for an org. blocked = enforced && !paid (fail-open on
  *  a lookup error — a billing glitch must never lock an org out). */
 export async function resolvePaymentGate(orgId: string, orgCreatedAt: string | null | undefined): Promise<PaymentGateDecision> {
-  const enforced = isOrgEnforced(orgCreatedAt);
+  // QA testing mode: when BILLING_QA_ORG_IDS is set, ONLY those explicit QA orgs
+  // are enforced — every real customer is left untouched, regardless of the date
+  // cutoff. This lets us verify Payment Required on a live QA org in production
+  // without gating anyone else. Empty allowlist ⇒ fall back to the date cutoff.
+  const enforced = qaEnforcementActive() ? isQaOrg(orgId) : isOrgEnforced(orgCreatedAt);
   if (!enforced) return { orgId, ...paymentGateDecision(false, true) };
   const paid = await hasActivePaidSubscription(orgId).catch(() => true);
   return { orgId, ...paymentGateDecision(true, paid) };
