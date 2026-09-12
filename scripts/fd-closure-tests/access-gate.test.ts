@@ -30,6 +30,19 @@ test("unpaid user is blocked from the product surfaces", () => {
     assert.equal(isPathAllowedWhenUnpaid(p), false, p);
   }
 });
+// Launch Part 7 — DIRECT URL ATTACK: every product surface an unpaid user might
+// type into the address bar must resolve to Payment Required (blocked), including
+// the office-intelligence + my-office surfaces added this launch cycle.
+test("direct-URL attack: /today, /claim, /properties, CRM, Maps, Office Intelligence, AI, Reports all blocked when unpaid", () => {
+  for (const p of [
+    "/today", "/claim", "/properties", "/leads", "/crm",
+    "/market-intelligence/map", "/maps",
+    "/brokerage-data", "/brokerage-data/offices", "/brokerage-data/my-office", "/brokerage-data/offices/abc",
+    "/ai", "/reports", "/broker-intelligence", "/competition-radar",
+  ]) {
+    assert.equal(isPathAllowedWhenUnpaid(p), false, `${p} must be blocked for an unpaid user`);
+  }
+});
 test("query string does not smuggle a blocked path past the allowlist", () => {
   assert.equal(isPathAllowedWhenUnpaid("/today?x=/account"), false);
 });

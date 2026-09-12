@@ -62,13 +62,19 @@ export async function backfillSelfProfiles(opts: { dryRun?: boolean } = {}): Pro
     rep.byConfidence[confidence]++;
 
     if (!dryRun) {
+      // verification_status is the DB enum {unverified, auto, human_verified,
+      // rejected}. A backfilled self-profile is SYSTEM-derived, so a confident
+      // (phone / name+city) match maps to "auto"; anything needing the owner's
+      // confirmation stays "unverified". The finer self-confidence
+      // (verified / high / needs_confirmation) is preserved in metadata.confidence,
+      // and the claim flow is where a human promotes it to human_verified.
+      const dbStatus = confidence === "needs_confirmation" ? "unverified" : "auto";
       await db.from("broker_profiles" as never).insert({
         org_id: orgId, display_name: name, normalized_name: normName,
         phone: (u.phone as string | null) ?? null, normalized_phone: phone || null,
-        email: email || null, primary_city: city, broker_type: "agent",
-        verification_status: confidence === "verified" ? "verified" : confidence,
-        created_by_user_id: userId, verified_by_user_id: confidence === "verified" ? userId : null,
-        verified_at: confidence === "verified" ? new Date().toISOString() : null,
+        email: email || null, primary_city: city, broker_type: "independent_broker",
+        verification_status: dbStatus,
+        created_by_user_id: userId, verified_by_user_id: null, verified_at: null,
         metadata: { self: true, source: "backfill", confidence } as never,
       } as never).then(() => { rep.created++; }, () => { rep.skipped++; });
     }

@@ -9,6 +9,7 @@
 import { revalidatePath } from "next/cache";
 import { getClaimCandidates } from "@/lib/claim/claim-candidate-service";
 import { claimExternalListing, rejectClaimCandidate, snoozeClaimCandidate } from "@/lib/claim/claim-write-service";
+import { requireActiveSubscription } from "@/lib/commercial/access-gate";
 
 export interface ClaimCandidateDTO {
   id: string;
@@ -50,6 +51,8 @@ export async function fetchClaimCandidatesAction(): Promise<{ ready: boolean; ca
 }
 
 export async function claimListingAction(listingId: string, confirmLowConfidence = false) {
+  // Central paywall guard: claiming writes a property, so it must assert the gate.
+  try { await requireActiveSubscription(); } catch { return { ok: false as const, status: "refused" as const, reason: "נדרש מנוי פעיל כדי לשייך נכס." }; }
   const res = await claimExternalListing(listingId, { confirmLowConfidence });
   if (res.ok) { revalidatePath("/claim"); revalidatePath("/today"); revalidatePath("/properties"); }
   return res;

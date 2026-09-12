@@ -7,6 +7,7 @@
 // ============================================================================
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { requireActiveSubscription } from "@/lib/commercial/access-gate";
 // A "use server" module may export ONLY async functions — the picker options
 // live in ./options and are imported (never re-exported) from here.
 
@@ -25,6 +26,8 @@ export interface NewLeadInput {
 export async function createLeadAction(input: NewLeadInput): Promise<{ ok: boolean; id?: string; error?: string }> {
   const { user, profile } = await getSessionContext();
   if (!user || !profile?.org_id) return { ok: false, error: "אין הרשאה — התחבר מחדש." };
+  // Central paywall guard: a direct action POST does not pass the layout gate.
+  try { await requireActiveSubscription(); } catch { return { ok: false, error: "נדרש מנוי פעיל כדי ליצור ליד." }; }
   const name = input.fullName?.trim();
   if (!name) return { ok: false, error: "יש להזין שם." };
   if (!input.phone?.trim() && !input.email?.trim()) return { ok: false, error: "יש להזין טלפון או אימייל." };

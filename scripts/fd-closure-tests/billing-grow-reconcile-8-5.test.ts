@@ -17,12 +17,19 @@ const src = (rel: string) => readFileSync(new URL(`../../src/${rel}`, import.met
 // ── MONTHLY amount model (₪197 × active seats; no proration; >10 → custom) ────
 // model.ts uses `@/` path aliases the fd runner can't resolve, so we lock the
 // canonical formula by source-closure (the arithmetic 197×N is deterministic).
-test("unit price is ₪197 and monthly = agents × price, null above the >10 threshold", () => {
+test("unit price is ₪197 canonical (env-overridable for QA, invalid→197) and monthly = agents × price, null above the >10 threshold", () => {
   const s = src("lib/commercial/model.ts");
-  assert.match(s, /pricePerAgentIls:\s*197/, "canonical ₪197 per agent");
+  // The canonical unit price is 197, resolved through resolveUnitPriceIls() so a
+  // ₪1 end-to-end QA run is possible via BILLING_UNIT_PRICE_ILS WITHOUT a deploy.
+  // The DEFAULT (no override) and the invalid-value fallback are both the
+  // canonical 197, and an override must be ≥ ₪1 — a bad env can never zero-out
+  // billing. This locks that whole contract, not just the literal.
+  assert.match(s, /pricePerAgentIls:\s*resolveUnitPriceIls\(\)/, "unit price is resolved (env-overridable for QA)");
+  assert.match(s, /if\s*\(!raw\)\s*return\s*197/, "canonical default ₪197 when no override is set");
+  assert.match(s, /Number\.isFinite\(n\)\s*&&\s*n\s*>=\s*1\s*\?\s*Math\.round\(n\)\s*:\s*197/, "override must be a finite ≥₪1 value, else fall back to ₪197");
   assert.match(s, /customPricingAgentThreshold:\s*10/, ">10 is custom");
-  assert.match(s, /standardMonthlyIls:\s*overThreshold \? null : agents \* COMMERCIAL_MODEL\.pricePerAgentIls/, "monthly = agents×197, custom→null (no auto 197×N)");
-  // deterministic examples the model yields: 1→197, 2→394, 5→985
+  assert.match(s, /standardMonthlyIls:\s*overThreshold \? null : agents \* COMMERCIAL_MODEL\.pricePerAgentIls/, "monthly = agents×price, custom→null (no auto price×N)");
+  // deterministic examples the model yields at the canonical price: 1→197, 2→394, 5→985
   assert.equal(1 * 197, 197); assert.equal(2 * 197, 394); assert.equal(5 * 197, 985);
 });
 

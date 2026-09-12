@@ -12,6 +12,7 @@ import {
 } from "./repository";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { requireActiveSubscription } from "@/lib/commercial/access-gate";
 import { findOpenDealsForProperty, type OpenDealLite } from "@/lib/deals/deal-property-sync";
 import { advanceDealStage } from "@/lib/deals/service";
 import { logActivityEvent } from "@/lib/activity/service";
@@ -62,6 +63,8 @@ function validate(input: PropertyInput): string | null {
 export async function createPropertyAction(
   input: PropertyInput,
 ): Promise<PropertyActionState> {
+  // Central paywall guard: a direct action POST does not pass the layout gate.
+  try { await requireActiveSubscription(); } catch { return { error: "נדרש מנוי פעיל כדי ליצור נכס." }; }
   const err = validate(input);
   if (err) return { error: err };
 
