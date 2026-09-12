@@ -132,13 +132,20 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
               </div>
             </div>
 
-            {/* activation ring */}
-            <div className="flex items-center gap-4 sm:flex-col sm:items-end">
-              <div className="relative h-[92px] w-[92px] shrink-0"
-                style={{ background: `conic-gradient(var(--office-accent) ${activation.percent * 3.6}deg, rgba(255,255,255,0.16) 0deg)`, borderRadius: "9999px" }}>
-                <div className="absolute inset-[7px] flex flex-col items-center justify-center rounded-full bg-[#1a1140]">
-                  <span className="text-xl font-extrabold">{activation.percent}%</span>
-                  <span className="text-[10px] text-white/60">הפעלה</span>
+            {/* activation ring — enlarged to own the hero's open space, big and prominent */}
+            <div className="flex flex-1 items-center justify-center py-2 sm:py-4">
+              <div className="relative h-[190px] w-[190px] shrink-0 sm:h-[230px] sm:w-[230px]"
+                style={{ background: `conic-gradient(var(--office-accent) ${activation.percent * 3.6}deg, rgba(255,255,255,0.14) 0deg)`, borderRadius: "9999px", boxShadow: "0 24px 70px -24px rgba(0,0,0,0.65)" }}>
+                <div className="absolute inset-[13px] flex flex-col items-center justify-center rounded-full bg-[#1a1140]/95 text-center sm:inset-[15px]">
+                  <span className="leading-none font-black tabular-nums text-[52px] sm:text-[64px]">
+                    {activation.percent}<span className="align-top text-2xl sm:text-3xl">%</span>
+                  </span>
+                  <span className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">הפעלה</span>
+                  {activation.total > 0 && (
+                    <span className="mt-2 text-[12.5px] font-medium text-white/70">
+                      {activation.completedCount} מתוך {activation.total} שלבים
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

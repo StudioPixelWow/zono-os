@@ -1,22 +1,26 @@
 "use client";
 // ============================================================================
-// ZONO — Office Detail view. Premium, RTL, tabbed: Overview / Agents / Listings /
-// Territory. Reads the real backfilled office intelligence. Honest empty states.
+// ZONO — Office Detail view. Premium, RTL, tabbed: Overview / Competitors /
+// Agents / Listings / Territory. Reads the real backfilled office intelligence +
+// activity-based competitor intelligence. Honest empty states, mobile-first.
 // ============================================================================
 import { useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import type { OfficeDetail } from "@/lib/office-intel/office-detail";
+import type { OfficeCompetitorReport, CompetitorView } from "@/lib/office-intel/competitor";
 
 const ils = (n: number | null) => (n == null ? "—" : `₪${Number(n).toLocaleString("he-IL")}`);
 const priceShort = (p: number | null) => (p == null ? "—" : p >= 1_000_000 ? `₪${(p / 1_000_000).toFixed(1)}M` : p >= 1000 ? `₪${Math.round(p / 1000)}K` : `₪${p}`);
 const dateHe = (s: string | null) => (s ? new Date(s).toLocaleDateString("he-IL") : "—");
 
-type Tab = "overview" | "agents" | "listings" | "territory";
+type Tab = "overview" | "competitors" | "agents" | "listings" | "territory";
 
-export function OfficeDetailView({ detail }: { detail: OfficeDetail }) {
+export function OfficeDetailView({ detail, competitors }: { detail: OfficeDetail; competitors?: OfficeCompetitorReport | null }) {
   const [tab, setTab] = useState<Tab>("overview");
   const k = detail.kpis;
+  const rivals = competitors?.competitors ?? [];
+  const momentum = competitors?.target.momentum ?? null;
 
   return (
     <div dir="rtl" className="flex flex-col gap-5 pb-10">
@@ -56,13 +60,36 @@ export function OfficeDetailView({ detail }: { detail: OfficeDetail }) {
 
       {/* Tabs */}
       <div className="border-line flex gap-1 overflow-x-auto border-b">
-        {([["overview", "סקירה"], ["agents", "מתווכים"], ["listings", "נכסים"], ["territory", "טריטוריה"]] as [Tab, string][]).map(([id, label]) => (
+        {([["overview", "סקירה"], ["competitors", "מתחרים"], ["agents", "מתווכים"], ["listings", "נכסים"], ["territory", "טריטוריה"]] as [Tab, string][]).map(([id, label]) => (
           <button key={id} type="button" onClick={() => setTab(id)}
             className={`whitespace-nowrap px-4 py-2.5 text-sm font-bold transition ${tab === id ? "text-brand-strong border-brand-strong border-b-2" : "text-muted hover:text-ink"}`}>
-            {label}{id === "agents" ? ` (${detail.agents.length})` : id === "listings" ? ` (${detail.listings.length})` : ""}
+            {label}{id === "competitors" ? ` (${rivals.length})` : id === "agents" ? ` (${detail.agents.length})` : id === "listings" ? ` (${detail.listings.length})` : ""}
           </button>
         ))}
       </div>
+
+      {tab === "overview" && momentum && (
+        <Card title="מומנטום המשרד">
+          <div className="flex flex-wrap items-center gap-5">
+            <div className="flex items-center gap-3">
+              <MomentumDial score={momentum.score} />
+              <div>
+                <p className="text-ink text-2xl font-black tabular-nums">{momentum.score}<span className="text-muted text-sm font-bold"> / 100</span></p>
+                <p className="text-muted text-xs">מדד פעילות נצפית — קצב, פריסה ומתווכים</p>
+              </div>
+            </div>
+            <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
+              {momentum.breakdown.map((b) => (
+                <div key={b.label} className="bg-surface border-line rounded-xl border p-2.5">
+                  <div className="text-muted text-[10.5px] font-semibold">{b.label}</div>
+                  <div className="text-ink mt-0.5 text-base font-black tabular-nums">{b.value}%</div>
+                  <div className="text-muted text-[10px]">{b.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {tab === "overview" && (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -89,6 +116,35 @@ export function OfficeDetailView({ detail }: { detail: OfficeDetail }) {
                 ))}
               </ul>
             ) : <p className="text-muted text-sm">ZONO עדיין אוספת את שיוך המתווכים למשרד זה.</p>}
+          </Card>
+        </div>
+      )}
+
+      {tab === "competitors" && (
+        <div className="flex flex-col gap-4">
+          {competitors?.insights?.length ? (
+            <Card title="מודיעין הזדמנויות">
+              <ul className="flex flex-col gap-2">
+                {competitors.insights.map((t, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[13.5px]">
+                    <span className="text-brand-strong mt-0.5 shrink-0"><Icon name="Sparkles" size={14} /></span>
+                    <span className="text-ink">{t}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-muted mt-3 text-[11px]">התובנות מבוססות אך ורק על מלאי שנצפה בפועל — ZONO לעולם אינה ממציאה מספרים.</p>
+            </Card>
+          ) : null}
+
+          <Card title="מתחרים ישירים">
+            {rivals.length ? (
+              <div className="flex flex-col gap-3">
+                {rivals.map((r) => <CompetitorRow key={r.officeId} r={r} />)}
+                <p className="text-muted mt-1 text-[11px]">הדירוג מבוסס על פעילות נצפית (חפיפת שכונות, עיר, סוגי נכסים, היקף וקצב) — לא על שמות. משרד לעולם אינו מתחרה של עצמו.</p>
+              </div>
+            ) : (
+              <p className="text-muted text-sm">ZONO עדיין אוספת נתונים כדי לזהות מתחרים ישירים עם חפיפה טריטוריאלית עבור משרד זה.</p>
+            )}
           </Card>
         </div>
       )}
@@ -165,3 +221,48 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 function Empty() { return <p className="text-muted text-sm">ZONO עדיין אוספת פעילות עבור משרד זה.</p>; }
+
+function MomentumDial({ score }: { score: number }) {
+  return (
+    <div className="relative h-16 w-16 shrink-0 rounded-full"
+      style={{ background: `conic-gradient(var(--brand-strong, #6d28d9) ${score * 3.6}deg, var(--line, #e5e7eb) 0deg)` }}>
+      <div className="bg-card absolute inset-[6px] grid place-items-center rounded-full">
+        <span className="text-ink text-sm font-black tabular-nums">{score}</span>
+      </div>
+    </div>
+  );
+}
+
+function CompetitorRow({ r }: { r: CompetitorView }) {
+  return (
+    <Link href={`/brokerage-data/offices/${r.officeId}`} prefetch={false}
+      className="border-line hover:border-brand-light hover:bg-surface/60 flex flex-col gap-2 rounded-2xl border p-3.5 transition sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-ink truncate font-black">{r.name}</span>
+          {r.brand && <span className="text-brand-strong shrink-0 text-xs font-bold">· {r.brand}</span>}
+          {r.city && <span className="text-muted shrink-0 text-xs">· {r.city}</span>}
+        </div>
+        {r.sharedNeighborhoods.length > 0 && (
+          <p className="text-muted mt-1 truncate text-[12px]">שכונות משותפות: {r.sharedNeighborhoods.slice(0, 4).join(" · ")}</p>
+        )}
+        <div className="text-muted mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] tabular-nums">
+          <span>{r.kpis.total} מלאי</span>
+          <span>{r.kpis.new30d} חדשים/30י׳</span>
+          <span>{r.kpis.neighborhoods} שכונות</span>
+          <span>{r.kpis.brokers} מתווכים</span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-4">
+        <div className="text-center">
+          <div className="text-ink text-lg font-black tabular-nums">{r.score}</div>
+          <div className="text-muted text-[9.5px] font-bold">ציון תחרות</div>
+        </div>
+        <div className="text-center">
+          <div className="text-brand-strong text-lg font-black tabular-nums">{r.overlapPct}%</div>
+          <div className="text-muted text-[9.5px] font-bold">חפיפת טריטוריה</div>
+        </div>
+      </div>
+    </Link>
+  );
+}
