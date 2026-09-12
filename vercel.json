@@ -9,6 +9,10 @@
       "schedule": "20 2 * * *"
     },
     {
+      "path": "/api/cron/office-resolution",
+      "schedule": "40 2 * * *"
+    },
+    {
       "path": "/api/cron/journey-delay-queue",
       "schedule": "*/5 * * * *"
     },

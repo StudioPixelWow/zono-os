@@ -350,6 +350,14 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
       const bd = await detectForOrg(db, orgId);
       await logDebug("broker_detection", { broker_detection_total: bd.scanned, broker_auto_matched: bd.matched, broker_needs_review: bd.needsReview, broker_unknown: bd.unknown });
       await log(`זיהוי מתווכים: ${bd.scanned} נסרקו · ${bd.matched} אוטומטי · ${bd.needsReview} לבדיקה · ${bd.unknown} לא ידוע`);
+      // ROOT-CAUSE FIX: resolve OFFICES from the source agencyName that ingestion
+      // used to discard, so offices + office↔listing + agent→office populate every
+      // sync (not just via the backfill cron). Non-destructive, best-effort.
+      try {
+        const { backfillOfficesFromAgencyNames } = await import("@/lib/office-intel/office-resolution-service");
+        const or = await backfillOfficesFromAgencyNames({ orgId });
+        await logDebug("office_resolution", { offices: or.canonicalOffices, created: or.officesCreated, listing_links: or.listingLinksWritten, agents_linked: or.agentsLinked });
+      } catch (e) { console.error("[office] resolution during sync failed:", e); }
     } catch (e) {
       console.error("[broker] detection during sync failed:", e);
     }
