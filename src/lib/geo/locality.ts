@@ -119,6 +119,20 @@ export function canonicalNeighborhood(name: string | null | undefined): string {
   return foldLocality((name ?? "").replace(/^שכונת\s+/, ""));
 }
 
+/**
+ * Hebrew DISPLAY name for a locality. Known localities written in English
+ * (or Hebrew spelling drift) resolve to their canonical Hebrew name
+ * ("Even Yehuda" → "אבן יהודה"); an unknown locality is returned unchanged
+ * (we never fabricate a translation). Use this at the display layer so the UI
+ * reads Hebrew even when the underlying scraped data stored an English city.
+ */
+export function localityHe(name: string | null | undefined): string {
+  const raw = (name ?? "").trim();
+  if (!raw) return raw;
+  const canon = VARIANT_TO_CANONICAL.get(foldLocality(raw));
+  return canon && /[֐-׿]/.test(canon) ? canon : raw;
+}
+
 /** Whether a locality name is written in Latin script (English transliteration). */
 export function isLatinLocality(name: string | null | undefined): boolean {
   const s = (name ?? "").trim();

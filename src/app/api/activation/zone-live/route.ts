@@ -4,6 +4,7 @@ import { getOfficeActivation } from "@/lib/activation/activation-server";
 import { getCityDiscovery } from "@/lib/activation/city-discovery-server";
 import { getZoneSnapshot } from "@/lib/activation/zone-snapshot";
 import { propertyTypeHe } from "@/lib/valuation/property-type";
+import { localityHe } from "@/lib/geo/locality";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -67,7 +68,7 @@ async function recentFeed(orgId: string): Promise<LiveFeedItem[]> {
         listingId: r.id,
         kind: "property",
         title: bits || (r.title ?? "נכס"),
-        sub: [r.neighborhood || r.city, priceShort(r.price)].filter(Boolean).join(" · ") || null,
+        sub: [r.neighborhood || localityHe(r.city), priceShort(r.price)].filter(Boolean).join(" · ") || null,
         tag: r.has_agent === false ? "ללא מתווך" : null,
         imageUrl: firstImage(r.images),
       });
@@ -77,7 +78,7 @@ async function recentFeed(orgId: string): Promise<LiveFeedItem[]> {
           listingId: r.id,
           kind: "agent",
           title: r.contact_name,
-          sub: r.neighborhood || r.city || null,
+          sub: r.neighborhood || localityHe(r.city) || null,
           tag: "מתווך פעיל",
           imageUrl: null,
         });

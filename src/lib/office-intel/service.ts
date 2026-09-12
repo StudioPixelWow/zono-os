@@ -18,6 +18,7 @@ import { externalListingRepository } from "@/lib/external-listings/repository";
 import { buildOfficeCockpit, type OfficeCockpit, type OfficeRecord, type OfficeFilters } from "./cockpit";
 import { officeInTerritory, cityInTerritory } from "./office-territory";
 import { getOrgIntelligenceTerritory } from "@/lib/brokerage-data/territory";
+import { localityHe } from "@/lib/geo/locality";
 
 const DAY = 86_400_000;
 const num = (v: unknown): number | null => { const n = Number(v); return Number.isFinite(n) ? n : null; };
@@ -113,7 +114,11 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
   const hasTerritory = territoryAreas.length > 0;
   const hebTerritory = territoryAreas.find((n) => /[֐-׿]/.test(n)) ?? territoryAreas[0] ?? null;
   const inTerr = (place: string | null | undefined): boolean => cityInTerritory(place ?? null, territoryAreas);
-  const localize = (place: string | null): string | null => (place && hebTerritory && inTerr(place) ? hebTerritory : place);
+  // In-territory places show the org's own (Hebrew) city; any other known
+  // locality is Hebraised for display ("Even Yehuda" → "אבן יהודה"); unknown
+  // localities are left as written.
+  const localize = (place: string | null): string | null =>
+    !place ? place : hebTerritory && inTerr(place) ? hebTerritory : localityHe(place);
 
   const period = filters.period * DAY;
   const offices: OfficeRecord[] = offRows.map((o) => {

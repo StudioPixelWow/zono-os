@@ -9,6 +9,7 @@
 import type { PropertyRow } from "@/lib/properties/labels";
 import { propertyAddressLine, propertyLocation } from "@/lib/properties/labels";
 import type { ExternalListingRow } from "@/lib/external-listings/repository";
+import { localityHe } from "@/lib/geo/locality";
 import type { MarketHeatmapCell } from "@/lib/market/service";
 import type { AttentionItemRow, OpportunityRow } from "@/lib/decision-intelligence/repository";
 import type { CompetitorProfileRow } from "@/lib/competitor/service";
@@ -25,7 +26,7 @@ function rowToCard(r: PropertyRow): PropertyCard {
     id: r.id,
     imageUrl: r.primary_image_url,
     title: r.title,
-    city: r.city ?? loc.city ?? "",
+    city: localityHe(r.city ?? loc.city ?? ""),
     neighborhood: r.neighborhood ?? loc.neighborhood ?? "",
     addressLine: propertyAddressLine(r),
     price: r.price ?? 0,
@@ -48,7 +49,7 @@ function externalToCard(l: ExternalListingRow): PropertyCard {
     id: l.id,
     imageUrl: firstImage,
     title: l.title || addr,
-    city: l.city ?? "",
+    city: localityHe(l.city ?? ""),
     neighborhood: l.neighborhood ?? "",
     addressLine: addr,
     price: l.price ?? 0,

@@ -12,6 +12,7 @@
 import "server-only";
 import { externalListingRepository } from "@/lib/external-listings/repository";
 import { buildBrokerCockpit, aggregateBrokers, type BrokerCockpit, type BrokerListing, type BrokerFilters, type BrokerAgg } from "./cockpit";
+import { localityHe } from "@/lib/geo/locality";
 
 const num = (v: unknown): number | null => { const n = Number(v); return Number.isFinite(n) ? n : null; };
 const ms = (v: unknown): number | null => { if (!v) return null; const t = Date.parse(String(v)); return Number.isFinite(t) ? t : null; };
@@ -36,7 +37,10 @@ export async function getBrokerCockpit(filters: BrokerFilters): Promise<BrokerCo
       broker: ((r.detected_broker_name ?? (r.has_agent ? r.contact_name : null)) ?? "").toString().trim() || null,
       hasAgent: r.has_agent ?? null,
       neighborhood: r.neighborhood ?? null,
-      city: r.city ?? null,
+      // Hebraise the scraped city so the cockpit label, city filter and area
+      // rows all read Hebrew ("Even Yehuda" → "אבן יהודה"); unknown localities
+      // are left as written (never a fabricated translation).
+      city: localityHe(r.city ?? null),
       propertyType: r.property_type ?? null,
       price: num(r.price),
       firstSeenMs: ms(r.first_seen_at) ?? ms(r.imported_at),
