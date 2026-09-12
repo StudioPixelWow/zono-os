@@ -93,6 +93,25 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
     }
   } catch (e) { console.error("[office-cockpit] agents failed:", e instanceof Error ? e.message : e); }
 
+  // CANONICAL MEMBERSHIPS (additive): the real agent count derives from unified
+  // canonical brokers → offices, not only brokerage_agents.office_id. When an office
+  // has canonical memberships we use that (more complete); otherwise we fall back to
+  // the directory count above — so counts improve after the canonical backfill and
+  // never regress before it.
+  try {
+    const { data } = await db.from("broker_office_memberships").select("office_id,canonical_broker_id").eq("is_current", "true").limit(50000);
+    const canonByOffice = new Map<string, Set<string>>();
+    for (const m of (data ?? []) as unknown as { office_id: string; canonical_broker_id: string }[]) {
+      if (!m.office_id) continue;
+      (canonByOffice.get(m.office_id) ?? canonByOffice.set(m.office_id, new Set()).get(m.office_id)!).add(m.canonical_broker_id);
+    }
+    for (const [officeId, brokers] of canonByOffice) {
+      const cur = agentsByOffice.get(officeId) ?? { count: 0, sample: [] };
+      cur.count = Math.max(cur.count, brokers.size);   // canonical count wins when higher
+      agentsByOffice.set(officeId, cur);
+    }
+  } catch (e) { console.error("[office-cockpit] canonical memberships failed:", e instanceof Error ? e.message : e); }
+
   // This org's observed listing→office links.
   const listingsByOffice = new Map<string, Set<string>>();
   const attributedListingIds = new Set<string>();
