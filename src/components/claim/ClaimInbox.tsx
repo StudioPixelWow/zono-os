@@ -77,7 +77,7 @@ export function ClaimInbox() {
       {note && <div className="bg-brand-soft text-ink rounded-xl px-3 py-2 text-sm font-semibold">{note}</div>}
 
       {rows.length === 0 ? (
-        <EmptyStateVisual name="CheckCircle" title="הכול טופל" hint="אין כרגע נכסים חדשים שממתינים לאישור. נעדכן ברגע שיזוהה נכס חדש שכנראה שלך." accent="success" />
+        <EmptyStateVisual name="Radar" title="ZONO ממשיכה לסרוק את האזור שלך" hint="עדיין לא זוהו נכסים שממתינים לאישור. הסריקה רצה ברקע — נכסים שנראה שהם שלך יופיעו כאן אוטומטית, ונעדכן אותך ברגע שיימצאו." accent="neutral" />
       ) : (
         <div className="flex flex-col gap-3">
           {rows.map((row) => (

@@ -12,11 +12,22 @@ import { getSessionContext } from "@/lib/auth/session";
 import { scoreCandidate, isCandidate, type CandidateEvidence, type EvidenceVerdict } from "./claim-evidence-core";
 import { classifyPhone, phoneClassToMatch, phoneClassLabel, type PhoneClass, type PhoneKnowledge } from "./claim-phone-core";
 import { countMatchingApprovals } from "./claim-write-core";
+import { normalizeHebrewName } from "@/lib/broker/engine";
+import { canonicalLocality } from "@/lib/geo/locality";
+import { getOrgIntelligenceTerritory } from "@/lib/brokerage-data/territory";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "").replace(/^972/, "0");
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+/** All normalized forms of a name (plain fold + Hebrew canonical fold), non-empty. */
+const nameForms = (s: string | null | undefined): string[] => {
+  const out = new Set<string>();
+  const a = norm(s); if (a) out.add(a);
+  const b = norm(normalizeHebrewName(s)); if (b) out.add(b);
+  return [...out];
+};
+const canonCity = (s: string | null | undefined): string | null => { const c = canonicalLocality(s); return c || null; };
 
 export interface ClaimAnchor {
   orgId: string;
@@ -24,36 +35,99 @@ export interface ClaimAnchor {
   officeIds: string[];
   normalizedNames: string[];
   phones: string[];
+  emails: string[];        // the caller's own email(s) — a unique identity signal
+  territoryCanon: string[];// canonical localities of the org's activity area
+  ambiguous: boolean;      // the name matched agents across >1 city with no phone/email lock
   ready: boolean;          // an identity anchor exists at all
 }
 
-/** Resolve the caller's source identity anchor from brokerage data (org-scoped). */
+/**
+ * Resolve the caller's source identity anchor from brokerage data (org-scoped).
+ * The anchor is built from the REAL signed-up user's identity first (name, phone,
+ * email, activity cities) — never from arbitrary competitor broker_profiles or an
+ * unfiltered slice of the agent directory. brokerage_agents is small; we load the
+ * bounded set and match on strong signals (phone/email/exact-name-in-territory).
+ */
 export async function getClaimAnchor(): Promise<ClaimAnchor | null> {
-  const { profile } = await getSessionContext();
+  const { profile, user } = await getSessionContext();
   if (!profile?.org_id) return null;
+  const orgId = profile.org_id;
   const db: any = await createClient();
-  const empty: ClaimAnchor = { orgId: profile.org_id, agentIds: [], officeIds: [], normalizedNames: [], phones: [], ready: false };
+  const userId: string | null = (profile as any).id ?? user?.id ?? null;
 
-  // Broker profile(s) for this org give the display name + phone; brokerage_agents in
-  // the matching office give the stable source agent ids.
-  const { data: profs } = await db.from("broker_profiles").select("display_name,normalized_name,phone,normalized_phone").eq("org_id", profile.org_id).limit(20);
-  const names = new Set<string>(); const phones = new Set<string>();
-  for (const p of (profs ?? [])) { if (p.normalized_name) names.add(norm(p.normalized_name)); if (p.display_name) names.add(norm(p.display_name)); const d = digits(p.normalized_phone || p.phone); if (d) phones.add(d); }
-  // The agent's own ZONO phone is the strongest disambiguator.
-  const ud = digits((profile as any).phone); if (ud) phones.add(ud);
+  // ── 1. Identity from the REAL signed-up user (the primary, trusted anchor). ──
+  const names = new Set<string>(); const phones = new Set<string>(); const emails = new Set<string>();
+  for (const n of nameForms((profile as any).full_name)) names.add(n);
+  { const d = digits((profile as any).phone); if (d) phones.add(d); }
+  { const e = norm((profile as any).email); if (e.includes("@")) emails.add(e); }
 
-  if (!names.size) return empty;
-  // Stable source agent ids = brokerage_agents whose normalized_name matches an anchor name.
-  const { data: agents } = await db.from("brokerage_agents").select("id,office_id,normalized_name,full_name,primary_phone").limit(50);
-  const agentIds: string[] = []; const officeIds = new Set<string>();
-  for (const a of (agents ?? [])) {
-    const an = norm(a.normalized_name || a.full_name);
-    if ([...names].some((n) => n && (an === n || (n.length > 4 && an.includes(n))))) {
-      agentIds.push(a.id); if (a.office_id) officeIds.add(a.office_id);
-      const ad = digits(a.primary_phone); if (ad) phones.add(ad);
-    }
+  // Territory: the org's operating localities (canonical He/En) + the user's own cities.
+  const territory = new Set<string>();
+  try {
+    const t = await getOrgIntelligenceTerritory(orgId);
+    for (const n of t.canonicalNames) { const c = canonCity(n); if (c) territory.add(c); }
+  } catch { /* territory optional */ }
+  for (const c of [(profile as any).operating_city, (profile as any).primary_city]) { const cc = canonCity(c); if (cc) territory.add(cc); }
+
+  // ── 2. SELF broker_profile(s) only — tied to this user, or matching the user's
+  //       own name/phone/email. NEVER the org's competitor/publisher profiles. ──
+  const { data: profs } = await db.from("broker_profiles")
+    .select("id,display_name,normalized_name,phone,normalized_phone,email,primary_city,created_by_user_id,metadata")
+    .eq("org_id", orgId).limit(500);
+  for (const p of (profs ?? [])) {
+    const pPhone = digits(p.normalized_phone || p.phone);
+    const pEmail = norm(p.email);
+    const isSelf = (userId && p.created_by_user_id === userId)
+      || (p.metadata && (p.metadata as any).self === true)
+      || (pPhone && phones.has(pPhone))
+      || (pEmail && emails.has(pEmail))
+      || nameForms(p.normalized_name).some((n) => names.has(n))
+      || nameForms(p.display_name).some((n) => names.has(n));
+    if (!isSelf) continue;
+    for (const n of nameForms(p.display_name)) names.add(n);
+    for (const n of nameForms(p.normalized_name)) names.add(n);
+    if (pPhone) phones.add(pPhone);
+    if (pEmail.includes("@")) emails.add(pEmail);
+    { const cc = canonCity(p.primary_city); if (cc) territory.add(cc); }
   }
-  return { orgId: profile.org_id, agentIds, officeIds: [...officeIds], normalizedNames: [...names], phones: [...phones], ready: agentIds.length > 0 || names.size > 0 };
+
+  const empty: ClaimAnchor = { orgId, agentIds: [], officeIds: [], normalizedNames: [...names], phones: [...phones], emails: [...emails], territoryCanon: [...territory], ambiguous: false, ready: false };
+  if (!names.size && !phones.size && !emails.size) return empty;
+
+  // ── 3. Stable source agent ids: match the bounded agent directory on STRONG
+  //       signals. Phone/email are unique locks; an exact name counts only when it
+  //       is also in the org's territory (kills same-name-different-city bleaks). ──
+  const { data: agents } = await db.from("brokerage_agents")
+    .select("id,office_id,normalized_name,full_name,primary_phone,whatsapp_phone,primary_email,city").limit(5000);
+  const phoneHit = (a: any) => [digits(a.primary_phone), digits(a.whatsapp_phone)].some((d) => d && phones.has(d));
+  const emailHit = (a: any) => { const e = norm(a.primary_email); return !!e && emails.has(e); };
+  const nameHit = (a: any) => { const forms = [...nameForms(a.normalized_name), ...nameForms(a.full_name)]; return forms.some((f) => names.has(f)); };
+  const cityHit = (a: any) => { const c = canonCity(a.city); return !!c && territory.has(c); };
+
+  const strong: any[] = []; const nameOnly: any[] = [];
+  for (const a of (agents ?? [])) {
+    if (phoneHit(a) || emailHit(a)) strong.push(a);
+    else if (nameHit(a) && (cityHit(a) || territory.size === 0)) nameOnly.push(a);
+  }
+  // Ambiguity: name-only matches spanning more than one distinct city, with no
+  // phone/email lock — the identity is not certain. Prefer in-territory rows.
+  const nameOnlyCities = new Set(nameOnly.map((a) => canonCity(a.city)).filter(Boolean));
+  const ambiguous = strong.length === 0 && nameOnlyCities.size > 1;
+  const chosen = strong.length ? strong
+    : ambiguous ? nameOnly.filter((a) => cityHit(a))
+    : nameOnly;
+
+  const agentIds: string[] = []; const officeIds = new Set<string>();
+  for (const a of chosen) {
+    agentIds.push(a.id); if (a.office_id) officeIds.add(a.office_id);
+    const ad = digits(a.primary_phone); if (ad) phones.add(ad);
+  }
+  return {
+    orgId, agentIds, officeIds: [...officeIds],
+    normalizedNames: [...names], phones: [...phones], emails: [...emails],
+    territoryCanon: [...territory], ambiguous,
+    ready: agentIds.length > 0 || names.size > 0 || phones.size > 0,
+  };
 }
 
 export interface ClaimCandidate {
@@ -83,7 +157,12 @@ function toEvidence(anchor: ClaimAnchor, link: any, listing: any, know: PhoneKno
   const phoneClass = classifyPhone(listing?.contact_phone || link?.matched_phone, know);
   const phoneMatch = phoneClassToMatch(phoneClass);
   const officeMatch = Boolean(link?.office_id && anchor.officeIds.includes(link.office_id));
-  const cityMatch = norm(listing?.city) === "rehovot" || Boolean(listing?.city);
+  // Real territory match: the listing's city must canonically be one of the org's
+  // activity localities (He/En folded, so "Even Yehuda" == "אבן יהודה"). No more
+  // hardcoded literal and no "any city counts" — an out-of-area listing is NOT
+  // presented as "in your activity area".
+  const listingCanon = canonCity(listing?.city);
+  const cityMatch = Boolean(listingCanon) && anchor.territoryCanon.includes(listingCanon as string);
   return { ev: { sameOrg, stableAgentIdMatch, nameMatch, phoneMatch, officeMatch, cityMatch, priorConfirmedSameIdentity: priorConfirmed }, phoneClass };
 }
 
@@ -128,31 +207,50 @@ export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnc
   if (!anchor || !anchor.ready) return { anchor, candidates: [] };
   const db: any = await createClient();
 
-  // Listings linked to the anchor's stable agent ids (the strongest source signal).
-  const { data: links } = await db.from("brokerage_external_listing_links")
-    .select("external_listing_id,organization_id,agent_id,office_id,matched_name,matched_phone,match_reasons,confidence_score")
-    .in("agent_id", (anchor.agentIds.length ? anchor.agentIds : ["00000000-0000-0000-0000-000000000000"]))
-    .eq("organization_id", anchor.orgId).limit(200);
-  const linkRows = (links ?? []) as any[];
-  const listingIds = [...new Set(linkRows.map((l) => l.external_listing_id).filter(Boolean))];
-  if (!listingIds.length) return { anchor, candidates: [] };
-
-  const { data: listings } = await db.from("external_listings")
-    .select("id,org_id,title,city,neighborhood,address,price,rooms,sqm,property_type,deal_type,contact_name,contact_phone,source,listing_url,images,published_at,first_seen_at,promoted_property_id,status")
-    .in("id", listingIds).neq("status", "removed").limit(200);
-  const byId = new Map<string, any>((listings ?? []).map((r: any) => [r.id, r]));
   const know = await buildPhoneKnowledge(db, anchor);
   const priorConfirmed = await getPriorConfirmedCount(db, anchor);
 
+  // Source A — stable links by the anchor's verified agent ids (strongest signal).
+  const linkByListing = new Map<string, any>();
+  if (anchor.agentIds.length) {
+    const { data: links } = await db.from("brokerage_external_listing_links")
+      .select("external_listing_id,organization_id,agent_id,office_id,matched_name,matched_phone,match_reasons,confidence_score")
+      .in("agent_id", anchor.agentIds).eq("organization_id", anchor.orgId).limit(500);
+    for (const l of (links ?? [])) if (l.external_listing_id) linkByListing.set(l.external_listing_id, l);
+  }
+
+  // Source B — the org's OWN scraped listings whose detected/advertised identity
+  // matches the anchor. This BRIDGES the two matcher systems: candidates surface
+  // from broker detection (detected_broker_name / contact_name / contact_phone)
+  // even when no explicit brokerage_external_listing_links row exists yet. Bounded
+  // to the org's own inventory (RLS + org filter), matched in memory on strong forms.
+  const nameSet = new Set(anchor.normalizedNames); const phoneSet = new Set(anchor.phones);
+  const identityListingIds = new Set<string>();
+  if (nameSet.size || phoneSet.size) {
+    const { data: owned } = await db.from("external_listings")
+      .select("id,contact_name,detected_broker_name,contact_phone")
+      .eq("org_id", anchor.orgId).eq("has_agent", true).neq("status", "removed").limit(3000);
+    for (const r of (owned ?? [])) {
+      const nHit = [...nameForms(r.contact_name), ...nameForms(r.detected_broker_name)].some((f) => nameSet.has(f));
+      const pd = digits(r.contact_phone);
+      const pHit = !!pd && phoneSet.has(pd);
+      if (nHit || pHit) identityListingIds.add(r.id);
+    }
+  }
+
+  const allIds = [...new Set([...linkByListing.keys(), ...identityListingIds])];
+  if (!allIds.length) return { anchor, candidates: [] };
+
+  const { data: listings } = await db.from("external_listings")
+    .select("id,org_id,title,city,neighborhood,address,price,rooms,sqm,property_type,deal_type,contact_name,contact_phone,source,listing_url,images,published_at,first_seen_at,promoted_property_id,status")
+    .in("id", allIds).neq("status", "removed").limit(500);
+
   const out: ClaimCandidate[] = [];
-  const seenListing = new Set<string>();
-  for (const link of linkRows) {
-    const listing: any = byId.get(link.external_listing_id);
-    if (!listing || seenListing.has(listing.id)) continue;
+  for (const listing of ((listings ?? []) as any[])) {
+    const link = linkByListing.get(listing.id) ?? {};
     const { ev, phoneClass } = toEvidence(anchor, link, listing, know, priorConfirmed);
     const verdict = scoreCandidate(ev);
     if (!isCandidate(verdict)) continue;
-    seenListing.add(listing.id);
     out.push({
       externalListingId: listing.id, title: listing.title, city: listing.city, neighborhood: listing.neighborhood,
       address: listing.address, price: listing.price, rooms: listing.rooms, sqm: listing.sqm,
@@ -161,11 +259,11 @@ export async function getClaimCandidates(limit = 30): Promise<{ anchor: ClaimAnc
       imageCount: Array.isArray(listing.images) ? listing.images.length : 0, primaryImage: firstImage(listing.images),
       alreadyPromoted: Boolean(listing.promoted_property_id), verdict, phoneClass, phoneNote: phoneClassLabel(phoneClass),
     });
-    if (out.length >= limit) break;
   }
-  // HIGH → MEDIUM → LOW ordering.
+  // HIGH → MEDIUM → LOW ordering, then bound to the requested limit.
   const rank = { high: 0, medium: 1, low: 2 } as const;
   out.sort((a, b) => rank[a.verdict.confidence ?? "low"] - rank[b.verdict.confidence ?? "low"]);
+  out.splice(limit);
 
   // P10C §7 — internal notification (batched, deduped to ≤1/24h, best-effort,
   // NON-blocking). Detection is on-read; this surfaces it in the notification

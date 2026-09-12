@@ -64,8 +64,17 @@ export async function getCityDiscovery(orgId: string, city: string | null, local
       .eq("org_id" as never, orgId as never)
       .order("created_at" as never, { ascending: false })
       .limit(5);
-    const rows = (data ?? []) as Array<{ status: string | null; finished_at: string | null }>;
-    scanRunning = rows.some((r) => r.status === "queued" || r.status === "running" || r.status === "pending");
+    const rows = (data ?? []) as Array<{ status: string | null; finished_at: string | null; created_at: string | null }>;
+    // A job counts as actively running ONLY if it's non-terminal AND recent — a
+    // stale 'running' row (crashed / SIGKILLed / client-abandoned) must NOT pin the
+    // UI to "scanning" forever. The stale window matches the job reconciler (20m).
+    const STALE_MS = 20 * 60 * 1000;
+    const isActive = (r: { status: string | null; created_at: string | null }) => {
+      if (!(r.status === "queued" || r.status === "running" || r.status === "pending")) return false;
+      const started = r.created_at ? Date.parse(r.created_at) : 0;
+      return started > 0 && Date.now() - started < STALE_MS;
+    };
+    scanRunning = rows.some(isActive);
     lastScanAt = rows.map((r) => r.finished_at).filter(Boolean)[0] ?? null;
   } catch { /* honest: no job info */ }
 

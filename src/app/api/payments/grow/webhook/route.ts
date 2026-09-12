@@ -119,8 +119,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, reason: "not_verified_paid" }, { status: 200 });
     }
 
-    // Verified paid. provider_txn_id = transactionId → UNIQUE(provider, txn)
-    // enforces exactly-once. verified revenue = the PROVIDER-CONFIRMED sum.
+    // ── AMOUNT INTEGRITY GATE ────────────────────────────────────────────────
+    // Grow confirmed a paid transaction — but for how much? The expected price is
+    // computed SERVER-SIDE and stored on the payment row; the charged sum comes
+    // from the AUTHORITATIVE re-query (info.data.sum), never the callback body or a
+    // client-supplied value. If they disagree, someone paid a price we did not set
+    // (e.g. a tampered checkout amount) — we must NOT activate. Currency must be ILS.
+    const chargedSum = Number(info.data?.sum);
+    const expectedSum = Number(payment.amountIls);
+    const currencyOk = !payment.currency || /^(ils|nis|₪|376)$/i.test(String(payment.currency).trim());
+    const amountOk =
+      Number.isFinite(chargedSum) && chargedSum > 0 &&
+      Number.isFinite(expectedSum) && expectedSum > 0 &&
+      Math.abs(chargedSum - expectedSum) <= 1; // ₪1 rounding tolerance
+    if (!amountOk || !currencyOk) {
+      console.error("[grow-webhook] REFUSING ACTIVATION — amount/currency mismatch", {
+        paymentId, expectedSum, chargedSum, currency: payment.currency, currencyOk,
+      });
+      await setPaymentStatus(paymentId, "failed").catch(() => undefined);
+      if (payment.orgId) {
+        await emitBusinessEvent({
+          type: DOMAIN_EVENTS.billingPaymentFailed, entityType: "billing", entityId: payment.orgId, orgId: payment.orgId,
+          payload: { status: "amount_mismatch", reference: paymentId }, idempotencyKey: `billing.amount_mismatch:${transactionId}`,
+        }).catch(() => undefined);
+      }
+      return NextResponse.json({ ok: false, reason: "amount_mismatch" }, { status: 200 });
+    }
+
+    // Verified paid AND amount matches the server-computed price. provider_txn_id =
+    // transactionId → UNIQUE(provider, txn) enforces exactly-once.
     const verified = await markPaymentVerified(paymentId, transactionId, "", { verifiedVia: "getTransactionInfo" });
     if (!verified) return NextResponse.json({ ok: false, reason: "persist_failed" }, { status: 200 });
 

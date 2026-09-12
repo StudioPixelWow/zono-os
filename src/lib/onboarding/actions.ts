@@ -159,6 +159,39 @@ export async function completeOnboarding(
       });
     } catch (e) { console.error("[onboarding] owner roster ensure (non-fatal):", e); }
 
+    // Seed the user's OWN broker identity profile. This is the anchor the
+    // "claim your listings" engine matches against — without it, a fresh org has
+    // only auto-detected COMPETITOR profiles, so the claim inbox could never find
+    // the user's real listings. Marked self:true + created_by_user_id so it is
+    // never confused with a competitor. Idempotent (one per user/org), non-fatal.
+    try {
+      const { createServiceRoleClient } = await import("@/lib/supabase/server");
+      const { normalizeHebrewName } = await import("@/lib/broker/engine");
+      const svc = createServiceRoleClient();
+      const { data: existing } = await svc.from("broker_profiles").select("id")
+        .eq("org_id", org.id).eq("created_by_user_id", user.id).limit(1);
+      if (!existing?.length) {
+        const primaryLoc = localities.find((l) => l.isPrimary) ?? localities[0] ?? null;
+        const phoneRaw = payload.phone ?? payload.organizationPhone ?? null;
+        const normPhone = phoneRaw ? phoneRaw.replace(/\D/g, "").replace(/^972/, "0") : null;
+        await svc.from("broker_profiles").insert({
+          org_id: org.id,
+          display_name: payload.fullName.trim(),
+          normalized_name: normalizeHebrewName(payload.fullName),
+          phone: phoneRaw,
+          normalized_phone: normPhone,
+          email: user.email ?? payload.organizationEmail ?? null,
+          primary_city: primaryLoc?.nameHe ?? null,
+          broker_type: "agent",
+          verification_status: "verified",
+          created_by_user_id: user.id,
+          verified_by_user_id: user.id,
+          verified_at: new Date().toISOString(),
+          metadata: { self: true, source: "onboarding" } as never,
+        } as never);
+      }
+    } catch (e) { console.error("[onboarding] self broker-profile seed (non-fatal):", e); }
+
     // P8.1 — every new office automatically enters a real 14-day trial. Idempotent:
     // a retry never resets or duplicates it (subscriptions.PK = org_id). Trial is the
     // canonical billing state; commercial/enforcement stay separate + unchanged.

@@ -79,7 +79,7 @@ export async function startPaymentAction(): Promise<{ url?: string; errors?: Fie
   const payment = await createPayment({ draftId: draft.id, planTier: tier, amountIls: amount });
   if (!payment) return { errors: [{ field: "_", message: "תקלה ביצירת תשלום." }] };
   await saveDraft(token, { status: "submitted", planTier: tier });
-  const redirect = buildGrowRedirect({ paymentId: payment.id, amountIls: amount, planTier: tier, email: draft.email });
+  const redirect = await buildGrowRedirect({ paymentId: payment.id, amountIls: amount, planTier: tier, email: draft.email });
   return { url: redirect.url };
 }
 

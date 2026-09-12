@@ -30,6 +30,7 @@ export const MODULES: ModuleEntry[] = [
   // ── מכירות ──
   // Three independent property worlds (presentation IA) — never mixed:
   { id: "my-properties", label: "🏠 הנכסים שלי", route: "/my-properties", icon: "Building", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "ה-CRM האישי שלי — המלאי, הבלעדיות, המוכרים והקונים שלי" },
+  { id: "claim", label: "שיוך נכסים שנמצאו", route: "/claim", icon: "Sparkles", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "נכסים שפורסמו במקורות חיצוניים ונראה שהם שלך — אשר בלחיצה כדי לייבא ל-CRM עם התמונות" },
   { id: "office-inventory", label: "🏢 מלאי המשרד", route: "/office-inventory", icon: "Building2", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true, description: "מלאי המשרד והבלעדיות — סוכן משויך, זמינות ושיתופי פעולה" },
   { id: "buyers", label: "קונים", route: "/buyers", icon: "Users", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },
   { id: "sellers", label: "מוכרים", route: "/sellers", icon: "Handshake", category: "מכירות", roleMin: "agent", sidebar: true, searchable: true },

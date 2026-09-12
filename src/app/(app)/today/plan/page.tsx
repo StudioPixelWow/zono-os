@@ -9,6 +9,7 @@
 import { getAgentDailyPlan } from "@/lib/daily/daily-plan";
 import { recordUsage } from "@/lib/launch/server/services";
 import { DailyPlanBoard } from "./DailyPlanBoard";
+import { ClaimTodayCard } from "@/components/claim/ClaimTodayCard";
 
 export const dynamic = "force-dynamic";
 
@@ -25,5 +26,12 @@ export default async function DailyPlanPage() {
     );
   }
 
-  return <DailyPlanBoard plan={view.plan} rail={view.rail} />;
+  return (
+    <div dir="rtl" className="flex flex-col gap-4">
+      {/* The "claim your listings" moment — surfaced at the top of the daily screen
+          whenever ZONO has found external listings that look like the broker's. */}
+      <ClaimTodayCard />
+      <DailyPlanBoard plan={view.plan} rail={view.rail} />
+    </div>
+  );
 }

@@ -10,31 +10,40 @@
 // ============================================================================
 import "server-only";
 import type { PlanTier } from "@/lib/launch/types";
+import { growCreds, growCreatePaymentProcess } from "./grow-client";
 
 export interface GrowRedirect { url: string; simulated: boolean }
 
-/** Build the redirect to Grow's hosted payment page (or the internal pending
- *  page until Grow is configured). The paymentId is echoed back so the signed
- *  webhook can match the callback to our payment row. */
-export function buildGrowRedirect(input: { paymentId: string; amountIls: number; planTier: PlanTier; email: string | null }): GrowRedirect {
-  const base = process.env.GROW_CHECKOUT_URL;                 // supplied later
+/**
+ * Create the Grow checkout for a /register draft and return the hosted URL.
+ * SERVER-TO-SERVER: the price (`sum`) is sent directly to Grow's API and never
+ * placed in a browser-followed URL, so the amount the user is charged cannot be
+ * tampered with in transit. The paymentId is echoed (cField1) so the authoritative
+ * webhook re-query can correlate the callback to our payment row; the webhook is
+ * still the only path that activates anything, and it independently re-verifies
+ * the charged amount against this server-computed price.
+ */
+export async function buildGrowRedirect(input: { paymentId: string; amountIls: number; planTier: PlanTier; email: string | null }): Promise<GrowRedirect> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const statusUrl = `${appUrl}/register/status?payment=${encodeURIComponent(input.paymentId)}`;
+  const notifyUrl = `${appUrl}/api/payments/grow/webhook`;
+  const pendingUrl = `/register/status?payment=${encodeURIComponent(input.paymentId)}`;
 
-  if (!base) {
-    // Grow not configured — stay on the internal pending status page. No real
-    // charge, no activation.
-    return { url: `/register/status?payment=${encodeURIComponent(input.paymentId)}`, simulated: true };
-  }
+  // Grow not configured in this environment → stay on the internal pending page.
+  // No real charge, no activation, no fake success.
+  if (!growCreds().configured) return { url: pendingUrl, simulated: true };
 
-  const u = new URL(base);
-  u.searchParams.set("sum", String(input.amountIls));
-  u.searchParams.set("description", `ZONO · ${input.planTier}`);
-  u.searchParams.set("pageField[email]", input.email ?? "");
-  u.searchParams.set("cField1", input.paymentId);             // echoed in the webhook payload
-  u.searchParams.set("successUrl", statusUrl);
-  u.searchParams.set("cancelUrl", `${statusUrl}&cancelled=1`);
-  return { url: u.toString(), simulated: false };
+  const res = await growCreatePaymentProcess({
+    sum: input.amountIls,                     // server-computed; sent server-to-server only
+    description: `ZONO · ${input.planTier}`,
+    successUrl: statusUrl,
+    cancelUrl: `${statusUrl}&cancelled=1`,
+    notifyUrl,
+    email: input.email,
+    cField1: input.paymentId,                 // echoed back in the callback → correlates the payment
+  });
+  if (!res.ok || !res.data?.url) return { url: `${pendingUrl}&error=provider`, simulated: true };
+  return { url: res.data.url, simulated: false };
 }
 
 /** The shared secret Grow signs its webhook with (server-only env). */

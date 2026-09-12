@@ -200,6 +200,10 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   const jobId = job?.id as string;
   const log = (message: string, level = "info") => db.from("import_job_logs").insert({ org_id: orgId, job_id: jobId, message, level });
 
+  // Wrap the whole run so a THROWN error can never leave the job stuck in
+  // 'running' forever — the catch finalizes it as 'failed'. (A serverless SIGKILL
+  // still can't run this; the cron reconciler is the backstop for that case.)
+  try {
   const mode = opts.mode ?? "quick";
   const modeCfg = SYNC_MODE_LIMITS[mode] ?? SYNC_MODE_LIMITS.quick;
   const perCityLimit = modeCfg.perCity;
@@ -404,6 +408,39 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   summary.success = summary.errors.length === 0;
   await db.from("import_jobs").update({ status: summary.errors.length ? "completed_with_errors" : "completed", total_found: totalFound, total_imported: summary.inserted, total_updated: summary.updated, error: summary.errors.length ? summary.errors.slice(0, 5).join("; ") : null, finished_at: new Date().toISOString() }).eq("id", jobId);
   return summary;
+  } catch (err) {
+    // Any uncaught error → finalize the job as failed (never leave it 'running').
+    const msg = err instanceof Error ? err.message : "sync failed";
+    await db.from("import_jobs")
+      .update({ status: "failed", error: msg.slice(0, 500), finished_at: new Date().toISOString() })
+      .eq("id", jobId)
+      .then(() => undefined, () => undefined);
+    return { success: false, organizationId: orgId, cities: [], sources, inserted: 0, updated: 0, errors: [msg] };
+  }
+}
+
+/**
+ * Stale import-job reconciliation. A serverless SIGKILL (or a crash before the
+ * finalizer) — or a client that abandons the chunked sync mid-way — can leave an
+ * import_job stuck in a non-terminal state forever (observed: 743 zombie rows
+ * since June). This marks any job still 'running'/'queued'/'pending' whose
+ * started_at is older than the stale window as 'failed', so job health is honest
+ * and City Discovery never shows "scanning" forever. The threshold is well beyond
+ * any real run (syncOrg maxDuration=300s), so a genuinely live job is never killed
+ * early. Idempotent + service-role; safe to run on a schedule.
+ */
+export async function reconcileStaleImportJobs(staleMs = 20 * 60 * 1000): Promise<number> {
+  const db = createServiceRoleClient() as unknown as DB;
+  const cutoff = new Date(Date.now() - staleMs).toISOString();
+  try {
+    const { data } = await db
+      .from("import_jobs")
+      .update({ status: "failed", error: "stale job auto-recovered", finished_at: new Date().toISOString() } as never)
+      .in("status", ["running", "queued", "pending"])
+      .lt("started_at", cutoff)
+      .select("id");
+    return (data ?? []).length;
+  } catch { return 0; }
 }
 
 interface GeocodeBatchStats { attempted: number; success: number; failed: number; skipped: number }

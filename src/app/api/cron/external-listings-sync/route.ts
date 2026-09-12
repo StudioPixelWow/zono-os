@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { organizationsWithActiveLocalities, syncExternalListingsForOrganization, type SyncMode, type SyncSummary } from "@/lib/external-listings/service";
+import { organizationsWithActiveLocalities, syncExternalListingsForOrganization, reconcileStaleImportJobs, type SyncMode, type SyncSummary } from "@/lib/external-listings/service";
 import { generateMarketSnapshotsForOrg } from "@/lib/market/service";
 import { orgBudgetDecision } from "@/lib/external-listings/budget";
 import { createServiceRoleClient } from "@/lib/supabase/server";
@@ -150,6 +150,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const recovered = await closeStuckWatchRuns(db);
+    // Reconcile stale import_jobs (running/queued/pending past the stale window →
+    // failed). Runs every hour so a crashed/SIGKILLed/client-abandoned job never
+    // stays 'running' forever and never pins City Discovery to "scanning".
+    const importJobsRecovered = await reconcileStaleImportJobs();
     const orgs = await orderByStalestScan(db, await organizationsWithActiveLocalities());
     const estimates = await orgDurationEstimates(db);
     const results: unknown[] = [];
@@ -196,6 +200,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true, window, mode,
       staleRecovered: recovered,                    // should be 0 in normal operation
+      importJobsRecovered,                          // stale import_jobs swept to 'failed'
       orgsTotal: orgs.length, processed, deferred, failed,
       durationMs: Date.now() - startedAt, remainingBudgetMs: Math.max(0, deadline - Date.now()), results,
     });
