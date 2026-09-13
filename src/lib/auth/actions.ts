@@ -90,14 +90,25 @@ export async function updatePassword(
   formData: FormData,
 ): Promise<AuthFormState> {
   const password = String(formData.get("password") ?? "");
-  if (password.length < 6) return { error: "הסיסמה חייבת להכיל לפחות 6 תווים." };
+  if (password.length < 8) return { error: "הסיסמה חייבת להכיל לפחות 8 תווים." };
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "קישור האיפוס אינו תקף או פג תוקף. בקש/י קישור חדש." };
 
   const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: "עדכון הסיסמה נכשל. נסה/י שוב." };
+  if (error) {
+    // Surface the REAL reason instead of a generic "failed" — the update most
+    // often fails on Supabase's password policy (leaked/weak/too-short) or
+    // "same as old", and hiding it left users stuck retyping the same password.
+    console.error("[auth] updatePassword failed:", error.message);
+    const m = error.message.toLowerCase();
+    if (m.includes("different from the old") || m.includes("should be different")) return { error: "הסיסמה החדשה חייבת להיות שונה מהסיסמה הקודמת." };
+    if (m.includes("weak") || m.includes("pwned") || m.includes("leaked") || m.includes("compromis") || m.includes("breach")) return { error: "הסיסמה נפוצה או חלשה מדי ונדחתה. בחר/י סיסמה חזקה וייחודית יותר." };
+    if (m.includes("at least") || m.includes("length") || m.includes("characters")) return { error: "הסיסמה קצרה או פשוטה מדי. השתמש/י בלפחות 8 תווים עם אותיות ומספרים." };
+    if (m.includes("session") || m.includes("token") || m.includes("expired") || m.includes("aal")) return { error: "פג תוקף קישור האיפוס. בקש/י קישור חדש ונסה/י שוב." };
+    return { error: `עדכון הסיסמה נכשל: ${error.message}` };
+  }
 
   revalidatePath("/", "layout");
   redirect("/");

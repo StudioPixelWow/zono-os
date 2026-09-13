@@ -16,6 +16,7 @@
 // whether or not the email already existed. No card, no payment — the 14-day
 // trial subscription is created later in completeOnboarding.
 // ============================================================================
+import { renderZonoEmail } from "@/lib/email/shell";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -47,28 +48,17 @@ async function sendWelcomeSetupEmail(to: string, fullName: string, url: string):
   const key = process.env.RESEND_API_KEY;
   if (!key) { console.error("[start/signup] RESEND_API_KEY not configured — cannot send setup email"); return false; }
   const from = process.env.RESEND_FROM || "ZONO <noreply@zono.co.il>";
-  const hi = fullName ? `${fullName},` : "";
-  const html = `<!doctype html><html dir="rtl" lang="he"><body style="margin:0;background:#f5f4fb;font-family:Arial,'Segoe UI',sans-serif;color:#0f0a1c">
-  <div style="max-width:520px;margin:0 auto;padding:24px">
-    <div style="background:linear-gradient(135deg,#7c3aed,#a078ff);border-radius:20px 20px 0 0;padding:30px 28px;text-align:center">
-      <div style="color:#fff;font-size:26px;font-weight:800;letter-spacing:1px">ZONO</div>
-      <div style="color:rgba(255,255,255,.85);font-size:13px;margin-top:4px">מערכת ההפעלה לתיווך נדל״ן</div>
-    </div>
-    <div style="background:#fff;border-radius:0 0 20px 20px;padding:30px 28px">
-      <h1 style="font-size:22px;margin:0 0 10px">ברוכים הבאים ל‑ZONO! 🎉</h1>
-      <p style="font-size:15px;line-height:1.6;color:#4b4363;margin:0 0 8px">${hi ? `שלום ${hi}` : "שלום,"}</p>
-      <p style="font-size:15px;line-height:1.6;color:#4b4363;margin:0 0 22px">
-        החשבון שלך נפתח. נותר רק לקבוע סיסמה — ואתם בפנים. הזון שלכם כבר מחכה מוכן.
-      </p>
-      <a href="${url}" style="display:inline-block;background:linear-gradient(90deg,#7c3aed,#a078ff);color:#fff;font-weight:700;font-size:16px;text-decoration:none;padding:14px 30px;border-radius:999px">
-        קביעת סיסמה וכניסה למערכת ←
-      </a>
-      <p style="font-size:12.5px;color:#8b84a0;margin:24px 0 0">אם הכפתור לא עובד, העתיקו את הקישור לדפדפן:</p>
-      <p style="font-size:12px;color:#7c3aed;word-break:break-all;margin:4px 0 0"><a href="${url}" style="color:#7c3aed">${url}</a></p>
-      <p style="font-size:12px;color:#a49dba;margin:22px 0 0">הקישור תקף לזמן מוגבל. אם לא ביקשתם להירשם ל‑ZONO, אפשר להתעלם מהמייל.</p>
-    </div>
-    <div style="text-align:center;color:#a49dba;font-size:11px;padding:14px">© ZONO · מערכת ההפעלה לתיווך נדל״ן</div>
-  </div></body></html>`;
+  const first = (fullName || "").trim().split(/\s+/)[0] || "";
+  const html = renderZonoEmail({
+    preheader: `היי${first ? " " + first : ""}, ZI כבר סרק את הזירה שלך — נותר רק לקבוע סיסמה.`,
+    eyebrow: "ברוכים הבאים ל‑ZONO",
+    heading: `היי${first ? " " + first : ""},<br>הזון שלך כבר מוכן 🎉`,
+    ziPose: "celebrate",
+    ziSays: "כבר סרקתי את הזירה שלך והתחלתי למפות את הנכסים, המתווכים והמשרדים באזור שלך. נותר רק צעד אחד קטן — לקבוע סיסמה, ואתה בפנים.",
+    bodyHtml: `החשבון שלך נפתח. לחיצה אחת ואתה בתוך מערכת ההפעלה החכמה לנדל״ן — עם הזירה שלך כבר ממופה ומחכה.`,
+    cta: { label: "קביעת סיסמה וכניסה למערכת ←", url },
+    footnote: `אם הכפתור לא עובד, העתק את הקישור לדפדפן:<br><a href="${url}" style="color:#7c3aed;word-break:break-all">${url}</a><br><br>הקישור תקף לזמן מוגבל. אם לא ביקשת להירשם ל‑ZONO, אפשר להתעלם מהמייל הזה.`,
+  });
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
