@@ -36,7 +36,7 @@ export default function ResetPasswordPage() {
               <div className="zauth-input-wrap">
                 <Lock className="zauth-input-ico" size={18} aria-hidden="true" />
                 <input
-                  id="zauth-pw-reset" name="password" type={showPw ? "text" : "password"} required minLength={8}
+                  id="zauth-pw-reset" name="password" type={showPw ? "text" : "password"} required minLength={6}
                   dir="ltr" autoComplete="new-password" placeholder="••••••••" className="zauth-input has-trail"
                 />
                 <button

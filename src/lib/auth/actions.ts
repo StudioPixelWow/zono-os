@@ -90,7 +90,7 @@ export async function updatePassword(
   formData: FormData,
 ): Promise<AuthFormState> {
   const password = String(formData.get("password") ?? "");
-  if (password.length < 8) return { error: "הסיסמה חייבת להכיל לפחות 8 תווים." };
+  if (password.length < 6) return { error: "הסיסמה חייבת להכיל לפחות 6 תווים." };
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

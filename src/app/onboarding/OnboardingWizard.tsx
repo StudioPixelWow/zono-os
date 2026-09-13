@@ -14,6 +14,7 @@ import {
   LocalityAutocomplete,
   type SelectedLocality,
 } from "@/components/onboarding/LocalityAutocomplete";
+import { StepCelebration } from "@/components/onboarding/StepCelebration";
 import type { ListingKind, PropertyType } from "@/lib/supabase/types";
 
 const TOTAL_STEPS = 7;
@@ -140,6 +141,10 @@ export function OnboardingWizard({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // ONE celebration only — when the user reaches the FINAL step (סיום). No per-step
+  // confetti; just a single "you made it" moment as registration completes.
+  const [celebrate, setCelebrate] = useState(0);
+
   const [form, setForm] = useState<WizardForm>({
     organizationName: defaultOrgName,
     organizationLogoUrl: "",
@@ -187,7 +192,12 @@ export function OnboardingWizard({
 
   const next = () => {
     setError(null);
-    setStep((s) => Math.min(TOTAL_STEPS, s + 1));
+    setStep((s) => {
+      const nextStep = Math.min(TOTAL_STEPS, s + 1);
+      // Fire the single celebration only on ARRIVAL at the final step.
+      if (nextStep === TOTAL_STEPS && s !== TOTAL_STEPS) setCelebrate((c) => c + 1);
+      return nextStep;
+    });
   };
   const back = () => {
     setError(null);
@@ -226,6 +236,12 @@ export function OnboardingWizard({
 
   return (
     <div className="bg-card border-line rounded-[28px] border p-6 shadow-[var(--shadow-card)] sm:p-8">
+      <StepCelebration
+        trigger={celebrate}
+        fromPct={Math.round((6 / TOTAL_STEPS) * 100)}
+        toPct={100}
+        label="כמעט סיימת — צעד אחרון!"
+      />
       <style>{`
         .dr-input{position:absolute;top:0;left:0;width:100%;height:2rem;margin:0;background:transparent;-webkit-appearance:none;appearance:none;pointer-events:none}
         .dr-input:focus{outline:none}
