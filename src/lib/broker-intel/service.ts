@@ -22,6 +22,114 @@ export interface BrokerCockpitBundle {
   detail: Record<string, BrokerAgg>;   // aggregate for each broker shown (landscape + directory) → drawer
 }
 
+// ── Observed-broker DETAIL (name-keyed) ─────────────────────────────────────
+// The arena identifies brokers by observed NAME (there is no canonical id — that
+// is identity resolution / ENGINE_REQUIRED). This selector powers the per-broker
+// detail page: it re-reads the same org-scoped observed evidence and returns
+// everything ZONO observed for ONE broker name — inventory, territory, property
+// mix, price band, activity window, and the real listing cards. No CRM, no merge
+// of spelling variants (exact normalized-name match, same key the arena groups on).
+export interface ObservedBrokerListing {
+  id: string; title: string | null; neighborhood: string | null; city: string | null;
+  rooms: number | null; sqm: number | null; price: number | null; source: string | null;
+  firstSeen: string | null; image: string | null; listingUrl: string | null;
+  address: string | null; propertyType: string | null; dealType: string | null;
+}
+export interface ObservedBrokerDetail {
+  name: string;
+  observedInventory: number;
+  activeListings: number;
+  new30d: number;
+  neighborhoods: number;
+  avgPrice: number | null; medianPrice: number | null; minPrice: number | null; maxPrice: number | null;
+  firstObserved: string | null; lastObserved: string | null;
+  geocodedPct: number;
+  areas: { name: string; count: number }[];
+  propertyTypes: { type: string; count: number }[];
+  dealTypes: { type: string; count: number }[];
+  contactPhones: string[];
+  listings: ObservedBrokerListing[];
+}
+
+const firstImageOf = (v: unknown): string | null => {
+  let arr: unknown = v;
+  if (typeof v === "string") { try { arr = JSON.parse(v); } catch { return v.trim() ? v : null; } }
+  if (!Array.isArray(arr)) return null;
+  for (const it of arr) {
+    if (typeof it === "string" && it.trim()) return it;
+    if (it && typeof it === "object" && typeof (it as { url?: string }).url === "string") return (it as { url: string }).url;
+  }
+  return null;
+};
+
+export async function getObservedBrokerDetail(nameParam: string): Promise<ObservedBrokerDetail | null> {
+  const target = (nameParam ?? "").replace(/\s+/g, " ").trim();
+  if (!target) return null;
+
+  let rows: Awaited<ReturnType<typeof externalListingRepository.listForOrg>> = [];
+  try { rows = await externalListingRepository.listForOrg(); }
+  catch (e) { console.error("[observed-broker] listings failed:", e instanceof Error ? e.message : e); return null; }
+
+  const nameOf = (r: (typeof rows)[number]): string | null => {
+    const raw = (r.detected_broker_name ?? (r.has_agent ? r.contact_name : null)) ?? "";
+    const v = String(raw).replace(/\s+/g, " ").trim();
+    return v.length ? v : null;
+  };
+  const mine = rows.filter((r) => nameOf(r) === target);
+  if (mine.length === 0) return null;
+
+  const count = <T extends string>(items: (T | null)[]): { name: T; count: number }[] => {
+    const m = new Map<T, number>();
+    for (const it of items) { if (it == null) continue; m.set(it, (m.get(it) ?? 0) + 1); }
+    return [...m.entries()].map(([name, c]) => ({ name, count: c })).sort((a, b) => b.count - a.count);
+  };
+
+  const prices = mine.map((r) => num(r.price)).filter((p): p is number => p != null && p > 0).sort((a, b) => a - b);
+  const median = prices.length ? prices[Math.floor((prices.length - 1) / 2)] : null;
+  const seens = mine.map((r) => ms(r.first_seen_at) ?? ms(r.imported_at)).filter((t): t is number => t != null);
+  const DAY = 86_400_000; const now = Date.now();
+  const geocoded = mine.filter((r) => num((r as { lat?: unknown }).lat) != null).length;
+  const phones = [...new Set(mine.map((r) => (r.contact_phone ?? "").toString().trim()).filter((p) => p.length >= 6))].slice(0, 3);
+
+  const listings: ObservedBrokerListing[] = mine
+    .slice()
+    .sort((a, b) => (num(b.price) ?? 0) - (num(a.price) ?? 0))
+    .slice(0, 60)
+    .map((r) => ({
+      id: r.id,
+      title: (r.title as string) ?? null,
+      neighborhood: (r.neighborhood as string) ?? null,
+      city: localityHe((r.city as string) ?? null),
+      rooms: num(r.rooms), sqm: num(r.sqm), price: num(r.price),
+      source: (r.source as string) ?? null,
+      firstSeen: (r.first_seen_at as string) ?? null,
+      image: firstImageOf(r.images),
+      listingUrl: (r.listing_url as string) ?? null,
+      address: ((r.address as string) || (r.street as string)) ?? null,
+      propertyType: (r.property_type as string) ?? null,
+      dealType: (r.deal_type as string) ?? null,
+    }));
+
+  const areas = count(mine.map((r) => (r.neighborhood as string) || localityHe((r.city as string) ?? null)));
+  return {
+    name: target,
+    observedInventory: mine.length,
+    activeListings: mine.filter((r) => (r.status ?? "active") === "active").length,
+    new30d: mine.filter((r) => { const t = ms(r.first_seen_at) ?? ms(r.imported_at); return t != null && now - t < 30 * DAY; }).length,
+    neighborhoods: areas.length,
+    avgPrice: prices.length ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : null,
+    medianPrice: median, minPrice: prices[0] ?? null, maxPrice: prices[prices.length - 1] ?? null,
+    firstObserved: seens.length ? new Date(Math.min(...seens)).toISOString() : null,
+    lastObserved: seens.length ? new Date(Math.max(...seens)).toISOString() : null,
+    geocodedPct: mine.length ? Math.round((geocoded / mine.length) * 100) : 0,
+    areas: areas.slice(0, 8),
+    propertyTypes: count(mine.map((r) => (r.property_type as string) ?? null)).slice(0, 6).map((x) => ({ type: x.name, count: x.count })),
+    dealTypes: count(mine.map((r) => (r.deal_type as string) ?? null)).slice(0, 4).map((x) => ({ type: x.name, count: x.count })),
+    contactPhones: phones,
+    listings,
+  };
+}
+
 export async function getBrokerCockpit(filters: BrokerFilters): Promise<BrokerCockpitBundle> {
   const now = Date.now();
   let listings: BrokerListing[] = [];

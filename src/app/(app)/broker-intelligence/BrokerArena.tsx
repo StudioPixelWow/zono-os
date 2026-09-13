@@ -110,7 +110,7 @@ export function BrokerArena({ landscape, directory, detail, baseHref }: { landsc
               <DrawerBlock title="נצפה">
                 <div className="text-muted text-xs">ראשון: <span className="text-ink font-bold">{dateHe(agg.firstObservedMs)}</span> · אחרון: <span className="text-ink font-bold">{dateHe(agg.lastObservedMs)}</span></div>
               </DrawerBlock>
-              <Link href={`/market-intelligence/listings?broker=${encodeURIComponent(agg.name)}`} prefetch={false} className="border-line hover:border-brand-light bg-brand block rounded-xl border-transparent px-4 py-2.5 text-center text-sm font-bold text-white transition">הנכסים של {agg.name} ←</Link>
+              <Link href={`/broker-intelligence/observed/${encodeURIComponent(agg.name)}`} prefetch={false} className="border-line hover:border-brand-light bg-brand block rounded-xl border-transparent px-4 py-2.5 text-center text-sm font-bold text-white transition">הפרופיל המלא של {agg.name} ←</Link>
               <p className="text-muted/80 text-[10px]">מבוסס על המלאי הנצפה בלבד. אין מיזוג אוטומטי של וריאציות כתיב לשם המתווך.</p>
             </div>
           </div>

@@ -10,7 +10,30 @@
 import "server-only";
 import { getConnectionServiceRole } from "@/lib/whatsapp/business/tokens";
 import { sendText, sendTemplate } from "@/lib/whatsapp/business/messages";
+import { renderZonoEmail } from "@/lib/email/shell";
 import type { DeliveryProvider, DeliveryRequest, DeliveryResult, NotificationChannel } from "./types";
+
+// Escape user/content text before it goes into the email's HTML body, then turn
+// newlines into <br> so multi-line notification bodies keep their shape.
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+/** Wrap a plain notification (title + body) in the shared premium ZI email shell,
+ *  so EVERY notification email is branded — not only the ones a caller pre-renders. */
+function brandedNotificationHtml(title: string | null | undefined, body: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/+$/, "");
+  const heading = (title && title.trim()) || "עדכון חדש מ‑ZONO";
+  const bodyHtml = esc(body).replace(/\r?\n/g, "<br>");
+  return renderZonoEmail({
+    preheader: (title && title.trim()) || "יש לך עדכון חדש ב‑ZONO",
+    eyebrow: "ZONO · עדכון",
+    heading,
+    ziPose: "pointing",
+    bodyHtml,
+    cta: base ? { label: "פתיחה ב‑ZONO ←", url: `${base}/` } : undefined,
+    footnote: "קיבלת את המייל הזה כי יש לך התראות פעילות ב‑ZONO. אפשר לנהל העדפות התראה מתוך המערכת.",
+  });
+}
 
 // ── WhatsApp (real) ───────────────────────────────────────────────────────────
 const whatsappProvider: DeliveryProvider = {
@@ -48,6 +71,10 @@ const emailProvider: DeliveryProvider = {
     if (!key) return { ok: false, status: "skipped", error: "email_not_configured" };
     if (!req.to || !req.to.includes("@")) return { ok: false, status: "skipped", error: "invalid_email" };
     const from = process.env.RESEND_FROM || "ZONO <notifications@zono.co.il>";
+    // Branded HTML for EVERY email: use a caller-supplied html (e.g. a rich report)
+    // when present, otherwise wrap title+body in the premium ZI shell. The plain
+    // text stays as the reliable fallback for clients that don't render HTML.
+    const html = (req.html && req.html.trim()) ? req.html : brandedNotificationHtml(req.title, req.body);
     try {
       const res = await fetch(RESEND_ENDPOINT, {
         method: "POST",
@@ -58,7 +85,7 @@ const emailProvider: DeliveryProvider = {
           // dedupKey will not deliver a second email (Resend collapses on this key).
           ...(req.dedupKey ? { "Idempotency-Key": req.dedupKey } : {}),
         },
-        body: JSON.stringify({ from, to: [req.to], subject: req.title || "ZONO", text: req.body, ...(req.html ? { html: req.html } : {}) }),
+        body: JSON.stringify({ from, to: [req.to], subject: req.title || "ZONO", text: req.body, html }),
       });
       if (res.ok) {
         const data = (await res.json().catch(() => ({}))) as { id?: string };
