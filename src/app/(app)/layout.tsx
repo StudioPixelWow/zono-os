@@ -16,6 +16,7 @@ import { StickySystemRefreshButton } from "@/components/orchestrator/StickySyste
 import { DailyGroupsPublishingProvider } from "@/components/daily-groups-publishing/DailyGroupsPublishingProvider";
 import { PwaProvider } from "@/components/mobile/PwaProvider";
 import { AccountSuspended } from "@/components/auth/AccountSuspended";
+import { TrialBanner } from "@/components/commercial/TrialBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // org may still reach billing / account / support / pay — everything else routes
   // to the Payment-Required screen. This runs on the server for EVERY (app) page,
   // so a direct URL to /today, /claim, /properties, … cannot bypass it.
+  let trialBanner: ReactNode = null;
   if (organization?.id) {
     const path = (await headers()).get("x-zono-path");
-    if (!isPathAllowedWhenUnpaid(path)) {
-      const orgCreatedAt = (organization as { created_at?: string | null }).created_at ?? null;
-      const gate = await resolvePaymentGate(organization.id, orgCreatedAt);
-      if (gate.blocked) redirect("/payment-required");
+    const orgCreatedAt = (organization as { created_at?: string | null }).created_at ?? null;
+    const gate = await resolvePaymentGate(organization.id, orgCreatedAt);
+    // Blocked (unpaid + trial ended) → Payment Required, unless on an allowed path.
+    if (gate.blocked && !isPathAllowedWhenUnpaid(path)) redirect("/payment-required");
+    // On an active free trial → show the countdown banner to drive activation.
+    if (gate.enforced && !gate.paid && gate.trialActive) {
+      trialBanner = <TrialBanner daysLeft={gate.trialDaysLeft} />;
     }
   }
 
@@ -54,7 +59,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <DashboardDataProvider value={dashboardData}>
-      <DashboardShell>{children}</DashboardShell>
+      <DashboardShell>{trialBanner}{children}</DashboardShell>
       <CreatedCelebration />
       <PropertyRadarAlertProvider />
       <LaunchOverlay />
