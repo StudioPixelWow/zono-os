@@ -10,6 +10,7 @@ import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { getMyOperatingAreas } from "@/lib/operating-areas/service";
+import { makeCityMatch } from "@/lib/brokerage-data/brokerage-knowledge";
 import { DEFAULT_HOME_MAP_FILTERS, type ExternalMapDiag, type HomeMapData, type HomeMapFilters, type HomeMapPoint } from "./types";
 
 const NEW_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -173,10 +174,21 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
       // Operating-area city scope via token-subset matching (empty ⇒ no restriction)
       // so "תל אביב יפו" ↔ "תל אביב" and similar variants are treated as one city.
       const allowedTokenSets = cityFilter.length ? cityFilter.map(cityTokens).filter((t) => t.length) : null;
+      // Hebrew↔English/CBS bridge: external listings are stored with an ENGLISH
+      // city ("Petah Tikva") while the operating area resolves to Hebrew
+      // ("פתח תקווה"); the token matcher can't cross scripts, so ALL listings were
+      // dropped. makeCityMatch adds the alias bridge so the scope actually matches.
+      const cityMatchers = cityFilter.length ? cityFilter.map((c) => makeCityMatch(c)) : null;
+      const cityAllowed = (r: Record<string, unknown>): boolean => {
+        if (!allowedTokenSets && !cityMatchers) return true;              // no operating area ⇒ no restriction
+        if (allowedTokenSets && sameCity([r.city, r.neighborhood, r.address, r.title], allowedTokenSets)) return true;
+        if (cityMatchers && cityMatchers.some((m) => m(r.city) || m(r.neighborhood) || m(r.address))) return true;
+        return false;
+      };
       for (const r of (data ?? []) as Record<string, unknown>[]) {
         const lat = num(r.lat), lng = num(r.lng);
         if (lat == null || lng == null) continue;
-        if (allowedTokenSets && !sameCity([r.city, r.neighborhood, r.address, r.title], allowedTokenSets)) {
+        if (!cityAllowed(r)) {
           externalDiag.cityDropped++;
           // Capture the actual stored city (or first non-empty location field) so the
           // UI can show WHAT value failed to match — turns a mismatch into a fact.

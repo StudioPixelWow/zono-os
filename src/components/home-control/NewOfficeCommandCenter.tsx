@@ -17,7 +17,6 @@ import { CAPABILITIES, CAPABILITY_STATE_LABEL, type CapabilityState } from "@/li
 import type { ActivationState, OfficeIdentity, OfficeTrial, CityDiscovery } from "@/lib/activation/activation";
 import type { ZoneSnapshot } from "@/lib/activation/zone-snapshot";
 import { FirstLoginWowModal } from "./FirstLoginWowModal";
-import { ListingClaimModal } from "./ListingClaimModal";
 import { ActivationCelebration } from "./ActivationCelebration";
 import { HomeHeatmapSection } from "@/components/dashboard-home/components/HomeHeatmapSection";
 
@@ -101,9 +100,6 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
         zone={zone}
         discovery={discovery}
       />
-
-      {/* ── "היי, מצאנו את הנכסים שלך" — claim + permanent assignment ── */}
-      <ListingClaimModal ownerFirstName={identity.ownerFirstName} />
 
       {/* ── Confetti + ZI milestone when an activation step completes ── */}
       <ActivationCelebration
