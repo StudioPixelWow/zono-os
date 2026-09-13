@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { getOfficeActivation } from "@/lib/activation/activation-server";
 import { getCityDiscovery } from "@/lib/activation/city-discovery-server";
-import { getZoneSnapshot } from "@/lib/activation/zone-snapshot";
+import { getZoneSnapshot, type ZonePrivateListing } from "@/lib/activation/zone-snapshot";
+import { makeCityMatch, cityIlikeTerms } from "@/lib/brokerage-data/brokerage-knowledge";
 import { propertyTypeHe } from "@/lib/valuation/property-type";
 import { localityHe } from "@/lib/geo/locality";
 import { createServiceRoleClient } from "@/lib/supabase/server";
@@ -21,7 +22,52 @@ interface LiveFeedItem {
   sub: string | null;
   tag: string | null;
   imageUrl: string | null;
+  /** true = this org's own freshly-scanned row ("נסרק עכשיו"); false = already-known
+   *  shared-market row in the same city (revealed instantly, honestly labeled). */
+  fresh: boolean;
 }
+
+const ILS_FMT = new Intl.NumberFormat("he-IL");
+const priceShortStr = (p: number | null): string | null => {
+  if (p == null || p <= 0) return null;
+  if (p >= 1_000_000) return `₪${(p / 1_000_000).toFixed(p >= 10_000_000 ? 0 : 1)}M`;
+  if (p >= 1000) return `₪${Math.round(p / 1000)}K`;
+  return `₪${ILS_FMT.format(p)}`;
+};
+
+type MarketRow = {
+  id: string; title: string | null; property_type: string | null; rooms: number | null;
+  sqm: number | null; price: number | null; neighborhood: string | null; city: string | null;
+  has_agent: boolean | null; contact_name: string | null; contact_phone: string | null; images: unknown;
+};
+
+const feedItemFromRow = (r: MarketRow, fresh: boolean): LiveFeedItem[] => {
+  const bits = [propertyTypeHe(r.property_type), r.rooms ? `${r.rooms} חד׳` : null, r.sqm ? `${r.sqm} מ״ר` : null]
+    .filter(Boolean).join(" · ");
+  const out: LiveFeedItem[] = [{
+    id: fresh ? r.id : `m-${r.id}`,
+    listingId: r.id,
+    kind: "property",
+    title: bits || (r.title ?? "נכס"),
+    sub: [r.neighborhood || localityHe(r.city), priceShortStr(r.price)].filter(Boolean).join(" · ") || null,
+    tag: r.has_agent === false ? "ללא מתווך" : fresh ? null : "באזור שלך",
+    imageUrl: firstImage(r.images),
+    fresh,
+  }];
+  if (r.has_agent && r.contact_name) {
+    out.push({
+      id: `${fresh ? r.id : "m-" + r.id}-a`,
+      listingId: r.id,
+      kind: "agent",
+      title: r.contact_name,
+      sub: r.neighborhood || localityHe(r.city) || null,
+      tag: fresh ? "מתווך פעיל" : "מתווך באזור",
+      imageUrl: null,
+      fresh,
+    });
+  }
+  return out;
+};
 
 const firstImage = (imgs: unknown): string | null => {
   if (!Array.isArray(imgs)) return null;
@@ -40,51 +86,90 @@ async function recentFeed(orgId: string): Promise<LiveFeedItem[]> {
     const db = createServiceRoleClient();
     const { data } = await db
       .from("external_listings" as never)
-      .select("id,title,property_type,rooms,sqm,price,neighborhood,city,has_agent,contact_name,images,created_at")
+      .select("id,title,property_type,rooms,sqm,price,neighborhood,city,has_agent,contact_name,contact_phone,images,created_at")
       .eq("org_id" as never, orgId as never)
       .order("created_at" as never, { ascending: false })
       .limit(14);
-    const rows = (data ?? []) as Array<{
-      id: string; title: string | null; property_type: string | null; rooms: number | null;
-      sqm: number | null; price: number | null; neighborhood: string | null; city: string | null;
-      has_agent: boolean | null; contact_name: string | null; images: unknown;
-    }>;
-    const ILS = new Intl.NumberFormat("he-IL");
-    const priceShort = (p: number | null): string | null => {
-      if (p == null || p <= 0) return null;
-      if (p >= 1_000_000) return `₪${(p / 1_000_000).toFixed(p >= 10_000_000 ? 0 : 1)}M`;
-      if (p >= 1000) return `₪${Math.round(p / 1000)}K`;
-      return `₪${ILS.format(p)}`;
-    };
+    const rows = (data ?? []) as MarketRow[];
     const out: LiveFeedItem[] = [];
-    for (const r of rows) {
-      const bits = [
-        propertyTypeHe(r.property_type),
-        r.rooms ? `${r.rooms} חד׳` : null,
-        r.sqm ? `${r.sqm} מ״ר` : null,
-      ].filter(Boolean).join(" · ");
-      out.push({
-        id: r.id,
-        listingId: r.id,
-        kind: "property",
-        title: bits || (r.title ?? "נכס"),
-        sub: [r.neighborhood || localityHe(r.city), priceShort(r.price)].filter(Boolean).join(" · ") || null,
-        tag: r.has_agent === false ? "ללא מתווך" : null,
-        imageUrl: firstImage(r.images),
-      });
-      if (r.has_agent && r.contact_name) {
-        out.push({
-          id: `${r.id}-a`,
-          listingId: r.id,
-          kind: "agent",
-          title: r.contact_name,
-          sub: r.neighborhood || localityHe(r.city) || null,
-          tag: "מתווך פעיל",
-          imageUrl: null,
-        });
-      }
-    }
+    for (const r of rows) out.push(...feedItemFromRow(r, true));
     return out.slice(0, 18);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * SHARED-MARKET feed — real listings the WHOLE ZONO graph already knows in this
+ * city (any org), so a brand-new office sees properties/brokers INSTANTLY instead
+ * of waiting for its own first scan. Honest: these are real rows in the same city,
+ * labeled "באזור שלך" (not "נסרק עכשיו"). Excludes the caller's own rows (those are
+ * the fresh feed). City match bridges Hebrew office city ↔ scraped English city.
+ */
+async function marketFeed(orgId: string, city: string | null): Promise<LiveFeedItem[]> {
+  if (!city || !city.trim()) return [];
+  try {
+    const db = createServiceRoleClient();
+    const terms = cityIlikeTerms(city);
+    let q = db
+      .from("external_listings" as never)
+      .select("id,title,property_type,rooms,sqm,price,neighborhood,city,has_agent,contact_name,contact_phone,images,created_at,org_id")
+      .neq("org_id" as never, orgId as never)
+      .neq("status" as never, "removed" as never)
+      .order("created_at" as never, { ascending: false })
+      .limit(120);
+    if (terms.length) q = q.or(terms.map((t) => `city.ilike.%${t}%`).join(",")) as typeof q;
+    const { data } = await q;
+    const match = makeCityMatch(city);
+    const rows = ((data ?? []) as Array<MarketRow & { city: string | null }>).filter((r) => match(r.city));
+    const out: LiveFeedItem[] = [];
+    for (const r of rows) { out.push(...feedItemFromRow(r, false)); if (out.length >= 20) break; }
+    return out.slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * SHARED-MARKET recruitment opportunities — real no-broker, for-sale listings with
+ * photos anywhere in the city (any org). Fallback for the WOW "הזדמנויות גיוס" band
+ * when the office's own scan hasn't produced private-owner listings yet.
+ */
+async function marketOpportunities(orgId: string, city: string | null): Promise<ZonePrivateListing[]> {
+  if (!city || !city.trim()) return [];
+  try {
+    const db = createServiceRoleClient();
+    const terms = cityIlikeTerms(city);
+    let q = db
+      .from("external_listings" as never)
+      .select("id,property_type,rooms,sqm,price,neighborhood,city,has_agent,contact_phone,deal_type,images,first_seen_at")
+      .neq("org_id" as never, orgId as never)
+      .neq("status" as never, "removed" as never)
+      .not("has_agent" as never, "is", true as never)
+      .not("contact_phone" as never, "is", null as never)
+      .neq("deal_type" as never, "rent" as never)
+      .order("first_seen_at" as never, { ascending: false })
+      .limit(80);
+    if (terms.length) q = q.or(terms.map((t) => `city.ilike.%${t}%`).join(",")) as typeof q;
+    const { data } = await q;
+    const match = makeCityMatch(city);
+    const out: ZonePrivateListing[] = [];
+    for (const r of (data ?? []) as Array<Record<string, unknown>>) {
+      if (!match(r.city)) continue;
+      const img = firstImage(r.images);
+      if (!img) continue;
+      out.push({
+        id: typeof r.id === "string" ? r.id : null,
+        neighborhood: typeof r.neighborhood === "string" ? r.neighborhood : null,
+        price: typeof r.price === "number" ? r.price : null,
+        rooms: typeof r.rooms === "number" ? r.rooms : null,
+        sqm: typeof r.sqm === "number" ? r.sqm : null,
+        propertyType: propertyTypeHe(typeof r.property_type === "string" ? r.property_type : null),
+        imageUrl: img,
+      });
+      if (out.length >= 4) break;
+    }
+    return out;
   } catch {
     return [];
   }
@@ -133,15 +218,46 @@ export async function GET() {
       });
     }
 
-    const [zone, feed] = await Promise.all([
+    const [zone, orgFeed, mktFeed, mktOpps] = await Promise.all([
       getZoneSnapshot(orgId, city, discovery).catch(() => null),
       recentFeed(orgId),
+      marketFeed(orgId, city),
+      marketOpportunities(orgId, city),
     ]);
+
+    // INSTANT WOW: the office's own freshly-scanned rows first ("נסרק עכשיו"),
+    // then already-known shared-market rows in the same city ("באזור שלך"), so a
+    // brand-new office sees properties/brokers immediately instead of an empty
+    // screen while its own scan runs. Dedup by underlying listing id.
+    const seenListing = new Set<string>();
+    const feed: LiveFeedItem[] = [];
+    for (const it of [...orgFeed, ...mktFeed]) {
+      const key = it.listingId ?? it.id;
+      const dedupKey = `${it.kind}:${key}`;
+      if (seenListing.has(dedupKey)) continue;
+      seenListing.add(dedupKey);
+      feed.push(it);
+    }
+
+    // Opportunities: prefer the office's own private-owner finds; fall back to the
+    // shared-market ones so the recruitment band isn't empty on first login.
+    const privateOwners = (zone?.privateOwners && zone.privateOwners.length)
+      ? zone.privateOwners
+      : mktOpps;
+
+    // The office's own scan drives discoveredListings; the shared graph already
+    // knows listingsTotal for the city — surface both so the modal can show the
+    // real "properties in your area" number instantly, before the own scan lands.
+    const listingsTotal = zone?.census?.listingsTotal ?? 0;
+    // A brand-new office is "market ready" the moment the shared graph has data.
+    const marketReady = listingsTotal > 0 || (zone?.census?.brokersTotal ?? 0) > 0 || feed.length > 0;
+
     return NextResponse.json({
       ok: true,
       scanRunning: discovery.scanRunning || scanKicked,
       phase: scanKicked ? "scanning" : discovery.phase,
       scanKicked,
+      marketReady,
       stats: {
         discoveredListings: discovery.discoveredListings,
         noBrokerCount: discovery.noBrokerCount,
@@ -149,9 +265,9 @@ export async function GET() {
         mapPoints: discovery.mapPoints,
         brokersTotal: zone?.census?.brokersTotal ?? 0,
         verifiedOffices: zone?.census?.verifiedOffices ?? 0,
-        listingsTotal: zone?.census?.listingsTotal ?? 0,
+        listingsTotal,
       },
-      privateOwners: zone?.privateOwners ?? [],
+      privateOwners,
       insight: zone?.insights?.[0] ?? null,
       feed,
     });

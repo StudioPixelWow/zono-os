@@ -30,16 +30,70 @@ export function normCityKb(raw: string | null | undefined): string {
     .replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-// Minimal Hebrew→English city aliases (extensible). Rows imported with an
-// English city name would otherwise be excluded by the Hebrew-only fold.
+// Hebrew→English city aliases. External listings are scraped/imported with an
+// ENGLISH (or CBS-transliterated) city name — e.g. a Hebrew-onboarded office in
+// "פתח תקווה" must still match rows stored as "Petah Tikva"/"PETAH TIQWA" — so
+// without these the shared-market census/feed silently returns 0 for that office.
+// Keys are normCityKb(Hebrew name); values are lowercase English/CBS variants.
 const CITY_EN_ALIASES: Record<string, string[]> = {
-  "קרית ביאליק": ["kiryat bialik", "qiryat bialik", "kiryat byalik"],
-  "קרית מוצקין": ["kiryat motzkin", "qiryat motzkin"],
+  "קרית ביאליק": ["kiryat bialik", "qiryat bialik", "kiryat byalik", "qiryat byalik"],
+  "קרית מוצקין": ["kiryat motzkin", "qiryat motzkin", "kiryat mozkin"],
   "קרית ים": ["kiryat yam", "qiryat yam"],
-  "קרית אתא": ["kiryat ata", "qiryat ata"],
-  "תל אביב": ["tel aviv", "tel aviv yafo", "tel-aviv"],
-  "חיפה": ["haifa"], "ירושלים": ["jerusalem"], "ראשון לציון": ["rishon lezion", "rishon letzion"],
+  "קרית אתא": ["kiryat ata", "qiryat ata", "kiryat atta"],
+  "קרית גת": ["kiryat gat", "qiryat gat"],
+  "קרית מלאכי": ["kiryat malakhi", "qiryat malakhi", "kiryat malachi"],
+  "פתח תקווה": ["petah tikva", "petah tiqwa", "petach tikva", "petah tiqva", "petah-tikva", "petah tikvah"],
+  "רחובות": ["rehovot", "rechovot", "rehovoth"],
+  "אבן יהודה": ["even yehuda", "even yehuda", "even-yehuda", "evenyehuda"],
+  "תל אביב": ["tel aviv", "tel aviv yafo", "tel-aviv", "tel aviv-yafo", "tel aviv jaffa"],
+  "חיפה": ["haifa", "hefa"],
+  "ירושלים": ["jerusalem", "yerushalayim"],
+  "ראשון לציון": ["rishon lezion", "rishon letzion", "rishon le zion", "rishon leziyyon"],
+  "נתניה": ["netanya", "natanya"],
+  "חדרה": ["hadera", "khadera"],
+  "כפר סבא": ["kfar saba", "kefar sava", "kfar sava"],
+  "הרצליה": ["herzliya", "herzeliya", "herzliyya"],
+  "רעננה": ["raanana", "ra'anana", "raanana"],
+  "אשדוד": ["ashdod"],
+  "אשקלון": ["ashkelon", "ashqelon"],
+  "באר שבע": ["beer sheva", "be'er sheva", "beersheba", "beer-sheva"],
+  "בת ים": ["bat yam"],
+  "חולון": ["holon", "kholon"],
+  "רמת גן": ["ramat gan"],
+  "גבעתיים": ["givatayim", "givataim"],
+  "בני ברק": ["bnei brak", "bene beraq", "bnei braq"],
+  "מודיעין": ["modiin", "modi'in", "modiin maccabim reut", "modiin-maccabim-reut"],
+  "ראש העין": ["rosh haayin", "rosh ha'ayin", "rosh haain"],
+  "הוד השרון": ["hod hasharon", "hod ha'sharon"],
+  "כפר יונה": ["kfar yona", "kfar yonah"],
+  "יבנה": ["yavne", "yavneh"],
+  "נס ציונה": ["nes ziona", "nes tziyona", "ness ziona"],
+  "לוד": ["lod", "lydda"],
+  "רמלה": ["ramla", "ramle", "ramleh"],
+  "עפולה": ["afula", "afula illit"],
+  "טבריה": ["tiberias", "teverya", "tveria"],
+  "נהריה": ["nahariya", "naharia", "nahariyya"],
+  "עכו": ["akko", "acre", "acco"],
+  "אילת": ["eilat", "elat"],
+  "דימונה": ["dimona"],
+  "קרית שמונה": ["kiryat shmona", "qiryat shemona", "kiryat shemona"],
 };
+
+/**
+ * Coarse DB-prefilter terms for a city — the Hebrew stem plus every English/CBS
+ * alias — so a cross-org `city ILIKE %term%` query can narrow to the right city
+ * before the precise makeCityMatch fold runs in JS. Always includes the longest
+ * Hebrew token so a Hebrew-stored value still prefilters.
+ */
+export function cityIlikeTerms(cityRaw: string | null | undefined): string[] {
+  const norm = normCityKb(cityRaw ?? "");
+  if (!norm) return [];
+  const out = new Set<string>();
+  const hebStem = norm.split(" ").filter((t) => t.length >= 2).sort((a, b) => b.length - a.length)[0];
+  if (hebStem) out.add(hebStem);
+  for (const a of CITY_EN_ALIASES[norm] ?? []) out.add(a.toLowerCase());
+  return [...out];
+}
 
 /**
  * VAL/26.4.14 — robust city matcher. Matches a stored city value to the target
@@ -156,16 +210,21 @@ export async function getBrokerageKnowledgeForCity(orgId: string, cityRaw: strin
   const brokersWithOffice = brokers.filter((b) => b.officeId).length;
   const brokersResearching = brokers.length - brokersWithOffice;
 
-  // Listings in this city — fetch a broad candidate set (ilike on the stem to
-  // keep the query cheap) then apply the robust matcher so variants still count.
+  // Listings in this city — fetch a broad candidate set then apply the robust
+  // matcher so variants still count. The DB prefilter uses the Hebrew stem AND the
+  // English/CBS aliases (cityIlikeTerms), because external listings are stored with
+  // an ENGLISH city ("Petah Tikva") while the office city is Hebrew ("פתח תקווה") —
+  // a Hebrew-stem-only ilike silently returned 0 for every such city.
+  const ilikeTerms = cityIlikeTerms(cityRaw);
+  const orExpr = ilikeTerms.length ? ilikeTerms.map((t) => `city.ilike.%${t}%`).join(",") : `city.ilike.%${stem}%`;
   const cityListingIds = new Set<string>();
   const { data: cityListings } = await db.from("external_listings" as never)
-    .select("id,city,city_name").ilike("city", `%${stem}%`).limit(50000);
+    .select("id,city,city_name").or(orExpr).limit(50000);
   for (const r of (cityListings ?? []) as Row[]) if (inCity(r.city) || inCity((r as Row).city_name)) cityListingIds.add(s(r.id));
   // Properties (internal inventory) in the city.
   let propertiesInCity = 0;
   try {
-    const { data: props } = await db.from("properties" as never).select("id,city,city_name").ilike("city", `%${stem}%`).limit(50000);
+    const { data: props } = await db.from("properties" as never).select("id,city,city_name").or(orExpr).limit(50000);
     propertiesInCity = ((props ?? []) as Row[]).filter((r) => inCity(r.city) || inCity((r as Row).city_name)).length;
   } catch { /* properties table optional */ }
   const linkedSet = new Set<string>();

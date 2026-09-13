@@ -58,6 +58,8 @@ interface LiveFeedItem {
   sub: string | null;
   tag: string | null;
   imageUrl: string | null;
+  /** true = this org's own freshly-scanned row; false = already-known shared-market row. */
+  fresh?: boolean;
 }
 
 const SCAN_STEPS: { icon: string; label: string }[] = [
@@ -281,7 +283,9 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
   const reduce = reduceRef.current;
 
   // Hot-map dots scaled to the REAL density we found (never more than we have).
-  const density = Math.max(stats.mapPoints, stats.noBrokerCount, stats.discoveredListings);
+  // Includes the shared-market listing count so a brand-new office still gets a
+  // populated heat-map from what ZONO already knows about the city.
+  const density = Math.max(stats.mapPoints, stats.noBrokerCount, stats.discoveredListings, stats.listingsTotal);
   const dotCount = Math.min(density, 26);
   const rnd = seeded((orgId ? orgId.length * 7919 : 101) + 517);
   const dots = Array.from({ length: Math.max(dotCount, 8) }, (_, i) => ({
@@ -292,7 +296,9 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
   }));
 
   const revealTiles = [
-    { key: "listings", v: stats.discoveredListings, label: "נכסים באזור", icon: "Building2", hot: false },
+    // "Properties in area" = the office's own scanned rows OR, instantly, the count
+    // the shared ZONO graph already knows for the city (whichever is larger).
+    { key: "listings", v: Math.max(stats.discoveredListings, stats.listingsTotal), label: "נכסים באזור", icon: "Building2", hot: false },
     { key: "nobroker", v: stats.noBrokerCount, label: "ללא מתווך — הזדמנות גיוס", icon: "Sparkles", hot: true },
     { key: "brokers", v: stats.brokersTotal, label: "מתווכים פעילים", icon: "Users", hot: false },
     { key: "offices", v: stats.verifiedOffices, label: "משרדים מזוהים", icon: "Landmark", hot: false },
@@ -483,7 +489,7 @@ export function FirstLoginWowModal({ orgId, ownerFirstName, city, zone, discover
                           <div className="ftitle">{it.title}</div>
                           {it.sub && <div className="fsub">{it.sub}</div>}
                         </div>
-                        {i === 0 ? (
+                        {i === 0 && it.fresh ? (
                           <span className="zwow-ftag now">נסרק עכשיו</span>
                         ) : it.tag ? (
                           <span className="zwow-ftag plain">{it.tag}</span>
