@@ -13,10 +13,10 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
-import { isOrgEnforced, paymentGateDecision, isPathAllowedWhenUnpaid, billingEnforcementCutoff } from "./access-gate-core";
+import { isOrgEnforced, paymentGateDecision, isPathAllowedWhenUnpaid, billingEnforcementCutoff, isWithinTrial, trialEndsAt, trialDaysLeft, TRIAL_DAYS } from "./access-gate-core";
 import { qaEnforcementActive, isQaOrg } from "./qa-billing";
 
-export { isOrgEnforced, isPathAllowedWhenUnpaid, billingEnforcementCutoff };
+export { isOrgEnforced, isPathAllowedWhenUnpaid, billingEnforcementCutoff, isWithinTrial, trialEndsAt, trialDaysLeft, TRIAL_DAYS };
 
 /** True only when the org has a genuinely PAID (active) subscription. Trial/
  *  payment_due/cancelled/missing all count as NOT paid under the no-trial model. */
@@ -27,19 +27,26 @@ export async function hasActivePaidSubscription(orgId: string): Promise<boolean>
   return (data?.status ?? "").toLowerCase() === "active";
 }
 
-export interface PaymentGateDecision { orgId: string; enforced: boolean; paid: boolean; blocked: boolean }
+export interface PaymentGateDecision { orgId: string; enforced: boolean; paid: boolean; blocked: boolean; trialActive: boolean; trialEndsAt: number | null; trialDaysLeft: number }
 
-/** Resolve the payment gate for an org. blocked = enforced && !paid (fail-open on
- *  a lookup error — a billing glitch must never lock an org out). */
+/** Resolve the payment gate for an org. A new office gets a 14-day FREE TRIAL from
+ *  registration; blocked = enforced && !paid && trial ended (fail-open on a lookup
+ *  error — a billing glitch must never lock an org out). */
 export async function resolvePaymentGate(orgId: string, orgCreatedAt: string | null | undefined): Promise<PaymentGateDecision> {
   // QA testing mode: when BILLING_QA_ORG_IDS is set, ONLY those explicit QA orgs
   // are enforced — every real customer is left untouched, regardless of the date
   // cutoff. This lets us verify Payment Required on a live QA org in production
   // without gating anyone else. Empty allowlist ⇒ fall back to the date cutoff.
-  const enforced = qaEnforcementActive() ? isQaOrg(orgId) : isOrgEnforced(orgCreatedAt);
-  if (!enforced) return { orgId, ...paymentGateDecision(false, true) };
+  const qa = qaEnforcementActive();
+  const enforced = qa ? isQaOrg(orgId) : isOrgEnforced(orgCreatedAt);
+  const endsAt = trialEndsAt(orgCreatedAt);
+  const daysLeft = trialDaysLeft(orgCreatedAt);
+  if (!enforced) return { orgId, ...paymentGateDecision(false, true), trialActive: false, trialEndsAt: endsAt, trialDaysLeft: daysLeft };
   const paid = await hasActivePaidSubscription(orgId).catch(() => true);
-  return { orgId, ...paymentGateDecision(true, paid) };
+  // QA orgs skip the trial so the paywall can be tested immediately; real orgs get
+  // the 14-day trial counted from registration.
+  const trialActive = qa ? false : isWithinTrial(orgCreatedAt);
+  return { orgId, ...paymentGateDecision(true, paid, trialActive), trialActive, trialEndsAt: endsAt, trialDaysLeft: daysLeft };
 }
 
 /** Thrown by requireActiveSubscription when an unpaid, enforced org tries to run a

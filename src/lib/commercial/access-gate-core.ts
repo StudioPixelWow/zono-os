@@ -21,9 +21,36 @@ export function isOrgEnforced(orgCreatedAt: string | null | undefined, cutoff: n
   return Number.isFinite(created) && created >= cutoff;
 }
 
-/** Pure gate decision from the two facts. blocked = enforced && !paid. */
-export function paymentGateDecision(enforced: boolean, paid: boolean): { enforced: boolean; paid: boolean; blocked: boolean } {
-  return { enforced, paid, blocked: enforced && !paid };
+// ── 14-day free trial (from registration) ───────────────────────────────────
+export const TRIAL_DAYS = 14;
+const DAY_MS = 86_400_000;
+
+/** The moment the org's free trial ends (epoch ms), or null when unknown. */
+export function trialEndsAt(orgCreatedAt: string | null | undefined, trialDays: number = TRIAL_DAYS): number | null {
+  if (!orgCreatedAt) return null;
+  const created = Date.parse(orgCreatedAt);
+  return Number.isFinite(created) ? created + trialDays * DAY_MS : null;
+}
+
+/** True while the org is still inside its free-trial window (counted from the
+ *  registration/creation time). Unknown creation date ⇒ no trial (safe default). */
+export function isWithinTrial(orgCreatedAt: string | null | undefined, trialDays: number = TRIAL_DAYS, now: number = Date.now()): boolean {
+  const ends = trialEndsAt(orgCreatedAt, trialDays);
+  return ends != null && now < ends;
+}
+
+/** Whole days left in the trial (0 once it has ended), for UI countdowns. */
+export function trialDaysLeft(orgCreatedAt: string | null | undefined, trialDays: number = TRIAL_DAYS, now: number = Date.now()): number {
+  const ends = trialEndsAt(orgCreatedAt, trialDays);
+  if (ends == null) return 0;
+  return Math.max(0, Math.ceil((ends - now) / DAY_MS));
+}
+
+/** Pure gate decision. blocked = enforced && !paid && trial has ENDED. A new
+ *  office gets full access during its 14-day trial; only an unpaid org whose
+ *  trial has lapsed is blocked. */
+export function paymentGateDecision(enforced: boolean, paid: boolean, trialActive = false): { enforced: boolean; paid: boolean; blocked: boolean } {
+  return { enforced, paid, blocked: enforced && !paid && !trialActive };
 }
 
 // Paths an UNPAID (blocked) user may still reach — pay, billing, account, help, out.

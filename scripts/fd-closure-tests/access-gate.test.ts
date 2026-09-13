@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isOrgEnforced, paymentGateDecision, isPathAllowedWhenUnpaid, billingEnforcementCutoff } from "../../src/lib/commercial/access-gate-core.ts";
+import { isOrgEnforced, paymentGateDecision, isPathAllowedWhenUnpaid, billingEnforcementCutoff, isWithinTrial, trialDaysLeft, TRIAL_DAYS } from "../../src/lib/commercial/access-gate-core.ts";
 
 const CUTOFF = Date.parse("2026-09-01T00:00:00Z");
 
@@ -15,10 +15,26 @@ test("orgs created AFTER the cutoff are enforced; BEFORE are grandfathered", () 
 test("unknown org age is never enforced (never lock out)", () => {
   assert.equal(isOrgEnforced(null, CUTOFF), false);
 });
-test("gate blocks only enforced + unpaid", () => {
-  assert.equal(paymentGateDecision(true, false).blocked, true);   // enforced, unpaid → blocked
-  assert.equal(paymentGateDecision(true, true).blocked, false);   // enforced, paid → allowed
-  assert.equal(paymentGateDecision(false, false).blocked, false); // grandfathered → allowed
+test("gate blocks only enforced + unpaid (trial ended)", () => {
+  assert.equal(paymentGateDecision(true, false).blocked, true);         // enforced, unpaid, no trial → blocked
+  assert.equal(paymentGateDecision(true, false, true).blocked, false);  // enforced, unpaid, TRIAL ACTIVE → allowed
+  assert.equal(paymentGateDecision(true, true).blocked, false);         // enforced, paid → allowed
+  assert.equal(paymentGateDecision(false, false).blocked, false);       // grandfathered → allowed
+});
+test("14-day trial counted from registration", () => {
+  const now = Date.parse("2026-09-13T12:00:00Z");
+  const dayMs = 86_400_000;
+  assert.equal(TRIAL_DAYS, 14);
+  // created just now → in trial, ~14 days left
+  assert.equal(isWithinTrial("2026-09-13T00:00:00Z", TRIAL_DAYS, now), true);
+  assert.equal(trialDaysLeft("2026-09-13T00:00:00Z", TRIAL_DAYS, now) > 0, true);
+  // created 10 days ago → still in trial
+  assert.equal(isWithinTrial(new Date(now - 10 * dayMs).toISOString(), TRIAL_DAYS, now), true);
+  // created 15 days ago → trial ended
+  assert.equal(isWithinTrial(new Date(now - 15 * dayMs).toISOString(), TRIAL_DAYS, now), false);
+  assert.equal(trialDaysLeft(new Date(now - 15 * dayMs).toISOString(), TRIAL_DAYS, now), 0);
+  // unknown creation date → no trial
+  assert.equal(isWithinTrial(null, TRIAL_DAYS, now), false);
 });
 test("unpaid user may reach billing / account / pay / support / logout", () => {
   for (const p of ["/payment-required", "/settings/plan", "/settings/billing", "/account", "/billing/status", "/logout", "/support"]) {
