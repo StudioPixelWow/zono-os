@@ -14,7 +14,6 @@ import {
   LocalityAutocomplete,
   type SelectedLocality,
 } from "@/components/onboarding/LocalityAutocomplete";
-import { StepCelebration } from "@/components/onboarding/StepCelebration";
 import type { ListingKind, PropertyType } from "@/lib/supabase/types";
 
 const TOTAL_STEPS = 7;
@@ -141,11 +140,6 @@ export function OnboardingWizard({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Step-completion celebration: bump `celebrate` each time a step is completed
-  // and the activation % grows, so a confetti + ZI milestone popup fires.
-  const [celebrate, setCelebrate] = useState({ trigger: 0, from: 0, to: 0 });
-  const pct = (s: number) => Math.round((s / TOTAL_STEPS) * 100);
-
   const [form, setForm] = useState<WizardForm>({
     organizationName: defaultOrgName,
     organizationLogoUrl: "",
@@ -193,15 +187,7 @@ export function OnboardingWizard({
 
   const next = () => {
     setError(null);
-    setStep((s) => {
-      const nextStep = Math.min(TOTAL_STEPS, s + 1);
-      if (nextStep > s) {
-        // A step was just completed — fire the milestone celebration, growing the
-        // activation bar from the old step's % to the new one's.
-        setCelebrate((c) => ({ trigger: c.trigger + 1, from: pct(s), to: pct(nextStep) }));
-      }
-      return nextStep;
-    });
+    setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   };
   const back = () => {
     setError(null);
@@ -240,12 +226,6 @@ export function OnboardingWizard({
 
   return (
     <div className="bg-card border-line rounded-[28px] border p-6 shadow-[var(--shadow-card)] sm:p-8">
-      <StepCelebration
-        trigger={celebrate.trigger}
-        fromPct={celebrate.from}
-        toPct={celebrate.to}
-        label="ההפעלה שלך"
-      />
       <style>{`
         .dr-input{position:absolute;top:0;left:0;width:100%;height:2rem;margin:0;background:transparent;-webkit-appearance:none;appearance:none;pointer-events:none}
         .dr-input:focus{outline:none}
