@@ -30,6 +30,24 @@ const COVERAGE_STATUS_LABEL: Record<string, string> = {
   attention: "דורש טיפול", never_published: "לא פורסם עדיין",
 };
 
+// ── STARTER ("על הבוקר" never-empty) actions ─────────────────────────────────
+// A brand-new office has no leads/deals/properties yet, so every deterministic
+// source above produces zero actions and the day would render EMPTY — the wrong
+// first impression. A new user must always see the few high-value first steps.
+// These are injected ONLY when there is no real work AND the office looks new, so
+// an established office that genuinely cleared its day still gets the honest
+// "הכול בשליטה" state. Kind is the canonical "onboarding" slot (→ task item).
+function buildStarterActions(o: { isManager: boolean; hasBuyers: boolean; hasLeads: boolean }): DailyAction[] {
+  const s: DailyAction[] = [
+    { id: "starter:claim", kind: "onboarding", priority: "P1", title: "שייך את הנכסים שלך", reason: "איתרנו נכסים באזור הפעילות שלך — שייך אותם למשרד ותתחיל לעבוד עליהם", href: "/claim", cta: "לשיוך נכסים", icon: "Home", urgency: 72 },
+    { id: "starter:market", kind: "onboarding", priority: "P1", title: "גלה את מפת השוק באזור שלך", reason: "ראה את המתווכים, המשרדים והנכסים הפעילים בעיר שלך", href: "/brokerage-data", cta: "לתצוגת השוק", icon: "Map", urgency: 58 },
+  ];
+  if (!o.hasBuyers) s.push({ id: "starter:buyer", kind: "onboarding", priority: "P1", title: "הוסף את הלקוח הראשון שלך", reason: "בנה מאגר קונים — ZONO תתאים להם נכסים רלוונטיים אוטומטית", href: "/buyers", cta: "הוספת לקוח", icon: "UserPlus", urgency: 52 });
+  if (!o.hasLeads) s.push({ id: "starter:leads", kind: "onboarding", priority: "P2", title: "חבר מקור לידים", reason: "כל פנייה חדשה מוואטסאפ או מפייסבוק תיכנס אוטומטית ל-CRM", href: "/leads", cta: "חיבור לידים", icon: "PhoneCall", urgency: 40 });
+  if (o.isManager) s.push({ id: "starter:invite", kind: "onboarding", priority: "P2", title: "הזמן את הצוות למשרד", reason: "הוסף את הסוכנים שלך כדי לנהל את כל הפעילות במקום אחד", href: "/office", cta: "הזמנת צוות", icon: "Users", urgency: 44 });
+  return s;
+}
+
 /**
  * The authoritative morning brief for the current session. Returns null when
  * there is no active org (unauthenticated / mid-onboarding). Resilient: any
@@ -361,6 +379,29 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
   const meetingsDone = countType(["meeting.completed"]);
   if (meetingsDone > 0) completedToday.push({ id: "done:meet", label: `${meetingsDone} פגישות הושלמו`, icon: "Calendar" });
   if (tasksDoneToday > 0) completedToday.push({ id: "done:task", label: `${tasksDoneToday} משימות טופלו`, icon: "CheckSquare" });
+
+  // ── STARTER injection — never leave a NEW office with an empty day ──────────
+  // Only when the deterministic engine produced NO real work. We then confirm the
+  // office genuinely looks new (no properties/leads/deals) with cheap head counts
+  // before seeding the first-steps set — an established office that truly cleared
+  // its day keeps the honest "all clear" state.
+  if (actions.length === 0) {
+    let propsCount = covProps.length, leadsCount = 0, buyersCount = 0;
+    try {
+      const [pR, lR, bR] = await Promise.allSettled([
+        propsCount > 0
+          ? Promise.resolve({ count: propsCount })
+          : supabase.from("properties").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+        supabase.from("buyers").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+      ]);
+      propsCount = pR.status === "fulfilled" ? ((pR.value as { count: number | null }).count ?? propsCount) : propsCount;
+      leadsCount = lR.status === "fulfilled" ? ((lR.value as { count: number | null }).count ?? 0) : 0;
+      buyersCount = bR.status === "fulfilled" ? ((bR.value as { count: number | null }).count ?? 0) : 0;
+    } catch { /* counts best-effort — err on showing starters for an empty-looking org */ }
+    const looksNew = propsCount === 0 && leadsCount === 0 && deals.length === 0;
+    if (looksNew) actions.push(...buildStarterActions({ isManager, hasBuyers: buyersCount > 0, hasLeads: leadsCount > 0 }));
+  }
 
   // ── Rank + hero ─────────────────────────────────────────────────────────────
   const priorityActions = rankDailyActions(actions);
