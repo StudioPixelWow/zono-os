@@ -33,11 +33,23 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
-      {/* Trial / status banner */}
+      {/* Trial / status banner — three honest states: paid · active trial · trial ended */}
       {o.paid ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
           <div className="flex items-center gap-2 font-black"><Icon name="CheckCircle" size={18} /> המנוי פעיל</div>
           <p className="mt-1 text-sm">חיוב חודשי {ils(o.monthlyIls)} · {o.billableAgents} משתמשים · החיוב הבא: {fmtDate(o.currentPeriodEnd)}</p>
+        </div>
+      ) : o.isTrial ? (
+        <div className="rounded-2xl border border-brand-light bg-brand-soft p-4 text-ink">
+          <div className="flex items-center gap-2 font-black">
+            <Icon name="Sparkles" size={18} />
+            {o.trialDaysLeft != null && o.trialDaysLeft > 0
+              ? `אתה בתקופת הניסיון — נותרו ${o.trialDaysLeft} ${o.trialDaysLeft === 1 ? "יום" : "ימים"}`
+              : "היום האחרון של תקופת הניסיון"}
+          </div>
+          <p className="mt-1 text-sm">
+            כל היכולות פתוחות במלואן. בסיום הניסיון החיוב הוא {ils(o.monthlyIls)} לחודש ({o.billableAgents} משתמשים × {ils(o.pricePerAgentIls)}). אפשר להפעיל את המנוי כבר עכשיו כדי להבטיח רצף — לא תחויב לפני תום הניסיון.
+          </p>
         </div>
       ) : (
         <div className="rounded-2xl border border-brand-light bg-brand-soft p-4 text-ink">
@@ -45,7 +57,7 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
             <Icon name="Sparkles" size={18} /> נדרשת הפעלת מנוי
           </div>
           <p className="mt-1 text-sm">
-            כדי להשתמש ב-ZONO יש להפעיל את המנוי — {ils(o.monthlyIls)} לחודש ({o.billableAgents} משתמשים × {ils(o.pricePerAgentIls)}). כל המידע שכבר הוכן עבורך שמור וממתין.
+            תקופת הניסיון הסתיימה. כדי להמשיך להשתמש ב-ZONO יש להפעיל את המנוי — {ils(o.monthlyIls)} לחודש ({o.billableAgents} משתמשים × {ils(o.pricePerAgentIls)}). כל המידע שכבר הוכן עבורך שמור וממתין.
           </p>
         </div>
       )}
@@ -65,7 +77,7 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
               type="button" onClick={activate} disabled={pending || o.customPricingRequired}
               className="bg-brand-strong inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[15px] font-black text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
             >
-              <Icon name="Sparkles" size={18} /> {pending ? "מכין תשלום…" : "הפעלת המנוי"}
+              <Icon name="Sparkles" size={18} /> {pending ? "מכין תשלום…" : o.isTrial ? "הפעל מנוי עכשיו" : "הפעלת המנוי"}
             </button>
             {o.customPricingRequired && <p className="text-muted text-xs">מעל 10 משתמשים — תמחור מותאם. פנה/י לתמיכה להפעלה.</p>}
             {msg && <p className={`text-xs font-semibold ${msg.tone === "error" ? "text-red-600" : "text-muted"}`}>{msg.text}</p>}

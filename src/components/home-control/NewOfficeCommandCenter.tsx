@@ -362,16 +362,16 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
                   <Icon name="Users" className="h-4 w-4 text-[var(--office-accent-strong)]" />
                   <p className="text-sm font-bold text-ink">מי מוכר בזון שלך</p>
                 </div>
-                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-muted ring-1 ring-line">{zone.census.knowledgeStateLabel}</span>
+                <Link href="/brokerage-data/offices" className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[var(--office-accent-strong)] ring-1 ring-line transition hover:ring-[var(--office-accent-strong)]">כל המודיעין ←</Link>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <div className="rounded-xl bg-white p-3 text-center ring-1 ring-line">
                   <p className="text-xl font-extrabold text-ink">{zone.census.brokersTotal}</p>
-                  <p className="text-[11px] text-muted">מתווכים פעילים</p>
+                  <p className="text-[11px] text-muted">מתווכים בזון</p>
                 </div>
                 <div className="rounded-xl bg-white p-3 text-center ring-1 ring-line">
-                  <p className="text-xl font-extrabold text-ink">{zone.census.verifiedOffices}</p>
-                  <p className="text-[11px] text-muted">משרדים מזוהים</p>
+                  <p className="text-xl font-extrabold text-ink">{zone.census.estimatedActiveOffices}</p>
+                  <p className="text-[11px] text-muted">משרדים בזון</p>
                 </div>
                 <div className="rounded-xl bg-white p-3 text-center ring-1 ring-line">
                   <p className="text-xl font-extrabold text-ink">{zone.census.listingsTotal}</p>

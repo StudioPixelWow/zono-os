@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/dashboard/Icon";
 import { StatusBadge, KpiCard, EmptyStateVisual } from "@/components/ui/action-surfaces";
 import {
-  fetchClaimCandidatesAction, claimListingAction, rejectListingAction, snoozeListingAction,
+  fetchClaimCandidatesAction, claimListingAction, claimAllStrongAction, rejectListingAction, snoozeListingAction,
   type ClaimCandidateDTO,
 } from "@/app/(app)/claim/actions";
 
@@ -50,6 +50,20 @@ export function ClaimInbox() {
       if (res.ok) refresh();
     });
   }
+  function claimAll() {
+    const strong = rows.filter((r) => r.confidence === "high" && !r.needsConfirmation && !r.alreadyPromoted);
+    if (!strong.length) return;
+    if (!window.confirm(`לייבא ${strong.length} נכסים בהתאמה גבוהה ישירות ל-CRM שלך?`)) return;
+    setBusyId("__all__");
+    startTransition(async () => {
+      const res = await claimAllStrongAction();
+      setBusyId(null);
+      setNote(res.ok
+        ? `יובאו ${res.claimed} נכסים ✓${res.media ? ` (${res.media} תמונות)` : ""}${res.failed ? ` · ${res.failed} לא יובאו` : ""}`
+        : `לא בוצע: ${res.reason}`);
+      if (res.ok && res.claimed) refresh();
+    });
+  }
   function reject(row: ClaimCandidateDTO) {
     setBusyId(row.id);
     startTransition(async () => { await rejectListingAction(row.id); setBusyId(null); refresh(); });
@@ -65,6 +79,7 @@ export function ClaimInbox() {
   }
 
   const counts = { high: rows.filter((r) => r.confidence === "high").length, medium: rows.filter((r) => r.confidence === "medium").length, low: rows.filter((r) => r.confidence === "low").length };
+  const strongCount = rows.filter((r) => r.confidence === "high" && !r.needsConfirmation && !r.alreadyPromoted).length;
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
@@ -73,6 +88,21 @@ export function ClaimInbox() {
         <KpiCard label="התאמה בינונית" value={counts.medium} icon="Circle" accent="warn" />
         <KpiCard label="לבדיקה" value={counts.low} icon="Search" accent="neutral" />
       </div>
+
+      {strongCount >= 2 && (
+        <div className="border-line bg-success-soft flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+          <div>
+            <p className="text-ink text-sm font-black">{strongCount} נכסים בהתאמה גבוהה מזוהים כשלך</p>
+            <p className="text-muted text-xs">אפשר לייבא את כולם ל-CRM בלחיצה אחת — עם התמונות המקוריות.</p>
+          </div>
+          <button
+            type="button" disabled={pending} onClick={claimAll}
+            className="bg-[var(--brand,#6d28d9)] inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            <Icon name="Download" size={16} /> {busyId === "__all__" ? "מייבא…" : `ייבא את כל הנכסים שלי (${strongCount})`}
+          </button>
+        </div>
+      )}
 
       {note && <div className="bg-brand-soft text-ink rounded-xl px-3 py-2 text-sm font-semibold">{note}</div>}
 

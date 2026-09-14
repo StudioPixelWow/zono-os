@@ -114,7 +114,7 @@ export function BrokerDirectoryView({ directory }: { directory: BrokerDirectory 
         <>
           <TerminalSection title="סקירה" subtitle="נתוני אמת מצינור מודעה ← מתווך">
             <MetricGrid>
-              <Metric label="מתווכים" value={fmt(directory.agentsTotal)} accent />
+              <Metric label="מתווכים במאגר" value={fmt(directory.agentsTotal)} accent />
               <Metric label="מודעות מקושרות למתווך" value={fmt(totalListingsLinked)} />
               <Metric label="משויכים למשרד" value={fmt(resolvedCount)} />
               <Metric label="משרדים שזוהו" value={fmt(directory.officesTotal)} />
