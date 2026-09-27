@@ -20,7 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { key: "command", title: "היום שלי", desc: "מה לעשות עכשיו • הפגישות והמשימות שלך", icon: "Sun", accent: "purple", items: [
     { label: "היום שלי", href: "/", icon: "Sun" },
     { label: "פגישות", href: "/calendar", icon: "Calendar" },
-    { label: "היום · מרכז יומי", href: "/today", icon: "CalendarClock" },
+    { label: "התוכנית שלי להיום", href: "/today", icon: "CalendarClock" },
     { label: "מוח הברוקר", href: "/brain", icon: "Sparkles" },
     { label: "מרכז הפעולות", href: "/action-center", icon: "Flame" },
   ]},

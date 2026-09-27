@@ -273,16 +273,32 @@ export async function completeOnboarding(
         // nightly cron backstops anything the request budget truncates. Cost stays
         // bounded (quick mode, one office). NO fabrication — real provider only.
         if (process.env.APIFY_TOKEN) {
-          const { syncExternalListingsForOrganization } = await import("@/lib/external-listings/service");
-          // The ONE-TIME signup scan uses "full" (≤500/city PER SOURCE) so a new
-          // office opens to a DEEP picture of its registration city — up to ~1000
-          // real listings (external-listing sources) instead of a thin sample. Still bounded
-          // (only the office's own operating cities, one pass; the sync self-checkpoints
-          // under its wall-clock budget and the nightly cron backstops any tail).
-          // The per-login refresh-on-entry stays "quick" for cost. NO fabrication —
-          // real external-listing sources via the provider only.
-          void syncExternalListingsForOrganization(bootstrapOrgId, { mode: "full" })
-            .catch((e) => console.error("[onboarding] bootstrap scan skipped:", e));
+          // CREDIT-SAVING REUSE FIRST: if any of the office's cities were already
+          // scanned recently by ANOTHER office, CLONE that fresh data in instead of
+          // paying Apify to re-scrape the identical listings. 10 offices in one city
+          // must not equal 10 full scans. We only fall back to a paid scan for cities
+          // that ZONO does not already know fresh — and even then downgrade to a light
+          // "quick" top-up when most cities were served from reuse.
+          const { reuseCityListingsForOrg } = await import("@/lib/external-listings/city-reuse");
+          let reusedCities = 0, reusedListings = 0;
+          for (const city of bootstrapCities) {
+            const r = await reuseCityListingsForOrg(bootstrapOrgId, city).catch(() => ({ reused: false, copied: 0 }));
+            if (r.reused) { reusedCities++; reusedListings += r.copied; }
+          }
+          const allCovered = bootstrapCities.length > 0 && reusedCities === bootstrapCities.length;
+          if (allCovered) {
+            // Every city served instantly from existing data — no signup scan needed.
+            // The hourly/nightly city sync backstops fresh listings from here on.
+            console.info(`[onboarding] reused ${reusedListings} listings across ${reusedCities} city(ies) — skipping signup Apify scan`);
+          } else {
+            const { syncExternalListingsForOrganization } = await import("@/lib/external-listings/service");
+            // Cold city (no fresh data anywhere) → one deep "full" scan; partial reuse
+            // → light "quick" top-up (the bulk already came from reuse). Bounded to the
+            // office's own cities; the nightly cron backstops any tail.
+            const mode = reusedCities > 0 ? ("quick" as const) : ("full" as const);
+            void syncExternalListingsForOrganization(bootstrapOrgId, { mode })
+              .catch((e) => console.error("[onboarding] bootstrap scan skipped:", e));
+          }
         }
       } catch (e) {
         console.error("[onboarding] city bootstrap skipped:", e);

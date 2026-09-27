@@ -267,6 +267,15 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
   const ENRICHMENT_RESERVE_MS = 40_000;
   const pastHardDeadline = () => pastDeadline(opts.deadline, Date.now());
 
+  // CREDIT-SAVING CITY-LEVEL REUSE — only for the FREQUENT light modes (the hourly
+  // refresh). If another office already scanned this city recently, we clone that
+  // fresh data instead of paying Apify to re-scrape the same listings. Deep modes
+  // (full/backfill) always scrape so an explicit deep refresh is never short-circuited.
+  const allowReuse = mode === "quick" || mode === "standard";
+  const { reuseCityListingsForOrg } = allowReuse
+    ? await import("./city-reuse")
+    : { reuseCityListingsForOrg: null as unknown as typeof import("./city-reuse").reuseCityListingsForOrg };
+
   for (const loc of localities) {
     const pastSoft = completedCities.length > 0 && Date.now() - syncStart > SOFT_BUDGET_MS;
     if (pastSoft || pastHardDeadline()) {
@@ -280,7 +289,21 @@ async function syncOrg(db: DB, orgId: string, opts: SyncOptions, actingUserId: s
     // within seconds of the first source returning, AND partial results persist
     // if the serverless function is later cut short. (Concurrent runs meant
     // nothing was saved until BOTH finished — worse on a tight time budget.)
+    // If a peer office already made this city fresh, clone it and skip the scrape.
+    let cityReused = false;
+    if (allowReuse && reuseCityListingsForOrg) {
+      try {
+        const reuse = await reuseCityListingsForOrg(orgId, loc.name);
+        if (reuse.reused) {
+          cityReused = true;
+          summary.updated += reuse.copied;
+          await log(`${loc.name}: שימוש חוזר ב-${reuse.copied} מודעות טריות ממאגר העיר — נחסכה סריקה`, "info");
+        }
+      } catch { /* reuse is best-effort — fall through to a normal scan */ }
+    }
+
     for (const source of sources) {
+      if (cityReused) break; // fresh city already cloned — no paid scrape needed
       const t0 = Date.now();
       try {
         const provider = getProvider(source);

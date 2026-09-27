@@ -105,6 +105,8 @@ export function SmartPropertyCard({ l, match, marketPct, selected, onSelect, fav
     l.balconies ? { icon: "Trees", t: "מרפסת" } : null,
   ].filter(Boolean) as { icon: string; t: string }[];
 
+  const isRent = String((l as { deal_type?: string | null }).deal_type ?? "").toLowerCase() === "rent";
+
   const insight = marketPct != null && marketPct <= -3 ? `מחיר נמוך ב-${Math.abs(marketPct)}% מממוצע השכונה`
     : marketPct != null && marketPct >= 3 ? `מחיר גבוה ב-${marketPct}% מממוצע השכונה`
     : l.has_agent === false ? "בעלים פרטי — פוטנציאל בלעדיות"
@@ -136,7 +138,8 @@ export function SmartPropertyCard({ l, match, marketPct, selected, onSelect, fav
             <p className="text-muted truncate text-xs">{[l.neighborhood, l.city].filter(Boolean).join(" · ") || "—"}</p>
           </div>
           <div className="shrink-0 text-end">
-            <p className="text-ink text-lg font-black">{l.price ? formatShekels(l.price) : "—"}</p>
+            <span className={cn("mb-1 inline-block rounded-md px-1.5 py-0.5 text-[10px] font-black", isRent ? "bg-cyan-50 text-cyan-700" : "bg-brand-soft text-brand-strong")}>{isRent ? "השכרה" : "מכירה"}</span>
+            <p className="text-ink text-lg font-black">{l.price ? formatShekels(l.price) : "—"}{isRent && l.price ? <span className="text-muted text-xs font-bold"> / חודש</span> : ""}</p>
             {ppsqm && <p className="text-muted text-[11px] font-bold">{ppsqm.toLocaleString("he-IL")}₪ למ״ר</p>}
             {marketPct != null && marketPct !== 0 && (
               <p className={cn("text-[11px] font-bold", marketPct < 0 ? "text-success" : "text-danger")}>{marketPct < 0 ? "↓" : "↑"} {Math.abs(marketPct)}% מהשכונה</p>

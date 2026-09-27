@@ -194,6 +194,28 @@ export function BuyerDetailView({
             </span>
           </button>
 
+          {/* Top matches — concrete properties that fit this buyer, surfaced right
+              on the overview so the buyer feels like a deal in motion, not a record. */}
+          {buyerMatches.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-muted text-[11px] font-bold">נכסים מובילים שמתאימים לקונה</span>
+                <button type="button" onClick={() => setTab("matching")} className="text-brand-strong text-[11px] font-bold">כל ההתאמות ({matchCount}) ←</button>
+              </div>
+              {buyerMatches.slice(0, 2).map((m) => (
+                <button key={m.matchId} type="button" onClick={() => setTab("matching")}
+                  className="bg-surface hover:bg-brand-soft flex items-center gap-3 rounded-2xl p-3 text-right transition">
+                  <span className="bg-brand-soft text-brand-strong grid h-9 w-9 shrink-0 place-items-center rounded-xl"><Icon name="Home" size={16} /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="text-ink block truncate text-[13.5px] font-black">{m.title}</span>
+                    <span className="text-muted block truncate text-[11px]">{[m.locality ?? m.address, fmtShekels(m.price)].filter(Boolean).join(" · ")}</span>
+                  </span>
+                  {m.nextBestAction && <span className="text-brand-strong hidden shrink-0 text-[11px] font-bold sm:block">{m.nextBestAction}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Signal chips */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <button type="button" onClick={() => setTab("matching")} className="bg-surface hover:bg-brand-soft rounded-2xl p-2.5 text-center transition">

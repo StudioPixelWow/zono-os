@@ -109,7 +109,10 @@ export function PropertiesCommandTable({ data, view, canManage, agentOptions }: 
         <ZonoEmptyState
           title="הנכס הראשון שלך עוד לא כאן"
           description="ברגע שתוסיפו נכס, ZONO תתחיל לבנות סביבו התאמות לקונים, שיווק בקבוצות, משימות ומעקב — הכול במקום אחד."
-          actions={[{ label: "הוספת נכס", href: "/properties/new", primary: true }]}
+          actions={[
+            { label: "הוספת נכס", href: "/properties/new", primary: true },
+            { label: "שייך את הנכסים שלך", href: "/claim" },
+          ]}
         />
       </div>
     );

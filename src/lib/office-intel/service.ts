@@ -112,14 +112,19 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
     }
   } catch (e) { console.error("[office-cockpit] canonical memberships failed:", e instanceof Error ? e.message : e); }
 
-  // This org's observed listing→office links.
+  // This org's observed listing→office links. Also tracks the DISTINCT agents seen
+  // operating for each office (agent_id on the link), used as a fallback headcount
+  // when the shared agent→office graph hasn't linked anyone yet (so an office with
+  // real observed activity shows the agents behind it instead of a bare "0").
   const listingsByOffice = new Map<string, Set<string>>();
+  const observedAgentsByOffice = new Map<string, Set<string>>();
   const attributedListingIds = new Set<string>();
   try {
-    const { data } = await db.from("brokerage_external_listing_links").select("office_id,external_listing_id").eq("organization_id", orgId ?? "").not("office_id", "is", null).limit(50000);
-    for (const l of (data ?? []) as unknown as { office_id: string; external_listing_id: string }[]) {
+    const { data } = await db.from("brokerage_external_listing_links").select("office_id,external_listing_id,agent_id").eq("organization_id", orgId ?? "").not("office_id", "is", null).limit(50000);
+    for (const l of (data ?? []) as unknown as { office_id: string; external_listing_id: string; agent_id: string | null }[]) {
       (listingsByOffice.get(l.office_id) ?? listingsByOffice.set(l.office_id, new Set()).get(l.office_id)!).add(l.external_listing_id);
       attributedListingIds.add(l.external_listing_id);
+      if (l.agent_id) (observedAgentsByOffice.get(l.office_id) ?? observedAgentsByOffice.set(l.office_id, new Set()).get(l.office_id)!).add(l.agent_id);
     }
   } catch (e) { console.error("[office-cockpit] links failed:", e instanceof Error ? e.message : e); }
 
@@ -154,7 +159,7 @@ export async function getOfficeCockpit(filters: OfficeFilters): Promise<OfficeCo
     return {
       id: o.id, name: (o.name ?? "").trim() || "משרד ללא שם", brand: o.brand_network ?? null, officeType: o.office_type ?? null, hierarchy: o.hierarchy_level ?? null,
       city: displayCity, phone: o.primary_phone ?? null, rating: num(o.google_rating), reviews: num(o.google_reviews_count), status: o.status ?? "candidate",
-      agents: ag.count, observedListings: listingIds.length,
+      agents: ag.count || (observedAgentsByOffice.get(o.id)?.size ?? 0), observedListings: listingIds.length,
       areas: rawAreas.map((a) => ({ ...a, name: localize(a.name) ?? a.name })),
       propertyTypes: topCounts(lits.map((l) => l.propertyType), 4).map((t) => ({ type: t.name, count: t.count })),
       newInPeriod: lits.filter((l) => l.firstSeenMs != null && now - l.firstSeenMs < period).length,

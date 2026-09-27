@@ -49,17 +49,19 @@ export function Header() {
           </Link>
         </div>
 
-        {/* Search */}
-        <div className="relative me-auto hidden w-full max-w-xl md:block">
-          <span className="text-muted pointer-events-none absolute inset-y-0 end-3 flex items-center">
-            <Icon name="Search" size={18} />
-          </span>
-          <input
-            type="search"
-            placeholder="חיפוש נכס, לקוח, שכונה, רחוב..."
-            className="bg-card border-line text-ink placeholder:text-muted focus:border-brand-light focus:ring-brand/15 h-11 w-full rounded-2xl border pe-10 ps-4 text-sm outline-none transition focus:ring-4"
-          />
-        </div>
+        {/* Search — opens the real ⌘K command palette (properties, buyers, sellers,
+            leads, deals, neighborhoods…). The bar itself is a trigger; typing and
+            results live in the palette overlay. */}
+        <button
+          type="button"
+          onClick={() => { try { window.dispatchEvent(new CustomEvent("zono:open-search")); } catch { /* ignore */ } }}
+          className="bg-card border-line text-muted hover:border-brand-light me-auto hidden h-11 w-full max-w-xl items-center gap-2 rounded-2xl border pe-3 ps-4 text-sm transition md:flex"
+          aria-label="חיפוש"
+        >
+          <Icon name="Search" size={18} className="shrink-0" />
+          <span className="text-muted truncate">חיפוש נכס, לקוח, שכונה, רחוב...</span>
+          <kbd className="border-line bg-surface text-muted ms-auto hidden shrink-0 rounded-md border px-1.5 py-0.5 font-sans text-[11px] font-bold lg:inline">⌘K</kbd>
+        </button>
 
         {/* Right cluster */}
         <div className="ms-auto flex items-center gap-2 sm:gap-3">

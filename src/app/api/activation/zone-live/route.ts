@@ -210,6 +210,11 @@ export async function GET() {
       scanKicked = true;
       after(async () => {
         try {
+          // Credit-saving reuse first: if the city already has fresh data from
+          // another office, clone it instead of paying Apify for the same listings.
+          const { reuseCityListingsForOrg } = await import("@/lib/external-listings/city-reuse");
+          const r = await reuseCityListingsForOrg(orgId, city).catch(() => ({ reused: false, copied: 0 }));
+          if (r.reused) { console.info(`[zone-live] reused ${r.copied} listings for ${city} — no scan`); return; }
           const { syncExternalListingsForOrganization } = await import("@/lib/external-listings/service");
           await syncExternalListingsForOrganization(orgId, { mode: "quick" });
         } catch (e) {

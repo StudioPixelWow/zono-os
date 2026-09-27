@@ -121,6 +121,43 @@ export async function resolveSelfOffice(): Promise<SelfOfficeResolution> {
     if (hit) { const off = await officeById(db, String(hit.office_id)); if (off) return resolve(off, "agent_email", "medium"); }
   }
 
+  // 4.5 Offices attributed to listings this org AFFIRMATIVELY CLAIMED. A claim is
+  //     the user asserting "this listing is mine", so the office that owns the
+  //     claimed listings is a strong, self-authored signal — it can never be a
+  //     competitor the user didn't pick. We take the dominant office across the
+  //     claimed listings (via the listing→office link table), with a fallback to
+  //     the offices of the claim's anchor agents. Never overrides a rejection.
+  if (me.orgId) {
+    const { data: reviews } = await (db.from("broker_match_reviews" as never)
+      .select("listing_id,evidence,status").eq("org_id", me.orgId).eq("status", "approved").limit(2000) as any);
+    const claimedIds: string[] = [];
+    const anchorAgentIds = new Set<string>();
+    for (const r of (reviews ?? [])) {
+      const ev = (r.evidence ?? {}) as any;
+      if (ev.outcome !== "claimed") continue;
+      if (r.listing_id) claimedIds.push(String(r.listing_id));
+      for (const a of (ev.anchorAgentIds ?? [])) if (a) anchorAgentIds.add(String(a));
+    }
+    const dominant = (pairs: { office_id: unknown }[]): string | null => {
+      const tally = new Map<string, number>();
+      for (const p of pairs) { const oid = String(p.office_id ?? ""); if (oid && !rejected.has(oid)) tally.set(oid, (tally.get(oid) ?? 0) + 1); }
+      return [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    };
+    if (claimedIds.length) {
+      const { data: links } = await (db.from("brokerage_external_listing_links" as never)
+        .select("office_id").eq("organization_id", me.orgId)
+        .in("external_listing_id", claimedIds.slice(0, 500)).not("office_id", "is", null).limit(2000) as any);
+      const oid = dominant((links ?? []) as { office_id: unknown }[]);
+      if (oid) { const off = await officeById(db, oid); if (off) return resolve(off, "claim", "high"); }
+    }
+    if (anchorAgentIds.size) {
+      const { data: agents } = await (db.from("brokerage_agents" as never)
+        .select("office_id").in("id", [...anchorAgentIds].slice(0, 200)).not("office_id", "is", null).limit(500) as any);
+      const oid = dominant((agents ?? []) as { office_id: unknown }[]);
+      if (oid) { const off = await officeById(db, oid); if (off) return resolve(off, "claim", "medium"); }
+    }
+  }
+
   // 5. Name + city → CANDIDATES ONLY (never auto-resolve name-only).
   const candidates: SelfOfficeCandidate[] = [];
   if (me.name) {

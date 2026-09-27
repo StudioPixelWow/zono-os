@@ -403,6 +403,28 @@ export async function getDailyCommandCenter(): Promise<DailyCommandCenter | null
     if (looksNew) actions.push(...buildStarterActions({ isManager, hasBuyers: buyersCount > 0, hasLeads: leadsCount > 0 }));
   }
 
+  // ── PROACTIVE MARKET PULSE — ZONO surfaces what changed in the office's market
+  //    without being asked: competitor listings that appeared THIS WEEK. Sourced
+  //    from the org's own observed external_listings (has_agent, not yet claimed),
+  //    so no cross-org query. One low-urgency informational action — the "ZONO works
+  //    for you while you sleep" signal, pushed instead of waited-for.
+  try {
+    const weekAgo = new Date(nowMs - 7 * 24 * 3_600_000).toISOString();
+    const { count } = await supabase.from("external_listings")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId).eq("has_agent", true).eq("status", "active")
+      .is("promoted_property_id", null).gte("first_seen_at", weekAgo);
+    const fresh = count ?? 0;
+    if (fresh >= 3) {
+      actions.push({
+        id: "market:pulse", kind: "onboarding", priority: "P2",
+        title: `${fresh} מודעות חדשות ממתווכים באזור שלך השבוע`,
+        reason: "מתחרים פעילים בזון שלך — כדאי לבדוק הזדמנויות גיוס ותמחור.",
+        href: "/brokerage-data", cta: "לתצוגת השוק", icon: "TrendingUp", urgency: 30,
+      });
+    }
+  } catch { /* market pulse is best-effort */ }
+
   // ── Rank + hero ─────────────────────────────────────────────────────────────
   const priorityActions = rankDailyActions(actions);
   const actionCount = priorityActions.filter((a) => a.priority === "P0" || a.priority === "P1").length;
