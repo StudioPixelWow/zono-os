@@ -14,7 +14,7 @@ import { DEFAULT_HOME_MAP_FILTERS, type HomeMapData, type HomeMapFilters, type M
 
 const SCOPES: { v: MapScope; label: string }[] = [{ v: "all", label: "הכל" }, { v: "internal", label: "פנימיים" }, { v: "external", label: "חיצוניים" }];
 const DEALS: { v: MapDeal; label: string }[] = [{ v: "all", label: "הכל" }, { v: "sale", label: "למכירה" }, { v: "rent", label: "להשכרה" }];
-const SOURCES: { v: MapSource; label: string }[] = [{ v: "all", label: "כל המקורות" }, { v: "yad2", label: "מודעה חיצונית" }, { v: "madlan", label: "מודעה חיצונית" }, { v: "manual", label: "ידני" }];
+const SOURCES: { v: MapSource; label: string }[] = [{ v: "all", label: "כל המקורות" }, { v: "external", label: "מודעות חיצוניות" }, { v: "manual", label: "ידני" }];
 const TYPES: { v: MapPropertyType; label: string }[] = [{ v: "all", label: "כל הסוגים" }, { v: "apartment", label: "דירה" }, { v: "house", label: "בית" }, { v: "commercial", label: "מסחרי" }, { v: "land", label: "מגרש" }];
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {

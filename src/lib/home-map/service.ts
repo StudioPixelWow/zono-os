@@ -161,7 +161,8 @@ export async function getHomeMapData(filters: HomeMapFilters = DEFAULT_HOME_MAP_
       // City scoping is applied in JS with normalized comparison (below) so
       // spelling variants like קריית/קרית don't drop real listings.
       if (filters.deal !== "all") q = q.eq("deal_type", filters.deal);
-      if (filters.source !== "all") q = q.eq("source", filters.source);
+      if (filters.source === "external") q = q.in("source", ["yad2", "madlan"]);
+      else if (filters.source !== "all") q = q.eq("source", filters.source);
       if (filters.privateOnly) q = q.eq("has_agent", false);
       if (filters.newOnly) q = q.gte("first_seen_at", nowIso);
       if (filters.priceMin != null) q = q.gte("price", filters.priceMin);

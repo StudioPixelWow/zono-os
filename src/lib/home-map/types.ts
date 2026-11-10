@@ -6,7 +6,7 @@
 
 export type MapScope = "all" | "internal" | "external";
 export type MapDeal = "all" | "sale" | "rent";
-export type MapSource = "all" | "yad2" | "madlan" | "manual";
+export type MapSource = "all" | "external" | "yad2" | "madlan" | "manual";
 export type MapPropertyType = "all" | "apartment" | "house" | "commercial" | "land";
 
 export interface HomeMapFilters {
