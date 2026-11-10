@@ -328,6 +328,8 @@ function ActionBtn({ icon, label, onClick, href, disabled }: { icon: string; lab
 }
 
 // ── Grid (manages selection + drawer + favorites + market position) ───────────
+const PAGE = 40;
+
 export function SmartPropertyGrid({ listings, matches }: { listings: Row[]; matches: Record<string, MatchSummary> }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [favs, setFavs] = useState<Set<string>>(new Set());
@@ -352,14 +354,28 @@ export function SmartPropertyGrid({ listings, matches }: { listings: Row[]; matc
   const toggleFav = (id: string) => setFavs((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const active = listings.find((l) => l.id === selected) ?? null;
   const sorted = useMemo(() => [...listings].sort((a, b) => b.opportunity_score - a.opportunity_score), [listings]);
+  // Launch fix: rendering ~1,000 rich cards at once froze the browser for minutes.
+  // Render in pages (best opportunities first) and reset when the filter changes.
+  const [shown, setShown] = useState(PAGE);
+  const [prevListings, setPrevListings] = useState(listings);
+  if (prevListings !== listings) { setPrevListings(listings); setShown(PAGE); }
+  const page = sorted.slice(0, shown);
 
   return (
     <>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {sorted.map((l) => (
+        {page.map((l) => (
           <SmartPropertyCard key={l.id} l={l} match={matches[l.id]} marketPct={marketPct(l)} selected={selected === l.id} onSelect={() => setSelected(l.id)} fav={favs.has(l.id)} onFav={() => toggleFav(l.id)} />
         ))}
       </div>
+      {sorted.length > shown && (
+        <div className="mt-4 flex flex-col items-center gap-1">
+          <button type="button" onClick={() => setShown((n) => n + PAGE)} className="bg-brand rounded-xl px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-95">
+            הצג עוד נכסים
+          </button>
+          <span className="text-muted text-[12px]">מוצגים {page.length} מתוך {sorted.length}</span>
+        </div>
+      )}
       {active && <PropertyIntelligenceDrawer base={active} onClose={() => setSelected(null)} />}
     </>
   );
