@@ -176,39 +176,20 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
 
   return (
     <div dir="rtl" className="flex flex-col gap-3 xl:h-[calc(100vh-108px)] xl:overflow-hidden">
-      {/* ── Greeting ────────────────────────────────────────────────────────── */}
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="text-ink text-xl font-black leading-tight">{data.greeting}, {data.agentName} 👋</h1>
-          <p className="text-muted text-[13px] font-medium">{data.dateLabel}</p>
-        </div>
-        {data.nextEventLabel && <span className="bg-brand-soft text-brand-strong hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold sm:inline-flex"><Icon name="Clock" size={14} />{data.nextEventLabel}</span>}
-      </div>
-
-      {/* ── Compact status strip (replaces the four big KPI cards) ───────────── */}
-      <div className="border-line bg-card shadow-[var(--shadow-soft)] flex shrink-0 flex-wrap items-stretch divide-x divide-x-reverse divide-[var(--line)] overflow-hidden rounded-2xl max-md:overflow-x-auto md:flex-nowrap">
-        {data.kpis.map((k) => {
-          const zero = k.value === "0";
-          return (
-            <Link key={k.id} href={k.href} className={`hover:bg-brand-soft/40 flex min-w-[150px] flex-1 items-center gap-2.5 px-4 py-2.5 transition ${zero ? "opacity-60" : ""}`}>
-              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${zero ? "bg-surface text-muted" : TONE_SOFT.brand}`}><Icon name={k.icon} size={16} /></span>
-              <div className="min-w-0">
-                <div className="text-ink text-[17px] font-black leading-none tabular-nums">{k.value}</div>
-                <div className="text-muted mt-0.5 truncate text-[11.5px] font-semibold leading-tight">{k.label}</div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* ── ZI action center — the single highest-weight area ────────────────── */}
+      {/* ── ZI hero — greeting + action center, the single highest-weight area ── */}
       <div className="border-brand-light relative shrink-0 overflow-hidden rounded-[24px] border bg-gradient-to-l from-[var(--color-brand-soft)] via-card to-card p-4 shadow-[var(--shadow-card)] sm:p-5">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(200px,auto)_1fr_minmax(0,1.35fr)] lg:items-center">
           {/* right: heading + subtitle + start button */}
           <div className="flex min-w-0 flex-col justify-center">
+            {/* Greeting lives inside the hero now — ZI is the first thing the agent reads. */}
+            <h1 className="text-ink mb-0.5 text-[15px] font-bold leading-tight">{data.greeting}, {data.agentName} 👋</h1>
+            <p className="text-muted mb-2 flex flex-wrap items-center gap-2 text-[12px] font-medium">
+              {data.dateLabel}
+              {data.nextEventLabel && <span className="bg-brand-soft text-brand-strong inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"><Icon name="Clock" size={12} />{data.nextEventLabel}</span>}
+            </p>
             <div className="mb-1 flex items-center gap-2">
-              <span className="zono-ai-gradient grid h-8 w-8 place-items-center rounded-xl text-white"><Icon name="Sparkles" size={17} /></span>
-              <h2 className="text-ink text-lg font-black leading-tight">ZI הכין לך את היום</h2>
+              <span className="zono-ai-gradient grid h-9 w-9 place-items-center rounded-xl text-white"><Icon name="Sparkles" size={18} /></span>
+              <h2 className="text-ink text-2xl font-black leading-tight">ZI הכין לך את היום</h2>
             </div>
             <p className="text-muted text-[13px] font-medium">
               {ziRows.length > 0 ? `יש לך ${actionCount} ${actionCount === 1 ? "פעולה שיכולה" : "פעולות שיכולות"} לקדם עסקאות היום` : "הכול מסודר כרגע — הנה מה שיכול לקדם אותך"}
@@ -234,6 +215,22 @@ export function MyDayCockpit({ data }: { data: Cockpit }) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* ── Compact status strip — secondary, below the ZI hero ──────────────── */}
+      <div className="border-line bg-card shadow-[var(--shadow-soft)] flex shrink-0 flex-wrap items-stretch divide-x divide-x-reverse divide-[var(--line)] overflow-hidden rounded-2xl max-md:overflow-x-auto md:flex-nowrap">
+        {data.kpis.map((k) => {
+          const zero = k.value === "0";
+          return (
+            <Link key={k.id} href={k.href} className={`hover:bg-brand-soft/40 flex min-w-[150px] flex-1 items-center gap-2.5 px-4 py-2.5 transition ${zero ? "opacity-60" : ""}`}>
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${zero ? "bg-surface text-muted" : TONE_SOFT.brand}`}><Icon name={k.icon} size={16} /></span>
+              <div className="min-w-0">
+                <div className="text-ink text-[17px] font-black leading-none tabular-nums">{k.value}</div>
+                <div className="text-muted mt-0.5 truncate text-[11.5px] font-semibold leading-tight">{k.label}</div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
       {/* ── Main work grid: deals · today · clients ──────────────────────────── */}
