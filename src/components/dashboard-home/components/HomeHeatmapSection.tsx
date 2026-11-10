@@ -110,6 +110,9 @@ export function HomeHeatmapSection({ heightClass = "h-[380px] lg:h-[460px]" }: {
             <p className="text-sm font-bold text-white/80">יש להגדיר אזור התמחות כדי להציג מפת חום</p>
             <Link href="/settings/operating-areas" className="bg-brand-strong rounded-xl px-3 py-2 text-sm font-bold text-white">הגדרת אזור התמחות</Link>
           </div>
+        ) : data === null ? (
+          // Still fetching — skeleton, never the "no properties" empty state.
+          <div className={`zono-skel w-full ${heightClass}`} aria-busy="true" aria-label="טוען מפה" />
         ) : (
           <ZonoMap points={points} heightClass={heightClass} clusterThreshold={60} heatmap={view === "heat"} emptyMessage="אין עדיין נכסים עם מיקום מדויק להצגה על המפה" />
         )}

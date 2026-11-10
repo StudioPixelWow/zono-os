@@ -166,7 +166,7 @@ export async function listSelectableEntities(): Promise<Record<string, Selectabl
   const o = org.data as { id: string; name: string } | null;
   return {
     agent: ((agents.data ?? []) as { id: string; full_name: string }[]).map((a) => ({ id: a.id, name: a.full_name })),
-    property: ((properties.data ?? []) as { id: string; title: string; city: string | null }[]).map((p) => ({ id: p.id, name: p.city ? `${p.title} · ${p.city}` : p.title })),
+    property: ((properties.data ?? []) as { id: string; title: string; city: string | null }[]).map((p) => ({ id: p.id, name: p.city && !p.title.replace(/קריית/g, "קרית").includes(p.city.replace(/קריית/g, "קרית")) ? `${p.title} · ${p.city}` : p.title })),
     project: ((projects.data ?? []) as { id: string; name: string }[]).map((p) => ({ id: p.id, name: p.name })),
     office: o ? [{ id: o.id, name: o.name }] : [],
   };

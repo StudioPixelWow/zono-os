@@ -1233,3 +1233,39 @@ html::-webkit-scrollbar-thumb:hover,
 .zauth .zauth-particles { opacity: 0.4; }
 .zauth .zauth-amb-map { opacity: 0.5; }
 .zauth .zauth-amb-node { opacity: 0.6; }
+
+/* ============================================================================
+   Launch polish (Nov 2026) — the sticky refresh pill covered page content.
+   Now a compact 40px icon docked bottom-left; the label/freshness line slides
+   out only on hover/focus or while a refresh is running / reporting a result.
+   ========================================================================== */
+.zono-sysrefresh-wrap { top: auto; bottom: 20px; left: 16px; transform: none; }
+.zono-sysrefresh { padding: 10px; gap: 0; box-shadow: 0 6px 16px rgba(109, 40, 217, 0.28); }
+.zono-sysrefresh-text, .zono-sysrefresh-status { max-width: 0; overflow: hidden; opacity: 0; transition: max-width .22s ease, opacity .18s ease; }
+.zono-sysrefresh:hover .zono-sysrefresh-text, .zono-sysrefresh:focus-visible .zono-sysrefresh-text,
+.zono-sysrefresh-wrap:not([data-phase="idle"]) .zono-sysrefresh-text,
+.zono-sysrefresh-wrap:not([data-phase="idle"]) .zono-sysrefresh-status { max-width: 180px; opacity: 1; }
+.zono-sysrefresh:hover, .zono-sysrefresh:focus-visible, .zono-sysrefresh-wrap:not([data-phase="idle"]) .zono-sysrefresh { gap: 10px; padding: 9px 16px 9px 13px; }
+@media (max-width: 768px) {
+  /* Mobile: out of the way of forms/cards — only visible while actually running. */
+  .zono-sysrefresh-wrap { bottom: 16px; left: 12px; }
+  .zono-sysrefresh-wrap[data-phase="idle"]:not([data-status="running"]) { display: none; }
+}
+
+/* ============================================================================
+   Launch polish — mobile tap targets & minimum readable text (WCAG-ish 44px).
+   ========================================================================== */
+@media (max-width: 768px) {
+  main button, main a[role="button"], main [role="tab"], main select, main input:not([type="checkbox"]):not([type="radio"]) { min-height: 40px; }
+  main .text-\[10px\], main .text-\[10\.5px\] { font-size: 11.5px !important; }
+  main .text-\[11px\] { font-size: 12px !important; }
+}
+
+/* Launch polish — skeleton shimmer used by route loading states. */
+.zono-skel {
+  background: linear-gradient(90deg, rgba(124,58,237,0.06) 0%, rgba(124,58,237,0.13) 50%, rgba(124,58,237,0.06) 100%);
+  background-size: 200% 100%;
+  animation: zono-skel-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes zono-skel-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .zono-skel { animation: none; } }

@@ -313,6 +313,7 @@ export function PropertyWizard({
       </div>
 
       {/* Stepper */}
+      <p className="text-muted -mb-2 text-[12px] font-bold sm:hidden">שלב {step} מתוך {STEPS.length} · {STEPS.find((x) => x.id === step)?.label}</p>
       <div className="bg-card border-line flex items-center justify-between gap-1 overflow-x-auto rounded-[20px] border p-3">
         {STEPS.map((s) => {
           const active = s.id === step;
@@ -322,7 +323,7 @@ export function PropertyWizard({
               key={s.id}
               type="button"
               onClick={() => setStep(s.id)}
-              className="flex min-w-[88px] flex-1 flex-col items-center gap-1.5"
+              className="flex min-w-[42px] flex-1 flex-col items-center gap-1.5 sm:min-w-[88px]"
             >
               <span
                 className={cn(
@@ -336,7 +337,7 @@ export function PropertyWizard({
               >
                 {done ? <Icon name="UserCheck" size={16} /> : <Icon name={s.icon} size={16} />}
               </span>
-              <span className={cn("text-[11px] font-bold", active ? "text-brand-strong" : "text-muted")}>
+              <span className={cn("hidden text-[11px] font-bold sm:inline", active ? "text-brand-strong" : "text-muted")}>
                 {s.label}
               </span>
             </button>

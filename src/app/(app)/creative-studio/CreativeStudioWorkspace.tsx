@@ -161,9 +161,9 @@ function CommandCenter({ selectable }: { selectable: Record<string, SelectableEn
 
       {/* STEP 2 — the entity, STEP 3 — continue into the canonical studio wizard */}
       <div className="mt-3 flex flex-wrap items-end gap-2">
-        <label className="flex flex-1 flex-col gap-1">
+        <label className="flex min-w-0 flex-1 basis-full flex-col gap-1 sm:basis-auto">
           <span className="text-muted text-[11px] font-bold">בחרו {ENTITY_LABELS[type] ?? "ישות"}</span>
-          <select value={id} onChange={(e) => setId(e.target.value)} className="border-line bg-surface text-ink h-10 min-w-[220px] rounded-xl border px-3 text-[14px]">
+          <select value={id} onChange={(e) => setId(e.target.value)} className="border-line bg-surface text-ink h-10 w-full min-w-0 rounded-xl border px-3 text-[14px] sm:min-w-[220px]">
             <option value="">— בחר —</option>
             {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>

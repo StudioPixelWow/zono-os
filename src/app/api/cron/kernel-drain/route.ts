@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { drainDomainEvents } from "@/lib/kernel/processor";
+import { raceDeadline, TIMED_OUT } from "@/lib/cron/time-box";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -16,7 +17,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    const result = await drainDomainEvents(300);
+    // Smaller batch + time-box under the 120s limit; the outbox is idempotent so
+    // anything left is drained on the next 10-minute run.
+    const result = await raceDeadline(drainDomainEvents(150), 100_000);
+    if (result === TIMED_OUT) return NextResponse.json({ ok: true, timeBoxed: true });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "drain failed" }, { status: 500 });

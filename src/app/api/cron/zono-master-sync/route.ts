@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { organizationsWithActiveLocalities } from "@/lib/external-listings/service";
 import { runZonoOrchestrator } from "@/lib/orchestrator";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { raceDeadline, TIMED_OUT } from "@/lib/cron/time-box";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -53,13 +54,14 @@ export async function GET(req: NextRequest) {
     let processed = 0;
     for (const orgId of orgs) {
       if (Date.now() - startedAt > SOFT_BUDGET_MS) break; // time-box; remaining orgs next run
-      const r = await runZonoOrchestrator({
+      const r = await raceDeadline(runZonoOrchestrator({
         organizationId: orgId,
         trigger: "scheduled_cron",
         force: true,
         source: "zono-master-sync",
         skipExternalSync: true, // external discovery handled by the hourly market watch
-      });
+      }), SOFT_BUDGET_MS + 30_000 - (Date.now() - startedAt));
+      if (r === TIMED_OUT) { results.push({ organizationId: orgId, status: "time_boxed", durationMs: 0, steps: [] }); break; }
       results.push({ organizationId: orgId, status: r.status, durationMs: r.durationMs, steps: r.steps.map((s) => ({ name: s.name, status: s.status, summary: s.summary })) });
       processed++;
     }

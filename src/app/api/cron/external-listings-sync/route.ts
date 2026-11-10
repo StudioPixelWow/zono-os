@@ -3,6 +3,7 @@ import { organizationsWithActiveLocalities, syncExternalListingsForOrganization,
 import { generateMarketSnapshotsForOrg } from "@/lib/market/service";
 import { orgBudgetDecision } from "@/lib/external-listings/budget";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { raceDeadline, TIMED_OUT } from "@/lib/cron/time-box";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -177,7 +178,14 @@ export async function GET(req: NextRequest) {
       const runStart = Date.now();
       const runId = await openRun(db, orgId, mode, window);
       try {
-        const summary = await syncExternalListingsForOrganization(orgId, { mode, deadline });
+        const raced = await raceDeadline(syncExternalListingsForOrganization(orgId, { mode, deadline }), deadline - Date.now());
+        if (raced === TIMED_OUT) {
+          await finishRun(db, runId, runStart, "partial", null, "time-boxed before function limit — resumes next run");
+          results.push({ success: false, organizationId: orgId, error: "time-boxed" });
+          processed++;
+          break;
+        }
+        const summary = raced;
         const status = summary.deferred ? "partial" : summary.success ? "success" : "partial";
         await finishRun(db, runId, runStart, status, summary, summary.errors[0] ?? null);
         results.push(summary);
@@ -186,7 +194,9 @@ export async function GET(req: NextRequest) {
         // CANONICAL inventory (not the batch) so the /market counts never collapse
         // to a stale/last-run value. Best-effort + NON-BLOCKING: a failure here must
         // never fail the market-watch or block the next org.
-        try { await generateMarketSnapshotsForOrg(orgId); }
+        // Only when real budget remains — this step ran unbounded after the ingest and
+        // was the main source of the 300s kills.
+        try { if (deadline - Date.now() > 30_000) await raceDeadline(generateMarketSnapshotsForOrg(orgId), deadline - Date.now() - 10_000); }
         catch (e) { console.error("[market-watch] snapshot refresh skipped for", orgId, e); }
       } catch (e) {
         failed++;

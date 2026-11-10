@@ -280,7 +280,12 @@ export function ZIWidget() {
             aria-label="פתח את ZICHAT — המומחה שלך ל-ZONO"
             className="zi-launcher fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-5 z-[150] lg:bottom-5"
           >
-            <ZIAvatar size={108} state="idle" bare />
+            {/* Launch polish: smaller launcher so it stops covering cards/forms (was 108px). */}
+            <span dir="ltr" className="block h-[65px] w-[65px] overflow-visible lg:h-[84px] lg:w-[84px]">
+              <span className="block w-[108px] origin-top-left scale-[0.6] lg:scale-[0.78]">
+                <ZIAvatar size={108} state="idle" bare />
+              </span>
+            </span>
           </motion.button>
         )}
       </AnimatePresence>
