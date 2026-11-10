@@ -61,7 +61,7 @@ export function ActionCenterView({ data }: { data: ActionCenterDTO }) {
       <header className="flex items-start gap-3">
         <IconSurface name="Zap" tier="l" accent="brand" />
         <div>
-          <p className="text-brand text-[11px] font-black tracking-wide">INTELLIGENCE ACTION CENTER™</p>
+          <p className="text-brand text-[11px] font-black tracking-wide">מרכז הפעולות החכם</p>
           <h1 className="text-ink text-2xl font-black sm:text-3xl">מרכז הפעולות</h1>
           <p className="text-muted mt-0.5 text-sm">מה לעשות היום — מהמודיעין הקיים, מאורגן לעבודה.</p>
         </div>

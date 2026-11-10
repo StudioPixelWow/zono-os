@@ -28,7 +28,7 @@ export default async function PlanRoute() {
   return (
     <div dir="rtl" className="mx-auto flex max-w-5xl flex-col gap-5 p-4 sm:p-6">
       {overview && <BillingActivationPanel overview={overview} />}
-      <PlanView current={res.data} />
+      <PlanView current={res.data} statusLabel={overview ? (overview.paid ? "פעיל" : overview.isTrial ? "תקופת ניסיון" : "ממתין להפעלה") : undefined} />
     </div>
   );
 }

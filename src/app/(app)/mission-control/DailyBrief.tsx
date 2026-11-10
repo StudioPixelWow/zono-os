@@ -13,6 +13,7 @@ import { bucketRecommendations } from "@/lib/intelligence-explorer/action-center
 import { listMissionDraftsAction } from "@/lib/ai-mission-planner/service";
 import type { MissionControlDTO } from "@/lib/mission-control/types";
 import type { MissionDraft } from "@/lib/ai-mission-planner/types";
+import { greetingHe } from "@/lib/greeting";
 
 const QUICK_QUESTIONS = ["מה השתנה מאז אתמול?", "איזה משרד מוביל בשכונה?", "הצג הזדמנויות חזקות", "מי המתחרה הקרוב?"];
 
@@ -176,7 +177,7 @@ export function DailyBrief({ data }: { data: MissionControlDTO }) {
     <section dir="rtl" className="border-brand-light/40 from-brand-soft/40 flex flex-col gap-4 rounded-3xl border bg-gradient-to-bl to-transparent p-5 sm:p-6">
       <div>
         <p className="text-brand text-[11px] font-black tracking-wide">AI DAILY BRIEFING™</p>
-        <h2 className="text-ink text-xl font-black sm:text-2xl">בוקר טוב{data.session.agentName ? `, ${data.session.agentName}` : ""} — המשימה של היום</h2>
+        <h2 className="text-ink text-xl font-black sm:text-2xl">{greetingHe()}{data.session.agentName ? `, ${data.session.agentName}` : ""} — המשימה של היום</h2>
         {summary.length ? (
           <ul className="mt-2 flex flex-col gap-0.5">
             {summary.map((line, i) => <li key={i} className="text-ink text-sm">• {line}</li>)}

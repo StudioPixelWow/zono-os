@@ -37,7 +37,7 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
       {o.paid ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
           <div className="flex items-center gap-2 font-black"><Icon name="CheckCircle" size={18} /> המנוי פעיל</div>
-          <p className="mt-1 text-sm">חיוב חודשי {ils(o.monthlyIls)} · {o.billableAgents} משתמשים · החיוב הבא: {fmtDate(o.currentPeriodEnd)}</p>
+          <p className="mt-1 text-sm">חיוב חודשי {ils(o.monthlyIls)} · {o.billableAgents === 1 ? "משתמש 1" : `${o.billableAgents} משתמשים`} · החיוב הבא: {fmtDate(o.currentPeriodEnd)}</p>
         </div>
       ) : o.isTrial ? (
         <div className="rounded-2xl border border-brand-light bg-brand-soft p-4 text-ink">
@@ -48,7 +48,7 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
               : "היום האחרון של תקופת הניסיון"}
           </div>
           <p className="mt-1 text-sm">
-            כל היכולות פתוחות במלואן. בסיום הניסיון החיוב הוא {ils(o.monthlyIls)} לחודש ({o.billableAgents} משתמשים × {ils(o.pricePerAgentIls)}). אפשר להפעיל את המנוי כבר עכשיו כדי להבטיח רצף — לא תחויב לפני תום הניסיון.
+            כל היכולות פתוחות במלואן. בסיום הניסיון החיוב הוא {ils(o.monthlyIls)} לחודש ({o.billableAgents === 1 ? "משתמש 1" : `${o.billableAgents} משתמשים`} × {ils(o.pricePerAgentIls)}). אפשר להפעיל את המנוי כבר עכשיו כדי להבטיח רצף — לא תחויב לפני תום הניסיון.
           </p>
         </div>
       ) : (
@@ -57,7 +57,7 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
             <Icon name="Sparkles" size={18} /> נדרשת הפעלת מנוי
           </div>
           <p className="mt-1 text-sm">
-            תקופת הניסיון הסתיימה. כדי להמשיך להשתמש ב-ZONO יש להפעיל את המנוי — {ils(o.monthlyIls)} לחודש ({o.billableAgents} משתמשים × {ils(o.pricePerAgentIls)}). כל המידע שכבר הוכן עבורך שמור וממתין.
+            תקופת הניסיון הסתיימה. כדי להמשיך להשתמש ב-ZONO יש להפעיל את המנוי — {ils(o.monthlyIls)} לחודש ({o.billableAgents === 1 ? "משתמש 1" : `${o.billableAgents} משתמשים`} × {ils(o.pricePerAgentIls)}). כל המידע שכבר הוכן עבורך שמור וממתין.
           </p>
         </div>
       )}
@@ -68,7 +68,7 @@ export function BillingActivationPanel({ overview }: { overview: BillingOverview
           <Stat label="משתמשים פעילים" value={String(o.billableAgents)} />
           <Stat label="מחיר למשתמש" value={ils(o.pricePerAgentIls)} />
           <Stat label="סה״כ חודשי" value={o.customPricingRequired ? "התאמה אישית" : ils(o.monthlyIls)} />
-          <Stat label="סטטוס" value={STATUS_HE[o.subscriptionStatus ?? ""] ?? (o.isTrial ? "תקופת ניסיון" : "—")} />
+          <Stat label="סטטוס" value={o.paid ? "פעיל" : o.isTrial ? "תקופת ניסיון" : "ממתין להפעלה"} />
         </div>
 
         {!o.paid && (

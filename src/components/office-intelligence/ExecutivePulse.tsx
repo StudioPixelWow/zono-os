@@ -2,6 +2,7 @@
 import { Sunrise } from "lucide-react";
 import { AiActionButton } from "@/components/ai-copilot/AiCopilotPanel";
 import { officeAiSummaryAction } from "@/lib/office-intelligence/actions";
+import { greetingHe } from "@/lib/greeting";
 
 export function ExecutivePulse({ managerName, pulse }: { managerName: string; pulse: string[] }) {
   return (
@@ -10,7 +11,7 @@ export function ExecutivePulse({ managerName, pulse }: { managerName: string; pu
       <div className="relative flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-1.5 text-sm font-bold text-white/80"><Sunrise size={16} /> מרכז מודיעין המשרד</p>
-          <h1 className="mt-1 text-2xl font-black">בוקר טוב, {managerName}</h1>
+          <h1 className="mt-1 text-2xl font-black">{greetingHe()}, {managerName}</h1>
         </div>
         <AiActionButton label="סכם לי את הבוקר" title="תדריך בוקר משרד — ZONO Copilot"
           run={() => officeAiSummaryAction("morning")}

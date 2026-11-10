@@ -29,10 +29,10 @@ const INCLUDED: string[] = [
   "ריבוי סוכנים, פרסום, דוחות ותמיכה",
 ];
 
-export function PlanView({ current }: { current: OrgPlan }) {
+export function PlanView({ current, statusLabel }: { current: OrgPlan; statusLabel?: string }) {
   const price = COMMERCIAL_MODEL.pricePerAgentIls; // ₪197 (env-overridable for QA only)
   const threshold = COMMERCIAL_MODEL.customPricingAgentThreshold; // 10
-  const status = PLAN_STATUS_HE[current.status] ?? current.status;
+  const status = statusLabel ?? PLAN_STATUS_HE[current.status] ?? current.status;
 
   return (
     <div dir="rtl" className="flex flex-col gap-5">

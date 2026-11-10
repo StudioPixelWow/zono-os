@@ -41,8 +41,6 @@ export function FacebookGroupsImportPanel({ overview, events, groups = [] }: { o
   const [savingId, setSavingId] = useState<string | null>(null);
   const [onlySelected, setOnlySelected] = useState(false);
 
-  if (!overview.ready) return null;
-
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string) => {
     setMsg(null);
     startTransition(async () => {
@@ -61,6 +59,9 @@ export function FacebookGroupsImportPanel({ overview, events, groups = [] }: { o
     const term = q.trim().toLowerCase();
     return groupList.filter((g) => (!onlySelected || g.selected) && (!term || g.name.toLowerCase().includes(term)));
   }, [groupList, q, onlySelected]);
+
+  // Early return AFTER all hooks (Rules of Hooks — was React error #310).
+  if (!overview.ready) return null;
 
   function toggleGroup(id: string, next: boolean) {
     setSavingId(id);

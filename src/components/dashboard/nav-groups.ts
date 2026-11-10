@@ -2,6 +2,9 @@
 // ZONO navigation — the SINGLE source of truth for the app's launcher groups.
 // Consumed by BOTH the desktop Sidebar and the mobile drawer, so there is never
 // a second hardcoded menu. Presentation/data only; every href is an existing route.
+// Launch slimming (Nov 2026): advanced/internal screens (publishing-control, group
+// intelligence, knowledge graph, marketplace, learning, brokerage-data) are kept as
+// routes but removed from the menu to reduce overload for new customers.
 // ============================================================================
 export type Accent = "purple" | "blue" | "green" | "amber" | "slate";
 export interface NavItem { label: string; href: string; icon: string; managerOnly?: boolean }
@@ -46,18 +49,14 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "Facebook", href: "/facebook", icon: "Send" },
     { label: "מרכז שיווק", href: "/marketing", icon: "BarChart3" },
     { label: "סטודיו יצירה", href: "/creative-studio", icon: "Presentation" },
-    { label: "בקרת פרסום (מתקדם)", href: "/publishing-control", icon: "Shield" },
-    { label: "מודיעין קבוצות", href: "/distribution/groups/intelligence", icon: "BarChart3" },
   ]},
   { key: "intelligence", title: "מודיעין עסקי", desc: "מנהלים • מתווכים • טריטוריה", icon: "BarChart3", accent: "amber", items: [
-    { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3" },
+    { label: "מרכז מנהלים", href: "/executive", icon: "BarChart3", managerOnly: true },
     { label: "מודיעין מתווכים", href: "/broker-intelligence", icon: "Users" },
     { label: "מודיעין משרדים", href: "/brokerage-data/offices", icon: "Building2" },
     { label: "מודיעין שוק", href: "/market-intelligence", icon: "Globe" },
     { label: "ניהול טריטוריה", href: "/territory", icon: "Map" },
     { label: "תחזיות", href: "/predictions", icon: "TrendingUp" },
-    { label: "גרף ידע", href: "/graph", icon: "Layers" },
-    { label: "מודיעין זירה", href: "/marketplace", icon: "Globe" },
     { label: "מפת חום שוק", href: "/market-intelligence/map", icon: "MapPin" },
   ]},
   { key: "sites", title: "אתרים ופורטלים", desc: "אתרי משרד/סוכן • דפי נחיתה • פורטלים", icon: "Globe", accent: "blue", items: [
@@ -71,14 +70,11 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "תהליכי עבודה", href: "/workflow-builder", icon: "ListChecks" },
     { label: "מסעות לקוח", href: "/journeys", icon: "Activity" },
     { label: "עוזר קולי", href: "/voice", icon: "Mic" },
-    { label: "למידה עצמית", href: "/learning", icon: "Sparkles" },
   ]},
   { key: "system", title: "ניהול מערכת", desc: "האזור האישי • צוות • חיבורים • הגדרות", icon: "Settings", accent: "slate", items: [
     { label: "האזור האישי", href: "/my-profile", icon: "UserCircle" },
     { label: "צוות וסוכנים", href: "/team", icon: "UserCheck" },
     { label: "חיבורים", href: "/settings/distribution-connections", icon: "Send" },
-    { label: "מסמכים", href: "/documents", icon: "FileText" },
-    { label: "דאטה משרדי תיווך", href: "/brokerage-data", icon: "Database" },
     { label: "הגדרות", href: "/settings", icon: "Settings" },
   ]},
 ];

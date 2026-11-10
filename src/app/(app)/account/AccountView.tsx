@@ -4,22 +4,13 @@
 // self-service (change plan / cancel renewal / reactivate) + first-login
 // checklist with progress. Actions re-check owner role server-side.
 // ============================================================================
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { changePlanAction, cancelRenewalAction, reactivateAction } from "@/lib/commercial/self-service";
-import { retryAccountingDocumentAction } from "@/lib/accounting/actions";
-import { planCards } from "@/lib/commercial/plans";
-import { MORNING_DOC_TYPE_HE } from "@/lib/accounting/morning-policy";
+import { cancelRenewalAction, reactivateAction } from "@/lib/commercial/self-service";
 import type { AccountOverview } from "@/lib/commercial/account";
-import type { PlanTier, Payment } from "@/lib/commercial/types";
 
-const STATUS_HE: Record<string, string> = {
-  trial: "תקופת ניסיון", pending_payment: "ממתין לתשלום", active: "פעיל", suspended: "מושהה",
-  cancelled: "מבוטל", expired: "פג תוקף", grace_period: "תקופת חסד", trialing: "ניסיון", past_due: "בפיגור", canceled: "מבוטל",
-};
-const CARDS = planCards();
 
-export function AccountView({ overview }: { overview: AccountOverview }) {
+export function AccountView({ overview, billing }: { overview: AccountOverview; billing?: ReactNode }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string) =>
@@ -34,7 +25,7 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
       setMsg(r.ok ? "המנוי הופעל מחדש." : (r.error ?? "שגיאה"));
     });
 
-  const { subscription, license, planTier, subscriptionStatus, payments, checklist } = overview;
+  const { subscription, checklist } = overview;
 
   return (
     <div dir="rtl" className="flex flex-col gap-5">
@@ -44,53 +35,18 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
       </header>
       {msg ? <p className="text-brand text-[12px] font-bold">{msg}</p> : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Subscription */}
-        <section className="bg-card border-line flex flex-col gap-3 rounded-[20px] border p-5 shadow-[var(--shadow-card)]">
-          <h3 className="text-ink text-sm font-black">המנוי</h3>
-          <div className="flex items-center justify-between rounded-[12px] border border-[var(--line)] p-3">
-            <span className="text-ink text-[13px] font-bold">{CARDS.find((c) => c.tier === planTier)?.label ?? planTier}</span>
-            <span className="text-brand text-[12px] font-black">{STATUS_HE[(subscriptionStatus ?? "").toLowerCase()] ?? "סטטוס מנוי"}</span>
-          </div>
-          {subscription?.cancelAtPeriodEnd ? <div className="flex flex-wrap items-center gap-2"><p className="text-warning text-[11px]">החידוש בוטל — הגישה תישאר עד סוף התקופה.</p><button type="button" disabled={pending} onClick={reactivate} className="text-brand text-[11px] font-bold disabled:opacity-50">חידוש המנוי</button></div> : null}
-          <div className="flex flex-wrap gap-2">
-            <select disabled={pending} defaultValue={planTier} onChange={(e) => run(() => changePlanAction(e.target.value as PlanTier), "התוכנית עודכנה.")} className="border-line rounded-full border px-3 py-1.5 text-[12px] font-bold">
-              {CARDS.map((c) => <option key={c.tier} value={c.tier}>{c.label}</option>)}
-            </select>
-            {subscription && !subscription.cancelAtPeriodEnd ? <button type="button" disabled={pending} onClick={() => run(cancelRenewalAction, "החידוש בוטל.")} className="text-muted rounded-full border border-[var(--line)] px-3 py-1.5 text-[12px] font-bold">בטל חידוש</button> : null}
-            {subscription && ["cancelled", "canceled", "expired", "suspended"].includes(subscription.status) ? <button type="button" disabled={pending} onClick={reactivate} className="bg-brand rounded-full px-3 py-1.5 text-[12px] font-black text-white">הפעלת מנוי מחדש</button> : null}
-          </div>
-        </section>
-
-        {/* License */}
-        <section className="bg-card border-line flex flex-col gap-3 rounded-[20px] border p-5 shadow-[var(--shadow-card)]">
-          <h3 className="text-ink text-sm font-black">הרישיון</h3>
-          <div className="grid grid-cols-2 gap-2 text-[12px]">
-            <Stat label="משתמשים" value={license.maxUsers < 0 ? "ללא הגבלה" : String(license.maxUsers)} />
-            <Stat label="קרדיטים AI / חודש" value={license.aiCredits < 0 ? "ללא הגבלה" : String(license.aiCredits)} />
-            <Stat label="אחסון" value={license.storageMb < 0 ? "ללא הגבלה" : `${Math.round(license.storageMb / 1024)}GB`} />
-            <Stat label="מודולים" value={String(license.enabledModules.length)} />
-          </div>
-        </section>
-      </div>
-
-      {/* Payment history */}
-      <section className="bg-card border-line flex flex-col gap-3 rounded-[20px] border p-5 shadow-[var(--shadow-card)]">
-        <h3 className="text-ink text-sm font-black">היסטוריית תשלומים וחשבוניות</h3>
-        {payments.length === 0 ? <p className="text-muted text-[12px]">אין תשלומים עדיין.</p> : (
-          <ul className="flex flex-col gap-1.5">
-            {payments.map((p) => (
-              <li key={p.id} className="flex flex-col gap-1 rounded-[10px] border border-[var(--line)] px-3 py-2 text-[12px]">
-                <div className="flex items-center justify-between">
-                  <span className="text-ink font-bold">₪{p.amountIls} · {CARDS.find((c) => c.tier === p.planTier)?.label ?? p.planTier}</span>
-                  <span className="text-muted">{STATUS_HE[p.status] ?? p.status}{p.verified ? " ✓" : ""} · {new Date(p.createdAt).toLocaleDateString("he-IL")}</span>
-                </div>
-                {p.verified && <InvoiceRow payment={p} />}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {billing}
+      {subscription && !subscription.cancelAtPeriodEnd && ["active", "trialing", "trial"].includes(subscription.status) ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={pending} onClick={() => run(cancelRenewalAction, "החידוש בוטל.")} className="text-muted rounded-full border border-[var(--line)] px-3 py-1.5 text-[12px] font-bold">בטל חידוש</button>
+        </div>
+      ) : null}
+      {subscription?.cancelAtPeriodEnd || (subscription && ["cancelled", "canceled", "expired", "suspended"].includes(subscription.status)) ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {subscription?.cancelAtPeriodEnd ? <p className="text-warning text-[11px]">החידוש בוטל — הגישה תישאר עד סוף התקופה.</p> : null}
+          <button type="button" disabled={pending} onClick={reactivate} className="bg-brand rounded-full px-3 py-1.5 text-[12px] font-black text-white">הפעלת מנוי מחדש</button>
+        </div>
+      ) : null}
 
       {/* First-login checklist */}
       <section className="bg-card border-line flex flex-col gap-3 rounded-[20px] border p-5 shadow-[var(--shadow-card)]">
@@ -112,46 +68,4 @@ export function AccountView({ overview }: { overview: AccountOverview }) {
       </section>
     </div>
   );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col rounded-[10px] border border-[var(--line)] px-3 py-2">
-      <span className="text-ink text-[13px] font-black">{value}</span>
-      <span className="text-muted text-[10px] font-bold">{label}</span>
-    </div>
-  );
-}
-
-// Accounting-document (Morning) state per verified payment. Honest wording keyed to
-// the ACTUAL document type — a receipt is never called "חשבונית". Owner/manager may
-// retry a failed issuance (re-checked server-side; idempotent).
-function InvoiceRow({ payment: p }: { payment: Payment }) {
-  const [pending, start] = useTransition();
-  const [err, setErr] = useState<string | null>(null);
-  const docHe = MORNING_DOC_TYPE_HE[p.invoiceType ?? 320] ?? "חשבונית";
-
-  if (p.invoiceStatus === "issued") {
-    return (
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-success font-bold">{docHe} הופקה{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</span>
-        {p.invoiceUrl ? <a href={p.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-brand-strong font-bold">צפייה ב{docHe} ↗</a> : null}
-      </div>
-    );
-  }
-  if (p.invoiceStatus === "failed") {
-    return (
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <span className="text-warning font-bold">הפקת החשבונית נכשלה{err ? ` · ${err}` : ""}</span>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => { setErr(null); start(async () => { const r = await retryAccountingDocumentAction(p.id); if (!r.ok) setErr(r.error ?? "retry_failed"); }); }}
-          className="text-brand-strong font-bold disabled:opacity-50"
-        >{pending ? "מפיק…" : "נסה להפיק שוב"}</button>
-      </div>
-    );
-  }
-  // pending / issuing / not-yet-attempted
-  return <span className="text-muted text-[11px]">ממתין להפקת חשבונית</span>;
 }

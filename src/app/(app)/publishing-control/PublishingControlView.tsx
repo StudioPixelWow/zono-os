@@ -254,7 +254,7 @@ export function PublishingControlView({ data }: { data: PublishingControlData })
               <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/60 px-3 py-2">
                 <div className="text-ink text-xs font-bold">
                   {c.scopeLabel}
-                  {c.reason && <span className="text-muted mr-2 font-medium">· {c.reason}</span>}
+                  {c.reason && <span className="text-muted mr-2 font-medium">· {reasonHe(c.reason)}</span>}
                   <span className="text-muted mr-2 font-medium">· {c.createdByName ?? "—"} · {timeAgo(c.createdAt)}</span>
                 </div>
                 <button type="button" disabled={pending}
@@ -428,7 +428,7 @@ export function PublishingControlView({ data }: { data: PublishingControlData })
                     {e.fromState ? `${STATE_META[e.fromState]?.label ?? e.fromState} → ` : ""}{STATE_META[e.toState]?.label ?? e.toState}
                   </span>
                   <span className="text-muted truncate text-[11px]">
-                    {e.groupName ? `· ${e.groupName} ` : ""}{e.reason ? `· ${e.reason}` : ""}
+                    {e.groupName ? `· ${e.groupName} ` : ""}{e.reason ? `· ${reasonHe(e.reason)}` : ""}
                   </span>
                 </div>
                 <div className="text-muted shrink-0 text-[11px]">
@@ -454,4 +454,13 @@ export function PublishingControlView({ data }: { data: PublishingControlData })
       )}
     </div>
   );
+}
+
+// Technical state-machine reasons → customer-facing Hebrew (unknown ones pass through).
+const REASON_HE: Record<string, string> = {
+  "extension ack not received": "לא התקבל אישור מהתוסף — ממתין לבדיקה",
+  "must reconcile before retry": "יש לאמת את מצב הפרסום לפני ניסיון חוזר",
+};
+function reasonHe(r: string): string {
+  return REASON_HE[r] ?? r;
 }

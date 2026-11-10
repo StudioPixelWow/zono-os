@@ -19,6 +19,7 @@ import type { ZoneSnapshot } from "@/lib/activation/zone-snapshot";
 import { FirstLoginWowModal } from "./FirstLoginWowModal";
 import { ActivationCelebration } from "./ActivationCelebration";
 import { HomeHeatmapSection } from "@/components/dashboard-home/components/HomeHeatmapSection";
+import { greetingHe } from "@/lib/greeting";
 
 export interface NewOfficeCommandCenterProps {
   identity: OfficeIdentity;
@@ -216,7 +217,7 @@ export function NewOfficeCommandCenter({ identity, activation, trial, discovery,
               <Icon name="Sunrise" className="h-5 w-5" />
             </span>
             <div>
-              <h2 className="text-lg font-bold text-ink">בוקר טוב {identity.ownerFirstName} — הנה הזון שלך להיום</h2>
+              <h2 className="text-lg font-bold text-ink">{greetingHe()} {identity.ownerFirstName} — הנה הזון שלך להיום</h2>
               <p className="mt-1 text-sm leading-relaxed text-muted">
                 כאן יופיע מדי יום מרכז הפיקוד שלך: מעקבים, משימות ופגישות, לידים שדורשים מענה, פעילות נכסים ועסקאות, והמלצות חכמות של ZONO — ברגע שהמשרד יתחיל לעבוד. נתחיל עכשיו בהפעלה.
               </p>

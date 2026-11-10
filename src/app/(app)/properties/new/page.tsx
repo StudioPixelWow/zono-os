@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   getOrCreateDraftProperty,
+  createDraftProperty,
   listPropertyMedia,
   type PropertyRow,
 } from "@/lib/properties/repository";
@@ -80,12 +81,14 @@ function ListingLimitReached() {
   );
 }
 
-export default async function NewPropertyPage() {
+export default async function NewPropertyPage({ searchParams }: { searchParams: Promise<{ fresh?: string }> }) {
+  const { fresh } = await searchParams;
   // Resume an existing in-progress draft instead of inserting a new row every
   // visit — prevents the "saved twice (one with images, one without)" bug.
   let draft: PropertyRow;
   try {
-    draft = await getOrCreateDraftProperty();
+    // ?fresh=1 → the agent explicitly asked for a brand-new listing.
+    draft = fresh === "1" ? await createDraftProperty() : await getOrCreateDraftProperty();
   } catch (e) {
     if (e instanceof Error && e.message === "LIMIT_REACHED") return <ListingLimitReached />;
     throw e;
@@ -103,11 +106,24 @@ export default async function NewPropertyPage() {
     } catch { /* best-effort prefill */ }
   }
 
+  // Resuming a draft that already has content → say so, and offer a clean start
+  // (previously "הוסף נכס" silently opened an old, half-filled listing).
+  const resuming = fresh !== "1" && (!!initial.title || media.length > 0 || (initial.price ?? 0) > 0);
+
   return (
-    <PropertyWizard
-      draftId={draft.id}
-      initial={initial}
-      initialMedia={media}
-    />
+    <>
+      {resuming && (
+        <div dir="rtl" className="bg-brand-soft border-brand-light mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-3 text-sm">
+          <span className="text-ink font-bold">ממשיכים טיוטה שהתחלת{initial.title ? `: ${initial.title}` : ""}</span>
+          <Link href="/properties/new?fresh=1" className="bg-brand rounded-xl px-3 py-1.5 text-xs font-black text-white">התחל נכס חדש</Link>
+        </div>
+      )}
+      <PropertyWizard
+        key={draft.id}
+        draftId={draft.id}
+        initial={initial}
+        initialMedia={media}
+      />
+    </>
   );
 }

@@ -2,11 +2,12 @@ import Link from "next/link";
 import { Icon } from "@/components/dashboard/Icon";
 import { IconSurface } from "@/components/ui/action-surfaces";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentPlatformOperator } from "@/lib/platform-admin/server/auth";
 
 export const dynamic = "force-dynamic";
 
 type Item = { label: string; href: string; icon: string; desc: string };
-type Group = { title: string; items: Item[]; minRole?: "manager" | "owner" };
+type Group = { title: string; items: Item[]; minRole?: "manager" | "owner" | "platform" };
 
 // One clear map of "where do I configure X". Personal groups are visible to everyone;
 // office / communication / billing / admin groups are role-gated for visibility (the
@@ -56,13 +57,20 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    title: "ניהול מערכת",
+    title: "ניהול ובקרה",
     minRole: "owner",
+    items: [
+      { label: "מטריצת הרשאות", href: "/admin/permissions", icon: "UserCheck", desc: "תפקיד מינימלי לכל פעולה" },
+      { label: "יומן ביקורת", href: "/admin/audit-log", icon: "Clock", desc: "תיעוד פעולות רגישות" },
+    ],
+  },
+  {
+    // Internal ZONO tooling — visible ONLY to platform operators, never to customers.
+    title: "כלי מערכת (צוות ZONO)",
+    minRole: "platform",
     items: [
       { label: "מנועי חישוב", href: "/admin/system-health", icon: "Settings", desc: "סטטוס ורענון של כל המנועים" },
       { label: "מרכז תצורה", href: "/admin/configuration", icon: "Settings", desc: "סטטוס אינטגרציות (ללא סודות)" },
-      { label: "מטריצת הרשאות", href: "/admin/permissions", icon: "UserCheck", desc: "תפקיד מינימלי לכל פעולה" },
-      { label: "יומן ביקורת", href: "/admin/audit-log", icon: "Clock", desc: "תיעוד פעולות רגישות" },
       { label: "איכות דאטה", href: "/admin/data-quality", icon: "Shield", desc: "זיהוי דאטה שבורה לפי קטגוריה" },
       { label: "העשרת שכונות (AI)", href: "/admin/neighborhood-enrichment", icon: "Sparkles", desc: "העלאת קובץ ערים ויצירת שכונות אוטומטית" },
       { label: "גאוקודינג מיקומים", href: "/admin/geocoding", icon: "MapPin", desc: "השלמת קואורדינטות אמיתיות למפה" },
@@ -85,8 +93,9 @@ async function roleFlags(): Promise<{ isManager: boolean; isOwner: boolean }> {
 }
 
 export default async function SettingsHubPage() {
-  const { isManager, isOwner } = await roleFlags();
-  const visible = GROUPS.filter((g) => !g.minRole || (g.minRole === "manager" ? isManager : isOwner));
+  const [{ isManager, isOwner }, operator] = await Promise.all([roleFlags(), getCurrentPlatformOperator().catch(() => null)]);
+  const isPlatform = !!operator && operator.status === "active";
+  const visible = GROUPS.filter((g) => !g.minRole || (g.minRole === "platform" ? isPlatform : g.minRole === "manager" ? isManager : isOwner));
 
   return (
     <div dir="rtl" className="flex flex-col gap-5">

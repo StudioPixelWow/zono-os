@@ -148,8 +148,11 @@ function CommissionCard({ c, isManager, r, onChanged }: { c: CommissionSummary; 
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>{status}</span>
             <span className="text-muted text-[11px]">{c.side === "buy" ? "קנייה" : c.side === "both" ? "שני צדדים" : "מכירה"}</span>
           </div>
-          <p className="text-ink mt-1 text-[13px] font-bold">ברוטו {ils(c.gross_amount)} · מע״מ {ils(c.vat_amount)} · נטו {ils(c.net_amount)}</p>
-          <p className="text-muted mt-0.5 text-[12px]">משרד {ils(c.office_share)} · סוכן {ils(c.agent_share)} · מנהל {ils(c.manager_share)} · שת״פ {ils(c.cooperating_broker_share)} · הפניה {ils(c.referral_share)}</p>
+          <p className="text-ink mt-1 text-[13px] font-bold">עמלה {ils(c.gross_amount)} + מע״מ {ils(c.vat_amount)} = לחיוב {ils(c.gross_amount + c.vat_amount)} · הכנסה נטו (ללא מע״מ) {ils(c.net_amount)}</p>
+          {(() => {
+            const parts = ([["משרד", c.office_share], ["סוכן", c.agent_share], ["מנהל", c.manager_share], ["שת״פ", c.cooperating_broker_share], ["הפניה", c.referral_share]] as const).filter(([, v]) => v > 0);
+            return <p className="text-muted mt-0.5 text-[12px]">{parts.length ? parts.map(([k, v]) => `${k} ${ils(v)}`).join(" · ") : "חלוקת העמלה טרם הוגדרה"}</p>;
+          })()}
         </div>
       </div>
 

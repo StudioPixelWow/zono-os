@@ -108,7 +108,7 @@ export function ExternalListingDetailView({ detail, contact }: { detail: Externa
 
   return (
     <div className="flex flex-col gap-5">
-      <Link href="/properties?inv=external" className="text-muted hover:text-brand flex items-center gap-1 text-sm font-bold"><Icon name="ArrowLeft" size={15} /> חזרה למודעות חיצוניות</Link>
+      <Link href="/market-intelligence/listings" className="text-muted hover:text-brand flex items-center gap-1 text-sm font-bold"><Icon name="ArrowLeft" size={15} /> חזרה למודעות חיצוניות</Link>
 
       {/* Header */}
       <div className="bg-card border-line rounded-[22px] border p-5 shadow-[var(--shadow-card)]">

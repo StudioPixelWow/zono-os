@@ -114,6 +114,8 @@ export async function createCommission(input: CommissionInput): Promise<{ id: st
   const vatPct = typeof input.vatPct === "number" ? input.vatPct : 18;
   const adjustments = typeof input.adjustments === "number" ? round(input.adjustments) : 0;
   const { gross_amount, vat_amount, net_amount } = computeVatNet(input.grossAmount, vatPct, adjustments);
+  const sharesTotal = num(input.officeShare) + num(input.agentShare) + num(input.managerShare) + num(input.cooperatingBrokerShare) + num(input.referralShare);
+  if (sharesTotal > net_amount) throw new Error("סכום חלוקת העמלה גבוה מהעמלה נטו");
   const { data, error } = await db.from("commissions").insert({
     org_id: orgId, owner_id: userId, created_by: userId, deal_id: input.dealId, side: input.side ?? "sell",
     gross_amount, vat_pct: vatPct, vat_amount, net_amount, adjustments,

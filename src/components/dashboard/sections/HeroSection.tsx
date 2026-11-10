@@ -11,6 +11,7 @@ import { Icon } from "../Icon";
 import { FloatingAssistant } from "../FloatingAssistant";
 import { motion } from "../motion";
 import { useCurrentUser, useDashboardData } from "../DashboardDataProvider";
+import { greetingHe } from "@/lib/greeting";
 
 function labelsFor(
   values: string[],
@@ -34,7 +35,7 @@ export function HeroSection() {
   const { localities, primaryLocality, localitiesCount, error } = useDashboardData();
 
   const firstName = user?.firstName?.trim();
-  const greeting = firstName ? `בוקר טוב, ${firstName}` : "בוקר טוב";
+  const greeting = firstName ? `${greetingHe()}, ${firstName}` : greetingHe();
 
   const propertyFocus = labelsFor(user?.propertyTypes ?? [], PROPERTY_TYPE_OPTIONS);
   const dealFocus = labelsFor(user?.dealTypes ?? [], DEAL_TYPE_OPTIONS);

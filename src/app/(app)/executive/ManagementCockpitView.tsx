@@ -16,6 +16,7 @@ import { teamLeaderboard, type Insight, type RiskCategory, type Funnel, type Mon
 import { Icon } from "@/components/dashboard/Icon";
 import { ManagementTeam } from "./ManagementTeam";
 import { AskZono } from "./AskZono";
+import { greetingHe } from "@/lib/greeting";
 
 const ils = (n: number): string => (n <= 0 ? "₪0" : n >= 1_000_000 ? `₪${(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `₪${Math.round(n / 1000)}K` : `₪${Math.round(n)}`);
 const TREND: Record<string, { icon: string; cls: string }> = { up: { icon: "▲", cls: "text-success" }, down: { icon: "▼", cls: "text-danger" }, flat: { icon: "▪", cls: "text-muted" } };
@@ -39,7 +40,7 @@ export function ManagementCockpitView({ bundle }: { bundle: ManagementCockpitBun
       <section className="border-line bg-card bg-gradient-to-bl from-brand-soft/50 to-transparent grid gap-4 rounded-2xl border p-4 sm:p-5 lg:grid-cols-[2.2fr_1fr]">
         <div>
           <p className="text-brand text-[11px] font-black tracking-wide">ZONO · מרכז הפיקוד הניהולי</p>
-          <h1 className="text-ink mt-0.5 text-xl font-black sm:text-2xl">{d.managerName ? `בוקר טוב, ${d.managerName}` : "המשרד עכשיו"}</h1>
+          <h1 className="text-ink mt-0.5 text-xl font-black sm:text-2xl">{d.managerName ? `${greetingHe()}, ${d.managerName}` : "המשרד עכשיו"}</h1>
           <p className="text-muted text-sm">זה מה שקורה במשרד שלך עכשיו</p>
           <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {d.hero.map((h) => (
